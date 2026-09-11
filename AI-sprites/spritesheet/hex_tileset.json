@@ -1,0 +1,1678 @@
+{
+  "meta": {
+    "image": "hex_tileset.png",
+    "tile_size": [
+      56,
+      64
+    ],
+    "columns": 12,
+    "rows": 10,
+    "sheet_size": [
+      672,
+      640
+    ],
+    "color_mode": "indexed",
+    "transparent_index": 0,
+    "palette": [
+      "#14101e",
+      "#1b3328",
+      "#2a5236",
+      "#3d7a3c",
+      "#58a046",
+      "#86c25a",
+      "#c3de7c",
+      "#3a2521",
+      "#5c3b2b",
+      "#80553a",
+      "#a6754b",
+      "#c39a61",
+      "#dcbd7f",
+      "#efdcaa",
+      "#34374a",
+      "#565a6e",
+      "#7d8196",
+      "#a6aabb",
+      "#cfd3de",
+      "#3f6fa6",
+      "#72a8d6",
+      "#acd6ee",
+      "#e8f5fb",
+      "#26325e",
+      "#c0443a",
+      "#7a2a36",
+      "#e9b640",
+      "#d57a39",
+      "#a77fcf",
+      "#8a8f3e",
+      "#f4eedc"
+    ],
+    "hex": {
+      "orientation": "pointy-top",
+      "column_step_px": 56,
+      "row_step_px": 48,
+      "odd_row_offset_px": 28,
+      "note": "56x64 near-regular hex; tiles tessellate exactly with these steps"
+    },
+    "draw_order": "environment first, then road overlay; rows top-to-bottom",
+    "edge_order": [
+      "E",
+      "SE",
+      "SW",
+      "W",
+      "NW",
+      "NE"
+    ],
+    "road_rotation": "rotation k = canonical edges turned clockwise by k*60 degrees; every needed orientation is pre-rendered, never rotate sprites in-engine",
+    "road_materials": {
+      "dirt": [
+        "grass",
+        "dirt",
+        "forest"
+      ],
+      "stone": [
+        "desert",
+        "mountains"
+      ],
+      "snow": [
+        "ice"
+      ]
+    },
+    "accent_frequency": "use env *_accent on roughly 1 in 8-12 tiles of that environment",
+    "texture_filter": "nearest"
+  },
+  "tiles": [
+    {
+      "name": "env_grass_v1",
+      "group": "environments",
+      "col": 0,
+      "row": 0,
+      "x": 0,
+      "y": 0,
+      "w": 56,
+      "h": 64,
+      "env": "grass",
+      "variant": "v1"
+    },
+    {
+      "name": "env_grass_v2",
+      "group": "environments",
+      "col": 1,
+      "row": 0,
+      "x": 56,
+      "y": 0,
+      "w": 56,
+      "h": 64,
+      "env": "grass",
+      "variant": "v2"
+    },
+    {
+      "name": "env_grass_v3",
+      "group": "environments",
+      "col": 2,
+      "row": 0,
+      "x": 112,
+      "y": 0,
+      "w": 56,
+      "h": 64,
+      "env": "grass",
+      "variant": "v3"
+    },
+    {
+      "name": "env_grass_accent",
+      "group": "environments",
+      "col": 3,
+      "row": 0,
+      "x": 168,
+      "y": 0,
+      "w": 56,
+      "h": 64,
+      "env": "grass",
+      "variant": "accent"
+    },
+    {
+      "name": "env_dirt_v1",
+      "group": "environments",
+      "col": 4,
+      "row": 0,
+      "x": 224,
+      "y": 0,
+      "w": 56,
+      "h": 64,
+      "env": "dirt",
+      "variant": "v1"
+    },
+    {
+      "name": "env_dirt_v2",
+      "group": "environments",
+      "col": 5,
+      "row": 0,
+      "x": 280,
+      "y": 0,
+      "w": 56,
+      "h": 64,
+      "env": "dirt",
+      "variant": "v2"
+    },
+    {
+      "name": "env_dirt_v3",
+      "group": "environments",
+      "col": 6,
+      "row": 0,
+      "x": 336,
+      "y": 0,
+      "w": 56,
+      "h": 64,
+      "env": "dirt",
+      "variant": "v3"
+    },
+    {
+      "name": "env_dirt_accent",
+      "group": "environments",
+      "col": 7,
+      "row": 0,
+      "x": 392,
+      "y": 0,
+      "w": 56,
+      "h": 64,
+      "env": "dirt",
+      "variant": "accent"
+    },
+    {
+      "name": "env_desert_v1",
+      "group": "environments",
+      "col": 8,
+      "row": 0,
+      "x": 448,
+      "y": 0,
+      "w": 56,
+      "h": 64,
+      "env": "desert",
+      "variant": "v1"
+    },
+    {
+      "name": "env_desert_v2",
+      "group": "environments",
+      "col": 9,
+      "row": 0,
+      "x": 504,
+      "y": 0,
+      "w": 56,
+      "h": 64,
+      "env": "desert",
+      "variant": "v2"
+    },
+    {
+      "name": "env_desert_v3",
+      "group": "environments",
+      "col": 10,
+      "row": 0,
+      "x": 560,
+      "y": 0,
+      "w": 56,
+      "h": 64,
+      "env": "desert",
+      "variant": "v3"
+    },
+    {
+      "name": "env_desert_accent",
+      "group": "environments",
+      "col": 11,
+      "row": 0,
+      "x": 616,
+      "y": 0,
+      "w": 56,
+      "h": 64,
+      "env": "desert",
+      "variant": "accent"
+    },
+    {
+      "name": "env_ice_v1",
+      "group": "environments",
+      "col": 0,
+      "row": 1,
+      "x": 0,
+      "y": 64,
+      "w": 56,
+      "h": 64,
+      "env": "ice",
+      "variant": "v1"
+    },
+    {
+      "name": "env_ice_v2",
+      "group": "environments",
+      "col": 1,
+      "row": 1,
+      "x": 56,
+      "y": 64,
+      "w": 56,
+      "h": 64,
+      "env": "ice",
+      "variant": "v2"
+    },
+    {
+      "name": "env_ice_v3",
+      "group": "environments",
+      "col": 2,
+      "row": 1,
+      "x": 112,
+      "y": 64,
+      "w": 56,
+      "h": 64,
+      "env": "ice",
+      "variant": "v3"
+    },
+    {
+      "name": "env_ice_accent",
+      "group": "environments",
+      "col": 3,
+      "row": 1,
+      "x": 168,
+      "y": 64,
+      "w": 56,
+      "h": 64,
+      "env": "ice",
+      "variant": "accent"
+    },
+    {
+      "name": "env_forest_v1",
+      "group": "environments",
+      "col": 4,
+      "row": 1,
+      "x": 224,
+      "y": 64,
+      "w": 56,
+      "h": 64,
+      "env": "forest",
+      "variant": "v1"
+    },
+    {
+      "name": "env_forest_v2",
+      "group": "environments",
+      "col": 5,
+      "row": 1,
+      "x": 280,
+      "y": 64,
+      "w": 56,
+      "h": 64,
+      "env": "forest",
+      "variant": "v2"
+    },
+    {
+      "name": "env_forest_v3",
+      "group": "environments",
+      "col": 6,
+      "row": 1,
+      "x": 336,
+      "y": 64,
+      "w": 56,
+      "h": 64,
+      "env": "forest",
+      "variant": "v3"
+    },
+    {
+      "name": "env_forest_accent",
+      "group": "environments",
+      "col": 7,
+      "row": 1,
+      "x": 392,
+      "y": 64,
+      "w": 56,
+      "h": 64,
+      "env": "forest",
+      "variant": "accent"
+    },
+    {
+      "name": "env_mountains_v1",
+      "group": "environments",
+      "col": 8,
+      "row": 1,
+      "x": 448,
+      "y": 64,
+      "w": 56,
+      "h": 64,
+      "env": "mountains",
+      "variant": "v1"
+    },
+    {
+      "name": "env_mountains_v2",
+      "group": "environments",
+      "col": 9,
+      "row": 1,
+      "x": 504,
+      "y": 64,
+      "w": 56,
+      "h": 64,
+      "env": "mountains",
+      "variant": "v2"
+    },
+    {
+      "name": "env_mountains_v3",
+      "group": "environments",
+      "col": 10,
+      "row": 1,
+      "x": 560,
+      "y": 64,
+      "w": 56,
+      "h": 64,
+      "env": "mountains",
+      "variant": "v3"
+    },
+    {
+      "name": "env_mountains_accent",
+      "group": "environments",
+      "col": 11,
+      "row": 1,
+      "x": 616,
+      "y": 64,
+      "w": 56,
+      "h": 64,
+      "env": "mountains",
+      "variant": "accent"
+    },
+    {
+      "name": "road_dirt_stub",
+      "group": "roads",
+      "col": 0,
+      "row": 2,
+      "x": 0,
+      "y": 128,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "stub",
+      "rotation": 0,
+      "edges": [
+        "E"
+      ]
+    },
+    {
+      "name": "road_dirt_stub_r1",
+      "group": "roads",
+      "col": 1,
+      "row": 2,
+      "x": 56,
+      "y": 128,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "stub",
+      "rotation": 1,
+      "edges": [
+        "SE"
+      ]
+    },
+    {
+      "name": "road_dirt_stub_r2",
+      "group": "roads",
+      "col": 2,
+      "row": 2,
+      "x": 112,
+      "y": 128,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "stub",
+      "rotation": 2,
+      "edges": [
+        "SW"
+      ]
+    },
+    {
+      "name": "road_dirt_stub_r3",
+      "group": "roads",
+      "col": 3,
+      "row": 2,
+      "x": 168,
+      "y": 128,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "stub",
+      "rotation": 3,
+      "edges": [
+        "W"
+      ]
+    },
+    {
+      "name": "road_dirt_stub_r4",
+      "group": "roads",
+      "col": 4,
+      "row": 2,
+      "x": 224,
+      "y": 128,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "stub",
+      "rotation": 4,
+      "edges": [
+        "NW"
+      ]
+    },
+    {
+      "name": "road_dirt_stub_r5",
+      "group": "roads",
+      "col": 5,
+      "row": 2,
+      "x": 280,
+      "y": 128,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "stub",
+      "rotation": 5,
+      "edges": [
+        "NE"
+      ]
+    },
+    {
+      "name": "road_dirt_straight",
+      "group": "roads",
+      "col": 6,
+      "row": 2,
+      "x": 336,
+      "y": 128,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "straight",
+      "rotation": 0,
+      "edges": [
+        "E",
+        "W"
+      ]
+    },
+    {
+      "name": "road_dirt_straight_r1",
+      "group": "roads",
+      "col": 7,
+      "row": 2,
+      "x": 392,
+      "y": 128,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "straight",
+      "rotation": 1,
+      "edges": [
+        "SE",
+        "NW"
+      ]
+    },
+    {
+      "name": "road_dirt_straight_r2",
+      "group": "roads",
+      "col": 8,
+      "row": 2,
+      "x": 448,
+      "y": 128,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "straight",
+      "rotation": 2,
+      "edges": [
+        "SW",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_dirt_curve_wide",
+      "group": "roads",
+      "col": 9,
+      "row": 2,
+      "x": 504,
+      "y": 128,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "curve_wide",
+      "rotation": 0,
+      "edges": [
+        "E",
+        "SW"
+      ]
+    },
+    {
+      "name": "road_dirt_curve_wide_r1",
+      "group": "roads",
+      "col": 10,
+      "row": 2,
+      "x": 560,
+      "y": 128,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "curve_wide",
+      "rotation": 1,
+      "edges": [
+        "SE",
+        "W"
+      ]
+    },
+    {
+      "name": "road_dirt_curve_wide_r2",
+      "group": "roads",
+      "col": 11,
+      "row": 2,
+      "x": 616,
+      "y": 128,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "curve_wide",
+      "rotation": 2,
+      "edges": [
+        "SW",
+        "NW"
+      ]
+    },
+    {
+      "name": "road_dirt_curve_wide_r3",
+      "group": "roads",
+      "col": 0,
+      "row": 3,
+      "x": 0,
+      "y": 192,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "curve_wide",
+      "rotation": 3,
+      "edges": [
+        "W",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_dirt_curve_wide_r4",
+      "group": "roads",
+      "col": 1,
+      "row": 3,
+      "x": 56,
+      "y": 192,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "curve_wide",
+      "rotation": 4,
+      "edges": [
+        "E",
+        "NW"
+      ]
+    },
+    {
+      "name": "road_dirt_curve_wide_r5",
+      "group": "roads",
+      "col": 2,
+      "row": 3,
+      "x": 112,
+      "y": 192,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "curve_wide",
+      "rotation": 5,
+      "edges": [
+        "SE",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_dirt_y3",
+      "group": "roads",
+      "col": 3,
+      "row": 3,
+      "x": 168,
+      "y": 192,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "y3",
+      "rotation": 0,
+      "edges": [
+        "E",
+        "SW",
+        "NW"
+      ]
+    },
+    {
+      "name": "road_dirt_y3_r1",
+      "group": "roads",
+      "col": 4,
+      "row": 3,
+      "x": 224,
+      "y": 192,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "y3",
+      "rotation": 1,
+      "edges": [
+        "SE",
+        "W",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_dirt_x4",
+      "group": "roads",
+      "col": 5,
+      "row": 3,
+      "x": 280,
+      "y": 192,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "x4",
+      "rotation": 0,
+      "edges": [
+        "SE",
+        "SW",
+        "NW",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_dirt_x4_r1",
+      "group": "roads",
+      "col": 6,
+      "row": 3,
+      "x": 336,
+      "y": 192,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "x4",
+      "rotation": 1,
+      "edges": [
+        "E",
+        "SW",
+        "W",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_dirt_x4_r2",
+      "group": "roads",
+      "col": 7,
+      "row": 3,
+      "x": 392,
+      "y": 192,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "x4",
+      "rotation": 2,
+      "edges": [
+        "E",
+        "SE",
+        "W",
+        "NW"
+      ]
+    },
+    {
+      "name": "road_dirt_x6",
+      "group": "roads",
+      "col": 8,
+      "row": 3,
+      "x": 448,
+      "y": 192,
+      "w": 56,
+      "h": 64,
+      "material": "dirt",
+      "pattern": "x6",
+      "rotation": 0,
+      "edges": [
+        "E",
+        "SE",
+        "SW",
+        "W",
+        "NW",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_stone_stub",
+      "group": "roads",
+      "col": 9,
+      "row": 3,
+      "x": 504,
+      "y": 192,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "stub",
+      "rotation": 0,
+      "edges": [
+        "E"
+      ]
+    },
+    {
+      "name": "road_stone_stub_r1",
+      "group": "roads",
+      "col": 10,
+      "row": 3,
+      "x": 560,
+      "y": 192,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "stub",
+      "rotation": 1,
+      "edges": [
+        "SE"
+      ]
+    },
+    {
+      "name": "road_stone_stub_r2",
+      "group": "roads",
+      "col": 11,
+      "row": 3,
+      "x": 616,
+      "y": 192,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "stub",
+      "rotation": 2,
+      "edges": [
+        "SW"
+      ]
+    },
+    {
+      "name": "road_stone_stub_r3",
+      "group": "roads",
+      "col": 0,
+      "row": 4,
+      "x": 0,
+      "y": 256,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "stub",
+      "rotation": 3,
+      "edges": [
+        "W"
+      ]
+    },
+    {
+      "name": "road_stone_stub_r4",
+      "group": "roads",
+      "col": 1,
+      "row": 4,
+      "x": 56,
+      "y": 256,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "stub",
+      "rotation": 4,
+      "edges": [
+        "NW"
+      ]
+    },
+    {
+      "name": "road_stone_stub_r5",
+      "group": "roads",
+      "col": 2,
+      "row": 4,
+      "x": 112,
+      "y": 256,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "stub",
+      "rotation": 5,
+      "edges": [
+        "NE"
+      ]
+    },
+    {
+      "name": "road_stone_straight",
+      "group": "roads",
+      "col": 3,
+      "row": 4,
+      "x": 168,
+      "y": 256,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "straight",
+      "rotation": 0,
+      "edges": [
+        "E",
+        "W"
+      ]
+    },
+    {
+      "name": "road_stone_straight_r1",
+      "group": "roads",
+      "col": 4,
+      "row": 4,
+      "x": 224,
+      "y": 256,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "straight",
+      "rotation": 1,
+      "edges": [
+        "SE",
+        "NW"
+      ]
+    },
+    {
+      "name": "road_stone_straight_r2",
+      "group": "roads",
+      "col": 5,
+      "row": 4,
+      "x": 280,
+      "y": 256,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "straight",
+      "rotation": 2,
+      "edges": [
+        "SW",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_stone_curve_wide",
+      "group": "roads",
+      "col": 6,
+      "row": 4,
+      "x": 336,
+      "y": 256,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "curve_wide",
+      "rotation": 0,
+      "edges": [
+        "E",
+        "SW"
+      ]
+    },
+    {
+      "name": "road_stone_curve_wide_r1",
+      "group": "roads",
+      "col": 7,
+      "row": 4,
+      "x": 392,
+      "y": 256,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "curve_wide",
+      "rotation": 1,
+      "edges": [
+        "SE",
+        "W"
+      ]
+    },
+    {
+      "name": "road_stone_curve_wide_r2",
+      "group": "roads",
+      "col": 8,
+      "row": 4,
+      "x": 448,
+      "y": 256,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "curve_wide",
+      "rotation": 2,
+      "edges": [
+        "SW",
+        "NW"
+      ]
+    },
+    {
+      "name": "road_stone_curve_wide_r3",
+      "group": "roads",
+      "col": 9,
+      "row": 4,
+      "x": 504,
+      "y": 256,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "curve_wide",
+      "rotation": 3,
+      "edges": [
+        "W",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_stone_curve_wide_r4",
+      "group": "roads",
+      "col": 10,
+      "row": 4,
+      "x": 560,
+      "y": 256,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "curve_wide",
+      "rotation": 4,
+      "edges": [
+        "E",
+        "NW"
+      ]
+    },
+    {
+      "name": "road_stone_curve_wide_r5",
+      "group": "roads",
+      "col": 11,
+      "row": 4,
+      "x": 616,
+      "y": 256,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "curve_wide",
+      "rotation": 5,
+      "edges": [
+        "SE",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_stone_y3",
+      "group": "roads",
+      "col": 0,
+      "row": 5,
+      "x": 0,
+      "y": 320,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "y3",
+      "rotation": 0,
+      "edges": [
+        "E",
+        "SW",
+        "NW"
+      ]
+    },
+    {
+      "name": "road_stone_y3_r1",
+      "group": "roads",
+      "col": 1,
+      "row": 5,
+      "x": 56,
+      "y": 320,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "y3",
+      "rotation": 1,
+      "edges": [
+        "SE",
+        "W",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_stone_x4",
+      "group": "roads",
+      "col": 2,
+      "row": 5,
+      "x": 112,
+      "y": 320,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "x4",
+      "rotation": 0,
+      "edges": [
+        "SE",
+        "SW",
+        "NW",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_stone_x4_r1",
+      "group": "roads",
+      "col": 3,
+      "row": 5,
+      "x": 168,
+      "y": 320,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "x4",
+      "rotation": 1,
+      "edges": [
+        "E",
+        "SW",
+        "W",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_stone_x4_r2",
+      "group": "roads",
+      "col": 4,
+      "row": 5,
+      "x": 224,
+      "y": 320,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "x4",
+      "rotation": 2,
+      "edges": [
+        "E",
+        "SE",
+        "W",
+        "NW"
+      ]
+    },
+    {
+      "name": "road_stone_x6",
+      "group": "roads",
+      "col": 5,
+      "row": 5,
+      "x": 280,
+      "y": 320,
+      "w": 56,
+      "h": 64,
+      "material": "stone",
+      "pattern": "x6",
+      "rotation": 0,
+      "edges": [
+        "E",
+        "SE",
+        "SW",
+        "W",
+        "NW",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_snow_stub",
+      "group": "roads",
+      "col": 6,
+      "row": 5,
+      "x": 336,
+      "y": 320,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "stub",
+      "rotation": 0,
+      "edges": [
+        "E"
+      ]
+    },
+    {
+      "name": "road_snow_stub_r1",
+      "group": "roads",
+      "col": 7,
+      "row": 5,
+      "x": 392,
+      "y": 320,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "stub",
+      "rotation": 1,
+      "edges": [
+        "SE"
+      ]
+    },
+    {
+      "name": "road_snow_stub_r2",
+      "group": "roads",
+      "col": 8,
+      "row": 5,
+      "x": 448,
+      "y": 320,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "stub",
+      "rotation": 2,
+      "edges": [
+        "SW"
+      ]
+    },
+    {
+      "name": "road_snow_stub_r3",
+      "group": "roads",
+      "col": 9,
+      "row": 5,
+      "x": 504,
+      "y": 320,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "stub",
+      "rotation": 3,
+      "edges": [
+        "W"
+      ]
+    },
+    {
+      "name": "road_snow_stub_r4",
+      "group": "roads",
+      "col": 10,
+      "row": 5,
+      "x": 560,
+      "y": 320,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "stub",
+      "rotation": 4,
+      "edges": [
+        "NW"
+      ]
+    },
+    {
+      "name": "road_snow_stub_r5",
+      "group": "roads",
+      "col": 11,
+      "row": 5,
+      "x": 616,
+      "y": 320,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "stub",
+      "rotation": 5,
+      "edges": [
+        "NE"
+      ]
+    },
+    {
+      "name": "road_snow_straight",
+      "group": "roads",
+      "col": 0,
+      "row": 6,
+      "x": 0,
+      "y": 384,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "straight",
+      "rotation": 0,
+      "edges": [
+        "E",
+        "W"
+      ]
+    },
+    {
+      "name": "road_snow_straight_r1",
+      "group": "roads",
+      "col": 1,
+      "row": 6,
+      "x": 56,
+      "y": 384,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "straight",
+      "rotation": 1,
+      "edges": [
+        "SE",
+        "NW"
+      ]
+    },
+    {
+      "name": "road_snow_straight_r2",
+      "group": "roads",
+      "col": 2,
+      "row": 6,
+      "x": 112,
+      "y": 384,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "straight",
+      "rotation": 2,
+      "edges": [
+        "SW",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_snow_curve_wide",
+      "group": "roads",
+      "col": 3,
+      "row": 6,
+      "x": 168,
+      "y": 384,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "curve_wide",
+      "rotation": 0,
+      "edges": [
+        "E",
+        "SW"
+      ]
+    },
+    {
+      "name": "road_snow_curve_wide_r1",
+      "group": "roads",
+      "col": 4,
+      "row": 6,
+      "x": 224,
+      "y": 384,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "curve_wide",
+      "rotation": 1,
+      "edges": [
+        "SE",
+        "W"
+      ]
+    },
+    {
+      "name": "road_snow_curve_wide_r2",
+      "group": "roads",
+      "col": 5,
+      "row": 6,
+      "x": 280,
+      "y": 384,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "curve_wide",
+      "rotation": 2,
+      "edges": [
+        "SW",
+        "NW"
+      ]
+    },
+    {
+      "name": "road_snow_curve_wide_r3",
+      "group": "roads",
+      "col": 6,
+      "row": 6,
+      "x": 336,
+      "y": 384,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "curve_wide",
+      "rotation": 3,
+      "edges": [
+        "W",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_snow_curve_wide_r4",
+      "group": "roads",
+      "col": 7,
+      "row": 6,
+      "x": 392,
+      "y": 384,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "curve_wide",
+      "rotation": 4,
+      "edges": [
+        "E",
+        "NW"
+      ]
+    },
+    {
+      "name": "road_snow_curve_wide_r5",
+      "group": "roads",
+      "col": 8,
+      "row": 6,
+      "x": 448,
+      "y": 384,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "curve_wide",
+      "rotation": 5,
+      "edges": [
+        "SE",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_snow_y3",
+      "group": "roads",
+      "col": 9,
+      "row": 6,
+      "x": 504,
+      "y": 384,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "y3",
+      "rotation": 0,
+      "edges": [
+        "E",
+        "SW",
+        "NW"
+      ]
+    },
+    {
+      "name": "road_snow_y3_r1",
+      "group": "roads",
+      "col": 10,
+      "row": 6,
+      "x": 560,
+      "y": 384,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "y3",
+      "rotation": 1,
+      "edges": [
+        "SE",
+        "W",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_snow_x4",
+      "group": "roads",
+      "col": 11,
+      "row": 6,
+      "x": 616,
+      "y": 384,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "x4",
+      "rotation": 0,
+      "edges": [
+        "SE",
+        "SW",
+        "NW",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_snow_x4_r1",
+      "group": "roads",
+      "col": 0,
+      "row": 7,
+      "x": 0,
+      "y": 448,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "x4",
+      "rotation": 1,
+      "edges": [
+        "E",
+        "SW",
+        "W",
+        "NE"
+      ]
+    },
+    {
+      "name": "road_snow_x4_r2",
+      "group": "roads",
+      "col": 1,
+      "row": 7,
+      "x": 56,
+      "y": 448,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "x4",
+      "rotation": 2,
+      "edges": [
+        "E",
+        "SE",
+        "W",
+        "NW"
+      ]
+    },
+    {
+      "name": "road_snow_x6",
+      "group": "roads",
+      "col": 2,
+      "row": 7,
+      "x": 112,
+      "y": 448,
+      "w": 56,
+      "h": 64,
+      "material": "snow",
+      "pattern": "x6",
+      "rotation": 0,
+      "edges": [
+        "E",
+        "SE",
+        "SW",
+        "W",
+        "NW",
+        "NE"
+      ]
+    },
+    {
+      "name": "town_grass_small",
+      "group": "towns",
+      "col": 0,
+      "row": 8,
+      "x": 0,
+      "y": 512,
+      "w": 56,
+      "h": 64,
+      "env": "grass",
+      "tier": "small"
+    },
+    {
+      "name": "town_grass_medium",
+      "group": "towns",
+      "col": 1,
+      "row": 8,
+      "x": 56,
+      "y": 512,
+      "w": 56,
+      "h": 64,
+      "env": "grass",
+      "tier": "medium"
+    },
+    {
+      "name": "town_grass_fortress",
+      "group": "towns",
+      "col": 2,
+      "row": 8,
+      "x": 112,
+      "y": 512,
+      "w": 56,
+      "h": 64,
+      "env": "grass",
+      "tier": "fortress"
+    },
+    {
+      "name": "town_dirt_small",
+      "group": "towns",
+      "col": 3,
+      "row": 8,
+      "x": 168,
+      "y": 512,
+      "w": 56,
+      "h": 64,
+      "env": "dirt",
+      "tier": "small"
+    },
+    {
+      "name": "town_dirt_medium",
+      "group": "towns",
+      "col": 4,
+      "row": 8,
+      "x": 224,
+      "y": 512,
+      "w": 56,
+      "h": 64,
+      "env": "dirt",
+      "tier": "medium"
+    },
+    {
+      "name": "town_dirt_fortress",
+      "group": "towns",
+      "col": 5,
+      "row": 8,
+      "x": 280,
+      "y": 512,
+      "w": 56,
+      "h": 64,
+      "env": "dirt",
+      "tier": "fortress"
+    },
+    {
+      "name": "town_desert_small",
+      "group": "towns",
+      "col": 6,
+      "row": 8,
+      "x": 336,
+      "y": 512,
+      "w": 56,
+      "h": 64,
+      "env": "desert",
+      "tier": "small"
+    },
+    {
+      "name": "town_desert_medium",
+      "group": "towns",
+      "col": 7,
+      "row": 8,
+      "x": 392,
+      "y": 512,
+      "w": 56,
+      "h": 64,
+      "env": "desert",
+      "tier": "medium"
+    },
+    {
+      "name": "town_desert_fortress",
+      "group": "towns",
+      "col": 8,
+      "row": 8,
+      "x": 448,
+      "y": 512,
+      "w": 56,
+      "h": 64,
+      "env": "desert",
+      "tier": "fortress"
+    },
+    {
+      "name": "town_ice_small",
+      "group": "towns",
+      "col": 9,
+      "row": 8,
+      "x": 504,
+      "y": 512,
+      "w": 56,
+      "h": 64,
+      "env": "ice",
+      "tier": "small"
+    },
+    {
+      "name": "town_ice_medium",
+      "group": "towns",
+      "col": 10,
+      "row": 8,
+      "x": 560,
+      "y": 512,
+      "w": 56,
+      "h": 64,
+      "env": "ice",
+      "tier": "medium"
+    },
+    {
+      "name": "town_ice_fortress",
+      "group": "towns",
+      "col": 11,
+      "row": 8,
+      "x": 616,
+      "y": 512,
+      "w": 56,
+      "h": 64,
+      "env": "ice",
+      "tier": "fortress"
+    },
+    {
+      "name": "town_forest_small",
+      "group": "towns",
+      "col": 0,
+      "row": 9,
+      "x": 0,
+      "y": 576,
+      "w": 56,
+      "h": 64,
+      "env": "forest",
+      "tier": "small"
+    },
+    {
+      "name": "town_forest_medium",
+      "group": "towns",
+      "col": 1,
+      "row": 9,
+      "x": 56,
+      "y": 576,
+      "w": 56,
+      "h": 64,
+      "env": "forest",
+      "tier": "medium"
+    },
+    {
+      "name": "town_forest_fortress",
+      "group": "towns",
+      "col": 2,
+      "row": 9,
+      "x": 112,
+      "y": 576,
+      "w": 56,
+      "h": 64,
+      "env": "forest",
+      "tier": "fortress"
+    },
+    {
+      "name": "town_mountains_small",
+      "group": "towns",
+      "col": 3,
+      "row": 9,
+      "x": 168,
+      "y": 576,
+      "w": 56,
+      "h": 64,
+      "env": "mountains",
+      "tier": "small"
+    },
+    {
+      "name": "town_mountains_medium",
+      "group": "towns",
+      "col": 4,
+      "row": 9,
+      "x": 224,
+      "y": 576,
+      "w": 56,
+      "h": 64,
+      "env": "mountains",
+      "tier": "medium"
+    },
+    {
+      "name": "town_mountains_fortress",
+      "group": "towns",
+      "col": 5,
+      "row": 9,
+      "x": 280,
+      "y": 576,
+      "w": 56,
+      "h": 64,
+      "env": "mountains",
+      "tier": "fortress"
+    }
+  ]
+}
