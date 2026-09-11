@@ -7,6 +7,7 @@ of distance-to-centreline plus lattice-periodic data, so they also continue acro
 import math
 
 from hexlib import C, CENTER, EDGE_MID, EDGE_NAMES, HEX_PIXELS, Tile, bayer, periodic_noise, wrap
+from stamps import seg_dist
 
 MATERIALS = ["dirt", "stone", "snow"]
 PATTERNS = [   # canonical edge sets (0=E 1=SE 2=SW 3=W 4=NW 5=NE)
@@ -33,13 +34,6 @@ def rotations(edges):
     return out
 
 
-def _seg_dist(p, a, b):
-    vx, vy = b[0] - a[0], b[1] - a[1]
-    L2 = vx * vx + vy * vy
-    t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / L2))
-    return math.hypot(p[0] - a[0] - t * vx, p[1] - a[1] - t * vy), t
-
-
 def _lerp(a, b, t):
     return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
 
@@ -57,8 +51,8 @@ def road_shape(edges):
         far, _ = _stem(edges[0])
 
         def stub(px, py):
-            d_out, _ = _seg_dist((px, py), far, m)
-            d_in, t = _seg_dist((px, py), CENTER, m)
+            d_out, _ = seg_dist((px, py), far, m)
+            d_in, t = seg_dist((px, py), CENTER, m)
             fade = min(max((t - 0.02) / 0.4, 0.0), 1.0)
             return (d_out, 1.0) if d_out < d_in else (d_in, fade * fade * (3 - 2 * fade))
         return stub
@@ -79,7 +73,7 @@ def road_shape(edges):
     hub = len(edges) >= 3
 
     def shape(px, py):
-        d = min(_seg_dist((px, py), a, b)[0] for a, b in segs)
+        d = min(seg_dist((px, py), a, b)[0] for a, b in segs)
         if hub:
             d = min(d, math.hypot(px - CENTER[0], py - CENTER[1]) - 1.0)
         return d, 1.0

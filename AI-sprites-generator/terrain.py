@@ -15,6 +15,26 @@ from stamps import boulder, dome, line_pixels, pebble, scatter, shade_dome, tuft
 VARIANTS = ["v1", "v2", "v3", "accent"]
 ENV_ORDER = ["grass", "dirt", "desert", "ice", "forest", "mountains"]
 ENV_SEED = {"grass": 100, "dirt": 200, "desert": 300, "ice": 400, "forest": 500, "mountains": 600}
+
+# Which environments may border each other (symmetric; the same environment is always allowed).
+_BORDERS = {
+    "grass": ("dirt", "ice", "forest", "mountains"),
+    "dirt": ("grass", "desert", "forest", "mountains"),
+    "desert": ("dirt", "mountains"),
+    "ice": ("grass", "mountains"),
+    "forest": ("grass", "dirt", "mountains"),
+    "mountains": ("grass", "dirt", "desert", "ice", "forest"),
+}
+ADJACENT = {env: {env} for env in ENV_ORDER}
+for _env, _others in _BORDERS.items():
+    for _other in _others:
+        ADJACENT[_env].add(_other)
+        ADJACENT[_other].add(_env)
+ENV_CHAIN = ["desert", "dirt", "forest", "grass", "ice", "mountains"]   # a legal order for side-by-side bands
+
+
+def can_border(a, b):
+    return b in ADJACENT[a]
 BAND = 6.0     # shared detail anchors
 INNER = 9.0    # per-variant detail anchors
 
@@ -27,8 +47,14 @@ def new_tile(env, variant):
     return Tile(f"env_{env}_{variant}", "environments")
 
 
+def mix(variant, base, own):
+    """Shared edge band + per-variant interior. The "base" pseudo-variant (used by blends.py) is
+    the shared field everywhere, which every real variant matches near the border."""
+    return base if variant == "base" else blend_fields(base, own())
+
+
 def ground_field(env, variant, salt=0):
-    return blend_fields(fbm(ENV_SEED[env] + salt), fbm(vseed(env, variant) * 13 + salt))
+    return mix(variant, fbm(ENV_SEED[env] + salt), lambda: fbm(vseed(env, variant) * 13 + salt))
 
 
 def paint_field(tile, field, ramp, band=0.3):
@@ -38,6 +64,8 @@ def paint_field(tile, field, ramp, band=0.3):
 
 def details(env, variant, shared_count, own_count, spacing, salt=0):
     shared = scatter(ENV_SEED[env] * 7 + salt, shared_count, spacing, max_border=BAND)
+    if variant == "base":
+        return shared
     own = scatter(vseed(env, variant) * 7 + salt, own_count, spacing, min_border=INNER, avoid=shared)
     return shared + own
 
@@ -147,7 +175,7 @@ def cracked_patch(t, cx, cy, seed):
 def desert(variant, objects=True):
     t = new_tile("desert", variant)
     field = ground_field("desert", variant)
-    warp = blend_fields(periodic_noise(3011, 30), periodic_noise(vseed("desert", variant) * 17, 30))
+    warp = mix(variant, periodic_noise(3011, 30), lambda: periodic_noise(vseed("desert", variant) * 17, 30))
     flat = [C["sand_dk"]] + [C["sand"]] * 6 + [C["sand_lt"]]
     for x, y in HEX_PIXELS:
         # periodic on the lattice: (56,0) -> +2 cycles, (28,48) -> +3 cycles
@@ -287,6 +315,15 @@ def mushroom(t, x, y):
     t.put(x + 1, y + 1, C["brick_dk"])
 
 
+def forest_shared_trees():
+    """Tree anchors near the border, identical for every forest variant (also used by blends.py)."""
+    return scatter(5007, 60, 10.5, max_border=11.0)
+
+
+def forest_tree(t, x, y):
+    (conifer if hashf(x, y, 5) < 0.35 else broadleaf)(t, x, y)
+
+
 def forest(variant, objects=True):
     t = new_tile("forest", variant)
     paint_field(t, ground_field("forest", variant),
@@ -295,9 +332,9 @@ def forest(variant, objects=True):
         tuft(t, x, y, C["leaf_dk"], C["pine"], C["pine_dk"], big=(x + y) % 3 == 0)
     if not objects:
         return t
-    shared = scatter(5007, 60, 10.5, max_border=11.0)
-    own = [] if variant == "accent" else scatter(vseed("forest", variant) * 7 + 1, 6, 10.5,
-                                                 min_border=14.0, avoid=shared)
+    shared = forest_shared_trees()
+    own = [] if variant in ("accent", "base") else scatter(vseed("forest", variant) * 7 + 1, 6, 10.5,
+                                                           min_border=14.0, avoid=shared)
     if variant == "accent":
         cx, cy = accent_center("forest", jitter=1)
         fallen_log(t, cx, cy)
@@ -306,7 +343,7 @@ def forest(variant, objects=True):
             ang = i / 6 * math.tau + 0.4
             mushroom(t, int(cx - 7 + 4.5 * math.cos(ang)), int(cy + 9 + 3.5 * math.sin(ang)))
     for x, y in sorted(shared + own, key=lambda p: (p[1], p[0])):
-        (conifer if hashf(x, y, 5) < 0.35 else broadleaf)(t, x, y)
+        forest_tree(t, x, y)
     return t
 
 
@@ -314,7 +351,7 @@ def forest(variant, objects=True):
 def mountains(variant, objects=True):
     t = new_tile("mountains", variant)
     noise = ground_field("mountains", variant)
-    crag = blend_fields(periodic_noise(6101, 6), periodic_noise(vseed("mountains", variant) * 19, 6))
+    crag = mix(variant, periodic_noise(6101, 6), lambda: periodic_noise(vseed("mountains", variant) * 19, 6))
     peaks = []
     if objects:
         for px, py in scatter(6007, 8, 16.0, max_border=9.0):

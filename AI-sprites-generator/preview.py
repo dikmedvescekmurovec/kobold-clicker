@@ -30,7 +30,7 @@ def contact_sheet(tiles, path, cols=8, scale=3, bg=(40, 40, 48, 255)):
     sheet.resize((sheet.width * scale, sheet.height * scale), Image.NEAREST).save(path)
 
 
-def tiled_map(layers, path, cols=7, rows=6, scale=2, seed=1, bg=(20, 20, 24, 255)):
+def tiled_image(layers, cols=7, rows=6, seed=1, bg=(20, 20, 24, 255)):
     """layers: callables (row, col, rng) -> list of Tiles stacked at that cell, drawn row by row."""
     rng = random.Random(seed)
     img = Image.new("RGBA", (cols * STEP_X + ROW_OFFSET, rows * STEP_Y + (H - STEP_Y)), bg)
@@ -40,4 +40,9 @@ def tiled_map(layers, path, cols=7, rows=6, scale=2, seed=1, bg=(20, 20, 24, 255
             for layer in layers:
                 for t in layer(r, c, rng):
                     img.alpha_composite(tile_image(t), (ox, oy))
+    return img
+
+
+def tiled_map(layers, path, cols=7, rows=6, scale=2, seed=1, bg=(20, 20, 24, 255)):
+    img = tiled_image(layers, cols, rows, seed, bg)
     img.resize((img.width * scale, img.height * scale), Image.NEAREST).save(path)

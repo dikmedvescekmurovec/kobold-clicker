@@ -1,4 +1,4 @@
-"""QA for each phase. Usage: python qa.py <phase1|phase2|phase3|showcase> <tag>
+"""QA for each phase. Usage: python qa.py <phase1|phase2|phase3|showcase|blends> <tag>
 Images are written to qa/<name>_<tag>.png so every run can be viewed under a fresh filename."""
 import os
 import random
@@ -24,6 +24,19 @@ def neighbor(r, c, e):
     odd = r % 2
     return {0: (r, c + 1), 3: (r, c - 1), 5: (r - 1, c + odd), 4: (r - 1, c - 1 + odd),
             1: (r + 1, c + odd), 2: (r + 1, c - 1 + odd)}[e]
+
+
+def illegal_borders(env_at, rows, cols):
+    """Neighbouring cells whose environments may not border each other (terrain.ADJACENT)."""
+    from terrain import can_border
+    bad = Counter()
+    for r in range(rows):
+        for c in range(cols):
+            for e in (0, 1, 2):
+                nr, nc = neighbor(r, c, e)
+                if 0 <= nr < rows and 0 <= nc < cols and not can_border(env_at(r, c), env_at(nr, nc)):
+                    bad["|".join(sorted((env_at(r, c), env_at(nr, nc))))] += 1
+    return dict(bad)
 
 
 def road_network(rows, cols, valid, seed, density, blocked=()):
@@ -52,7 +65,7 @@ def road_network(rows, cols, valid, seed, density, blocked=()):
 
 
 def phase1(tag):
-    from terrain import ENV_ORDER, VARIANTS, all_environments
+    from terrain import ENV_CHAIN, ENV_ORDER, VARIANTS, all_environments
     t0 = time.time()
     tiles = all_environments()
     by = {t.name: t for t in tiles}
@@ -65,9 +78,13 @@ def phase1(tag):
     print("  spill/holes:", containment(tiles))
     contact_sheet(tiles, f"qa/p1_sheet_{tag}.png", cols=8, scale=3)
 
+    def band(r, c):
+        return ENV_CHAIN[c // 3]
+    print("  illegal borders on map:", illegal_borders(band, 6, 18))
+
     def layer(r, c, rng):
         v = "accent" if rng.random() < 0.1 else rng.choice(VARIANTS[:3])
-        return [by[f"env_{ENV_ORDER[c // 3]}_{v}"]]
+        return [by[f"env_{band(r, c)}_{v}"]]
     tiled_map([layer], f"qa/p1_map_{tag}.png", cols=18, rows=6, scale=1, seed=7)
 
 
@@ -127,7 +144,8 @@ def showcase(tag):
             return "forest" if (r + c * 2) % 5 == 0 or r > 5 else "grass"
         if c < 8:
             return "mountains" if r < 2 else "dirt" if c < 6 else "desert"
-        return "ice"
+        return "mountains" if c == 8 else "ice"   # desert may not border ice
+    print("illegal borders:", illegal_borders(region, rows, cols))
     towns_at = {(2, 1): "small", (5, 2): "fortress", (4, 6): "medium", (1, 10): "small", (5, 9): "fortress", (3, 4): "small"}
     edges_of = road_network(rows, cols, lut["dirt"], seed=5, density=0.3, blocked=towns_at)
 
@@ -141,5 +159,64 @@ def showcase(tag):
     tiled_map([cell], f"qa/showcase_{tag}.png", cols=cols, rows=rows, scale=2)
 
 
+def blends(tag):
+    from PIL import Image
+    from blends import RANK, all_blends, blend_tile, edge_dist
+    from preview import tiled_image
+    from terrain import ENV_CHAIN, ENV_ORDER, ENVS, VARIANTS
+    t0 = time.time()
+    tiles = all_blends()
+    print(f"blends: {len(tiles)} in {time.time() - t0:.1f}s, spill:", containment(tiles, solid=False)[0])
+    envs = {e: {v: ENVS[e](v) for v in VARIANTS} for e in ENV_ORDER}
+    uncovered, differ = Counter(), Counter()
+    for t in tiles:
+        ref = envs[t.env]["v1"]
+        for x, y in RING:
+            if min(edge_dist(e, x, y) for e in t.mask) < 1.5:
+                uncovered[t.env] += t.px[y][x] == 0
+                differ[t.env] += t.px[y][x] not in (0, ref.px[y][x])
+    print("  seam pixels uncovered:", dict(uncovered), "| differing from v1:", dict(differ))
+
+    def layers(env_at, rows, cols, blended):
+        def cell(r, c, rng):
+            own = env_at(r, c)
+            v = "accent" if rng.random() < 0.1 else rng.choice(VARIANTS[:3])
+            if not blended:
+                return [envs[own][v]]
+            near = {}
+            for e in range(6):
+                nr, nc = neighbor(r, c, e)
+                if 0 <= nr < rows and 0 <= nc < cols and RANK[env_at(nr, nc)] > RANK[own]:
+                    near.setdefault(env_at(nr, nc), []).append(e)
+            return [envs[own][v]] + [blend_tile(n, tuple(es)) for n, es in sorted(near.items(), key=lambda kv: RANK[kv[0]])]
+        return [cell]
+
+    pairs = [("forest", "grass"), ("grass", "dirt"), ("desert", "dirt"), ("mountains", "desert"), ("ice", "grass"),
+             ("mountains", "ice")]
+    shots, illegal = [], {}
+    for i, (hi, lo) in enumerate(pairs):
+        def env_at(r, c, hi=hi, lo=lo):
+            env = hi if c < (3, 2, 3, 4)[r] else lo
+            return (lo if env == hi else hi) if (r, c) in ((1, 4), (2, 1)) else env   # one island each way
+        illegal.update(illegal_borders(env_at, 4, 6))
+        after = tiled_image(layers(env_at, 4, 6, True), 6, 4, seed=i)
+        shots.append((tiled_image(layers(env_at, 4, 6, False), 6, 4, seed=i), after))
+        after.resize((after.width * 3, after.height * 3), Image.NEAREST).save(f"qa/blend_{hi}_{lo}_{tag}.png")
+    w, h = shots[0][0].size
+    sheet = Image.new("RGBA", (w * 2 + 8, (h + 8) * len(shots)), (40, 40, 48, 255))
+    for i, (before, after) in enumerate(shots):
+        sheet.paste(before, (0, i * (h + 8)))
+        sheet.paste(after, (w + 8, i * (h + 8)))
+    sheet.resize((sheet.width * 2, sheet.height * 2), Image.NEAREST).save(f"qa/blend_pairs_{tag}.png")
+
+    def band(r, c):
+        return ENV_CHAIN[c // 3]
+    illegal.update(illegal_borders(band, 6, 18))
+    print("  illegal borders on preview maps:", illegal)
+    img = tiled_image(layers(band, 6, 18, True), 18, 6, seed=7)
+    img.resize((img.width * 2, img.height * 2), Image.NEAREST).save(f"qa/blend_map_{tag}.png")
+
+
 if __name__ == "__main__":
-    {"phase1": phase1, "phase2": phase2, "phase3": phase3, "showcase": showcase}[sys.argv[1]](sys.argv[2])
+    {"phase1": phase1, "phase2": phase2, "phase3": phase3, "showcase": showcase,
+     "blends": blends}[sys.argv[1]](sys.argv[2])

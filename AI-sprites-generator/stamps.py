@@ -137,3 +137,11 @@ def line_pixels(x0, y0, x1, y1):
         if e2 <= dx:
             err += dx
             y0 += sy
+
+
+def seg_dist(p, a, b):
+    """Distance from p to segment ab, and the clamped position t along it."""
+    vx, vy = b[0] - a[0], b[1] - a[1]
+    L2 = vx * vx + vy * vy
+    t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / L2))
+    return math.hypot(p[0] - a[0] - t * vx, p[1] - a[1] - t * vy), t

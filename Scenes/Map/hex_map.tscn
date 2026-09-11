@@ -1,0 +1,14 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://Scenes/Map/hex_map.gd" id="1_map"]
+[ext_resource type="Script" path="res://Scenes/Map/hex_highlight.gd" id="2_highlight"]
+
+[node name="HexMap" type="Node2D"]
+script = ExtResource("1_map")
+
+[node name="GroundLayer" type="TileMapLayer" parent="."]
+
+[node name="RoadLayer" type="TileMapLayer" parent="."]
+
+[node name="Highlight" type="Node2D" parent="."]
+script = ExtResource("2_highlight")

@@ -7,9 +7,10 @@ from collections import Counter
 
 from PIL import Image
 
+from blends import PRIORITY, all_blends
 from hexlib import EDGE_NAMES, H, HEX_PIXELS, PALETTE, ROW_OFFSET, STEP_X, STEP_Y, W, in_hex
 from roads import all_roads
-from terrain import all_environments
+from terrain import ADJACENT, all_environments
 from towns import all_towns
 
 ASEPRITE = r"C:\Users\Dik\Documents\Git\aseprite\aseprite\build\bin\aseprite.exe"
@@ -17,7 +18,7 @@ OUT = r"C:\Users\Dik\Documents\incremendal-side-scroller\AI-sprites"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHEET = "hex_tileset.png"
 COLS = 12
-GROUPS = ("environments", "roads", "towns")
+GROUPS = ("environments", "roads", "towns", "blends")   # appended groups keep earlier atlas coordinates
 
 
 def describe(t):
@@ -26,6 +27,8 @@ def describe(t):
         return {"env": parts[1], "variant": parts[2]}
     if t.group == "towns":
         return {"env": parts[1], "tier": parts[2]}
+    if t.group == "blends":
+        return {"env": t.env, "edges": t.edges}
     pattern, rotation = parts[2:], 0
     if pattern[-1][0] == "r" and pattern[-1][1:].isdigit():
         rotation = int(pattern[-1][1:])
@@ -34,7 +37,7 @@ def describe(t):
 
 
 def main():
-    tiles = all_environments() + all_roads() + all_towns()
+    tiles = all_environments() + all_roads() + all_towns() + all_blends()
     names = [t.name for t in tiles]
     assert len(set(names)) == len(names), "duplicate tile names"
 
@@ -71,12 +74,17 @@ def main():
             "hex": {"orientation": "pointy-top", "column_step_px": STEP_X, "row_step_px": STEP_Y,
                     "odd_row_offset_px": ROW_OFFSET,
                     "note": "56x64 near-regular hex; tiles tessellate exactly with these steps"},
-            "draw_order": "environment first, then road overlay; rows top-to-bottom",
+            "draw_order": "environment first, then blend overlays in blend_priority order, then road overlay; "
+                          "rows top-to-bottom",
             "edge_order": EDGE_NAMES,
             "road_rotation": "rotation k = canonical edges turned clockwise by k*60 degrees; every "
                              "needed orientation is pre-rendered, never rotate sprites in-engine",
             "road_materials": {"dirt": ["grass", "dirt", "forest"], "stone": ["desert", "mountains"],
                                "snow": ["ice"]},
+            "env_adjacency": {env: sorted(ADJACENT[env]) for env in ADJACENT},
+            "blend_priority": PRIORITY,
+            "blend_rule": "on a non-town tile, for each neighbouring env A later in blend_priority than the tile's "
+                          "env, draw blend_<A>_<edges> where edges are the sides touching A",
             "accent_frequency": "use env *_accent on roughly 1 in 8-12 tiles of that environment",
             "texture_filter": "nearest",
         },
@@ -102,7 +110,7 @@ def main():
         problems["pixel mismatch"] += mismatch(list(im.get_flattened_data()), im.getpalette(), src)
         crop = sheet.crop((e["x"], e["y"], e["x"] + W, e["y"] + H))
         problems["sheet mismatch"] += mismatch(list(crop.get_flattened_data()), spal, src)
-        if t.group != "roads":
+        if t.group not in ("roads", "blends"):
             problems["holes in hex"] += sum(t.px[y][x] == 0 for x, y in HEX_PIXELS)
         problems["outside hex"] += sum(t.px[y][x] != 0 for y in range(H) for x in range(W) if not in_hex(x, y))
     counts = {g: len([f for f in os.listdir(os.path.join(OUT, g)) if f.endswith(".png")]) for g in GROUPS}
