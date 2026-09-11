@@ -1,3 +1,17 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+# Export output
+/build/
+/export/
+
+# Temp files (e.g. Assets/bars.png271044417.tmp)
+*.tmp
+
+# OS junk
+.DS_Store
+._*
+__MACOSX/
+Thumbs.db
+desktop.ini
