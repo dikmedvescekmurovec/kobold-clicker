@@ -3,6 +3,7 @@ import random
 
 from PIL import Image
 
+from buildlib import ceil_div
 from hexlib import H, PALETTE, ROW_OFFSET, STEP_X, STEP_Y, W
 
 
@@ -42,7 +43,7 @@ def nine_slice(tile, w, h, cell=8):
 
 
 def contact_sheet(tiles, path, cols=8, scale=3, bg=(40, 40, 48, 255)):
-    rows = (len(tiles) + cols - 1) // cols
+    rows = ceil_div(len(tiles), cols)
     sheet = Image.new("RGBA", (cols * (W + 2), rows * (H + 2)), bg)
     for i, t in enumerate(tiles):
         sheet.alpha_composite(tile_image(t), ((i % cols) * (W + 2) + 1, (i // cols) * (H + 2) + 1))

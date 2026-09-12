@@ -9,7 +9,11 @@ import math
 from hexlib import C, CENTER, EDGE_MID, EDGE_NAMES, HEX_PIXELS, Tile, bayer, periodic_noise, wrap
 from stamps import seg_dist
 
-MATERIALS = ["dirt", "stone", "snow"]
+# Which environments each road material is used on. build.py ships this to the engine in the sheet
+# JSON (meta.road_materials), and qa.py lays out its previews by it, so it is written once here.
+MATERIAL_ENVS = {"dirt": ["grass", "dirt", "forest"], "stone": ["desert", "mountains"], "snow": ["ice"]}
+MATERIALS = list(MATERIAL_ENVS)
+ENV_MATERIAL = {env: material for material, envs in MATERIAL_ENVS.items() for env in envs}
 PATTERNS = [   # canonical edge sets (0=E 1=SE 2=SW 3=W 4=NW 5=NE)
     ("stub", (0,)),
     ("straight", (0, 3)),

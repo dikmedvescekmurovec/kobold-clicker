@@ -1,21 +1,15 @@
 """Final build: generate all tiles, export indexed PNGs + spritesheet through Aseprite,
 write spritesheet JSON metadata, then verify every exported file against the source data."""
-import json
 import os
-import subprocess
 from collections import Counter
 
-from PIL import Image
-
 from blends import PRIORITY, all_blends
+from buildlib import HERE, OUT, ceil_div, report, verify, write_and_emit
 from hexlib import EDGE_NAMES, H, HEX_PIXELS, PALETTE, ROW_OFFSET, STEP_X, STEP_Y, W, in_hex
-from roads import all_roads
+from roads import MATERIAL_ENVS, all_roads
 from terrain import ADJACENT, all_environments
 from towns import all_towns
 
-ASEPRITE = r"C:\Users\Dik\Documents\Git\aseprite\aseprite\build\bin\aseprite.exe"
-OUT = r"C:\Users\Dik\Documents\incremendal-side-scroller\AI-sprites"
-HERE = os.path.dirname(os.path.abspath(__file__))
 SHEET = "hex_tileset.png"
 COLS = 12
 GROUPS = ("environments", "roads", "towns", "blends")   # appended groups keep earlier atlas coordinates
@@ -48,23 +42,16 @@ def main():
             r, c = row + i // COLS, i % COLS
             entries.append((t, dict(name=t.name, group=group, col=c, row=r, x=c * W, y=r * H,
                                     w=W, h=H, **describe(t))))
-        row += (len(members) + COLS - 1) // COLS
+        row += ceil_div(len(members), COLS)
     sheet_w, sheet_h = COLS * W, row * H
 
     palette = [h for _, h in PALETTE]
     data = {"palette": palette, "tile_w": W, "tile_h": H,
             "sheet": {"image": SHEET, "width": sheet_w, "height": sheet_h},
             "tiles": [dict(name=t.name, group=t.group, x=e["x"], y=e["y"], pixels=t.flat()) for t, e in entries]}
-    data_path = os.path.join(HERE, "build_data.json")
-    with open(data_path, "w") as f:
-        json.dump(data, f)
-
     for sub in GROUPS + ("spritesheet",):
         os.makedirs(os.path.join(OUT, sub), exist_ok=True)
-    proc = subprocess.run([ASEPRITE, "-b", "--script-param", f"data={data_path}", "--script-param", f"out={OUT}",
-                           "--script", os.path.join(HERE, "emit.lua")], capture_output=True, text=True)
-    print("aseprite:", proc.stdout.strip(), proc.stderr.strip(), "exit", proc.returncode)
-    assert proc.returncode == 0
+    write_and_emit(data, os.path.join(HERE, "build_data.json"))
 
     meta = {
         "meta": {
@@ -79,8 +66,7 @@ def main():
             "edge_order": EDGE_NAMES,
             "road_rotation": "rotation k = canonical edges turned clockwise by k*60 degrees; every "
                              "needed orientation is pre-rendered, never rotate sprites in-engine",
-            "road_materials": {"dirt": ["grass", "dirt", "forest"], "stone": ["desert", "mountains"],
-                               "snow": ["ice"]},
+            "road_materials": MATERIAL_ENVS,
             "env_adjacency": {env: sorted(ADJACENT[env]) for env in ADJACENT},
             "blend_priority": PRIORITY,
             "blend_rule": "on a non-town tile, for each neighbouring env A later in blend_priority than the tile's "
@@ -94,30 +80,17 @@ def main():
         json.dump(meta, f, indent=2)
 
     # ---- verification pass
-    rgba = [tuple(int(h.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)) for h in palette]
-    sheet = Image.open(os.path.join(OUT, "spritesheet", SHEET))
-    spal = sheet.getpalette()
-    problems = Counter()
-
-    def mismatch(got, pal, src):
-        return sum((g == 0) != (s == 0) or (s and tuple(pal[g * 3:g * 3 + 3]) != rgba[s]) for g, s in zip(got, src))
-
-    for t, e in entries:
-        im = Image.open(os.path.join(OUT, t.group, t.name + ".png"))
-        problems["not indexed"] += im.mode != "P"
-        problems["wrong size"] += im.size != (W, H)
-        src = t.flat()
-        problems["pixel mismatch"] += mismatch(list(im.get_flattened_data()), im.getpalette(), src)
-        crop = sheet.crop((e["x"], e["y"], e["x"] + W, e["y"] + H))
-        problems["sheet mismatch"] += mismatch(list(crop.get_flattened_data()), spal, src)
+    def hex_shape(problems, t):
+        # Environments and towns fill the hex; nothing may spill outside it.
         if t.group not in ("roads", "blends"):
             problems["holes in hex"] += sum(t.px[y][x] == 0 for x, y in HEX_PIXELS)
         problems["outside hex"] += sum(t.px[y][x] != 0 for y in range(H) for x in range(W) if not in_hex(x, y))
+
+    problems, sheet = verify(entries, palette, os.path.join(OUT, "spritesheet", SHEET),
+                             lambda t: os.path.join(OUT, t.group), hex_shape)
     counts = {g: len([f for f in os.listdir(os.path.join(OUT, g)) if f.endswith(".png")]) for g in GROUPS}
-    used = sorted({c for t in tiles for c in t.flat() if c})
-    print("tiles:", Counter(t.group for t in tiles), "| files on disk:", counts, "| sheet", sheet.size, sheet.mode)
-    print("palette indices used:", len(used), "of", len(palette) - 1)
-    print("problems:", dict(problems))
+    print("tiles:", Counter(t.group for t in tiles))
+    report(problems, palette, tiles, sheet, counts)
 
 
 if __name__ == "__main__":

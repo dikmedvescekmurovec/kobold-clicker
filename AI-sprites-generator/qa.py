@@ -6,6 +6,7 @@ import sys
 import time
 from collections import Counter
 
+from buildlib import ceil_div
 from hexlib import BORDER, EDGE_MID, EDGE_NAMES, H, HEX_PIXELS, W, in_hex
 from preview import contact_sheet, tiled_map
 
@@ -89,7 +90,7 @@ def phase1(tag):
 
 
 def phase2(tag):
-    from roads import MATERIALS, all_roads
+    from roads import MATERIAL_ENVS, MATERIALS, all_roads
     from terrain import ENVS
     roads = all_roads()
     print("roads:", len(roads), Counter(t.name.split("_")[1] for t in roads), "spill:", containment(roads, solid=False)[0])
@@ -104,7 +105,8 @@ def phase2(tag):
     lut = {m: {frozenset(t.edges): t for t in roads if t.name.startswith(f"road_{m}_")} for m in MATERIALS}
     rows, cols = 6, 12
     edges_of = road_network(rows, cols, lut["dirt"], seed=3, density=0.42)
-    block = lambda c: ("dirt", ["grass", "forest", "dirt"]) if c < 4 else ("stone", ["desert", "mountains"]) if c < 8 else ("snow", ["ice"])
+    columns = list(MATERIAL_ENVS.items())   # one material per four columns, in MATERIAL_ENVS order
+    block = lambda c: columns[min(c // 4, len(columns) - 1)]
     rng = random.Random(1)
     terrain = {(r, c): rng.choice(block(c)[1]) for r in range(rows) for c in range(cols)}
     env_cache = {e: ENVS[e]("v1") for e in ENVS}
@@ -128,7 +130,7 @@ def phase3(tag):
 
 
 def showcase(tag):
-    from roads import MATERIALS, all_roads
+    from roads import MATERIAL_ENVS, MATERIALS, all_roads
     from terrain import ENVS, VARIANTS
     from towns import all_towns
     rows, cols = 7, 12
@@ -137,7 +139,7 @@ def showcase(tag):
     towns = {t.name: t for t in all_towns()}
     roads = all_roads()
     lut = {m: {frozenset(t.edges): t for t in roads if t.name.startswith(f"road_{m}_")} for m in MATERIALS}
-    mat = {"grass": "dirt", "dirt": "dirt", "forest": "dirt", "desert": "stone", "mountains": "stone", "ice": "snow"}
+    from roads import ENV_MATERIAL as mat
 
     def region(r, c):
         if c < 4:
@@ -292,7 +294,7 @@ def ui(tag):
     font = _ui_font(12)
     cols, scale, pad, lab = 6, 4, 6, 30
     cw, ch = SIZE * scale + pad * 2, SIZE * scale + pad + lab
-    rows = (len(tiles) + cols - 1) // cols
+    rows = ceil_div(len(tiles), cols)
     sheet = Image.new("RGBA", (cols * cw, rows * ch), (40, 40, 48, 255))
     draw = ImageDraw.Draw(sheet)
     for i, t in enumerate(tiles):
