@@ -17,9 +17,28 @@ RGBA = [_rgba(h) for _, h in PALETTE]
 
 
 def tile_image(tile):
-    img = Image.new("RGBA", (W, H))
+    img = Image.new("RGBA", (getattr(tile, "w", W), getattr(tile, "h", H)))
     img.putdata([RGBA[c] if c else (0, 0, 0, 0) for c in tile.flat()])
     return img
+
+
+def nine_slice(tile, w, h, cell=8):
+    """Stretch a 9-slice sprite to w x h the way Godot's StyleBoxTexture does with
+    AXIS_STRETCH_MODE_TILE: corners once, edges and centre repeated in whole `cell` steps."""
+    src = tile_image(tile)
+    w, h = max(w, 2 * cell), max(h, 2 * cell)
+    out = Image.new("RGBA", (w, h))
+    mid_w, mid_h = w - 2 * cell, h - 2 * cell
+    xs = [(0, cell, 0, cell), (cell, mid_w, cell, cell), (w - cell, cell, 2 * cell, cell)]
+    ys = [(0, cell, 0, cell), (cell, mid_h, cell, cell), (h - cell, cell, 2 * cell, cell)]
+    for dx, span_w, sx, sw in xs:
+        for dy, span_h, sy, sh in ys:
+            piece = src.crop((sx, sy, sx + sw, sy + sh))
+            for ox in range(0, span_w, sw):                       # repeat, clipping the last step
+                for oy in range(0, span_h, sh):
+                    box = piece.crop((0, 0, min(sw, span_w - ox), min(sh, span_h - oy)))
+                    out.alpha_composite(box, (dx + ox, dy + oy))
+    return out
 
 
 def contact_sheet(tiles, path, cols=8, scale=3, bg=(40, 40, 48, 255)):

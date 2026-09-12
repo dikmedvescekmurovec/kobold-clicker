@@ -1,8 +1,8 @@
 # AI-sprites generator
 
-Rebuilds the 420-sprite hex tileset in `../AI-sprites/` (24 environments, 63 roads, 18 towns, 315 blend overlays, plus the spritesheet and JSON).
+Rebuilds the 420-sprite hex tileset in `../AI-sprites/` (24 environments, 63 roads, 18 towns, 315 blend overlays, plus the spritesheet and JSON),
+and the 18-sprite 9-slice UI kit in `../AI-sprites/ui/` (2 panels, 16 buttons).
 Everything is procedural and deterministic: the same code always produces the same pixels.
-The Godot map does not draw the blend overlays yet (see `blend_rule` in the JSON meta).
 
 Godot skips this folder because of `.gdignore`.
 
@@ -19,7 +19,9 @@ Godot skips this folder because of `.gdignore`.
 | `python qa.py phase3 <tag>` | Towns: containment and border match vs `v1`, plus sheet |
 | `python qa.py showcase <tag>` | One map mixing all terrain, variants, roads and towns (illegal-border check included) |
 | `python qa.py blends <tag>` | Blend overlays: spill, seam coverage and seam match vs `v1`, illegal borders, plus `qa/blend_pairs_<tag>.png` (before/after for each allowed pair), `qa/blend_map_<tag>.png` and 3× zooms `qa/blend_<hi>_<lo>_<tag>.png` |
-| `python build.py` | Exports every PNG through Aseprite into `../AI-sprites/`, writes the spritesheet and JSON, then verifies each file pixel by pixel |
+| `python qa.py ui <tag>` | 9-slice UI: size, silhouette, outline and 8-periodicity checks, plus `qa/ui_sheet_<tag>.png` and a `qa/ui_mock_<tag>.png` showing every state and the panels stretched from 16 px to 428 px |
+| `python build.py` | Exports every hex PNG through Aseprite into `../AI-sprites/`, writes the spritesheet and JSON, then verifies each file pixel by pixel |
+| `python build_ui.py` | The same for the UI sprites, into `../AI-sprites/ui/` with its own `ui_sheet.json` |
 
 `qa/` output is preview-only and git-ignored. `build.py` overwrites the files in `../AI-sprites/` (change `OUT` in `build.py` to write elsewhere).
 
@@ -34,7 +36,8 @@ Godot skips this folder because of `.gdignore`.
 | `towns.py` | Small, medium and fortress layouts, plus per-environment materials and landmarks |
 | `blends.py` | Blend overlays: priority, coverage mask, fringe details per environment |
 | `preview.py`, `qa.py` | Preview images and checks |
-| `build.py`, `emit.lua` | Export through Aseprite in batch mode, JSON metadata, verification |
+| `ui.py` | 9-slice UI: `RectTile` (rectangular, not hex), rect primitives, the two panels and the 16 buttons |
+| `build.py`, `build_ui.py`, `emit.lua` | Export through Aseprite in batch mode, JSON metadata, verification. `emit.lua` takes per-sprite `w`/`h`, so both builds share it |
 
 ## Rules that keep the set consistent
 - **Geometry:** 56×64 pointy-top hex. Place tiles at 56 px columns and 48 px rows, with odd rows shifted 28 px.
@@ -46,6 +49,13 @@ Godot skips this folder because of `.gdignore`.
 - **Look:** light from the top-left, 1 px ink outline on objects only, no outline on terrain edges. Buildings use roofs from above plus a thin south-facing front wall.
 - **Aseprite quirk:** in Lua, `json.decode` returns floats, and `Image:drawPixel` silently writes palette index 1 for a float. `emit.lua` converts with `math.tointeger` and reads every pixel back.
 - **Build hiccup:** if `build.py` prints `Cannot save file ... in the given location` and reports a `sheet mismatch`, the spritesheet PNG was briefly locked (typically by the open Godot editor reimporting the new PNGs), and the JSON no longer matches the old sheet. Rerun `build.py` until `problems` are all zero.
+
+### 9-slice UI
+- **Geometry:** 24x24 sprites made of nine 8x8 cells, so a `StyleBoxTexture` with an 8 px texture margin stretches them to any size down to 16x16. The four corner pixels are transparent, which rounds every panel and button the same way.
+- **Periodicity:** Godot repeats the centre cell on both axes and the edge cells along theirs, so **all interior art must be a pure function of `(x % 8, y % 8)`**; borders and bevels must depend only on the distance to the sprite edge and stay in the outer cells. Tile the axes, never stretch them. `qa.py ui` fails if an interior pixel breaks this.
+- **States:** normal (bevel out), hover (face one ramp step lighter), pressed (**the hover face with the bevel inverted**, so the dark rim merges with the ink outline and the button sinks - the label sinks 1 px with it), disabled (no bevel, one flat dull ring, face collapsed toward its own backdrop).
+- **Surfaces:** `wood` buttons are light-faced for the brown panel, `light` buttons dark-faced for the white one. The `danger` flavour runs deep red to bright red (`brick_dk` -> `brick`); the palette's lighter steps skew orange, so `rust` appears only as a 1 px lit rim.
+- **Own sheet:** the UI ships in `AI-sprites/ui/`, not the hex atlas, so hex atlas coordinates never move.
 
 ### Environment adjacency
 Which environments may border each other (`terrain.ADJACENT`, exported as `env_adjacency`). The table is symmetric, and the same environment is always allowed. Maps, QA layouts and demos must only use allowed borders. `ENV_CHAIN` (desert, dirt, forest, grass, ice, mountains) is a legal order for side-by-side bands.

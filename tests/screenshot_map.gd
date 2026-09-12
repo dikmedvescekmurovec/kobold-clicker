@@ -21,20 +21,29 @@ func _run() -> void:
 	for i in 3:
 		await process_frame
 
-	# Center the window on a town-rich spot: the world's first fortress.
+	# Center the window near a town-rich spot: 8 steps off the world's first fortress, far enough that the
+	# fortress survives the clearing around the center and stays in view.
 	var towns: TownWorld = main.towns
 	var map: HexMap = main.map
 	var camera: Camera2D = main.camera
 	var fortress := towns.towns().filter(func(spot: Vector2i) -> bool: return towns.tier_at(spot) == TownWorld.Tier.FORTRESS)[0] as Vector2i
-	var origin := Vector2i(fortress.x - MapBuilder.SIZE.x / 2, (fortress.y - MapBuilder.SIZE.y / 2) & ~1)
+	var origin := Vector2i(fortress.x + 8, fortress.y & ~1)
 	main.map_origin = origin
 	for map_seed: int in MAP_SEEDS:
-		MapBuilder.build(map, towns, origin, map_seed)
+		var view := MapBuilder.create(map, towns, origin, map_seed)
+		if map_seed == MAP_SEEDS[0]:
+			# The starting view, as the player first sees it: 3x3 tiles at 3x zoom.
+			await RenderingServer.frame_post_draw
+			root.get_texture().get_image().save_png("user://start_view.png")
+			print("Saved ", ProjectSettings.globalize_path("user://start_view.png"))
+		# The rest of the shots show the whole map, so zoom out to fit it.
+		view.reveal_all()
+		camera.zoom = Vector2.ONE
 		await RenderingServer.frame_post_draw
 		var image := root.get_texture().get_image()
 		var path := "user://map_seed_%d.png" % map_seed
 		image.save_png(path)
-		print("Saved ", ProjectSettings.globalize_path(path))
+		print("Saved %s (%d road tiles)" % [ProjectSettings.globalize_path(path), map.road_layer.get_used_cells().size()])
 
 		# Tiles blended from more than one environment, in row order.
 		var cells := map.ground_layer.get_used_cells()

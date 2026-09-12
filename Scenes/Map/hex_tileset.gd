@@ -17,6 +17,7 @@ var _coords: Dictionary[String, Vector2i] = {}
 var _road_names: Dictionary[String, String] = {}  # _edge_key(material, edges) -> tile name
 var _blend_names: Dictionary[String, String] = {}  # _edge_key(env, edges) -> tile name
 var _road_material_by_env: Dictionary[String, String] = {}
+var _road_masks: Dictionary[int, bool] = {}
 var _adjacency: Dictionary[String, PackedStringArray] = {}
 var _sheet_path: String
 var _sheet_image: Image
@@ -53,6 +54,11 @@ func road_name(road_material: String, edges: Array) -> String:
 ## Road material ("dirt", "stone", "snow") that suits an environment.
 func road_material_for(env: String) -> String:
 	return _road_material_by_env.get(env, "")
+
+
+## Every edge mask a road sprite exists for, so route building can stay to shapes that can be drawn.
+func legal_road_masks() -> Dictionary[int, bool]:
+	return _road_masks
 
 
 ## Overlay of `env` for a tile whose given HexGrid.Edge values (any order) touch `env`, or "" if none exists.
@@ -130,7 +136,9 @@ func _build_tile_set(texture: Texture2D, tiles: Array) -> void:
 				if not (entry["env"] in environments):
 					environments.append(entry["env"])
 			"roads":
-				_road_names[_edge_key(entry["material"], _edge_indices(entry["edges"]))] = tile_name
+				var road_edges := _edge_indices(entry["edges"])
+				_road_masks[_edge_mask(road_edges)] = true
+				_road_names[_edge_key(entry["material"], road_edges)] = tile_name
 			"blends":
 				_blend_names[_edge_key(entry["env"], _edge_indices(entry["edges"]))] = tile_name
 
@@ -139,8 +147,12 @@ static func _edge_indices(edge_names: Array) -> Array:
 	return edge_names.map(func(edge_name: String) -> int: return HexGrid.Edge[edge_name])
 
 
-static func _edge_key(prefix: String, edges: Array) -> String:
+static func _edge_mask(edges: Array) -> int:
 	var mask := 0
 	for edge: int in edges:
 		mask |= 1 << edge
-	return "%s:%d" % [prefix, mask]
+	return mask
+
+
+static func _edge_key(prefix: String, edges: Array) -> String:
+	return "%s:%d" % [prefix, _edge_mask(edges)]

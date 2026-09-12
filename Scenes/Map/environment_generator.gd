@@ -31,13 +31,14 @@ const MAX_REGION_SIZE := 50
 const LARGE_DAMPING := 0.25
 
 
-static func generate(size: Vector2i, seed_value: int) -> Dictionary[Vector2i, String]:
+## Fills every cell of `cells` with an environment.
+static func generate(cells: Rect2i, seed_value: int) -> Dictionary[Vector2i, String]:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
 	var envs: Dictionary[Vector2i, String] = {}
 	var regions := Regions.new()
 
-	var start := Vector2i(rng.randi_range(0, size.x - 1), rng.randi_range(0, size.y - 1))
+	var start := cells.position + Vector2i(rng.randi_range(0, cells.size.x - 1), rng.randi_range(0, cells.size.y - 1))
 	var frontier: Array[Vector2i] = [start]
 	var queued: Dictionary[Vector2i, bool] = {start: true}
 	while not frontier.is_empty():
@@ -49,7 +50,7 @@ static func generate(size: Vector2i, seed_value: int) -> Dictionary[Vector2i, St
 		envs[cell] = _pick(choice_weights(cell, envs, regions), rng)
 		regions.add(cell, envs)
 		for next in HexGrid.neighbors(cell):
-			if next.x >= 0 and next.y >= 0 and next.x < size.x and next.y < size.y and not queued.has(next):
+			if cells.has_point(next) and not queued.has(next):
 				queued[next] = true
 				frontier.append(next)
 

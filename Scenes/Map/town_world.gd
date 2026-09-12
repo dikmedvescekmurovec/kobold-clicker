@@ -15,17 +15,24 @@ const TIER_CHANCES := {Tier.FORTRESS: 0.001, Tier.MEDIUM: 0.005, Tier.SMALL: 0.0
 const LINKS_PER_TIER := {Tier.SMALL: 1, Tier.MEDIUM: 2, Tier.FORTRESS: 4}
 ## Towns further apart than this many hex steps are never connected.
 const MAX_LINK_DISTANCE := 20
+## Returned when no spot can hold a town.
+const NO_SPOT := Vector2i(-1, -1)
 
 var size: Vector2i
+## The seed this world was generated with, so later insertions can stay deterministic.
+var seed_value: int
 
 var _tiers: Dictionary[Vector2i, int] = {}
 var _links: Dictionary[Vector2i, Array] = {}
+## Towns by spot / MAX_LINK_DISTANCE: every town within link range is in the same or an adjacent bucket.
+var _buckets: Dictionary[Vector2i, Array] = {}
 
 
 ## Every spot rolls for a town, except spots next to an existing town, so towns never touch.
 static func generate(seed_value: int, world_size := SIZE) -> TownWorld:
 	var world := TownWorld.new()
 	world.size = world_size
+	world.seed_value = seed_value
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
 	for y in world_size.y:
@@ -64,6 +71,51 @@ func are_connected(a: Vector2i, b: Vector2i) -> bool:
 	return _links.has(a) and b in _links[a]
 
 
+## Removes every town within `distance` steps of `center`, and the links pointing at them, so the nearest town
+## ends up at least that far out. Returns how many were removed.
+func clear_towns_near(center: Vector2i, distance: int) -> int:
+	var removed: Array[Vector2i] = []
+	for spot in _tiers:
+		if HexGrid.distance(spot, center) < distance:
+			removed.append(spot)
+	for spot in removed:
+		for other: Vector2i in _links.get(spot, []):
+			if _links.has(other):
+				_links[other].erase(spot)
+		_links.erase(spot)
+		_tiers.erase(spot)
+		_bucket_for(spot).erase(spot)
+	return removed.size()
+
+
+## Makes sure one of `spots` has a small town and returns that spot (NO_SPOT if none can). A spot that already
+## has one is kept, so this is idempotent; a new town never touches another and gets its links like any other.
+func ensure_small_town(spots: Array[Vector2i]) -> Vector2i:
+	for spot in spots:
+		if tier_at(spot) == Tier.SMALL:
+			return spot
+
+	var free: Array[Vector2i] = []
+	for spot in spots:
+		if _in_bounds(spot) and not has_town(spot) and not HexGrid.neighbors(spot).any(has_town):
+			free.append(spot)
+	if not free.is_empty():
+		var spot: Vector2i = free[absi(hash([seed_value, spots.size(), spots[0]])) % free.size()]
+		_tiers[spot] = Tier.SMALL
+		_links[spot] = []
+		_bucket_for(spot).append(spot)
+		_connect_one(spot)
+		return spot
+
+	# Every candidate is taken or boxed in by a neighbor, so turn a town that is already there into a small one.
+	for spot in spots:
+		if has_town(spot):
+			_tiers[spot] = Tier.SMALL
+			return spot
+	push_warning("None of the %d candidate spots can hold a small town" % spots.size())
+	return NO_SPOT
+
+
 static func _roll_tier(roll: float) -> int:
 	var threshold := 0.0
 	for tier: int in TIER_CHANCES:
@@ -73,28 +125,38 @@ static func _roll_tier(roll: float) -> int:
 	return -1
 
 
+func _in_bounds(spot: Vector2i) -> bool:
+	return spot.x >= 0 and spot.y >= 0 and spot.x < size.x and spot.y < size.y
+
+
 func _connect_towns() -> void:
-	# Buckets as large as the link distance: every town in range is in the same or an adjacent bucket.
-	var buckets: Dictionary[Vector2i, Array] = {}
 	for spot in _tiers:
 		_links[spot] = []
-		var bucket := spot / MAX_LINK_DISTANCE
-		if not buckets.has(bucket):
-			buckets[bucket] = []
-		buckets[bucket].append(spot)
-
+		_bucket_for(spot).append(spot)
 	for spot in _tiers:
-		var nearby: Array[Vector2i] = []
-		for dy in range(-1, 2):
-			for dx in range(-1, 2):
-				for other: Vector2i in buckets.get(spot / MAX_LINK_DISTANCE + Vector2i(dx, dy), []):
-					if other != spot and HexGrid.distance(spot, other) <= MAX_LINK_DISTANCE:
-						nearby.append(other)
-		nearby.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
-			var distance_a := HexGrid.distance(spot, a)
-			var distance_b := HexGrid.distance(spot, b)
-			return distance_a < distance_b or (distance_a == distance_b and a < b))
-		for other in nearby.slice(0, LINKS_PER_TIER[_tiers[spot]]):
-			if not (other in _links[spot]):
-				_links[spot].append(other)
-				_links[other].append(spot)
+		_connect_one(spot)
+
+
+## Links a town to as many of its nearest towns as its tier asks for.
+func _connect_one(spot: Vector2i) -> void:
+	var nearby: Array[Vector2i] = []
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			for other: Vector2i in _buckets.get(spot / MAX_LINK_DISTANCE + Vector2i(dx, dy), []):
+				if other != spot and HexGrid.distance(spot, other) <= MAX_LINK_DISTANCE:
+					nearby.append(other)
+	nearby.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		var distance_a := HexGrid.distance(spot, a)
+		var distance_b := HexGrid.distance(spot, b)
+		return distance_a < distance_b or (distance_a == distance_b and a < b))
+	for other in nearby.slice(0, LINKS_PER_TIER[_tiers[spot]]):
+		if not (other in _links[spot]):
+			_links[spot].append(other)
+			_links[other].append(spot)
+
+
+func _bucket_for(spot: Vector2i) -> Array:
+	var key := spot / MAX_LINK_DISTANCE
+	if not _buckets.has(key):
+		_buckets[key] = []
+	return _buckets[key]

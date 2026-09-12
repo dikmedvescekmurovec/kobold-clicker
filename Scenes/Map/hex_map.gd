@@ -5,12 +5,20 @@ extends Node2D
 
 signal tile_hovered(cell: Vector2i, info: Dictionary)
 signal tile_clicked(cell: Vector2i, info: Dictionary)
+## Mouse movement, in screen pixels, while dragging the map. Whoever owns the camera moves it.
+signal dragged(relative: Vector2)
 
 const NO_CELL := Vector2i(-99999, -99999)
+## A press that travels further than this many pixels drags the map instead of selecting a tile.
+const DRAG_THRESHOLD := 6.0
 
 var tileset: HexTileset
 var hovered_cell := NO_CELL
 var selected_cell := NO_CELL
+
+var _press_at := Vector2.ZERO
+var _pressing := false
+var _dragging := false
 ## Overlay layer of each environment that can spread onto lower-priority neighbors, lowest priority first.
 var blend_layers: Dictionary[String, TileMapLayer] = {}
 
@@ -36,12 +44,26 @@ func _ready() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
-		_set_hovered(cell_at(get_global_mouse_position()))
-	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var cell := cell_at(get_global_mouse_position())
-		if has_tile(cell):
-			select_cell(cell)
-			get_viewport().set_input_as_handled()
+		_set_hovered(cell_at(world_position(event.position)))
+		if _pressing:
+			if _press_at.distance_to(event.position) > DRAG_THRESHOLD:
+				_dragging = true
+			if _dragging:
+				dragged.emit(event.relative)
+				get_viewport().set_input_as_handled()
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_pressing = true
+			_dragging = false
+			_press_at = event.position
+		else:
+			# A click selects a tile; a press that travelled was a drag, and only moved the map.
+			var cell := cell_at(world_position(event.position))
+			if _pressing and not _dragging and has_tile(cell):
+				select_cell(cell)
+				get_viewport().set_input_as_handled()
+			_pressing = false
+			_dragging = false
 
 
 ## Sets the ground tile and redraws the blend overlays of the cell and its neighbors.
@@ -76,6 +98,11 @@ func clear_map() -> void:
 
 func has_tile(cell: Vector2i) -> bool:
 	return ground_layer.get_cell_source_id(cell) != -1
+
+
+## Where a viewport point, such as a mouse event's position, lands in world coordinates.
+func world_position(viewport_point: Vector2) -> Vector2:
+	return get_canvas_transform().affine_inverse() * viewport_point
 
 
 ## Cell under a point in global coordinates (e.g. the mouse).
@@ -158,6 +185,12 @@ func select_cell(cell: Vector2i) -> void:
 	selected_cell = cell
 	highlight.queue_redraw()
 	tile_clicked.emit(cell, get_tile_info(cell))
+
+
+## Clears the selection, so no tile is outlined any more.
+func deselect() -> void:
+	selected_cell = NO_CELL
+	highlight.queue_redraw()
 
 
 func _set_hovered(cell: Vector2i) -> void:

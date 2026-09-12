@@ -25,6 +25,7 @@ func _run() -> void:
 	_check(_test_blend_lookups(map.tileset) == true, "blend lookup tests ran to the end")
 	_check(_test_map_api(map) == true, "map API tests ran to the end")
 	_check(_test_blends_on_map(map) == true, "blend placement tests ran to the end")
+	_check(_test_mouse(map) == true, "mouse tests ran to the end")
 	if _failures == 0:
 		print("All hex map tests passed")
 	else:
@@ -77,6 +78,14 @@ func _test_roads(tileset: HexTileset) -> bool:
 	_check(tileset.road_name("stone", range(6)) == "road_stone_x6", "six-way crossing")
 	_check(tileset.road_name("snow", [HexGrid.Edge.E, HexGrid.Edge.NE]) == "", "no sprite for a sharp turn")
 	_check(tileset.road_material_for("ice") == "snow", "ice uses snow roads")
+
+	# Edge masks: bit per HexGrid.Edge. 21 shapes exist, the same set for every material.
+	var masks := tileset.legal_road_masks()
+	_check(masks.size() == 21, "21 road shapes (got %d)" % masks.size())
+	for mask: int in [0b000001, 0b001001, 0b000101, 0b010101, 0b110110, 0b111111]:
+		_check(masks.has(mask), "shape %s exists (stub/straight/curve/y3/x4/x6)" % mask)
+	for mask: int in [0, 0b000011, 0b111110]:
+		_check(not masks.has(mask), "no sprite for shape %s (empty, 60 degree turn, five edges)" % mask)
 	return true
 
 
@@ -156,6 +165,55 @@ func _test_blends_on_map(map: HexMap) -> bool:
 	_check(map.blend_layers.values().all(func(layer: TileMapLayer) -> bool: return layer.get_used_cells().is_empty()), "clear_map empties blend layers")
 	_check(map.blend_layers.keys() == Array(tileset.blend_priority.slice(1)), "one blend layer per spreading environment, in priority order")
 	return true
+
+
+## A click selects the tile under it; a press that travels drags the map instead.
+func _test_mouse(map: HexMap) -> bool:
+	map.clear_map()
+	var cells := HexGrid.neighbors(Vector2i.ZERO)
+	cells.append(Vector2i.ZERO)
+	for cell in cells:
+		map.set_ground(cell, "env_grass_v1")
+	var moves: Array[Vector2] = []
+	map.dragged.connect(func(relative: Vector2) -> void: moves.append(relative))
+	# This scene has no camera, so viewport positions are world positions.
+	var center := map.ground_layer.map_to_local(Vector2i.ZERO)
+	var east := map.ground_layer.map_to_local(Vector2i(1, 0))
+
+	map.selected_cell = HexMap.NO_CELL
+	map._unhandled_input(_mouse_button(center, true))
+	_check(map.selected_cell == HexMap.NO_CELL, "pressing alone selects nothing")
+	map._unhandled_input(_mouse_button(center, false))
+	_check(map.selected_cell == Vector2i.ZERO and moves.is_empty(), "releasing without moving selects the tile")
+
+	map.selected_cell = HexMap.NO_CELL
+	map._unhandled_input(_mouse_button(center, true))
+	map._unhandled_input(_mouse_motion(east, east - center))
+	map._unhandled_input(_mouse_button(east, false))
+	_check(moves.size() == 1 and moves[0] == east - center, "dragging reports the movement (got %s)" % [moves])
+	_check(map.selected_cell == HexMap.NO_CELL, "a drag selects nothing")
+
+	# A tiny wobble is still a click.
+	map._unhandled_input(_mouse_button(center, true))
+	map._unhandled_input(_mouse_motion(center + Vector2(2, 0), Vector2(2, 0)))
+	map._unhandled_input(_mouse_button(center + Vector2(2, 0), false))
+	_check(moves.size() == 1 and map.selected_cell == Vector2i.ZERO, "a wobble under the threshold still selects")
+	return true
+
+
+func _mouse_button(at: Vector2, pressed: bool) -> InputEventMouseButton:
+	var event := InputEventMouseButton.new()
+	event.button_index = MOUSE_BUTTON_LEFT
+	event.pressed = pressed
+	event.position = at
+	return event
+
+
+func _mouse_motion(at: Vector2, relative: Vector2) -> InputEventMouseMotion:
+	var event := InputEventMouseMotion.new()
+	event.position = at
+	event.relative = relative
+	return event
 
 
 func _count(mask: PackedByteArray) -> int:
