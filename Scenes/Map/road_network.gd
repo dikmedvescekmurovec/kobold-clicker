@@ -44,15 +44,6 @@ static func _box(a: Vector2i, b: Vector2i) -> Rect2i:
 	return Rect2i(corner, (a - b).abs() + Vector2i.ONE).grow(MARGIN)
 
 
-## The edges of a mask, in HexGrid.Edge order.
-static func mask_edges(mask: int) -> Array[int]:
-	var edges: Array[int] = []
-	for edge in 6:
-		if mask & (1 << edge):
-			edges.append(edge)
-	return edges
-
-
 ## Linked town pairs with at least one town in `area`, each pair once, in a stable order.
 static func _links_in(towns: TownWorld, area: Rect2i) -> Array:
 	var links: Array = []
@@ -80,11 +71,11 @@ static func _route(towns: TownWorld, from_town: Vector2i, to_town: Vector2i, are
 	var target_outside := target_is_town and not area.has_point(to_town)
 	var cost: Dictionary[Vector3i, float] = {}
 	var came_from: Dictionary[Vector3i, Vector3i] = {}
-	for edge in 6:
+	for edge in HexGrid.EDGES:
 		var cell := HexGrid.neighbor(from_town, edge)
 		if not _usable(towns, cell, area):
 			continue
-		var state := Vector3i(cell.x, cell.y, (edge + 3) % 6)
+		var state := Vector3i(cell.x, cell.y, HexGrid.opposite(edge))
 		cost[state] = _cell_cost(towns, cell)
 		open.push(cost[state] + _heuristic(cell, to_town), state)
 
@@ -104,7 +95,7 @@ static func _route(towns: TownWorld, from_town: Vector2i, to_town: Vector2i, are
 			return _apply(_path_masks(came_from, state, entry), legal_masks, roads)
 
 		for turn: int in [3, 2, 4]:  # Straight ahead, then the two 120 degree curves. Sharper turns have no sprite.
-			var out := (entry + turn) % 6
+			var out := (entry + turn) % HexGrid.EDGES
 			if not legal_masks.has(existing | (1 << entry) | (1 << out)):
 				continue
 			var next := HexGrid.neighbor(cell, out)
@@ -116,7 +107,7 @@ static func _route(towns: TownWorld, from_town: Vector2i, to_town: Vector2i, are
 				return _apply(_path_masks(came_from, state, out), legal_masks, roads)
 			if not _usable(towns, next, area):
 				continue
-			var next_state := Vector3i(next.x, next.y, (out + 3) % 6)
+			var next_state := Vector3i(next.x, next.y, HexGrid.opposite(out))
 			var next_cost: float = cost[state] + _cell_cost(towns, next) + (0.0 if turn == 3 else TURN_COST)
 			if cost.has(next_state) and cost[next_state] <= next_cost:
 				continue
@@ -137,7 +128,7 @@ static func _path_masks(came_from: Dictionary[Vector3i, Vector3i], last_state: V
 		if not came_from.has(state):
 			return added
 		# The previous cell was left through the edge facing this one.
-		out = (state.z + 3) % 6
+		out = HexGrid.opposite(state.z)
 		state = came_from[state]
 	return added
 
@@ -159,7 +150,7 @@ static func _usable(towns: TownWorld, cell: Vector2i, area: Rect2i) -> bool:
 
 ## The edge from `cell` to `target` if they are neighbors, else -1.
 static func _edge_toward(cell: Vector2i, target: Vector2i) -> int:
-	for edge in 6:
+	for edge in HexGrid.EDGES:
 		if HexGrid.neighbor(cell, edge) == target:
 			return edge
 	return -1

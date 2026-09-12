@@ -368,7 +368,7 @@ func _test_map_builder() -> bool:
 		var expected := PackedStringArray()
 		if not is_town:
 			var edges_by_env := {}
-			for edge in 6:
+			for edge in HexGrid.EDGES:
 				var next := HexGrid.neighbor(cell, edge)
 				if envs.has(next) and tileset.env_rank(envs[next]) > tileset.env_rank(envs[cell]):
 					if not edges_by_env.has(envs[next]):
@@ -385,7 +385,7 @@ func _test_map_builder() -> bool:
 		# The road tile must match the network, in the material of the tile's environment.
 		var mask: int = roads.get(origin + cell, 0)
 		var expected_road := "" if mask == 0 or is_town else tileset.road_name(
-				tileset.road_material_for(envs[cell]), RoadNetwork.mask_edges(mask))
+				tileset.road_material_for(envs[cell]), HexGrid.mask_edges(mask))
 		if info["road"] != expected_road:
 			wrong_roads += 1
 
@@ -515,9 +515,9 @@ func _test_roads() -> bool:
 			if world.has_town(spot):
 				on_towns += 1
 			# Every edge of a road tile must meet another road or a town: routes run from town to town whole.
-			for edge in RoadNetwork.mask_edges(roads[spot]):
+			for edge in HexGrid.mask_edges(roads[spot]):
 				var other := HexGrid.neighbor(spot, edge)
-				var joined: bool = roads.has(other) and (roads[other] & (1 << ((edge + 3) % 6))) != 0
+				var joined: bool = roads.has(other) and (roads[other] & (1 << HexGrid.opposite(edge))) != 0
 				if not (joined or world.has_town(other)):
 					dangling += 1
 		strays += _stray_road_groups(roads, world)
@@ -560,7 +560,7 @@ func _stray_road_groups(roads: Dictionary, world: TownWorld) -> int:
 		while i < queue.size():
 			var spot := queue[i]
 			i += 1
-			for edge in RoadNetwork.mask_edges(roads[spot]):
+			for edge in HexGrid.mask_edges(roads[spot]):
 				var other := HexGrid.neighbor(spot, edge)
 				if world.has_town(other):
 					leads_somewhere = true
@@ -594,20 +594,20 @@ func _unrouted_links(world: TownWorld, roads: Dictionary, rect: Rect2i) -> int:
 func _roads_join(roads: Dictionary, from_town: Vector2i, to_town: Vector2i) -> bool:
 	var queue: Array[Vector2i] = []
 	var seen := {}
-	for edge in 6:
+	for edge in HexGrid.EDGES:
 		var cell := HexGrid.neighbor(from_town, edge)
-		if roads.has(cell) and (roads[cell] & (1 << ((edge + 3) % 6))) != 0:
+		if roads.has(cell) and (roads[cell] & (1 << HexGrid.opposite(edge))) != 0:
 			seen[cell] = true
 			queue.append(cell)
 	var i := 0
 	while i < queue.size():
 		var spot := queue[i]
 		i += 1
-		for edge in RoadNetwork.mask_edges(roads[spot]):
+		for edge in HexGrid.mask_edges(roads[spot]):
 			var other := HexGrid.neighbor(spot, edge)
 			if other == to_town:
 				return true
-			if roads.has(other) and not seen.has(other) and (roads[other] & (1 << ((edge + 3) % 6))) != 0:
+			if roads.has(other) and not seen.has(other) and (roads[other] & (1 << HexGrid.opposite(edge))) != 0:
 				seen[other] = true
 				queue.append(other)
 	return false

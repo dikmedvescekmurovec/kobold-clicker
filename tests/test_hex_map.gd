@@ -65,7 +65,7 @@ func _test_geometry(map: HexMap) -> bool:
 	for cell: Vector2i in [Vector2i(2, 2), Vector2i(3, 3), Vector2i(-3, -1)]:
 		var center := layer.map_to_local(cell)
 		_check(map.cell_at(center) == cell, "center of %s maps to it" % [cell])
-		for edge in 6:
+		for edge in HexGrid.EDGES:
 			var neighbor := HexGrid.neighbor(cell, edge)
 			_check(layer.map_to_local(neighbor) - center == EDGE_OFFSETS[edge],
 					"edge %d of %s points at the right neighbor" % [edge, cell])

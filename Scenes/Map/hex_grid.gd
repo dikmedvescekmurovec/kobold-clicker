@@ -5,6 +5,8 @@ extends RefCounted
 
 ## Hex edges, in the order used by the sprite generator's JSON.
 enum Edge { E, SE, SW, W, NW, NE }
+## How many edges a hex has, so loops over them don't spell out the 6.
+const EDGES := 6
 
 ## Offset to the neighbor across each Edge, for even and odd rows.
 const _EVEN_ROW_OFFSETS := [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 1), Vector2i(-1, 0), Vector2i(-1, -1), Vector2i(0, -1)]
@@ -28,9 +30,31 @@ static func neighbor(cell: Vector2i, edge: int) -> Vector2i:
 ## The six neighbors, in Edge order.
 static func neighbors(cell: Vector2i) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
-	for edge in 6:
+	for edge in EDGES:
 		result.append(neighbor(cell, edge))
 	return result
+
+
+## The edge facing the other way: the one the neighbor across `edge` is entered through.
+static func opposite(edge: int) -> int:
+	return (edge + 3) % EDGES
+
+
+## Edges packed into a bitmask, bit `edge` per Edge value.
+static func edge_mask(edges: Array) -> int:
+	var mask := 0
+	for edge: int in edges:
+		mask |= 1 << edge
+	return mask
+
+
+## The edges of a mask, in Edge order: the inverse of edge_mask.
+static func mask_edges(mask: int) -> Array[int]:
+	var edges: Array[int] = []
+	for edge in EDGES:
+		if mask & (1 << edge):
+			edges.append(edge)
+	return edges
 
 
 ## Number of steps between two cells.

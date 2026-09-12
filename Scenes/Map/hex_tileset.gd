@@ -137,7 +137,7 @@ func _build_tile_set(texture: Texture2D, tiles: Array) -> void:
 					environments.append(entry["env"])
 			"roads":
 				var road_edges := _edge_indices(entry["edges"])
-				_road_masks[_edge_mask(road_edges)] = true
+				_road_masks[HexGrid.edge_mask(road_edges)] = true
 				_road_names[_edge_key(entry["material"], road_edges)] = tile_name
 			"blends":
 				_blend_names[_edge_key(entry["env"], _edge_indices(entry["edges"]))] = tile_name
@@ -147,12 +147,5 @@ static func _edge_indices(edge_names: Array) -> Array:
 	return edge_names.map(func(edge_name: String) -> int: return HexGrid.Edge[edge_name])
 
 
-static func _edge_mask(edges: Array) -> int:
-	var mask := 0
-	for edge: int in edges:
-		mask |= 1 << edge
-	return mask
-
-
 static func _edge_key(prefix: String, edges: Array) -> String:
-	return "%s:%d" % [prefix, _edge_mask(edges)]
+	return "%s:%d" % [prefix, HexGrid.edge_mask(edges)]

@@ -234,7 +234,7 @@ func _draw_road(cell: Vector2i) -> void:
 		map.set_road(cell, "")
 		return
 	var material := map.tileset.road_material_for(_envs[cell])
-	map.set_road(cell, map.tileset.road_name(material, RoadNetwork.mask_edges(mask)))
+	map.set_road(cell, map.tileset.road_name(material, HexGrid.mask_edges(mask)))
 
 
 ## The tile a cell is drawn with: the town of its environment where the world has one, otherwise the

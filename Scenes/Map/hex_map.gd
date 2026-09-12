@@ -246,7 +246,7 @@ func refresh_blends(cell: Vector2i) -> void:
 		return
 	var rank := tileset.env_rank(ground.get_custom_data("env"))
 	var edges_by_env: Dictionary[String, Array] = {}
-	for edge in 6:
+	for edge in HexGrid.EDGES:
 		var env := _env_at(HexGrid.neighbor(cell, edge))
 		if env != "" and tileset.env_rank(env) > rank:
 			if not edges_by_env.has(env):

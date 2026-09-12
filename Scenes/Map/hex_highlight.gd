@@ -43,8 +43,8 @@ func _band(color: Color, inner: float, outer: float) -> Dictionary:
 	var inside := _offset_corners(inner)
 	var outside := _offset_corners(outer)
 	var quads: Array[PackedVector2Array] = []
-	for i in 6:
-		var j := (i + 1) % 6
+	for i in _corners.size():
+		var j := (i + 1) % _corners.size()
 		quads.append(PackedVector2Array([inside[i], outside[i], outside[j], inside[j]]))
 	return {"color": color, "quads": quads}
 
@@ -52,9 +52,9 @@ func _band(color: Color, inner: float, outer: float) -> Dictionary:
 ## Corners moved `distance` pixels outward from every edge, with mitered joins.
 func _offset_corners(distance: float) -> PackedVector2Array:
 	var result := PackedVector2Array()
-	for i in 6:
+	for i in _corners.size():
 		var before := _outward_normal(_corners[i - 1], _corners[i])
-		var after := _outward_normal(_corners[i], _corners[(i + 1) % 6])
+		var after := _outward_normal(_corners[i], _corners[(i + 1) % _corners.size()])
 		result.append(_corners[i] + (before + after) * distance / (1 + before.dot(after)))
 	return result
 
