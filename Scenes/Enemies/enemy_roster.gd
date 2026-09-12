@@ -46,6 +46,12 @@ const TIER_HP := {
 
 const ROOT := "res://Assets/Enemies/"
 
+## `frame` is how the pack's sheets are sliced and `bounds` the part of a frame the creature uses across
+## every one of its animations, so one shared crop keeps it still when the animation changes and centres it
+## on its spot -- the same trick PlayerToken.BOUNDS plays for the player. Both are measured, not guessed:
+## the frame width is the smallest divisor of every sheet width in the pack where each frame boundary falls
+## on a fully transparent column, which is what test_enemies.gd re-checks against the sprites.
+##
 ## folder -> tier, size, environments, the sprite directory under ROOT, and the sheet file per animation.
 ## Slime is the one pack shipped as separate frames, so its sheets are empty and `frames` names the
 ## "<prefix><n>.png" series instead.
@@ -55,6 +61,8 @@ const ENEMIES := {
 		"size": Size.MEDIUM,
 		"environments": ["dirt", "desert", "ice", "forest", "mountains"],
 		"dir": "Baby Dragon/Sprites/outline",
+		"frame": Vector2i(158, 125),
+		"bounds": Rect2i(40, 36, 77, 88),
 		"sheets": {"idle": "IDLE.png", "walk": "MOVE.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Centaur": {
@@ -62,6 +70,8 @@ const ENEMIES := {
 		"size": Size.MEDIUM,
 		"environments": ["grass", "dirt", "desert", "forest"],
 		"dir": "Centaur/Sprite",
+		"frame": Vector2i(100, 100),
+		"bounds": Rect2i(0, 1, 89, 94),
 		"sheets": {"idle": "IDLE.png", "walk": "RUN.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Cerberus": {
@@ -69,6 +79,8 @@ const ENEMIES := {
 		"size": Size.LARGE,
 		"environments": ["dirt", "desert", "forest", "mountains"],
 		"dir": "Cerberus/New Version/Sprites/outline",
+		"frame": Vector2i(128, 128),
+		"bounds": Rect2i(20, 26, 106, 71),
 		"sheets": {"idle": "IDLE.png", "walk": "RUN.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Cyclops": {
@@ -76,6 +88,8 @@ const ENEMIES := {
 		"size": Size.LARGE,
 		"environments": ["dirt", "desert", "forest", "mountains"],
 		"dir": "Cyclops/New Version/Sprites/outline",
+		"frame": Vector2i(245, 128),
+		"bounds": Rect2i(26, 25, 140, 91),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK 1.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Demon Boss": {
@@ -83,6 +97,8 @@ const ENEMIES := {
 		"size": Size.HUGE,
 		"environments": ["dirt", "desert", "mountains"],
 		"dir": "Demon Boss/Sprites/with_outline",
+		"frame": Vector2i(162, 148),
+		"bounds": Rect2i(2, 24, 160, 123),
 		"sheets": {"idle": "IDLE.png", "walk": "FLYING.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Dragon": {
@@ -90,6 +106,8 @@ const ENEMIES := {
 		"size": Size.HUGE,
 		"environments": ["dirt", "desert", "ice", "forest", "mountains"],
 		"dir": "Dragon/Sprites/with_outline",
+		"frame": Vector2i(144, 96),
+		"bounds": Rect2i(10, 10, 134, 77),
 		"sheets": {"idle": "IDLE.png", "walk": "RUN.png", "attack": "ATTACK 1.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Dwarf Warrior": {
@@ -97,6 +115,8 @@ const ENEMIES := {
 		"size": Size.SMALL,
 		"environments": ["dirt", "ice", "mountains"],
 		"dir": "Dwarf Warrior/Sprite",
+		"frame": Vector2i(100, 100),
+		"bounds": Rect2i(7, 27, 61, 55),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Flying Eye": {
@@ -104,6 +124,8 @@ const ENEMIES := {
 		"size": Size.MEDIUM,
 		"environments": ["dirt", "desert", "forest", "mountains"],
 		"dir": "Flying Eye/Sprites/outline",
+		"frame": Vector2i(150, 150),
+		"bounds": Rect2i(17, 16, 108, 117),
 		# The pack has no idle: it hovers, so MOVE stands in for both.
 		"sheets": {"idle": "MOVE.png", "walk": "MOVE.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
@@ -112,6 +134,8 @@ const ENEMIES := {
 		"size": Size.LARGE,
 		"environments": ["dirt", "desert", "mountains"],
 		"dir": "Gargoyle/New Version/Sprites/outline",
+		"frame": Vector2i(144, 96),
+		"bounds": Rect2i(10, 4, 129, 92),
 		"sheets": {"idle": "IDLE.png", "walk": "MOVE.png", "attack": "ATTACK 1.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Goblin": {
@@ -119,6 +143,8 @@ const ENEMIES := {
 		"size": Size.SMALL,
 		"environments": ["grass", "dirt", "forest", "mountains"],
 		"dir": "Goblin/Sprites/with_outline",
+		"frame": Vector2i(116, 78),
+		"bounds": Rect2i(16, 8, 91, 63),
 		"sheets": {"idle": "IDLE.png", "walk": "RUN.png", "attack": "ATTACK1.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Gryphon": {
@@ -126,6 +152,8 @@ const ENEMIES := {
 		"size": Size.MEDIUM,
 		"environments": ["grass", "desert", "ice", "mountains"],
 		"dir": "Gryphon/NEW VERSION/Sprites/with_outline",
+		"frame": Vector2i(112, 103),
+		"bounds": Rect2i(12, 20, 96, 80),
 		"sheets": {"idle": "IDLE.png", "walk": "MOVE.png", "attack": "ATTACK 1.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Harpy": {
@@ -133,6 +161,8 @@ const ENEMIES := {
 		"size": Size.SMALL,
 		"environments": ["desert", "ice", "mountains"],
 		"dir": "Harpy/Sprite",
+		"frame": Vector2i(100, 100),
+		"bounds": Rect2i(7, 8, 90, 79),
 		# One sheet covers hovering and flying, and the attack file is spelled ATTACk.
 		"sheets": {"idle": "IDLE_MOVE.png", "walk": "IDLE_MOVE.png", "attack": "ATTACk.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
@@ -141,6 +171,8 @@ const ENEMIES := {
 		"size": Size.HUGE,
 		"environments": ["grass", "dirt", "ice", "forest"],
 		"dir": "Headless Horseman/Sprites/outline",
+		"frame": Vector2i(150, 150),
+		"bounds": Rect2i(7, 19, 129, 118),
 		"sheets": {"idle": "IDLE.png", "walk": "RUN.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Huge Knight": {
@@ -148,6 +180,8 @@ const ENEMIES := {
 		"size": Size.HUGE,
 		"environments": ["grass", "dirt", "desert", "ice", "forest", "mountains"],
 		"dir": "Huge Knight/Sprites/outline",
+		"frame": Vector2i(237, 187),
+		"bounds": Rect2i(4, 6, 222, 172),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Imp": {
@@ -155,6 +189,8 @@ const ENEMIES := {
 		"size": Size.SMALL,
 		"environments": ["grass", "dirt", "desert", "mountains"],
 		"dir": "Imp/Sprites/outline",
+		"frame": Vector2i(128, 48),
+		"bounds": Rect2i(33, 5, 95, 41),
 		"sheets": {"idle": "IDLE.png", "walk": "MOVE.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Lizardman": {
@@ -162,6 +198,8 @@ const ENEMIES := {
 		"size": Size.MEDIUM,
 		"environments": ["dirt", "desert", "forest"],
 		"dir": "Lizardman/New Version/Sprites/outline",
+		"frame": Vector2i(144, 96),
+		"bounds": Rect2i(35, 7, 87, 85),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK 1.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Masked Orc": {
@@ -169,6 +207,8 @@ const ENEMIES := {
 		"size": Size.SMALL,
 		"environments": ["grass", "dirt", "desert", "forest"],
 		"dir": "Masked Orc/Sprites",
+		"frame": Vector2i(150, 80),
+		"bounds": Rect2i(13, 13, 103, 59),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Medusa": {
@@ -176,6 +216,8 @@ const ENEMIES := {
 		"size": Size.MEDIUM,
 		"environments": ["dirt", "desert", "forest", "mountains"],
 		"dir": "Medusa/Sprite",
+		"frame": Vector2i(150, 125),
+		"bounds": Rect2i(11, 52, 112, 57),
 		"sheets": {"idle": "IDLE.png", "walk": "MOVE.png", "attack": "ATTACK1.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Mimic": {
@@ -183,6 +225,8 @@ const ENEMIES := {
 		"size": Size.MEDIUM,
 		"environments": ["dirt", "desert", "forest", "mountains"],
 		"dir": "Mimic/Sprite",
+		"frame": Vector2i(158, 125),
+		"bounds": Rect2i(26, 13, 99, 83),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Minotaur": {
@@ -190,6 +234,8 @@ const ENEMIES := {
 		"size": Size.LARGE,
 		"environments": ["grass", "dirt", "forest", "mountains"],
 		"dir": "Minotaur/Sprites/with_outline",
+		"frame": Vector2i(128, 128),
+		"bounds": Rect2i(11, 9, 113, 110),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK1.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Poison Skull": {
@@ -197,6 +243,8 @@ const ENEMIES := {
 		"size": Size.MEDIUM,
 		"environments": ["dirt", "desert", "forest"],
 		"dir": "Poison Skull/Sprite",
+		"frame": Vector2i(150, 100),
+		"bounds": Rect2i(1, 40, 107, 55),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Pyromancer": {
@@ -204,6 +252,8 @@ const ENEMIES := {
 		"size": Size.SMALL,
 		"environments": ["dirt", "desert", "mountains"],
 		"dir": "Pyromancer/Sprites",
+		"frame": Vector2i(100, 100),
+		"bounds": Rect2i(27, 10, 62, 75),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Satyr Archer": {
@@ -211,6 +261,8 @@ const ENEMIES := {
 		"size": Size.SMALL,
 		"environments": ["grass", "forest", "mountains"],
 		"dir": "Satyr Archer/Sprite",
+		"frame": Vector2i(125, 100),
+		"bounds": Rect2i(5, 28, 80, 51),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Skeleton Mage": {
@@ -218,6 +270,8 @@ const ENEMIES := {
 		"size": Size.LARGE,
 		"environments": ["dirt", "desert", "ice", "mountains"],
 		"dir": "Skeleton Mage/Sprites/outline",
+		"frame": Vector2i(128, 128),
+		"bounds": Rect2i(18, 33, 110, 79),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Skeleton Warrior": {
@@ -225,6 +279,8 @@ const ENEMIES := {
 		"size": Size.MEDIUM,
 		"environments": ["grass", "dirt", "desert", "ice", "mountains"],
 		"dir": "Skeleton Warrior/Sprites/with_outline",
+		"frame": Vector2i(89, 78),
+		"bounds": Rect2i(5, 0, 84, 77),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK 1.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Slime": {
@@ -232,6 +288,8 @@ const ENEMIES := {
 		"size": Size.TINY,
 		"environments": ["grass", "dirt", "desert", "ice", "forest", "mountains"],
 		"dir": "Slime/Individual Sprites",
+		"frame": Vector2i(32, 25),
+		"bounds": Rect2i(0, 4, 31, 20),
 		"sheets": {},
 		"frames": {"idle": "slime-idle-", "walk": "slime-move-", "attack": "slime-attack-", "hurt": "slime-hurt-", "death": "slime-die-"},
 	},
@@ -240,6 +298,8 @@ const ENEMIES := {
 		"size": Size.LARGE,
 		"environments": ["dirt", "desert", "ice", "mountains"],
 		"dir": "Stone Golem/new version/Sprites/outline",
+		"frame": Vector2i(220, 96),
+		"bounds": Rect2i(0, 8, 156, 76),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Werewolf": {
@@ -247,6 +307,8 @@ const ENEMIES := {
 		"size": Size.LARGE,
 		"environments": ["grass", "dirt", "ice", "forest", "mountains"],
 		"dir": "Werewolf/Sprites/outline",
+		"frame": Vector2i(158, 125),
+		"bounds": Rect2i(30, 42, 123, 74),
 		"sheets": {"idle": "IDLE.png", "walk": "RUN.png", "attack": "ATTACK1.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Witch": {
@@ -254,6 +316,8 @@ const ENEMIES := {
 		"size": Size.MEDIUM,
 		"environments": ["dirt", "ice", "forest", "mountains"],
 		"dir": "Witch/Sprite",
+		"frame": Vector2i(125, 125),
+		"bounds": Rect2i(42, 37, 68, 84),
 		"sheets": {"idle": "IDLE.png", "walk": "MOVE.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
 	"Wizard": {
@@ -261,6 +325,8 @@ const ENEMIES := {
 		"size": Size.MEDIUM,
 		"environments": ["grass", "dirt", "desert", "ice", "forest", "mountains"],
 		"dir": "Wizard/Sprites/with_outline",
+		"frame": Vector2i(128, 78),
+		"bounds": Rect2i(26, 9, 102, 57),
 		# The pack splits its attack in two; the melee swing is the one a tile fight uses.
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "MELEE ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
@@ -287,6 +353,38 @@ static func size_of(name: String) -> Size:
 ## 0.5 (the slime) to 24.0 (Huge Knight, Demon Boss), so a base of 20 HP spans 10 to 480.
 static func hp_modifier(name: String) -> float:
 	return SIZE_HP[size_of(name)] * TIER_HP[tier_of(name)]
+
+
+## The size of one frame on this enemy's sheets, and of each of its files for a frame-per-file pack.
+static func frame_size(name: String) -> Vector2i:
+	return ENEMIES[name]["frame"]
+
+
+## The part of a frame worth drawing, shared by all of the enemy's animations.
+static func bounds_of(name: String) -> Rect2i:
+	return ENEMIES[name]["bounds"]
+
+
+## How many frames an animation has: its sheet's width over the frame width, or the files on disk for a
+## frame-per-file pack. 0 when the pack has no such animation.
+static func frame_count(name: String, animation: String) -> int:
+	var path := sheet_path(name, animation)
+	if path.is_empty():
+		return frame_paths(name, animation).size()
+	var image := _sheet_image(path)
+	return 0 if image == null else image.get_width() / frame_size(name).x
+
+
+## Sheets are read as images only to measure and check them; drawing uses AtlasTexture regions instead.
+## Textures have no readable image under --headless, so fall back to the file, as HexTileset does.
+static func _sheet_image(path: String) -> Image:
+	var texture: Texture2D = load(path)
+	var image := texture.get_image() if texture else null
+	if image == null or image.is_empty():
+		image = Image.load_from_file(path)
+	if image != null and image.is_compressed():
+		image.decompress()
+	return image
 
 
 static func environments_of(name: String) -> PackedStringArray:
