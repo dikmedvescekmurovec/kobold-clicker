@@ -198,8 +198,7 @@ func _on_discover_pressed() -> void:
 ## The player walks to the tile; both buttons stay disabled until they get there.
 func _on_move_pressed() -> void:
 	var cell := map.selected_cell
-	print("Walking to %s, %d tile(s) away" % [cell, view.route_to(cell).size()])
-	view.move_to(cell)
+	print("Walking to %s, %d tile(s) away" % [cell, view.move_to(cell).size()])
 	_update_buttons()
 
 

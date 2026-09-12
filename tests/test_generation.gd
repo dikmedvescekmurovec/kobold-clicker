@@ -300,7 +300,7 @@ func _test_map_builder() -> bool:
 	for step: Vector2i in route:
 		_check(HexGrid.distance(walked, step) == 1, "%s is next to %s" % [step, walked])
 		walked = step
-	_check(view.move_to(MapBuilder.CENTER), "the walk back to the center starts")
+	_check(not view.move_to(MapBuilder.CENTER).is_empty(), "the walk back to the center starts")
 	map.player.finish_walk()
 	_check(view.player_cell == MapBuilder.CENTER, "the player walks the whole route")
 
@@ -426,7 +426,8 @@ func _test_map_builder() -> bool:
 		before[cell] = [view.env_at(cell), info["name"], info["road"]]
 	var was := view.rect
 	var toward_edge := Vector2i(was.end.x - MapBuilder.EXPAND_MARGIN, 0)
-	_check(view.discovered(toward_edge) and view.move_to(toward_edge), "the player sets off for the eastern edge")
+	_check(view.discovered(toward_edge) and not view.move_to(toward_edge).is_empty(),
+			"the player sets off for the eastern edge")
 	var grow_start := Time.get_ticks_msec()
 	map.player.finish_walk()
 	var grow_ms := Time.get_ticks_msec() - grow_start

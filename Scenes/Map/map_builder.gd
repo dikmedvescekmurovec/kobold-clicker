@@ -104,6 +104,12 @@ static func start_cells() -> Array[Vector2i]:
 	return cells
 
 
+## The world spot a map cell shows. `_envs`, `_tiles`, `_states` and `_drawn_roads` are keyed by cell;
+## `_roads` and everything reached through `towns` are keyed by spot.
+func _spot(cell: Vector2i) -> Vector2i:
+	return origin + cell
+
+
 ## The environment generated for a cell, drawn or not, and "" outside the map.
 func env_at(cell: Vector2i) -> String:
 	return _envs.get(cell, "")
@@ -111,9 +117,9 @@ func env_at(cell: Vector2i) -> String:
 
 ## The road edges on a cell, as a mask, and 0 where there is no road. Towns carry none: roads stop at their edge.
 func road_at(cell: Vector2i) -> int:
-	if towns.has_town(origin + cell):
+	if towns.has_town(_spot(cell)):
 		return 0
-	return _roads.get(origin + cell, 0)
+	return _roads.get(_spot(cell), 0)
 
 
 ## What the player knows about a cell. Cells outside the map are HIDDEN.
@@ -169,12 +175,13 @@ func route_to(cell: Vector2i) -> Array[Vector2i]:
 
 
 ## Sends the player walking to a discovered tile. They arrive a couple of seconds per tile later, when
-## `arrived` is emitted. Returns whether the walk started.
-func move_to(cell: Vector2i) -> bool:
-	if not can_move_to(cell):
-		return false
-	map.player.walk(route_to(cell))
-	return true
+## `arrived` is emitted. Returns the tiles they will cross, empty if the walk didn't start.
+func move_to(cell: Vector2i) -> Array[Vector2i]:
+	if walking or not discovered(cell) or cell == player_cell:
+		return []
+	var route := route_to(cell)
+	map.player.walk(route)
+	return route
 
 
 func _on_player_arrived(cell: Vector2i) -> void:
@@ -187,14 +194,14 @@ func _on_player_arrived(cell: Vector2i) -> void:
 ## the roads and towns on it) without touching what is already there. Returns whether the map grew.
 func expand_if_needed() -> bool:
 	var grown := rect
-	if player_cell.x - rect.position.x < EXPAND_MARGIN:
-		grown = Rect2i(grown.position - Vector2i(EXPAND_BY.x, 0), grown.size + Vector2i(EXPAND_BY.x, 0))
-	if rect.end.x - 1 - player_cell.x < EXPAND_MARGIN:
-		grown.size += Vector2i(EXPAND_BY.x, 0)
-	if player_cell.y - rect.position.y < EXPAND_MARGIN:
-		grown = Rect2i(grown.position - Vector2i(0, EXPAND_BY.y), grown.size + Vector2i(0, EXPAND_BY.y))
-	if rect.end.y - 1 - player_cell.y < EXPAND_MARGIN:
-		grown.size += Vector2i(0, EXPAND_BY.y)
+	for axis in 2:
+		# How much this axis grows by, as a vector: (EXPAND_BY.x, 0) for x, (0, EXPAND_BY.y) for y.
+		var step := Vector2i.ZERO
+		step[axis] = EXPAND_BY[axis]
+		if player_cell[axis] - rect.position[axis] < EXPAND_MARGIN:
+			grown = Rect2i(grown.position - step, grown.size + step)
+		if rect.end[axis] - 1 - player_cell[axis] < EXPAND_MARGIN:
+			grown.size += step
 	if grown == rect:
 		return false
 	var was := rect
@@ -222,7 +229,7 @@ func _generate(area: Rect2i) -> void:
 			var cell := Vector2i(x, y)
 			if not _tiles.has(cell) and _envs.has(cell):
 				_tiles[cell] = _tile_name(cell)
-	RoadNetwork.extend(towns, Rect2i(origin + area.position, area.size), map.tileset.legal_road_masks(),
+	RoadNetwork.extend(towns, Rect2i(_spot(area.position), area.size), map.tileset.legal_road_masks(),
 			_roads, _routed_links)
 
 
@@ -241,7 +248,7 @@ func _draw_road(cell: Vector2i) -> void:
 ## environment itself in one of its variants. Seeded per cell, so it never depends on when the cell was reached.
 func _tile_name(cell: Vector2i) -> String:
 	var env: String = _envs[cell]
-	var tier := towns.tier_at(origin + cell)
+	var tier := towns.tier_at(_spot(cell))
 	if tier != -1:
 		return "town_%s_%s" % [env, TownWorld.TIER_NAMES[tier]]
 	var rng := RandomNumberGenerator.new()
