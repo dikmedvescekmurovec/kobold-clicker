@@ -19,8 +19,12 @@ signal arrived(cell: Vector2i)
 ## What the player knows about a cell.
 enum State { HIDDEN, UNDISCOVERED, DISCOVERED }
 
-## Cells the map covers: 20x11 around cell (0, 0), which the camera puts at the middle of the screen.
-const RECT := Rect2i(-10, -5, 20, 11)
+## Cells the map covers to begin with: 20x11 around cell (0, 0), which the camera puts at the middle of the
+## screen. It grows from there as the player travels; `rect` is what the map covers now.
+const START_RECT := Rect2i(-10, -5, 20, 11)
+## The map grows once the player is this close to its edge, by this much on the side they are heading for.
+const EXPAND_MARGIN := 4
+const EXPAND_BY := Vector2i(10, 5)
 ## Cell the map is centered on, and the only one visible together with its neighbors at the start.
 const CENTER := Vector2i.ZERO
 ## About 1 in 10 environment tiles use the accent sprite (JSON meta accent_frequency: 1 in 8-12).
@@ -30,6 +34,10 @@ const START_TOWN_DISTANCE := 5
 
 var map: HexMap
 var towns: TownWorld
+## What the map covers now, in cells. It starts as START_RECT and grows towards the player.
+var rect := START_RECT
+## Seed the environments are generated from; kept, since the map is generated in pieces as it grows.
+var env_seed: int
 ## World spot at the center cell (0, 0).
 var origin: Vector2i
 ## The small town START_TOWN_DISTANCE steps out, which a road connects to the center cell.
@@ -42,8 +50,10 @@ var walking: bool:
 
 var _envs: Dictionary[Vector2i, String] = {}
 var _tiles: Dictionary[Vector2i, String] = {}  # ground tile name per cell
-var _roads: Dictionary[Vector2i, int] = {}  # road edge mask per cell
+var _roads: Dictionary[Vector2i, int] = {}  # road edge mask per world spot
+var _routed_links: Dictionary[String, bool] = {}  # town links already routed, so a road is never laid twice
 var _states: Dictionary[Vector2i, State] = {}
+var _drawn_roads: Dictionary[Vector2i, int] = {}  # road mask each drawn cell shows, to spot the ones that change
 
 
 ## Generates the window and shows the starting tiles. `origin` is the world spot at the center cell (0, 0); its
@@ -63,26 +73,11 @@ static func create(map: HexMap, towns: TownWorld, origin: Vector2i, env_seed: in
 		start_spots.append(origin + cell)
 	builder.start_town = towns.ensure_small_town(start_spots)
 
-	builder._envs = EnvironmentGenerator.generate(RECT, env_seed)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([env_seed, "variants"])
-	for cell in builder._envs:
-		var env := builder._envs[cell]
-		var tier := towns.tier_at(origin + cell)
-		if tier != -1:
-			builder._tiles[cell] = "town_%s_%s" % [env, TownWorld.TIER_NAMES[tier]]
-		else:
-			var variant := "accent" if rng.randf() < ACCENT_CHANCE else "v%d" % rng.randi_range(1, 3)
-			builder._tiles[cell] = "env_%s_%s" % [env, variant]
-
-	# Roads come from the town links and stop at town edges, so they never cover a town sprite. The first town
-	# also gets a road to the center cell.
-	var roads := RoadNetwork.build(towns, Rect2i(origin + RECT.position, RECT.size),
-			map.tileset.legal_road_masks(), {}, builder.start_town, origin)
-	for cell in builder._envs:
-		var mask: int = roads.get(origin + cell, 0)
-		if mask != 0 and towns.tier_at(origin + cell) == -1:
-			builder._roads[cell] = mask
+	# The one road that doesn't end at a town: the first town's road to the center cell. It is laid before any
+	# other, so the rest of the network gives way to it however the map later grows.
+	builder.env_seed = env_seed
+	RoadNetwork.route_to_cell(towns, builder.start_town, origin, map.tileset.legal_road_masks(), builder._roads)
+	builder._generate(START_RECT)
 
 	map.clear_map()
 	# Blends read the environment of every generated cell, not just the drawn ones, so a tile is drawn with the
@@ -112,6 +107,13 @@ static func start_cells() -> Array[Vector2i]:
 ## The environment generated for a cell, drawn or not, and "" outside the map.
 func env_at(cell: Vector2i) -> String:
 	return _envs.get(cell, "")
+
+
+## The road edges on a cell, as a mask, and 0 where there is no road. Towns carry none: roads stop at their edge.
+func road_at(cell: Vector2i) -> int:
+	if towns.has_town(origin + cell):
+		return 0
+	return _roads.get(origin + cell, 0)
 
 
 ## What the player knows about a cell. Cells outside the map are HIDDEN.
@@ -177,7 +179,75 @@ func move_to(cell: Vector2i) -> bool:
 
 func _on_player_arrived(cell: Vector2i) -> void:
 	player_cell = cell
+	expand_if_needed()
 	arrived.emit(cell)
+
+
+## Grows the map on whichever sides the player has come within EXPAND_MARGIN of, generating the new land (and
+## the roads and towns on it) without touching what is already there. Returns whether the map grew.
+func expand_if_needed() -> bool:
+	var grown := rect
+	if player_cell.x - rect.position.x < EXPAND_MARGIN:
+		grown = Rect2i(grown.position - Vector2i(EXPAND_BY.x, 0), grown.size + Vector2i(EXPAND_BY.x, 0))
+	if rect.end.x - 1 - player_cell.x < EXPAND_MARGIN:
+		grown.size += Vector2i(EXPAND_BY.x, 0)
+	if player_cell.y - rect.position.y < EXPAND_MARGIN:
+		grown = Rect2i(grown.position - Vector2i(0, EXPAND_BY.y), grown.size + Vector2i(0, EXPAND_BY.y))
+	if rect.end.y - 1 - player_cell.y < EXPAND_MARGIN:
+		grown.size += Vector2i(0, EXPAND_BY.y)
+	if grown == rect:
+		return false
+	var was := rect
+	rect = grown
+	_generate(rect)
+	for cell in _states:
+		# Tiles on the old edge had nothing beyond them to blend with; now they do.
+		for next in HexGrid.neighbors(cell):
+			if not was.has_point(next) and _envs.has(next):
+				map.refresh_blends(cell)
+				break
+		# A road laid to one of the new towns can join a road already drawn, which then becomes a junction.
+		if _drawn_roads.get(cell, 0) != road_at(cell):
+			_draw_road(cell)
+	return true
+
+
+## Fills in everything the map needs for `area`: the environments of the cells it doesn't have yet, the tile
+## each one is drawn with, and the roads of the town links it brings into reach. Cells already generated are
+## left exactly as they are, so the land the player has seen never changes under them.
+func _generate(area: Rect2i) -> void:
+	EnvironmentGenerator.extend(_envs, area, hash([env_seed, area]))
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var cell := Vector2i(x, y)
+			if not _tiles.has(cell) and _envs.has(cell):
+				_tiles[cell] = _tile_name(cell)
+	RoadNetwork.extend(towns, Rect2i(origin + area.position, area.size), map.tileset.legal_road_masks(),
+			_roads, _routed_links)
+
+
+## Draws the road on a cell, or takes it off when there is none.
+func _draw_road(cell: Vector2i) -> void:
+	var mask := road_at(cell)
+	_drawn_roads[cell] = mask
+	if mask == 0:
+		map.set_road(cell, "")
+		return
+	var material := map.tileset.road_material_for(_envs[cell])
+	map.set_road(cell, map.tileset.road_name(material, RoadNetwork.mask_edges(mask)))
+
+
+## The tile a cell is drawn with: the town of its environment where the world has one, otherwise the
+## environment itself in one of its variants. Seeded per cell, so it never depends on when the cell was reached.
+func _tile_name(cell: Vector2i) -> String:
+	var env: String = _envs[cell]
+	var tier := towns.tier_at(origin + cell)
+	if tier != -1:
+		return "town_%s_%s" % [env, TownWorld.TIER_NAMES[tier]]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([env_seed, "variant", cell])
+	var variant := "accent" if rng.randf() < ACCENT_CHANCE else "v%d" % rng.randi_range(1, 3)
+	return "env_%s_%s" % [env, variant]
 
 
 ## Discovers a tile the player can see next to them: its grey veil comes off, the tiles behind it come out of
@@ -206,8 +276,8 @@ func reveal_all() -> void:
 ## Map cells exactly START_TOWN_DISTANCE steps from the center cell (0, 0), where the guaranteed small town may go.
 static func start_town_cells() -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
-	for y in range(RECT.position.y, RECT.end.y):
-		for x in range(RECT.position.x, RECT.end.x):
+	for y in range(START_RECT.position.y, START_RECT.end.y):
+		for x in range(START_RECT.position.x, START_RECT.end.x):
 			if HexGrid.distance(CENTER, Vector2i(x, y)) == START_TOWN_DISTANCE:
 				cells.append(Vector2i(x, y))
 	return cells
@@ -219,9 +289,7 @@ func _show(cell: Vector2i, to: State) -> void:
 		return
 	if not seen(cell):
 		map.set_ground(cell, _tiles[cell])
-		if _roads.has(cell):
-			var material := map.tileset.road_material_for(_envs[cell])
-			map.set_road(cell, map.tileset.road_name(material, RoadNetwork.mask_edges(_roads[cell])))
+		_draw_road(cell)
 	_states[cell] = to
 	if to == State.UNDISCOVERED:
 		map.fog.add_cell(cell)

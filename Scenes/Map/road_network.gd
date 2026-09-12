@@ -1,8 +1,8 @@
 class_name RoadNetwork
 extends RefCounted
 ## Routes roads between connected towns (see TownWorld). Every road leads to a town: a route runs from the edge
-## of one town to the edge of another, and ends anywhere else only where it leaves the built area on its way to
-## a town outside it. Terrain plays no part, so the same world always gives the same roads.
+## of one town to the edge of another, whether or not the window shows both ends. Terrain plays no part, so the
+## same world always gives the same roads.
 ##
 ## A road is an edge bitmask per world spot: bit `edge` is set when the road touches that HexGrid.Edge.
 
@@ -16,33 +16,34 @@ const TURN_COST := 0.35
 const NO_SPOT := Vector2i(-99999, -99999)
 
 
-## Roads crossing `rect`. `legal_masks` comes from HexTileset.legal_road_masks(); `stats` is filled with the
-## number of routes laid ("routes") and links no legal route could serve ("skipped").
-##
-## `hub_town` and `hub_cell` add one more road, from that town to that plain cell (the map's center), which is
-## the one road that ends somewhere other than a town.
-static func build(towns: TownWorld, rect: Rect2i, legal_masks: Dictionary, stats: Dictionary = {},
-		hub_town := NO_SPOT, hub_cell := NO_SPOT) -> Dictionary[Vector2i, int]:
-	var area := rect.grow(MARGIN)
-	var roads: Dictionary[Vector2i, int] = {}
-	var routed := 0
-	var skipped := 0
-	for link: Array in _links_in(towns, area):
-		# Routes start at the town inside the area; the other one may lie outside it.
-		var from_town: Vector2i = link[0] if area.has_point(link[0]) else link[1]
-		var to_town: Vector2i = link[1] if from_town == link[0] else link[0]
-		if _route(towns, from_town, to_town, area, legal_masks, roads):
-			routed += 1
+## Lays the roads of every link with a town in `rect` that `routed` doesn't hold yet, adding them to `roads`
+## (an edge mask per world spot) and keying `routed` by link. Each link is routed inside its own box, around
+## its two towns only, so a road never depends on the window it was first needed for: the map can grow without
+## anything the player has already seen moving. `legal_masks` comes from HexTileset.legal_road_masks();
+## `stats` counts the routes laid ("routes") and the links no legal route could serve ("skipped").
+static func extend(towns: TownWorld, rect: Rect2i, legal_masks: Dictionary, roads: Dictionary[Vector2i, int],
+		routed: Dictionary[String, bool], stats: Dictionary = {}) -> void:
+	for link: Array in _links_in(towns, rect.grow(MARGIN)):
+		var key := "%s%s" % link
+		if routed.has(key):
+			continue
+		routed[key] = true
+		if _route(towns, link[0], link[1], _box(link[0], link[1]), legal_masks, roads):
+			stats["routes"] = stats.get("routes", 0) + 1
 		else:
-			skipped += 1
-	if hub_town != NO_SPOT and hub_cell != NO_SPOT:
-		if _route(towns, hub_town, hub_cell, area, legal_masks, roads, false):
-			routed += 1
-		else:
-			skipped += 1
-	stats["routes"] = routed
-	stats["skipped"] = skipped
-	return roads
+			stats["skipped"] = stats.get("skipped", 0) + 1
+
+
+## Lays the one road that ends somewhere other than a town: from `town` to a plain cell, the map's center.
+static func route_to_cell(towns: TownWorld, town: Vector2i, cell: Vector2i, legal_masks: Dictionary,
+		roads: Dictionary[Vector2i, int]) -> bool:
+	return _route(towns, town, cell, _box(town, cell), legal_masks, roads, false)
+
+
+## The area one road is routed inside: the box around its two ends, with MARGIN to wander in.
+static func _box(a: Vector2i, b: Vector2i) -> Rect2i:
+	var corner := Vector2i(mini(a.x, b.x), mini(a.y, b.y))
+	return Rect2i(corner, (a - b).abs() + Vector2i.ONE).grow(MARGIN)
 
 
 ## The edges of a mask, in HexGrid.Edge order.

@@ -239,6 +239,11 @@ func _env_at(cell: Vector2i) -> String:
 	return hidden_env.call(cell) if hidden_env.is_valid() else ""
 
 
+## Redraws a cell's blend overlays, for when the land around it has changed (the map growing, say).
+func refresh_blends(cell: Vector2i) -> void:
+	_refresh_blends(cell)
+
+
 ## Redraws a cell's overlays per the JSON meta blend_rule: a non-town tile gets blend_<A>_<edges> for every
 ## neighboring environment A with a higher blend priority than its own.
 func _refresh_blends(cell: Vector2i) -> void:

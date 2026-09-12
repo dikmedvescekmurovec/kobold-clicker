@@ -33,14 +33,37 @@ const LARGE_DAMPING := 0.25
 
 ## Fills every cell of `cells` with an environment.
 static func generate(cells: Rect2i, seed_value: int) -> Dictionary[Vector2i, String]:
+	var envs: Dictionary[Vector2i, String] = {}
+	extend(envs, cells, seed_value)
+	return envs
+
+
+## Fills the cells of `cells` that `envs` doesn't have yet, growing out of the ones it does, so a map can be
+## enlarged as the player travels. Cells already in `envs` are never changed, and the new ones border them
+## legally; what is already there also decides what the new land is likely to be. `envs` may hold cells
+## outside `cells`, which count as neighbors but are not filled in.
+static func extend(envs: Dictionary[Vector2i, String], cells: Rect2i, seed_value: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
-	var envs: Dictionary[Vector2i, String] = {}
 	var regions := Regions.new()
+	var grown: Dictionary[Vector2i, bool] = {}
+	for cell in envs:
+		regions.add(cell, envs)
+		grown[cell] = true
 
-	var start := cells.position + Vector2i(rng.randi_range(0, cells.size.x - 1), rng.randi_range(0, cells.size.y - 1))
-	var frontier: Array[Vector2i] = [start]
-	var queued: Dictionary[Vector2i, bool] = {start: true}
+	# The frontier starts on the land already there, or on one random cell when there is none.
+	var frontier: Array[Vector2i] = []
+	var queued: Dictionary[Vector2i, bool] = {}
+	for cell in envs:
+		for next in HexGrid.neighbors(cell):
+			if cells.has_point(next) and not envs.has(next) and not queued.has(next):
+				queued[next] = true
+				frontier.append(next)
+	if frontier.is_empty() and envs.is_empty():
+		var start := cells.position + Vector2i(rng.randi_range(0, cells.size.x - 1), rng.randi_range(0, cells.size.y - 1))
+		queued[start] = true
+		frontier.append(start)
+
 	while not frontier.is_empty():
 		var index := rng.randi_range(0, frontier.size() - 1)
 		var cell := frontier[index]
@@ -50,12 +73,11 @@ static func generate(cells: Rect2i, seed_value: int) -> Dictionary[Vector2i, Str
 		envs[cell] = _pick(choice_weights(cell, envs, regions), rng)
 		regions.add(cell, envs)
 		for next in HexGrid.neighbors(cell):
-			if cells.has_point(next) and not queued.has(next):
+			if cells.has_point(next) and not envs.has(next) and not queued.has(next):
 				queued[next] = true
 				frontier.append(next)
 
-	_merge_small_regions(envs)
-	return envs
+	_merge_small_regions(envs, grown)
 
 
 static func can_border(a: String, b: String) -> bool:
@@ -120,7 +142,8 @@ static func _pick(weights: Dictionary[String, float], rng: RandomNumberGenerator
 
 
 ## Merges regions under MIN_REGION_SIZE into a neighboring region, smallest first, until none can be merged.
-static func _merge_small_regions(envs: Dictionary[Vector2i, String]) -> void:
+## Regions holding any cell of `frozen` are left alone: land the player may already have seen never changes.
+static func _merge_small_regions(envs: Dictionary[Vector2i, String], frozen: Dictionary[Vector2i, bool] = {}) -> void:
 	while true:
 		var regions := find_regions(envs)
 		var region_of: Dictionary[Vector2i, int] = {}
@@ -133,6 +156,8 @@ static func _merge_small_regions(envs: Dictionary[Vector2i, String]) -> void:
 		for i: int in order:
 			if regions[i].size() >= MIN_REGION_SIZE:
 				break
+			if regions[i].any(func(cell: Vector2i) -> bool: return frozen.has(cell)):
+				continue
 			if _absorb(regions, i, region_of, envs):
 				merged = true
 				break  # Regions changed; recompute them.

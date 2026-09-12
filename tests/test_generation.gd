@@ -17,6 +17,7 @@ func _run() -> void:
 	_check(_test_hex_grid() == true, "hex grid tests ran to the end")
 	_check(_test_adjacency_matches_sprites() == true, "adjacency tests ran to the end")
 	_check(_test_environments() == true, "environment tests ran to the end")
+	_check(_test_environment_growth() == true, "environment growth tests ran to the end")
 	_check(_test_region_weights() == true, "region weight tests ran to the end")
 	_check(_test_towns() == true, "town tests ran to the end")
 	_check(_test_roads() == true, "road tests ran to the end")
@@ -54,7 +55,7 @@ func _test_adjacency_matches_sprites() -> bool:
 
 
 func _test_environments() -> bool:
-	var cells := MapBuilder.RECT
+	var cells := MapBuilder.START_RECT
 	var forbidden := 0
 	var small_regions := 0
 	var pairs := 0
@@ -91,6 +92,55 @@ func _test_environments() -> bool:
 	_check(float(same_pairs) / pairs > 0.8, "neighbors mostly share an environment")
 	_check(EnvironmentGenerator.generate(cells, 7) == EnvironmentGenerator.generate(cells, 7), "same seed gives the same map")
 	_check(EnvironmentGenerator.generate(cells, 7) != EnvironmentGenerator.generate(cells, 8), "different seeds give different maps")
+	return true
+
+
+## Land can be added to a generated map, over and over, without the old land changing.
+func _test_environment_growth() -> bool:
+	var kept := 0
+	var illegal := 0
+	var missing := 0
+	var elapsed := 0
+	var seeds := 0
+	for env_seed in range(1, 21):
+		var envs := EnvironmentGenerator.generate(MapBuilder.START_RECT, env_seed)
+		var before := envs.duplicate()
+		var rect := MapBuilder.START_RECT
+		# Two steps east, then one north: the sides grow one after another, as the player wanders.
+		for growth: Rect2i in [rect.grow_individual(0, 0, 10, 0), rect.grow_individual(0, 0, 20, 0),
+				rect.grow_individual(0, 5, 20, 0)]:
+			var start := Time.get_ticks_msec()
+			EnvironmentGenerator.extend(envs, growth, hash([env_seed, growth]))
+			elapsed += Time.get_ticks_msec() - start
+			rect = growth
+		seeds += 1
+
+		for cell: Vector2i in before:
+			if envs[cell] == before[cell]:
+				kept += 1
+		for y in range(rect.position.y, rect.end.y):
+			for x in range(rect.position.x, rect.end.x):
+				var cell := Vector2i(x, y)
+				if not envs.has(cell):
+					missing += 1
+					continue
+				for next in HexGrid.neighbors(cell):
+					if envs.has(next) and not EnvironmentGenerator.can_border(envs[cell], envs[next]):
+						illegal += 1
+		# The same growth, from the same map, has to come out the same.
+		var again := before.duplicate()
+		EnvironmentGenerator.extend(again, MapBuilder.START_RECT.grow_individual(0, 0, 10, 0), hash([env_seed, MapBuilder.START_RECT.grow_individual(0, 0, 10, 0)]))
+		var repeats := true
+		for cell: Vector2i in again:
+			if envs[cell] != again[cell]:
+				repeats = false
+		_check(repeats, "seed %d grows the same way twice" % env_seed)
+
+	print("Environment growth over %d maps: 220 -> %d cells, %d ms total" % [
+			seeds, (MapBuilder.START_RECT.grow_individual(0, 5, 20, 0)).get_area(), elapsed])
+	_check(kept == 220 * seeds, "growing the map never changes the land already there (%d of %d kept)" % [kept, 220 * seeds])
+	_check(missing == 0, "every cell of the grown map has an environment (%d missing)" % missing)
+	_check(illegal == 0, "every neighbor pair is one the sprites allow (%d bad)" % illegal)
 	return true
 
 
@@ -232,7 +282,7 @@ func _test_map_builder() -> bool:
 	_check(not view.can_move_to(rim) and not view.move_to(rim), "an undiscovered tile can't be walked to yet")
 	_check(not view.can_discover(beyond), "a tile two steps out is out of reach")
 	var expected_new := HexGrid.neighbors(rim).filter(func(next: Vector2i) -> bool:
-			return MapBuilder.RECT.has_point(next) and not view.seen(next)).size()
+			return view.rect.has_point(next) and not view.seen(next)).size()
 	_check(view.can_discover(rim) and expected_new > 0, "the tile next to the player can be discovered")
 	_check(view.discover(rim) == expected_new, "discovering it lifts the fog off the tiles behind it")
 	_check(view.state(rim) == MapBuilder.State.DISCOVERED and not map.fog.has_cell(rim), "the tile is discovered and clear")
@@ -287,9 +337,14 @@ func _test_map_builder() -> bool:
 	print("Blends kept on %d of %d tiles drawn before their neighbors" % [
 			blended_when_found, blends_when_found.size()])
 
-	var envs := EnvironmentGenerator.generate(MapBuilder.RECT, env_seed)
-	var roads := RoadNetwork.build(world, Rect2i(origin + MapBuilder.RECT.position, MapBuilder.RECT.size),
-			tileset.legal_road_masks(), {}, start_town, origin)
+	# The same land and roads, worked out here from scratch, in the order the builder lays them.
+	var envs := EnvironmentGenerator.generate(MapBuilder.START_RECT, hash([env_seed, MapBuilder.START_RECT]))
+	var roads: Dictionary[Vector2i, int] = {}
+	var routed: Dictionary[String, bool] = {}
+	RoadNetwork.route_to_cell(world, start_town, origin, tileset.legal_road_masks(), roads)
+	RoadNetwork.extend(world, Rect2i(origin + MapBuilder.START_RECT.position, MapBuilder.START_RECT.size),
+			tileset.legal_road_masks(), roads, routed)
+	_check(view.rect == MapBuilder.START_RECT, "the map is still the one it started with")
 
 	var towns_drawn := 0
 	var wrong_ground := 0
@@ -379,6 +434,51 @@ func _test_map_builder() -> bool:
 	if not start_towns.is_empty():
 		var drawn: String = map.get_tile_info(start_towns[0]).get("name", "")
 		_check(drawn.begins_with("town_") and drawn.ends_with("_small"), "the guaranteed town is drawn as a small town (got %s)" % drawn)
+	# The map grows as the player nears its edge, and none of the land behind them changes.
+	var before: Dictionary[Vector2i, Array] = {}
+	for cell: Vector2i in envs:
+		var info := map.get_tile_info(cell)
+		before[cell] = [view.env_at(cell), info["name"], info["road"]]
+	var was := view.rect
+	var toward_edge := Vector2i(was.end.x - MapBuilder.EXPAND_MARGIN, 0)
+	_check(view.discovered(toward_edge) and view.move_to(toward_edge), "the player sets off for the eastern edge")
+	var grow_start := Time.get_ticks_msec()
+	map.player.finish_walk()
+	var grow_ms := Time.get_ticks_msec() - grow_start
+	_check(view.rect.end.x == was.end.x + MapBuilder.EXPAND_BY.x, "the map has grown east")
+	_check(view.rect.position == was.position and view.rect.end.y == was.end.y, "and only east")
+
+	var changed := 0
+	for cell: Vector2i in before:
+		var info := map.get_tile_info(cell)
+		if [view.env_at(cell), info["name"], info["road"]] != before[cell]:
+			changed += 1
+	_check(changed == 0, "the land the player has seen is untouched by the growth (%d changed)" % changed)
+
+	var ungenerated := 0
+	var illegal_border := 0
+	for y in range(view.rect.position.y, view.rect.end.y):
+		for x in range(view.rect.position.x, view.rect.end.x):
+			var cell := Vector2i(x, y)
+			var env := view.env_at(cell)
+			if env == "":
+				ungenerated += 1
+				continue
+			for next in HexGrid.neighbors(cell):
+				var other := view.env_at(next)
+				if other != "" and not EnvironmentGenerator.can_border(env, other):
+					illegal_border += 1
+	_check(ungenerated == 0, "every cell of the grown map has an environment (%d missing)" % ungenerated)
+	_check(illegal_border == 0, "the new land borders the old legally (%d bad borders)" % illegal_border)
+
+	# The new land is drawn like any other once it is discovered, roads and all.
+	var beyond_old := Vector2i(was.end.x, 0)
+	_check(view.state(beyond_old) == MapBuilder.State.HIDDEN, "the new land starts in the fog")
+	view.reveal_all()
+	_check(view.discovered(beyond_old) and map.get_tile_info(beyond_old).get("group", "") != "",
+			"and is drawn once revealed")
+	print("Map grown from %s to %s (%d cells) in %d ms" % [was.size, view.rect.size, view.rect.get_area(), grow_ms])
+
 	map.queue_free()
 	return true
 
@@ -396,44 +496,58 @@ func _test_roads() -> bool:
 	var routes := 0
 	var skipped := 0
 	var elapsed := 0
+	var changed := 0
 	for origin: Vector2i in [Vector2i(40, 40), Vector2i(90, 120), Vector2i(160, 60)]:
-		var rect := Rect2i(origin + MapBuilder.RECT.position, MapBuilder.RECT.size)
-		var area := rect.grow(RoadNetwork.MARGIN)
+		var rect := Rect2i(origin + MapBuilder.START_RECT.position, MapBuilder.START_RECT.size)
 		var stats := {}
+		var roads: Dictionary[Vector2i, int] = {}
+		var routed: Dictionary[String, bool] = {}
 		var start := Time.get_ticks_msec()
-		var roads := RoadNetwork.build(world, rect, legal, stats)
+		RoadNetwork.extend(world, rect, legal, roads, routed, stats)
 		elapsed += Time.get_ticks_msec() - start
 		road_tiles += roads.size()
-		routes += stats["routes"]
-		skipped += stats["skipped"]
+		routes += stats.get("routes", 0)
+		skipped += stats.get("skipped", 0)
 
 		for spot in roads:
 			if not legal.has(roads[spot]):
 				illegal += 1
 			if world.has_town(spot):
 				on_towns += 1
-			# Every edge of a road tile must meet another road, a town, or the border of the built area.
+			# Every edge of a road tile must meet another road or a town: routes run from town to town whole.
 			for edge in RoadNetwork.mask_edges(roads[spot]):
 				var other := HexGrid.neighbor(spot, edge)
 				var joined: bool = roads.has(other) and (roads[other] & (1 << ((edge + 3) % 6))) != 0
-				if not (joined or world.has_town(other) or not area.has_point(other)):
+				if not (joined or world.has_town(other)):
 					dangling += 1
-		strays += _stray_road_groups(roads, world, area)
+		strays += _stray_road_groups(roads, world)
 		unrouted += _unrouted_links(world, roads, rect)
-		_check(RoadNetwork.build(world, rect, legal) == roads, "same world and rect give the same roads")
+
+		var again: Dictionary[Vector2i, int] = {}
+		RoadNetwork.extend(world, rect, legal, again, {} as Dictionary[String, bool])
+		_check(again == roads, "same world and rect give the same roads")
+
+		# Growing the map only ever adds to the roads already laid, so nothing the player has seen moves.
+		var grown := roads.duplicate()
+		RoadNetwork.extend(world, rect.grow(10), legal, grown, routed, {})
+		for spot: Vector2i in roads:
+			if grown[spot] & roads[spot] != roads[spot]:
+				changed += 1
+		_check(grown.size() > roads.size(), "a bigger window brings more roads")
 
 	print("Roads over 3 windows: %d routes (%d skipped), %d tiles, %d ms" % [routes, skipped, road_tiles, elapsed])
 	_check(illegal == 0, "every road mask is a shape the sprites have (%d bad)" % illegal)
 	_check(on_towns == 0, "no road on a town spot (%d)" % on_towns)
-	_check(dangling == 0, "every road edge meets a road, a town or the area border (%d loose)" % dangling)
+	_check(dangling == 0, "every road edge meets a road or a town (%d loose)" % dangling)
+	_check(changed == 0, "growing the map never takes an edge off a road already laid (%d changed)" % changed)
 	_check(strays == 0, "every road leads to a town (%d groups that don't)" % strays)
 	_check(unrouted == 0, "linked towns in the window are joined by road (%d missing)" % unrouted)
 	_check(routes > 0 and road_tiles > 0, "roads were built at all")
 	return true
 
 
-## Groups of connected road tiles that reach neither a town nor the border of the built area.
-func _stray_road_groups(roads: Dictionary, world: TownWorld, area: Rect2i) -> int:
+## Groups of connected road tiles that reach no town at all.
+func _stray_road_groups(roads: Dictionary, world: TownWorld) -> int:
 	var seen := {}
 	var strays := 0
 	for start in roads:
@@ -448,7 +562,7 @@ func _stray_road_groups(roads: Dictionary, world: TownWorld, area: Rect2i) -> in
 			i += 1
 			for edge in RoadNetwork.mask_edges(roads[spot]):
 				var other := HexGrid.neighbor(spot, edge)
-				if world.has_town(other) or not area.has_point(other):
+				if world.has_town(other):
 					leads_somewhere = true
 				elif roads.has(other) and not seen.has(other):
 					seen[other] = true

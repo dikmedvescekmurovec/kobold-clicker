@@ -182,8 +182,8 @@ func _on_map_dragged(relative: Vector2) -> void:
 
 ## Keeps the camera over the map, on the middle of the outermost tiles.
 func _clamp_to_map(to: Vector2) -> Vector2:
-	var first := map.ground_layer.map_to_local(MapBuilder.RECT.position)
-	var last := map.ground_layer.map_to_local(MapBuilder.RECT.end - Vector2i.ONE)
+	var first := map.ground_layer.map_to_local(view.rect.position)
+	var last := map.ground_layer.map_to_local(view.rect.end - Vector2i.ONE)
 	return to.clamp(first, last)
 
 
