@@ -23,6 +23,12 @@ enum Tier {
 ## Flying Eye is the one entry that overrides its measurement — the frame is nearly all wingspan.
 enum Size { TINY, SMALL, MEDIUM, LARGE, HUGE }
 
+## Which way a pack drew its creature. The packs do not agree -- most face left, nine face right --
+## so every entry says, read off its own idle frames, and CombatActor mirrors the ones that need it
+## rather than mirroring the lot. An enemy that comes in facing away from the player is the bug this
+## exists to stop.
+enum Facing { LEFT, RIGHT }
+
 ## Animations every entry names, in the order a fight uses them. IDLE and WALK always exist.
 const ANIMATIONS := ["idle", "walk", "attack", "hurt", "death"]
 
@@ -52,13 +58,14 @@ const ROOT := "res://Assets/Enemies/"
 ## the frame width is the smallest divisor of every sheet width in the pack where each frame boundary falls
 ## on a fully transparent column, which is what test_enemies.gd re-checks against the sprites.
 ##
-## folder -> tier, size, environments, the sprite directory under ROOT, and the sheet file per animation.
+## folder -> tier, size, facing, environments, the sprite directory under ROOT, and the sheet file per animation.
 ## Slime is the one pack shipped as separate frames, so its sheets are empty and `frames` names the
 ## "<prefix><n>.png" series instead.
 const ENEMIES := {
 	"Baby Dragon": {
 		"tier": Tier.ELITE,
 		"size": Size.MEDIUM,
+		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "ice", "forest", "mountains"],
 		"dir": "Baby Dragon/Sprites/outline",
 		"frame": Vector2i(158, 125),
@@ -68,6 +75,7 @@ const ENEMIES := {
 	"Centaur": {
 		"tier": Tier.ELITE,
 		"size": Size.MEDIUM,
+		"faces": Facing.LEFT,
 		"environments": ["grass", "dirt", "desert", "forest"],
 		"dir": "Centaur/Sprite",
 		"frame": Vector2i(100, 100),
@@ -77,6 +85,7 @@ const ENEMIES := {
 	"Cerberus": {
 		"tier": Tier.BOSS,
 		"size": Size.LARGE,
+		"faces": Facing.RIGHT,
 		"environments": ["dirt", "desert", "forest", "mountains"],
 		"dir": "Cerberus/New Version/Sprites/outline",
 		"frame": Vector2i(128, 128),
@@ -86,6 +95,7 @@ const ENEMIES := {
 	"Cyclops": {
 		"tier": Tier.BOSS,
 		"size": Size.LARGE,
+		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "forest", "mountains"],
 		"dir": "Cyclops/New Version/Sprites/outline",
 		"frame": Vector2i(245, 128),
@@ -95,6 +105,7 @@ const ENEMIES := {
 	"Demon Boss": {
 		"tier": Tier.BOSS,
 		"size": Size.HUGE,
+		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "mountains"],
 		"dir": "Demon Boss/Sprites/with_outline",
 		"frame": Vector2i(162, 148),
@@ -104,6 +115,7 @@ const ENEMIES := {
 	"Dragon": {
 		"tier": Tier.BOSS,
 		"size": Size.HUGE,
+		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "ice", "forest", "mountains"],
 		"dir": "Dragon/Sprites/with_outline",
 		"frame": Vector2i(144, 96),
@@ -113,6 +125,7 @@ const ENEMIES := {
 	"Dwarf Warrior": {
 		"tier": Tier.COMMON,
 		"size": Size.SMALL,
+		"faces": Facing.LEFT,
 		"environments": ["dirt", "ice", "mountains"],
 		"dir": "Dwarf Warrior/Sprite",
 		"frame": Vector2i(100, 100),
@@ -122,6 +135,7 @@ const ENEMIES := {
 	"Flying Eye": {
 		"tier": Tier.ELITE,
 		"size": Size.MEDIUM,
+		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "forest", "mountains"],
 		"dir": "Flying Eye/Sprites/outline",
 		"frame": Vector2i(150, 150),
@@ -132,6 +146,7 @@ const ENEMIES := {
 	"Gargoyle": {
 		"tier": Tier.ELITE,
 		"size": Size.LARGE,
+		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "mountains"],
 		"dir": "Gargoyle/New Version/Sprites/outline",
 		"frame": Vector2i(144, 96),
@@ -141,6 +156,7 @@ const ENEMIES := {
 	"Goblin": {
 		"tier": Tier.COMMON,
 		"size": Size.SMALL,
+		"faces": Facing.LEFT,
 		"environments": ["grass", "dirt", "forest", "mountains"],
 		"dir": "Goblin/Sprites/with_outline",
 		"frame": Vector2i(116, 78),
@@ -150,6 +166,7 @@ const ENEMIES := {
 	"Gryphon": {
 		"tier": Tier.BOSS,
 		"size": Size.MEDIUM,
+		"faces": Facing.RIGHT,
 		"environments": ["grass", "desert", "ice", "mountains"],
 		"dir": "Gryphon/NEW VERSION/Sprites/with_outline",
 		"frame": Vector2i(112, 103),
@@ -159,6 +176,7 @@ const ENEMIES := {
 	"Harpy": {
 		"tier": Tier.COMMON,
 		"size": Size.SMALL,
+		"faces": Facing.LEFT,
 		"environments": ["desert", "ice", "mountains"],
 		"dir": "Harpy/Sprite",
 		"frame": Vector2i(100, 100),
@@ -169,6 +187,7 @@ const ENEMIES := {
 	"Headless Horseman": {
 		"tier": Tier.BOSS,
 		"size": Size.HUGE,
+		"faces": Facing.LEFT,
 		"environments": ["grass", "dirt", "ice", "forest"],
 		"dir": "Headless Horseman/Sprites/outline",
 		"frame": Vector2i(150, 150),
@@ -178,6 +197,7 @@ const ENEMIES := {
 	"Huge Knight": {
 		"tier": Tier.BOSS,
 		"size": Size.HUGE,
+		"faces": Facing.LEFT,
 		"environments": ["grass", "dirt", "desert", "ice", "forest", "mountains"],
 		"dir": "Huge Knight/Sprites/outline",
 		"frame": Vector2i(237, 187),
@@ -187,6 +207,7 @@ const ENEMIES := {
 	"Imp": {
 		"tier": Tier.COMMON,
 		"size": Size.SMALL,
+		"faces": Facing.RIGHT,
 		"environments": ["grass", "dirt", "desert", "mountains"],
 		"dir": "Imp/Sprites/outline",
 		"frame": Vector2i(128, 48),
@@ -196,6 +217,7 @@ const ENEMIES := {
 	"Lizardman": {
 		"tier": Tier.COMMON,
 		"size": Size.MEDIUM,
+		"faces": Facing.RIGHT,
 		"environments": ["dirt", "desert", "forest"],
 		"dir": "Lizardman/New Version/Sprites/outline",
 		"frame": Vector2i(144, 96),
@@ -205,6 +227,7 @@ const ENEMIES := {
 	"Masked Orc": {
 		"tier": Tier.COMMON,
 		"size": Size.SMALL,
+		"faces": Facing.LEFT,
 		"environments": ["grass", "dirt", "desert", "forest"],
 		"dir": "Masked Orc/Sprites",
 		"frame": Vector2i(150, 80),
@@ -214,6 +237,7 @@ const ENEMIES := {
 	"Medusa": {
 		"tier": Tier.ELITE,
 		"size": Size.MEDIUM,
+		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "forest", "mountains"],
 		"dir": "Medusa/Sprite",
 		"frame": Vector2i(150, 125),
@@ -223,6 +247,7 @@ const ENEMIES := {
 	"Mimic": {
 		"tier": Tier.ELITE,
 		"size": Size.MEDIUM,
+		"faces": Facing.RIGHT,
 		"environments": ["dirt", "desert", "forest", "mountains"],
 		"dir": "Mimic/Sprite",
 		"frame": Vector2i(158, 125),
@@ -232,6 +257,7 @@ const ENEMIES := {
 	"Minotaur": {
 		"tier": Tier.BOSS,
 		"size": Size.LARGE,
+		"faces": Facing.RIGHT,
 		"environments": ["grass", "dirt", "forest", "mountains"],
 		"dir": "Minotaur/Sprites/with_outline",
 		"frame": Vector2i(128, 128),
@@ -241,6 +267,7 @@ const ENEMIES := {
 	"Poison Skull": {
 		"tier": Tier.COMMON,
 		"size": Size.MEDIUM,
+		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "forest"],
 		"dir": "Poison Skull/Sprite",
 		"frame": Vector2i(150, 100),
@@ -250,6 +277,7 @@ const ENEMIES := {
 	"Pyromancer": {
 		"tier": Tier.ELITE,
 		"size": Size.SMALL,
+		"faces": Facing.RIGHT,
 		"environments": ["dirt", "desert", "mountains"],
 		"dir": "Pyromancer/Sprites",
 		"frame": Vector2i(100, 100),
@@ -259,6 +287,7 @@ const ENEMIES := {
 	"Satyr Archer": {
 		"tier": Tier.COMMON,
 		"size": Size.SMALL,
+		"faces": Facing.LEFT,
 		"environments": ["grass", "forest", "mountains"],
 		"dir": "Satyr Archer/Sprite",
 		"frame": Vector2i(125, 100),
@@ -268,6 +297,7 @@ const ENEMIES := {
 	"Skeleton Mage": {
 		"tier": Tier.ELITE,
 		"size": Size.LARGE,
+		"faces": Facing.RIGHT,
 		"environments": ["dirt", "desert", "ice", "mountains"],
 		"dir": "Skeleton Mage/Sprites/outline",
 		"frame": Vector2i(128, 128),
@@ -277,6 +307,7 @@ const ENEMIES := {
 	"Skeleton Warrior": {
 		"tier": Tier.COMMON,
 		"size": Size.MEDIUM,
+		"faces": Facing.LEFT,
 		"environments": ["grass", "dirt", "desert", "ice", "mountains"],
 		"dir": "Skeleton Warrior/Sprites/with_outline",
 		"frame": Vector2i(89, 78),
@@ -286,6 +317,7 @@ const ENEMIES := {
 	"Slime": {
 		"tier": Tier.COMMON,
 		"size": Size.TINY,
+		"faces": Facing.LEFT,
 		"environments": ["grass", "dirt", "desert", "ice", "forest", "mountains"],
 		"dir": "Slime/Individual Sprites",
 		"frame": Vector2i(32, 25),
@@ -296,6 +328,7 @@ const ENEMIES := {
 	"Stone Golem": {
 		"tier": Tier.BOSS,
 		"size": Size.LARGE,
+		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "ice", "mountains"],
 		"dir": "Stone Golem/new version/Sprites/outline",
 		"frame": Vector2i(220, 96),
@@ -305,6 +338,7 @@ const ENEMIES := {
 	"Werewolf": {
 		"tier": Tier.ELITE,
 		"size": Size.LARGE,
+		"faces": Facing.RIGHT,
 		"environments": ["grass", "dirt", "ice", "forest", "mountains"],
 		"dir": "Werewolf/Sprites/outline",
 		"frame": Vector2i(158, 125),
@@ -314,6 +348,7 @@ const ENEMIES := {
 	"Witch": {
 		"tier": Tier.ELITE,
 		"size": Size.MEDIUM,
+		"faces": Facing.LEFT,
 		"environments": ["dirt", "ice", "forest", "mountains"],
 		"dir": "Witch/Sprite",
 		"frame": Vector2i(125, 125),
@@ -323,6 +358,7 @@ const ENEMIES := {
 	"Wizard": {
 		"tier": Tier.ELITE,
 		"size": Size.MEDIUM,
+		"faces": Facing.LEFT,
 		"environments": ["grass", "dirt", "desert", "ice", "forest", "mountains"],
 		"dir": "Wizard/Sprites/with_outline",
 		"frame": Vector2i(128, 78),
@@ -347,6 +383,11 @@ static func tier_of(name: String) -> Tier:
 
 static func size_of(name: String) -> Size:
 	return ENEMIES[name]["size"]
+
+
+## Which way the pack's art points, before anything mirrors it.
+static func facing_of(name: String) -> Facing:
+	return ENEMIES[name]["faces"]
 
 
 ## What to multiply an encounter's base health by for this enemy: its body times its tier. Ranges from

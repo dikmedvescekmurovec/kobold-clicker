@@ -48,7 +48,9 @@ func setup_player(height: float) -> void:
 	_finish(built, height, false)
 
 
-## The enemy named in EnemyRoster, facing left towards the player.
+## The enemy named in EnemyRoster, turned to face left towards the player. The packs disagree about
+## which way they drew their creature, so only the ones EnemyRoster records as facing right are
+## mirrored -- mirroring every enemy sends half of them running in backwards.
 func setup_enemy(enemy_name: String, height: float) -> void:
 	bounds = EnemyRoster.bounds_of(enemy_name)
 	var frame := EnemyRoster.frame_size(enemy_name)
@@ -61,7 +63,7 @@ func setup_enemy(enemy_name: String, height: float) -> void:
 			continue
 		_add(built, animation, textures, first)
 		first = false
-	_finish(built, height, true)
+	_finish(built, height, EnemyRoster.facing_of(enemy_name) == EnemyRoster.Facing.RIGHT)
 
 
 ## The frames of one enemy animation: cut from its sheet, or one file each for the packs that ship
@@ -107,7 +109,7 @@ func _add(built: SpriteFrames, animation: String, textures: Array[AtlasTexture],
 ## Scales the fighter so that standing still it is `height` scene pixels tall, and puts the middle of
 ## its feet on `position`. Measured off the idle frames, so `position` means the same thing for a
 ## slime and a werewolf, and an attack that swings outside the body changes neither.
-func _finish(built: SpriteFrames, height: float, face_left: bool) -> void:
+func _finish(built: SpriteFrames, height: float, mirror: bool) -> void:
 	sprite_frames = built
 	var factor := height / float(standing.size.y)
 	scale = Vector2(factor, factor)
@@ -115,7 +117,7 @@ func _finish(built: SpriteFrames, height: float, face_left: bool) -> void:
 	var middle := Vector2(bounds.position) + Vector2(bounds.size) / 2.0
 	var feet := Vector2(standing.position.x + standing.size.x / 2.0, standing.end.y)
 	offset = middle - feet
-	flip_h = face_left
+	flip_h = mirror
 	play("idle")
 
 

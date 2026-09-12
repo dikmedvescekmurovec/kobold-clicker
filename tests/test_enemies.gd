@@ -8,6 +8,7 @@ extends "res://tests/harness.gd"
 func _run() -> void:
 	_check(_test_every_entry_names_a_known_environment(), "environments are the spritesheet's")
 	_check(_test_every_environment_has_every_tier(), "each environment can roll each tier")
+	_check(_test_every_entry_names_its_facing(), "every entry says which way it faces")
 	_check(_test_sheets_exist(), "every named sheet is on disk")
 	_check(_test_frame_packs_have_frames(), "frame-per-file packs resolve their frames")
 	_check(_test_pick_stays_in_environment(), "pick only returns enemies of that terrain")
@@ -41,6 +42,17 @@ func _test_every_environment_has_every_tier() -> bool:
 		for tier: EnemyRoster.Tier in [EnemyRoster.Tier.COMMON, EnemyRoster.Tier.ELITE, EnemyRoster.Tier.BOSS]:
 			var found := EnemyRoster.in_environment(env, tier)
 			_check(not found.is_empty(), "%s has a tier %d enemy" % [env, tier])
+	return true
+
+
+## Every pack has to say which way it drew its creature: an entry that forgets would be mirrored by
+## the default and come into the fight facing away from the player.
+func _test_every_entry_names_its_facing() -> bool:
+	for name in EnemyRoster.names():
+		_check(EnemyRoster.ENEMIES[name].has("faces"), name + " says which way it faces")
+		var facing := EnemyRoster.facing_of(name)
+		_check(facing == EnemyRoster.Facing.LEFT or facing == EnemyRoster.Facing.RIGHT,
+				name + " faces left or right")
 	return true
 
 
