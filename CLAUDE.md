@@ -11,9 +11,12 @@ Use the console build, so output reaches the terminal: `C:\Users\Dik\Godot_v4.7.
 | Map and tileset tests | `--headless --path . -s res://tests/test_hex_map.gd` |
 | Generation, town and map builder tests | `--headless --path . -s res://tests/test_generation.gd` |
 | UI theme tests | `--headless --path . -s res://tests/test_ui_theme.gd` |
+| Enemy roster and sprite geometry tests | `--headless --path . -s res://tests/test_enemies.gd` |
+| Combat tests | `--headless --path . -s res://tests/test_combat.gd` |
 | Run the game briefly | `--headless --path . --quit-after 30` |
 | Screenshots (opens a window) | `--path . -s res://tests/screenshot_map.gd`, saved to `%APPDATA%\Godot\app_userdata\Incremendal Side Scroller\` |
 | UI screenshots (opens a window) | `--path . -s res://tests/screenshot_ui.gd` (`ui_in_scene.png`, `ui_panel_crop.png`, `ui_kit.png`) |
+| Combat screenshots (opens a window) | `--path . -s res://tests/screenshot_combat.gd` (`combat_start/hurt/elite/won/lost.png`, plus `combat_roster.png`, every enemy at fight size) |
 
 "UID duplicate" warnings come from duplicated asset folders under `Assets/` and are harmless.
 
@@ -33,6 +36,16 @@ Use the console build, so output reaches the terminal: `C:\Users\Dik\Godot_v4.7.
 | `map_builder.gd` (`MapBuilder`) | Generates the map (`START_RECT`: 20×11 cells around cell (0, 0), which the camera centers on screen) and draws it as the player uncovers it. `rect` is what the map covers now: coming within `EXPAND_MARGIN` of an edge grows it by `EXPAND_BY` on that side (`expand_if_needed`, on arrival), generating the new land, its tiles and the roads it brings into reach, and redrawing the blends and roads of drawn tiles the new land touches. Everything already generated stays exactly as it is. Every cell is in one `State`: `HIDDEN` (the fog of war, nothing drawn), `UNDISCOVERED` (drawn under the grey fog, can't be walked to) or `DISCOVERED`. `create()` generates everything and draws `start_cells()`: the discovered center, where the player starts, ringed by six undiscovered tiles. `discover(cell)` takes the grey off a tile next to the player (`can_discover`), draws the tiles behind it as undiscovered, and sends the player walking onto it. `move_to(cell)` sends the player walking to a discovered tile over `route_to(cell)`, a shortest path of discovered tiles (`can_move_to` refuses anything else, and anything at all while `walking`); arriving emits `arrived(cell)` and discovers nothing by itself. `reveal_all()` discovers the lot. `origin` is the world spot at cell (0, 0): generated environments, plus that environment's town sprite where the world has a town. Before drawing, it clears any town within `START_TOWN_DISTANCE` (5) of the center and guarantees a small town exactly that far out, which a road links to cell (0, 0); that town's world spot is `start_town`. `_spot(cell)` is the crossing from map cells to world spots |
 
 `Scenes/main_scene.gd` has the exported `world_seed` and `map_seed` (0 = random; the used seeds are printed), `map_origin`, `zoom` (3 by default, whole numbers only so sprite pixels stay square) and `ui_scale` (2). It prints the clicked tile's environment weights and town connections, and builds the UI in code, so the scene file stays untouched while the editor has it open: a side panel flush against the right edge, running the full window height and hidden until a tile is selected, holding one row per environment on the tile (a 16 px swatch cut from that environment's own hex-sheet tile, plus its percentage), a "Discover" and a "Move here" button pinned to the bottom — discovering the tile next to you walks you onto it, and "Move here" goes back to any tile already discovered (the camera follows until the player arrives), and an X top-right that closes the panel and calls `HexMap.deselect()`.
+
+## Combat code (`Scenes/Combat/`, `Scenes/Enemies/`)
+A tile has to be taken before it can be discovered: ten enemies in 60 seconds, one click per point of damage. Winning calls `MapBuilder.discover` exactly as pressing Discover used to; losing changes nothing and can be retried at once.
+
+| File | Contents |
+|---|---|
+| `enemy_roster.gd` (`EnemyRoster`) | Every enemy under `Assets/Enemies`: its `Tier` (COMMON/ELITE/BOSS), its `Size`, the environments it lives on, and its sheet per animation. Health is not written per enemy — `SIZE_HP` and `TIER_HP` multiply into `hp_modifier`, so the whole curve is tuned from two tables. `frame` and `bounds` are measured, not guessed (see the gotcha below) |
+| `encounter.gd` (`Encounter`) | The rules, with no nodes: `for_tile(cell, env)` rolls nine commons and an elite, seeded from the cell so a tile always fields the same fight. Bosses are never rolled here. `hit()` takes a point off, `advance(delta)` runs the clock through the walk-ins and deaths, `won`/`lost` end it. Health is `hp_modifier` over a base that grows with the distance from cell (0, 0) |
+| `combat_actor.gd` (`CombatActor`) | An `AnimatedSprite2D` built from a sheet at runtime, as `PlayerToken` is. Serves both sides. Scaled and stood up by its *idle* frames, so `position` is the middle of its feet whatever the attack or death frames sprawl into |
+| `combat_scene.tscn` / `combat_scene.gd` (`CombatScene`) | The view: backdrop, the two fighters, the HUD, the clicks, the verdict. A `CanvasLayer` the main scene adds in front of the map rather than a scene change — the map holds a whole generated world in memory that a scene change would throw away, so it is hidden and its `process_mode` disabled instead. Drawn height comes from `SIZE_HEIGHT`, so a slime is knee-high and a boss looms |
 
 ## UI code (`Scenes/UI/`)
 | File | Contents |
@@ -54,4 +67,5 @@ Both builds share `buildlib.py`: the Aseprite call, the pass that reads every ex
 - **Editor conflicts:** the Godot editor is often open. After changing `project.godot` or `.tscn` files outside it, reload the project so the editor doesn't overwrite them.
 - **9-slice interiors must be 8-periodic:** a `StyleBoxTexture` repeats the centre and edge cells, so UI interior art has to be a pure function of `(x % 8, y % 8)` or the seams show when a panel is stretched. `qa.py ui` checks this.
 - **Pixellari renders cleanly only at 16 px**, its native size; below about 14 the glyphs break up. To make the interface smaller, lower `ui_scale` rather than the theme's `FONT_SIZE`.
+- **Enemy sheet geometry is measured, not guessed:** frame widths run 32 to 245 px with no relation to the sheet height, and a greatest-common-divisor guess gets Dwarf Warrior and Mimic wrong. The frame width is the smallest divisor of every sheet width in the pack where each frame boundary lands on a fully transparent column; `test_enemies.gd` re-checks that against the sprites, so adding an enemy means measuring it the same way.
 - **Commit** `.uid` and `.import` files.

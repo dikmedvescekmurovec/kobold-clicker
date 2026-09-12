@@ -10,6 +10,7 @@ func _run() -> void:
 	_check(_test_a_won_fight() == true, "won fight tests ran to the end")
 	_check(_test_a_lost_fight() == true, "lost fight tests ran to the end")
 	_check(_test_hits_only_land_on_a_waiting_enemy() == true, "hit timing tests ran to the end")
+	await _test_the_map_hands_over_and_takes_back()
 	_report("combat")
 
 
@@ -70,20 +71,27 @@ func _test_health() -> bool:
 ## Ten enemies clicked down inside the minute, with the clock running through every walk-in and death.
 func _test_a_won_fight() -> bool:
 	var fight := Encounter.for_tile(Vector2i(1, 0), "grass")
+	var coming: Array[String] = []
 	var spawned: Array[int] = []
 	var died: Array[int] = []
 	var results: Array[bool] = []
+	fight.enemy_coming.connect(func(_i: int, n: String, _hp: int) -> void: coming.append(n))
 	fight.enemy_spawned.connect(func(i: int, _n: String, _hp: int) -> void: spawned.append(i))
 	fight.enemy_died.connect(func(i: int) -> void: died.append(i))
 	fight.won.connect(func() -> void: results.append(true))
 	fight.lost.connect(func() -> void: results.append(false))
 
 	_check(not fight.hit(), "no hit lands before the first enemy is on")
+	fight.start()
+	_check(coming.size() == 1 and coming[0] == fight.lineup[0], "the first enemy is announced on its way in")
 	var clicks := _play(fight, 10000)
 	_check(fight.finished and fight.victory, "the fight is won")
 	_check(results == [true], "winning is reported once")
 	_check(spawned.size() == Encounter.ENEMIES and died.size() == Encounter.ENEMIES,
 			"all ten came out and all ten went down")
+	# Every enemy has to be announced on its way in, or the scene draws the one before it.
+	_check(coming.size() == Encounter.ENEMIES, "all ten were announced (%d)" % coming.size())
+	_check(PackedStringArray(coming) == fight.lineup, "in the order the fight lists them")
 	_check(fight.remaining() == 0, "none are left")
 	_check(fight.time_left > 0.0, "with %.1fs to spare" % fight.time_left)
 	_check(not fight.hit(), "a hit after the last one does nothing")
@@ -162,6 +170,45 @@ func _test_hits_only_land_on_a_waiting_enemy() -> bool:
 	fight.give_up()
 	_check(fight.finished and not fight.victory, "leaving counts as a loss")
 	return true
+
+
+## Discovering a tile goes through a fight now, so the map has to hand over and take back cleanly:
+## winning discovers the tile as it always did, losing leaves the map exactly as it was.
+func _test_the_map_hands_over_and_takes_back() -> void:
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	root.add_child(main)
+	for i in 3:
+		await process_frame
+
+	var target := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
+	_check(main.view.can_discover(target), "the tile next door can be fought for")
+
+	# Losing changes nothing.
+	main.map.select_cell(target)
+	main._on_discover_pressed()
+	_check(main._combat != null, "pressing Discover starts a fight")
+	_check(not main.map.visible and main.map.process_mode == Node.PROCESS_MODE_DISABLED,
+			"the map stops while the fight is on")
+	main._combat.fight.give_up()
+	main._combat._on_back_pressed()
+	await process_frame
+	_check(main._combat == null, "the fight is torn down")
+	_check(main.map.visible and main.map.process_mode == Node.PROCESS_MODE_INHERIT, "and the map is back")
+	_check(not main.view.discovered(target), "a lost tile stays undiscovered")
+	_check(main.view.can_discover(target), "and can be fought for again straight away")
+
+	# Winning discovers it, exactly as pressing Discover used to.
+	main._on_discover_pressed()
+	var fight: Encounter = main._combat.fight
+	_play(fight, 10000)
+	_check(fight.victory, "the rematch is won")
+	main._combat._on_back_pressed()
+	await process_frame
+	_check(main.view.discovered(target), "a won tile is discovered")
+	_check(main.map.visible, "and the map is back")
+	main.queue_free()
 
 
 ## Clicks the fight to its end at a steady rate, stepping the clock between clicks. Returns the clicks

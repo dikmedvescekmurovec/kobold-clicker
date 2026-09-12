@@ -14,7 +14,10 @@ extends RefCounted
 ## The rules live here with no nodes in sight, so a test can play a whole fight in a few lines --
 ## `advance(delta)` steps the clock the way PlayerToken.advance steps a walk. CombatScene draws it.
 
-## A new enemy has walked in and can be hit. `index` counts from 0, so the elite is ENEMIES - 1.
+## The next enemy has started running in, and is not yet in reach. `index` counts from 0, so the
+## elite is ENEMIES - 1. The first one is announced by `start()`.
+signal enemy_coming(index: int, enemy_name: String, hp: int)
+## That enemy has arrived and can now be hit.
 signal enemy_spawned(index: int, enemy_name: String, hp: int)
 ## The enemy took a hit and has this much health left.
 signal enemy_hit(hp_left: int)
@@ -57,7 +60,8 @@ var time_left := SECONDS
 var finished := false
 var victory := false
 
-var _phase_left := WALK_IN
+## Seconds left of the walking-in or dying that is under way. The scene slides the enemy in over it.
+var phase_left := WALK_IN
 
 
 ## The fight waiting on `cell`, whose terrain is `env`. Nine commons and an elite, drawn from the
@@ -78,6 +82,12 @@ static func for_tile(cell: Vector2i, env: String) -> Encounter:
 		fight.health.append(hp_of(picked, cell))
 	fight.hp = fight.health[0]
 	return fight
+
+
+## Announces the first enemy, so whoever is drawing the fight can put it on the field. Safe to call
+## more than once; a fight that is never started simply never announces anyone.
+func start() -> void:
+	enemy_coming.emit(index, lineup[index], hp)
 
 
 ## What one enemy is worth on this tile: an ordinary body grows with the distance from the middle of
@@ -120,7 +130,7 @@ func hit() -> bool:
 	enemy_hit.emit(hp)
 	if hp <= 0:
 		phase = Phase.DYING
-		_phase_left = DEATH
+		phase_left = DEATH
 		enemy_died.emit(index)
 	return true
 
@@ -133,10 +143,10 @@ func advance(delta: float) -> void:
 	time_left = maxf(time_left - delta, 0.0)
 	while not finished and phase != Phase.WAITING and delta > 0.0:
 		# A phase that ends part-way through the frame hands the rest of the frame to the next one.
-		if delta < _phase_left:
-			_phase_left -= delta
+		if delta < phase_left:
+			phase_left -= delta
 			break
-		delta -= _phase_left
+		delta -= phase_left
 		_advance_phase()
 	if time_left <= 0.0 and not finished:
 		_finish(false)
@@ -160,7 +170,8 @@ func _advance_phase() -> void:
 		return
 	hp = health[index]
 	phase = Phase.WALKING_IN
-	_phase_left = WALK_IN
+	phase_left = WALK_IN
+	enemy_coming.emit(index, lineup[index], hp)
 
 
 func _finish(win: bool) -> void:

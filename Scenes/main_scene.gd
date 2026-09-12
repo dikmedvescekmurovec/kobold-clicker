@@ -25,6 +25,8 @@ var _discover_button: Button
 var _move_button: Button
 var _env_rows: VBoxContainer
 var _panel: PanelContainer
+## The fight in front of the map, while there is one.
+var _combat: CombatScene
 
 
 func _ready() -> void:
@@ -187,11 +189,37 @@ func _clamp_to_map(to: Vector2) -> Vector2:
 	return to.clamp(first, last)
 
 
-## Discovering a tile next to the player takes the grey off it, shows what lies behind it, and sends the
-## player walking onto it.
+## A tile has to be taken before it can be discovered: ten of whatever lives on it, inside a minute.
+## Winning discovers it as before; losing leaves the map exactly as it was, free to try again.
 func _on_discover_pressed() -> void:
 	var cell := map.selected_cell
-	print("Discovered %s, showing %d tile(s) behind it; walking there" % [cell, view.discover(cell)])
+	if not view.can_discover(cell):
+		return
+	var env: String = map.get_tile_info(cell).get("env", "")
+	print("Fighting for %s (%s)" % [cell, env])
+	_combat = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
+	_combat.finished.connect(_on_combat_finished.bind(cell))
+	add_child(_combat)
+	_combat.begin(Encounter.for_tile(cell, env), cell, ui_scale)
+	# The map keeps its state but stops running, so nothing walks on underneath the fight.
+	map.hide()
+	map.process_mode = Node.PROCESS_MODE_DISABLED
+	_panel.hide()
+
+
+## Back from the fight. The tile is discovered only if it was won; either way the map comes back
+## exactly as it was left.
+func _on_combat_finished(won: bool, cell: Vector2i) -> void:
+	_combat.queue_free()
+	_combat = null
+	map.process_mode = Node.PROCESS_MODE_INHERIT
+	map.show()
+	if won:
+		print("Discovered %s, showing %d tile(s) behind it; walking there" % [cell, view.discover(cell)])
+	else:
+		print("Lost the fight for %s; it stays undiscovered" % cell)
+	if map.selected_cell != HexMap.NO_CELL:
+		_panel.show()
 	_update_buttons()
 
 
