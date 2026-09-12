@@ -1,4 +1,4 @@
-extends SceneTree
+extends "res://tests/harness.gd"
 ## Headless checks for the hex map. Run from the project folder:
 ##   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/test_hex_map.gd
 
@@ -7,18 +7,9 @@ const EDGE_OFFSETS := [
 	Vector2(56, 0), Vector2(28, 48), Vector2(-28, 48), Vector2(-56, 0), Vector2(-28, -48), Vector2(28, -48),
 ]
 
-var _failures := 0
-
-
-func _initialize() -> void:
-	# The root only enters the tree after _initialize, so nodes added here would not get _ready yet.
-	_run.call_deferred()
-
-
 func _run() -> void:
 	var map: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
 	root.add_child(map)
-	# A script error aborts a test function and makes it return null instead of true.
 	_check(_test_tileset(map.tileset) == true, "tileset tests ran to the end")
 	_check(_test_geometry(map) == true, "geometry tests ran to the end")
 	_check(_test_roads(map.tileset) == true, "road tests ran to the end")
@@ -34,11 +25,7 @@ func _run() -> void:
 	await create_timer(2.0 / PlayerToken.FPS).timeout
 	_check(map.player.frame != first_frame, "the idle animation advances by itself")
 
-	if _failures == 0:
-		print("All hex map tests passed")
-	else:
-		printerr("%d hex map check(s) failed" % _failures)
-	quit(1 if _failures else 0)
+	_report("hex map")
 
 
 func _test_tileset(tileset: HexTileset) -> bool:
@@ -328,8 +315,3 @@ func _godot_neighbor(edge: int) -> TileSet.CellNeighbor:
 		TileSet.CELL_NEIGHBOR_LEFT_SIDE, TileSet.CELL_NEIGHBOR_TOP_LEFT_SIDE, TileSet.CELL_NEIGHBOR_TOP_RIGHT_SIDE,
 	][edge]
 
-
-func _check(ok: bool, what: String) -> void:
-	if not ok:
-		_failures += 1
-		printerr("FAIL: " + what)

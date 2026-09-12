@@ -1,27 +1,14 @@
-extends SceneTree
+extends "res://tests/harness.gd"
 ## Headless checks for the 9-slice UI theme. Run from the project folder:
 ##   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/test_ui_theme.gd
 
-var _failures := 0
-
-
-func _initialize() -> void:
-	# The root only enters the tree after _initialize, so nodes added here would not get _ready yet.
-	_run.call_deferred()
-
-
 func _run() -> void:
 	var theme := UITheme.build()
-	# A script error aborts a test function and makes it return null instead of true.
 	_check(_test_sheet() == true, "sheet JSON tests ran to the end")
 	_check(_test_panels(theme) == true, "panel tests ran to the end")
 	_check(_test_buttons(theme) == true, "button tests ran to the end")
 	_check(_test_controls(theme) == true, "live control tests ran to the end")
-	if _failures == 0:
-		print("All UI theme tests passed")
-	else:
-		printerr("%d UI theme check(s) failed" % _failures)
-	quit(1 if _failures else 0)
+	_report("UI theme")
 
 
 func _test_sheet() -> bool:
@@ -113,8 +100,3 @@ func _is_nine_slice(box: StyleBox, what: String) -> bool:
 	_check(textured.texture is AtlasTexture, "%s draws from the shared sheet" % what)
 	return true
 
-
-func _check(ok: bool, what: String) -> void:
-	if not ok:
-		_failures += 1
-		printerr("FAIL: " + what)

@@ -1,19 +1,11 @@
-extends SceneTree
+extends "res://tests/harness.gd"
 ## Headless checks for environment and town generation. Run from the project folder:
 ##   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/test_generation.gd
 
 const ENV_SEEDS := 200
-const WORLD_SEED := 12345
-
-var _failures := 0
-
-
-func _initialize() -> void:
-	_run.call_deferred()
 
 
 func _run() -> void:
-	# A script error aborts a test function and makes it return null instead of true.
 	_check(_test_hex_grid() == true, "hex grid tests ran to the end")
 	_check(_test_environments() == true, "environment tests ran to the end")
 	_check(_test_environment_growth() == true, "environment growth tests ran to the end")
@@ -21,11 +13,7 @@ func _run() -> void:
 	_check(_test_towns() == true, "town tests ran to the end")
 	_check(_test_roads() == true, "road tests ran to the end")
 	_check(_test_map_builder() == true, "map builder tests ran to the end")
-	if _failures == 0:
-		print("All generation tests passed")
-	else:
-		printerr("%d generation check(s) failed" % _failures)
-	quit(1 if _failures else 0)
+	_report("generation")
 
 
 func _test_hex_grid() -> bool:
@@ -235,6 +223,20 @@ func _test_map_builder() -> bool:
 	var start_town := view.start_town
 	var build_ms := Time.get_ticks_msec() - start
 
+	_check(_test_start_state(map, view) == true, "starting state tests ran to the end")
+	_check(_test_discovery(map, view) == true, "discovery tests ran to the end")
+	_check(_test_blends_stay(map, view) == true, "blend stability tests ran to the end")
+	_check(_test_drawn_window(map, view, world, origin, env_seed, start_town, build_ms) == true,
+			"drawn window tests ran to the end")
+	_check(_test_start_town(map, world, origin, start_town) == true, "first town tests ran to the end")
+	_check(_test_growth(map, view) == true, "map growth tests ran to the end")
+
+	map.queue_free()
+	return true
+
+
+## The window as the player first sees it.
+func _test_start_state(map: HexMap, view: MapBuilder) -> bool:
 	# The start is a hexagon of 7 tiles: the discovered center, ringed by undiscovered land under the fog.
 	var start_tiles := MapBuilder.start_cells()
 	var rows := {}
@@ -251,7 +253,12 @@ func _test_map_builder() -> bool:
 		_check(view.state(cell) == MapBuilder.State.UNDISCOVERED, "%s starts undiscovered" % cell)
 		_check(map.fog.has_cell(cell), "%s is greyed out" % cell)
 	_check(not map.fog.has_cell(MapBuilder.CENTER) and map.fog.cells().size() == 6, "only undiscovered tiles are greyed")
+	return true
 
+
+## Reaching new land: what may be discovered, what may be walked to, and what each does.
+func _test_discovery(map: HexMap, view: MapBuilder) -> bool:
+	var start_tiles := MapBuilder.start_cells()
 	# Tiles have to be discovered before the player can go there, and only from the tile they stand on.
 	var arrivals: Array[Vector2i] = []
 	view.arrived.connect(func(at: Vector2i) -> void: arrivals.append(at))
@@ -303,7 +310,10 @@ func _test_map_builder() -> bool:
 	_check(not view.move_to(MapBuilder.CENTER).is_empty(), "the walk back to the center starts")
 	map.player.finish_walk()
 	_check(view.player_cell == MapBuilder.CENTER, "the player walks the whole route")
+	return true
 
+
+func _test_blends_stay(map: HexMap, view: MapBuilder) -> bool:
 	# A tile must be drawn with the blends of all its neighbors, discovered or not, so what is on screen never
 	# changes as the land around it is found.
 	var blends_when_found := {}
@@ -321,14 +331,17 @@ func _test_map_builder() -> bool:
 						cell, map.blends_at(cell), blends_when_found[cell]])
 	print("Blends kept on %d of %d tiles drawn before their neighbors" % [
 			blended_when_found, blends_when_found.size()])
+	return true
 
+
+## Everything the builder drew, checked against the same window worked out here from scratch.
+func _test_drawn_window(map: HexMap, view: MapBuilder, world: TownWorld, origin: Vector2i, env_seed: int,
+		start_town: Vector2i, build_ms: int) -> bool:
+	var tileset := map.tileset
+	var start := 0
 	# The same land and roads, worked out here from scratch, in the order the builder lays them.
 	var envs := EnvironmentGenerator.generate(MapBuilder.START_RECT, hash([env_seed, MapBuilder.START_RECT]))
-	var roads: Dictionary[Vector2i, int] = {}
-	var routed: Dictionary[String, bool] = {}
-	RoadNetwork.route_to_cell(world, start_town, origin, tileset.legal_road_masks(), roads)
-	RoadNetwork.extend(world, Rect2i(origin + MapBuilder.START_RECT.position, MapBuilder.START_RECT.size),
-			tileset.legal_road_masks(), roads, routed)
+	var roads := _expected_roads(tileset, world, origin, start_town)
 	_check(view.rect == MapBuilder.START_RECT, "the map is still the one it started with")
 
 	var towns_drawn := 0
@@ -397,7 +410,11 @@ func _test_map_builder() -> bool:
 	_check(bad_weights == 0, "environment weights are valid on every cell (%d problems)" % bad_weights)
 	_check(wrong_roads == 0, "every cell's road matches the network and its material (%d wrong)" % wrong_roads)
 	_check(not map.road_layer.get_used_cells().is_empty(), "the window's roads are drawn")
+	return true
 
+
+func _test_start_town(map: HexMap, world: TownWorld, origin: Vector2i, start_town: Vector2i) -> bool:
+	var roads := _expected_roads(map.tileset, world, origin, start_town)
 	# The first town: exactly START_TOWN_DISTANCE out, nothing nearer, and a road to the center cell.
 	_check(HexGrid.distance(origin, start_town) == MapBuilder.START_TOWN_DISTANCE
 			and world.tier_at(start_town) == TownWorld.Tier.SMALL,
@@ -418,10 +435,15 @@ func _test_map_builder() -> bool:
 	_check(not start_towns.is_empty(), "a small town sits %d steps from cell (0, 0)" % MapBuilder.START_TOWN_DISTANCE)
 	if not start_towns.is_empty():
 		var drawn: String = map.get_tile_info(start_towns[0]).get("name", "")
-		_check(drawn.begins_with("town_") and drawn.ends_with("_small"), "the guaranteed town is drawn as a small town (got %s)" % drawn)
-	# The map grows as the player nears its edge, and none of the land behind them changes.
+		_check(drawn.begins_with("town_") and drawn.ends_with("_small"),
+				"the guaranteed town is drawn as a small town (got %s)" % drawn)
+	return true
+
+
+## The map grows as the player nears its edge, and none of the land behind them changes.
+func _test_growth(map: HexMap, view: MapBuilder) -> bool:
 	var before: Dictionary[Vector2i, Array] = {}
-	for cell: Vector2i in envs:
+	for cell: Vector2i in map.ground_layer.get_used_cells():
 		var info := map.get_tile_info(cell)
 		before[cell] = [view.env_at(cell), info["name"], info["road"]]
 	var was := view.rect
@@ -464,9 +486,18 @@ func _test_map_builder() -> bool:
 	_check(view.discovered(beyond_old) and map.get_tile_info(beyond_old).get("group", "") != "",
 			"and is drawn once revealed")
 	print("Map grown from %s to %s (%d cells) in %d ms" % [was.size, view.rect.size, view.rect.get_area(), grow_ms])
-
-	map.queue_free()
 	return true
+
+
+## The roads of the starting window, routed here rather than read off the builder, in the order it lays them:
+## the first town's road to the center cell, then the links the window brings into reach.
+func _expected_roads(tileset: HexTileset, world: TownWorld, origin: Vector2i, start_town: Vector2i) -> Dictionary[Vector2i, int]:
+	var roads: Dictionary[Vector2i, int] = {}
+	var routed: Dictionary[String, bool] = {}
+	RoadNetwork.route_to_cell(world, start_town, origin, tileset.legal_road_masks(), roads)
+	RoadNetwork.extend(world, Rect2i(origin + MapBuilder.START_RECT.position, MapBuilder.START_RECT.size),
+			tileset.legal_road_masks(), roads, routed)
+	return roads
 
 
 func _test_roads() -> bool:
@@ -607,8 +638,3 @@ func _weights_for(cell: Vector2i, layout: Dictionary[Vector2i, String]) -> Dicti
 		regions.add(placed, envs)
 	return EnvironmentGenerator.choice_weights(cell, envs, regions)
 
-
-func _check(ok: bool, what: String) -> void:
-	if not ok:
-		_failures += 1
-		printerr("FAIL: " + what)

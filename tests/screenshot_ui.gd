@@ -1,18 +1,13 @@
-extends SceneTree
+extends "res://tests/harness.gd"
 ## Renders the UI kit for a visual check: the main scene's panel over the map, then a board showing
 ## every button state at three sizes, including the 16x16 minimum. Needs a window (no --headless):
 ##   Godot_v4.7.2-stable_win64_console.exe --path . -s res://tests/screenshot_ui.gd
 
-const WORLD_SEED := 12345
 const MAP_SEED := 1
 ## The board is drawn at 2x rather than the scene's 3x so all four states of every variation fit in
 ## one 1152x648 window, at the 16x16 minimum and at a realistic button size.
 const UI_SCALE := 2
 const SIZES := [Vector2(16, 16), Vector2(100, 26)]
-
-
-func _initialize() -> void:
-	_run.call_deferred()
 
 
 func _run() -> void:

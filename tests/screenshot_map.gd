@@ -1,16 +1,11 @@
-extends SceneTree
+extends "res://tests/harness.gd"
 ## Renders the main scene for a few map seeds and saves screenshots to user://, for checking the look.
 ## Also prints the environment weights of a few blended tiles and saves a 3x crop around the first one.
 ## Needs a window (no --headless):
 ##   Godot_v4.7.2-stable_win64_console.exe --path . -s res://tests/screenshot_map.gd
 
-const WORLD_SEED := 12345
 const MAP_SEEDS := [1, 2, 3, 4]
 const CROP_ZOOM := 3
-
-
-func _initialize() -> void:
-	_run.call_deferred()
 
 
 func _run() -> void:
