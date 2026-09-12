@@ -12,8 +12,6 @@ const MARGIN := 8
 const WANDER := 0.9
 ## Extra cost for a 120 degree turn, so a route doesn't zigzag for free.
 const TURN_COST := 0.35
-## Stands in for "no spot" in the optional hub arguments.
-const NO_SPOT := Vector2i(-99999, -99999)
 
 
 ## Lays the roads of every link with a town in `rect` that `routed` doesn't hold yet, adding them to `roads`

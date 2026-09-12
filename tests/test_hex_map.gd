@@ -66,7 +66,7 @@ func _test_geometry(map: HexMap) -> bool:
 		var center := layer.map_to_local(cell)
 		_check(map.cell_at(center) == cell, "center of %s maps to it" % [cell])
 		for edge in 6:
-			var neighbor := map.neighbor(cell, edge)
+			var neighbor := HexGrid.neighbor(cell, edge)
 			_check(layer.map_to_local(neighbor) - center == EDGE_OFFSETS[edge],
 					"edge %d of %s points at the right neighbor" % [edge, cell])
 			_check(layer.get_neighbor_cell(cell, _godot_neighbor(edge)) == neighbor, "HexGrid matches Godot for edge %d of %s" % [edge, cell])
@@ -74,7 +74,7 @@ func _test_geometry(map: HexMap) -> bool:
 		var edge_mid := center + Vector2(14, -24)
 		var normal := Vector2(16, -28).normalized() * 2
 		_check(map.cell_at(edge_mid - normal) == cell, "point inside NE edge of %s" % [cell])
-		_check(map.cell_at(edge_mid + normal) == map.neighbor(cell, HexGrid.Edge.NE), "point outside NE edge of %s" % [cell])
+		_check(map.cell_at(edge_mid + normal) == HexGrid.neighbor(cell, HexGrid.Edge.NE), "point outside NE edge of %s" % [cell])
 	return true
 
 

@@ -3,6 +3,7 @@ extends Node2D
 ## Clickable hex map. Ground tiles (environments, towns) go on GroundLayer, blend overlays on one layer per
 ## spreading environment above it, and road overlays on RoadLayer.
 
+## Part of the node's public surface; nothing listens yet, the main scene only acts on clicks.
 signal tile_hovered(cell: Vector2i, info: Dictionary)
 signal tile_clicked(cell: Vector2i, info: Dictionary)
 ## Mouse movement, in screen pixels, while dragging the map. Whoever owns the camera moves it.
@@ -90,12 +91,12 @@ func _unhandled_input(event: InputEvent) -> void:
 func set_ground(cell: Vector2i, tile_name: String) -> void:
 	ground_layer.set_cell(cell, HexTileset.SOURCE_ID, tileset.atlas_coords(tile_name))
 	var env := _env_at(cell)
-	_refresh_blends(cell)
+	refresh_blends(cell)
 	for next in HexGrid.neighbors(cell):
 		var next_env := _env_at(next)
 		if env != "" and next_env != "" and not tileset.can_border(env, next_env):
 			push_warning("%s at %s borders %s at %s, which env_adjacency doesn't allow" % [env, cell, next_env, next])
-		_refresh_blends(next)
+		refresh_blends(next)
 
 
 ## Pass "" to remove the road from a cell.
@@ -135,11 +136,6 @@ func world_position(viewport_point: Vector2) -> Vector2:
 ## Cell under a point in global coordinates (e.g. the mouse).
 func cell_at(global_point: Vector2) -> Vector2i:
 	return ground_layer.local_to_map(ground_layer.to_local(global_point))
-
-
-## The cell across the given HexGrid.Edge.
-func neighbor(cell: Vector2i, edge: int) -> Vector2i:
-	return HexGrid.neighbor(cell, edge)
 
 
 ## Names of the blend overlays drawn on a cell, lowest priority first.
@@ -239,14 +235,10 @@ func _env_at(cell: Vector2i) -> String:
 	return hidden_env.call(cell) if hidden_env.is_valid() else ""
 
 
-## Redraws a cell's blend overlays, for when the land around it has changed (the map growing, say).
-func refresh_blends(cell: Vector2i) -> void:
-	_refresh_blends(cell)
-
-
 ## Redraws a cell's overlays per the JSON meta blend_rule: a non-town tile gets blend_<A>_<edges> for every
-## neighboring environment A with a higher blend priority than its own.
-func _refresh_blends(cell: Vector2i) -> void:
+## neighboring environment A with a higher blend priority than its own. Called again for a drawn cell when the
+## land around it has changed, as it does when the map grows.
+func refresh_blends(cell: Vector2i) -> void:
 	for layer: TileMapLayer in blend_layers.values():
 		layer.erase_cell(cell)
 	var ground := ground_layer.get_cell_tile_data(cell)

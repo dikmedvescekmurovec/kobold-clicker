@@ -47,11 +47,6 @@ static func theme() -> Theme:
 	return _theme
 
 
-## Applies the theme to a node and everything under it.
-static func apply_to(node: Control) -> void:
-	node.theme = theme()
-
-
 static func build() -> Theme:
 	var built := Theme.new()
 	var text := FileAccess.get_file_as_string(SHEET_JSON)
