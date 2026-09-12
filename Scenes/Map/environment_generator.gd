@@ -4,18 +4,18 @@ extends RefCounted
 ##
 ## Growth starts at one random cell and repeatedly fills a random cell touching the generated area.
 ## A new cell prefers the environments around it, favours neighboring regions that are still small,
-## and never breaks ALLOWED. Regions still smaller than MIN_REGION_SIZE are merged into a neighbor at the end.
+## and never breaks the adjacency table. Regions still smaller than MIN_REGION_SIZE are merged into a neighbor at the end.
 
-## Which environments may border each other: the same table as terrain.ADJACENT in the sprite generator
-## (see AI-sprites-generator/README.md). Symmetric; an environment may always border itself.
-const ALLOWED := {
-	"grass": ["dirt", "ice", "forest", "mountains"],
-	"dirt": ["grass", "desert", "forest", "mountains"],
-	"desert": ["dirt", "mountains"],
-	"ice": ["grass", "mountains"],
-	"forest": ["grass", "dirt", "mountains"],
-	"mountains": ["grass", "dirt", "desert", "ice", "forest"],
-}
+## Which environments may border each other, read from the spritesheet's own JSON meta env_adjacency
+## (see AI-sprites-generator/README.md) so the generator can only produce borders the sprites can draw.
+## Symmetric; an environment may always border itself, which can_border handles rather than the table.
+static var _allowed: Dictionary[String, PackedStringArray]
+
+
+static func allowed() -> Dictionary[String, PackedStringArray]:
+	if _allowed.is_empty():
+		_allowed = SheetMeta.env_adjacency()
+	return _allowed
 
 ## Weight each generated neighbor adds to its own environment.
 const SAME_WEIGHT := 1.0
@@ -81,7 +81,7 @@ static func extend(envs: Dictionary[Vector2i, String], cells: Rect2i, seed_value
 
 
 static func can_border(a: String, b: String) -> bool:
-	return a == b or b in ALLOWED[a]
+	return a == b or b in allowed()[a]
 
 
 ## Weight of every environment the cell may take, given the cells generated so far.
@@ -92,7 +92,7 @@ static func choice_weights(cell: Vector2i, envs: Dictionary[Vector2i, String], r
 		if envs.has(next):
 			neighbor_envs.append(envs[next])
 			weights[envs[next]] = weights.get(envs[next], 0.0) + SAME_WEIGHT * _size_factor(regions.size_of(next))
-	for env: String in ALLOWED:
+	for env: String in allowed():
 		if not weights.has(env):
 			weights[env] = NEW_REGION_WEIGHT
 	for env: String in weights.keys():

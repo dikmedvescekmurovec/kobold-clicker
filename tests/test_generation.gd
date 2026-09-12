@@ -15,7 +15,6 @@ func _initialize() -> void:
 func _run() -> void:
 	# A script error aborts a test function and makes it return null instead of true.
 	_check(_test_hex_grid() == true, "hex grid tests ran to the end")
-	_check(_test_adjacency_matches_sprites() == true, "adjacency tests ran to the end")
 	_check(_test_environments() == true, "environment tests ran to the end")
 	_check(_test_environment_growth() == true, "environment growth tests ran to the end")
 	_check(_test_region_weights() == true, "region weight tests ran to the end")
@@ -37,20 +36,6 @@ func _test_hex_grid() -> bool:
 	_check(HexGrid.distance(Vector2i(0, 0), Vector2i(1, 2)) == 2, "distance two steps SE")
 	_check(HexGrid.distance(Vector2i(0, 0), Vector2i(-1, 2)) == 2, "distance two steps SW")
 	_check(HexGrid.distance(Vector2i(0, 0), Vector2i(0, 4)) == 4, "distance zigzag down")
-	return true
-
-
-## EnvironmentGenerator.ALLOWED must stay equal to the sprite generator's table (JSON meta env_adjacency).
-func _test_adjacency_matches_sprites() -> bool:
-	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(HexTileset.SHEET_JSON))
-	var table: Dictionary = data["meta"]["env_adjacency"]
-	_check(table.size() == EnvironmentGenerator.ALLOWED.size(), "same environments in ALLOWED and env_adjacency")
-	for env: String in EnvironmentGenerator.ALLOWED:
-		var ours: Array = EnvironmentGenerator.ALLOWED[env] + [env]
-		ours.sort()
-		var theirs: Array = table.get(env, []).duplicate()
-		theirs.sort()
-		_check(ours == theirs, "%s borders match env_adjacency (%s vs %s)" % [env, ours, theirs])
 	return true
 
 

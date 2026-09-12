@@ -3,7 +3,7 @@ extends RefCounted
 ## Builds a hex TileSet from the generated spritesheet and its JSON (see AI-sprites-generator/README.md),
 ## so rebuilding the sprites updates the game without editing the TileSet by hand.
 
-const SHEET_JSON := "res://AI-sprites/spritesheet/hex_tileset.json"
+const SHEET_JSON := SheetMeta.SHEET_JSON
 const SOURCE_ID := 0
 const CUSTOM_DATA := ["name", "group", "env", "kind"]
 
@@ -25,15 +25,13 @@ var _masks: Dictionary[String, PackedByteArray] = {}
 
 
 func _init() -> void:
-	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(SHEET_JSON))
-	assert(data is Dictionary, "Could not read " + SHEET_JSON)
-	var meta: Dictionary = data["meta"]
+	var data := SheetMeta.data()
+	var meta := SheetMeta.meta()
 	tile_size = Vector2i(int(meta["tile_size"][0]), int(meta["tile_size"][1]))
 	for road_material: String in meta["road_materials"]:
 		for env: String in meta["road_materials"][road_material]:
 			_road_material_by_env[env] = road_material
-	for env: String in meta["env_adjacency"]:
-		_adjacency[env] = PackedStringArray(meta["env_adjacency"][env])
+	_adjacency = SheetMeta.env_adjacency()
 	blend_priority = PackedStringArray(meta["blend_priority"])
 	_sheet_path = SHEET_JSON.get_base_dir().path_join(meta["image"])
 	_build_tile_set(load(_sheet_path), data["tiles"])
