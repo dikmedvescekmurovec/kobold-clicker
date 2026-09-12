@@ -15,12 +15,7 @@ var _selected_bands: Array[Dictionary] = []
 
 func setup(map: HexMap) -> void:
 	_map = map
-	var tile := Vector2(map.tileset.tile_size)
-	# Pointy-top hex, clockwise from the top: the slanted edges span the top and bottom quarter of the tile.
-	_corners = PackedVector2Array([
-		Vector2(0, -tile.y / 2), Vector2(tile.x / 2, -tile.y / 4), Vector2(tile.x / 2, tile.y / 4),
-		Vector2(0, tile.y / 2), Vector2(-tile.x / 2, tile.y / 4), Vector2(-tile.x / 2, -tile.y / 4),
-	])
+	_corners = HexGrid.corners(Vector2(map.tileset.tile_size))
 	# Bands span from `inner` to `outer` pixels off the tile edge (positive is outward), drawn in order.
 	# Selected: 4 px gold with 1 px ink on both sides. Hover: 2 px light line on a softer ink border.
 	_hover_bands = [_band(Color(INK, 0.6), -2, 2), _band(HOVER_COLOR, -1, 1)]

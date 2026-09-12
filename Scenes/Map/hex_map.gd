@@ -16,6 +16,11 @@ var tileset: HexTileset
 var hovered_cell := NO_CELL
 var selected_cell := NO_CELL
 
+## Environment of cells that aren't drawn yet, as a Callable taking a cell and returning an environment name
+## ("" when there is none). Whoever generates the map sets it, so a tile can blend with land around it that the
+## player hasn't discovered, and looks the same however late it is drawn.
+var hidden_env := Callable()
+
 var _press_at := Vector2.ZERO
 var _pressing := false
 var _dragging := false
@@ -25,6 +30,11 @@ var blend_layers: Dictionary[String, TileMapLayer] = {}
 @onready var ground_layer: TileMapLayer = $GroundLayer
 @onready var road_layer: TileMapLayer = $RoadLayer
 @onready var highlight: HexHighlight = $Highlight
+
+## Marker for the player's tile, and the grey veil over tiles that aren't discovered yet. Both are created
+## here, so the scene file stays untouched while the editor has it open.
+var player: PlayerToken
+var fog: FogOverlay
 
 
 func _ready() -> void:
@@ -40,6 +50,16 @@ func _ready() -> void:
 		move_child(layer, road_layer.get_index())
 		blend_layers[env] = layer
 	highlight.setup(self)
+	fog = FogOverlay.new()
+	fog.name = "Fog"
+	add_child(fog)
+	move_child(fog, highlight.get_index())  # Over the terrain and roads, under the outlines.
+	fog.setup(self)
+	player = PlayerToken.new()
+	player.name = "Player"
+	add_child(player)  # Last, so the token draws over the highlight.
+	player.setup(self)
+	player.set_cell(NO_CELL)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -86,6 +106,11 @@ func set_road(cell: Vector2i, tile_name: String) -> void:
 		road_layer.set_cell(cell, HexTileset.SOURCE_ID, tileset.atlas_coords(tile_name))
 
 
+## Puts the player token on a cell, or on NO_CELL to take it off the map.
+func set_player_cell(cell: Vector2i) -> void:
+	player.set_cell(cell)
+
+
 func clear_map() -> void:
 	ground_layer.clear()
 	road_layer.clear()
@@ -93,6 +118,8 @@ func clear_map() -> void:
 		layer.clear()
 	hovered_cell = NO_CELL
 	selected_cell = NO_CELL
+	player.set_cell(NO_CELL)
+	fog.clear()
 	highlight.queue_redraw()
 
 
@@ -204,9 +231,12 @@ func _set_hovered(cell: Vector2i) -> void:
 		tile_hovered.emit(cell, get_tile_info(cell))
 
 
+## The environment on a cell: what is drawn there, or what will be, per `hidden_env`.
 func _env_at(cell: Vector2i) -> String:
 	var ground := ground_layer.get_cell_tile_data(cell)
-	return ground.get_custom_data("env") if ground else ""
+	if ground:
+		return ground.get_custom_data("env")
+	return hidden_env.call(cell) if hidden_env.is_valid() else ""
 
 
 ## Redraws a cell's overlays per the JSON meta blend_rule: a non-town tile gets blend_<A>_<edges> for every

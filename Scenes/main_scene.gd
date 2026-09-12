@@ -22,6 +22,7 @@ var view: MapBuilder
 @onready var camera: Camera2D = $Camera2D
 
 var _discover_button: Button
+var _move_button: Button
 var _env_rows: VBoxContainer
 var _panel: PanelContainer
 
@@ -35,9 +36,17 @@ func _ready() -> void:
 			used_world_seed, towns.towns().size(), used_map_seed, view.start_town - map_origin])
 	map.tile_clicked.connect(_on_tile_clicked)
 	map.dragged.connect(_on_map_dragged)
+	view.arrived.connect(_on_player_arrived)
 	_build_ui()
 	camera.zoom = Vector2(zoom, zoom)
 	camera.position = map.ground_layer.map_to_local(Vector2i.ZERO)
+
+
+## The camera keeps up with the walking player, so they never walk off screen. Standing still, it only moves
+## where the player drags it.
+func _process(_delta: float) -> void:
+	if view.walking:
+		camera.position = _clamp_to_map(map.player.position)
 
 
 ## Built in code so the scene file stays untouched while the Godot editor has it open.
@@ -83,9 +92,16 @@ func _build_ui() -> void:
 	filler.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	rows.add_child(filler)
 
-	_discover_button = _button("Discover", "WoodButton", "Show the tiles around the selected one")
+	# Two steps to reach new land: look at the tile next to you, then walk onto it.
+	var buttons := VBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 4)
+	rows.add_child(buttons)
+	_discover_button = _button("Discover", "WoodButton", "Look at the tile next to you and what lies behind it")
 	_discover_button.pressed.connect(_on_discover_pressed)
-	rows.add_child(_discover_button)
+	buttons.add_child(_discover_button)
+	_move_button = _button("Move here", "WoodButton", "Walk to the selected tile")
+	_move_button.pressed.connect(_on_move_pressed)
+	buttons.add_child(_move_button)
 
 	get_viewport().size_changed.connect(_layout_ui)
 	_layout_ui.call_deferred()
@@ -144,7 +160,7 @@ func _layout_ui() -> void:
 
 
 func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
-	_discover_button.disabled = not view.can_discover(cell)
+	_update_buttons()
 	_panel.show()
 	_layout_ui()
 	var spot := map_origin + cell
@@ -159,20 +175,48 @@ func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
 	_show_environments(weights)
 
 
-## Dragging moves the camera the other way, so the map follows the cursor, and never leaves the map behind.
+## Dragging moves the camera the other way, so the map follows the cursor.
 func _on_map_dragged(relative: Vector2) -> void:
+	camera.position = _clamp_to_map(camera.position - relative / camera.zoom.x)
+
+
+## Keeps the camera over the map, on the middle of the outermost tiles.
+func _clamp_to_map(to: Vector2) -> Vector2:
 	var first := map.ground_layer.map_to_local(MapBuilder.RECT.position)
 	var last := map.ground_layer.map_to_local(MapBuilder.RECT.end - Vector2i.ONE)
-	camera.position = (camera.position - relative / camera.zoom.x).clamp(first, last)
+	return to.clamp(first, last)
 
 
+## Discovering a tile next to the player takes the grey off it, shows what lies behind it, and sends the
+## player walking onto it.
 func _on_discover_pressed() -> void:
 	var cell := map.selected_cell
-	print("Discovered %d tile(s) around %s" % [view.discover(cell), cell])
+	print("Discovered %s, showing %d tile(s) behind it; walking there" % [cell, view.discover(cell)])
+	_update_buttons()
+
+
+## The player walks to the tile; both buttons stay disabled until they get there.
+func _on_move_pressed() -> void:
+	var cell := map.selected_cell
+	print("Walking to %s, %d tile(s) away" % [cell, view.route_to(cell).size()])
+	view.move_to(cell)
+	_update_buttons()
+
+
+func _on_player_arrived(cell: Vector2i) -> void:
+	print("Arrived at %s" % cell)
+	_update_buttons()
+
+
+## A tile is either something to look at or somewhere to go, and neither while the player is walking.
+func _update_buttons() -> void:
+	var cell := map.selected_cell
 	_discover_button.disabled = not view.can_discover(cell)
+	_move_button.disabled = not view.can_move_to(cell)
 
 
 ## The X closes the panel and drops the selection, so nothing stays outlined on the map.
 func _on_close_pressed() -> void:
 	_panel.hide()
 	map.deselect()
+	_update_buttons()

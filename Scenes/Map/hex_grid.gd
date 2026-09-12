@@ -11,6 +11,15 @@ const _EVEN_ROW_OFFSETS := [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 1), Vec
 const _ODD_ROW_OFFSETS := [Vector2i(1, 0), Vector2i(1, 1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1), Vector2i(1, -1)]
 
 
+## Corners of a pointy-top tile around its middle, clockwise from the top. The slanted edges span the top and
+## bottom quarter of the tile.
+static func corners(tile_size: Vector2) -> PackedVector2Array:
+	return PackedVector2Array([
+		Vector2(0, -tile_size.y / 2), Vector2(tile_size.x / 2, -tile_size.y / 4), Vector2(tile_size.x / 2, tile_size.y / 4),
+		Vector2(0, tile_size.y / 2), Vector2(-tile_size.x / 2, tile_size.y / 4), Vector2(-tile_size.x / 2, -tile_size.y / 4),
+	])
+
+
 static func neighbor(cell: Vector2i, edge: int) -> Vector2i:
 	var offsets: Array = _ODD_ROW_OFFSETS if cell.y & 1 else _EVEN_ROW_OFFSETS
 	return cell + offsets[edge]

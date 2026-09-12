@@ -200,7 +200,7 @@ func _test_map_builder() -> bool:
 	var start_town := view.start_town
 	var build_ms := Time.get_ticks_msec() - start
 
-	# The start is a hexagon of 7 tiles, and discovering a tile shows the tiles around it.
+	# The start is a hexagon of 7 tiles: the discovered center, ringed by undiscovered land under the fog.
 	var start_tiles := MapBuilder.start_cells()
 	var rows := {}
 	for cell: Vector2i in start_tiles:
@@ -210,19 +210,83 @@ func _test_map_builder() -> bool:
 	_check(start_tiles.all(func(cell: Vector2i) -> bool: return HexGrid.distance(MapBuilder.CENTER, cell) <= 1),
 			"every starting tile is the center or touches it")
 	_check(map.ground_layer.get_used_cells().size() == start_tiles.size(), "only the 7 starting tiles are drawn")
-	_check(view.discovered(MapBuilder.CENTER) and not view.discovered(Vector2i(4, 0)), "the start covers the hexagon only")
-	_check(not view.can_discover(MapBuilder.CENTER), "the center is boxed in by the starting tiles")
-	_check(not view.can_discover(Vector2i(4, 0)) and view.discover(Vector2i(4, 0)) == 0, "an undiscovered tile discovers nothing")
+	_check(view.state(MapBuilder.CENTER) == MapBuilder.State.DISCOVERED, "the center is discovered")
+	_check(view.state(Vector2i(4, 0)) == MapBuilder.State.HIDDEN, "the rest of the map is in the fog")
+	for cell in HexGrid.neighbors(MapBuilder.CENTER):
+		_check(view.state(cell) == MapBuilder.State.UNDISCOVERED, "%s starts undiscovered" % cell)
+		_check(map.fog.has_cell(cell), "%s is greyed out" % cell)
+	_check(not map.fog.has_cell(MapBuilder.CENTER) and map.fog.cells().size() == 6, "only undiscovered tiles are greyed")
+
+	# Tiles have to be discovered before the player can go there, and only from the tile they stand on.
+	var arrivals: Array[Vector2i] = []
+	view.arrived.connect(func(at: Vector2i) -> void: arrivals.append(at))
+	_check(view.player_cell == MapBuilder.CENTER and map.player.cell == MapBuilder.CENTER, "the player starts on the center")
+	_check(not view.can_move_to(MapBuilder.CENTER) and view.route_to(MapBuilder.CENTER).is_empty(),
+			"there is nowhere to walk on the tile they stand on")
+	_check(not view.can_discover(MapBuilder.CENTER) and view.discover(MapBuilder.CENTER) == -1,
+			"the tile they stand on is discovered already")
+	_check(not view.can_discover(Vector2i(4, 0)) and view.discover(Vector2i(4, 0)) == -1, "fog can't be discovered")
+
 	var rim := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
+	var beyond := HexGrid.neighbor(rim, HexGrid.Edge.E)
+	_check(not view.can_move_to(rim) and not view.move_to(rim), "an undiscovered tile can't be walked to yet")
+	_check(not view.can_discover(beyond), "a tile two steps out is out of reach")
 	var expected_new := HexGrid.neighbors(rim).filter(func(next: Vector2i) -> bool:
-			return MapBuilder.RECT.has_point(next) and not view.discovered(next)).size()
-	_check(view.can_discover(rim) and expected_new > 0, "a tile on the rim of the start has more to show")
-	_check(view.discover(rim) == expected_new, "discovering shows every undiscovered neighbor")
+			return MapBuilder.RECT.has_point(next) and not view.seen(next)).size()
+	_check(view.can_discover(rim) and expected_new > 0, "the tile next to the player can be discovered")
+	_check(view.discover(rim) == expected_new, "discovering it lifts the fog off the tiles behind it")
+	_check(view.state(rim) == MapBuilder.State.DISCOVERED and not map.fog.has_cell(rim), "the tile is discovered and clear")
 	_check(map.ground_layer.get_used_cells().size() == start_tiles.size() + expected_new, "the newly shown tiles are drawn")
 	for next in HexGrid.neighbors(rim):
-		_check(view.discovered(next), "%s is discovered now" % next)
+		_check(view.state(next) != MapBuilder.State.HIDDEN, "%s is out of the fog" % next)
+		_check(view.discovered(next) or map.fog.has_cell(next), "%s is discovered or greyed" % next)
+
+	# Discovering sends the player walking onto the tile by itself.
+	_check(view.walking and view.player_cell == MapBuilder.CENTER,
+			"the player sets off, and counts as standing where they were until they arrive")
+	_check(arrivals.is_empty() and not view.can_discover(HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.W)),
+			"nothing can be discovered while they are on the way")
+	_check(not view.can_move_to(MapBuilder.CENTER), "they can't be sent somewhere else mid-walk")
+	map.player.finish_walk()
+	_check(view.player_cell == rim and map.player.cell == rim, "arriving puts the player on the tile")
+	_check(arrivals == ([rim] as Array[Vector2i]), "arriving is reported")
+	_check(map.ground_layer.get_used_cells().size() == start_tiles.size() + expected_new, "arriving discovers nothing by itself")
+
+	# Walking back is not limited to neighbors, but every tile of the route has to be discovered.
+	_check(view.can_discover(beyond) and view.discover(beyond) >= 0, "the next tile out can be discovered from there")
+	map.player.finish_walk()
+	_check(view.player_cell == beyond, "and walked to in turn")
+	_check(HexGrid.distance(MapBuilder.CENTER, beyond) == 2, "%s is two steps from the center" % beyond)
+	var route := view.route_to(MapBuilder.CENTER)
+	_check(route.size() == 2 and route.back() == MapBuilder.CENTER,
+			"the route back is as short as the distance and ends on the destination")
+	_check(route.all(func(cell: Vector2i) -> bool: return view.discovered(cell)), "every tile of the route is discovered")
+	var walked := beyond
+	for step: Vector2i in route:
+		_check(HexGrid.distance(walked, step) == 1, "%s is next to %s" % [step, walked])
+		walked = step
+	_check(view.move_to(MapBuilder.CENTER), "the walk back to the center starts")
+	map.player.finish_walk()
+	_check(view.player_cell == MapBuilder.CENTER, "the player walks the whole route")
+
+	# A tile must be drawn with the blends of all its neighbors, discovered or not, so what is on screen never
+	# changes as the land around it is found.
+	var blends_when_found := {}
+	var blended_when_found := 0
+	for cell: Vector2i in map.ground_layer.get_used_cells():
+		blends_when_found[cell] = map.blends_at(cell)
+		if not blends_when_found[cell].is_empty():
+			blended_when_found += 1
 
 	view.reveal_all()
+	_check(map.fog.cells().is_empty(), "revealing the map takes the fog off every tile")
+	for cell: Vector2i in blends_when_found:
+		_check(map.blends_at(cell) == blends_when_found[cell],
+				"%s keeps its blends once its neighbors are discovered (%s, was %s)" % [
+						cell, map.blends_at(cell), blends_when_found[cell]])
+	print("Blends kept on %d of %d tiles drawn before their neighbors" % [
+			blended_when_found, blends_when_found.size()])
+
 	var envs := EnvironmentGenerator.generate(MapBuilder.RECT, env_seed)
 	var roads := RoadNetwork.build(world, Rect2i(origin + MapBuilder.RECT.position, MapBuilder.RECT.size),
 			tileset.legal_road_masks(), {}, start_town, origin)

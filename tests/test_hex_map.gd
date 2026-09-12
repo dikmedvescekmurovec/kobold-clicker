@@ -26,6 +26,14 @@ func _run() -> void:
 	_check(_test_map_api(map) == true, "map API tests ran to the end")
 	_check(_test_blends_on_map(map) == true, "blend placement tests ran to the end")
 	_check(_test_mouse(map) == true, "mouse tests ran to the end")
+	_check(_test_player(map) == true, "player token tests ran to the end")
+	_check(_test_fog(map) == true, "fog tests ran to the end")
+	# The idle animation runs on its own; give it long enough to leave the frame it started on.
+	map.set_player_cell(Vector2i.ZERO)
+	var first_frame := map.player.frame
+	await create_timer(2.0 / PlayerToken.FPS).timeout
+	_check(map.player.frame != first_frame, "the idle animation advances by itself")
+
 	if _failures == 0:
 		print("All hex map tests passed")
 	else:
@@ -164,6 +172,86 @@ func _test_blends_on_map(map: HexMap) -> bool:
 	map.clear_map()
 	_check(map.blend_layers.values().all(func(layer: TileMapLayer) -> bool: return layer.get_used_cells().is_empty()), "clear_map empties blend layers")
 	_check(map.blend_layers.keys() == Array(tileset.blend_priority.slice(1)), "one blend layer per spreading environment, in priority order")
+	return true
+
+
+## The fog greys out the tiles that are seen but not discovered.
+func _test_fog(map: HexMap) -> bool:
+	var fog := map.fog
+	fog.clear()
+	_check(fog.cells().is_empty() and not fog.has_cell(Vector2i.ZERO), "the fog starts empty")
+	fog.add_cell(Vector2i(1, 1))
+	fog.add_cell(Vector2i(1, 1))
+	_check(fog.has_cell(Vector2i(1, 1)) and fog.cells().size() == 1, "a tile is greyed once")
+	fog.remove_cell(Vector2i(1, 1))
+	_check(not fog.has_cell(Vector2i(1, 1)), "and can be cleared again")
+	_check(FogOverlay.FOG_COLOR.a > 0.0 and FogOverlay.FOG_COLOR.a < 1.0, "the grey is see-through")
+	_check(fog.get_index() < map.highlight.get_index() and fog.get_index() > map.road_layer.get_index(),
+			"it covers the terrain and roads, but not the outlines")
+	fog.clear()
+	return true
+
+
+## The player's character idles on its cell, cut out of the wide sheet frames.
+func _test_player(map: HexMap) -> bool:
+	var player := map.player
+	for animation: Array in [["idle", PlayerToken.IDLE_FRAMES, PlayerToken.IDLE_SHEET],
+			["run", PlayerToken.RUN_FRAMES, PlayerToken.RUN_SHEET]]:
+		var name: String = animation[0]
+		_check(player.sprite_frames.has_animation(name), "the token has a %s animation" % name)
+		_check(player.sprite_frames.get_frame_count(name) == animation[1],
+				"the %s animation has every frame of its sheet" % name)
+		_check(player.sprite_frames.get_animation_loop(name), "the %s animation loops" % name)
+		for i: int in animation[1]:
+			var region: Rect2 = player.sprite_frames.get_frame_texture(name, i).region
+			_check(region.size == Vector2(PlayerToken.BOUNDS.size) and region.position.y == PlayerToken.BOUNDS.position.y,
+					"%s frame %d is cut to the character" % [name, i])
+			_check(region.end.x <= animation[2].get_width(), "%s frame %d stays on the sheet" % [name, i])
+	_check(player.animation == "idle" and player.is_playing(), "it idles to begin with")
+
+	map.set_player_cell(Vector2i(2, 2))
+	_check(player.visible and player.position == map.ground_layer.map_to_local(Vector2i(2, 2)),
+			"the token stands on its cell")
+	_check(player.scale == Vector2(PlayerToken.SCALE, PlayerToken.SCALE), "it is drawn at half size")
+	_check((player.offset.y + PlayerToken.BOUNDS.size.y / 2.0) * PlayerToken.SCALE == PlayerToken.FOOT_OFFSET,
+			"its feet are on the tile")
+	# Walking: one tile every SECONDS_PER_TILE, straight from the middle of one tile to the middle of the next.
+	map.set_player_cell(Vector2i.ZERO)
+	var west := HexGrid.neighbor(Vector2i.ZERO, HexGrid.Edge.W)
+	var east := HexGrid.neighbor(Vector2i.ZERO, HexGrid.Edge.E)
+	var arrivals: Array[Vector2i] = []
+	player.arrived.connect(func(at: Vector2i) -> void: arrivals.append(at))
+
+	player.walk([west] as Array[Vector2i])
+	_check(player.is_walking() and player.animation == "run", "walking plays the run animation")
+	_check(player.flip_h, "the character faces the way it walks")
+	player.advance(PlayerToken.SECONDS_PER_TILE / 2.0)
+	var middle := map.ground_layer.map_to_local(Vector2i.ZERO).lerp(map.ground_layer.map_to_local(west), 0.5)
+	_check(player.position.is_equal_approx(middle), "half a tile's time is half way there")
+	_check(player.cell == Vector2i.ZERO and arrivals.is_empty(), "it still counts as standing on the tile it left")
+	player.advance(PlayerToken.SECONDS_PER_TILE / 2.0)
+	_check(not player.is_walking() and player.animation == "idle", "arriving goes back to idling")
+	_check(player.cell == west and player.position == map.ground_layer.map_to_local(west), "it stands on the tile")
+	_check(arrivals == ([west] as Array[Vector2i]), "arriving is reported once, for the last tile")
+
+	# A walk of several tiles carries leftover time into the next step, so it takes the time it should.
+	arrivals.clear()
+	player.walk([Vector2i.ZERO, east] as Array[Vector2i])
+	_check(not player.flip_h, "walking east isn't mirrored")
+	player.advance(PlayerToken.SECONDS_PER_TILE * 1.5)
+	_check(player.cell == Vector2i.ZERO and player.is_walking(), "one tile and a half in, it is on the middle tile")
+	player.advance(PlayerToken.SECONDS_PER_TILE * 0.5)
+	_check(player.cell == east and arrivals == ([east] as Array[Vector2i]), "two tiles' time covers two tiles")
+
+	player.walk([Vector2i.ZERO, west] as Array[Vector2i])
+	player.finish_walk()
+	_check(not player.is_walking() and player.cell == west, "finishing a walk lands on its last tile")
+	player.walk([Vector2i.ZERO] as Array[Vector2i])
+	map.set_player_cell(Vector2i(2, 2))
+	_check(not player.is_walking() and player.cell == Vector2i(2, 2), "putting the token somewhere drops the walk")
+
+	map.set_player_cell(HexMap.NO_CELL)
+	_check(not player.visible, "no cell hides the token")
 	return true
 
 
