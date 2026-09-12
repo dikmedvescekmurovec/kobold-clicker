@@ -3,9 +3,9 @@ extends Node2D
 ## Outlines the hovered and selected cells of a HexMap. Each outline is a bright band edged with dark ink,
 ## so it stands out on light terrain (sand, ice) and dark terrain (forest) alike.
 
-const INK := Color("14101e")
-const HOVER_COLOR := Color("f4eedc")
-const SELECTED_COLOR := Color("e9b640")
+const INK := Palette.INK
+const HOVER_COLOR := Palette.BONE
+const SELECTED_COLOR := Palette.GOLD
 
 var _map: HexMap
 var _corners: PackedVector2Array

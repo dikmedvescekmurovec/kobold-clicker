@@ -27,12 +27,12 @@ const STATES := ["normal", "hover", "pressed", "disabled"]
 ## Label colours, picked for contrast against each face: the wood buttons are light-faced except
 ## the red ones, and every disabled face is pale.
 const FONT_COLORS := {
-	"wood_normal": Color("14101e"), "wood_danger": Color("f4eedc"),       # ink, bone
-	"light_normal": Color("f4eedc"), "light_danger": Color("f4eedc"),
+	"wood_normal": Palette.INK, "wood_danger": Palette.BONE,
+	"light_normal": Palette.BONE, "light_danger": Palette.BONE,
 }
 const DISABLED_COLORS := {
-	"wood_normal": Color("3a2521"), "wood_danger": Color("3a2521"),       # earth_dk
-	"light_normal": Color("565a6e"), "light_danger": Color("565a6e"),     # slate
+	"wood_normal": Palette.EARTH_DK, "wood_danger": Palette.EARTH_DK,
+	"light_normal": Palette.SLATE, "light_danger": Palette.SLATE,
 }
 const PANEL_MARGIN := 10
 const BUTTON_MARGIN := Vector2i(8, 4)   # x: left and right, y: top and bottom
@@ -67,7 +67,7 @@ static func build() -> Theme:
 
 	# Labels default to white, which is invisible on the bone panel.
 	built.set_type_variation("PanelLabel", "Label")
-	built.set_color("font_color", "PanelLabel", Color("14101e"))
+	built.set_color("font_color", "PanelLabel", Palette.INK)
 	built.set_font_size("font_size", "PanelLabel", FONT_SIZE)
 
 	for variation: String in PANELS:

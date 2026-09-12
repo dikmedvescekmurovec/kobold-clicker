@@ -41,8 +41,5 @@ func clear() -> void:
 
 func _draw() -> void:
 	for cell in _cells:
-		var middle := _map.ground_layer.map_to_local(cell)
-		var hex := PackedVector2Array()
-		for corner in _corners:
-			hex.append(corner + middle)
-		draw_colored_polygon(hex, FOG_COLOR)
+		draw_set_transform(_map.ground_layer.map_to_local(cell))
+		draw_colored_polygon(_corners, FOG_COLOR)
