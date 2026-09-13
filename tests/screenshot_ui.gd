@@ -63,12 +63,17 @@ func _shoot_inventory() -> void:
 	# enough plain gear behind them to fill the grid out.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = WORLD_SEED
+	# Every gear type appears at least once, so the shot also shows the three cut from the UI pack
+	# sitting next to the four that came with the game.
 	main.inventory.add(Item.rolled("Leather Boot", ItemRarity.Rarity.COMMON, rng))
 	main.inventory.add(Item.rolled("Wooden Armor", ItemRarity.Rarity.COMMON, rng))
 	main.inventory.add(Item.rolled("Wooden Sword", ItemRarity.Rarity.UNCOMMON, rng))
 	main.inventory.add(Item.rolled("Wooden Shield", ItemRarity.Rarity.COMMON, rng))
+	main.inventory.add(Item.rolled("Wooden Torch", ItemRarity.Rarity.COMMON, rng))
+	main.inventory.add(Item.rolled("Gold Ring", ItemRarity.Rarity.RARE, rng))
 	main.inventory.add(Item.rolled("Leather Boot", ItemRarity.Rarity.RARE, rng))
 	main.inventory.add(Item.rolled("Wooden Armor", ItemRarity.Rarity.COMMON, rng))
+	main.inventory.add(Item.rolled("Ruby Amulet", ItemRarity.Rarity.ELITE, rng))
 	main.inventory.add(Item.rolled("Wooden Sword", ItemRarity.Rarity.ELITE, rng))
 	main._on_bag_pressed()
 	for i in 2:

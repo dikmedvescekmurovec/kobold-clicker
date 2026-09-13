@@ -2,11 +2,14 @@ class_name ModifierTable
 extends RefCounted
 ## What an item can carry on top of what it is.
 ##
-## Two shapes of modifier. A PERCENT or FLAT one acts on one of the item's own stats, so it can only
-## land on a piece that has that stat -- a boot has no damage to increase. A PLAYER one is a buff to
-## the player rather than the item, and can land on anything; the pool of those is deliberately small
-## and every one of them names something this game already has, rather than inventing a currency or a
-## resistance for a system nobody has written.
+## Three shapes of modifier, and each is let onto a piece by a different rule.
+##
+## A PERCENT one scales a stat the item already has, so it needs that *base* stat: a boot has no
+## damage to increase. A FLAT one adds a stat outright, so it needs only that the piece be allowed to
+## carry it -- LootTable's `affixes` -- which is how a ring with no health of its own rolls "+8
+## Health". A PLAYER one is a buff to the player rather than the item, and can land on anything; the
+## pool of those is deliberately small and every one of them names something this game already has,
+## rather than inventing a currency or a resistance for a system nobody has written.
 ##
 ## Which modifiers an item can roll is decided by building the list of candidates first and drawing
 ## from that, never by rolling and checking: a modifier the item cannot carry is never a candidate,
@@ -17,8 +20,8 @@ extends RefCounted
 ## Nothing here wants half a percent.
 
 enum Kind {
-	PERCENT,  ## scales one of the item's own stats: "+14% increased Damage"
-	FLAT,     ## adds to one of them: "+2 Damage"
+	PERCENT,  ## scales a base stat the item has: "+14% increased Damage"
+	FLAT,     ## adds a stat the item is allowed to carry: "+2 Damage"
 	PLAYER,   ## a buff to the player, and so at home on any item at all: "+6% item find"
 }
 
@@ -43,6 +46,25 @@ const MODS := {
 	"added_move_speed": {"kind": Kind.FLAT, "stat": "move_speed", "range": [2, 5], "weight": 10},
 	"increased_dodge": {"kind": Kind.PERCENT, "stat": "dodge_chance", "range": [10, 25], "weight": 10},
 	"added_dodge": {"kind": Kind.FLAT, "stat": "dodge_chance", "range": [1, 3], "weight": 10},
+	"increased_crit_damage": {"kind": Kind.PERCENT, "stat": "crit_damage", "range": [8, 20], "weight": 10},
+	"added_crit_damage": {"kind": Kind.FLAT, "stat": "crit_damage", "range": [5, 15], "weight": 10},
+	"increased_energy_shield": {"kind": Kind.PERCENT, "stat": "energy_shield", "range": [8, 20], "weight": 10},
+	"added_energy_shield": {"kind": Kind.FLAT, "stat": "energy_shield", "range": [2, 8], "weight": 10},
+	"increased_health_regen": {"kind": Kind.PERCENT, "stat": "health_regen", "range": [8, 20], "weight": 10},
+	"added_health_regen": {"kind": Kind.FLAT, "stat": "health_regen", "range": [1, 3], "weight": 10},
+	# The resistances, the attributes and what a hit gives back are all flat-only: each is a quantity
+	# you add up across the set rather than a thing an item has more or less of, so "+35% to Fire
+	# Resistance" is the whole idea and "+14% increased Fire Resistance" would be a percentage of a
+	# percentage. That they have no PERCENT form is also what lets them sit in `affixes` on pieces
+	# that show none of them.
+	"added_fire_resist": {"kind": Kind.FLAT, "stat": "fire_resist", "range": [5, 15], "weight": 8},
+	"added_cold_resist": {"kind": Kind.FLAT, "stat": "cold_resist", "range": [5, 15], "weight": 8},
+	"added_lightning_resist": {"kind": Kind.FLAT, "stat": "lightning_resist", "range": [5, 15], "weight": 8},
+	"added_leech": {"kind": Kind.FLAT, "stat": "leech", "range": [1, 3], "weight": 6},
+	"added_life_on_hit": {"kind": Kind.FLAT, "stat": "life_on_hit", "range": [1, 4], "weight": 8},
+	"added_strength": {"kind": Kind.FLAT, "stat": "strength", "range": [2, 8], "weight": 8},
+	"added_dexterity": {"kind": Kind.FLAT, "stat": "dexterity", "range": [2, 8], "weight": 8},
+	"added_intelligence": {"kind": Kind.FLAT, "stat": "intelligence", "range": [2, 8], "weight": 8},
 	# The player-wide four. Each points at something that exists: LootTable.chance_for,
 	# Encounter.SECONDS, PlayerToken.SECONDS_PER_TILE and ItemRarity.TIER_WEIGHTS. The clock stops at
 	# four seconds because four on a minute is already a noticeably easier fight.
@@ -63,7 +85,15 @@ static func pool_for(item_type: String) -> PackedStringArray:
 	var pool := PackedStringArray()
 	for id: String in MODS:
 		var mod: Dictionary = MODS[id]
-		if mod["kind"] == Kind.PLAYER or LootTable.has_stat(item_type, mod["stat"]):
+		var fits := false
+		match mod["kind"]:
+			Kind.PLAYER:
+				fits = true
+			Kind.PERCENT:
+				fits = LootTable.has_stat(item_type, mod["stat"])
+			_:
+				fits = LootTable.can_roll(item_type, mod["stat"])
+		if fits:
 			pool.append(id)
 	return pool
 
@@ -112,4 +142,8 @@ static func line(mod: Dictionary) -> String:
 		Kind.PERCENT:
 			return "+%d%% increased %s" % [value, LootTable.STAT_LABELS[entry["stat"]]]
 		_:
-			return "+%d %s" % [value, LootTable.STAT_LABELS[entry["stat"]]]
+			# A flat roll on a stat that is itself a percentage adds percentage points, and has to
+			# say so: "+10% Fire Resistance", never "+10 Fire Resistance".
+			var stat: String = entry["stat"]
+			var unit := "%" if stat in LootTable.PERCENT_STATS else ""
+			return "+%d%s %s" % [value, unit, LootTable.STAT_LABELS[stat]]

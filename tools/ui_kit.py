@@ -22,7 +22,9 @@ import os
 from PIL import Image
 
 SRC = "Assets/Potential/2D Pixel UI/PNG"
+POTENTIAL = "Assets/Potential"
 OUT = "Assets/UI"
+GEAR_OUT = "Assets/Gear"
 QA = "tools/qa"
 SHEET = "ui_sheet.png"
 
@@ -72,6 +74,28 @@ GREEN_RAMP = ["#50a978", "#57c767", "#478773", "#6ae356", "#68c97e", "#80e87c", 
 # further away rather than merely paler.
 DANGER_HUE, DANGER_SAT = 0.017, 0.55
 DISABLED_HUE, DISABLED_SAT, DISABLED_DIM = 0.62, 0.06, 0.80
+
+# The gear icons, which are not theme sprites: they go to Assets/Gear as loose PNGs for
+# LootTable.ROOT to load by path, and never enter ui_sheet.png or ui_sheet.json. They are cut here
+# all the same, because this is the file that records which rectangle of which bought sheet is which
+# sprite, and a second script saying the same thing in a second way is how the two drift apart.
+#
+# name -> (sheet under Assets/Potential, x, y, w, h, scale)
+#
+# The four icons that shipped with the game are 32x32 art from "Pixel Art Icon Pack - RPG". Nothing
+# in any pack here draws a ring or an amulet, so those two come off the UI pack's Icons.png, which is
+# a 6-column grid on a 16 px pitch (96 px wide) with rows that are not evenly spaced -- the y and the
+# height below are each the measured extent of that one icon, not a cell of a regular grid. Its art
+# is 12 px where the RPG pack's is 28, so it is doubled to land at a comparable size in the bag; that
+# doubles its pixel too, which is why only the two pieces with no alternative are taken from it.
+GEAR = {
+    "Gold Ring": ("2D Pixel UI/PNG/Icons", 82, 130, 12, 12, 2),
+    "Ruby Amulet": ("2D Pixel UI/PNG/Icons", 3, 146, 10, 12, 2),
+    "Wooden Torch": ("Pixel Art Icon Pack - RPG/Weapon & Tool/Torch", 0, 0, 32, 32, 1),
+}
+# Every gear icon is drawn on a square of this side, centred, because ItemSlot draws a fixed 32x32
+# rect and a test holds every icon to it.
+GEAR_SIDE = 32
 
 
 def _recolor(hue, sat, dim=1.0):
@@ -210,6 +234,54 @@ def build():
     return sprites, margins
 
 
+def gear():
+    """The gear icons, each centred on its own GEAR_SIDE square.
+
+    Nothing here is checked for tiling: an icon is drawn at its own size and never stretched, so it
+    has no nine-slice and no rows to keep uniform, the same reason the close button skips check().
+    """
+    out = {}
+    for name, (src, x, y, w, h, scale) in GEAR.items():
+        art = Image.open(os.path.join(POTENTIAL, src + ".png")).convert("RGBA").crop((x, y, x + w, y + h))
+        # Cropped to the measured extent, so trim anything the measurement left over and centre what
+        # is actually drawn -- an icon sitting off-centre in its square reads as a mistake in a grid.
+        box = art.getbbox()
+        if box:
+            art = art.crop(box)
+        if scale != 1:
+            art = art.resize((art.width * scale, art.height * scale), Image.NEAREST)
+        if art.width > GEAR_SIDE or art.height > GEAR_SIDE:
+            raise SystemExit("%s is %dx%d, too big for a %d square"
+                             % (name, art.width, art.height, GEAR_SIDE))
+        square = Image.new("RGBA", (GEAR_SIDE, GEAR_SIDE), (0, 0, 0, 0))
+        square.alpha_composite(art, ((GEAR_SIDE - art.width) // 2, (GEAR_SIDE - art.height) // 2))
+        out[name] = square
+    return out
+
+
+def gear_preview(cut):
+    """Every gear icon the game has, new and old together, on the tan socket the bag draws them on.
+
+    The point of showing them together is the one thing that can go wrong here: the new icons come
+    off a different sheet at a different pixel size, and whether they sit next to the old four
+    without looking pasted in is a question for eyes, not for an assertion.
+    """
+    socket = (0x8A, 0x6F, 0x4E, 0xFF)
+    held = dict(cut)
+    for file in sorted(os.listdir(GEAR_OUT)) if os.path.isdir(GEAR_OUT) else []:
+        name = os.path.splitext(file)[0]
+        if file.endswith(".png") and name not in held:
+            held[name] = Image.open(os.path.join(GEAR_OUT, file)).convert("RGBA")
+    order = sorted(held, key=lambda n: (n not in cut, n))
+    side, pad = GEAR_SIDE + 8, 6
+    out = Image.new("RGBA", (pad + len(order) * (side + pad), side + 2 * pad), (0xE8, 0xDC, 0xC0, 0xFF))
+    for i, name in enumerate(order):
+        x = pad + i * (side + pad)
+        out.paste(Image.new("RGBA", (side, side), socket), (x, pad))
+        out.alpha_composite(held[name], (x + 4, pad + 4))
+    return out.resize((out.width * 3, out.height * 3), Image.NEAREST)
+
+
 def pack(sprites, margins):
     """One grid, cells as wide and tall as the largest sprite. Panels first, then the buttons."""
     order = sorted(sprites, key=lambda n: (not n.startswith("ui_panel"), n))
@@ -296,6 +368,11 @@ def main():
     os.makedirs(QA, exist_ok=True)
     preview(sprites, margins).save(os.path.join(QA, "ui_kit_tiling.png"))
 
+    cut = gear()
+    gear_preview(cut).save(os.path.join(QA, "ui_kit_gear.png"))
+    for name, image in cut.items():
+        image.save(os.path.join(GEAR_OUT, name + ".png"))
+
     sheet_image, meta, (cell_w, cell_h, columns, rows) = pack(sprites, margins)
     sheet_image.save(os.path.join(OUT, SHEET))
     for name, image in sprites.items():
@@ -321,6 +398,7 @@ def main():
         }, f, indent=2)
     print("wrote %s (%dx%d, %d sprites) and %s/ui_kit_tiling.png"
           % (SHEET, sheet_image.width, sheet_image.height, len(sprites), QA))
+    print("wrote %d gear icons to %s/ and %s/ui_kit_gear.png" % (len(cut), GEAR_OUT, QA))
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ const ROLLS := 20000
 func _run() -> void:
 	_clear_save()
 	_check(_test_items() == true, "item tests ran to the end")
+	_check(_test_slot_locks() == true, "slot lock tests ran to the end")
 	_check(_test_chances() == true, "drop-chance tests ran to the end")
 	_check(_test_rarity_tables() == true, "rarity table tests ran to the end")
 	_check(_test_rarity_rolls() == true, "rarity roll tests ran to the end")
@@ -55,6 +56,40 @@ func _test_items() -> bool:
 			# A stat with no label would reach the stat block as a bare key.
 			_check(LootTable.STAT_LABELS.has(stat), "%s has no label for %s" % [item, stat])
 			_check(not LootTable.stat_line(stat, stats[stat]).is_empty(), stat + " writes a line")
+		for stat: String in LootTable.affixes_of(item):
+			_check(LootTable.STAT_LABELS.has(stat), "%s has no label for affix %s" % [item, stat])
+			_check(not stats.has(stat),
+					"%s lists %s as an affix and as a base stat" % [item, stat])
+			# An affix is only reachable through a FLAT modifier -- a PERCENT one needs the base
+			# stat, which an affix by definition is not. One with none is dead weight in the table.
+			var reachable := false
+			for id: String in ModifierTable.MODS:
+				var mod: Dictionary = ModifierTable.MODS[id]
+				reachable = reachable or (mod["kind"] == ModifierTable.Kind.FLAT
+						and mod["stat"] == stat)
+			_check(reachable, "%s can carry %s, but nothing flat rolls it" % [item, stat])
+	return true
+
+
+## The stats that belong to one piece and must stay there. Offence on the weapon is the rule the
+## whole table is built on -- damage anywhere else and the sword stops being the interesting slot --
+## and the other two are locked by what the piece is: you walk in boots and you block with a thing
+## you hold. Pinned here so a later widening of the tables cannot quietly undo the design.
+func _test_slot_locks() -> bool:
+	var locked := {
+		"damage": ["Wooden Sword"],
+		"move_speed": ["Leather Boot"],
+		"block_chance": ["Wooden Shield", "Wooden Torch"],
+	}
+	for stat: String in locked:
+		var found := PackedStringArray()
+		for item in LootTable.items():
+			if LootTable.can_roll(item, stat):
+				found.append(item)
+		var want: Array = locked[stat]
+		_check(found.size() == want.size(), "%s is on %s, not %s" % [stat, found, want])
+		for item: String in want:
+			_check(item in found, "%s should be on %s" % [stat, item])
 	return true
 
 
@@ -174,11 +209,15 @@ func _test_modifier_tables() -> bool:
 			continue
 		var stat: String = mod["stat"]
 		_check(LootTable.STAT_LABELS.has(stat), "%s names %s, which has no label" % [id, stat])
-		# A modifier for a stat nothing carries could never be rolled: dead weight in the table.
+		# A modifier for a stat nothing carries could never be rolled: dead weight in the table. A
+		# PERCENT one needs a piece with the base stat; a FLAT one only needs one allowed to carry it.
 		var carried := false
 		for item in LootTable.items():
-			carried = carried or LootTable.has_stat(item, stat)
-		_check(carried, "%s names %s, which no item has" % [id, stat])
+			if mod["kind"] == ModifierTable.Kind.PERCENT:
+				carried = carried or LootTable.has_stat(item, stat)
+			else:
+				carried = carried or LootTable.can_roll(item, stat)
+		_check(carried, "%s names %s, which no item can roll" % [id, stat])
 		_check(not ModifierTable.line({"id": id, "value": int(band[1])}).is_empty(), id + " writes a line")
 	_check(ModifierTable.line({"id": "nonsense", "value": 1}).is_empty(), "an unknown modifier writes nothing")
 
@@ -215,9 +254,14 @@ func _test_modifier_rolls() -> bool:
 					_check(typeof(mod["value"]) == TYPE_INT, id + " rolled a whole number")
 					_check(mod["value"] >= int(range_band[0]) and mod["value"] <= int(range_band[1]),
 							"%s rolled %d, outside %s" % [id, mod["value"], range_band])
-					if entry["kind"] != ModifierTable.Kind.PLAYER:
+					# The rule the whole table turns on: a PERCENT modifier scales a base stat, so the
+					# piece must have one; a FLAT one only has to be allowed to carry the stat.
+					if entry["kind"] == ModifierTable.Kind.PERCENT:
 						_check(stats.has(entry["stat"]),
-								"%s rolled %s for a stat it hasn't got" % [item_type, id])
+								"%s rolled %s, scaling a base stat it hasn't got" % [item_type, id])
+					elif entry["kind"] == ModifierTable.Kind.FLAT:
+						_check(LootTable.can_roll(item_type, entry["stat"]),
+								"%s rolled %s for a stat it cannot carry" % [item_type, id])
 				_check(item.mod_lines().size() == item.mods.size(), "every modifier writes its line")
 				_check(item.stat_lines().size() == stats.size(), "every base stat writes its line")
 	return true
