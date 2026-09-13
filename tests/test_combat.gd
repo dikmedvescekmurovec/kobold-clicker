@@ -58,7 +58,7 @@ func _test_health() -> bool:
 	for enemy in EnemyRoster.names():
 		_check(Encounter.hp_of(enemy, near) >= 1, "%s is worth at least one click" % enemy)
 		_check(Encounter.hp_of(enemy, far) > Encounter.hp_of(enemy, near), "%s is tougher further out" % enemy)
-	_check(Encounter.hp_of("Slime", near) < Encounter.hp_of("Skeleton Warrior", near), "a slime is the softest")
+	_check(Encounter.hp_of("Grass Slime", near) < Encounter.hp_of("Skeleton Warrior", near), "a slime is the softest")
 
 	# The elite is the wall at the end: it must outlast any common the same tile can send.
 	var fight := Encounter.for_tile(near, "grass")
@@ -178,6 +178,8 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
 	main.world_seed = WORLD_SEED
 	main.map_seed = 1
+	# A fight drops loot into whatever inventory the scene was pointed at, so never the player's own.
+	main.inventory_path = "user://test_combat_inventory.json"
 	root.add_child(main)
 	for i in 3:
 		await process_frame

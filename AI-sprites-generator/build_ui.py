@@ -5,6 +5,7 @@ The UI ships in its own sheet (AI-sprites/ui/) rather than the hex atlas: the sp
 rather than 56x64 hexes, and keeping them out of hex_tileset.json means no existing atlas coordinate
 ever moves. Run build.py for the hex tiles and this for the UI; they share emit.lua.
 """
+import json
 import os
 
 from buildlib import HERE, OUT, ceil_div, report, verify, write_and_emit

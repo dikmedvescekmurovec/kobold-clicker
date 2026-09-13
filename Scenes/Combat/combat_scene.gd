@@ -1,7 +1,8 @@
 class_name CombatScene
 extends CanvasLayer
 ## Draws one Encounter: the player on the left, the tile's enemies walking in one at a time from the
-## right, and a click doing a point of damage to whichever is standing there.
+## right, and a click doing a point of damage to whichever is standing there. When it is over, a
+## panel says whether the ten were beaten and lists what they dropped.
 ##
 ## Everything below the HUD is built in code, so the .tscn stays a stub the editor can hold open --
 ## the same convention as main_scene._build_ui and HexMap._ready. The scene owns no rules: it asks
@@ -43,6 +44,11 @@ const BAR_HEALTH := Color("c4453a")
 const BAR_TIME := Color("6fa84a")
 ## The clock turns red once this little is left, so running out is never a surprise.
 const TIME_WARNING := 10.0
+## How many drops stand in a row on the end-of-fight panel. Ten is the most a fight can give, so
+## four to a row is three rows at worst. How big a square is belongs to ItemSlot, not here.
+const DROPS_PER_ROW := 4
+## How wide a line of an item's details may run before it wraps, in panel pixels.
+const INSPECT_WIDTH := 150.0
 
 var fight: Encounter
 ## The cell being fought for, so the main scene knows what was won.
@@ -60,7 +66,15 @@ var _enemy_panel: PanelContainer
 var _enemy_label: Label
 var _enemy_fill: ColorRect
 var _result: PanelContainer
+var _result_summary: VBoxContainer
+var _result_inspect: PanelContainer
+var _result_inspect_rows: VBoxContainer
 var _result_label: Label
+var _result_detail: Label
+## Where the fight's drops are listed, under the verdict.
+var _result_drops: VBoxContainer
+## What this fight has turned up, in the order it fell.
+var _drops: Array[Item] = []
 
 
 ## Starts the fight for `cell`. `ui_scale` matches the map's, so the panels are the same size.
@@ -72,6 +86,7 @@ func begin(encounter: Encounter, for_cell: Vector2i, ui_scale: float) -> void:
 	fight.enemy_spawned.connect(_on_enemy_spawned)
 	fight.enemy_hit.connect(_on_enemy_hit)
 	fight.enemy_died.connect(_on_enemy_died)
+	fight.loot_dropped.connect(_on_loot_dropped)
 	fight.won.connect(_on_finished.bind(true))
 	fight.lost.connect(_on_finished.bind(false))
 	_build()
@@ -193,14 +208,48 @@ func _build_hud() -> void:
 	var verdict := VBoxContainer.new()
 	verdict.add_theme_constant_override("separation", 8)
 	_result.add_child(verdict)
+
+	# What happened, and what it left. Swapped out for one item's details when a square is clicked,
+	# rather than growing the panel: a piece with six modifiers is taller than the verdict itself.
+	_result_summary = VBoxContainer.new()
+	_result_summary.add_theme_constant_override("separation", 8)
+	verdict.add_child(_result_summary)
 	_result_label = _label("")
 	_result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	verdict.add_child(_result_label)
+	_result_summary.add_child(_result_label)
+	_result_detail = _label("")
+	_result_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_result_summary.add_child(_result_detail)
+	# What the ten left behind, under the verdict. Kept even when the fight was lost, so this is
+	# where that promise is visibly kept. Everything stays at the theme's 16 px: Pixellari breaks up
+	# below that, so a quieter line is said with words, not with a smaller font.
+	_result_drops = VBoxContainer.new()
+	_result_drops.add_theme_constant_override("separation", 4)
+	_result_drops.gui_input.connect(_on_drops_input)
+	_result_summary.add_child(_result_drops)
 	var back := Button.new()
 	back.text = "Back to the map"
 	back.theme_type_variation = "WoodButton"
 	back.pressed.connect(_on_back_pressed)
-	verdict.add_child(back)
+	_result_summary.add_child(back)
+
+	# One drop, looked at properly. On the white panel, because that is the ground the rarity colours
+	# were picked to be read against.
+	_result_inspect = PanelContainer.new()
+	_result_inspect.theme_type_variation = "TextPanel"
+	_result_inspect.hide()
+	verdict.add_child(_result_inspect)
+	var inspect_rows := VBoxContainer.new()
+	inspect_rows.add_theme_constant_override("separation", 2)
+	_result_inspect.add_child(inspect_rows)
+	_result_inspect_rows = VBoxContainer.new()
+	_result_inspect_rows.add_theme_constant_override("separation", 2)
+	inspect_rows.add_child(_result_inspect_rows)
+	var done := Button.new()
+	done.text = "Back"
+	done.theme_type_variation = "LightButton"
+	done.pressed.connect(_inspect_drop.bind(-1))
+	inspect_rows.add_child(done)
 
 
 func _label(text: String) -> Label:
@@ -293,17 +342,82 @@ func _on_enemy_died(_index: int) -> void:
 	_enemy.play_once("death")
 
 
+func _on_loot_dropped(_index: int, item: Item) -> void:
+	_drops.append(item)
+
+
 func _on_finished(won: bool) -> void:
 	_refresh()
 	_enemy_panel.hide()
 	if won:
 		_enemy.hide()
-	_result_label.text = "Tile discovered" if won else "Out of time"
+	_result_label.text = "Success" if won else "Failed"
+	_result_detail.text = "The tile is yours" if won else "Out of time"
+	_show_drops()
 	_result.show()
-	# Centre it once it knows how big it is.
+	await _centre_result()
+
+
+## The panel is only as big as what it holds, and what it holds changes when a drop is opened, so it
+## is put back in the middle every time -- after a frame, once it knows its new size.
+func _centre_result() -> void:
 	await get_tree().process_frame
 	var size := _result.get_combined_minimum_size() * _ui_scale
 	_result.position = (_size() - size) / 2.0
+
+
+## A click on the drops. The squares take no input of their own -- ItemSlot never does -- so which
+## one was hit is worked out from where the click landed, the same way the bag does it.
+func _on_drops_input(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed):
+		return
+	for row: Node in _result_drops.get_children():
+		if not (row is HBoxContainer):
+			continue
+		for slot: Control in (row as HBoxContainer).get_children():
+			if slot.get_global_rect().has_point(event.global_position):
+				_inspect_drop(slot.get_meta("drop_index", -1))
+				return
+
+
+## Opens what one drop actually is, in the verdict's place, or goes back to the verdict with -1.
+func _inspect_drop(index: int) -> void:
+	if index < 0 or index >= _drops.size():
+		_result_inspect.hide()
+		_result_summary.show()
+		_centre_result()
+		return
+	ItemDetails.fill(_result_inspect_rows, _drops[index], INSPECT_WIDTH)
+	_result_summary.hide()
+	_result_inspect.show()
+	_centre_result()
+
+
+## What the fight turned up, in the order it fell: the same squares the inventory draws, so a rare
+## piece looks the same here as it does in the bag. Nothing is counted together any more -- every
+## drop rolled its own rarity and its own modifiers, so no two are the same thing.
+##
+## Clicking one opens what it actually is, in the verdict's place.
+func _show_drops() -> void:
+	for child: Node in _result_drops.get_children():
+		child.queue_free()
+	if _drops.is_empty():
+		var none := _label("Nothing dropped")
+		none.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		none.modulate = Color(1.0, 1.0, 1.0, 0.5)
+		_result_drops.add_child(none)
+		return
+	var row: HBoxContainer = null
+	for i in _drops.size():
+		if i % DROPS_PER_ROW == 0:
+			row = HBoxContainer.new()
+			row.add_theme_constant_override("separation", 4)
+			row.alignment = BoxContainer.ALIGNMENT_CENTER
+			_result_drops.add_child(row)
+		var slot := ItemSlot.make(_drops[i])
+		# Which drop this is, so a click on it can find its way back to the item.
+		slot.set_meta("drop_index", i)
+		row.add_child(slot)
 
 
 func _on_back_pressed() -> void:

@@ -23,11 +23,16 @@ func _shoot_fight() -> void:
 	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
 	main.world_seed = WORLD_SEED
 	main.map_seed = MAP_SEED
+	main.inventory_path = "user://screenshot_combat_inventory.json"
 	root.add_child(main)
 	for i in 3:
 		await process_frame
 
 	var fight := Encounter.for_tile(CELL, ENVIRONMENT)
+	# Drops are rare, so the winning shot is seeded and its elite promised one: the point of the shot
+	# is the panel that lists them.
+	fight.loot_rng.seed = WORLD_SEED
+	fight.guarantee_elite = true
 	print("Lineup for %s on %s:" % [CELL, ENVIRONMENT])
 	for i in fight.lineup.size():
 		print("  %2d %-18s %3d hp%s" % [i + 1, fight.lineup[i], fight.health[i],
@@ -60,6 +65,12 @@ func _shoot_fight() -> void:
 		if not fight.hit():
 			fight.advance(0.05)
 	await _save(combat, "combat_won.png")
+
+	# One of those drops, opened: what clicking a square on the verdict panel gives.
+	if not combat._drops.is_empty():
+		combat._inspect_drop(0)
+		await _save(combat, "combat_drop.png")
+		combat._inspect_drop(-1)
 
 	var lost: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 	main.add_child(lost)

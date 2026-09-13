@@ -13,6 +13,8 @@ func _run() -> void:
 	_check(_test_frame_packs_have_frames(), "frame-per-file packs resolve their frames")
 	_check(_test_pick_stays_in_environment(), "pick only returns enemies of that terrain")
 	_check(_test_hp_rises_with_size_and_tier(), "health follows size and tier")
+	_check(_test_weights_are_whole_and_banded(), "every enemy names a whole-number weight")
+	_check(_test_pick_favours_the_common(), "pick draws the small fry most often")
 	_check(_test_frames_divide_their_sheets(), "every sheet is a whole number of frames")
 	_check(_test_frames_fall_on_gutters(), "no frame boundary cuts through a sprite")
 	_check(_test_bounds_hold_every_frame(), "the shared crop holds every frame of every animation")
@@ -202,5 +204,54 @@ func _test_hp_rises_with_size_and_tier() -> bool:
 	]
 	for i in sizes.size() - 1:
 		_check(EnemyRoster.SIZE_HP[sizes[i]] < EnemyRoster.SIZE_HP[sizes[i + 1]], "bigger bodies hold more")
-	_check(EnemyRoster.hp_modifier("Slime") == 0.5, "the slime is the floor")
+	_check(EnemyRoster.hp_modifier("Grass Slime") == 0.5, "the slime is the floor")
+	return true
+
+
+## Every entry has to name a whole-number weight, and the tier bands must not overlap: the rarest
+## common still turns up more often than the commonest elite, and that elite more than any boss. That
+## is what lets one absolute scale serve a draw that asks for any tier at all.
+func _test_weights_are_whole_and_banded() -> bool:
+	var heaviest := {}
+	var lightest := {}
+	var commonest := ""
+	for name in EnemyRoster.names():
+		_check(EnemyRoster.ENEMIES[name].has("weight"), name + " names a weight")
+		var w: Variant = EnemyRoster.ENEMIES[name]["weight"]
+		_check(typeof(w) == TYPE_INT, name + " weighs a whole number")
+		_check(EnemyRoster.weight_of(name) > 0, name + " can be drawn at all")
+		var tier := EnemyRoster.tier_of(name)
+		heaviest[tier] = maxi(heaviest.get(tier, 0), EnemyRoster.weight_of(name))
+		lightest[tier] = mini(lightest.get(tier, 1 << 30), EnemyRoster.weight_of(name))
+		if commonest == "" or EnemyRoster.weight_of(name) > EnemyRoster.weight_of(commonest):
+			commonest = name
+	_check(lightest[EnemyRoster.Tier.COMMON] > heaviest[EnemyRoster.Tier.ELITE], "no elite is as common as a common")
+	_check(lightest[EnemyRoster.Tier.ELITE] > heaviest[EnemyRoster.Tier.BOSS], "no boss is as common as an elite")
+	_check(commonest.ends_with("Slime"), "a slime is the commonest thing in the game, not " + commonest)
+	return true
+
+
+## What the weights are actually for: on every terrain, each common turns up in proportion to its own
+## weight against the others living there, which is what an unweighted pick would fail.
+func _test_pick_favours_the_common() -> bool:
+	const DRAWS := 4000
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	for env in _environments():
+		var seen := {}
+		for i in DRAWS:
+			var picked := EnemyRoster.pick(env, EnemyRoster.Tier.COMMON, rng)
+			seen[picked] = seen.get(picked, 0) + 1
+		var candidates := EnemyRoster.in_environment(env, EnemyRoster.Tier.COMMON)
+		for name in candidates:
+			_check(seen.get(name, 0) > 0, "%s turns up on %s at all" % [name, env])
+		# The shares must land near the weights: a tenth of the draw is slack enough that a seed
+		# never fails this, and tight enough that an unweighted pick would.
+		var total := 0
+		for name in candidates:
+			total += EnemyRoster.weight_of(name)
+		for name in candidates:
+			var want := float(EnemyRoster.weight_of(name)) / total
+			var got := float(seen.get(name, 0)) / DRAWS
+			_check(absf(got - want) < 0.1, "%s is %.2f of %s's commons, meant to be %.2f" % [name, got, env, want])
 	return true

@@ -1,4 +1,4 @@
-"""QA for each phase. Usage: python qa.py <phase1|phase2|phase3|showcase|blends> <tag>
+"""QA for each phase. Usage: python qa.py <phase1|phase2|phase3|showcase|blends|ui|slimes> <tag>
 Images are written to qa/<name>_<tag>.png so every run can be viewed under a fresh filename."""
 import os
 import random
@@ -365,6 +365,64 @@ def ui(tag):
     print(f"  wrote qa/ui_sheet_{tag}.png and qa/ui_mock_{tag}.png")
 
 
+def slimes(tag):
+    """The per-environment slimes: palette and silhouette checks, plus sheet and terrain previews."""
+    import slimes as S
+    from PIL import Image, ImageDraw
+    from hexlib import PALETTE
+    from preview import tile_image
+    from terrain import ENVS as TERRAIN
+    font = _ui_font(12)
+
+    pal = {tuple(int(h.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)) for _, h in PALETTE[1:]}
+    problems = Counter()
+
+    made = {}
+    for env, name, img in S.variants():
+        made[(env, name)] = img
+        base = S.source(name)
+        # A pure swap: every pixel keeps its transparency, so outline and animation are untouched.
+        problems["silhouette changed"] += sum((a[3] > 0) != (b[3] > 0)
+                                              for a, b in zip(base.get_flattened_data(),
+                                                              img.get_flattened_data()))
+        colours = {p[:3] for p in img.get_flattened_data() if p[3]}
+        problems["off-palette"] += len(colours - pal)
+        problems["baseline colour left"] += len(colours & ({tuple(c) for c in S.BODY}
+                                                           | {tuple(c) for c in S.EYE}))
+        # Each frame must use exactly as many colours as the baseline did, or a ramp step collapsed.
+        problems["ramp step collapsed"] += len(colours) != len(
+            {p[:3] for p in base.get_flattened_data() if p[3]})
+
+    print("problems:", dict(problems))
+
+    # ---- sheet: the baseline on top, then one row per environment, every frame in order
+    names = S.frame_names()
+    fw, fh, scale = 32, 25, 4
+    rows = [("baseline", {n: S.source(n) for n in names})] +            [(env, {n: made[(env, n)] for n in names}) for env in S.ENVS]
+    pad = 54
+    sheet = Image.new("RGBA", (pad + len(names) * fw * scale, len(rows) * fh * scale),
+                      (28, 30, 40, 255))
+    draw = ImageDraw.Draw(sheet)
+    for r, (label, frames) in enumerate(rows):
+        for c, n in enumerate(names):
+            im = frames[n].resize((fw * scale, fh * scale), Image.NEAREST)
+            sheet.alpha_composite(im, (pad + c * fw * scale, r * fh * scale))
+        if font:
+            draw.text((4, r * fh * scale + 40), label, font=font, fill=(220, 220, 230, 255))
+    sheet.save(f"qa/slimes_{tag}.png")
+
+    # ---- each slime on its own ground (the fight itself draws them on the combat backdrop)
+    board = Image.new("RGBA", (len(S.ENVS) * W, H * 2), (20, 20, 24, 255))
+    for i, env in enumerate(S.ENVS):
+        for j, variant in enumerate(("v1", "v2")):
+            board.alpha_composite(tile_image(TERRAIN[env](variant)), (i * W, j * H))
+    for i, env in enumerate(S.ENVS):
+        for j, n in enumerate(("slime-idle-0", "slime-attack-3")):
+            board.alpha_composite(made[(env, n)], (i * W + 12, j * H + 30))
+    board.resize((board.width * 4, board.height * 4), Image.NEAREST).save(f"qa/slimes_ground_{tag}.png")
+    print(f"  wrote qa/slimes_{tag}.png and qa/slimes_ground_{tag}.png")
+
+
 if __name__ == "__main__":
     {"phase1": phase1, "phase2": phase2, "phase3": phase3, "showcase": showcase,
-     "blends": blends, "ui": ui}[sys.argv[1]](sys.argv[2])
+     "blends": blends, "ui": ui, "slimes": slimes}[sys.argv[1]](sys.argv[2])

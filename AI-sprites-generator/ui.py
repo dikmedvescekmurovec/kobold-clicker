@@ -110,21 +110,16 @@ def panel_white():
 
 
 def panel_wood():
-    """Wooden container: ink outline, dark inner rim, 8-periodic plank grain."""
+    """Wooden container: ink outline, dark inner rim, one plank seam per cell.
+
+    The grain is a single `earth` row and nothing else. A StyleBoxTexture repeats the centre cell, so
+    whatever sits in these 8 px becomes a stripe every 8 px all the way down a panel that runs the
+    full height of the window: the seam is the one mark that can afford to. The lit row under it, the
+    butt-joint marks and the second dark row it used to carry came out as corduroy that the labels on
+    the panel had to be read through.
+    """
     t = RectTile("ui_panel_wood", "ui")
-
-    def grain(lx, ly):
-        if ly == 0:
-            return C["earth_dk"]                       # plank seam
-        if ly == 1:
-            return C["soil_lt"]                        # lit edge under the seam
-        if lx == 0 and ly in (4, 5):
-            return C["earth"]                          # short butt-joint marks
-        if ly == 7:
-            return C["earth"]
-        return C["soil"]
-
-    interior(t, grain)
+    interior(t, lambda lx, ly: C["earth"] if ly == 0 else C["soil"])
     ring(t, 1, C["earth_dk"])
     frame(t)
     return t

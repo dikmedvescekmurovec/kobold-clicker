@@ -10,8 +10,13 @@ const UI_SCALE := 2
 const SIZES := [Vector2(16, 16), Vector2(100, 26)]
 
 
+## Never the player's own save: these shots put fake items in the inventory.
+const SCRATCH_SAVE := "user://screenshot_inventory.json"
+
+
 func _run() -> void:
 	await _shoot_main_scene()
+	await _shoot_inventory()
 	await _shoot_board()
 	quit()
 
@@ -43,6 +48,56 @@ func _shoot_main_scene() -> void:
 	print("Saved ", ProjectSettings.globalize_path("user://ui_panel_crop.png"))
 	main.queue_free()
 	await process_frame
+
+
+## The collection log open over the map, with some of it found and some of it still to find.
+func _shoot_inventory() -> void:
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = MAP_SEED
+	main.inventory_path = SCRATCH_SAVE
+	root.add_child(main)
+	for i in 3:
+		await process_frame
+	# One of every rarity, because the borders are the thing these shots are here to check, plus
+	# enough plain gear behind them to fill the grid out.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	main.inventory.add(Item.rolled("Leather Boot", ItemRarity.Rarity.COMMON, rng))
+	main.inventory.add(Item.rolled("Wooden Armor", ItemRarity.Rarity.COMMON, rng))
+	main.inventory.add(Item.rolled("Wooden Sword", ItemRarity.Rarity.UNCOMMON, rng))
+	main.inventory.add(Item.rolled("Wooden Shield", ItemRarity.Rarity.COMMON, rng))
+	main.inventory.add(Item.rolled("Leather Boot", ItemRarity.Rarity.RARE, rng))
+	main.inventory.add(Item.rolled("Wooden Armor", ItemRarity.Rarity.COMMON, rng))
+	main.inventory.add(Item.rolled("Wooden Sword", ItemRarity.Rarity.ELITE, rng))
+	main._on_bag_pressed()
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	var image := root.get_texture().get_image()
+	image.save_png("user://ui_inventory.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_inventory.png"))
+
+	var panel: Control = main._bag_panel
+	var rect := Rect2i(Rect2(panel.position, panel.get_combined_minimum_size() * panel.scale))
+	rect = rect.grow(8).intersection(Rect2i(Vector2i.ZERO, image.get_size()))
+	var crop := image.get_region(rect)
+	crop.resize(crop.get_width() * 2, crop.get_height() * 2, Image.INTERPOLATE_NEAREST)
+	crop.save_png("user://ui_inventory_crop.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_inventory_crop.png"))
+
+	# The stat block, open on the elite sword -- the newest item, and the only shot that shows what a
+	# modifier reads like.
+	main._select_item(main.inventory.total() - 1)
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_item_detail.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_item_detail.png"))
+	main.queue_free()
+	await process_frame
+	if FileAccess.file_exists(SCRATCH_SAVE):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(SCRATCH_SAVE))
 
 
 ## Every variation and state, at three sizes, on the surface each one is meant to stand on.

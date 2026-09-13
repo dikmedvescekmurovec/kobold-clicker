@@ -6,11 +6,14 @@ extends RefCounted
 ## hex_tileset.json, so an enemy is only ever placed on terrain that was drawn for it, and `tier`
 ## separates the wandering rabble from the things worth a fight. Health is not written per enemy:
 ## `size` and `tier` multiply into it, so the whole curve is tuned from SIZE_HP and TIER_HP rather
-## than by editing thirty numbers. The sheet names differ from pack to
+## than by editing thirty numbers. How often an enemy turns up is the other way round: `weight` is
+## written on each entry, because being numerous has little to do with being big -- goblins come in
+## packs, a mimic waits alone, a dragon is a set piece. The sheet names differ from pack to
 ## pack (RUN vs WALK vs MOVE, "ATTACK 1" vs ATTACK1), so each entry spells its own out rather than
 ## guessing from the folder; an animation a pack does not have is an empty string.
 ##
-## Kobold Warrior stayed in Assets/Potential and is deliberately absent.
+## Kobold Warrior stayed in Assets/Potential and is deliberately absent, as is the blue slime the six
+## environment slimes are recoloured from.
 
 enum Tier {
 	COMMON,  ## Wandering encounters, the bulk of a walk.
@@ -19,8 +22,8 @@ enum Tier {
 }
 
 ## How much room the creature takes on a tile, measured off the trimmed idle frame rather than judged:
-## TINY under 1000 px², SMALL under 2000, MEDIUM under 4000, LARGE under 6000, HUGE above it.
-## Flying Eye is the one entry that overrides its measurement — the frame is nearly all wingspan.
+## TINY under 1000 pxÂ², SMALL under 2000, MEDIUM under 4000, LARGE under 6000, HUGE above it.
+## Flying Eye is the one entry that overrides its measurement â€” the frame is nearly all wingspan.
 enum Size { TINY, SMALL, MEDIUM, LARGE, HUGE }
 
 ## Which way a pack drew its creature. The packs do not agree -- most face left, nine face right --
@@ -58,13 +61,23 @@ const ROOT := "res://Assets/Enemies/"
 ## the frame width is the smallest divisor of every sheet width in the pack where each frame boundary falls
 ## on a fully transparent column, which is what test_enemies.gd re-checks against the sprites.
 ##
-## folder -> tier, size, facing, environments, the sprite directory under ROOT, and the sheet file per animation.
-## Slime is the one pack shipped as separate frames, so its sheets are empty and `frames` names the
-## "<prefix><n>.png" series instead.
+## `weight` is how much of a tile's draw this enemy takes against the others living there -- see `pick`.
+## Whole numbers on one absolute scale, not one scale per tier: commons run 30 to 100, elites 8 to 20,
+## bosses 1 to 4. The bands never overlap, so a draw that asks for any tier at all still mostly turns up
+## rabble, and the ratios inside a band are what actually shows: a slime for every two goblins.
+##
+## folder -> tier, size, weight, facing, environments, the sprite directory under ROOT, and the sheet file per animation.
+## The six slimes are the packs shipped as separate frames, so their sheets are empty and `frames`
+## names the "<prefix><n>.png" series instead. They share one frame size and one crop because they are
+## one creature recoloured: AI-sprites-generator/slimes.py swaps the blue pack under
+## Assets/Enemies/Slime onto each environment's palette ramp, so each slime is the colour of the
+## ground it lives on and appears on that terrain alone. The blue original stays as the generator's
+## source and is deliberately absent here, the way Kobold Warrior is.
 const ENEMIES := {
 	"Baby Dragon": {
 		"tier": Tier.ELITE,
 		"size": Size.MEDIUM,
+		"weight": 10,
 		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "ice", "forest", "mountains"],
 		"dir": "Baby Dragon/Sprites/outline",
@@ -75,6 +88,7 @@ const ENEMIES := {
 	"Centaur": {
 		"tier": Tier.ELITE,
 		"size": Size.MEDIUM,
+		"weight": 12,
 		"faces": Facing.LEFT,
 		"environments": ["grass", "dirt", "desert", "forest"],
 		"dir": "Centaur/Sprite",
@@ -85,6 +99,7 @@ const ENEMIES := {
 	"Cerberus": {
 		"tier": Tier.BOSS,
 		"size": Size.LARGE,
+		"weight": 3,
 		"faces": Facing.RIGHT,
 		"environments": ["dirt", "desert", "forest", "mountains"],
 		"dir": "Cerberus/New Version/Sprites/outline",
@@ -95,6 +110,7 @@ const ENEMIES := {
 	"Cyclops": {
 		"tier": Tier.BOSS,
 		"size": Size.LARGE,
+		"weight": 3,
 		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "forest", "mountains"],
 		"dir": "Cyclops/New Version/Sprites/outline",
@@ -105,6 +121,7 @@ const ENEMIES := {
 	"Demon Boss": {
 		"tier": Tier.BOSS,
 		"size": Size.HUGE,
+		"weight": 1,
 		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "mountains"],
 		"dir": "Demon Boss/Sprites/with_outline",
@@ -115,6 +132,7 @@ const ENEMIES := {
 	"Dragon": {
 		"tier": Tier.BOSS,
 		"size": Size.HUGE,
+		"weight": 2,
 		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "ice", "forest", "mountains"],
 		"dir": "Dragon/Sprites/with_outline",
@@ -125,6 +143,7 @@ const ENEMIES := {
 	"Dwarf Warrior": {
 		"tier": Tier.COMMON,
 		"size": Size.SMALL,
+		"weight": 40,
 		"faces": Facing.LEFT,
 		"environments": ["dirt", "ice", "mountains"],
 		"dir": "Dwarf Warrior/Sprite",
@@ -135,6 +154,7 @@ const ENEMIES := {
 	"Flying Eye": {
 		"tier": Tier.ELITE,
 		"size": Size.MEDIUM,
+		"weight": 20,
 		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "forest", "mountains"],
 		"dir": "Flying Eye/Sprites/outline",
@@ -146,6 +166,7 @@ const ENEMIES := {
 	"Gargoyle": {
 		"tier": Tier.ELITE,
 		"size": Size.LARGE,
+		"weight": 8,
 		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "mountains"],
 		"dir": "Gargoyle/New Version/Sprites/outline",
@@ -156,6 +177,7 @@ const ENEMIES := {
 	"Goblin": {
 		"tier": Tier.COMMON,
 		"size": Size.SMALL,
+		"weight": 80,
 		"faces": Facing.LEFT,
 		"environments": ["grass", "dirt", "forest", "mountains"],
 		"dir": "Goblin/Sprites/with_outline",
@@ -166,6 +188,7 @@ const ENEMIES := {
 	"Gryphon": {
 		"tier": Tier.BOSS,
 		"size": Size.MEDIUM,
+		"weight": 3,
 		"faces": Facing.RIGHT,
 		"environments": ["grass", "desert", "ice", "mountains"],
 		"dir": "Gryphon/NEW VERSION/Sprites/with_outline",
@@ -176,6 +199,7 @@ const ENEMIES := {
 	"Harpy": {
 		"tier": Tier.COMMON,
 		"size": Size.SMALL,
+		"weight": 50,
 		"faces": Facing.LEFT,
 		"environments": ["desert", "ice", "mountains"],
 		"dir": "Harpy/Sprite",
@@ -187,6 +211,7 @@ const ENEMIES := {
 	"Headless Horseman": {
 		"tier": Tier.BOSS,
 		"size": Size.HUGE,
+		"weight": 2,
 		"faces": Facing.LEFT,
 		"environments": ["grass", "dirt", "ice", "forest"],
 		"dir": "Headless Horseman/Sprites/outline",
@@ -197,6 +222,7 @@ const ENEMIES := {
 	"Huge Knight": {
 		"tier": Tier.BOSS,
 		"size": Size.HUGE,
+		"weight": 1,
 		"faces": Facing.LEFT,
 		"environments": ["grass", "dirt", "desert", "ice", "forest", "mountains"],
 		"dir": "Huge Knight/Sprites/outline",
@@ -207,6 +233,7 @@ const ENEMIES := {
 	"Imp": {
 		"tier": Tier.COMMON,
 		"size": Size.SMALL,
+		"weight": 70,
 		"faces": Facing.RIGHT,
 		"environments": ["grass", "dirt", "desert", "mountains"],
 		"dir": "Imp/Sprites/outline",
@@ -217,6 +244,7 @@ const ENEMIES := {
 	"Lizardman": {
 		"tier": Tier.COMMON,
 		"size": Size.MEDIUM,
+		"weight": 30,
 		"faces": Facing.RIGHT,
 		"environments": ["dirt", "desert", "forest"],
 		"dir": "Lizardman/New Version/Sprites/outline",
@@ -227,6 +255,7 @@ const ENEMIES := {
 	"Masked Orc": {
 		"tier": Tier.COMMON,
 		"size": Size.SMALL,
+		"weight": 60,
 		"faces": Facing.LEFT,
 		"environments": ["grass", "dirt", "desert", "forest"],
 		"dir": "Masked Orc/Sprites",
@@ -237,6 +266,7 @@ const ENEMIES := {
 	"Medusa": {
 		"tier": Tier.ELITE,
 		"size": Size.MEDIUM,
+		"weight": 10,
 		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "forest", "mountains"],
 		"dir": "Medusa/Sprite",
@@ -247,6 +277,7 @@ const ENEMIES := {
 	"Mimic": {
 		"tier": Tier.ELITE,
 		"size": Size.MEDIUM,
+		"weight": 16,
 		"faces": Facing.RIGHT,
 		"environments": ["dirt", "desert", "forest", "mountains"],
 		"dir": "Mimic/Sprite",
@@ -257,6 +288,7 @@ const ENEMIES := {
 	"Minotaur": {
 		"tier": Tier.BOSS,
 		"size": Size.LARGE,
+		"weight": 4,
 		"faces": Facing.RIGHT,
 		"environments": ["grass", "dirt", "forest", "mountains"],
 		"dir": "Minotaur/Sprites/with_outline",
@@ -267,6 +299,7 @@ const ENEMIES := {
 	"Poison Skull": {
 		"tier": Tier.COMMON,
 		"size": Size.MEDIUM,
+		"weight": 30,
 		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "forest"],
 		"dir": "Poison Skull/Sprite",
@@ -277,6 +310,7 @@ const ENEMIES := {
 	"Pyromancer": {
 		"tier": Tier.ELITE,
 		"size": Size.SMALL,
+		"weight": 16,
 		"faces": Facing.RIGHT,
 		"environments": ["dirt", "desert", "mountains"],
 		"dir": "Pyromancer/Sprites",
@@ -287,6 +321,7 @@ const ENEMIES := {
 	"Satyr Archer": {
 		"tier": Tier.COMMON,
 		"size": Size.SMALL,
+		"weight": 40,
 		"faces": Facing.LEFT,
 		"environments": ["grass", "forest", "mountains"],
 		"dir": "Satyr Archer/Sprite",
@@ -297,6 +332,7 @@ const ENEMIES := {
 	"Skeleton Mage": {
 		"tier": Tier.ELITE,
 		"size": Size.LARGE,
+		"weight": 10,
 		"faces": Facing.RIGHT,
 		"environments": ["dirt", "desert", "ice", "mountains"],
 		"dir": "Skeleton Mage/Sprites/outline",
@@ -307,6 +343,7 @@ const ENEMIES := {
 	"Skeleton Warrior": {
 		"tier": Tier.COMMON,
 		"size": Size.MEDIUM,
+		"weight": 50,
 		"faces": Facing.LEFT,
 		"environments": ["grass", "dirt", "desert", "ice", "mountains"],
 		"dir": "Skeleton Warrior/Sprites/with_outline",
@@ -314,12 +351,73 @@ const ENEMIES := {
 		"bounds": Rect2i(5, 0, 84, 77),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK 1.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
-	"Slime": {
+	"Desert Slime": {
 		"tier": Tier.COMMON,
 		"size": Size.TINY,
+		"weight": 100,
 		"faces": Facing.LEFT,
-		"environments": ["grass", "dirt", "desert", "ice", "forest", "mountains"],
-		"dir": "Slime/Individual Sprites",
+		"environments": ["desert"],
+		"dir": "Desert Slime",
+		"frame": Vector2i(32, 25),
+		"bounds": Rect2i(0, 4, 31, 20),
+		"sheets": {},
+		"frames": {"idle": "slime-idle-", "walk": "slime-move-", "attack": "slime-attack-", "hurt": "slime-hurt-", "death": "slime-die-"},
+	},
+	"Dirt Slime": {
+		"tier": Tier.COMMON,
+		"size": Size.TINY,
+		"weight": 100,
+		"faces": Facing.LEFT,
+		"environments": ["dirt"],
+		"dir": "Dirt Slime",
+		"frame": Vector2i(32, 25),
+		"bounds": Rect2i(0, 4, 31, 20),
+		"sheets": {},
+		"frames": {"idle": "slime-idle-", "walk": "slime-move-", "attack": "slime-attack-", "hurt": "slime-hurt-", "death": "slime-die-"},
+	},
+	"Forest Slime": {
+		"tier": Tier.COMMON,
+		"size": Size.TINY,
+		"weight": 100,
+		"faces": Facing.LEFT,
+		"environments": ["forest"],
+		"dir": "Forest Slime",
+		"frame": Vector2i(32, 25),
+		"bounds": Rect2i(0, 4, 31, 20),
+		"sheets": {},
+		"frames": {"idle": "slime-idle-", "walk": "slime-move-", "attack": "slime-attack-", "hurt": "slime-hurt-", "death": "slime-die-"},
+	},
+	"Grass Slime": {
+		"tier": Tier.COMMON,
+		"size": Size.TINY,
+		"weight": 100,
+		"faces": Facing.LEFT,
+		"environments": ["grass"],
+		"dir": "Grass Slime",
+		"frame": Vector2i(32, 25),
+		"bounds": Rect2i(0, 4, 31, 20),
+		"sheets": {},
+		"frames": {"idle": "slime-idle-", "walk": "slime-move-", "attack": "slime-attack-", "hurt": "slime-hurt-", "death": "slime-die-"},
+	},
+	"Ice Slime": {
+		"tier": Tier.COMMON,
+		"size": Size.TINY,
+		"weight": 100,
+		"faces": Facing.LEFT,
+		"environments": ["ice"],
+		"dir": "Ice Slime",
+		"frame": Vector2i(32, 25),
+		"bounds": Rect2i(0, 4, 31, 20),
+		"sheets": {},
+		"frames": {"idle": "slime-idle-", "walk": "slime-move-", "attack": "slime-attack-", "hurt": "slime-hurt-", "death": "slime-die-"},
+	},
+	"Mountain Slime": {
+		"tier": Tier.COMMON,
+		"size": Size.TINY,
+		"weight": 100,
+		"faces": Facing.LEFT,
+		"environments": ["mountains"],
+		"dir": "Mountain Slime",
 		"frame": Vector2i(32, 25),
 		"bounds": Rect2i(0, 4, 31, 20),
 		"sheets": {},
@@ -328,6 +426,7 @@ const ENEMIES := {
 	"Stone Golem": {
 		"tier": Tier.BOSS,
 		"size": Size.LARGE,
+		"weight": 3,
 		"faces": Facing.LEFT,
 		"environments": ["dirt", "desert", "ice", "mountains"],
 		"dir": "Stone Golem/new version/Sprites/outline",
@@ -338,6 +437,7 @@ const ENEMIES := {
 	"Werewolf": {
 		"tier": Tier.ELITE,
 		"size": Size.LARGE,
+		"weight": 8,
 		"faces": Facing.RIGHT,
 		"environments": ["grass", "dirt", "ice", "forest", "mountains"],
 		"dir": "Werewolf/Sprites/outline",
@@ -348,6 +448,7 @@ const ENEMIES := {
 	"Witch": {
 		"tier": Tier.ELITE,
 		"size": Size.MEDIUM,
+		"weight": 14,
 		"faces": Facing.LEFT,
 		"environments": ["dirt", "ice", "forest", "mountains"],
 		"dir": "Witch/Sprite",
@@ -358,6 +459,7 @@ const ENEMIES := {
 	"Wizard": {
 		"tier": Tier.ELITE,
 		"size": Size.MEDIUM,
+		"weight": 14,
 		"faces": Facing.LEFT,
 		"environments": ["grass", "dirt", "desert", "ice", "forest", "mountains"],
 		"dir": "Wizard/Sprites/with_outline",
@@ -394,6 +496,11 @@ static func facing_of(name: String) -> Facing:
 ## 0.5 (the slime) to 24.0 (Huge Knight, Demon Boss), so a base of 20 HP spans 10 to 480.
 static func hp_modifier(name: String) -> float:
 	return SIZE_HP[size_of(name)] * TIER_HP[tier_of(name)]
+
+
+## How much of a tile's draw this enemy takes up, against the others that live on the same terrain.
+static func weight_of(name: String) -> int:
+	return ENEMIES[name]["weight"]
 
 
 ## The size of one frame on this enemy's sheets, and of each of its files for a frame-per-file pack.
@@ -444,12 +551,23 @@ static func in_environment(env: String, tier: Variant = null) -> PackedStringArr
 	return found
 
 
-## Picks one enemy for `env`, or "" when that terrain has none of that tier. `rng` decides.
+## Picks one enemy for `env`, or "" when that terrain has none of that tier. `rng` decides, weighted by
+## `weight`, so a terrain's small fry crowd out its rarer company instead of every candidate being
+## equally likely. Laying the weights end to end and walking them keeps the draw a pure function of one
+## `randi_range`, so a seeded fight stays the same fight however the weights are retuned.
 static func pick(env: String, tier: Variant, rng: RandomNumberGenerator) -> String:
 	var candidates := in_environment(env, tier)
 	if candidates.is_empty():
 		return ""
-	return candidates[rng.randi_range(0, candidates.size() - 1)]
+	var total := 0
+	for name in candidates:
+		total += weight_of(name)
+	var roll := rng.randi_range(0, total - 1)
+	for name in candidates:
+		roll -= weight_of(name)
+		if roll < 0:
+			return name
+	return candidates[candidates.size() - 1]
 
 
 ## The sheet of one animation, e.g. sheet_path("Goblin", "walk"). "" when the pack lacks it, and for

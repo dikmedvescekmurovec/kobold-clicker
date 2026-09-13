@@ -6,6 +6,8 @@ extends RefCounted
 ## them are wandering rabble and the tenth is an elite, so every fight ends on something worth the
 ## name. Bosses are never rolled here -- they are saved for set pieces.
 ##
+## Each kill rolls for loot against LootTable, and what drops is kept whatever the fight does next.
+##
 ## Nothing the enemies do can hurt the player: the clock is the only way to lose. Beat all ten inside
 ## SECONDS and the tile is discovered; run out and nothing happens, the tile stays grey and can be
 ## tried again. A tile's ten are seeded from its cell, so the same tile always fields the same fight,
@@ -23,6 +25,10 @@ signal enemy_spawned(index: int, enemy_name: String, hp: int)
 signal enemy_hit(hp_left: int)
 ## The enemy's health reached zero; its death plays before the next one comes out.
 signal enemy_died(index: int)
+## That enemy was carrying something. Emitted with the death, so the drop reads as coming off the
+## body, and kept whatever the fight does afterwards: running out of time loses the tile, not what is
+## already on the ground.
+signal loot_dropped(index: int, item: Item)
 ## All ten are down, with time to spare.
 signal won()
 ## The clock ran out.
@@ -62,6 +68,15 @@ var victory := false
 
 ## Seconds left of the walking-in or dying that is under way. The scene slides the enemy in over it.
 var phase_left := WALK_IN
+
+## Loot belongs to the attempt, not to the tile. The ten enemies are the tile's, decided before the
+## player ever reaches it, but what they happen to be carrying is rolled fresh each fight, so a tile
+## fought twice is not a fixed payout. Unseeded on purpose: RandomNumberGenerator seeds itself
+## randomly, so there is no randomize() to add here. Tests set the seed before they play.
+var loot_rng := RandomNumberGenerator.new()
+## Whether the elite that ends this fight is promised a drop. The main scene turns it on while the
+## player has yet to see their first, so the first real fight hands something over.
+var guarantee_elite := false
 
 
 ## The fight waiting on `cell`, whose terrain is `env`. Nine commons and an elite, drawn from the
@@ -132,6 +147,11 @@ func hit() -> bool:
 		phase = Phase.DYING
 		phase_left = DEATH
 		enemy_died.emit(index)
+		# The only path to a death, which is why drops survive a loss for free: nothing is rolled
+		# when the clock runs out.
+		var dropped := LootTable.roll(lineup[index], loot_rng, guarantee_elite and on_elite())
+		if dropped != null:
+			loot_dropped.emit(index, dropped)
 	return true
 
 
