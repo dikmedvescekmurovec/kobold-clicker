@@ -8,6 +8,7 @@ with its "layouts are twins" check, and the entries here that repeat are the wor
 Every plan below is transcribed from the hand-written settlement it replaces, so the first build
 after the engine lands should look like the one before it.
 """
+import lay_dirt as _dirt
 import lay_forest as _forest
 import lay_ice as _ice
 from areaplan import Belt, Course, Fix, Land, Plan, Row
@@ -1140,6 +1141,8 @@ LAYOUTS = {
         "town": (HEARTHS, DRIFT_TOWN, HARBOUR, WINTER_HOLD),
         "fortress": (GLASS_CROWN, FROZEN_COURT, RIME_HALL, AURORA_GATE),
     },
+    # Dirt builds its own way now; its catalogue is in lay_dirt.py.
+    "dirt": _dirt.LAYOUTS,
     # Ice builds its own way now; its catalogue is in lay_ice.py.
     "ice": _ice.LAYOUTS,
     # Forest builds its own way now; its catalogue is in lay_forest.py.

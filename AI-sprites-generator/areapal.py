@@ -75,6 +75,16 @@ PAL = {
         # The shaded side of a trunk and the litter under it. Shared, because a palm
         # grows in a desert oasis and over a jungle river both.
         "trunk_sh": (66, 48, 32), "trunk_lit": (88, 64, 42),
+        # Daub: mud and straw pressed onto a wattle frame, which is what the village reference
+        # is walled with. Warmer and duller than plaster -- it has never been painted.
+        "daub": (186, 158, 118), "daub_dk": (142, 116, 84), "daub_lit": (212, 188, 150),
+        # Undressed rubble, off the fortress reference: cold grey, laid without being cut. It is
+        # deliberately colder than this environment's own warm `stone`, because what makes the
+        # keep read as older and grimmer than the town is that it was never dressed.
+        "rubble": (126, 126, 124), "rubble_dk": (88, 88, 88), "rubble_lit": (154, 154, 150),
+        # The poles the thatch is bound over, and the fire in the middle of the village.
+        "pole": (132, 106, 70), "fire": (236, 128, 52), "fire_lit": (255, 198, 96),
+        "smoke": (176, 170, 158),
         "glow": (255, 214, 120), "fence": (120, 92, 60), "trunk": (96, 70, 48),
         "crown": (108, 132, 72), "crown_dk": (70, 90, 52), "crown_lit": (134, 156, 90),
     },

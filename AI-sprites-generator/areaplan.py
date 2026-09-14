@@ -26,6 +26,7 @@ from collections import namedtuple
 import areabuild as B
 import bld_desert as D
 import bld_forest as F
+import bld_dirt as R
 import bld_ice as I
 import arealib as A
 from arealib import H, W
@@ -315,6 +316,27 @@ KIT = {
         belt=lambda s, x0, x1, y, n, scrub: B.hedgerow(s.im, s.next_seed(), x0, x1, y, s.pal,
                                                        n, scrub),
     ),
+    # Dirt, written from its own reference photographs: daub and undressed rubble, fat thatch
+    # cones and flat crenellated tops, and nothing dressed, painted or carved anywhere. Its two
+    # marks are the crown of crossed poles and the group of lancets -- see bld_dirt.py.
+    "dirt": dict(
+        house=lambda s, x, y, w, h: R.pole_round(s.px, x, y, w, h, s.pal, s.rng),
+        hall=lambda s, x, y, w, h: R.daub_hall(s.px, x, y, w, h, s.pal, s.rng),
+        street=lambda s, x, y, w, h: R.rubble_house(s.px, x, y, w, h, s.pal, s.rng),
+        tower=lambda s, x, y, w, h: R.broken_tower(s.px, x, y, w, h, s.pal, s.rng),
+        spire=lambda s, x, y, w, h: R.broken_tower(s.px, x, y, w, h, s.pal, s.rng),
+        keep=lambda s, x, y, w, h: R.lancet_keep(s.px, x, y, w, h, s.pal, s.rng),
+        great=lambda s, x, y, w, h: R.lancet_keep(s.px, x, y, w, h, s.pal, s.rng),
+        gate=lambda s, x, y, w, h: R.rubble_gate(s.px, x, y, w, h, s.pal, s.rng),
+        fire=lambda s, x, y, w, h: R.hearth(s.px, x, y, s.pal, s.rng, h=h),
+        stair=lambda s, x0, x1, y, h: R.stone_stair(s.px, x0, x1, y, h, s.pal),
+        tree=lambda s, x, y, w, h: _tree(s, x, y, int(h * 1.7)),
+        wall=lambda s, x0, x1, y, h: R.rubble_wall(s.px, x0, x1, y, h, s.pal),
+        bulwark=lambda s, x0, x1, y, h: R.rubble_wall(s.px, x0, x1, y, h, s.pal),
+        yard=lambda s, x0, x1, y, h: R.wattle(s.px, x0, x1, y, s.pal, s.rng, h=max(4, h)),
+        belt=lambda s, x0, x1, y, n, scrub: R.scrub_belt(s.im, s.next_seed(), x0, x1, y, s.pal,
+                                                         n, scrub),
+    ),
     # Ice, written from its own reference photographs: dark timber and carved ice under a load of
     # snow, eaves that curl up at the ends, and a warm light in every opening. `great` and `keep`
     # are its own needle and dome rather than the shared castle's tower and hall -- see bld_ice.py.
@@ -396,7 +418,7 @@ for _name_ in _ON_THE_OLD_CASTLE:
 ## Which vocabulary each place builds with. Grass keeps the northern timber and gables as its own
 ## style; the reference photographs put the other four somewhere else entirely, and each moves off
 ## it as its kit is written.
-STYLE = {"grass": "timber", "dirt": "celtic", "ice": "ice", "forest": "forest",
+STYLE = {"grass": "timber", "dirt": "dirt", "ice": "ice", "forest": "forest",
          "mountains": "alpine", "desert": "desert"}
 
 ## What grows here: spruce in the cold and the woods, broadleaf everywhere else.
