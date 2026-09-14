@@ -9,6 +9,12 @@
 # Temp files (e.g. Assets/bars.png271044417.tmp)
 *.tmp
 
+# Reference photographs the backdrop art is derived from: ~45 MB of source images, several of
+# them watermarked stock comps. Fine to hold locally and draw from, not something to redistribute
+# in the repo or in a build -- the .gdignore beside them is what keeps Godot from importing them.
+Assets/Area/references/**
+!Assets/Area/references/.gdignore
+
 # OS junk
 .DS_Store
 ._*

@@ -12,6 +12,10 @@ from preview import contact_sheet, tiled_map
 
 os.makedirs("qa", exist_ok=True)
 RING = [(x, y) for x, y in HEX_PIXELS if BORDER[y][x] < 1.5]
+## How many distinct colours a backdrop may sample to. Each environment carries its own
+## ramps plus whatever it builds with, and a place with its own architecture needs more of
+## them than one borrowing a neighbour's.
+AREA_COLOUR_CEILING = 140
 OPP = {0: 3, 1: 4, 2: 5, 3: 0, 4: 1, 5: 2}
 
 
@@ -423,6 +427,93 @@ def slimes(tag):
     print(f"  wrote qa/slimes_{tag}.png and qa/slimes_ground_{tag}.png")
 
 
+def _silhouette(built, bare, y0, y1, step=2):
+    """The roofline of a settlement, column by column.
+
+    Taken as the topmost row where the scene differs from the same scene without a settlement in
+    it. The two share a seed, so sky, skyline, ground and cover are pixel-identical between them
+    and the only thing left to differ is what was built -- which makes this the silhouette exactly,
+    with no need to guess which colours are sky and which are roof.
+    """
+    pb, pn = built.load(), bare.load()
+    tops = []
+    for x in range(0, 576, step):
+        top = y1
+        for y in range(y0, y1):
+            if pb[x, y] != pn[x, y]:
+                top = y
+                break
+        tops.append(top)
+    return tops
+
+
+def areas(tag):
+    """The battle backdrops: skeleton, variant and layout checks, plus the contact sheets."""
+    import areas as A
+    from arealib import GROUND_TOP, H as AH, HORIZON, W as AW
+
+    problems = Counter()
+    made = {}
+    for env in A.ENVS:
+      for layout in range(1, A.LAYOUTS_PER_VARIANT + 1):
+        for variant in A.VARIANTS:
+            im = A.scene(env, variant, layout=layout)
+            made[(env, variant, layout)] = im
+            px = im.load()
+            problems["wrong size"] += im.size != (AW, AH)
+            # The skeleton is shared: the land starts on the same row in every scene, so an enemy
+            # standing at a given height stands in the same place whatever the backdrop is.
+            far = A.PAL[env]["ground"][0][1]
+            row = [px[x, GROUND_TOP + 2] for x in range(AW)]
+            problems["land starts late"] += far not in row
+            problems["land in the sky"] += any(px[x, y] == far
+                                               for y in range(0, HORIZON - 10, 3)
+                                               for x in range(0, AW, 7))
+            # A backdrop is pixel art in one palette, not a photograph. The ceiling is generous
+            # -- the busiest scene in the set sits around 55 -- so it is not a budget to paint up
+            # to, it is a tripwire for an un-quantised blend or a stray gradient getting in.
+            colours = {px[x, y] for y in range(0, AH, 3) for x in range(0, AW, 3)}
+            problems["too many colours"] += len(colours) > AREA_COLOUR_CEILING
+            # Bare ground under the fight: the bottom rows have to carry cover, not a flat band.
+            # Bare ground under the fight: the bottom rows carry cover or a road surface, never
+            # one flat band. Three is the floor -- a road is only its own three colours.
+            floor = {px[x, AH - 1 - d] for d in range(24) for x in range(0, AW, 2)}
+            problems["bare floor"] += len(floor) < 3
+        # Against plain at the SAME layout: the layout index moves the shared seed identically for
+        # every variant, so these two differ only in what was built on top.
+        for variant in A.VARIANTS[1:]:
+            same = sum(a == b for a, b in zip(made[(env, "plain", layout)].get_flattened_data(),
+                                              made[(env, variant, layout)].get_flattened_data()))
+            problems["variant drew nothing"] += same == AW * AH
+
+    # A pixel count is too weak a test here: two seeds of one plan already differ in thousands of
+    # pixels and still read as one town, and a whole-image diff passes trivially because the sky
+    # and the cover are seeded anyway. What says these are two settlements is that the roofline
+    # goes somewhere else.
+    for env in A.ENVS:
+        for variant in ("village", "town", "fortress"):
+            shapes = [_silhouette(made[(env, variant, L)], made[(env, "plain", L)],
+                                  HORIZON - 60, 272)
+                      for L in range(1, A.LAYOUTS_PER_VARIANT + 1)]
+            twins = []
+            for i in range(len(shapes)):
+                for j in range(i + 1, len(shapes)):
+                    # Out of the columns that have anything built in them, not out of the whole
+                    # frame: a settlement covers half the width, and counting the empty sky either
+                    # side of it halves every score for no reason.
+                    pairs = [(a, b) for a, b in zip(shapes[i], shapes[j]) if a < 272 or b < 272]
+                    moved = sum(abs(a - b) > 4 for a, b in pairs)
+                    if pairs and moved < len(pairs) * 0.25:
+                        twins.append("%d/%d" % (i + 1, j + 1))
+            if twins:
+                problems["layouts are twins"] += len(twins)
+                print("  twins: %s_%s layouts %s" % (env, variant, ", ".join(twins)))
+
+    print("problems:", dict(problems))
+    print(" ", A.sheet(tag, made=made))
+    print(" ", A.layout_sheet(tag, made=made))
+
+
 if __name__ == "__main__":
     {"phase1": phase1, "phase2": phase2, "phase3": phase3, "showcase": showcase,
-     "blends": blends, "ui": ui, "slimes": slimes}[sys.argv[1]](sys.argv[2])
+     "blends": blends, "ui": ui, "slimes": slimes, "areas": areas}[sys.argv[1]](sys.argv[2])
