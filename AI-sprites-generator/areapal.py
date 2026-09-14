@@ -40,6 +40,9 @@ PAL = {
         # The crag the castle reference stands on: grey rock going green in the wet.
         "crag": (128, 130, 118), "crag_dk": (94, 96, 86), "crag_lit": (158, 160, 146),
         "stone": (176, 176, 176), "stone_dk": (128, 132, 140), "stone_lit": (206, 206, 202),
+        # The shaded side of a trunk and the litter under it. Shared, because a palm
+        # grows in a desert oasis and over a jungle river both.
+        "trunk_sh": (74, 52, 34), "trunk_lit": (96, 70, 46),
         "glow": (255, 214, 120), "fence": (132, 102, 68), "trunk": (108, 78, 52),
         "crown": (92, 167, 84), "crown_dk": (52, 89, 72), "crown_lit": (119, 181, 98),
     },
@@ -69,6 +72,9 @@ PAL = {
         "crag": (150, 138, 118), "crag_dk": (112, 102, 86), "crag_lit": (180, 168, 146),
         "tile": (150, 96, 66), "tile_dk": (112, 68, 48), "tile_lit": (182, 128, 92),
         "stone": (168, 160, 148), "stone_dk": (124, 116, 108), "stone_lit": (198, 192, 180),
+        # The shaded side of a trunk and the litter under it. Shared, because a palm
+        # grows in a desert oasis and over a jungle river both.
+        "trunk_sh": (66, 48, 32), "trunk_lit": (88, 64, 42),
         "glow": (255, 214, 120), "fence": (120, 92, 60), "trunk": (96, 70, 48),
         "crown": (108, 132, 72), "crown_dk": (70, 90, 52), "crown_lit": (134, 156, 90),
     },
@@ -90,6 +96,9 @@ PAL = {
         "wall": (232, 214, 176), "wall_dk": (196, 174, 136), "roof": (196, 140, 92),
         "roof_dk": (150, 102, 64), "ink": (56, 44, 36), "dark": (40, 32, 26),
         "stone": (214, 198, 164), "stone_dk": (166, 148, 116), "stone_lit": (238, 226, 198),
+        # The shaded side of a trunk and the litter under it. Shared, because a palm
+        # grows in a desert oasis and over a jungle river both.
+        "trunk_sh": (118, 72, 48), "trunk_lit": (160, 102, 66),
         "glow": (255, 214, 120), "fence": (150, 120, 78), "trunk": (126, 98, 62),
         "crown": (150, 170, 96), "crown_dk": (104, 124, 70), "crown_lit": (176, 192, 116),
         # Rammed earth and the rock it is piled on, sampled off the kasbah references: a red
@@ -124,6 +133,9 @@ PAL = {
         "tile": (86, 96, 116), "tile_dk": (60, 68, 84), "tile_lit": (116, 128, 150),
         "cap": (238, 246, 252), "cap_sh": (198, 214, 234),
         "stone": (198, 208, 222), "stone_dk": (150, 162, 182), "stone_lit": (228, 236, 244),
+        # The shaded side of a trunk and the litter under it. Shared, because a palm
+        # grows in a desert oasis and over a jungle river both.
+        "trunk_sh": (58, 48, 42), "trunk_lit": (78, 64, 56),
         "glow": (255, 214, 120), "fence": (120, 110, 104), "trunk": (86, 72, 64),
         "crown": (74, 116, 102), "crown_dk": (48, 84, 78), "crown_lit": (104, 146, 124),
     },
@@ -153,10 +165,22 @@ PAL = {
         "tile": (126, 92, 64), "tile_dk": (92, 66, 46), "tile_lit": (156, 118, 84),
         # The hillside the temple reference is cut into -- wet grey rock going green wherever it
         # has stood still long enough, which in a jungle is everywhere.
-        "crag": (116, 118, 104), "crag_dk": (82, 86, 74), "crag_lit": (146, 148, 132),
+        "crag": (132, 140, 116), "crag_dk": (100, 108, 88), "crag_lit": (162, 170, 142),
         "stone": (176, 180, 168), "stone_dk": (130, 136, 126), "stone_lit": (204, 208, 196),
+        # The shaded side of a trunk and the litter under it. Shared, because a palm
+        # grows in a desert oasis and over a jungle river both.
+        "trunk_sh": (60, 44, 30), "trunk_lit": (82, 60, 42),
         "glow": (255, 214, 120), "fence": (110, 86, 58), "trunk": (92, 68, 48),
         "crown": (78, 128, 70), "crown_dk": (48, 90, 54), "crown_lit": (104, 152, 84),
+        # Brown river water, off the town reference -- it is silt, not sky, so it is warm and
+        # nearly opaque, and a reflection in it is a dimmed shape rather than a mirror.
+        "water": (56, 82, 86), "water_lit": (118, 150, 142),
+        # The gold a meru's finials and upper tiers carry. The only warm accent the place has, and
+        # the thing that separates a temple from a very large barn.
+        "gold": (214, 170, 78), "gold_dk": (150, 114, 48),
+        # What grows in every ledge and joint. A jungle leaves nothing bare, and a fern on a stone
+        # course is what says this temple has stood a long time.
+        "fern": (128, 174, 88), "fern_dk": (74, 116, 58),
     },
     "mountains": {
         "sky": [(0, (56, 146, 190)), (100, (72, 160, 200)),
@@ -188,6 +212,9 @@ PAL = {
         # the old value put a white bar across a white field -- a curtain wall here has to sit down
         # against the scree rather than glare off it.
         "stone": (164, 164, 172), "stone_dk": (120, 120, 130), "stone_lit": (192, 192, 198),
+        # The shaded side of a trunk and the litter under it. Shared, because a palm
+        # grows in a desert oasis and over a jungle river both.
+        "trunk_sh": (56, 44, 36), "trunk_lit": (78, 62, 50),
         "glow": (255, 214, 120), "fence": (110, 102, 92), "trunk": (84, 68, 56),
         "crown": (72, 110, 86), "crown_dk": (48, 80, 66), "crown_lit": (98, 136, 104),
     },

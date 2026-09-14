@@ -486,11 +486,19 @@ def _slopes(tops, y1):
     are arranged, which is what makes it a fair test of whether two environments build alike --
     a pixel diff is not, because two palettes always differ and two arrangements always differ.
     """
+    # Only what stands proud of the ground. A plan that lays a full-width patch or a river makes
+    # almost every column differ from `plain`, so the raw silhouette is mostly the *terrain* line
+    # -- and every environment's terrain line is flat, which made two quite different towns look
+    # like one roof logic. The lowest built thing is that terrain line; a roof is what clears it.
+    on = [t for t in tops if t < y1]
+    if not on:
+        return None
+    floor = max(on) - 5
     buckets = [0, 0, 0, 0]
     for a, b in zip(tops, tops[1:]):
-        if a >= y1 and b >= y1:                        # both columns empty sky: not a roofline
+        if a > floor and b > floor:                    # both columns are ground, not roofline
             continue
-        d = abs(a - b)
+        d = abs(min(a, floor + 1) - min(b, floor + 1))
         buckets[0 if d == 0 else 1 if d <= 2 else 2 if d <= 6 else 3] += 1
     n = sum(buckets)
     return [b / n for b in buckets] if n else None
@@ -509,12 +517,13 @@ def areas(tag, *only):
 
         layouts are twins: 2   (desert_fortress 1/2 and 3/4, both deliberate)
         cousins: 10           (every other counter zero)
-        worst colours: grass 56, dirt 63, desert 49, ice 61, forest 75, mountains 75
+        worst colours: grass 56, dirt 63, desert 49, ice 61, forest 84, mountains 75
 
     Those ten cousins are the whole reason the settlements are being rebuilt, and which ten says
-    why: every pair is drawn from grass, dirt, ice and mountains, the four that shared one castle
-    kit and one northern vocabulary. Desert and forest, the two that were written from their own
-    reference photographs, are not a cousin of anything.
+    why: every pair is drawn from grass, dirt, ice and mountains, the four still sharing one castle
+    kit and one northern vocabulary. Desert and forest, the two written from their own reference
+    photographs, are a cousin of nothing. The count comes down as each of the other four is
+    rewritten, and zero is the finish line.
     """
     import areas as A
     from arealib import GROUND_TOP, H as AH, HORIZON, W as AW

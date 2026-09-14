@@ -25,6 +25,7 @@ from collections import namedtuple
 
 import areabuild as B
 import bld_desert as D
+import bld_forest as F
 import arealib as A
 from arealib import H, W
 
@@ -313,6 +314,24 @@ KIT = {
         belt=lambda s, x0, x1, y, n, scrub: B.hedgerow(s.im, s.next_seed(), x0, x1, y, s.pal,
                                                        n, scrub),
     ),
+    # Forest, written from its own reference photographs: thatch over dark timber, everything
+    # stepping inward as it rises, a finial on every apex. It reaches nothing another place owns
+    # and shares no piece with one, which is the point -- see bld_forest.py.
+    "forest": dict(
+        house=lambda s, x, y, w, h: F.thatch_cone(s.px, x, y, w, h, s.pal, s.rng),
+        hall=lambda s, x, y, w, h: F.stilt_long(s.px, x, y, w, h, s.pal, s.rng),
+        tower=lambda s, x, y, w, h: F.meru_tower(s.px, x, y, w, h, s.pal, s.rng),
+        spire=lambda s, x, y, w, h: F.meru_tower(s.px, x, y, w, h, s.pal, s.rng),
+        keep=lambda s, x, y, w, h: F.meru_tower(s.px, x, y, w, h, s.pal, s.rng),
+        gate=lambda s, x, y, w, h: F.candi_gate(s.px, x, y, w, h, s.pal, s.rng),
+        shrine=lambda s, x, y, w, h: F.shrine(s.px, x, y, w, h, s.pal, s.rng),
+        stair=lambda s, x, y, w, h: F.temple_stair(s.px, x, y, w, h, s.pal),
+        tree=lambda s, x, y, w, h: _tree(s, x, y, int(h * 1.7)),
+        wall=lambda s, x0, x1, y, h: F.temple_wall(s.px, x0, x1, y, h, s.pal),
+        yard=lambda s, x0, x1, y, h: F.temple_wall(s.px, x0, x1, y, max(2, h), s.pal),
+        belt=lambda s, x0, x1, y, n, scrub: F.jungle_belt(s.im, s.next_seed(), x0, x1, y, s.pal,
+                                                          n, scrub),
+    ),
     "desert": dict(
         house=lambda s, x, y, w, h: D.mud_house(s.px, x, y, w, h, s.pal, s.rng),
         hall=lambda s, x, y, w, h: D.mud_house(s.px, x, y, w, h, s.pal, s.rng, taper=0.06),
@@ -341,20 +360,25 @@ _GRAND = dict(
     barbican=lambda s, x, y, w, h: B.great_gate(s.px, x, y, w, h, s.pal, s.rng),
     steps=lambda s, x, y, w, h: B.grand_steps(s.px, x, y, w, h, s.pal),
 )
-for _style in KIT.values():
-    for _name, _fn in _GRAND.items():
-        _style.setdefault(_name, _fn)
+## Which styles are still on the shared castle. The list shrinks by one as each place is written
+## from its own references, and when it is empty `_GRAND` and its six pieces go. It is an explicit
+## list rather than "every style" so that a finished place cannot quietly reach back for a curtain
+## wall -- `qa.py audit` fails on the name instead of silently resolving it.
+_ON_THE_OLD_CASTLE = ("north", "timber", "alpine", "celtic", "snow", "cone", "desert")
+for _name_ in _ON_THE_OLD_CASTLE:
+    for _piece_, _fn_ in _GRAND.items():
+        KIT[_name_].setdefault(_piece_, _fn_)
 
 
 ## Which vocabulary each place builds with. Grass keeps the northern timber and gables as its own
 ## style; the reference photographs put the other four somewhere else entirely, and each moves off
 ## it as its kit is written.
-STYLE = {"grass": "timber", "dirt": "celtic", "ice": "snow", "forest": "cone",
+STYLE = {"grass": "timber", "dirt": "celtic", "ice": "snow", "forest": "forest",
          "mountains": "alpine", "desert": "desert"}
 
 ## What grows here: spruce in the cold and the woods, broadleaf everywhere else.
 TREE = {"grass": "broadleaf", "dirt": "broadleaf", "desert": "palm",
-        "ice": "conifer", "forest": "conifer", "mountains": "conifer"}
+        "ice": "conifer", "forest": "broadleaf", "mountains": "conifer"}
 
 ## Places whose ground cover is drawn right across the mid band -- dune ripples scribble over a mud
 ## wall rather than standing in front of it -- so what is built there goes in after the cover.

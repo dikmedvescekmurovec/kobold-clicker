@@ -330,7 +330,7 @@ def palm(px, cx, base, h, p, rng):
         _px(px, tx - 1, y, p["crown_lit"] if i % 4 else p["crown_dk"])
         _px(px, tx, y, p["trunk"])
         _px(px, tx + 1, y, p["trunk"] if i % 4 else p["crown_dk"])
-        _px(px, tx + 2, y, p["mud_sh"])
+        _px(px, tx + 2, y, p["trunk_sh"])
     ty = base - h
     n = rng.randint(9, 12)
     for f in range(n):
@@ -352,7 +352,7 @@ def palm(px, cx, base, h, p, rng):
                 _px(px, x, y + 2 if side > 0 else y - 2, p["crown_dk"])
     rect(px, tx - 1, ty - 1, tx + 1, ty, p["crown_dk"])
     for _ in range(rng.randint(2, 5)):                         # dates hanging under the crown
-        _px(px, tx + rng.randint(-3, 3), ty + rng.randint(1, 4), p["mud_dk"])
+        _px(px, tx + rng.randint(-3, 3), ty + rng.randint(1, 4), p["trunk_lit"])
 
 
 def mesa(px, rng, cx, base, half, h, p):

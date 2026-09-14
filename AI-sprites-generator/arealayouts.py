@@ -8,6 +8,7 @@ with its "layouts are twins" check, and the entries here that repeat are the wor
 Every plan below is transcribed from the hand-written settlement it replaces, so the first build
 after the engine lands should look like the one before it.
 """
+import lay_forest as _forest
 from areaplan import Belt, Course, Fix, Land, Plan, Row
 
 # ---------------------------------------------------------------- the north
@@ -1138,6 +1139,8 @@ LAYOUTS = {
         "town": (HEARTHS, DRIFT_TOWN, HARBOUR, WINTER_HOLD),
         "fortress": (GLASS_CROWN, FROZEN_COURT, RIME_HALL, AURORA_GATE),
     },
+    # Forest builds its own way now; its catalogue is in lay_forest.py.
+    "forest": _forest.LAYOUTS,
     "cone": {
         "village": (WAE, CLEARING, KAMPUNG, SHRINE),
         "town": (STILTS, LONGHOUSES, WATER_TOWN, TERRACES),
