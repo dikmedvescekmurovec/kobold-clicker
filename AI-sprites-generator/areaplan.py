@@ -27,6 +27,7 @@ import areabuild as B
 import bld_desert as D
 import bld_forest as F
 import bld_dirt as R
+import bld_mountains as M
 import bld_ice as I
 import arealib as A
 from arealib import H, W
@@ -316,6 +317,28 @@ KIT = {
         belt=lambda s, x0, x1, y, n, scrub: B.hedgerow(s.im, s.next_seed(), x0, x1, y, s.pal,
                                                        n, scrub),
     ),
+    # Mountains, written from its own reference photographs: warm cut stone laid flat-roofed,
+    # dark timber galleries bolted on the front, arched openings, and round drums under red cones.
+    # Its three photographs disagree; the town's read wins -- see bld_mountains.py.
+    "mountains": dict(
+        house=lambda s, x, y, w, h: M.ashlar_block(s.px, x, y, w, h, s.pal, s.rng),
+        hall=lambda s, x, y, w, h: M.ashlar_block(s.px, x, y, w, h, s.pal, s.rng),
+        street=lambda s, x, y, w, h: M.ashlar_block(s.px, x, y, w, h, s.pal, s.rng),
+        tower=lambda s, x, y, w, h: M.red_drum(s.px, x, y, w, h, s.pal, s.rng),
+        spire=lambda s, x, y, w, h: M.red_drum(s.px, x, y, w, h, s.pal, s.rng, flag=True),
+        great=lambda s, x, y, w, h: M.red_drum(s.px, x, y, w, h, s.pal, s.rng, flag=True),
+        keep=lambda s, x, y, w, h: M.red_drum(s.px, x, y, w, h, s.pal, s.rng, flag=True),
+        gate=lambda s, x, y, w, h: M.spur_gate(s.px, x, y, w, h, s.pal, s.rng),
+        tree=lambda s, x, y, w, h: _tree(s, x, y, int(h * 1.7)),
+        wall=lambda s, x0, x1, y, h: M.arcade(s.px, x0, x1, y, h, s.pal),
+        bulwark=lambda s, x0, x1, y, h: M.arcade(s.px, x0, x1, y, h, s.pal),
+        yard=lambda s, x0, x1, y, h: M.arcade(s.px, x0, x1, y, max(5, h), s.pal),
+        gallery=lambda s, x0, x1, y, h: M.timber_gallery(s.px, x0, x1, y, s.pal, s.rng),
+        stair=lambda s, x0, x1, y, h: M.gallery_stair(s.px, x0, x1, y, h, s.pal),
+        bridge=lambda s, x0, x1, y, h: M.viaduct(s.px, x0, x1, y, s.pal, s.rng, rise=h),
+        belt=lambda s, x0, x1, y, n, scrub: M.crag_belt(s.im, s.next_seed(), x0, x1, y, s.pal,
+                                                        n, scrub),
+    ),
     # Dirt, written from its own reference photographs: daub and undressed rubble, fat thatch
     # cones and flat crenellated tops, and nothing dressed, painted or carved anywhere. Its two
     # marks are the crown of crossed poles and the group of lancets -- see bld_dirt.py.
@@ -419,7 +442,7 @@ for _name_ in _ON_THE_OLD_CASTLE:
 ## style; the reference photographs put the other four somewhere else entirely, and each moves off
 ## it as its kit is written.
 STYLE = {"grass": "timber", "dirt": "dirt", "ice": "ice", "forest": "forest",
-         "mountains": "alpine", "desert": "desert"}
+         "mountains": "mountains", "desert": "desert"}
 
 ## What grows here: spruce in the cold and the woods, broadleaf everywhere else.
 TREE = {"grass": "broadleaf", "dirt": "broadleaf", "desert": "palm",

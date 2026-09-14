@@ -208,20 +208,20 @@ PAL = {
         "cloud_core": (48, 124, 164), "cloud_edge": (96, 176, 206), "cloud_lit": (156, 210, 226),
         "cloud_hi": (222, 242, 244), "cloud_lo": (188, 224, 236),
         "horizon": (124, 144, 176),
-        "ground": [(GROUND_TOP, (156, 156, 158)), (227, (138, 138, 142)), (242, (122, 122, 128)),
-                   (254, (106, 106, 114)), (266, (92, 92, 100))],
-        "clumps": [(146, 146, 150), (124, 124, 130), (104, 104, 112), (86, 86, 94), (70, 70, 78),
-                   (56, 56, 64)],
-        "specks": [(170, 170, 172), (120, 140, 100), (150, 150, 152)],
+        "ground": [(GROUND_TOP, (170, 158, 136)), (227, (152, 140, 120)), (242, (136, 124, 106)),
+                   (254, (120, 110, 94)), (266, (106, 96, 82))],
+        "clumps": [(156, 146, 126), (134, 124, 106), (114, 104, 88), (94, 86, 72), (76, 70, 58),
+                   (60, 55, 46)],
+        "specks": [(188, 174, 148), (120, 140, 100), (162, 150, 128)],
         "blossoms": [((150, 170, 120), (190, 200, 150)), ((168, 168, 170), (200, 200, 202))],
-        "hill": (120, 126, 142), "hill_lit": (150, 156, 170),
-        "road": [(168, 164, 158), (144, 140, 136), (120, 118, 114)], "road_edge": (98, 96, 94),
+        "hill": (134, 126, 110), "hill_lit": (162, 152, 134),
+        "road": [(180, 166, 142), (156, 142, 120), (132, 120, 100)], "road_edge": (108, 98, 82),
         "wall": (206, 200, 190), "wall_dk": (162, 158, 150), "roof": (120, 110, 120),
         "roof_dk": (86, 80, 92), "ink": (40, 40, 46), "dark": (28, 28, 34),
         # The village in the reference is built on a rock and steps up it, so mountains needs the
         # crag ramp the desert has. Its roofs are weathered dark shingle, not tile: steep, packed
         # tight and at a dozen heights, which is the whole silhouette.
-        "crag": (118, 116, 124), "crag_dk": (84, 82, 92), "crag_lit": (152, 150, 156),
+        "crag": (142, 126, 104), "crag_dk": (104, 92, 74), "crag_lit": (172, 158, 134),
         "shingle": (88, 80, 74), "shingle_dk": (60, 54, 50), "shingle_lit": (118, 108, 98),
         "beam": (78, 64, 52), "beam_dk": (52, 42, 34),
         "plaster": (208, 204, 196), "plaster_sh": (166, 162, 156),
@@ -234,6 +234,15 @@ PAL = {
         # The shaded side of a trunk and the litter under it. Shared, because a palm
         # grows in a desert oasis and over a jungle river both.
         "trunk_sh": (56, 44, 36), "trunk_lit": (78, 62, 50),
+        # Warm ashlar, off the town reference: cut stone, laid flat-roofed and stacked up a rock.
+        # Warmer than the grass's limestone on purpose -- the two places that both build in stone
+        # have to differ in something a glance can catch, and the temperature of it is that thing.
+        "ochre": (198, 180, 144), "ochre_dk": (152, 136, 106), "ochre_lit": (226, 212, 180),
+        # The red cones on the fortress's drum towers, and the pennants over them. This is the only
+        # saturated colour anywhere in the six environments, which is the whole point of spending
+        # it here: one look at a red roof and you know which place you are fighting in.
+        "redtile": (180, 76, 58), "redtile_dk": (134, 52, 42), "redtile_lit": (208, 112, 84),
+        "banner": (198, 66, 54), "banner_pale": (238, 232, 218),
         "glow": (255, 214, 120), "fence": (110, 102, 92), "trunk": (84, 68, 56),
         "crown": (72, 110, 86), "crown_dk": (48, 80, 66), "crown_lit": (98, 136, 104),
     },

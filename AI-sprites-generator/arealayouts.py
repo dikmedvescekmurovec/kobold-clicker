@@ -9,6 +9,7 @@ Every plan below is transcribed from the hand-written settlement it replaces, so
 after the engine lands should look like the one before it.
 """
 import lay_dirt as _dirt
+import lay_mountains as _mtn
 import lay_forest as _forest
 import lay_ice as _ice
 from areaplan import Belt, Course, Fix, Land, Plan, Row
@@ -1141,6 +1142,8 @@ LAYOUTS = {
         "town": (HEARTHS, DRIFT_TOWN, HARBOUR, WINTER_HOLD),
         "fortress": (GLASS_CROWN, FROZEN_COURT, RIME_HALL, AURORA_GATE),
     },
+    # Mountains build their own way now; the catalogue is in lay_mountains.py.
+    "mountains": _mtn.LAYOUTS,
     # Dirt builds its own way now; its catalogue is in lay_dirt.py.
     "dirt": _dirt.LAYOUTS,
     # Ice builds its own way now; its catalogue is in lay_ice.py.

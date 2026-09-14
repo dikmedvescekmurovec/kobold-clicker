@@ -722,6 +722,36 @@ def audit(*_):
     from arealayouts import LAYOUTS
 
     bad = 0
+    # A piece anchored on the crest is drawn at the rock's single highest row, but a mesa is only
+    # that high in the middle: its profile is (1 - t**1.7), so a piece placed further out hangs
+    # over the shoulder by the difference. A plan can pay that back with a positive `y`, which is
+    # exactly what the hand-written ksar does -- its wall sits 14 below the crest so it meets the
+    # rock -- so the check has to model the drop and subtract the offset, not just measure across.
+    for style, variants in sorted(LAYOUTS.items()):
+        for variant, plans in sorted(variants.items()):
+            for plan in plans:
+                rock = None
+                for step in plan.steps:
+                    if isinstance(step, P.Land) and step.kind == "mesa":
+                        rock = step
+                    on = getattr(step, "on", None)
+                    if rock is None or on not in ("crest", "land"):
+                        continue
+                    if not isinstance(step, P.Fix):
+                        continue                       # a Course walks the profile by itself
+                    if on == "land" and step.span is None:
+                        continue                       # a point piece on the land is always right
+                    ends = ([step.span[0], step.span[1]] if getattr(step, "span", None)
+                            else [step.x])
+                    here = 0.0 if on == "crest" else                         (min(1.0, abs(step.x - rock.at) / max(1, rock.half)) ** 1.7) * rock.h * 0.9
+                    for e in ends:
+                        t = min(1.0, abs(e - rock.at) / max(1, rock.half))
+                        gap = (t ** 1.7) * rock.h * 0.9 - here - step.y
+                        if gap > 10:
+                            print("  %s/%s/%s: %r at %+d floats ~%dpx over the rock"
+                                  % (style, variant, plan.name, step.piece, e, gap))
+                            bad += 1
+                            break
     for style, variants in sorted(LAYOUTS.items()):
         kit = P.KIT.get(style)
         if kit is None:
@@ -742,7 +772,7 @@ def audit(*_):
                         print("  %s/%s/%s wants %r, which %r has not got"
                               % (style, variant, plan.name, name, style))
                         bad += 1
-    print("unknown piece names:", bad)
+    print("piece problems:", bad)
 
 
 if __name__ == "__main__":
