@@ -202,7 +202,7 @@ def cover(im, pal, env, seed):
 
 def settlement(im, pal, env, variant, seed, layout):
     """Lay the variant's `layout`-th plan, in whatever this place builds with."""
-    plans = LAYOUTS[P.STYLE[env]].get(variant)
+    plans = LAYOUTS[env].get(variant)
     if not plans:
         return
     P.run(im, pal, env, plans[(layout - 1) % len(plans)], seed)

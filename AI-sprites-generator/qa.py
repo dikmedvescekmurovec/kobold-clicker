@@ -19,8 +19,8 @@ RING = [(x, y) for x, y in HEX_PIXELS if BORDER[y][x] < 1.5]
 ## headroom a real runaway needs to hide in. Each of these is that environment's own measured
 ## maximum plus room for the ramps its culture still wants, and each is re-recorded when its kit
 ## lands. The check is a tripwire for an un-quantised blend, not a budget to paint up to.
-AREA_COLOUR_CEILING = {"grass": 81, "dirt": 88, "desert": 74, "ice": 86, "forest": 100,
-                       "mountains": 100}
+AREA_COLOUR_CEILING = {"grass": 112, "dirt": 103, "desert": 74, "ice": 102, "forest": 109,
+                       "mountains": 107}
 ## Desert is frozen: it already matches its reference photographs and is the hand-written original
 ## the layout engine was generalised from. These are md5 of the raw 576x324 pixels of its twenty
 ## scenes -- before the 4x upscale, before disk, so the check needs no build to have run and no

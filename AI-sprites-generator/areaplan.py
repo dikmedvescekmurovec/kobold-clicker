@@ -25,6 +25,7 @@ from collections import namedtuple
 
 import areabuild as B
 import bld_desert as D
+import bld_grass as G
 import bld_forest as F
 import bld_dirt as R
 import bld_mountains as M
@@ -107,7 +108,7 @@ class Site:
         self.seed = seed
         self.plan = plan
         self.cx, self.base = plan.cx, plan.base
-        self.kit = KIT[STYLE[env]]
+        self.kit = KIT[env]
         self.top = {}              # x -> the standing line, where a land step publishes one
         self.crest = plan.base     # the highest that land reaches
         self.keep = []             # spans later rows must not build across
@@ -222,100 +223,25 @@ def run(im, pal, env, plan, seed):
 ## in the north and rammed earth in the desert. A style is a dict, so a new one is a few overrides
 ## rather than a new table: KIT["cone"] = dict(KIT["north"], house=_roundhouse).
 KIT = {
-    "north": dict(
-        house=lambda s, x, y, w, h: B.hut(s.px, x, y, w, h, s.pal, s.rng),
-        hall=lambda s, x, y, w, h: B.longhouse(s.px, x, y, w, h, s.pal, s.rng),
-        tower=lambda s, x, y, w, h: B.tower(s.px, x, y, w, h, s.pal),
-        spire=lambda s, x, y, w, h: B.tower(s.px, x, y, w, h, s.pal, roofed=True),
-        keep=lambda s, x, y, w, h: B.keep(s.px, x, y, w, h, s.pal, s.rng),
-        gate=lambda s, x, y, w, h: B.gatehouse(s.px, x, y, w, h, s.pal),
+    # Grass, written from its own reference photographs: cream plaster in dark oak framing on pale
+    # limestone, roofs steeper than anyone else's here, and a round stair-turret under a tall
+    # slender cone. Everything old is green -- see bld_grass.py.
+    "grass": dict(
+        house=lambda s, x, y, w, h: G.gable_house(s.px, x, y, w, h, s.pal, s.rng),
+        street=lambda s, x, y, w, h: G.jetty_house(s.px, x, y, w, h, s.pal, s.rng),
+        hall=lambda s, x, y, w, h: G.manor(s.px, x, y, w, h, s.pal, s.rng),
+        keep=lambda s, x, y, w, h: G.manor(s.px, x, y, w, h, s.pal, s.rng),
+        tower=lambda s, x, y, w, h: G.drum_tower(s.px, x, y, w, h, s.pal, s.rng, coned=False),
+        spire=lambda s, x, y, w, h: G.stair_turret(s.px, x, y, w, h, s.pal, s.rng),
+        great=lambda s, x, y, w, h: G.drum_tower(s.px, x, y, w, h, s.pal, s.rng, flag=True),
+        gate=lambda s, x, y, w, h: G.gothic_gate(s.px, x, y, w, h, s.pal, s.rng),
         tree=lambda s, x, y, w, h: _tree(s, x, y, int(h * 1.7)),
-        wall=lambda s, x0, x1, y, h: B.wall_run(s.px, x0, x1, y, h, s.pal),
+        wall=lambda s, x0, x1, y, h: G.mossy_curtain(s.px, x0, x1, y, h, s.pal, crenels=False),
+        bulwark=lambda s, x0, x1, y, h: G.mossy_curtain(s.px, x0, x1, y, h, s.pal),
         yard=lambda s, x0, x1, y, h: B.fence(s.px, x0, x1, y, s.pal),
-        belt=lambda s, x0, x1, y, n, scrub: B.hedgerow(s.im, s.next_seed(), x0, x1, y, s.pal,
-                                                       n, scrub),
-    ),
-    # Plaster between dark uprights on a stone footing, under steep clay tile: what the grass
-    # references are all of. The frame is the read at this size, not the panel between it.
-    "timber": dict(
-        house=lambda s, x, y, w, h: B.cottage(s.px, x, y, w, h, s.pal, s.rng),
-        hall=lambda s, x, y, w, h: B.townhouse(s.px, x, y, w, h, s.pal, s.rng),
-        tower=lambda s, x, y, w, h: B.tower(s.px, x, y, w, h, s.pal),
-        spire=lambda s, x, y, w, h: B.turret(s.px, x, y, w, h, s.pal),
-        keep=lambda s, x, y, w, h: B.great_hall(s.px, x, y, w, h, s.pal, s.rng),
-        gate=lambda s, x, y, w, h: B.gatehouse(s.px, x, y, w, h, s.pal),
-        stair=lambda s, x0, x1, y, h: B.stair(s.px, x0, x1, y, h, s.pal),
-        tree=lambda s, x, y, w, h: _tree(s, x, y, int(h * 1.7)),
-        wall=lambda s, x0, x1, y, h: B.wall_run(s.px, x0, x1, y, h, s.pal),
-        yard=lambda s, x0, x1, y, h: B.fence(s.px, x0, x1, y, s.pal),
-        belt=lambda s, x0, x1, y, n, scrub: B.hedgerow(s.im, s.next_seed(), x0, x1, y, s.pal,
-                                                       n, scrub),
-    ),
-    # Steep dark shingle over stone, built on a rock and climbing it. Shares the timber kit's
-    # framing and hall; what makes it its own place is the pitch of the roofs and the crag.
-    "alpine": dict(
-        house=lambda s, x, y, w, h: B.chalet(s.px, x, y, w, h, s.pal, s.rng),
-        hall=lambda s, x, y, w, h: B.gallery(s.px, x, y, w, h, s.pal, s.rng),
-        tower=lambda s, x, y, w, h: B.tower(s.px, x, y, w, h, s.pal),
-        spire=lambda s, x, y, w, h: B.tower(s.px, x, y, w, h, s.pal, roofed=True),
-        keep=lambda s, x, y, w, h: B.great_hall(s.px, x, y, w, h, s.pal, s.rng),
-        gate=lambda s, x, y, w, h: B.gatehouse(s.px, x, y, w, h, s.pal),
-        stair=lambda s, x0, x1, y, h: B.stair(s.px, x0, x1, y, h, s.pal),
-        tree=lambda s, x, y, w, h: _tree(s, x, y, int(h * 1.7)),
-        wall=lambda s, x0, x1, y, h: B.wall_run(s.px, x0, x1, y, h, s.pal),
-        yard=lambda s, x0, x1, y, h: B.palisade(s.px, x0, x1, y, s.pal, max(6, h + 4)),
-        belt=lambda s, x0, x1, y, n, scrub: B.hedgerow(s.im, s.next_seed(), x0, x1, y, s.pal,
-                                                       n, scrub),
-    ),
-    # Dirt: iron-age roundhouses on the flat, a stone street with timber galleries, and a keep
-    # that has already fallen -- the only ruin in the set, and the thing that makes the place read
-    # as older than the others rather than just browner.
-    "celtic": dict(
-        house=lambda s, x, y, w, h: B.roundhouse(s.px, x, y, w, h, s.pal, s.rng),
-        hall=lambda s, x, y, w, h: B.gallery(s.px, x, y, w, h, s.pal, s.rng),
-        tower=lambda s, x, y, w, h: B.tower(s.px, x, y, w, h, s.pal),
-        spire=lambda s, x, y, w, h: B.tower(s.px, x, y, w, h, s.pal, roofed=True),
-        keep=lambda s, x, y, w, h: B.ruin(s.px, x, y, w, h, s.pal, s.rng),
-        gate=lambda s, x, y, w, h: B.gatehouse(s.px, x, y, w, h, s.pal),
-        stair=lambda s, x0, x1, y, h: B.stair(s.px, x0, x1, y, h, s.pal),
-        tree=lambda s, x, y, w, h: _tree(s, x, y, int(h * 1.7)),
-        wall=lambda s, x0, x1, y, h: B.wall_run(s.px, x0, x1, y, h, s.pal),
-        yard=lambda s, x0, x1, y, h: B.fence(s.px, x0, x1, y, s.pal),
-        belt=lambda s, x0, x1, y, n, scrub: B.hedgerow(s.im, s.next_seed(), x0, x1, y, s.pal,
-                                                       n, scrub),
-    ),
-    # Ice: snow domes in the village, dark timber under a thick cap in the town, and needles of
-    # carved ice for the palace. `dome` is its own piece because the two tiers build differently.
-    "snow": dict(
-        house=lambda s, x, y, w, h: B.snowhouse(s.px, x, y, w, h, s.pal, s.rng),
-        dome=lambda s, x, y, w, h: B.igloo(s.px, x, y, w, h, s.pal, s.rng),
-        hall=lambda s, x, y, w, h: B.snowhouse(s.px, x, y, w, h, s.pal, s.rng),
-        tower=lambda s, x, y, w, h: B.ice_spire(s.px, x, y, w, h, s.pal),
-        spire=lambda s, x, y, w, h: B.ice_spire(s.px, x, y, w, h, s.pal),
-        keep=lambda s, x, y, w, h: B.great_hall(s.px, x, y, w, h, s.pal, s.rng),
-        gate=lambda s, x, y, w, h: B.gatehouse(s.px, x, y, w, h, s.pal),
-        stair=lambda s, x0, x1, y, h: B.stair(s.px, x0, x1, y, h, s.pal),
-        tree=lambda s, x, y, w, h: _tree(s, x, y, int(h * 1.7)),
-        wall=lambda s, x0, x1, y, h: B.wall_run(s.px, x0, x1, y, h, s.pal),
-        yard=lambda s, x0, x1, y, h: B.fence(s.px, x0, x1, y, s.pal),
-        belt=lambda s, x0, x1, y, n, scrub: B.hedgerow(s.im, s.next_seed(), x0, x1, y, s.pal,
-                                                       n, scrub),
-    ),
-    # Forest: the references are Indonesian, not Carpathian. Cone thatch nearly to the ground,
-    # longhouses on posts over water, and a temple of tiered merus behind a split gate.
-    "cone": dict(
-        house=lambda s, x, y, w, h: B.cone_house(s.px, x, y, w, h, s.pal, s.rng),
-        hall=lambda s, x, y, w, h: B.stilt_house(s.px, x, y, w, h, s.pal, s.rng),
-        tower=lambda s, x, y, w, h: B.meru(s.px, x, y, w, h, s.pal, s.rng),
-        spire=lambda s, x, y, w, h: B.meru(s.px, x, y, w, h, s.pal, s.rng),
-        keep=lambda s, x, y, w, h: B.meru(s.px, x, y, w, h, s.pal, s.rng),
-        gate=lambda s, x, y, w, h: B.split_gate(s.px, x, y, w, h, s.pal),
-        stair=lambda s, x0, x1, y, h: B.stair(s.px, x0, x1, y, h, s.pal),
-        tree=lambda s, x, y, w, h: _tree(s, x, y, int(h * 1.7)),
-        wall=lambda s, x0, x1, y, h: B.wall_run(s.px, x0, x1, y, h, s.pal),
-        yard=lambda s, x0, x1, y, h: B.fence(s.px, x0, x1, y, s.pal),
-        belt=lambda s, x0, x1, y, n, scrub: B.hedgerow(s.im, s.next_seed(), x0, x1, y, s.pal,
-                                                       n, scrub),
+        stair=lambda s, x0, x1, y, h: G.timber_stair(s.px, x0, x1, y, h, s.pal),
+        belt=lambda s, x0, x1, y, n, scrub: G.meadow_belt(s.im, s.next_seed(), x0, x1, y, s.pal,
+                                                          n, scrub),
     ),
     # Mountains, written from its own reference photographs: warm cut stone laid flat-roofed,
     # dark timber galleries bolted on the front, arched openings, and round drums under red cones.
@@ -415,35 +341,14 @@ KIT = {
     ),
 }
 
-## The grand pieces every fortress draws on. They differ between places only by the palette they are
-## handed, so they are injected into each style rather than repeated in six dicts -- and they are
-## their own names rather than replacing `wall` and `gate`, because the towns want the modest ones.
-_GRAND = dict(
-    great=lambda s, x, y, w, h: B.grand_tower(s.px, x, y, w, h, s.pal, s.rng, flag=True),
-    plain_great=lambda s, x, y, w, h: B.grand_tower(s.px, x, y, w, h, s.pal, s.rng),
-    crown=lambda s, x, y, w, h: B.grand_tower(s.px, x, y, w, h, s.pal, s.rng, roofed=True,
-                                              flag=True),
-    bulwark=lambda s, x0, x1, y, h: B.curtain(s.px, x0, x1, y, h, s.pal),
-    barbican=lambda s, x, y, w, h: B.great_gate(s.px, x, y, w, h, s.pal, s.rng),
-    steps=lambda s, x, y, w, h: B.grand_steps(s.px, x, y, w, h, s.pal),
-)
-## Which styles are still on the shared castle. The list shrinks by one as each place is written
-## from its own references, and when it is empty `_GRAND` and its six pieces go. It is an explicit
-## list rather than "every style" so that a finished place cannot quietly reach back for a curtain
-## wall -- `qa.py audit` fails on the name instead of silently resolving it.
-_ON_THE_OLD_CASTLE = ("north", "timber", "alpine", "celtic", "snow", "cone", "desert")
-## ice and forest are off it: they build their fortresses out of their own vocabulary.
-for _name_ in _ON_THE_OLD_CASTLE:
-    for _piece_, _fn_ in _GRAND.items():
-        KIT[_name_].setdefault(_piece_, _fn_)
-
-
-## Which vocabulary each place builds with. Grass keeps the northern timber and gables as its own
-## style; the reference photographs put the other four somewhere else entirely, and each moves off
-## it as its kit is written.
-STYLE = {"grass": "timber", "dirt": "dirt", "ice": "ice", "forest": "forest",
-         "mountains": "mountains", "desert": "desert"}
-
+## Every place now builds its fortress out of its own vocabulary, so the shared castle that used
+## to be injected into all of them -- a grand tower, a curtain, a great gate, a flight of steps --
+## is gone, along with the six kits that leaned on it. It is worth saying why, because it is the
+## whole reason this work happened: six cultures drawing from one set of castle pieces produced
+## six of the same castle in six palettes, and no amount of retinting was ever going to fix that.
+## `KIT[env]` and `LAYOUTS[env]` are keyed by the environment itself now. There used to be a
+## style name in between, so that several places could share one vocabulary; nothing shares any
+## more, and the hop was the last thing keeping the idea alive that they might.
 ## What grows here: spruce in the cold and the woods, broadleaf everywhere else.
 TREE = {"grass": "broadleaf", "dirt": "broadleaf", "desert": "palm",
         "ice": "conifer", "forest": "broadleaf", "mountains": "conifer"}

@@ -32,7 +32,7 @@ PAL = {
         "roof_dk": (132, 68, 56), "ink": (52, 44, 48), "dark": (40, 36, 40),
         # Half-timbering, after the references: clay tile over pale plaster panels between dark
         # uprights, on a stone footing, with moss on anything old enough to be stone.
-        "tile": (186, 118, 72), "tile_dk": (140, 84, 52), "tile_lit": (214, 154, 100),
+        "tile": (174, 92, 58), "tile_dk": (126, 62, 42), "tile_lit": (204, 132, 82),
         "beam": (92, 62, 44), "beam_dk": (64, 42, 30),
         "plaster": (238, 230, 208), "plaster_sh": (204, 192, 166),
         "moss": (116, 142, 84), "moss_dk": (82, 104, 62),
@@ -43,6 +43,13 @@ PAL = {
         # The shaded side of a trunk and the litter under it. Shared, because a palm
         # grows in a desert oasis and over a jungle river both.
         "trunk_sh": (74, 52, 34), "trunk_lit": (96, 70, 46),
+        # A slate-dark roof for the town, beside the village's terracotta. The references have
+        # both -- small houses under warm tile, big ones under something nearly black -- and the
+        # contrast between them is most of what separates the two tiers.
+        "slate": (86, 84, 88), "slate_dk": (58, 56, 62), "slate_lit": (116, 114, 118),
+        # Moss, lit. The fortress reference is not a grey castle with moss on it, it is a green
+        # castle, so the green needs a highlight of its own or it reads as dirt on stone.
+        "moss_lit": (146, 172, 108),
         "glow": (255, 214, 120), "fence": (132, 102, 68), "trunk": (108, 78, 52),
         "crown": (92, 167, 84), "crown_dk": (52, 89, 72), "crown_lit": (119, 181, 98),
     },
@@ -237,7 +244,7 @@ PAL = {
         # Warm ashlar, off the town reference: cut stone, laid flat-roofed and stacked up a rock.
         # Warmer than the grass's limestone on purpose -- the two places that both build in stone
         # have to differ in something a glance can catch, and the temperature of it is that thing.
-        "ochre": (198, 180, 144), "ochre_dk": (152, 136, 106), "ochre_lit": (226, 212, 180),
+        "ochre": (188, 180, 158), "ochre_dk": (142, 136, 118), "ochre_lit": (216, 210, 192),
         # The red cones on the fortress's drum towers, and the pennants over them. This is the only
         # saturated colour anywhere in the six environments, which is the whole point of spending
         # it here: one look at a red roof and you know which place you are fighting in.
