@@ -136,15 +136,23 @@ def skyline(im, pal, env, seed):
 
 # ---------------------------------------------------------------- ground cover
 
-def framing(im, pal, seed):
-    """The tree the shot is taken from: two trunks at the edges and its leaves hanging in.
+## How many near trunks the shot is framed by. Two of them stand the camera in a clearing; one
+## leans the shot without closing it, which is what the grass village reference does -- a single
+## tree at the left with its leaves hanging in over the meadow. A table rather than a test against
+## one environment's name, because more than one place has a tree in front of it.
+FRAMING = {"forest": 2}
+
+
+def framing(im, pal, seed, trunks=2):
+    """The tree the shot is taken from: a trunk at each edge and its leaves hanging in.
 
     Drawn after everything else, the road included -- it is the nearest thing in the picture.
     """
     rng = random.Random(seed)
     px = im.load()
     B.edge_trunk(px, 12, 306, 32, pal, rng)
-    B.edge_trunk(px, W - 20, 298, 26, pal, rng)
+    if trunks > 1:
+        B.edge_trunk(px, W - 20, 298, 26, pal, rng)
     canopy(im, seed + 2, pal)
 
 
@@ -249,8 +257,8 @@ def scene(env, variant, seed=0, layout=1):
     if variant == "road":
         verge = B.road(im, seed + 9, pal, GROUND_TOP)
         A.verge_tufts(im, seed + 13, verge, pal["clumps"][2:])
-    if env == "forest":
-        framing(im, pal, seed + 41)                   # last: the near tree stands in front of all
+    if env in FRAMING:
+        framing(im, pal, seed + 41, FRAMING[env])     # last: the near tree stands in front of all
     return im
 
 

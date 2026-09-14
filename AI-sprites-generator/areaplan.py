@@ -24,6 +24,7 @@ import random
 from collections import namedtuple
 
 import areabuild as B
+import bld_desert as D
 import arealib as A
 from arealib import H, W
 
@@ -138,6 +139,10 @@ def _land(s, l):
         # Drawn like land because it is laid down in order with it: haze at the foot of a crag,
         # which is what stops a tall rock reading as a tall rock rather than as height.
         B.mist(s.im, s.next_seed(), s.cx + l.at, l.half, s.base - l.depth, s.pal, height=l.h)
+    elif l.kind == "water":
+        # `depth` is where the waterline sits below the plan's base and `h` is how deep the band
+        # goes. It belongs last in a plan for the reason its docstring gives.
+        B.water(s.im, s.next_seed(), s.cx + l.at, l.half, s.base + l.depth, l.h, s.pal)
     elif l.kind == "mesa":
         tops = B.mesa(s.px, random.Random(s.next_seed()), s.cx + l.at, s.base, l.half, l.h, s.pal)
         s.top.update(tops)
@@ -309,16 +314,16 @@ KIT = {
                                                        n, scrub),
     ),
     "desert": dict(
-        house=lambda s, x, y, w, h: B.mud_house(s.px, x, y, w, h, s.pal, s.rng),
-        hall=lambda s, x, y, w, h: B.mud_house(s.px, x, y, w, h, s.pal, s.rng, taper=0.06),
-        cluster=lambda s, x, y, w, h: B.mud_cluster(s.px, x, y, w, h, s.pal, s.rng),
-        tower=lambda s, x, y, w, h: B.kasbah_tower(s.px, x, y, w, h, s.pal),
-        spire=lambda s, x, y, w, h: B.kasbah_tower(s.px, x, y, w, h, s.pal),
-        keep=lambda s, x, y, w, h: B.mud_keep(s.px, x, y, w, h, s.pal, s.rng),
-        gate=lambda s, x, y, w, h: B.mud_gate(s.px, x, y, w, h, s.pal),
+        house=lambda s, x, y, w, h: D.mud_house(s.px, x, y, w, h, s.pal, s.rng),
+        hall=lambda s, x, y, w, h: D.mud_house(s.px, x, y, w, h, s.pal, s.rng, taper=0.06),
+        cluster=lambda s, x, y, w, h: D.mud_cluster(s.px, x, y, w, h, s.pal, s.rng),
+        tower=lambda s, x, y, w, h: D.kasbah_tower(s.px, x, y, w, h, s.pal),
+        spire=lambda s, x, y, w, h: D.kasbah_tower(s.px, x, y, w, h, s.pal),
+        keep=lambda s, x, y, w, h: D.mud_keep(s.px, x, y, w, h, s.pal, s.rng),
+        gate=lambda s, x, y, w, h: D.mud_gate(s.px, x, y, w, h, s.pal),
         tree=lambda s, x, y, w, h: B.palm(s.px, x, y, int(h * 1.7), s.pal, s.rng),
-        wall=lambda s, x0, x1, y, h: B.mud_wall(s.px, x0, x1, y, h, s.pal),
-        yard=lambda s, x0, x1, y, h: B.mud_wall(s.px, x0, x1, y, h, s.pal, crown=False),
+        wall=lambda s, x0, x1, y, h: D.mud_wall(s.px, x0, x1, y, h, s.pal),
+        yard=lambda s, x0, x1, y, h: D.mud_wall(s.px, x0, x1, y, h, s.pal, crown=False),
         belt=lambda s, x0, x1, y, n, scrub: B.palm_belt(s.im, s.next_seed(), x0, x1, y, s.pal,
                                                         n, scrub),
     ),
