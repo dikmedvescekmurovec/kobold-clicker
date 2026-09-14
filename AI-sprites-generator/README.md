@@ -21,7 +21,9 @@ Godot skips this folder because of `.gdignore`.
 | `python qa.py showcase <tag>` | One map mixing all terrain, variants, roads and towns (illegal-border check included) |
 | `python qa.py blends <tag>` | Blend overlays: spill, seam coverage and seam match vs `v1`, illegal borders, plus `qa/blend_pairs_<tag>.png` (before/after for each allowed pair), `qa/blend_map_<tag>.png` and 3× zooms `qa/blend_<hi>_<lo>_<tag>.png` |
 | `python qa.py slimes <tag>` | Slimes: silhouette, palette and ramp checks, plus `qa/slimes_<tag>.png` (the baseline above all six, every frame) and `qa/slimes_ground_<tag>.png` |
-| `python qa.py areas <tag>` | Battle backdrops: skeleton, variant, palette-size and layout-twin checks, plus the 6x5 contact sheet `qa/area_sheet_<tag>.png` and the layouts sheet `qa/area_layouts_<tag>.png` |
+| `python qa.py areas <tag> [env...]` | Battle backdrops: skeleton, variant, palette-size, layout-twin and cross-environment `cousins` checks, plus the 6x5 contact sheet `qa/area_sheet_<tag>.png` and the layouts sheet. Name environments to scope it -- a full pass is over two minutes, one place is ten seconds |
+| `python qa.py frozen check` | The desert's twenty scenes against their recorded hashes. Two seconds; run it after anything that touches a shared primitive |
+| `python qa.py audit` | Every piece name every plan asks for, resolved against the kit that would draw it, plus whether anything anchored to a rock actually sits on it. Under a second, no rendering |
 | `python qa.py ui <tag>` | 9-slice UI: size, silhouette, outline and 8-periodicity checks, plus `qa/ui_sheet_<tag>.png` and a `qa/ui_mock_<tag>.png` showing every state and the panels stretched from 16 px to 428 px |
 | `python build.py` | Exports every hex PNG through Aseprite into `../AI-sprites/`, writes the spritesheet and JSON, then verifies each file pixel by pixel |
 | `python build_ui.py` | The same for the UI sprites, into `../AI-sprites/ui/` with its own `ui_sheet.json` |
@@ -44,10 +46,12 @@ Godot skips this folder because of `.gdignore`.
 | `slimes.py` | The per-environment slimes: the baseline's eight colours, and the five-step `hexlib.PALETTE` body ramp each environment swaps in |
 | `arealib.py` | Backdrop toolkit: banded skies, cloud ceilings and banks, triangular mountain ranges, ridges, foliage clumps, rocks, furrows, patches, flowers |
 | `areapal.py` | One palette per environment for the backdrops, plus the peak and haze colours |
-| `areabuild.py` | What stands in a backdrop, in six vocabularies -- one a place: huts, longhouses, towers, curtain walls, gatehouse, fences, trees, conifers, signpost, road, and the desert's own mud-brick set (battered blocks, domes, kasbah towers, earth walls and gate, relief lattice, pointed merlons, palms, the crag a ksar climbs) |
+| `areabuild.py` | The primitives and what every place shares: rectangles and boxes, road, rock, water, haze, trees, fences, a signpost. Nothing that is *built* -- that lives in the six `bld_<env>.py` |
 | `areas.py` | The scenes themselves: skylines, ground cover, the settlement dispatch, and the `sheet` and `layout_sheet` previews. `scene(env, variant, seed, layout)` -- one layout step moves the *shared* seed, so `plain` and `road`, which build nothing, still come in four |
-| `areaplan.py` | The settlement layout engine: `Site`, the `Land`/`Row`/`Course`/`Fix`/`Belt` steps, and the `KIT`/`STYLE`/`TREE`/`LATE` tables that say what each place builds with. A plan is an ordered list of steps and list order is draw order |
-| `arealayouts.py` | The catalogue: `LAYOUTS[style][variant]`, one plan per layout index |
+| `bld_<env>.py` | One culture's own pieces, six files. A piece here cannot be reached by another environment, which is the point rather than the filing -- see the rule below |
+| `lay_<env>.py` | One culture's own twelve plans, four to a variant |
+| `areaplan.py` | The settlement layout engine: `Site`, the `Land`/`Row`/`Course`/`Fix`/`Belt` steps, and the `KIT`/`TREE`/`LATE` tables. `KIT[env]` -- there is no style name in between, because nothing is shared. A plan is an ordered list of steps and list order is draw order |
+| `arealayouts.py` | A thin index over the six `lay_<env>` catalogues: `LAYOUTS[env][variant]`, one plan per layout index |
 | `ui.py` | 9-slice UI: `RectTile` (rectangular, not hex), rect primitives, the two panels and the 16 buttons |
 | `build.py`, `build_ui.py`, `build_slimes.py`, `emit.lua` | Export through Aseprite in batch mode, JSON metadata, verification. `emit.lua` takes per-sprite `w`/`h`, so both builds share it |
 
@@ -75,7 +79,43 @@ Godot skips this folder because of `.gdignore`.
 - **One skeleton, six places:** every scene has the horizon at y=200 and the land starting at y=202, with four bands under it. An enemy standing at a given height stands in the same spot whatever the backdrop, and `qa.py areas` fails if a scene moves the land.
 - **A settlement is a plan, not a function.** `areaplan.py` walks a cursor along a span dropping seeded pieces, so two seeds give two villages rather than one village jittered; `arealayouts.py` says which plan each (style, variant) builds. The bar the engine had to clear was the ksar -- a `Land("mesa")` publishes a standing line, a `Course` walks down it and draws the highest houses first, which is why it reads as a stack of cubes and not a pile.
 - **Measure a layout family by its roofline, not by its pixels.** Two seeds of one plan already differ in thousands of pixels and still read as one town, and a whole-image diff passes at about a third whatever you do, because the sky and the cover are seeded anyway. `qa.py areas` takes the topmost row where a scene differs from `plain` at the same layout -- which isolates the settlement exactly -- and counts columns whose roofline moved, out of the columns that have anything built in them.
-- **Six places, six ways of building.** `areaplan.KIT` holds one entry a style and `STYLE` says which environment builds in which: `timber` (grass: plaster between uprights on a stone footing, clay tile), `alpine` (mountains: steep dark shingle, built on a crag and climbing it), `celtic` (dirt: thatch cones on a wattle drum, and the set's only ruin), `snow` (ice: domes in the village, dark timber under a thick cap in the town, needles of ice for the palace), `cone` (forest: Wae Rebo thatch, stilted longhouses, tiered merus -- the references are Indonesian, not Carpathian), `desert` (the kasbah set). A style is a dict, so a seventh is overrides on an existing one rather than a new table.
+- **Six places, six ways of building, and nothing shared between them.** Each environment commits
+  to one wall material, one roof logic and one signature motif, and no two share any of the three:
+
+  | env | wall | roof | signature |
+  |---|---|---|---|
+  | grass | cream plaster in dark oak, on limestone | steep, dormered | round stair-turret under a tall slate cone |
+  | dirt | brown daub and undressed rubble | fat thatch cone; flat crenellated | crossed poles over a thatch apex; grouped lancets |
+  | ice | dark timber and carved ice | upswept eaves under a load of snow | a warm light in every opening |
+  | forest | timber posts on mossy stone | receding stacked tiers | a finial on every apex |
+  | mountains | warm ashlar, timber galleries bolted on | flat parapet deck | red cone, pennant, arcaded viaduct |
+  | desert | red rammed earth, battered | flat parapet deck | pointed merlon teeth, incised lattice |
+
+  Both halves matter. Within one environment the village, the town and the fortress are the same
+  people at three scales; between environments no two build the same shape out of the same stuff.
+  `qa.py areas` measures the second half as `cousins`, and it takes both axes -- on silhouette
+  alone it called a gold temple and a white ice palace one place, and on material alone it would
+  miss four grey castles that each had a different `stone` value.
+
+- **A fortress is composed to three rules, in its own culture's terms.** One dominant mass with
+  everything stepping down from it. The base hidden, so you cannot see where it meets the ground --
+  haze, a curtain, a viaduct, whatever that place has. And the tallest thing carries that culture's
+  own crown: a slate cone and a pennant in grass, a red cone in the mountains, a needle in ice, a
+  gold finial in forest, toothed merlons in the desert, and in dirt nothing at all, because dirt's
+  fortress is a box with the top taken off and that is what makes it the grimmest of them.
+
+- **There was a shared castle once, and it is why this was rewritten.** A grand tower, a curtain,
+  a great gate and a flight of steps used to be injected into every style, so six cultures drew
+  from one set of castle pieces and differed only by tint -- four of the six fortresses were the
+  same building. Pieces now live one culture to a file and a plan can only reach its own, which
+  makes the mistake unavailable rather than merely discouraged.
+
+- **A piece standing on a rock wants `on="land"`, not `on="crest"`.** A mesa is only at full
+  height in the middle: its profile is `(1 - t**1.7)`, so anything anchored to the single highest
+  row and placed further out hangs in the air over the shoulder. `crest` is for things that must be
+  level with the summit, and a wall running wider than its rock is an outer curtain -- it belongs
+  at ground level with the citadel above it. `qa.py audit` checks this.
+
 - **A fortress is the one thing allowed to dominate the frame.** The twenty non-desert ones are hand-written rather than varied off a template, and each keeps three rules: height comes from ONE dominant mass with everything stepping down from it, never several towers of a height; the base is hidden, in `Land("mist")` or behind a curtain or over a `mesa`, because a castle you can see the bottom of is a building; and the tallest thing carries a `pennant`, which at this size does more for scale than another fifty pixels of stone. The first pass built them wide and low -- dirt's rose twenty-nine pixels above the horizon -- and they now clear a hundred.
 - **Haze must blend, and the blend must be quantised.** `mist` mixes toward the palette's `horizon` in three fixed steps. Replacing pixels outright drew a bright band across the curtain wall that read as damage, and a *continuous* mix is no longer a limited palette -- it put six scenes over the colour ceiling on its own, which is what that check is for.
 - **A ruin is drawn top-first.** Work out the broken profile, then draw each column only up to it. Painting the missing part dark instead puts a black slab on the skyline where there should be sky.

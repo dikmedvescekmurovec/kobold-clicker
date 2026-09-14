@@ -29,6 +29,26 @@ MINE = re.compile(r"^(%s)_(%s)(_\d+)?\.png(\.import)?$"
                   % ("|".join(areas.ENVS), "|".join(areas.VARIANTS)))
 
 
+def _locked():
+    """Which of the files we are about to overwrite something else is holding open.
+
+    Godot locks the PNGs it has imported, and without this the first one it holds raises part of
+    the way through the write loop -- leaving Assets/Area half old and half new, with `_prune`
+    possibly already run. A backdrop that is a mix of two builds is worse than no build at all,
+    so the question is asked before a single byte is written.
+    """
+    held = []
+    for name in sorted(os.listdir(OUT)):
+        if not MINE.match(name) or not name.endswith(".png"):
+            continue
+        try:
+            with open(os.path.join(OUT, name), "r+b"):
+                pass
+        except OSError:
+            held.append(name)
+    return held
+
+
 def _prune(keep):
     """Removes backdrops this script used to write and no longer does."""
     gone = []
@@ -41,6 +61,13 @@ def _prune(keep):
 
 def main():
     os.makedirs(OUT, exist_ok=True)
+    held = _locked()
+    if held:
+        print("refusing to build: %d file(s) are open elsewhere, the first being %s."
+              % (len(held), held[0]))
+        print("Close the Godot editor -- it locks the PNGs it has imported, and a build that")
+        print("dies part of the way through leaves Assets/Area half old and half new.")
+        raise SystemExit(1)
     problems = Counter()
     written = []
     # Compared as each one is written rather than at the end: holding all 120 at 2304x1296 would
