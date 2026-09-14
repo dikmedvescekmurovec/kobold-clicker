@@ -1,5 +1,6 @@
 """QA for each phase. Usage: python qa.py <phase1|phase2|phase3|showcase|blends|ui|slimes> <tag>
 Images are written to qa/<name>_<tag>.png so every run can be viewed under a fresh filename."""
+import hashlib
 import os
 import random
 import sys
@@ -12,10 +13,40 @@ from preview import contact_sheet, tiled_map
 
 os.makedirs("qa", exist_ok=True)
 RING = [(x, y) for x, y in HEX_PIXELS if BORDER[y][x] < 1.5]
-## How many distinct colours a backdrop may sample to. Each environment carries its own
-## ramps plus whatever it builds with, and a place with its own architecture needs more of
-## them than one borrowing a neighbour's.
-AREA_COLOUR_CEILING = 140
+## How many distinct colours a backdrop may sample to -- one number per environment rather than one
+## for all six. A single ceiling generous enough for the busiest place is no tripwire at all for the
+## quietest: at a flat 140 the worst scene in the set sampled 75, which is two and a half times the
+## headroom a real runaway needs to hide in. Each of these is that environment's own measured
+## maximum plus room for the ramps its culture still wants, and each is re-recorded when its kit
+## lands. The check is a tripwire for an un-quantised blend, not a budget to paint up to.
+AREA_COLOUR_CEILING = {"grass": 81, "dirt": 88, "desert": 74, "ice": 86, "forest": 100,
+                       "mountains": 100}
+## Desert is frozen: it already matches its reference photographs and is the hand-written original
+## the layout engine was generalised from. These are md5 of the raw 576x324 pixels of its twenty
+## scenes -- before the 4x upscale, before disk, so the check needs no build to have run and no
+## file Godot might be holding. Anything that moves one of them moved desert, and says which.
+DESERT_HASHES = {
+    "fortress_1": "722a27bb9fdc402e69800fb824ce260d",
+    "fortress_2": "460ceca2649bc097ffe8155dfe4d5dab",
+    "fortress_3": "30a25636c0a898c0e2ed17766491eee8",
+    "fortress_4": "6e9d5a5089ec433938576ddec67d9802",
+    "plain_1": "0518c9cf329739b7cb47865d4ae42beb",
+    "plain_2": "66f8a4713479e4b9d564312308e5442f",
+    "plain_3": "d1104120ce618c52fff0c6c86d34bcad",
+    "plain_4": "a4feb57ba95f96b6a53a99881e6bbd97",
+    "road_1": "b16cb4c99ec65b1d754c30842cd39d96",
+    "road_2": "9572573a0c52e177e796730f08463e61",
+    "road_3": "390ba3773f0d38a3b081fe6695c4ff34",
+    "road_4": "e021bfc782fba5b8e0c22c248dcebcea",
+    "town_1": "9d3f389a4c33aa1443eae1fef9070f1f",
+    "town_2": "c29d556fbb2339cadf0b1a1b3f5e24b7",
+    "town_3": "8a66c82d1959dbddf7cb02ac5c69d43e",
+    "town_4": "dde9f38659b640f5c2fb2c6a45d23c2e",
+    "village_1": "4f150755295e09c9c6bb5dc1d4cf29da",
+    "village_2": "b9a9184dc57e2bd18399d6b536ef22d4",
+    "village_3": "7dc8369a43c5529c22fc54e58f50eeca",
+    "village_4": "5bfbce253d6462dae80fe1fbbc87ccc8",
+}
 OPP = {0: 3, 1: 4, 2: 5, 3: 0, 4: 1, 5: 2}
 
 
@@ -447,17 +478,67 @@ def _silhouette(built, bare, y0, y1, step=2):
     return tops
 
 
-def areas(tag):
-    """The battle backdrops: skeleton, variant and layout checks, plus the contact sheets."""
+def _slopes(tops, y1):
+    """How a roofline moves, as four fractions: flat, gentle, steep, vertical.
+
+    This is the roof logic of a culture reduced to a number. A flat-decked kasbah, a steep-gabled
+    town and a cone-thatch village produce three quite different distributions however the pieces
+    are arranged, which is what makes it a fair test of whether two environments build alike --
+    a pixel diff is not, because two palettes always differ and two arrangements always differ.
+    """
+    buckets = [0, 0, 0, 0]
+    for a, b in zip(tops, tops[1:]):
+        if a >= y1 and b >= y1:                        # both columns empty sky: not a roofline
+            continue
+        d = abs(a - b)
+        buckets[0 if d == 0 else 1 if d <= 2 else 2 if d <= 6 else 3] += 1
+    n = sum(buckets)
+    return [b / n for b in buckets] if n else None
+
+
+def areas(tag, *only):
+    """The battle backdrops: skeleton, variant and layout checks, plus the contact sheets.
+
+    `only` scopes the run to some environments. A full pass renders 120 scenes and takes over two
+    minutes, which is past the point where it gets backgrounded and its exit status arrives
+    detached; one environment is about ten seconds, which is what iterating on a kit needs.
+
+    The bar is that no counter goes *up* from where it was, not that the dict is empty -- desert is
+    frozen and its four fortress layouts are one plan under four seeds, so its two twin pairs are
+    today's cost of that and not a regression. The state this was recorded at:
+
+        layouts are twins: 2   (desert_fortress 1/2 and 3/4, both deliberate)
+        cousins: 10           (every other counter zero)
+        worst colours: grass 56, dirt 63, desert 49, ice 61, forest 75, mountains 75
+
+    Those ten cousins are the whole reason the settlements are being rebuilt, and which ten says
+    why: every pair is drawn from grass, dirt, ice and mountains, the four that shared one castle
+    kit and one northern vocabulary. Desert and forest, the two that were written from their own
+    reference photographs, are not a cousin of anything.
+    """
     import areas as A
     from arealib import GROUND_TOP, H as AH, HORIZON, W as AW
 
+    envs = [e for e in A.ENVS if e in only] if only else list(A.ENVS)
+    assert envs, "no such environment: %s" % (only,)
     problems = Counter()
+    worst = Counter()
     made = {}
-    for env in A.ENVS:
+    for env in envs:
       for layout in range(1, A.LAYOUTS_PER_VARIANT + 1):
         for variant in A.VARIANTS:
-            im = A.scene(env, variant, layout=layout)
+            # A kit name a plan asks for and a kit has not got raises from deep inside the render.
+            # Unguarded that ends the whole pass, and the five environments that were fine lose
+            # their contact sheets along with the one that was not -- which during a rewrite, when
+            # half the kits are new, is most days. Draw the wreck and carry on.
+            try:
+                im = A.scene(env, variant, layout=layout)
+            except Exception as exc:
+                from PIL import Image
+                print("  crashed: %s_%s_%d  %s: %s"
+                      % (env, variant, layout, type(exc).__name__, exc))
+                problems["scene crashed"] += 1
+                im = Image.new("RGB", (AW, AH), (255, 0, 255))
             made[(env, variant, layout)] = im
             px = im.load()
             problems["wrong size"] += im.size != (AW, AH)
@@ -469,11 +550,15 @@ def areas(tag):
             problems["land in the sky"] += any(px[x, y] == far
                                                for y in range(0, HORIZON - 10, 3)
                                                for x in range(0, AW, 7))
-            # A backdrop is pixel art in one palette, not a photograph. The ceiling is generous
-            # -- the busiest scene in the set sits around 55 -- so it is not a budget to paint up
-            # to, it is a tripwire for an un-quantised blend or a stray gradient getting in.
+            # A backdrop is pixel art in one palette, not a photograph. Each environment has its
+            # own ceiling, set just above what its art actually samples to, so the check stays a
+            # tripwire for an un-quantised blend rather than a budget to paint up to.
             colours = {px[x, y] for y in range(0, AH, 3) for x in range(0, AW, 3)}
-            problems["too many colours"] += len(colours) > AREA_COLOUR_CEILING
+            worst[env] = max(worst[env], len(colours))
+            if len(colours) > AREA_COLOUR_CEILING[env]:
+                problems["too many colours"] += 1
+                print("  colours: %s_%s_%d used %d, ceiling %d"
+                      % (env, variant, layout, len(colours), AREA_COLOUR_CEILING[env]))
             # Bare ground under the fight: the bottom rows have to carry cover, not a flat band.
             # Bare ground under the fight: the bottom rows carry cover or a road surface, never
             # one flat band. Three is the floor -- a road is only its own three colours.
@@ -490,7 +575,8 @@ def areas(tag):
     # pixels and still read as one town, and a whole-image diff passes trivially because the sky
     # and the cover are seeded anyway. What says these are two settlements is that the roofline
     # goes somewhere else.
-    for env in A.ENVS:
+    roof = {}
+    for env in envs:
         for variant in ("village", "town", "fortress"):
             shapes = [_silhouette(made[(env, variant, L)], made[(env, "plain", L)],
                                   HORIZON - 60, 272)
@@ -502,18 +588,127 @@ def areas(tag):
                     # frame: a settlement covers half the width, and counting the empty sky either
                     # side of it halves every score for no reason.
                     pairs = [(a, b) for a, b in zip(shapes[i], shapes[j]) if a < 272 or b < 272]
+                    # ...but not out of a handful either. A quarter of six columns is two, so a
+                    # plan that drew almost nothing clears the bar on noise. Something has to have
+                    # been built before "these two are different" means anything.
+                    if len(pairs) < 60:
+                        continue
                     moved = sum(abs(a - b) > 4 for a, b in pairs)
-                    if pairs and moved < len(pairs) * 0.25:
+                    if moved < len(pairs) * 0.25:
                         twins.append("%d/%d" % (i + 1, j + 1))
             if twins:
                 problems["layouts are twins"] += len(twins)
                 print("  twins: %s_%s layouts %s" % (env, variant, ", ".join(twins)))
+            for L, tops in enumerate(shapes, 1):
+                if sum(t < 272 for t in tops) < 60:
+                    problems["settlement too small"] += 1
+                    print("  too small: %s_%s_%d" % (env, variant, L))
+            # Pool all four layouts into one distribution: a culture's roof logic is the thing that
+            # holds across its layouts, so pooling is both steadier and the right question.
+            pooled = [0, 0, 0, 0]
+            for tops in shapes:
+                s = _slopes(tops, 272)
+                if s:
+                    for k in range(4):
+                        pooled[k] += s[k]
+            if sum(pooled):
+                roof[(env, variant)] = [p / sum(pooled) for p in pooled]
+
+    # Nothing else asks whether two *environments* build alike, and building alike is exactly what
+    # shipped: one castle kit injected into every style, six palettes over one silhouette. Two
+    # cultures may share a palette or a plot; they may not share the way their roofs move.
+    #
+    # The bar is calibrated on desert, the one place already built from its own references: its
+    # fortress sits 0.41 or further from all five others, so a culture that really is its own
+    # clears a quarter comfortably. At 0.15 the check missed grass/ice (0.17) and grass/mountains
+    # (0.18), which are visibly the same castle -- the calibration, not the idea, was wrong.
+    for variant in ("village", "town", "fortress"):
+        have = [e for e in envs if (e, variant) in roof]
+        for i, a in enumerate(have):
+            for b in have[i + 1:]:
+                gap = sum(abs(p - q) for p, q in zip(roof[(a, variant)], roof[(b, variant)]))
+                if gap < 0.25:
+                    problems["cousins"] += 1
+                    print("  cousins: %s_%s and %s_%s roofs move alike (%.2f)"
+                          % (a, variant, b, variant, gap))
+
+    if "desert" in envs and DESERT_HASHES:
+        for (env, variant, layout), im in sorted(made.items()):
+            if env != "desert":
+                continue
+            key = "%s_%d" % (variant, layout)
+            if hashlib.md5(im.tobytes()).hexdigest() != DESERT_HASHES.get(key):
+                problems["desert moved"] += 1
+                print("  desert moved: %s" % key)
 
     print("problems:", dict(problems))
-    print(" ", A.sheet(tag, made=made))
-    print(" ", A.layout_sheet(tag, made=made))
+    print("worst colours:", dict(worst))
+    print(" ", A.sheet(tag, envs=envs, made=made))
+    print(" ", A.layout_sheet(tag, envs=envs, made=made))
+
+
+def frozen(mode="check"):
+    """Desert, which is finished and must not move. `record` prints the table, `check` tests it.
+
+    Hashing the raw 576x324 pixels rather than comparing exported PNGs is the point: no build has
+    to have run, nothing Godot may be holding open is touched, and a PNG encoder difference cannot
+    be mistaken for an art change. Twenty scenes, about two seconds, so it runs at every step.
+    """
+    import areas as A
+
+    got = {}
+    for variant in A.VARIANTS:
+        for layout in range(1, A.LAYOUTS_PER_VARIANT + 1):
+            im = A.scene("desert", variant, layout=layout)
+            got["%s_%d" % (variant, layout)] = hashlib.md5(im.tobytes()).hexdigest()
+    if mode == "record":
+        print("DESERT_HASHES = {")
+        for k in sorted(got):
+            print('    "%s": "%s",' % (k, got[k]))
+        print("}")
+        return
+    assert DESERT_HASHES, "no hashes recorded yet -- run: python qa.py frozen record"
+    moved = [k for k in sorted(got) if got[k] != DESERT_HASHES.get(k)]
+    for k in moved:
+        print("  moved: desert_%s" % k)
+    print("desert moved:", len(moved), "of", len(got))
+
+
+def audit(*_):
+    """Every piece name a plan asks for, resolved against the kit that would have to draw it.
+
+    A name a kit has not got raises from inside the render, a hundred scenes deep, with nothing to
+    say which plan asked. This is the same question answered statically in under a second, which is
+    as close to a type checker as a table of namedtuples is going to get.
+    """
+    import areaplan as P
+    from arealayouts import LAYOUTS
+
+    bad = 0
+    for style, variants in sorted(LAYOUTS.items()):
+        kit = P.KIT.get(style)
+        if kit is None:
+            print("  no kit for style %r" % style)
+            bad += 1
+            continue
+        for variant, plans in sorted(variants.items()):
+            for plan in plans:
+                for step in plan.steps:
+                    wanted = set()
+                    if isinstance(step, P.Row):
+                        wanted = {name for name, _ in step.pieces}
+                    elif isinstance(step, (P.Course, P.Fix)):
+                        wanted = {step.piece}
+                    elif isinstance(step, P.Belt):
+                        wanted = {"belt"}
+                    for name in wanted - set(kit):
+                        print("  %s/%s/%s wants %r, which %r has not got"
+                              % (style, variant, plan.name, name, style))
+                        bad += 1
+    print("unknown piece names:", bad)
 
 
 if __name__ == "__main__":
     {"phase1": phase1, "phase2": phase2, "phase3": phase3, "showcase": showcase,
-     "blends": blends, "ui": ui, "slimes": slimes, "areas": areas}[sys.argv[1]](sys.argv[2])
+     "blends": blends, "ui": ui, "slimes": slimes, "areas": areas,
+     "frozen": frozen, "audit": audit}[sys.argv[1]](*sys.argv[2:])
