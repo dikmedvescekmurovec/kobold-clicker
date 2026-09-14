@@ -504,6 +504,22 @@ def _slopes(tops, y1):
     return [b / n for b in buckets] if n else None
 
 
+def _build_colour(built, bare, y0, y1, step=2):
+    """The average colour of what was built, ignoring the ground it was built on.
+
+    Same trick as the silhouette: the two scenes share a seed, so every pixel that differs is one
+    somebody put there. What comes back is the material a place builds in, as one number.
+    """
+    pb, pn = built.load(), bare.load()
+    r = g = b = n = 0
+    for x in range(0, 576, step):
+        for y in range(y0, y1, step):
+            if pb[x, y] != pn[x, y]:
+                c = pb[x, y]
+                r += c[0]; g += c[1]; b += c[2]; n += 1
+    return (r / n, g / n, b / n) if n else None
+
+
 def areas(tag, *only):
     """The battle backdrops: skeleton, variant and layout checks, plus the contact sheets.
 
@@ -516,14 +532,14 @@ def areas(tag, *only):
     today's cost of that and not a regression. The state this was recorded at:
 
         layouts are twins: 2   (desert_fortress 1/2 and 3/4, both deliberate)
-        cousins: 10           (every other counter zero)
-        worst colours: grass 56, dirt 63, desert 49, ice 61, forest 84, mountains 75
+        cousins: 5            (every other counter zero)
+        worst colours: grass 56, dirt 63, desert 49, ice 77, forest 84, mountains 75
 
-    Those ten cousins are the whole reason the settlements are being rebuilt, and which ten says
-    why: every pair is drawn from grass, dirt, ice and mountains, the four still sharing one castle
-    kit and one northern vocabulary. Desert and forest, the two written from their own reference
-    photographs, are a cousin of nothing. The count comes down as each of the other four is
-    rewritten, and zero is the finish line.
+    The cousins are the whole reason the settlements are being rebuilt, and which ones says why:
+    every remaining pair is drawn from grass, dirt and mountains, the three still sharing one
+    castle kit and one northern vocabulary. Desert, forest and ice -- the three written from their
+    own reference photographs -- are a cousin of nothing. The count comes down as each of the
+    other three is rewritten, and zero is the finish line.
     """
     import areas as A
     from arealib import GROUND_TOP, H as AH, HORIZON, W as AW
@@ -584,7 +600,7 @@ def areas(tag, *only):
     # pixels and still read as one town, and a whole-image diff passes trivially because the sky
     # and the cover are seeded anyway. What says these are two settlements is that the roofline
     # goes somewhere else.
-    roof = {}
+    roof, built = {}, {}
     for env in envs:
         for variant in ("village", "town", "fortress"):
             shapes = [_silhouette(made[(env, variant, L)], made[(env, "plain", L)],
@@ -622,6 +638,8 @@ def areas(tag, *only):
                         pooled[k] += s[k]
             if sum(pooled):
                 roof[(env, variant)] = [p / sum(pooled) for p in pooled]
+                built[(env, variant)] = _build_colour(made[(env, variant, 1)],
+                                                      made[(env, "plain", 1)], HORIZON - 60, 272)
 
     # Nothing else asks whether two *environments* build alike, and building alike is exactly what
     # shipped: one castle kit injected into every style, six palettes over one silhouette. Two
@@ -636,10 +654,20 @@ def areas(tag, *only):
         for i, a in enumerate(have):
             for b in have[i + 1:]:
                 gap = sum(abs(p - q) for p, q in zip(roof[(a, variant)], roof[(b, variant)]))
-                if gap < 0.25:
+                # Two axes, and it takes both. Silhouette alone called a gold tiered temple and a
+                # white ice palace one place, because a meru and a needle both taper -- they are
+                # not confusable for a second and the check was wrong to say so. Material alone is
+                # no better: the four grey castles this was written to catch had four different
+                # `stone` values. What makes two places the same place is building the same shape
+                # out of the same stuff, and the castles failed on both, which is why they are
+                # still caught.
+                ca, cb = built.get((a, variant)), built.get((b, variant))
+                near = ca and cb and sum((u - v) ** 2 for u, v in zip(ca, cb)) ** 0.5 < 45
+                if gap < 0.25 and near:
                     problems["cousins"] += 1
-                    print("  cousins: %s_%s and %s_%s roofs move alike (%.2f)"
-                          % (a, variant, b, variant, gap))
+                    print("  cousins: %s_%s and %s_%s build alike (roof %.2f, colour %.0f)"
+                          % (a, variant, b, variant, gap,
+                             sum((u - v) ** 2 for u, v in zip(ca, cb)) ** 0.5))
 
     if "desert" in envs and DESERT_HASHES:
         for (env, variant, layout), im in sorted(made.items()):

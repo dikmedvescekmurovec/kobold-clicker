@@ -136,6 +136,15 @@ PAL = {
         # The shaded side of a trunk and the litter under it. Shared, because a palm
         # grows in a desert oasis and over a jungle river both.
         "trunk_sh": (58, 48, 42), "trunk_lit": (78, 64, 56),
+        # Pack ice, for the berg a palace is cut out of. Ice had no crag ramp at all, so any
+        # plan of its that stood something on a rock raised KeyError rather than drawing it.
+        "crag": (176, 202, 224), "crag_dk": (134, 164, 196), "crag_lit": (214, 232, 244),
+        # Carved ice: what the palace is made of, as against the snow lying on everything else.
+        # Paler and bluer than stone, and lit hard on one side, or a spire is a grey stick.
+        "ice": (172, 206, 230), "ice_dk": (112, 152, 190), "ice_lit": (236, 248, 254),
+        # The one warm thing in the place. The town reference is carried entirely by orange
+        # windows and hanging lanterns against blue -- take those away and it is a grey hillside.
+        "lantern": (255, 168, 76), "lantern_dk": (196, 110, 40),
         "glow": (255, 214, 120), "fence": (120, 110, 104), "trunk": (86, 72, 64),
         "crown": (74, 116, 102), "crown_dk": (48, 84, 78), "crown_lit": (104, 146, 124),
     },

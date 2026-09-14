@@ -9,6 +9,7 @@ Every plan below is transcribed from the hand-written settlement it replaces, so
 after the engine lands should look like the one before it.
 """
 import lay_forest as _forest
+import lay_ice as _ice
 from areaplan import Belt, Course, Fix, Land, Plan, Row
 
 # ---------------------------------------------------------------- the north
@@ -1139,6 +1140,8 @@ LAYOUTS = {
         "town": (HEARTHS, DRIFT_TOWN, HARBOUR, WINTER_HOLD),
         "fortress": (GLASS_CROWN, FROZEN_COURT, RIME_HALL, AURORA_GATE),
     },
+    # Ice builds its own way now; its catalogue is in lay_ice.py.
+    "ice": _ice.LAYOUTS,
     # Forest builds its own way now; its catalogue is in lay_forest.py.
     "forest": _forest.LAYOUTS,
     "cone": {
