@@ -21,13 +21,15 @@ extends Panel
 ## The square, and the icon inside it: 32 px of gear with a little air around it.
 const SIDE := 40
 const ICON := 32
+## How solid an empty socket's mark is drawn. Faint enough to read as nothing being there.
+const EMPTY_MARK_ALPHA := 0.35
 
 
-func setup(item: Item, selected := false) -> void:
+func setup(item: Item, selected := false, translucent := false) -> void:
 	custom_minimum_size = Vector2(SIDE, SIDE)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_theme_stylebox_override("panel", ItemRarity.slot_style(item.rarity, selected))
-	tooltip_text = "%s (%s)" % [item.display_name(), item.rarity_name()]
+	add_theme_stylebox_override("panel", ItemRarity.slot_style(item.rarity, selected, translucent))
+	tooltip_text = "%s (%s, level %d)" % [item.display_name(), item.rarity_name(), item.level]
 	var icon := TextureRect.new()
 	icon.texture = item.icon()
 	icon.custom_minimum_size = Vector2(ICON, ICON)
@@ -39,7 +41,31 @@ func setup(item: Item, selected := false) -> void:
 
 
 ## The square for `item`, ready to be put in a grid or a row.
-static func make(item: Item, selected := false) -> ItemSlot:
+static func make(item: Item, selected := false, translucent := false) -> ItemSlot:
 	var slot := ItemSlot.new()
-	slot.setup(item, selected)
+	slot.setup(item, selected, translucent)
+	return slot
+
+
+## An empty socket on the equipment panel: the same square with nothing in it.
+##
+## `mark` is the pack's own faint drawing of what belongs there, and only the sockets a body does not
+## explain get one. Where the weapon goes is obvious from the hand it is beside; which of two squares
+## under the doll takes a ring is not, and the pack drew marks for exactly those.
+static func empty(label: String, mark: Texture2D = null, selected := false, translucent := false) -> ItemSlot:
+	var slot := ItemSlot.new()
+	slot.custom_minimum_size = Vector2(SIDE, SIDE)
+	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	slot.add_theme_stylebox_override("panel",
+			ItemRarity.slot_style(ItemRarity.Rarity.COMMON, selected, translucent))
+	slot.tooltip_text = label
+	if mark != null:
+		var icon := TextureRect.new()
+		icon.texture = mark
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# Dimmed rather than drawn in another colour: the mark has to read as the absence of an item,
+		# and anything solid enough to read as an item is too solid.
+		icon.modulate = Color(1, 1, 1, EMPTY_MARK_ALPHA)
+		icon.position = (Vector2(SIDE, SIDE) - mark.get_size()) / 2.0
+		slot.add_child(icon)
 	return slot

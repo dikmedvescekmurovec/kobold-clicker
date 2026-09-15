@@ -9,14 +9,25 @@ extends "res://tests/harness.gd"
 ## these tests collect from a signal is gathered in an Array, which is shared rather than copied.
 ## Never Inventory.SAVE_PATH: these tests write and delete, and that is the player's own save.
 const TEST_PATH := "user://test_inventory.json"
-## Enough rolls that a rate lands within a percent or so of the chance behind it.
+## Nor MapSave.SAVE_PATH, for the same reason and one more: these pin a seed, and a pinned seed
+## that differs from a save is a request for another world, which replaces it on the first write.
+const TEST_MAP_PATH := "user://test_inventory_map.json"
+## Enough rolls that a rate lands within a percent or so of the chance behind it. Most of these
+## come back empty on purpose -- what is being measured is how often anything falls at all.
 const ROLLS := 20000
+## Enough *guaranteed* rolls to measure what a drop looks like when there is one. Far fewer are
+## needed than above because every one of them lands: going through a common's 3% gate threw 97
+## rolls in 100 away and left a rare step's share as mostly noise.
+const SHAPE_ROLLS := 4000
 
 
 func _run() -> void:
 	_clear_save()
 	_check(_test_items() == true, "item tests ran to the end")
 	_check(_test_slot_locks() == true, "slot lock tests ran to the end")
+	_check(_test_sockets() == true, "socket tests ran to the end")
+	_check(_test_totals() == true, "stat total tests ran to the end")
+	_check(_test_wearing() == true, "wearing tests ran to the end")
 	_check(_test_chances() == true, "drop-chance tests ran to the end")
 	_check(_test_rarity_tables() == true, "rarity table tests ran to the end")
 	_check(_test_rarity_rolls() == true, "rarity roll tests ran to the end")
@@ -26,15 +37,31 @@ func _run() -> void:
 	_check(_test_a_fight_drops() == true, "fight drop tests ran to the end")
 	_check(_test_the_promised_elite() == true, "promised elite tests ran to the end")
 	_check(_test_counts() == true, "counting tests ran to the end")
+	_check(_test_level_rolls() == true, "level roll tests ran to the end")
+	_check(_test_item_levels() == true, "item level tests ran to the end")
 	_check(_test_saving() == true, "saving tests ran to the end")
-	await _test_the_map_keeps_what_dropped()
+	_check(_test_orb_tables() == true, "orb table tests ran to the end")
+	_check(_test_orb_verbs() == true, "orb verb tests ran to the end")
+	_check(_test_orb_saving() == true, "orb saving tests ran to the end")
+	_check(_test_bag_order() == true, "bag order tests ran to the end")
+	_check(_test_capacity() == true, "capacity tests ran to the end")
+	_check(_test_autodiscard() == true, "autodiscard tests ran to the end")
+	_check(_test_deltas() == true, "delta tests ran to the end")
+	_check(await _test_comparing() == true, "comparison tests ran to the end")
+	# Checked the same way as the rest: a script error aborts the function and returns null, which
+	# would otherwise be a suite that quietly stopped halfway and still said it passed.
+	_check(await _test_the_map_keeps_what_dropped() == true, "map drop tests ran to the end")
+	_check(await _test_a_farm_run_holds_its_loot() == true, "farm run tests ran to the end")
+	_check(await _test_a_rule_keeps_finds_off_the_screen() == true, "autodiscard fight tests ran to the end")
+	_check(await _test_crafting_from_the_bag() == true, "crafting tests ran to the end")
 	_clear_save()
 	_report("inventory")
 
 
 func _clear_save() -> void:
-	if FileAccess.file_exists(TEST_PATH):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_PATH))
+	for path in [TEST_PATH, TEST_MAP_PATH]:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
 ## Every item has art on disk at the size the panel draws it, a weight that can come up, and stats
@@ -68,6 +95,130 @@ func _test_items() -> bool:
 				reachable = reachable or (mod["kind"] == ModifierTable.Kind.FLAT
 						and mod["stat"] == stat)
 			_check(reachable, "%s can carry %s, but nothing flat rolls it" % [item, stat])
+	return true
+
+
+## Every socket takes something, every item type has a socket to go in, and the two that are not
+## one-to-one behave: a ring fits either hand, and a shield and a torch compete for the one offhand.
+func _test_sockets() -> bool:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var sockets := Equipment.sockets()
+	_check(sockets.size() == 8, "there are eight sockets, not %d" % sockets.size())
+	for socket: Equipment.Socket in sockets:
+		_check(Equipment.NAMES.has(socket) and Equipment.LABELS.has(socket)
+				and Equipment.TAKES.has(socket), "socket %d is named, labelled and takes something" % socket)
+		var takers := PackedStringArray()
+		for type in LootTable.items():
+			if LootTable.slot_of(type) == Equipment.TAKES[socket]:
+				takers.append(type)
+		_check(not takers.is_empty(), "nothing fits the %s socket" % Equipment.LABELS[socket])
+	# No two sockets share a save name, or one would quietly overwrite the other on disk.
+	var names := {}
+	for socket: Equipment.Socket in sockets:
+		_check(not names.has(Equipment.NAMES[socket]), "two sockets are saved as the same name")
+		names[Equipment.NAMES[socket]] = true
+
+	var gear := Equipment.new()
+	var ring := Item.rolled("Gold Ring", ItemRarity.Rarity.COMMON, rng)
+	_check(gear.sockets_for(ring).size() == 2, "a ring fits two sockets")
+	_check(Equipment.fits(Equipment.Socket.RING_LEFT, ring), "and either of them")
+	_check(not Equipment.fits(Equipment.Socket.WEAPON, ring), "but not the weapon hand")
+	var boot := Item.rolled("Leather Boot", ItemRarity.Rarity.COMMON, rng)
+	_check(gear.equip(Equipment.Socket.HELMET, boot) == null
+			and gear.item_at(Equipment.Socket.HELMET) == null, "a boot will not go on the head")
+
+	# The shared offhand: a shield and a torch both fit it, and the second one in displaces the first.
+	var shield := Item.rolled("Wooden Shield", ItemRarity.Rarity.COMMON, rng)
+	var torch := Item.rolled("Wooden Torch", ItemRarity.Rarity.COMMON, rng)
+	_check(gear.sockets_for(shield) == [Equipment.Socket.OFFHAND], "a shield fits only the offhand")
+	_check(gear.sockets_for(torch) == [Equipment.Socket.OFFHAND], "and so does a torch")
+	gear.equip(Equipment.Socket.OFFHAND, shield)
+	_check(gear.equip(Equipment.Socket.OFFHAND, torch) == shield, "the torch puts the shield back")
+	_check(gear.item_at(Equipment.Socket.OFFHAND) == torch, "and takes its place")
+	_check(gear.unequip(Equipment.Socket.OFFHAND) == torch, "and comes off again")
+	_check(gear.unequip(Equipment.Socket.OFFHAND) == null, "an empty socket gives nothing back")
+	return true
+
+
+## What a set adds up to, and that wearing is a move rather than a copy.
+func _test_totals() -> bool:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var gear := Equipment.new()
+	_check(gear.totals().is_empty(), "wearing nothing is worth nothing")
+
+	# A common sword is its base stats exactly: no modifiers to fold in.
+	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng)
+	gear.equip(Equipment.Socket.WEAPON, sword)
+	var base: Dictionary = LootTable.stats_of("Wooden Sword")
+	for stat: String in base:
+		_check(is_equal_approx(gear.totals()[stat], float(base[stat])),
+				"a plain sword is worth its %s" % stat)
+
+	# Two rings add. This is the whole reason the tables put a stat on more than one piece.
+	var two := Equipment.new()
+	two.equip(Equipment.Socket.RING_LEFT, Item.rolled("Gold Ring", ItemRarity.Rarity.COMMON, rng))
+	two.equip(Equipment.Socket.RING_RIGHT, Item.rolled("Gold Ring", ItemRarity.Rarity.COMMON, rng))
+	var one: float = float(LootTable.stats_of("Gold Ring")["fire_resist"])
+	_check(is_equal_approx(two.totals()["fire_resist"], one * 2.0), "two rings are worth two rings")
+
+	# Flat before percent, which is the only order that makes both modifiers worth having.
+	var rolled := Item.new()
+	rolled.type = "Wooden Sword"
+	# A piece carries its own numbers now, so one built by hand has to be given them; at level 1 they
+	# are the table as written, which is what this arithmetic is stated against.
+	rolled.stats = Item.scaled_stats("Wooden Sword", 1)
+	rolled.mods = [{"id": "added_damage", "value": 2}, {"id": "increased_damage", "value": 20}]
+	_check(is_equal_approx(rolled.effective_stats()["damage"], (1.0 + 2.0) * 1.2),
+			"a sword adds before it scales, not after")
+	# A flat modifier on an affix gives the piece a stat it has no base for at all.
+	var affixed := Item.new()
+	affixed.type = "Wooden Sword"
+	affixed.mods = [{"id": "added_strength", "value": 5}]
+	_check(not LootTable.has_stat("Wooden Sword", "strength"), "a sword has no strength of its own")
+	_check(is_equal_approx(affixed.effective_stats()["strength"], 5.0), "and carries it anyway")
+	return true
+
+
+## Wearing something is a move: it leaves the bag, and comes back when it comes off.
+func _test_wearing() -> bool:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var bag := Inventory.new()
+	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng)
+	bag.add(sword)
+	bag.add(Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng))
+	_check(bag.total() == 2, "two swords in the bag")
+	_check(bag.equip(sword, Equipment.Socket.WEAPON), "one goes on")
+	_check(bag.total() == 1, "and is out of the bag")
+	_check(bag.equipment.item_at(Equipment.Socket.WEAPON) == sword, "and on the player")
+	# Equipping over something hands the old piece back rather than losing it.
+	_check(bag.equip(bag.items[0], Equipment.Socket.WEAPON), "the other goes on over it")
+	_check(bag.total() == 1 and bag.items[0] == sword, "and the first is back in the bag")
+	_check(not bag.equip(sword, Equipment.Socket.BOOTS), "a sword will not go on the feet")
+	_check(bag.total() == 1, "and a refused equip takes nothing out of the bag")
+	_check(bag.unequip(Equipment.Socket.WEAPON), "what is worn comes off")
+	_check(bag.total() == 2, "back into the bag")
+	_check(not bag.unequip(Equipment.Socket.WEAPON), "and an empty socket comes off no further")
+
+	# A worn set survives the save, sockets and all.
+	bag.equip(bag.items[0], Equipment.Socket.WEAPON)
+	bag.equip(Item.rolled("Gold Ring", ItemRarity.Rarity.ELITE, rng), Equipment.Socket.RING_RIGHT)
+	bag.items.append(Item.rolled("Gold Ring", ItemRarity.Rarity.ELITE, rng))
+	bag.equip(bag.items[bag.total() - 1], Equipment.Socket.RING_RIGHT)
+	_check(bag.save(TEST_PATH), "a worn set saves")
+	var read := Inventory.load_from(TEST_PATH)
+	_check(read.equipment.worn.size() == bag.equipment.worn.size(), "and comes back worn")
+	for socket: Equipment.Socket in bag.equipment.worn:
+		_check(_fingerprint(read.equipment.item_at(socket))
+				== _fingerprint(bag.equipment.item_at(socket)), "the same piece in the same socket")
+	_check(read.total() == bag.total(), "with the bag as it was")
+
+	# A piece saved into a socket it no longer fits is dropped rather than worn wrongly.
+	var wrong := Equipment.from_dict({"boots": {"type": "Wooden Sword", "rarity": "common", "mods": []}})
+	_check(wrong.worn.is_empty(), "a sword saved onto the feet does not come back")
+	_clear_save()
 	return true
 
 
@@ -153,17 +304,57 @@ func _test_rarity_tables() -> bool:
 		# usefully on the day they are switched on.
 		_check(int(row[ItemRarity.Rarity.UNIQUE]) == 0, "tier %d cannot roll a unique" % tier)
 
-	# Better enemies carry better things: plain gear falls away and every good step climbs.
+	# Better enemies carry better things: as the tier rises the weight moves up the ramp. Said as
+	# the average step rather than band by band, because the middle of a ramp does not have to
+	# climb -- an uncommon is a good drop off a rat and a disappointment off a boss, so its mass is
+	# meant to rise and then move on to rare. Only the ends are one-directional: the plain step
+	# falls the whole way and the top two climb the whole way.
 	var tiers := [EnemyRoster.Tier.COMMON, EnemyRoster.Tier.ELITE, EnemyRoster.Tier.BOSS]
 	for i in tiers.size() - 1:
 		var low: Dictionary = ItemRarity.TIER_WEIGHTS[tiers[i]]
 		var high: Dictionary = ItemRarity.TIER_WEIGHTS[tiers[i + 1]]
 		_check(int(low[ItemRarity.Rarity.COMMON]) > int(high[ItemRarity.Rarity.COMMON]),
 				"a tier %d body drops more plain gear than a tier %d one" % [i, i + 1])
-		for step: ItemRarity.Rarity in [ItemRarity.Rarity.UNCOMMON, ItemRarity.Rarity.RARE, ItemRarity.Rarity.ELITE]:
+		for step: ItemRarity.Rarity in [ItemRarity.Rarity.RARE, ItemRarity.Rarity.ELITE]:
 			_check(int(low[step]) < int(high[step]),
 					"a tier %d body drops fewer of rarity %d than a tier %d one" % [i, step, i + 1])
+		_check(_mean_step(tiers[i]) < _mean_step(tiers[i + 1]),
+				"a tier %d body carries better things than a tier %d one: %.2f against %.2f"
+						% [i, i + 1, _mean_step(tiers[i]), _mean_step(tiers[i + 1])])
 	return true
+
+
+## How good a tier's drops are on average, as a position on the rarity ramp: 0 if it only ever
+## dropped plain gear, 3 if every piece were elite. The one number that says "better enemies
+## carry better things" without caring which band the weight is sitting in.
+func _mean_step(tier: EnemyRoster.Tier) -> float:
+	var row: Dictionary = ItemRarity.TIER_WEIGHTS[tier]
+	var total := 0
+	var sum := 0
+	for step: ItemRarity.Rarity in row:
+		total += int(row[step])
+		sum += int(row[step]) * int(step)
+	return float(sum) / maxi(total, 1)
+
+
+## How far a measured share may sit from the share behind it before it means something. Three
+## standard errors, so a band's own thinness sets its own margin: a step worth 45% of drops scatters
+## far more in absolute terms than one worth 1.5%, and holding both to one flat number either lets
+## the thin one drift unnoticed or fails the fat one on nothing. The floor is for a weight of zero,
+## where the error is zero and the count still has to be exactly right.
+func _tolerance(want: float, samples: int) -> float:
+	return maxf(3.0 * sqrt(want * (1.0 - want) / samples), 0.002)
+
+
+## What share of a tier's drops one rarity step is worth, straight off the table. Every share a
+## test holds a roll to comes from here, so retuning the curve retunes what is expected of it
+## rather than leaving a number written in a test to go quietly stale.
+func _rarity_share(tier: EnemyRoster.Tier, step: ItemRarity.Rarity) -> float:
+	var row: Dictionary = ItemRarity.TIER_WEIGHTS[tier]
+	var total := 0
+	for weight: int in row.values():
+		total += weight
+	return float(int(row[step])) / maxi(total, 1)
 
 
 ## The rolled rarities follow the table, and how many modifiers an item carries follows its rarity.
@@ -272,33 +463,47 @@ func _test_rolls() -> bool:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = WORLD_SEED
 	var enemy := "Skeleton Warrior"   # common, medium: a plain body to measure against
-	var dropped := 0
-	var mix := {}
-	var rarities := {}
-	for i in ROLLS:
-		var item := LootTable.roll(enemy, rng)
-		if item == null:
-			continue
-		dropped += 1
-		_check(item.type in LootTable.items(), "rolled a real item, not " + item.type)
-		mix[item.type] = int(mix.get(item.type, 0)) + 1
-		rarities[item.rarity] = int(rarities.get(item.rarity, 0)) + 1
 
+	# How often anything falls at all. The empty rolls are the whole point of this loop, so it is
+	# the one place that goes through the chance gate.
+	var dropped := 0
+	for i in ROLLS:
+		if LootTable.roll(enemy, rng) != null:
+			dropped += 1
 	var rate := float(dropped) / ROLLS
 	var chance := LootTable.chance_for(enemy)
 	_check(absf(rate - chance) < 0.01, "%s dropped at %.3f, not its %.3f" % [enemy, rate, chance])
+
+	# And what one looks like when it lands. Every roll here is guaranteed, so every roll counts
+	# towards the answer instead of 97 in 100 being thrown away by a gate this loop is not
+	# measuring -- which is both quicker and enough samples for the thin steps to mean anything.
+	var mix := {}
+	var rarities := {}
+	for i in SHAPE_ROLLS:
+		var item := LootTable.roll(enemy, rng, true)
+		_check(item != null, "a guaranteed roll always drops something")
+		if item == null:
+			break
+		_check(item.type in LootTable.items(), "rolled a real item, not " + item.type)
+		mix[item.type] = int(mix.get(item.type, 0)) + 1
+		rarities[item.rarity] = int(rarities.get(item.rarity, 0)) + 1
 
 	var total_weight := 0
 	for item: String in LootTable.ITEMS:
 		total_weight += int(LootTable.ITEMS[item]["weight"])
 	for item: String in LootTable.ITEMS:
-		var share := float(mix.get(item, 0)) / maxi(dropped, 1)
+		var share := float(mix.get(item, 0)) / SHAPE_ROLLS
 		var want := float(LootTable.ITEMS[item]["weight"]) / total_weight
 		_check(absf(share - want) < 0.05, "%s came up %.2f of the time, not %.2f" % [item, share, want])
 
-	# What common rabble is worth: almost all plain gear, and an elite piece practically never.
-	var elite_share := float(rarities.get(ItemRarity.Rarity.ELITE, 0)) / maxi(dropped, 1)
-	_check(elite_share < 0.005, "common rabble dropped elite gear %.3f of the time" % elite_share)
+	# What common rabble is worth, every step of it, held to the table's own numbers rather than to
+	# a line written here that goes stale the moment the curve is retuned.
+	for step: ItemRarity.Rarity in ItemRarity.TIER_WEIGHTS[EnemyRoster.Tier.COMMON]:
+		var share := float(rarities.get(step, 0)) / SHAPE_ROLLS
+		var want := _rarity_share(EnemyRoster.Tier.COMMON, step)
+		_check(absf(share - want) < _tolerance(want, SHAPE_ROLLS),
+				"common rabble dropped rarity %d %.3f of the time, not the table's %.3f"
+						% [step, share, want])
 	_check(not rarities.has(ItemRarity.Rarity.UNIQUE), "and never a unique")
 
 	# The same seed gives the same run, which is what lets the rest of these tests be sure of anything.
@@ -393,6 +598,7 @@ func _test_saving() -> bool:
 	inventory.add(Item.rolled("Wooden Armor", ItemRarity.Rarity.UNCOMMON, rng))
 	inventory.add(Item.rolled("Leather Boot", ItemRarity.Rarity.COMMON, rng))
 	inventory.first_elite_taken = true
+	inventory.gold = 1234
 	_check(inventory.save(TEST_PATH), "the inventory saved")
 
 	var loaded := Inventory.load_from(TEST_PATH)
@@ -402,6 +608,7 @@ func _test_saving() -> bool:
 		_check(_fingerprint(loaded.items[i]) == _fingerprint(inventory.items[i]),
 				"item %d came back as it went in: %s" % [i, _fingerprint(loaded.items[i])])
 	_check(loaded.first_elite_taken, "and so did the promised elite")
+	_check(loaded.gold == 1234, "and the purse, at %d" % loaded.gold)
 
 	# An item written by hand, to pin the file's shape rather than only its round trip.
 	var one := Item.from_dict({"type": "Wooden Sword", "rarity": "rare",
@@ -443,26 +650,92 @@ func _test_saving() -> bool:
 				"an item from before rarities is a plain common")
 	_check(migrated.save(TEST_PATH), "and it saves again")
 	var text := FileAccess.get_file_as_string(TEST_PATH)
-	_check(text.contains('"version": 2'), "in the shape this build writes")
+	_check(text.contains('"version": %d' % Inventory.VERSION), "in the shape this build writes")
+
+	# The shape from before anything could be worn. Its whole save is bag, and the player starts
+	# bare-handed: there is nothing to convert, which is the point of checking it.
+	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	file.store_string('{"version": 2, "first_elite_taken": false, "items": ' +
+			'[{"type": "Wooden Sword", "rarity": "rare", "mods": []}]}')
+	file.close()
+	var from_v2 := Inventory.load_from(TEST_PATH)
+	_check(from_v2.total() == 1, "a save from before equipment keeps its items")
+	_check(from_v2.equipment.worn.is_empty(), "and wears nothing")
+
+	# The rules go with the bag, and a save from before them has none -- an absent key and an empty
+	# list read the same, which is what makes the migration nothing at all.
+	var ruled := Inventory.new()
+	ruled.add(Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 4))
+	ruled.set_autodiscard(2, true)
+	ruled.set_autodiscard(5, true)
+	_check(ruled.save(TEST_PATH), "an inventory with rules saves")
+	var ruled_back := Inventory.load_from(TEST_PATH)
+	_check(ruled_back.autodiscards(2) and ruled_back.autodiscards(5),
+			"and its rules come back")
+	_check(not ruled_back.autodiscards(4), "only the ones that were set")
+	_check(ruled_back.total() == 1, "with its items")
+	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	file.store_string('{"version": 4, "first_elite_taken": false, "items": ' +
+			'[{"type": "Wooden Sword", "rarity": "rare", "level": 3, "mods": []}]}')
+	file.close()
+	var from_v4 := Inventory.load_from(TEST_PATH)
+	_check(from_v4.total() == 1 and from_v4.autodiscard.is_empty(),
+			"a save from before the rules keeps its items and carries none")
+
+	# The purse goes the same way: a save from before gold simply has none, and an absent key reads as
+	# an empty one rather than as a reason to start the bag over.
+	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	file.store_string('{"version": 5, "first_elite_taken": false, "autodiscard": [3], "items": ' +
+			'[{"type": "Wooden Sword", "rarity": "rare", "level": 3, "mods": []}]}')
+	file.close()
+	var from_v5 := Inventory.load_from(TEST_PATH)
+	_check(from_v5.total() == 1 and from_v5.autodiscards(3),
+			"a save from before gold keeps its items and its rules")
+	_check(from_v5.gold == 0, "and comes back empty-handed, not at %d" % from_v5.gold)
+	# A hand-edited purse: nonsense is stepped over and a debt is not a thing the game can hold.
+	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	file.store_string('{"version": %d, "gold": -50, "items": []}' % Inventory.VERSION)
+	file.close()
+	_check(Inventory.load_from(TEST_PATH).gold == 0, "a negative purse reads as none")
+	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	file.store_string('{"version": %d, "gold": "loads", "items": []}' % Inventory.VERSION)
+	file.close()
+	_check(Inventory.load_from(TEST_PATH).gold == 0, "and so does one that is not a number")
+
+	# A bag from before the cap, or one edited by hand. It comes back obeying the cap, because a bag
+	# allowed over it in one place is a bag every other rule in the game has to check for.
+	var bloated := Inventory.new()
+	for i in Inventory.CAPACITY + 5:
+		bloated.items.append(_piece(
+				ItemRarity.Rarity.RARE if i >= 5 else ItemRarity.Rarity.COMMON, 6))
+	_check(bloated.save(TEST_PATH), "an over-full save is written")
+	var trimmed := Inventory.load_from(TEST_PATH)
+	_check(trimmed.total() == Inventory.CAPACITY, "and comes back at the cap")
+	var kept_commons := 0
+	for item in trimmed.items:
+		if item.rarity == ItemRarity.Rarity.COMMON:
+			kept_commons += 1
+	_check(kept_commons == 0, "having dropped the worst of it")
 	_clear_save()
 	return true
 
 
 ## The whole way through: a fight in the real scene, the drops it hands over, the grid that shows
 ## them, the stat block behind a square, and the file they end up in.
-func _test_the_map_keeps_what_dropped() -> void:
+func _test_the_map_keeps_what_dropped() -> bool:
 	_clear_save()
 	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
 	main.world_seed = WORLD_SEED
 	main.map_seed = 1
 	main.inventory_path = TEST_PATH
+	main.map_path = TEST_MAP_PATH
 	root.add_child(main)
 	for i in 3:
 		await process_frame
 
 	_check(main.inventory.total() == 0, "a first run starts with nothing")
 	_check(main._bag_button.visible, "the items button is on the map")
-	_check(main._bag_grid.get_child_count() == 0, "and the bag is empty")
+	_check(_bag_squares(main).is_empty(), "and the bag is empty")
 
 	main._on_bag_pressed()
 	_check(main._bag_panel.visible and not main._bag_button.visible, "the panel takes the button's place")
@@ -470,6 +743,69 @@ func _test_the_map_keeps_what_dropped() -> void:
 	_check(not main._bag_detail.visible, "with no stat block until a square is clicked")
 	main._on_bag_closed()
 	_check(not main._bag_panel.visible and main._bag_button.visible, "closing it gives the button back")
+
+	# The equipment page: its own panel beside the item panel, eight sockets, all empty.
+	main._on_bag_pressed()
+	await process_frame
+	_check(_socket_squares(main).size() == Equipment.sockets().size(),
+			"the doll has %d sockets, not %d"
+			% [Equipment.sockets().size(), _socket_squares(main).size()])
+	_check(main._worn_panel.visible, "the character sheet opens with the bag")
+	_check(main._worn_panel.position.x >= main._bag_panel.size.x * main.ui_scale,
+			"and stands outside the item panel, not inside it")
+
+	# The sockets are placed by hand on the silhouette, which is the one thing here no layout code
+	# would catch going wrong: a socket with no spot would pile up at the origin, and two that
+	# overlap would leave one of them unclickable wherever they cross.
+	for socket: Equipment.Socket in Equipment.sockets():
+		_check(main.DOLL_SOCKETS.has(socket),
+				"the %s socket has nowhere to sit on the doll" % Equipment.LABELS[socket])
+	var placed := {}
+	for socket: Equipment.Socket in main.DOLL_SOCKETS:
+		var spot: Vector2 = main._socket_spot(socket)
+		_check(spot.x >= 0.0 and spot.y >= 0.0,
+				"the %s socket hangs off the page at %s" % [Equipment.LABELS[socket], spot])
+		var box := Rect2(spot, Vector2(ItemSlot.SIDE, ItemSlot.SIDE))
+		for other: Equipment.Socket in placed:
+			_check(not box.intersects(placed[other]), "the %s and %s sockets overlap"
+					% [Equipment.LABELS[socket], Equipment.LABELS[other]])
+		placed[socket] = box
+	# And the page is big enough to hold every one of them.
+	for socket: Equipment.Socket in placed:
+		var box: Rect2 = placed[socket]
+		_check(box.end.x <= main._doll.custom_minimum_size.x
+				and box.end.y <= main._doll.custom_minimum_size.y,
+				"the %s socket runs off the page" % Equipment.LABELS[socket])
+
+	# Wearing a sword through the panel: out of the bag, into the socket, and worth something.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng)
+	main.inventory.add(sword)
+	main._select_item(0)
+	await process_frame
+	_check(main._bag_detail.visible, "the sword's stat block opens")
+	main._on_equip_pressed(sword, Equipment.Socket.WEAPON)
+	await process_frame
+	_check(main.inventory.total() == 0, "wearing it takes it out of the bag")
+	_check(main.inventory.equipment.item_at(Equipment.Socket.WEAPON) == sword, "and puts it on")
+	var armed := Encounter.for_tile(Vector2i(1, 0), "grass")
+	armed.arm(main.inventory.equipment.totals())
+	_check(armed.damage > Encounter.BARE_DAMAGE, "and a fight now hits for more than a bare fist")
+	_check(armed.attack_speed > 0.0, "with the weapon swinging on its own")
+
+	# And off again, back to where it came from.
+	main._select_socket(Equipment.Socket.WEAPON)
+	await process_frame
+	_check(main._bag_detail.visible, "a worn piece opens the same way")
+	main._on_unequip_pressed(Equipment.Socket.WEAPON)
+	await process_frame
+	_check(main.inventory.total() == 1 and main.inventory.items[0] == sword, "taking it off gives it back")
+	_check(main.inventory.equipment.worn.is_empty(), "and leaves the socket empty")
+	main.inventory.items.clear()
+	main.inventory.save(TEST_PATH)
+	main._select_item(-1)
+	main._on_bag_closed()
 
 	# A first fight, whose elite is promised a drop.
 	var target := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
@@ -481,27 +817,37 @@ func _test_the_map_keeps_what_dropped() -> void:
 	fight.loot_rng.seed = WORLD_SEED
 	_play(fight)
 	var combat: CombatScene = main._combat
-	_check(combat._result_drops.get_child_count() > 0, "the fight's panel shows what fell")
+	# A discovery fight banks each purse as it lands, the way it banks each find: it is over in a
+	# minute, and closing the game halfway through must not cost either.
+	_check(fight.gold > 0, "the fight earned something: %d" % fight.gold)
+	_check(main.inventory.gold == fight.gold,
+			"and the purse has it already: %d of %d" % [main.inventory.gold, fight.gold])
+	_check(Inventory.load_from(TEST_PATH).gold == fight.gold, "so does the file on disk")
+	_check(combat._gold_row.visible and combat._gold_label.text == "+%d" % fight.gold,
+			"and the verdict says so: %s" % combat._gold_label.text)
+	_check(combat._result_drops.count() == combat._drops.size(),
+			"the fight's panel shows everything that fell: %d of %d" % [
+					combat._result_drops.count(), combat._drops.size()])
+	_check(combat._loot_button.text == str(combat._drops.size()),
+			"and so does the counter in the corner")
 
 	# A drop on that panel opens what it actually is, and goes back again.
 	await process_frame
 	var dropped: Item = combat._drops[0]
-	combat._inspect_drop(0)
+	combat._result_drops.inspect(0)
 	await process_frame
-	_check(combat._result_inspect.visible and not combat._result_summary.visible,
-			"clicking a drop opens it in the verdict's place")
+	_check(combat._result_drops.inspecting(), "clicking a drop opens it in the grid's place")
 	var lines := PackedStringArray()
-	for line: Node in combat._result_inspect_rows.get_children():
-		if line is Label:
-			lines.append((line as Label).text)
+	for line: Node in _labels_under(combat._result_drops):
+		lines.append((line as Label).text)
 	_check(dropped.display_name() in lines, "which names the item")
-	_check(dropped.rarity_name() in lines, "and its rarity")
+	_check("%s · level %d" % [dropped.rarity_name(), dropped.level] in lines,
+			"and its rarity and level")
 	for text in dropped.mod_lines():
 		_check(text in lines, "and every modifier it carries: " + text)
-	combat._inspect_drop(-1)
+	combat._result_drops.inspect(-1)
 	await process_frame
-	_check(combat._result_summary.visible and not combat._result_inspect.visible,
-			"and Back returns to the verdict")
+	_check(not combat._result_drops.inspecting(), "and Back returns to the verdict")
 	main._combat._on_back_pressed()
 	await process_frame
 
@@ -510,32 +856,34 @@ func _test_the_map_keeps_what_dropped() -> void:
 					main.inventory.total(), main._fight_drops.size()])
 	_check(main.inventory.total() > 0, "the promised elite paid out")
 	_check(main.inventory.first_elite_taken, "and is not promised again")
+	_check(main._bag_gold.text == str(main.inventory.gold),
+			"the bag's footer says what is in the purse: %s" % main._bag_gold.text)
 	_check(main._bag_button.visible, "the button is back with the map")
 
 	# The grid holds one square per item, and a square opens what that item is.
 	main._on_bag_pressed()
 	await process_frame
-	_check(main._bag_grid.get_child_count() == main.inventory.total(),
-			"the grid holds every item: %d of %d" % [
-					main._bag_grid.get_child_count(), main.inventory.total()])
+	var squares := _bag_squares(main)
+	_check(squares.size() == main.inventory.total(),
+			"the sections hold every item: %d of %d" % [squares.size(), main.inventory.total()])
 	main._select_item(0)
 	await process_frame
 	_check(main._bag_detail.visible, "clicking a square opens its stat block")
 	var newest: Item = main.inventory.items[0]
-	var block := PackedStringArray()
-	for line: Node in main._bag_detail.get_children():
-		if line is Label:
-			block.append((line as Label).text)
+	# Read out of the whole block, not off its direct children: the lines live inside the scroll that
+	# keeps a long piece from pushing Equip off the bottom of the panel.
+	var block := _texts(main._bag_detail)
 	_check(newest.display_name() in block, "which names the item")
-	_check(newest.rarity_name() in block, "and its rarity")
+	_check("%s · level %d" % [newest.rarity_name(), newest.level] in block,
+			"and its rarity and level")
 	main._select_item(-1)
 	await process_frame
 	_check(not main._bag_detail.visible, "and it closes again")
 
 	# The hand-written gesture: a press that stays put opens a square, one that travels scrolls the
 	# grid and opens nothing. Driven straight at the handler, because a headless run has no mouse.
-	var first: Control = main._bag_grid.get_child(0)
-	var on_first := first.position + first.size / 2.0
+	var first: Control = _bag_squares(main)[0]
+	var on_first := _square_spot(first)
 	_press(main, on_first, true)
 	_press(main, on_first, false)
 	await process_frame
@@ -546,6 +894,69 @@ func _test_the_map_keeps_what_dropped() -> void:
 	_press(main, on_first, false)
 	await process_frame
 	_check(not main._bag_detail.visible, "a press that travels is a drag, and opens nothing")
+
+	# Sections. Two levels means two grids with a heading each, and a square in the second section is
+	# the case the flat-grid arithmetic this replaced would have got wrong.
+	main.inventory.items.clear()
+	main.inventory.add(_piece(ItemRarity.Rarity.COMMON, 1))
+	var deeper := _piece(ItemRarity.Rarity.RARE, 6)
+	main.inventory.add(deeper)
+	main._select_item(-1)
+	await process_frame
+	var grids := 0
+	var headings := PackedStringArray()
+	for section: Node in main._bag_sections.get_children():
+		if section is GridContainer:
+			grids += 1
+		elif section is HBoxContainer:
+			for label: Node in section.get_children():
+				if label is Label:
+					headings.append((label as Label).text)
+	_check(grids == 2, "two levels held means two sections, not %d" % grids)
+	_check("Level 6" in headings and "Level 1" in headings, "each under its own level")
+	_check(headings[0] == "Level 6", "highest first")
+	var squares_now := _bag_squares(main)
+	_check(squares_now.size() == 2, "with one square each")
+	_check(squares_now[0].get_meta("bag_index", -1) == main.inventory.items.find(deeper),
+			"and the deeper piece is the first square")
+	var second: Control = squares_now[1]
+	# Read before the click: opening a square rebuilds the sections, and the square that was clicked
+	# is gone by the time the answer is checked.
+	var second_index: int = second.get_meta("bag_index", -1)
+	main._on_bag_clicked(_square_spot(second))
+	await process_frame
+	_check(main._bag_selected == second_index,
+			"a click in the second section opens that section's item")
+
+	# Throwing one away by hand, from the bag.
+	main._select_item(main.inventory.items.find(deeper))
+	await process_frame
+	main._on_discard_pressed(deeper)
+	await process_frame
+	_check(not main.inventory.items.has(deeper), "Discard takes the piece out of the bag")
+	_check(_bag_squares(main).size() == 1, "and off the panel")
+	_check(not Inventory.load_from(TEST_PATH).items.has(deeper), "and off the disk")
+
+	# A level with a rule on it and nothing in it keeps its heading, which is the only place the rule
+	# can be turned off again.
+	main._on_autodiscard_toggled(true, 9)
+	await process_frame
+	_check(main.inventory.autodiscards(9), "the Auto button sets the rule")
+	_check(Inventory.load_from(TEST_PATH).autodiscards(9), "and writes it")
+	var empty_heading := false
+	for section: Node in main._bag_sections.get_children():
+		if not (section is HBoxContainer):
+			continue
+		for label: Node in section.get_children():
+			# "Level 9 auto" while the rule is on: the heading says the rule in a word, because the
+			# toggle's pressed face is far too quiet to read a state off.
+			if label is Label and (label as Label).text == "Level 9 auto":
+				empty_heading = true
+	_check(empty_heading, "a level with a rule and no items still has its heading")
+	main._on_clear_level_pressed(1)
+	await process_frame
+	_check(main.inventory.total() == 0, "Clear empties a level")
+	main._on_autodiscard_toggled(false, 9)
 
 	var saved := Inventory.load_from(TEST_PATH)
 	_check(saved.total() == main.inventory.total(), "the file on disk holds the same count")
@@ -568,6 +979,519 @@ func _test_the_map_keeps_what_dropped() -> void:
 		main._combat._on_back_pressed()
 		await process_frame
 	main.queue_free()
+	return true
+
+
+## A farm run's finds wait in the pouch and go into the bag in one write when the run ends. It is
+## the one place the game holds loot back, and the reason is that a run has no end of its own: a
+## discovery fight is over in a minute and writes each find as it lands, and a run could go an hour.
+func _test_a_farm_run_holds_its_loot() -> bool:
+	_clear_save()
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	main.inventory_path = TEST_PATH
+	main.map_path = TEST_MAP_PATH
+	root.add_child(main)
+	for i in 3:
+		await process_frame
+
+	# Farming asks nothing about where the player stands, only that the tile is already theirs.
+	var here := MapBuilder.CENTER
+	var next_door := HexGrid.neighbor(here, HexGrid.Edge.E)
+	_check(main.view.can_farm(here), "the tile under the player can be farmed")
+	_check(not main.view.can_farm(next_door), "and one that has not been taken cannot")
+	main.map.select_cell(here)
+	main._on_farm_pressed()
+	_check(main._combat != null, "a run starts")
+	if main._combat == null:
+		main.queue_free()
+		return true
+	var fight: Encounter = main._combat.fight
+	var combat: CombatScene = main._combat
+	_check(fight.endless, "and it is endless")
+	_check(combat._terminate != null, "with a way out of it on the screen")
+	_check(not main._bag_button.visible, "and the bag out of the way, as in any fight")
+	fight.loot_rng.seed = WORLD_SEED
+	# Every body carries something, so three finds is three kills. What is under test is where a
+	# run's finds wait, not how often one falls -- at the real 3% this would be a hundred-odd kills.
+	fight.always_drop = true
+
+	var guard := 0
+	while main._fight_drops.size() < 3 and guard < 2000:
+		guard += 1
+		if not fight.hit():
+			fight.advance(1.0 / 8.0)
+	_check(main._fight_drops.size() >= 3, "a run long enough turns up several things: %d"
+			% main._fight_drops.size())
+	_check(not fight.finished, "and it is still going")
+	_check(main.inventory.total() == 0, "none of which is in the bag yet: %d" % main.inventory.total())
+	_check(not FileAccess.file_exists(TEST_PATH), "and nothing has been written to disk")
+	# The gold waits with them, and for the same reason: a run has no end of its own to write at.
+	_check(main._fight_gold > 0, "the run has earned something: %d" % main._fight_gold)
+	_check(main._fight_gold == fight.gold, "and the fight agrees what: %d" % fight.gold)
+	_check(main.inventory.gold == 0, "none of it in the purse yet: %d" % main.inventory.gold)
+	_check(combat._loot_button.text == str(main._fight_drops.size()),
+			"the counter has been keeping score all along")
+
+	# The counter opens the same list the verdict shows, and one of them opens properly.
+	combat._on_loot_pressed()
+	await process_frame
+	_check(combat._loot_panel.visible, "the counter opens the popup")
+	_check(combat._loot_drops.count() == main._fight_drops.size(), "holding every find")
+	var found: Item = main._fight_drops[0]
+	combat._loot_drops.inspect(0)
+	await process_frame
+	_check(combat._loot_drops.inspecting(), "and a square in it opens the item")
+	var lines := PackedStringArray()
+	for line: Node in _labels_under(combat._loot_drops):
+		lines.append((line as Label).text)
+	_check(found.display_name() in lines, "which names it")
+	_check("%s · level %d" % [found.rarity_name(), found.level] in lines,
+			"and its rarity and level")
+	# Throwing one away from the popup, which is the promised way out of a run that has found more
+	# than the bag can hold. The run is still holding its pouch, so this is the whole of it.
+	var before: int = main._fight_drops.size()
+	var doomed: Item = main._fight_drops[0]
+	combat._loot_drops.inspect(0)
+	combat._loot_drops._on_discard_pressed()
+	await process_frame
+	_check(not main._fight_drops.has(doomed), "Discard takes a find out of the run's pouch")
+	_check(main._fight_drops.size() == before - 1, "and only that one")
+	_check(combat._drops.size() == main._fight_drops.size(), "the fight agrees about what is left")
+	_check(combat._loot_button.text == str(main._fight_drops.size()), "and so does the counter")
+	_check(main.inventory.total() == 0, "nothing was in the bag to take it out of")
+
+	combat._on_loot_closed()
+	await process_frame
+	_check(not combat._loot_panel.visible, "and Close puts it away")
+
+	# Terminating is the end of the run, and the moment the pouch goes into the bag.
+	var pouch: Array[Item] = main._fight_drops.duplicate()
+	var earned: int = main._fight_gold
+	combat._on_terminate_pressed()
+	await process_frame
+	_check(fight.finished and fight.victory, "terminating ends the run, and not as a loss")
+	main._combat._on_back_pressed()
+	await process_frame
+	_check(main.inventory.total() == pouch.size(),
+			"every find the run made went into the bag at once: %d of %d"
+					% [main.inventory.total(), pouch.size()])
+	for i in mini(main.inventory.total(), pouch.size()):
+		_check(_fingerprint(main.inventory.items[i]) == _fingerprint(pouch[i]),
+				"and it is the same item %d, modifiers and all" % i)
+	_check(main.inventory.gold == earned,
+			"and so did its gold, in one go: %d of %d" % [main.inventory.gold, earned])
+	_check(main._fight_gold == 0, "leaving the pouch empty, so the next run starts from nothing")
+	_check(main._bag_gold.text == str(earned),
+			"the bag's footer says so: %s" % main._bag_gold.text)
+	var saved := Inventory.load_from(TEST_PATH)
+	_check(saved.total() == pouch.size(), "the file on disk holds them too")
+	_check(saved.gold == earned, "and the gold with them: %d of %d" % [saved.gold, earned])
+
+	# Nothing about the map moved. A run is fought on a tile that is already the player's.
+	_check(main.view.discovered(here), "the tile stays the player's")
+	_check(not main.view.discovered(next_door), "and the run discovered nothing")
+	_check(main._bag_button.visible, "the bag is back with the map")
+	main.queue_free()
+	return true
+
+
+## A level the player is done with never reaches them: not the pouch, not the counter, not either
+## list. It is counted, and the count is said once at the end -- which is the whole of "noted, but
+## not shown". And a bag with no room says so while the run is going, in time to do something about it.
+func _test_a_rule_keeps_finds_off_the_screen() -> bool:
+	_clear_save()
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	main.inventory_path = TEST_PATH
+	main.map_path = TEST_MAP_PATH
+	root.add_child(main)
+	for i in 3:
+		await process_frame
+
+	# Everything this tile can drop is at a level the player has finished with. A tile's ceiling is
+	# its level, so ruling out every level up to it rules out the lot.
+	var here := MapBuilder.CENTER
+	for level in range(1, MapBuilder.level_of(here) + LootTable.TIER_LEVEL.values().max() + 1):
+		main.inventory.set_autodiscard(level, true)
+	# And the bag is full, so the warning has something to say.
+	for i in Inventory.CAPACITY:
+		main.inventory.items.append(_piece(ItemRarity.Rarity.ELITE, 99))
+	main.map.select_cell(here)
+	main._on_farm_pressed()
+	_check(main._combat != null, "a run starts")
+	if main._combat == null:
+		main.queue_free()
+		return true
+	var fight: Encounter = main._combat.fight
+	var combat: CombatScene = main._combat
+	fight.loot_rng.seed = WORLD_SEED
+	# As above: every body carries something, so the rule has something to throw away at once.
+	fight.always_drop = true
+	_check(combat.bag_room == 0, "a full bag leaves the fight no room")
+	_check(combat._warning.visible, "so the warning stands while the run goes")
+
+	var guard := 0
+	while combat._auto_discarded < 3 and guard < 2000:
+		guard += 1
+		if not fight.hit():
+			fight.advance(1.0 / 8.0)
+	_check(combat._auto_discarded >= 3, "the rule threw several away: %d" % combat._auto_discarded)
+	# None of them touched anything the player can see.
+	_check(main._fight_drops.is_empty(), "none of them reached the pouch")
+	_check(combat._drops.is_empty(), "or the fight's own list")
+	_check(combat._loot_button.text == "0" and combat._loot_button.disabled,
+			"the counter never moved")
+	_check(combat._loot_drops.count() == 0 and combat._result_drops.count() == 0,
+			"and neither list has a square in it")
+	_check(combat._toasts.is_empty(), "nothing was announced")
+	_check(main.inventory.total() == Inventory.CAPACITY, "and the bag is exactly as it was")
+	# The rule is about finds. A purse is a number rather than a square, so nothing filters it and a
+	# run that kept nothing still earned its way.
+	_check(main._fight_gold > 0, "the gold came all the same: %d" % main._fight_gold)
+
+	# Said once, at the end, as a number.
+	var thrown := combat._auto_discarded
+	combat._on_terminate_pressed()
+	await process_frame
+	await process_frame
+	_check(combat._auto_label.visible, "the verdict says what the rule threw away")
+	_check(combat._auto_label.text == "%d finds discarded automatically" % thrown,
+			"as a count and nothing more: %s" % combat._auto_label.text)
+	main._combat._on_back_pressed()
+	await process_frame
+	_check(main.inventory.total() == Inventory.CAPACITY, "the run banked nothing, because it kept nothing")
+	_check(main.inventory.gold > 0, "but it banked its gold: %d" % main.inventory.gold)
+	main.queue_free()
+	return true
+
+
+## Every square the bag is showing, in the order the sections lay them out. The grid is no longer one
+## rectangle, so a test asking what the bag holds has to walk the sections the way the click does.
+func _bag_squares(main: Node) -> Array:
+	var squares := []
+	for section: Node in main._bag_sections.get_children():
+		if not (section is GridContainer):
+			continue
+		for slot: Node in section.get_children():
+			squares.append(slot)
+	return squares
+
+
+## Every socket square on the doll, or nothing at all when the comparison has taken its place. It is
+## the same list `_on_doll_input` hit-tests against, and whether it is empty is how a test tells the
+## page's two states apart.
+func _socket_squares(main: Node) -> Array:
+	var squares := []
+	if main._doll == null:
+		return squares
+	for slot: Node in main._doll.get_children():
+		if slot.has_meta("socket"):
+			squares.append(slot)
+	return squares
+
+
+## Every line of text on a node and everything under it, which is how a test reads a stat block
+## whose lines are nested in columns rather than laid flat.
+func _texts(node: Node) -> PackedStringArray:
+	var out := PackedStringArray()
+	if node is Label:
+		out.append((node as Label).text)
+	for child: Node in node.get_children():
+		out.append_array(_texts(child))
+	return out
+
+
+## The middle of a square in the sections' own space -- which is the space `_on_bag_clicked` works
+## in. A square's own position is its grid's, so its section has to be added back on.
+func _square_spot(slot: Control) -> Vector2:
+	return (slot.get_parent() as Control).position + slot.position + slot.size / 2.0
+
+
+## An item built to order, for the tests that care about where a piece sorts rather than what it
+## rolled. `Item.rolled` needs a generator and rolls modifiers; these want neither.
+func _piece(rarity: ItemRarity.Rarity, level: int) -> Item:
+	var item := Item.new()
+	item.type = "Wooden Sword"
+	item.rarity = rarity
+	item.level = level
+	item.stats = Item.scaled_stats(item.type, level)
+	return item
+
+
+## The bag is read one way and emptied another, and both are checked here: level-major for the
+## player looking for a piece, rarity-major for the game deciding what has to go.
+func _test_bag_order() -> bool:
+	var bag := Inventory.new()
+	# Added oldest first. Two at level 5, so the tie-break inside a rarity is exercised too.
+	var l5_common_old := _piece(ItemRarity.Rarity.COMMON, 5)
+	var l5_common_new := _piece(ItemRarity.Rarity.COMMON, 5)
+	var l5_rare := _piece(ItemRarity.Rarity.RARE, 5)
+	var l9_common := _piece(ItemRarity.Rarity.COMMON, 9)
+	var l2_elite := _piece(ItemRarity.Rarity.ELITE, 2)
+	for piece: Item in [l5_common_old, l5_common_new, l5_rare, l9_common, l2_elite]:
+		bag.add(piece)
+
+	var read: Array[Item] = []
+	for i in bag.order():
+		read.append(bag.items[i])
+	_check(read == [l9_common, l5_rare, l5_common_new, l5_common_old, l2_elite],
+			"the bag reads by level, then rarity, then newest first")
+
+	var doomed: Array[Item] = []
+	for i in bag.worst_first():
+		doomed.append(bag.items[i])
+	_check(doomed == [l5_common_old, l5_common_new, l9_common, l5_rare, l2_elite],
+			"and empties by rarity, then level, then oldest first")
+
+	# The whole reason there are two: the plainest piece goes first even though it is not the lowest,
+	# and the level-2 elite outlives the level-9 common.
+	var backwards := bag.order().duplicate()
+	backwards.reverse()
+	_check(backwards != bag.worst_first(),
+			"the two orders are not one reversed -- level-major to read, rarity-major to destroy")
+	_check(bag.levels() == [9, 5, 2], "and the sections run highest level first")
+	_check(bag.count_at(5) == 3 and bag.count_at(9) == 1 and bag.count_at(1) == 0,
+			"with the right number in each")
+	return true
+
+
+## The bag has a bottom to it, and the worst is what falls out of it.
+func _test_capacity() -> bool:
+	var bag := Inventory.new()
+	var destroyed: Array[Item] = []
+	for i in Inventory.CAPACITY:
+		destroyed = bag.add(_piece(ItemRarity.Rarity.RARE, 5))
+	_check(bag.total() == Inventory.CAPACITY, "the bag fills to the cap")
+	_check(destroyed.is_empty(), "with nothing destroyed on the way")
+	_check(bag.is_full() and bag.room_left() == 0, "and says it is full")
+
+	# A common falling into a bag of rares is the worst thing in it, so it is what goes. Nothing is
+	# lost that was better than what arrived, which is the whole promise.
+	var common := _piece(ItemRarity.Rarity.COMMON, 9)
+	destroyed = bag.add(common)
+	_check(destroyed == [common], "a find worse than everything held is what gets destroyed")
+	_check(bag.total() == Inventory.CAPACITY and not bag.items.has(common),
+			"and the bag is unchanged")
+
+	var elite := _piece(ItemRarity.Rarity.ELITE, 1)
+	destroyed = bag.add(elite)
+	_check(destroyed.size() == 1 and destroyed[0].rarity == ItemRarity.Rarity.RARE,
+			"a find better than the worst held destroys that one instead")
+	_check(bag.items.has(elite), "and is kept")
+
+	# Five at once, into a bag that is already at the cap.
+	var over := Inventory.new()
+	for i in Inventory.CAPACITY + 5:
+		over.add(_piece(ItemRarity.Rarity.RARE if i >= 5 else ItemRarity.Rarity.COMMON, 3))
+	_check(over.total() == Inventory.CAPACITY, "five too many leaves the cap")
+	var commons := 0
+	for item in over.items:
+		if item.rarity == ItemRarity.Rarity.COMMON:
+			commons += 1
+	_check(commons == 0, "and the five commons are the five that went")
+
+	# Taking a piece off is the one thing the player can do that grows the bag, so it refuses rather
+	# than destroying something to make room for a piece they only wanted a closer look at.
+	var worn := _piece(ItemRarity.Rarity.RARE, 4)
+	bag.equipment.equip(Equipment.Socket.WEAPON, worn)
+	_check(bag.is_full(), "the bag is still full")
+	_check(not bag.unequip(Equipment.Socket.WEAPON), "a full bag refuses to take a piece back")
+	_check(bag.equipment.item_at(Equipment.Socket.WEAPON) == worn, "so it stays on")
+	bag.remove(bag.items[0])
+	_check(bag.unequip(Equipment.Socket.WEAPON), "with one square free it comes off")
+	_check(bag.equipment.item_at(Equipment.Socket.WEAPON) == null and bag.items.has(worn),
+			"and is in the bag")
+	return true
+
+
+## A level the player is done with: cleared once, and then told not to come back.
+func _test_autodiscard() -> bool:
+	var bag := Inventory.new()
+	for level in [3, 3, 7]:
+		bag.add(_piece(ItemRarity.Rarity.COMMON, level))
+	_check(not bag.autodiscards(3), "nothing is autodiscarded to begin with")
+
+	bag.set_autodiscard(3, true)
+	_check(bag.autodiscards(3) and not bag.autodiscards(7), "a rule covers one level")
+	bag.set_autodiscard(3, true)
+	_check(bag.autodiscard.size() == 1, "and setting it twice is setting it once")
+	# The rule is about what arrives. What is already held is the other button's business, and a rule
+	# that emptied the section would leave a player who meant "no more of these" short three pieces.
+	_check(bag.count_at(3) == 2, "turning a rule on leaves what is already held alone")
+
+	bag.set_autodiscard(3, false)
+	_check(not bag.autodiscards(3), "and it can be turned off again")
+	bag.set_autodiscard(3, true)
+
+	var gone := bag.discard_level(3)
+	_check(gone.size() == 2 and bag.count_at(3) == 0, "Clear empties exactly that level")
+	_check(bag.count_at(7) == 1, "and leaves the others")
+	# The section survives its items, or the rule would have nowhere left to be turned off.
+	_check(bag.levels() == [7, 3], "a level with a rule and nothing in it keeps its heading")
+	bag.set_autodiscard(3, false)
+	_check(bag.levels() == [7], "and loses it once the rule goes too")
+	return true
+
+
+## Every Label anywhere under `node`, so a test can read what a panel actually says without knowing
+## how it is stacked.
+func _labels_under(node: Node) -> Array[Node]:
+	var found: Array[Node] = []
+	for child: Node in node.get_children():
+		if child is Label:
+			found.append(child)
+		found.append_array(_labels_under(child))
+	return found
+
+
+## What level a drop comes out at: evenly anywhere up to what the tile allows, with rarity lifting
+## the floor. The ceiling is what a tile is worth and not what it pays -- which is the reason to
+## fight the same ground more than once.
+func _test_level_rolls() -> bool:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var steps := ItemRarity.NAMES.keys()
+	for step: ItemRarity.Rarity in steps:
+		_check(ItemRarity.LEVEL_FLOOR.has(step), "rarity %d has a level floor" % step)
+
+	# Never outside the range, at any ceiling and any rarity. A ceiling of 1 is the case that would
+	# break a floor allowed to climb past the top, and it is the middle of the map.
+	for ceiling in range(1, 21):
+		for step: ItemRarity.Rarity in steps:
+			for i in 200:
+				var level := ItemRarity.roll_level(step, ceiling, rng)
+				_check(level >= 1 and level <= ceiling,
+						"rarity %d rolled level %d under a ceiling of %d" % [step, level, ceiling])
+				_check(level >= clampi(ceili(ceiling * float(ItemRarity.LEVEL_FLOOR[step])), 1, ceiling),
+						"rarity %d rolled level %d, under its own floor at ceiling %d"
+								% [step, level, ceiling])
+
+	# Even, which is what makes a deep tile a chase rather than a payout: every level in the range
+	# comes up, and no level is favoured beyond what this many draws can scatter.
+	var ceiling := 8
+	var seen := {}
+	for i in ROLLS:
+		var level := ItemRarity.roll_level(ItemRarity.Rarity.COMMON, ceiling, rng)
+		seen[level] = int(seen.get(level, 0)) + 1
+	var want := 1.0 / ceiling
+	for level in range(1, ceiling + 1):
+		_check(seen.has(level), "a common piece can roll level %d of %d" % [level, ceiling])
+		var share := float(seen.get(level, 0)) / ROLLS
+		_check(absf(share - want) < _tolerance(want, ROLLS),
+				"level %d came up %.3f of the time, not the even %.3f" % [level, share, want])
+
+	# The floors climb with rarity, so a better piece is never worth less for having rolled well.
+	var floors: Array[float] = []
+	for step: ItemRarity.Rarity in steps:
+		floors.append(float(ItemRarity.LEVEL_FLOOR[step]))
+	for i in floors.size() - 1:
+		_check(floors[i] <= floors[i + 1], "rarity %d starts no higher up the range than %d" % [i, i + 1])
+	_check(floors[0] == 0.0, "a common piece can roll the bottom of the range")
+	return true
+
+
+## What a level is worth to a piece, and the promise that a piece never changes once it is rolled.
+func _test_item_levels() -> bool:
+	for stat: String in LootTable.STAT_LABELS:
+		_check(LootTable.LEVEL_FLAT.has(stat), "%s says what a level is worth to it" % stat)
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+
+	# A level-1 piece is exactly the piece the table describes: nothing about the game as it was moved.
+	for type in LootTable.items():
+		var plain := Item.rolled(type, ItemRarity.Rarity.COMMON, rng, 1)
+		_check(plain.level == 1, "%s rolled at level 1 is level 1" % type)
+		for stat: String in LootTable.stats_of(type):
+			_check(is_equal_approx(float(plain.base_stats()[stat]), float(LootTable.stats_of(type)[stat])),
+					"a level-1 %s still has %s %s" % [type, stat, LootTable.stats_of(type)[stat]])
+
+	# And a deeper one follows the curve, on a stat that starts small and one that starts large.
+	for level in range(1, 21):
+		var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, level)
+		_check(sword.level == level, "a sword rolled at level %d says so" % level)
+		for stat: String in ["damage", "crit_damage"]:
+			var want := LootTable.scale(stat, float(LootTable.stats_of("Wooden Sword")[stat]), level)
+			_check(is_equal_approx(float(sword.base_stats()[stat]), float(roundi(want))),
+					"a level-%d sword has %s %s, not the curve's %.2f"
+							% [level, stat, sword.base_stats()[stat], want])
+		# Damage is a whole point a level, which is the reason the flat step exists at all.
+		var damage: float = sword.base_stats()["damage"]
+		_check(is_equal_approx(damage, float(roundi(damage))), "a level-%d sword's damage is whole" % level)
+		if level > 1:
+			var under := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, level - 1)
+			_check(damage > float(under.base_stats()["damage"]),
+					"a level-%d sword hits harder than a level-%d one" % [level, level - 1])
+		# A rate keeps its decimal, because it is read as one.
+		var speed: float = sword.base_stats()["attack_speed"]
+		_check(is_equal_approx(speed, snappedf(speed, 0.1)), "a level-%d sword's attack speed is a tenth" % level)
+
+	# A probability may not be multiplied by a level. Every chance stat grows by its flat step alone,
+	# so a deep set of gear cannot add up past certainty and make every hit a crit.
+	for stat: String in LootTable.CHANCE_STATS:
+		_check(stat in LootTable.PERCENT_STATS, "%s is written as a percentage" % stat)
+		for level in [1, 10, 40]:
+			var want := 5.0 + float(LootTable.LEVEL_FLAT[stat]) * float(level - 1)
+			_check(is_equal_approx(LootTable.scale(stat, 5.0, level), want),
+					"%s at level %d is %.1f, not %.1f" % [stat, level, LootTable.scale(stat, 5.0, level), want])
+	var deep_sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 30)
+	_check(float(deep_sword.base_stats()["crit_chance"]) < Encounter.CRIT_CAP,
+			"a level-30 sword's crit chance (%s%%) is still a chance" % deep_sword.base_stats()["crit_chance"])
+
+	# The promise: once a piece is rolled it is that piece for good.
+	var kept := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 6)
+	var before := kept.base_stats().duplicate()
+	var _other := Item.rolled("Wooden Sword", ItemRarity.Rarity.ELITE, rng, 19)
+	_check(kept.base_stats() == before, "rolling another sword leaves the first one alone")
+	var handed := kept.base_stats()
+	handed["damage"] = 999.0
+	_check(kept.base_stats() == before, "editing what base_stats() hands back leaves the item alone")
+	var table_damage: Variant = LootTable.stats_of("Wooden Sword")["damage"]
+	_check(table_damage == 1, "and the table itself was never written into: damage %s" % table_damage)
+
+	# Modifiers grow with the level too, each kind its own way.
+	for level in [1, 12]:
+		var ring := Item.rolled("Gold Ring", ItemRarity.Rarity.ELITE, rng, level)
+		for mod in ring.mods:
+			var entry: Dictionary = ModifierTable.MODS[mod["id"]]
+			var band: Array = entry["range"]
+			var value := int(mod["value"])
+			_check(value == roundi(value), "every modifier value is whole: %s" % mod)
+			match entry["kind"]:
+				ModifierTable.Kind.FLAT:
+					var low := maxi(1, roundi(LootTable.scale(entry["stat"], float(band[0]), level)))
+					var high := maxi(1, roundi(LootTable.scale(entry["stat"], float(band[1]), level)))
+					_check(value >= low and value <= high,
+							"%s rolled %d at level %d, outside %d-%d" % [mod["id"], value, level, low, high])
+				ModifierTable.Kind.PERCENT:
+					var grow := pow(LootTable.LEVEL_GROWTH, level - 1)
+					_check(value >= maxi(1, roundi(int(band[0]) * grow))
+							and value <= maxi(1, roundi(int(band[1]) * grow)),
+							"%s rolled %d at level %d, outside its multiplied band" % [mod["id"], value, level])
+				_:
+					_check(value >= int(band[0]) and value <= int(band[1]),
+							"a player buff keeps its written band: %s rolled %d" % [mod["id"], value])
+
+	# Through the save and back, unchanged.
+	var deep := Item.rolled("Ruby Amulet", ItemRarity.Rarity.RARE, rng, 14)
+	var read := Item.from_dict(deep.to_dict())
+	_check(read != null, "a levelled item round-trips")
+	if read != null:
+		_check(read.level == deep.level, "with its level: %d against %d" % [read.level, deep.level])
+		_check(read.base_stats() == deep.base_stats(), "and every stat exactly, not nearly")
+		_check(read.mods == deep.mods, "and every modifier")
+
+	# A save from before pieces carried their own numbers: level 1, and the tables unscaled, which is
+	# exactly what such a piece was worth on the day it was written.
+	var old := Item.from_dict({"type": "Wooden Sword", "rarity": "common", "mods": []})
+	_check(old != null, "an item with no level still loads")
+	if old != null:
+		_check(old.level == 1, "as a level-1 piece")
+		_check(old.base_stats() == LootTable.stats_of("Wooden Sword"), "carrying the table as written")
+	return true
 
 
 ## A mouse button going down or coming up on the grid, in the panel's own coordinates.
@@ -620,3 +1544,431 @@ func _play(fight: Encounter) -> void:
 		guard += 1
 		if not fight.hit():
 			fight.advance(1.0 / 8.0)
+
+
+## What the difference between two pieces comes to, with no scene to read it off. The union of both
+## sides, the sign, and that a difference too small to print is left out rather than shown as zero.
+func _test_deltas() -> bool:
+	var better := Item.new()
+	better.type = "Wooden Sword"
+	better.rarity = ItemRarity.Rarity.RARE
+	better.level = 1
+	better.stats = {"damage": 20.0, "crit_chance": 6.0, "armor": 5.0}
+	var worse := Item.new()
+	worse.type = "Wooden Sword"
+	worse.rarity = ItemRarity.Rarity.COMMON
+	worse.level = 1
+	worse.stats = {"damage": 12.0, "crit_chance": 6.0, "health": 30.0}
+
+	var change := ItemDetails.deltas(better, worse)
+	_check(change.get("damage") == 8.0, "a stat both have is the difference: %s" % change.get("damage"))
+	_check(change.get("armor") == 5.0, "a stat only the new piece has is the whole of it")
+	_check(change.get("health") == -30.0, "and one only the old piece has is the whole of it, lost")
+	_check(not change.has("crit_chance"), "a stat that does not move is not mentioned at all")
+
+	# Nothing rounds to zero on the line, either. An "+0 Armour" line says a stat changed and then
+	# says it did not, so the pieces are compared as the numbers the player can actually see.
+	var hair := Item.new()
+	hair.type = "Wooden Sword"
+	hair.rarity = ItemRarity.Rarity.COMMON
+	hair.level = 1
+	hair.stats = {"damage": 12.4, "attack_speed": 1.02}
+	var hair_worse := Item.new()
+	hair_worse.type = "Wooden Sword"
+	hair_worse.rarity = ItemRarity.Rarity.COMMON
+	hair_worse.level = 1
+	hair_worse.stats = {"damage": 12.0, "attack_speed": 1.0}
+	_check(ItemDetails.deltas(hair, hair_worse).is_empty(),
+			"a difference too small to print is left out")
+
+	# And the spelling, which lives beside stat_line for the reason stat_line gives.
+	_check(LootTable.stat_delta("damage", 8.0) == "Damage +8", "a gain is written with its sign")
+	_check(LootTable.stat_delta("health", -30.0) == "Health -30", "and a loss with its own")
+	_check(LootTable.stat_delta("crit_chance", 3.0) == "Crit Chance +3%", "a percentage keeps its sign")
+	_check(LootTable.stat_delta("attack_speed", 0.3) == "Attack Speed +0.3/s", "and so does a rate")
+	return true
+
+
+## The side-by-side: what is selected in the bag, and what it would replace on the page beside it.
+func _test_comparing() -> bool:
+	_clear_save()
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	main.inventory_path = TEST_PATH
+	main.map_path = TEST_MAP_PATH
+	root.add_child(main)
+	for i in 3:
+		await process_frame
+
+	var weak := _piece(ItemRarity.Rarity.COMMON, 1)
+	var strong := _piece(ItemRarity.Rarity.RARE, 9)
+	main.inventory.add(weak)
+	main.inventory.equip(weak, Equipment.Socket.WEAPON)
+	main.inventory.add(strong)
+	main._on_bag_pressed()
+	for i in 2:
+		await process_frame
+	_check(not _socket_squares(main).is_empty(), "with nothing selected the page is the doll")
+
+	main._select_item(main.inventory.items.find(strong))
+	for i in 2:
+		await process_frame
+	var beside := _texts(main._worn_body)
+	_check("Equipped · %s" % Equipment.LABELS[Equipment.Socket.WEAPON] in beside,
+			"selecting a sword names the socket it would go in: %s" % beside)
+	_check(weak.display_name() in beside, "and shows the sword already in it")
+	_check("%s · level %d" % [weak.rarity_name(), weak.level] in beside, "with its rarity and level")
+	_check(_socket_squares(main).is_empty(), "and the doll is out of the way while it does")
+
+	# What the swap is worth, under the selected piece's own stats.
+	var change := ItemDetails.deltas(strong, weak)
+	_check(change.has("damage") and change["damage"] > 0.0, "the better sword hits harder")
+	var block := _texts(main._bag_detail)
+	for stat: String in change:
+		_check(LootTable.stat_delta(stat, change[stat]) in block,
+				"the block says what %s would do: %s" % [stat, block])
+
+	# Taking the worn piece off from here keeps the piece being judged open -- it is the whole point
+	# of standing them side by side, and the index it sits at has just moved.
+	main._on_compare_unequip_pressed(strong, Equipment.Socket.WEAPON)
+	for i in 2:
+		await process_frame
+	_check(main.inventory.equipment.item_at(Equipment.Socket.WEAPON) == null, "Unequip takes it off")
+	_check(main.inventory.items.has(weak), "and gives it back to the bag")
+	_check(main._bag_selected == main.inventory.items.find(strong),
+			"and the sword being judged is still the one open")
+	_check("Nothing worn" in _texts(main._worn_body), "with an empty socket beside it")
+	_check(ItemDetails.deltas(strong, weak).size() > 0
+			and not (LootTable.stat_delta("damage", change["damage"]) in _texts(main._bag_detail)),
+			"and no gains against a piece that is no longer worn")
+
+	# A boot on the feet is not what a sword would replace: the page compares against the socket the
+	# Equip button targets and nothing else.
+	var boot := Item.new()
+	boot.type = "Leather Boot"
+	boot.rarity = ItemRarity.Rarity.COMMON
+	boot.level = 1
+	boot.stats = Item.scaled_stats(boot.type, 1)
+	main.inventory.add(boot)
+	main.inventory.equip(boot, Equipment.Socket.BOOTS)
+	main._select_item(main.inventory.items.find(strong))
+	for i in 2:
+		await process_frame
+	var still := _texts(main._worn_body)
+	_check("Nothing worn" in still, "a worn boot leaves the weapon socket empty")
+	_check(not (boot.display_name() in still), "and is not what the sword is compared against")
+
+	main._select_item(-1)
+	await process_frame
+	_check(_socket_squares(main).size() == Equipment.sockets().size(),
+			"closing the block brings the doll back, with every socket on it")
+	main._on_bag_closed()
+	main.queue_free()
+	_clear_save()
+	return true
+
+
+## The orb tables themselves: eight orbs, eight icons that resolve, and a drop curve that runs the
+## right way round. Nothing here crafts anything -- this is the file being well formed.
+func _test_orb_tables() -> bool:
+	_check(OrbTable.ORBS.size() == 8, "there are eight orbs")
+	for orb: String in OrbTable.ORBS:
+		_check(ResourceLoader.exists(OrbTable.icon_path(orb)),
+				"%s has an icon at %s" % [orb, OrbTable.icon_path(orb)])
+		_check(OrbTable.icon(orb) != null, "%s loads its icon" % orb)
+		_check(int(OrbTable.ORBS[orb]["weight"]) > 0, "%s can be drawn" % orb)
+		# The card reads it out as a sentence, so it has to be one.
+		_check(OrbTable.describe(orb).ends_with("."), "%s describes itself in a sentence" % orb)
+	# The same shape LootTable's curve has, and the same ceiling: a chance cannot pass certainty.
+	_check(OrbTable.chance_for("Skeleton Warrior") > 0.0, "a common body can carry an orb")
+	for enemy: String in EnemyRoster.names():
+		_check(OrbTable.chance_for(enemy) <= 1.0, "%s cannot exceed certainty" % enemy)
+	# Weighted draws land on every orb eventually and never outside the table.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 90210
+	var seen := {}
+	for i in 4000:
+		var orb := OrbTable.roll("Skeleton Warrior", rng, true)
+		_check(OrbTable.ORBS.has(orb), "a drawn orb is one of the eight")
+		seen[orb] = true
+	_check(seen.size() == 8, "every orb can be drawn, saw %d" % seen.size())
+	return true
+
+
+## The eight verbs, each against a piece it should take and a piece it should refuse. The rule under
+## all of them: rarity and modifiers may move, level and base stats may not.
+func _test_orb_verbs() -> bool:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+
+	# --- Transmutation: a common becomes an uncommon carrying uncommon's band ---
+	var common := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 5)
+	var was_level := common.level
+	var was_stats := common.base_stats()
+	_check(OrbTable.can_apply("Orb of Transmutation", common), "a common can be transmuted")
+	_check(OrbTable.apply("Orb of Transmutation", common, rng), "transmutation lands")
+	_check(common.rarity == ItemRarity.Rarity.UNCOMMON, "transmutation makes it uncommon")
+	var band: Array = ItemRarity.MOD_COUNT[ItemRarity.Rarity.UNCOMMON]
+	_check(common.mods.size() >= int(band[0]) and common.mods.size() <= int(band[1]),
+			"transmutation rolls uncommon's own band, got %d" % common.mods.size())
+	# The rule that holds for every one of the eight, checked here where a piece has just changed as
+	# much as an orb can change it.
+	_check(common.level == was_level, "an orb never moves a piece's level")
+	_check(common.base_stats() == was_stats, "an orb never moves a piece's base stats")
+	_check(not OrbTable.can_apply("Orb of Transmutation", common), "an uncommon cannot be transmuted")
+	_check(not OrbTable.why_not("Orb of Transmutation", common).is_empty(),
+			"a refused transmutation says why")
+
+	# --- Augmentation: fills an uncommon up, then refuses ---
+	var magic := Item.rolled("Wooden Shield", ItemRarity.Rarity.UNCOMMON, rng, 3)
+	var ceiling := int(ItemRarity.MOD_COUNT[ItemRarity.Rarity.UNCOMMON][1])
+	while magic.mods.size() < ceiling:
+		var before := magic.mods.size()
+		_check(OrbTable.can_apply("Orb of Augmentation", magic), "an uncommon with room takes one")
+		_check(OrbTable.apply("Orb of Augmentation", magic, rng), "augmentation lands")
+		_check(magic.mods.size() == before + 1, "augmentation adds exactly one")
+	_check(not OrbTable.can_apply("Orb of Augmentation", magic), "a full uncommon refuses")
+	# No modifier twice on one piece, which is what add_one draws without replacement for.
+	var ids := {}
+	for mod in magic.mods:
+		ids[str(mod["id"])] = true
+	_check(ids.size() == magic.mods.size(), "augmentation never repeats a modifier")
+
+	# --- Alteration: rerolls an uncommon, and it stays uncommon ---
+	_check(OrbTable.can_apply("Orb of Alteration", magic), "a full uncommon can still be altered")
+	_check(OrbTable.apply("Orb of Alteration", magic, rng), "alteration lands")
+	_check(magic.rarity == ItemRarity.Rarity.UNCOMMON, "alteration keeps the rarity")
+
+	# --- Alchemy: one step at a time, and never as far as unique ---
+	var climbing := Item.rolled("Leather Boot", ItemRarity.Rarity.COMMON, rng, 2)
+	var steps := 0
+	while OrbTable.can_apply("Orb of Alchemy", climbing):
+		var before_rarity := climbing.rarity
+		_check(OrbTable.apply("Orb of Alchemy", climbing, rng), "alchemy lands")
+		_check(climbing.rarity == before_rarity + 1, "alchemy steps exactly one rarity")
+		steps += 1
+		_check(steps <= 8, "alchemy terminates")
+	_check(climbing.rarity == ItemRarity.Rarity.ELITE, "alchemy stops at elite")
+	_check(climbing.rarity != ItemRarity.Rarity.UNIQUE, "alchemy can never reach unique")
+
+	# --- Chaos: rerolls at any rarity above common, keeping it ---
+	_check(OrbTable.can_apply("Orb of Chaos", climbing), "an elite can be chaosed")
+	_check(OrbTable.apply("Orb of Chaos", climbing, rng), "chaos lands")
+	_check(climbing.rarity == ItemRarity.Rarity.ELITE, "chaos keeps the rarity")
+	var bare := Item.rolled("Wooden Armor", ItemRarity.Rarity.COMMON, rng, 1)
+	_check(not OrbTable.can_apply("Orb of Chaos", bare), "a common has nothing to chaos")
+
+	# --- Exalted: any rarity with room, and a common has none ---
+	_check(not OrbTable.can_apply("Orb of Exalted", bare), "a common cannot be exalted")
+	var rare := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 6)
+	var rare_cap := int(ItemRarity.MOD_COUNT[ItemRarity.Rarity.RARE][1])
+	while rare.mods.size() < rare_cap:
+		_check(OrbTable.apply("Orb of Exalted", rare, rng), "exalt lands while there is room")
+	_check(not OrbTable.can_apply("Orb of Exalted", rare), "a full rare refuses an exalt")
+
+	# --- Divine: the ids stay, the numbers may move, and stay inside the band ---
+	var divine := Item.rolled("Wooden Sword", ItemRarity.Rarity.ELITE, rng, 9)
+	var before_ids := PackedStringArray()
+	for mod in divine.mods:
+		before_ids.append(str(mod["id"]))
+	_check(OrbTable.can_apply("Orb of Divine", divine), "a piece with modifiers can be divined")
+	var moved := false
+	for attempt in 20:
+		var before_values := []
+		for mod in divine.mods:
+			before_values.append(int(mod["value"]))
+		_check(OrbTable.apply("Orb of Divine", divine, rng), "divine lands")
+		for i in divine.mods.size():
+			if int(divine.mods[i]["value"]) != int(before_values[i]):
+				moved = true
+	var after_ids := PackedStringArray()
+	for mod in divine.mods:
+		after_ids.append(str(mod["id"]))
+	_check(before_ids == after_ids, "divine keeps every modifier it found")
+	_check(moved, "divine moves a value at least once in twenty tries")
+	for mod in divine.mods:
+		var mod_band := ModifierTable.band_for(str(mod["id"]), divine.level)
+		_check(int(mod["value"]) >= int(mod_band[0]) and int(mod["value"]) <= int(mod_band[1]),
+				"a divined %s stays in its band" % mod["id"])
+	_check(not OrbTable.can_apply("Orb of Divine", bare), "a bare common has nothing to divine")
+
+	# --- Scouring: back to nothing, and refused once it is there ---
+	_check(OrbTable.can_apply("Orb of Scouring", divine), "an elite can be scoured")
+	var scoured_level := divine.level
+	var scoured_stats := divine.base_stats()
+	_check(OrbTable.apply("Orb of Scouring", divine, rng), "scouring lands")
+	_check(divine.rarity == ItemRarity.Rarity.COMMON, "scouring makes it common")
+	_check(divine.mods.is_empty(), "scouring takes every modifier")
+	_check(divine.level == scoured_level, "scouring never moves the level")
+	_check(divine.base_stats() == scoured_stats, "scouring never moves the base stats")
+	_check(not OrbTable.can_apply("Orb of Scouring", divine), "a bare common refuses a scouring")
+
+	# `why_not` is the exact complement of `can_apply`, for every orb against every piece the suite
+	# has in hand -- so the card can ask one question rather than two and never go silent.
+	for orb: String in OrbTable.ORBS:
+		for piece: Item in [common, magic, climbing, bare, rare, divine]:
+			var quiet := OrbTable.why_not(orb, piece).is_empty()
+			_check(quiet == OrbTable.can_apply(orb, piece),
+					"%s explains itself on a %s %s" % [orb, piece.rarity_name(), piece.type])
+	# Nothing at all is refused without a fuss rather than crashing.
+	_check(not OrbTable.can_apply("Orb of Chaos", null), "an orb refuses a piece that is not there")
+	_check(OrbTable.why_not("Orb of Chaos", null).is_empty(), "and has nothing to say about it")
+	return true
+
+
+## The orbs through the save, and their standing apart from the bag: not counted against the cap,
+## not trimmed with it, and dropped by name when a build no longer has them.
+func _test_orb_saving() -> bool:
+	_clear_save()
+	var bag := Inventory.new()
+	bag.add_orb("Orb of Chaos", 3)
+	bag.add_orb("Orb of Divine")
+	_check(bag.orb_count("Orb of Chaos") == 3, "three chaos orbs went in")
+	_check(bag.orb_count("Orb of Alchemy") == 0, "an orb never found counts zero")
+	_check(bag.total_orbs() == 4, "four orbs in all")
+	# A name this build does not have is not a count it keeps.
+	bag.add_orb("Orb of Nonsense", 5)
+	_check(bag.total_orbs() == 4, "an orb that does not exist is not added")
+
+	# Spending: one at a time, and never past empty.
+	_check(bag.spend_orb("Orb of Divine"), "the last divine is spent")
+	_check(bag.orb_count("Orb of Divine") == 0, "and is gone")
+	_check(not bag.orbs.has("Orb of Divine"), "an emptied orb leaves no entry behind")
+	_check(not bag.spend_orb("Orb of Divine"), "there is no second one to spend")
+
+	# The cap is the bag's, and orbs are not in the bag.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for i in Inventory.CAPACITY:
+		bag.add(Item.rolled("Leather Boot", ItemRarity.Rarity.COMMON, rng, 1))
+	_check(bag.is_full(), "the bag is full of boots")
+	_check(bag.total() == Inventory.CAPACITY, "orbs are not counted against the cap")
+	bag.add_orb("Orb of Chaos")
+	bag.trim()
+	_check(bag.orb_count("Orb of Chaos") == 4, "trimming a full bag never touches the orbs")
+
+	_check(bag.save(TEST_PATH), "the bag with orbs in it saved")
+	var back := Inventory.load_from(TEST_PATH)
+	_check(back.orb_count("Orb of Chaos") == 4, "the chaos orbs came back")
+	_check(back.total_orbs() == 4, "and nothing else came with them")
+	_check(back.orbs == bag.orbs, "the orbs round-trip exactly")
+
+	# A version 6 file has no orbs at all, and reads as none rather than as a refusal.
+	var older := {
+		"version": 6, "first_elite_taken": false, "gold": 12,
+		"items": [], "equipped": {}, "autodiscard": [],
+	}
+	var file := FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	file.store_string(JSON.stringify(older, "\t"))
+	file = null
+	var legacy := Inventory.load_from(TEST_PATH)
+	_check(legacy.total_orbs() == 0, "a version 6 save comes back with no orbs")
+	_check(legacy.gold == 12, "and keeps everything it did have")
+
+	# A hand-edited file naming an orb this build has retired loses that line and keeps the rest.
+	var edited := {
+		"version": Inventory.VERSION, "first_elite_taken": false, "gold": 0,
+		"items": [], "equipped": {}, "autodiscard": [],
+		"orbs": {"Orb of Chaos": 2, "Orb of Nonsense": 9, "Orb of Scouring": -4},
+	}
+	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	file.store_string(JSON.stringify(edited, "\t"))
+	file = null
+	var pruned := Inventory.load_from(TEST_PATH)
+	_check(pruned.orb_count("Orb of Chaos") == 2, "a known orb survives the read")
+	_check(pruned.total_orbs() == 2, "an unknown orb is dropped and a negative one reads as none")
+	_clear_save()
+	return true
+
+
+## Crafting as the player does it: the real panel, the real tray, and a square pressed. The tables
+## are checked above; this is the wiring -- which orbs the tray offers against the piece that is
+## open, what a press does to the piece and to the count, and that the block it was pressed from is
+## still open on the same piece afterwards.
+func _test_crafting_from_the_bag() -> bool:
+	_clear_save()
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	main.inventory_path = TEST_PATH
+	main.map_path = TEST_MAP_PATH
+	root.add_child(main)
+	for i in 3:
+		await process_frame
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 99
+	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 4)
+	main.inventory.add(sword)
+	main.inventory.add_orb("Orb of Transmutation", 2)
+	main.inventory.add_orb("Orb of Scouring", 1)
+	main._on_bag_pressed()
+	main._select_item(0)
+	for i in 2:
+		await process_frame
+
+	# The tray with a common piece open: one of the two held orbs has something to do and the other
+	# has not, which is the whole of what the lit/grey split says.
+	var lit: Array = []
+	var grey: Array = []
+	for child: Node in main._orb_tray.get_children():
+		var orb: String = child.orb
+		if main.inventory.orb_count(orb) <= 0:
+			continue
+		if OrbTable.can_apply(orb, sword):
+			lit.append(orb)
+		else:
+			grey.append(orb)
+	_check(lit == ["Orb of Transmutation"], "only transmutation is lit on a common, got %s" % [lit])
+	_check(grey == ["Orb of Scouring"], "scouring is grey on a common, got %s" % [grey])
+	_check(main._orb_tray.get_child_count() == OrbTable.ORBS.size(),
+			"the tray draws every orb, held or not")
+
+	# Pressed, exactly as a click on the square does it.
+	main._on_orb_pressed("Orb of Transmutation")
+	for i in 2:
+		await process_frame
+	_check(sword.rarity == ItemRarity.Rarity.UNCOMMON, "the sword came up uncommon")
+	_check(not sword.mods.is_empty(), "and carries modifiers")
+	_check(main.inventory.orb_count("Orb of Transmutation") == 1, "one orb was spent")
+	# Crafting adds nothing and removes nothing, so the selection is still the same piece -- which is
+	# what lets the player watch a piece change rather than go hunting for it again.
+	_check(main._bag_selected == 0, "the block stayed open on the same piece")
+	_check(main._bag_detail.visible, "and is still showing")
+
+	# That orb now has nothing to do, and pressing it again must not cost the player the second one.
+	# The square is grey and ignores the click; the handler is checked too, because the guarantee is
+	# apply first and spend only if it landed.
+	main._on_orb_pressed("Orb of Transmutation")
+	_check(main.inventory.orb_count("Orb of Transmutation") == 1, "a refused orb is not spent")
+	_check(sword.rarity == ItemRarity.Rarity.UNCOMMON, "and the piece did not change again")
+
+	# Scouring is lit now, and takes it all back.
+	main._on_orb_pressed("Orb of Scouring")
+	for i in 2:
+		await process_frame
+	_check(sword.rarity == ItemRarity.Rarity.COMMON, "scouring brought it back to common")
+	_check(sword.mods.is_empty(), "and took the modifiers with it")
+	_check(main.inventory.orb_count("Orb of Scouring") == 0, "the scouring orb was spent")
+
+	# The card says what it is looking at, in all three of the states it can find an orb in.
+	main._on_orb_hovered("Orb of Alchemy", main._orb_tray.get_child(0))
+	_check(main._orb_card.visible, "hovering puts the card up")
+	main._on_orb_unhovered()
+	_check(not main._orb_card.visible, "and leaving takes it down")
+
+	# Everything crafted goes through the save unchanged, which is the whole point of a piece being
+	# frozen: what came back is what was put in, orbs and all.
+	var before := sword.to_dict()
+	main.inventory.save(TEST_PATH)
+	var back := Inventory.load_from(TEST_PATH)
+	_check(back.orb_count("Orb of Transmutation") == 1, "the unspent orb survived the save")
+	_check(back.orb_count("Orb of Scouring") == 0, "the spent one did not come back")
+	_check(back.items.size() == 1, "the sword came back")
+	_check(back.items[0].to_dict() == before, "the crafted sword round-trips exactly")
+
+	main.queue_free()
+	await process_frame
+	_clear_save()
+	return true

@@ -50,6 +50,9 @@ var walking: bool:
 
 var _envs: Dictionary[Vector2i, String] = {}
 var _tiles: Dictionary[Vector2i, String] = {}  # ground tile name per cell
+## What each tile the player has seen is called, from the moment they first saw it. Not derived and
+## not regenerated: see `name_of`.
+var _names: Dictionary[Vector2i, String] = {}
 var _roads: Dictionary[Vector2i, int] = {}  # road edge mask per world spot
 var _routed_links: Dictionary[String, bool] = {}  # town links already routed, so a road is never laid twice
 var _states: Dictionary[Vector2i, State] = {}
@@ -96,6 +99,95 @@ static func create(map: HexMap, towns: TownWorld, origin: Vector2i, env_seed: in
 	return builder
 
 
+## The map as plain data, for `MapSave` to write. Everything here either cannot be regenerated (the
+## land and the roads are order-dependent, see MapSave) or must not be (the towns). `_tiles` is left
+## out because `_tile_name` seeds per cell, so it is derived and cannot disagree with what it is
+## derived from; so are `_drawn_roads` and the fog, which the drawing puts back.
+##
+## Nothing here touches `map`: this is called from the main scene's _exit_tree, where the HexMap
+## child may already be gone -- which is also why `walking` is not asked about. A walk in progress
+## is not part of a save. `player_cell` is the last tile actually reached, so a game closed
+## mid-step resumes on the tile behind; the tile being walked to was set DISCOVERED before the walk
+## started, so it costs the step and nothing else.
+func to_save() -> MapSave:
+	var save := MapSave.new()
+	save.sheet = MapSave.fingerprint(map.tileset)
+	save.world_seed = towns.seed_value
+	save.map_seed = env_seed
+	save.origin = origin
+	save.rect = rect
+	save.start_town = start_town
+	save.player_cell = player_cell
+	save.towns = towns.to_dict()
+	save.envs = _envs
+	save.names = _names
+	save.roads = _roads
+	save.routed_links = _routed_links
+	for cell in _states:
+		save.states[cell] = _states[cell]
+	return save
+
+
+## Rebuilds the map a save holds and draws it, the mirror of `create()` -- and shorter than it,
+## because the saved town world already has `clear_towns_near` and `ensure_small_town` in it and the
+## start town's road is already among the saved roads. Nothing is generated and no town is touched.
+##
+## `towns` is the world out of the same save, through TownWorld.from_dict.
+static func restore(map: HexMap, towns: TownWorld, save: MapSave) -> MapBuilder:
+	assert(save.origin.y % 2 == 0, "MapBuilder origin row must be even")
+	var builder := MapBuilder.new()
+	builder.map = map
+	builder.towns = towns
+	builder.origin = save.origin
+	builder.env_seed = save.map_seed
+	builder.rect = save.rect
+	builder.start_town = save.start_town
+	builder._envs = save.envs
+	builder._names = save.names
+	builder._roads = save.roads
+	builder._routed_links = save.routed_links
+	for cell in save.states:
+		builder._states[cell] = save.states[cell]
+	for cell in builder._envs:
+		builder._tiles[cell] = builder._tile_name(cell)
+	# A save written before names existed brings back land the player has seen and no names for it.
+	# They are filled in here rather than left to whatever asks first, so one load is all it takes
+	# and the map on disk is whole again: a tile the player has looked at has a name.
+	for cell in builder._states:
+		builder.name_of(cell)
+
+	map.clear_map()
+	# Before anything is drawn, or the first cells get their blends worked out against land that
+	# reads as empty. Same reason create() sets it before its own first _show.
+	map.hidden_env = builder.env_at
+	for connection in map.player.arrived.get_connections():
+		map.player.arrived.disconnect(connection["callable"])
+	map.player.arrived.connect(builder._on_player_arrived)
+	builder._draw_saved()
+	builder.player_cell = save.player_cell
+	map.set_player_cell(save.player_cell)
+	return builder
+
+
+## Draws every cell the save had drawn, in one pass. `_show` is right for one tile appearing and
+## wrong for a whole map arriving at once: it goes through HexMap.set_ground, which refreshes the
+## blends of the cell *and its six neighbors*, so drawing N cells costs 7N refreshes of which all
+## but N are repeats. The ground and the roads go down first and the blends are refreshed once per
+## cell instead, which comes to the same picture -- a neighbor that isn't drawn has no ground, and
+## refresh_blends does nothing to a cell with no ground.
+func _draw_saved() -> void:
+	for cell in _states:
+		if not _tiles.has(cell):
+			continue
+		map.place_ground(cell, _tiles[cell])
+		_draw_road(cell)
+		if _states[cell] == State.UNDISCOVERED:
+			map.fog.add_cell(cell)
+	for cell in _states:
+		if _tiles.has(cell):
+			map.refresh_blends(cell)
+
+
 ## The hexagon drawn at the start, in rows of 2, 3 and 2: the discovered center cell and its six undiscovered
 ## neighbors.
 static func start_cells() -> Array[Vector2i]:
@@ -115,11 +207,55 @@ func env_at(cell: Vector2i) -> String:
 	return _envs.get(cell, "")
 
 
+## What a tile is called. A tile is named the first time it is asked about, which `_show` makes the
+## first time the player sees it, and the name is kept from then on -- in `_names` and in the save.
+##
+## It is stored rather than worked out again each time even though `TileNames.generate` is a pure
+## function of the seed and the cell, for the same reason the town world is written down: that is a
+## property of today's tables, not a promise, and a place the player has fought over must not be
+## renamed by a later build widening a word list. Cells the map has never generated have no name --
+## there is nothing there to call anything.
+func name_of(cell: Vector2i) -> String:
+	if _names.has(cell):
+		return _names[cell]
+	if not _envs.has(cell):
+		return ""
+	var tier := towns.tier_at(_spot(cell))
+	_names[cell] = TileNames.generate(cell, _envs[cell], env_seed,
+			TownWorld.TIER_NAMES[tier] if tier != -1 else "")
+	return _names[cell]
+
+
 ## The road edges on a cell, as a mask, and 0 where there is no road. Towns carry none: roads stop at their edge.
 func road_at(cell: Vector2i) -> int:
 	if towns.has_town(_spot(cell)):
 		return 0
 	return _roads.get(_spot(cell), 0)
+
+
+## Which battle backdrop a cell fights on: what the world put there, read in the order it matters.
+## A town is what you see whether or not a road runs to it, so it is asked about first.
+func area_variant(cell: Vector2i) -> String:
+	match towns.tier_at(_spot(cell)):
+		TownWorld.Tier.SMALL:
+			return "village"
+		TownWorld.Tier.MEDIUM:
+			return "town"
+		TownWorld.Tier.FORTRESS:
+			return "fortress"
+	return "road" if road_at(cell) != 0 else "plain"
+
+
+## The level of a tile, in bands that widen as they go: the middle tile alone is level 1, the next
+## two rings are level 2, the three after that level 3, and so on. Band n is n tiles wide, so level n
+## begins at the nth triangular number, and this is that series inverted. Levels come quickly off the
+## start, where one step is a real change, and slow down at the frontier, where the walk is long.
+##
+## It is what the side panel shows and the ceiling on what can drop here. Note it is not the whole
+## story of how hard a tile is: enemy health is smooth in the distance while this is banded, so two
+## tiles at opposite ends of one band read the same number and do not fight the same.
+static func level_of(cell: Vector2i) -> int:
+	return int((1.0 + sqrt(1.0 + 8.0 * HexGrid.distance(CENTER, cell))) / 2.0)
 
 
 ## What the player knows about a cell. Cells outside the map are HIDDEN.
@@ -140,6 +276,13 @@ func seen(cell: Vector2i) -> bool:
 ## and they have to be standing still.
 func can_discover(cell: Vector2i) -> bool:
 	return not walking and state(cell) == State.UNDISCOVERED and HexGrid.distance(cell, player_cell) == 1
+
+
+## Whether the player can farm this cell: a tile already taken, which the player can go back to and
+## fight on for as long as they like. Unlike discovering, it asks nothing about where they stand --
+## a run is a thing you choose to do, not a step you take.
+func can_farm(cell: Vector2i) -> bool:
+	return not walking and discovered(cell)
 
 
 ## Whether the player can travel to this cell: a discovered tile other than the one they stand on, with a route
@@ -294,6 +437,9 @@ static func start_town_cells() -> Array[Vector2i]:
 func _show(cell: Vector2i, to: State) -> void:
 	if not _tiles.has(cell) or state(cell) == to:
 		return
+	# Named the moment it is first drawn, undiscovered or not: seeing a place is meeting it, and a
+	# tile the player has been looking at for an hour should not be nameless when they walk in.
+	name_of(cell)
 	if not seen(cell):
 		map.set_ground(cell, _tiles[cell])
 		_draw_road(cell)

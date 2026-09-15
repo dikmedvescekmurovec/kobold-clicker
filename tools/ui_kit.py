@@ -25,6 +25,7 @@ SRC = "Assets/Potential/2D Pixel UI/PNG"
 POTENTIAL = "Assets/Potential"
 OUT = "Assets/UI"
 GEAR_OUT = "Assets/Gear"
+ORB_OUT = "Assets/Orbs"
 QA = "tools/qa"
 SHEET = "ui_sheet.png"
 
@@ -92,10 +93,84 @@ GEAR = {
     "Gold Ring": ("2D Pixel UI/PNG/Icons", 82, 130, 12, 12, 2),
     "Ruby Amulet": ("2D Pixel UI/PNG/Icons", 3, 146, 10, 12, 2),
     "Wooden Torch": ("Pixel Art Icon Pack - RPG/Weapon & Tool/Torch", 0, 0, 32, 32, 1),
+    "Leather Helmet": ("Pixel Art Icon Pack - RPG/Equipment/Leather Helmet", 0, 0, 32, 32, 1),
 }
 # Every gear icon is drawn on a square of this side, centred, because ItemSlot draws a fixed 32x32
 # rect and a test holds every icon to it.
 GEAR_SIDE = 32
+
+# The eight orbs, off "OreAndGem" -- a 10x5 grid of 50 gems on an exact 32 px pitch, so an entry is
+# only ever a cell of it. The picks are made for distinctness across the tray as much as for the
+# colours Path of Exile trained the idea into: the eight stand side by side in one row, so no two of
+# them may read as the same stone at a glance.
+#
+# name -> (sheet under Assets/Potential, x, y, w, h, scale), the same 6-tuple as GEAR
+ORBS = {
+    "Orb of Transmutation": ("OreAndGem/OreGemSpritesheet", 9 * 32, 1 * 32, 32, 32, 1),
+    "Orb of Augmentation": ("OreAndGem/OreGemSpritesheet", 1 * 32, 3 * 32, 32, 32, 1),
+    "Orb of Alteration": ("OreAndGem/OreGemSpritesheet", 7 * 32, 1 * 32, 32, 32, 1),
+    "Orb of Alchemy": ("OreAndGem/OreGemSpritesheet", 9 * 32, 3 * 32, 32, 32, 1),
+    "Orb of Chaos": ("OreAndGem/OreGemSpritesheet", 6 * 32, 2 * 32, 32, 32, 1),
+    "Orb of Exalted": ("OreAndGem/OreGemSpritesheet", 5 * 32, 1 * 32, 32, 32, 1),
+    "Orb of Divine": ("OreAndGem/OreGemSpritesheet", 8 * 32, 2 * 32, 32, 32, 1),
+    "Orb of Scouring": ("OreAndGem/OreGemSpritesheet", 9 * 32, 4 * 32, 32, 32, 1),
+}
+# What OrbSlot draws an orb at: half the source, which is the whole reason the centring below is
+# fussier than the gear's. Written here because the preview has to show that size to be worth looking
+# at -- the halving is the only thing about these icons that can go wrong.
+ORB_DRAWN = 16
+
+# The equipment screen's own furniture, cut off the UI pack's Equipment.png and written loose to
+# Assets/UI for the main scene to load by path -- like the gear icons, and for the same reason: none
+# of it is a nine-slice, so none of it belongs in the theme sheet.
+#
+# The doll is the pack's own silhouette, brown on brown so it reads as the panel rather than as a
+# picture on it; the sockets are laid over it. The other two are the pack's empty-socket marks, and
+# it is no accident that it draws exactly these two: which socket is the weapon and which the boots
+# is obvious from where it sits on a body, and which is a ring is not.
+PARTS = {
+    "ui_doll": ("2D Pixel UI/PNG/Equipment", 50, 336, 43, 46, 1),
+    "ui_socket_amulet": ("2D Pixel UI/PNG/Equipment", 99, 337, 10, 13, 1),
+    "ui_socket_ring": ("2D Pixel UI/PNG/Equipment", 99, 354, 11, 12, 1),
+}
+
+# The combat HUD's kill-pip bar, and the one thing here off a second bought pack -- "Pixel UI pack
+# 3", whose 06.png draws a capsule bar the 2D Pixel UI pack has no equivalent of. The game needs that
+# capsule ten pips long and the pack ships it at five, so what is cut here is not the bar but the
+# pieces it is built from, and KillPips butts them together at runtime.
+#
+# The capsule (27x8, the full one at x=66 and the empty one at x=226) is laid out on a rigid 4 px
+# segment pitch, which is what makes that possible. Measured off the pixels and checked against both
+# the 1/5 and the 5/5 step -- an n-segment fill is always columns 1 .. 4n+1:
+#
+#     col 0        the black left edge
+#     cols 1-4     segment 1, which carries the rounded left shoulder
+#     cols 5-8 ..  the repeating interior segment, each with its own left divider
+#     col 4n+1     the column that closes the fill off
+#     cols 25-26   the rounded right end
+#
+# So three parts make a bar of any length: a head, a body repeated, and a tail. Each is cut in the
+# three tier colourways and in the pack's empty grey, which is the state a pip takes once its enemy
+# is down. Named by the tier each stands for rather than by its colour: which tier is brown is a fact
+# about the game, and a table saying "brown" would have to be read against a second table saying what
+# brown meant.
+#
+# The pack's fill steps are not used -- a pip is a whole enemy, not a fraction of one -- and neither
+# is the silver colourway, because there is no fourth tier.
+PIP_SHEET = "Pixel UI pack 3/06"
+PIP_HEIGHT = 8
+# Where each colourway's capsule row starts, and where the full and the empty one sit along it.
+PIP_BANDS = {"common": 116, "elite": 148, "boss": 180}
+PIP_FULL_X = 66
+PIP_EMPTY_X = 226
+# part -> (columns off the capsule, width). The tail is the odd one: its first column is the full
+# capsule's closing column and its other two are the rounded right end, which is taken off the EMPTY
+# capsule for every colourway -- that is how the pack draws the right-hand end of its own full bar.
+PIP_HEAD = (0, 5)
+PIP_BODY = (5, 4)
+PIP_TAIL_CLOSE = 21
+PIP_TAIL_END = (25, 2)
+PIP_WIDTHS = {"head": 5, "body": 4, "tail": 3}
 
 
 def _recolor(hue, sat, dim=1.0):
@@ -234,22 +309,34 @@ def build():
     return sprites, margins
 
 
+def _cut(entry, trim=True):
+    """One rectangle off a pack sheet, trimmed to what is actually drawn and scaled.
+
+    Nothing cut this way is checked for tiling: it is drawn at its own size and never stretched, so
+    it has no nine-slice and no rows to keep uniform -- the same reason the close button skips check().
+
+    `trim` is what an icon wants and a pip does not: the pips stand in a row and every one of them
+    has to be the same width, whether or not its own art reaches the edge of the rectangle.
+    """
+    src, x, y, w, h, scale = entry
+    art = Image.open(os.path.join(POTENTIAL, src + ".png")).convert("RGBA").crop((x, y, x + w, y + h))
+    box = art.getbbox() if trim else None
+    if box:
+        art = art.crop(box)
+    if scale != 1:
+        art = art.resize((art.width * scale, art.height * scale), Image.NEAREST)
+    return art
+
+
 def gear():
     """The gear icons, each centred on its own GEAR_SIDE square.
 
-    Nothing here is checked for tiling: an icon is drawn at its own size and never stretched, so it
-    has no nine-slice and no rows to keep uniform, the same reason the close button skips check().
+    Centred rather than left where the measurement found it: an icon sitting off-centre in its
+    square reads as a mistake once there is a grid of them.
     """
     out = {}
-    for name, (src, x, y, w, h, scale) in GEAR.items():
-        art = Image.open(os.path.join(POTENTIAL, src + ".png")).convert("RGBA").crop((x, y, x + w, y + h))
-        # Cropped to the measured extent, so trim anything the measurement left over and centre what
-        # is actually drawn -- an icon sitting off-centre in its square reads as a mistake in a grid.
-        box = art.getbbox()
-        if box:
-            art = art.crop(box)
-        if scale != 1:
-            art = art.resize((art.width * scale, art.height * scale), Image.NEAREST)
+    for name, entry in GEAR.items():
+        art = _cut(entry)
         if art.width > GEAR_SIDE or art.height > GEAR_SIDE:
             raise SystemExit("%s is %dx%d, too big for a %d square"
                              % (name, art.width, art.height, GEAR_SIDE))
@@ -257,6 +344,130 @@ def gear():
         square.alpha_composite(art, ((GEAR_SIDE - art.width) // 2, (GEAR_SIDE - art.height) // 2))
         out[name] = square
     return out
+
+
+def orbs():
+    """The orb icons, on the same GEAR_SIDE square the gear uses -- but centred on an even offset.
+
+    That is the one thing gear() does not have to care about. OrbSlot draws an orb at half size, and
+    a 2:1 step keeps whichever pixel column is even; an odd offset shifts the art into the other
+    phase and the icon loses a column it did not have to lose. So the art is nudged to an even x and
+    y, which costs at most one pixel of centring and is invisible beside what it buys.
+    """
+    out = {}
+    for name, entry in ORBS.items():
+        art = _cut(entry)
+        if art.width > GEAR_SIDE or art.height > GEAR_SIDE:
+            raise SystemExit("%s is %dx%d, too big for a %d square"
+                             % (name, art.width, art.height, GEAR_SIDE))
+        square = Image.new("RGBA", (GEAR_SIDE, GEAR_SIDE), (0, 0, 0, 0))
+        square.alpha_composite(art, (((GEAR_SIDE - art.width) // 2) & ~1,
+                                     ((GEAR_SIDE - art.height) // 2) & ~1))
+        out[name] = square
+    return out
+
+
+def orb_preview(cut):
+    """Every orb twice: at source size, and at the 16 px the tray actually draws it.
+
+    Two rows rather than one because the question these icons raise is not whether they look good --
+    they are a bought pack -- but whether they survive being halved, and whether eight of them in a
+    row still read as eight different stones at that size. Only the bottom row can answer that.
+    """
+    socket = (0xCD, 0xA6, 0x77, 0xFF)
+    order = list(ORBS)
+    big, small, pad = GEAR_SIDE + 8, ORB_DRAWN + 8, 6
+    width = pad + len(order) * (big + pad)
+    out = Image.new("RGBA", (width, big + small + 3 * pad), (0xE5, 0xD6, 0xA1, 0xFF))
+    for i, name in enumerate(order):
+        x = pad + i * (big + pad)
+        out.paste(Image.new("RGBA", (big, big), socket), (x, pad))
+        out.alpha_composite(cut[name], (x + 4, pad + 4))
+        # The tray's own size, on the tray's own square, centred under the big one.
+        half = cut[name].resize((ORB_DRAWN, ORB_DRAWN), Image.NEAREST)
+        sx = x + (big - small) // 2
+        sy = big + 2 * pad
+        out.paste(Image.new("RGBA", (small, small), socket), (sx, sy))
+        out.alpha_composite(half, (sx + 4, sy + 4))
+    return out.resize((out.width * 3, out.height * 3), Image.NEAREST)
+
+
+def parts():
+    """The equipment screen's furniture, each at its own size -- nothing here sits in a grid."""
+    return {name: _cut(entry) for name, entry in PARTS.items()}
+
+
+def pips():
+    """The three parts a kill-pip bar is built from, in each tier's colourway and in empty grey.
+
+    A tier is cut off the full capsule and "empty" off the empty one, at the same columns: the pack
+    draws both to the same geometry, so the parts line up whichever state a pip is in.
+    """
+    out = {}
+    # The empty capsule is the same grey in every band, so it is cut once, off the first one.
+    wanted = [(tier, PIP_FULL_X, band) for tier, band in PIP_BANDS.items()]
+    wanted.append(("empty", PIP_EMPTY_X, list(PIP_BANDS.values())[0]))
+    for key, x, band in wanted:
+        out["ui_pip_head_" + key] = _column(x + PIP_HEAD[0], band, PIP_HEAD[1])
+        out["ui_pip_body_" + key] = _column(x + PIP_BODY[0], band, PIP_BODY[1])
+        out["ui_pip_tail_" + key] = _tail(x, band)
+    for name, image in out.items():
+        want = PIP_WIDTHS[name.split("_")[2]]
+        if image.size != (want, PIP_HEIGHT):
+            raise SystemExit("%s is %dx%d, not %dx%d -- the bar would not join up"
+                             % (name, image.width, image.height, want, PIP_HEIGHT))
+    return out
+
+
+def _column(x, y, width):
+    """A slice of the capsule, full height and never trimmed."""
+    return _cut((PIP_SHEET, x, y, width, PIP_HEIGHT, 1), trim=False)
+
+
+def _tail(x, band):
+    """The column that closes a fill off, then the pack's rounded right end behind it.
+
+    The end always comes off the empty capsule, whatever colourway the fill is: the pack leaves that
+    stub grey even on its own full bar, and copying it is what makes an assembled bar look drawn
+    rather than extended.
+    """
+    out = Image.new("RGBA", (PIP_WIDTHS["tail"], PIP_HEIGHT), (0, 0, 0, 0))
+    out.paste(_column(x + PIP_TAIL_CLOSE, band, 1), (0, 0))
+    out.paste(_column(PIP_EMPTY_X + PIP_TAIL_END[0], band, PIP_TAIL_END[1]), (1, 0))
+    return out
+
+
+def pip_bar(cut, tiers):
+    """One assembled bar, the way KillPips assembles it: head, bodies, tail.
+
+    `tiers` is one entry a pip, a tier name or None for a pip whose enemy is down.
+    """
+    parts = [cut["ui_pip_%s_%s" % ("head" if i == 0 else "body", t if t else "empty")]
+             for i, t in enumerate(tiers)]
+    parts.append(cut["ui_pip_tail_%s" % (tiers[-1] if tiers[-1] else "empty")])
+    out = Image.new("RGBA", (sum(p.width for p in parts), PIP_HEIGHT), (0, 0, 0, 0))
+    x = 0
+    for part in parts:
+        out.paste(part, (x, 0))
+        x += part.width
+    return out
+
+
+def pip_preview(cut):
+    """The assembled bar draining, every state from ten pips down to none.
+
+    The question only eyes can answer is whether the parts butt together without a seam, and whether
+    the elite's green at the far end still reads once there is one pip left. Drawn on the wood
+    panel's own brown, which is what the HUD stands it on.
+    """
+    line = ["common"] * 9 + ["elite"]
+    bars = [pip_bar(cut, [None] * k + line[k:]) for k in range(len(line) + 1)]
+    pad, gap = 4, 2
+    out = Image.new("RGBA", (2 * pad + bars[0].width, 2 * pad + len(bars) * (PIP_HEIGHT + gap) - gap),
+                    (0x6B, 0x4A, 0x32, 0xFF))
+    for i, bar in enumerate(bars):
+        out.alpha_composite(bar, (pad, pad + i * (PIP_HEIGHT + gap)))
+    return out.resize((out.width * 5, out.height * 5), Image.NEAREST)
 
 
 def gear_preview(cut):
@@ -372,6 +583,23 @@ def main():
     gear_preview(cut).save(os.path.join(QA, "ui_kit_gear.png"))
     for name, image in cut.items():
         image.save(os.path.join(GEAR_OUT, name + ".png"))
+    for name, image in parts().items():
+        image.save(os.path.join(OUT, name + ".png"))
+
+    # Their own folder, not Assets/Gear: an orb is not a piece of gear and OrbTable loads it by its
+    # own ROOT. Unlike GEAR_OUT this one is made here, because it did not exist before this chunk.
+    os.makedirs(ORB_OUT, exist_ok=True)
+    orb = orbs()
+    orb_preview(orb).save(os.path.join(QA, "ui_kit_orbs.png"))
+    for name, image in orb.items():
+        image.save(os.path.join(ORB_OUT, name + ".png"))
+
+    # Loose, like the parts: a pip is drawn at its own size and never stretched, so it has no
+    # nine-slice and no business in the theme sheet.
+    pip = pips()
+    pip_preview(pip).save(os.path.join(QA, "ui_kit_pips.png"))
+    for name, image in pip.items():
+        image.save(os.path.join(OUT, name + ".png"))
 
     sheet_image, meta, (cell_w, cell_h, columns, rows) = pack(sprites, margins)
     sheet_image.save(os.path.join(OUT, SHEET))
@@ -399,6 +627,8 @@ def main():
     print("wrote %s (%dx%d, %d sprites) and %s/ui_kit_tiling.png"
           % (SHEET, sheet_image.width, sheet_image.height, len(sprites), QA))
     print("wrote %d gear icons to %s/ and %s/ui_kit_gear.png" % (len(cut), GEAR_OUT, QA))
+    print("wrote %d kill pips to %s/ and %s/ui_kit_pips.png" % (len(pip), OUT, QA))
+    print("wrote %d orb icons to %s/ and %s/ui_kit_orbs.png" % (len(orb), ORB_OUT, QA))
 
 
 if __name__ == "__main__":

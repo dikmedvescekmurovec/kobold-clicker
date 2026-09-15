@@ -12,6 +12,10 @@ func _run() -> void:
 	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
 	main.world_seed = WORLD_SEED
 	main.map_seed = MAP_SEEDS[0]
+	# Never the player's own saves: this pins a seed, and a pinned seed replaces a save of another
+	# world on the first write.
+	main.inventory_path = "user://screenshot_map_inventory.json"
+	main.map_path = "user://screenshot_map.json"
 	root.add_child(main)
 	for i in 3:
 		await process_frame

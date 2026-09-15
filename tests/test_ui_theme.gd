@@ -9,6 +9,7 @@ func _run() -> void:
 	_check(_test_buttons(theme) == true, "button tests ran to the end")
 	_check(_test_icon_buttons(theme) == true, "icon button tests ran to the end")
 	_check(_test_controls(theme) == true, "live control tests ran to the end")
+	_check(_test_orb_tray() == true, "orb tray tests ran to the end")
 	_report("UI theme")
 
 
@@ -143,3 +144,65 @@ func _is_nine_slice(box: StyleBox, sprite_name: String, what: String) -> bool:
 	_check(textured.texture is AtlasTexture, "%s draws from the shared sheet" % what)
 	return true
 
+
+## The orb tray is exactly as wide as the bag's grid, and every icon it draws is the size it is drawn
+## at. Held here the way KillPips asserts its own parts still add up: the row is assembled from eight
+## fixed squares and a gap worked out from what is left over, so a change to either number that broke
+## the arithmetic would show as a tray a few pixels out rather than as anything that looks wrong.
+func _test_orb_tray() -> bool:
+	# The main scene has no class_name -- it is a scene's script, not a type anything constructs --
+	# so its constants are read off the script resource itself.
+	var scene := preload("res://Scenes/main_scene.gd")
+	var cols: int = scene.ORB_COLS
+	var gap: int = scene.ORB_GAP
+	var width: int = scene.BAG_WIDTH
+	var assembled := cols * OrbSlot.SIDE + (cols - 1) * gap
+	_check(assembled == width,
+			"eight orbs and their gaps come to %d, not the grid's %d" % [assembled, width])
+	_check(cols == OrbTable.ORBS.size(),
+			"the tray has a square for each of the %d orbs" % OrbTable.ORBS.size())
+	_check(gap > 0, "the squares do not touch")
+	_check(OrbSlot.ICON * 2 == ItemSlot.ICON,
+			"an orb is drawn at exactly half the size it is cut at, so its pixels stay square")
+	_check(OrbSlot.SIDE > OrbSlot.ICON, "an orb square has a gutter round its icon")
+	# Every orb builds into a live square, and the three states are three different pictures. That
+	# last part is the whole of what the tray communicates, and it is the one thing a table of names
+	# cannot tell us: an orb never found, one held but useless here, and one ready to spend have to
+	# be told apart at a glance in a row of eight.
+	for orb: String in OrbTable.orbs():
+		var ghost := OrbSlot.make(orb, 0, true)
+		var dim := OrbSlot.make(orb, 2, false)
+		var lit := OrbSlot.make(orb, 2, true)
+		for slot: OrbSlot in [ghost, dim, lit]:
+			_check(slot.custom_minimum_size == Vector2(OrbSlot.SIDE, OrbSlot.SIDE),
+					"%s builds a %d square" % [orb, OrbSlot.SIDE])
+			_check(slot.mouse_filter == Control.MOUSE_FILTER_STOP,
+					"%s takes the mouse, unlike an item square" % orb)
+		# Approximately: a Color's components are single-precision, so they never compare equal to a
+		# double literal on the nose.
+		_check(is_equal_approx(ghost._icon.modulate.a, ItemSlot.EMPTY_MARK_ALPHA),
+				"%s never found is drawn faint" % orb)
+		_check(lit._icon.modulate.is_equal_approx(Color.WHITE),
+				"%s ready to spend is drawn plain" % orb)
+		_check(dim._icon.modulate.is_equal_approx(OrbSlot.DIM),
+				"%s held but useless is drawn grey" % orb)
+		_check(dim._icon.modulate != ghost._icon.modulate,
+				"%s tells 'not yours' from 'not for this' " % orb)
+		# A count past one is drawn and a count of one is not -- seven squares wearing a 1 would be
+		# seven numbers saying nothing.
+		_check(_labels_in(OrbSlot.make(orb, 1, true)) == 0, "%s held once wears no count" % orb)
+		_check(_labels_in(OrbSlot.make(orb, 2, true)) == 1, "%s held twice wears a count" % orb)
+		for slot: OrbSlot in [ghost, dim, lit]:
+			slot.free()
+	return true
+
+
+## How many Labels a square is carrying, which is how the count is checked for without reaching for
+## a node path that would break the moment the square is built differently.
+func _labels_in(slot: OrbSlot) -> int:
+	var found := 0
+	for child: Node in slot.get_children():
+		if child is Label:
+			found += 1
+	slot.free()
+	return found

@@ -18,19 +18,65 @@ const RULE_HEIGHT := 1
 
 ## Empties `rows` and writes `item` into it. `width` is what a line may use before it wraps -- the
 ## font is only legible at its native 16 px, so a long modifier has to wrap rather than shrink.
-static func fill(rows: VBoxContainer, item: Item, width: float) -> void:
+##
+## `against` is the piece this one would replace, when there is one: it adds a last block saying what
+## wearing this would gain or lose, which is the question the bag is actually being read to answer.
+static func fill(rows: VBoxContainer, item: Item, width: float, against: Item = null) -> void:
 	for child: Node in rows.get_children():
 		child.queue_free()
 	rows.add_child(line(item.display_name(), item.text_color(), width))
-	rows.add_child(line(item.rarity_name(), item.text_color(), width))
-	var rule := ColorRect.new()
-	rule.color = Palette.SLATE
-	rule.custom_minimum_size = Vector2(0, RULE_HEIGHT)
-	rows.add_child(rule)
+	# Rarity and level on one line: they are the two things that say what a piece is worth, and they
+	# are rolled together off the same body.
+	rows.add_child(line("%s · level %d" % [item.rarity_name(), item.level], item.text_color(), width))
+	rows.add_child(_rule())
+	# What the swap is worth goes first, straight under the name, and what the piece is follows it.
+	# It is the answer the block is opened for, and an elite carrying six modifiers is taller than
+	# the panel -- last, it would be the one thing the player had to scroll to find.
+	if against != null:
+		var change := deltas(item, against)
+		if not change.is_empty():
+			for stat: String in change:
+				# Leaf for a gain and rust for a loss. Every stat the game has is better the larger it
+				# is, so the sign carries the whole meaning and no table is needed to say which way is
+				# up; one that ever inverted would need one here, and there is none.
+				rows.add_child(line(LootTable.stat_delta(stat, change[stat]),
+						Palette.LEAF if change[stat] > 0.0 else Palette.RUST, width))
+			rows.add_child(_rule())
 	for text in item.stat_lines():
 		rows.add_child(line(text, Palette.INK, width))
 	for text in item.mod_lines():
 		rows.add_child(line(text, Palette.RUST, width))
+
+
+## What wearing `item` instead of `against` would change: stat -> the signed difference.
+##
+## Worked out from `effective_stats` rather than the base tables, because that is what the piece is
+## actually worth once its own modifiers are folded in -- and a flat modifier can put a stat on one
+## side that the other has none of at all, which is why this runs over the union of both.
+##
+## A plain Dictionary rather than a list of Labels, so what the comparison says can be checked
+## without building an interface to read it off.
+static func deltas(item: Item, against: Item) -> Dictionary:
+	var mine := item.effective_stats()
+	var theirs := against.effective_stats()
+	var out := {}
+	for stat: String in mine:
+		out[stat] = float(mine[stat]) - float(theirs.get(stat, 0.0))
+	for stat: String in theirs:
+		if not mine.has(stat):
+			out[stat] = -float(theirs[stat])
+	for stat: String in out.keys():
+		if not LootTable.delta_shows(stat, out[stat]):
+			out.erase(stat)
+	return out
+
+
+## The line drawn between two blocks of it.
+static func _rule() -> ColorRect:
+	var rule := ColorRect.new()
+	rule.color = Palette.SLATE
+	rule.custom_minimum_size = Vector2(0, RULE_HEIGHT)
+	return rule
 
 
 ## One line of it.

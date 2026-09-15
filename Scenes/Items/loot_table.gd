@@ -36,44 +36,50 @@ const ROOT := "res://Assets/Gear/"
 ## top. And nothing reads these numbers for gameplay yet; they are shown and saved, and the chunk
 ## that makes a click do `damage` will be the one to retune every one of them.
 const ITEMS := {
+	"Leather Helmet": {
+		"icon": "Leather Helmet.png", "weight": 3, "slot": "helmet",
+		"stats": {"armor": 3, "health": 5},
+		"affixes": ["energy_shield", "fire_resist", "cold_resist", "lightning_resist", "strength",
+			"intelligence"],
+	},
 	"Leather Boot": {
-		"icon": "Leather Boot.png", "weight": 4,
-		"stats": {"move_speed": 10, "dodge_chance": 4},
+		"icon": "Leather Boot.png", "weight": 4, "slot": "boots",
+		"stats": {"move_speed": 5, "dodge_chance": 2},
 		"affixes": ["armor", "health", "fire_resist", "cold_resist", "lightning_resist", "dexterity"],
 	},
 	"Wooden Sword": {
-		"icon": "Wooden Sword.png", "weight": 3,
-		"stats": {"damage": 5, "crit_chance": 5, "crit_damage": 50, "attack_speed": 1.0},
+		"icon": "Wooden Sword.png", "weight": 3, "slot": "weapon",
+		"stats": {"damage": 1, "crit_chance": 5, "crit_damage": 50, "attack_speed": 1.0},
 		"affixes": ["leech", "life_on_hit", "strength"],
 	},
 	"Wooden Shield": {
-		"icon": "Wooden Shield.png", "weight": 3,
-		"stats": {"armor": 6, "block_chance": 10},
+		"icon": "Wooden Shield.png", "weight": 3, "slot": "offhand",
+		"stats": {"armor": 3, "block_chance": 5},
 		"affixes": ["health", "energy_shield", "fire_resist", "cold_resist", "lightning_resist",
 			"strength"],
 	},
 	"Wooden Torch": {
-		"icon": "Wooden Torch.png", "weight": 3,
-		"stats": {"energy_shield": 8, "health_regen": 2.0, "crit_damage": 20},
+		"icon": "Wooden Torch.png", "weight": 3, "slot": "offhand",
+		"stats": {"energy_shield": 4, "health_regen": 1.0, "crit_damage": 10},
 		"affixes": ["block_chance", "fire_resist", "cold_resist", "lightning_resist", "intelligence"],
 	},
 	"Wooden Armor": {
-		"icon": "Wooden Armor.png", "weight": 2,
-		"stats": {"armor": 10, "health": 20},
+		"icon": "Wooden Armor.png", "weight": 2, "slot": "body",
+		"stats": {"armor": 5, "health": 10},
 		"affixes": ["energy_shield", "dodge_chance", "fire_resist", "cold_resist",
 			"lightning_resist", "strength"],
 	},
 	"Gold Ring": {
-		"icon": "Gold Ring.png", "weight": 2,
-		"stats": {"fire_resist": 5, "life_on_hit": 1},
+		"icon": "Gold Ring.png", "weight": 2, "slot": "ring",
+		"stats": {"fire_resist": 3, "life_on_hit": 1},
 		"affixes": ["health", "health_regen", "cold_resist", "lightning_resist", "strength",
 			"dexterity", "intelligence"],
 	},
-	# The catch-all slot, and the rarest: the widest affix pool in the table, so an amulet is the one
-	# piece that can turn up carrying almost anything.
+	# The catch-all socket, and the rarest: the widest affix pool in the table, so an amulet is the
+	# one piece that can turn up carrying almost anything.
 	"Ruby Amulet": {
-		"icon": "Ruby Amulet.png", "weight": 1,
-		"stats": {"health": 15, "crit_damage": 20},
+		"icon": "Ruby Amulet.png", "weight": 1, "slot": "amulet",
+		"stats": {"health": 8, "crit_damage": 10},
 		"affixes": ["energy_shield", "health_regen", "crit_chance", "leech", "fire_resist",
 			"cold_resist", "lightning_resist", "strength", "dexterity", "intelligence"],
 	},
@@ -127,9 +133,45 @@ const STAT_LABELS := {
 }
 const PERCENT_STATS := ["crit_chance", "crit_damage", "block_chance", "move_speed", "dodge_chance",
 	"fire_resist", "cold_resist", "lightning_resist", "leech"]
+## The percentages that are a *probability*: how often something happens, rather than how much of it
+## there is. They are the ones a level may not multiply -- see `scale`. Crit damage is not one of
+## them (500% crit damage is a fine number), and neither is leech, which is a share of a hit.
+const CHANCE_STATS := ["crit_chance", "block_chance", "dodge_chance"]
 ## Per second: attacks in one case and health in the other. The two stats that are neither a plain
 ## number nor a percentage.
 const RATE_STATS := ["attack_speed", "health_regen"]
+
+## How much one level multiplies every scaled number by. The dial for how fast gear answers the
+## frontier; Encounter.HP_GROWTH is the dial for how fast the frontier pulls away.
+const LEVEL_GROWTH := 1.12
+
+## What one level *adds*, on top of that multiplier, per stat.
+##
+## Per stat because an absolute step has to suit the size of the number it is added to: a point a
+## level is the whole story for damage, which starts at 1, and a rounding error for crit damage,
+## which starts at 50. A multiplier alone would leave a sword reading "Damage 1" for four levels; a
+## flat step alone would do nothing to the large stats. Both together carry the whole range.
+##
+## Damage is a whole point a level on purpose, so a weapon gains a clean, visible point each time.
+## Every key of STAT_LABELS has an entry here and test_inventory holds that, so a new stat cannot be
+## added without saying what a level is worth to it.
+const LEVEL_FLAT := {
+	"damage": 1.0,
+	"crit_chance": 1.0, "crit_damage": 5.0, "attack_speed": 0.05,
+	"armor": 2.0, "energy_shield": 2.0, "health": 3.0, "health_regen": 0.1,
+	"block_chance": 1.0, "dodge_chance": 1.0, "move_speed": 1.0,
+	"fire_resist": 1.0, "cold_resist": 1.0, "lightning_resist": 1.0,
+	"leech": 0.2, "life_on_hit": 1.0,
+	"strength": 1.0, "dexterity": 1.0, "intelligence": 1.0,
+}
+
+## What a body's tier adds to the ceiling on what it drops, over the tile's own level. The elite at
+## the end of a fight can hand over something the rabble on the same tile never could.
+const TIER_LEVEL := {
+	EnemyRoster.Tier.COMMON: 0,
+	EnemyRoster.Tier.ELITE: 1,
+	EnemyRoster.Tier.BOSS: 2,
+}
 
 ## Icons are loaded once and kept, the way UITheme keeps its Theme: the panel rebuilds every square
 ## whenever something drops, and reloading four textures each time would be work for nothing.
@@ -165,6 +207,12 @@ static func has_stat(item: String, stat: String) -> bool:
 	return ITEMS.has(item) and ITEMS[item]["stats"].has(stat)
 
 
+## Where on the body this piece goes. `Equipment` turns it into sockets -- two of them take a ring,
+## and one takes either a shield or a torch, so the mapping is not one-to-one and does not live here.
+static func slot_of(item: String) -> String:
+	return ITEMS[item]["slot"]
+
+
 ## The stats this piece can roll a flat modifier for without having any of its own.
 static func affixes_of(item: String) -> Array:
 	return ITEMS[item]["affixes"]
@@ -176,6 +224,20 @@ static func can_roll(item: String, stat: String) -> bool:
 	return has_stat(item, stat) or (ITEMS.has(item) and stat in ITEMS[item]["affixes"])
 
 
+## What `value` of `stat` is worth at `level`. The one place that knows what a level does to a
+## number, so a piece's base stats and a modifier's band grow the same way and cannot drift apart.
+## Level 1 is the number as written, so a level-1 piece is exactly the piece the table describes.
+##
+## A CHANCE_STAT takes the flat step alone. A probability has a ceiling that a quantity has not, and
+## the exponent walked straight through it: a plain set of commons reached 163% crit chance by level
+## 30, which is every hit critting and a stat block that reads as nonsense. The flat step still grows
+## it -- a point of crit chance a level -- but at a pace the ceiling can hold.
+static func scale(stat: String, value: float, level: int) -> float:
+	var steps := maxi(level - 1, 0)
+	var grown := value if stat in CHANCE_STATS else value * pow(LEVEL_GROWTH, steps)
+	return grown + float(LEVEL_FLAT.get(stat, 0.0)) * steps
+
+
 ## A stat written for a person: "Damage 5", "Crit Chance 5%", "Attack Speed 1.0/s".
 static func stat_line(stat: String, value: float) -> String:
 	var label: String = STAT_LABELS.get(stat, stat)
@@ -184,6 +246,30 @@ static func stat_line(stat: String, value: float) -> String:
 	if stat in RATE_STATS:
 		return "%s %.1f/s" % [label, value]
 	return "%s %d" % [label, roundi(value)]
+
+
+## The same stat as a difference: "Damage +13", "Crit Chance -2%", "Attack Speed +0.3/s".
+##
+## Here rather than at the panel that shows it, for the reason `stat_line` is: this file is the one
+## place a stat is spelled, and a second spelling of "Attack Speed" is a second thing to keep in step.
+## The sign is always written, including on a gain -- "Damage 13" and "Damage +13" are two different
+## claims, and only one of them is what a comparison means.
+static func stat_delta(stat: String, delta: float) -> String:
+	var label: String = STAT_LABELS.get(stat, stat)
+	if stat in PERCENT_STATS:
+		return "%s %+d%%" % [label, roundi(delta)]
+	if stat in RATE_STATS:
+		return "%s %+.1f/s" % [label, delta]
+	return "%s %+d" % [label, roundi(delta)]
+
+
+## Whether a difference is worth saying at all. A delta that rounds to nothing on the line would read
+## as "+0 Armour", which says a stat changed and then says it did not -- so the two pieces are
+## compared as the numbers the player can actually see, not as the floats behind them.
+static func delta_shows(stat: String, delta: float) -> bool:
+	if stat in RATE_STATS:
+		return absf(delta) >= 0.05
+	return roundi(delta) != 0
 
 
 ## How often this enemy leaves anything at all: its tier times its body, and never more than certain.
@@ -203,12 +289,17 @@ static func chance_for(enemy_name: String) -> float:
 ##
 ## The chance is drawn first and on its own, so a kill that leaves nothing still costs exactly one
 ## draw. That is what keeps the drop rate comparable to before rarities existed.
-static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := false) -> Item:
+static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := false,
+		tile_level := 1) -> Item:
 	if not guaranteed and rng.randf() >= chance_for(enemy_name):
 		return null
 	var type := _weighted(rng)
-	var rarity := ItemRarity.roll(EnemyRoster.tier_of(enemy_name), rng)
-	return Item.rolled(type, rarity, rng)
+	var tier := EnemyRoster.tier_of(enemy_name)
+	var rarity := ItemRarity.roll(tier, rng)
+	# The tile's level and the body's tier give a ceiling; the piece rolls its own level under it,
+	# so a deep tile is a better place to fight rather than a guaranteed prize.
+	var ceiling := maxi(1, tile_level + int(TIER_LEVEL[tier]))
+	return Item.rolled(type, rarity, rng, ItemRarity.roll_level(rarity, ceiling, rng))
 
 
 ## An item picked by weight. Integer weights, so walking the table cannot drift.

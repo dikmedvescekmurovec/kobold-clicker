@@ -3,6 +3,9 @@ extends "res://tests/harness.gd"
 ##   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/test_generation.gd
 
 const ENV_SEEDS := 200
+## Never MapSave.SAVE_PATH: these tests write and delete, and that is the player's own map.
+const TEST_MAP_PATH := "user://test_generation_map.json"
+const SCRATCH_INVENTORY := "user://test_generation_inventory.json"
 
 
 func _run() -> void:
@@ -13,7 +16,47 @@ func _run() -> void:
 	_check(_test_towns() == true, "town tests ran to the end")
 	_check(_test_roads() == true, "road tests ran to the end")
 	_check(_test_map_builder() == true, "map builder tests ran to the end")
+	_check(_test_tile_levels() == true, "tile level tests ran to the end")
+	_check(_test_map_saving() == true, "map save tests ran to the end")
+	_check(await _test_the_map_comes_back() == true, "map reload tests ran to the end")
 	_report("generation")
+
+
+## A tile's level, in bands that widen as they go: band n is n tiles wide, so level n begins at the
+## nth triangular number. It is what the panel shows and the ceiling on what can drop on a tile.
+func _test_tile_levels() -> bool:
+	_check(MapBuilder.level_of(MapBuilder.CENTER) == 1, "the middle of the map is level 1")
+
+	# Band n starts exactly at n(n-1)/2 and is exactly n tiles wide. This is the whole curve: if it
+	# holds out to level 10 it holds everywhere, because the formula has no other moving part.
+	for n in range(1, 11):
+		var starts: int = n * (n - 1) / 2
+		for steps in range(starts, starts + n):
+			_check(MapBuilder.level_of(Vector2i(steps, 0)) == n,
+					"%d steps out is level %d, not %d" % [steps, n, MapBuilder.level_of(Vector2i(steps, 0))])
+		_check(MapBuilder.level_of(Vector2i(starts - 1, 0)) == n - 1 if n > 1 else true,
+				"the tile before band %d belongs to the one under it" % n)
+
+	# The same answer in every direction, because it is a function of hex distance and nothing else.
+	for edge: HexGrid.Edge in HexGrid.EDGES:
+		var cell := MapBuilder.CENTER
+		for steps in range(1, 30):
+			cell = HexGrid.neighbor(cell, edge)
+			_check(MapBuilder.level_of(cell) == MapBuilder.level_of(Vector2i(steps, 0)),
+					"%s is level %d going edge %d, not %d" % [cell, MapBuilder.level_of(cell), edge,
+							MapBuilder.level_of(Vector2i(steps, 0))])
+
+	# Never falls as the walk gets longer, and never jumps: one step can cost at most one level, which
+	# is what lets the number on the panel mean anything as the player moves.
+	for steps in range(1, 60):
+		var here := MapBuilder.level_of(Vector2i(steps, 0))
+		var back := MapBuilder.level_of(Vector2i(steps - 1, 0))
+		_check(here == back or here == back + 1, "step %d went from level %d to %d" % [steps, back, here])
+	for cell: Vector2i in [Vector2i(4, 4), Vector2i(7, 0), Vector2i(-3, 6)]:
+		for next in HexGrid.neighbors(cell):
+			_check(absi(MapBuilder.level_of(cell) - MapBuilder.level_of(next)) <= 1,
+					"%s and its neighbour %s are more than one level apart" % [cell, next])
+	return true
 
 
 func _test_hex_grid() -> bool:
@@ -225,13 +268,103 @@ func _test_map_builder() -> bool:
 
 	_check(_test_start_state(map, view) == true, "starting state tests ran to the end")
 	_check(_test_discovery(map, view) == true, "discovery tests ran to the end")
+	_check(_test_tile_names(view, world) == true, "tile name tests ran to the end")
 	_check(_test_blends_stay(map, view) == true, "blend stability tests ran to the end")
 	_check(_test_drawn_window(map, view, world, origin, env_seed, start_town, build_ms) == true,
 			"drawn window tests ran to the end")
 	_check(_test_start_town(map, world, origin, start_town) == true, "first town tests ran to the end")
 	_check(_test_growth(map, view) == true, "map growth tests ran to the end")
+	_check(_test_area_variants(view, world) == true, "backdrop variant tests ran to the end")
 
 	map.queue_free()
+	return true
+
+
+## A tile is named when the player first lays eyes on it, and never again. The three things that
+## have to hold: only seen tiles are named, a name is the same every time it is asked for, and it is
+## the name the tables give for that cell.
+func _test_tile_names(view: MapBuilder, world: TownWorld) -> bool:
+	var named: Dictionary = view.to_save().names
+	var seen := 0
+	for y in range(view.rect.position.y, view.rect.end.y):
+		for x in range(view.rect.position.x, view.rect.end.x):
+			if view.seen(Vector2i(x, y)):
+				seen += 1
+	_check(seen > 0 and named.size() == seen,
+			"every tile the player has seen is named, and only those (%d of %d)"
+			% [named.size(), seen])
+
+	for cell: Vector2i in named:
+		var place: String = view.name_of(cell)
+		_check(not place.is_empty(), "%s has a name" % cell)
+		_check(place.split(" ").size() == 2, "%s is named in two words (%s)" % [cell, place])
+		_check(view.name_of(cell) == place, "%s is called the same thing when asked again" % cell)
+		var tier := world.tier_at(view.origin + cell)
+		var tier_name: String = TownWorld.TIER_NAMES[tier] if tier != -1 else ""
+		_check(place == TileNames.generate(cell, view.env_at(cell), view.env_seed, tier_name),
+				"%s carries the name its cell and its seed give (%s)" % [cell, place])
+		# The second word says what the place is: a settlement is named for the people on it and
+		# open land for the ground.
+		_check(TileNames.features_for(view.env_at(cell), tier_name).has(place.split(" ")[1]),
+				"%s is called after what is on it (%s)" % [cell, place])
+
+	# Nothing is named before it is looked at. A cell still in the fog of war has no name, and the
+	# tiles a discovery lifts the fog off are named as they appear -- undiscovered land is land the
+	# player can see, so seeing it is the encounter, not walking onto it.
+	var hidden := Vector2i.ZERO
+	for y in range(view.rect.position.y, view.rect.end.y):
+		for x in range(view.rect.position.x, view.rect.end.x):
+			var cell := Vector2i(x, y)
+			if not view.seen(cell) and view.env_at(cell) != "":
+				hidden = cell
+				break
+	_check(hidden != Vector2i.ZERO and not named.has(hidden),
+			"%s is nameless while it is still in the fog" % hidden)
+
+	for cell in HexGrid.neighbors(view.player_cell):
+		if not view.can_discover(cell):
+			continue
+		view.discover(cell)
+		view.map.player.finish_walk()
+		var after: Dictionary = view.to_save().names
+		var shown := 0
+		for y in range(view.rect.position.y, view.rect.end.y):
+			for x in range(view.rect.position.x, view.rect.end.x):
+				if view.seen(Vector2i(x, y)):
+					shown += 1
+		_check(after.size() == shown and shown > seen,
+				"discovering %s names everything it brought into view (%d of %d)"
+				% [cell, after.size(), shown])
+		break
+	return true
+
+
+## Which backdrop a tile fights on. A town is what the player sees whether or not a road reaches it,
+## so a town cell never reports its road; everything else is a road or open country.
+func _test_area_variants(view: MapBuilder, world: TownWorld) -> bool:
+	const TIER_VARIANT := {
+		TownWorld.Tier.SMALL: "village",
+		TownWorld.Tier.MEDIUM: "town",
+		TownWorld.Tier.FORTRESS: "fortress",
+	}
+	var seen: Dictionary[String, int] = {}
+	for y in range(view.rect.position.y, view.rect.end.y):
+		for x in range(view.rect.position.x, view.rect.end.x):
+			var cell := Vector2i(x, y)
+			var variant := view.area_variant(cell)
+			seen[variant] = seen.get(variant, 0) + 1
+			var tier := world.tier_at(view.origin + cell)
+			if tier in TIER_VARIANT:
+				_check(variant == TIER_VARIANT[tier], "%s holds a %s" % [cell, TIER_VARIANT[tier]])
+			elif view.road_at(cell) != 0:
+				_check(variant == "road", "%s carries a road" % cell)
+			else:
+				_check(variant == "plain", "%s is open country" % cell)
+	# The starting window always has a town on its ring and a road running to the centre, so two of
+	# the five are guaranteed; a window of nothing but plains would mean the variants never fire.
+	_check(seen.get("plain", 0) > 0, "the window has open country")
+	_check(seen.get("road", 0) > 0, "the window has road tiles")
+	_check(seen.get("village", 0) > 0, "the window has the starting village")
 	return true
 
 
@@ -638,3 +771,251 @@ func _weights_for(cell: Vector2i, layout: Dictionary[Vector2i, String]) -> Dicti
 		regions.add(placed, envs)
 	return EnvironmentGenerator.choice_weights(cell, envs, regions)
 
+
+
+## The map on disk: written, read back and drawn again exactly as it was. Nothing on the map may
+## change -- not the land, not the roads, not the settlements, not the fog -- so the round trip is
+## checked cell by cell rather than by spot checks, and every refusal is checked to leave the file
+## alone.
+func _test_map_saving() -> bool:
+	_clear_map_save()
+	var map: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
+	root.add_child(map)
+	var world := TownWorld.generate(WORLD_SEED)
+	var town: Vector2i = world.towns().filter(func(spot: Vector2i) -> bool:
+			return spot.x > 20 and spot.y > 20 and spot.x < 230 and spot.y < 230)[0]
+	var origin := Vector2i(town.x, town.y & ~1)
+	var view := MapBuilder.create(map, world, origin, 99)
+
+	# Walk somewhere, so the save holds a half-explored map rather than the seven starting tiles.
+	for step in 6:
+		var ahead := Vector2i(view.player_cell.x + 1, 0)
+		if view.can_discover(ahead):
+			view.discover(ahead)
+			map.player.finish_walk()
+	_check(view.player_cell != MapBuilder.CENTER, "the player has walked off the middle of the map")
+	_check(view.rect != MapBuilder.START_RECT, "and far enough that the window has already grown once")
+
+	var before := _map_fingerprint(map, view)
+	_check(view.to_save().save(TEST_MAP_PATH), "the map writes itself to disk")
+
+	var problem: Array = []
+	var save := MapSave.load_from(TEST_MAP_PATH, problem, MapSave.fingerprint(map.tileset))
+	_check(save != null and problem.is_empty(), "and reads back without complaint")
+	if save == null:
+		map.queue_free()
+		return true
+
+	# A fresh HexMap, so nothing of the first drawing can be left standing behind the second.
+	var other: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
+	root.add_child(other)
+	var restored := MapBuilder.restore(other, TownWorld.from_dict(save.towns), save)
+	_check(restored.rect == view.rect, "the restored map covers the same window")
+	_check(restored.player_cell == view.player_cell, "with the player where they were left")
+	_check(restored.start_town == view.start_town, "and the same first town")
+	_check(_map_fingerprint(other, restored) == before, "and every cell of it comes back identical")
+	# Cell by cell over the window says nothing about cells outside it, and the bulk draw writes
+	# straight to the layers rather than through _show's guard.
+	_check(other.ground_layer.get_used_cells().size() == map.ground_layer.get_used_cells().size(),
+			"with nothing drawn that was not drawn before (%d vs %d)"
+			% [other.ground_layer.get_used_cells().size(), map.ground_layer.get_used_cells().size()])
+	_check(other.road_layer.get_used_cells().size() == map.road_layer.get_used_cells().size(),
+			"and the same roads on it")
+	var fog_before := map.fog.cells()
+	var fog_after := other.fog.cells()
+	fog_before.sort()
+	fog_after.sort()
+	_check(fog_before == fog_after, "the fog lies over exactly the tiles it did (%d vs %d)"
+			% [fog_before.size(), fog_after.size()])
+
+	# Names come out of the save rather than being worked out again, which is the whole reason they
+	# are written down: the tables could change under a player and the place must not be renamed.
+	var kept := 0
+	for cell: Vector2i in view.to_save().names:
+		kept += 1
+		_check(restored.name_of(cell) == view.name_of(cell),
+				"%s comes back as %s" % [cell, view.name_of(cell)])
+	_check(kept > 0, "the save carried names at all (%d)" % kept)
+
+	_check(_test_saved_settlements(restored, view) == true, "saved settlement tests ran to the end")
+	_check(_test_restored_growth(other, restored, before) == true, "restored growth tests ran to the end")
+	_check(_test_save_refusals(map) == true, "save refusal tests ran to the end")
+
+	# The legend the state rows are written through has to line up with the enum it spells, or a
+	# save reads its own fog back as something else.
+	_check(MapSave.STATE_NAMES.size() == MapBuilder.State.size(),
+			"every state has a name in the save's legend")
+	for state_name: String in MapBuilder.State:
+		_check(MapSave.STATE_NAMES[MapBuilder.State[state_name]] == state_name.to_lower(),
+				"%s sits at its own value in the legend" % state_name)
+
+	map.queue_free()
+	other.queue_free()
+	_clear_map_save()
+	return true
+
+
+## Everything about one cell that a save has to bring back, for every cell of the window: what the
+## land is, what is drawn on it, what the player knows about it, and what it would fight on.
+func _map_fingerprint(map: HexMap, view: MapBuilder) -> Dictionary:
+	var fingerprint := {}
+	for y in range(view.rect.position.y, view.rect.end.y):
+		for x in range(view.rect.position.x, view.rect.end.x):
+			var cell := Vector2i(x, y)
+			var info := map.get_tile_info(cell)
+			fingerprint[cell] = [view.state(cell), view.env_at(cell), view.road_at(cell),
+					view.area_variant(cell), info.get("name", ""), info.get("road", ""),
+					info.get("blends", [])]
+	return fingerprint
+
+
+## The settlements come out of the save, not out of a seed. Restoring against a town world built
+## from a different seed must change nothing: if it did, the towns would be being regenerated.
+func _test_saved_settlements(restored: MapBuilder, view: MapBuilder) -> bool:
+	var moved := 0
+	for y in range(view.rect.position.y, view.rect.end.y):
+		for x in range(view.rect.position.x, view.rect.end.x):
+			var spot := view.origin + Vector2i(x, y)
+			if restored.towns.tier_at(spot) != view.towns.tier_at(spot):
+				moved += 1
+	_check(moved == 0, "every settlement in the window came back where it was (%d moved)" % moved)
+
+	# And the world itself survives a round trip whole, links and all, in both directions.
+	var world := TownWorld.generate(WORLD_SEED + 1)
+	var copy := TownWorld.from_dict(world.to_dict())
+	_check(copy != null and copy.towns().size() == world.towns().size(),
+			"a town world round trips with all of its towns")
+	var wrong_tier := 0
+	var wrong_links := 0
+	for spot in world.towns():
+		if copy.tier_at(spot) != world.tier_at(spot):
+			wrong_tier += 1
+		var was := world.connections(spot)
+		var now := copy.connections(spot)
+		was.sort()
+		now.sort()
+		if was != now:
+			wrong_links += 1
+		for other in was:
+			if not copy.are_connected(other, spot):
+				wrong_links += 1  # A link is symmetric, and both halves have to come back.
+	_check(wrong_tier == 0, "every town keeps its tier (%d wrong)" % wrong_tier)
+	_check(wrong_links == 0, "and its links, both ways round (%d wrong)" % wrong_links)
+	return true
+
+
+## A restored map is a working map: it still grows, and the growth still leaves what the player has
+## already seen alone.
+func _test_restored_growth(map: HexMap, view: MapBuilder, before: Dictionary) -> bool:
+	var was := view.rect
+	view.reveal_all()
+	var toward_edge := Vector2i(was.end.x - MapBuilder.EXPAND_MARGIN, 0)
+	_check(not view.move_to(toward_edge).is_empty(), "the restored map sends the player east")
+	map.player.finish_walk()
+	_check(view.rect.end.x > was.end.x, "and grows when they get near the edge")
+
+	var changed := 0
+	for cell: Vector2i in before:
+		if before[cell][1] != view.env_at(cell) or before[cell][2] != view.road_at(cell):
+			changed += 1
+	_check(changed == 0, "the land it was restored with is untouched by the growth (%d changed)" % changed)
+
+	var ungenerated := 0
+	for y in range(view.rect.position.y, view.rect.end.y):
+		for x in range(view.rect.position.x, view.rect.end.x):
+			if view.env_at(Vector2i(x, y)) == "":
+				ungenerated += 1
+	_check(ungenerated == 0, "and the new land is generated like any other (%d missing)" % ungenerated)
+	return true
+
+
+## A save that cannot be honoured is refused, and -- the half that matters -- is left on disk
+## exactly as it was. Overwriting is how a save gets eaten, and the build that wrote it can still
+## read it.
+func _test_save_refusals(map: HexMap) -> bool:
+	var problem: Array = []
+	var sheet := MapSave.fingerprint(map.tileset)
+	var good := FileAccess.get_file_as_string(TEST_MAP_PATH)
+	_clear_map_save()
+	_check(MapSave.load_from(TEST_MAP_PATH, problem, sheet) == null and problem.is_empty(),
+			"no file at all is a first run, not a refusal")
+
+	for bad: Array in [
+			["{ not a save file at all", "a file that is not JSON"],
+			["{\"version\": 99}", "a save from a newer build"],
+			["{\"version\": 1, \"sheet\": \"%s\"}" % sheet, "a save with no window"],
+			[good.replace(sheet, "0" + sheet.substr(1)), "a save drawn with other tiles"]]:
+		var file := FileAccess.open(TEST_MAP_PATH, FileAccess.WRITE)
+		file.store_string(str(bad[0]))
+		file.close()
+		problem = []
+		_check(MapSave.load_from(TEST_MAP_PATH, problem, sheet) == null and not problem.is_empty(),
+				"%s is refused" % bad[1])
+		_check(FileAccess.get_file_as_string(TEST_MAP_PATH) == str(bad[0]),
+				"and left on disk untouched")
+	_clear_map_save()
+	return true
+
+
+## Cleared at the *start* of what uses them as well as the end: the scene writes its map from
+## _exit_tree, which fires as the tree comes down, so a run always leaves one behind and only the
+## next run starting clean can be relied on.
+func _clear_map_save() -> void:
+	for path in [TEST_MAP_PATH, SCRATCH_INVENTORY]:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+## The whole way round, through the scene that owns the save: play a little, close the game, open it
+## again, and find the same map. The round trip above checks MapBuilder and MapSave against each
+## other; this checks the wiring between them -- that _exit_tree writes, that _ready reads, and that
+## the seed guard lets a save of the world it asks for through.
+func _test_the_map_comes_back() -> bool:
+	_clear_map_save()
+	var main: Node = _open_game()
+	for i in 3:
+		await process_frame
+
+	# Take a tile, which is what a session of this game consists of.
+	var taken := Vector2i(1, 0)
+	main.view.discover(taken)
+	main.map.player.finish_walk()
+	await process_frame
+	var before := _map_fingerprint(main.map, main.view)
+	var was_rect: Rect2i = main.view.rect
+	_check(main.view.player_cell == taken, "the player took a tile before the game was closed")
+
+	main.queue_free()  # _exit_tree writes the map.
+	await process_frame
+	_check(FileAccess.file_exists(TEST_MAP_PATH), "closing the game leaves a map on disk")
+
+	var reopened: Node = _open_game()
+	for i in 3:
+		await process_frame
+	_check(reopened.view.player_cell == taken, "reopening it stands the player back where they were")
+	_check(reopened.view.rect == was_rect, "on a map covering the same window")
+	_check(_map_fingerprint(reopened.map, reopened.view) == before, "with every cell of it unchanged")
+
+	# And a seed asking for another world is a deliberate request, which wins over the save.
+	reopened.queue_free()
+	await process_frame
+	var elsewhere: Node = _open_game(MapBuilder.CENTER.x + 4242)
+	for i in 3:
+		await process_frame
+	_check(elsewhere.view.player_cell == MapBuilder.CENTER,
+			"a different map seed starts that world instead of loading the save")
+	elsewhere.queue_free()
+	await process_frame
+	_clear_map_save()
+	return true
+
+
+## The game as the player starts it, pointed away from their own two saves.
+func _open_game(map_seed := 7) -> Node:
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = map_seed
+	main.inventory_path = SCRATCH_INVENTORY
+	main.map_path = TEST_MAP_PATH
+	root.add_child(main)
+	return main

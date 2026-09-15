@@ -116,6 +116,76 @@ func ensure_small_town(spots: Array[Vector2i]) -> Vector2i:
 	return NO_SPOT
 
 
+## The whole world as plain data, for the map save. Written down rather than regenerated because
+## "a pure function of its seed" is a property of this code today, not a promise to the player:
+## retuning TIER_CHANCES, or a change to Godot's own hash(), would otherwise move every settlement
+## under land somebody had already walked.
+##
+## `spots` is flat [x, y, tier, ...] with the tier an index into `tiers`, which is written by name
+## for the reason rarities are -- an enum value is only a position. `_links` is symmetric, so
+## `links` holds each pair once, the lower spot first; from_dict fills both directions. `_buckets`
+## is a spatial index over `_tiers` and is rebuilt rather than stored.
+func to_dict() -> Dictionary:
+	var spots: Array[int] = []
+	for spot in _tiers:
+		spots.append_array([spot.x, spot.y, _tiers[spot]])
+	var links: Array[int] = []
+	for spot in _links:
+		for other: Vector2i in _links[spot]:
+			if spot < other:
+				links.append_array([spot.x, spot.y, other.x, other.y])
+	return {
+		"size": [size.x, size.y],
+		"seed": seed_value,
+		"tiers": TIER_NAMES,
+		"spots": spots,
+		"links": links,
+	}
+
+
+## The world `to_dict` wrote, or null if the data isn't one. A town whose tier is no longer a tier
+## this build knows is dropped along with its links, rather than coming back as some other tier.
+static func from_dict(data: Dictionary) -> TownWorld:
+	if typeof(data) != TYPE_DICTIONARY:
+		return null
+	var world := TownWorld.new()
+	var saved_size: Variant = data.get("size", [])
+	if typeof(saved_size) != TYPE_ARRAY or saved_size.size() != 2:
+		return null
+	world.size = Vector2i(int(saved_size[0]), int(saved_size[1]))
+	world.seed_value = int(data.get("seed", 0))
+
+	# Tiers are resolved through the saved legend, so reordering Tier can't reinterpret a file.
+	var legend: Array[int] = []
+	for name: Variant in data.get("tiers", []):
+		legend.append(TIER_NAMES.find(str(name)))
+	var spots: Variant = data.get("spots", [])
+	if typeof(spots) != TYPE_ARRAY or spots.size() % 3 != 0:
+		return null
+	for i in range(0, spots.size(), 3):
+		var index := int(spots[i + 2])
+		if index < 0 or index >= legend.size() or legend[index] == -1:
+			push_warning("TownWorld: dropping the town at %s, whose tier this build has no name for"
+					% Vector2i(int(spots[i]), int(spots[i + 1])))
+			continue
+		var spot := Vector2i(int(spots[i]), int(spots[i + 1]))
+		world._tiers[spot] = legend[index]
+		world._links[spot] = []
+		world._bucket_for(spot).append(spot)
+
+	var links: Variant = data.get("links", [])
+	if typeof(links) != TYPE_ARRAY or links.size() % 4 != 0:
+		return null
+	for i in range(0, links.size(), 4):
+		var a := Vector2i(int(links[i]), int(links[i + 1]))
+		var b := Vector2i(int(links[i + 2]), int(links[i + 3]))
+		if not (world._links.has(a) and world._links.has(b)):
+			continue  # One end was dropped above; a link to nowhere is worse than no link.
+		world._links[a].append(b)
+		world._links[b].append(a)
+	return world
+
+
 static func _roll_tier(roll: float) -> int:
 	var threshold := 0.0
 	for tier: int in TIER_CHANCES:

@@ -32,7 +32,9 @@ enum Kind {
 ## chance is a rounding error -- and a flat roll is worth roughly two percent rolls on the same stat.
 const MODS := {
 	"increased_damage": {"kind": Kind.PERCENT, "stat": "damage", "range": [8, 20], "weight": 10},
-	"added_damage": {"kind": Kind.FLAT, "stat": "damage", "range": [1, 3], "weight": 10},
+	# A point of damage is a lot now that a sword carries one: the whole curve starts at a click for 1
+	# and this is the modifier that can double it, so its band is the tightest in the table.
+	"added_damage": {"kind": Kind.FLAT, "stat": "damage", "range": [1, 2], "weight": 10},
 	"increased_crit": {"kind": Kind.PERCENT, "stat": "crit_chance", "range": [10, 30], "weight": 10},
 	"added_crit": {"kind": Kind.FLAT, "stat": "crit_chance", "range": [1, 4], "weight": 10},
 	"increased_attack_speed": {"kind": Kind.PERCENT, "stat": "attack_speed", "range": [5, 12], "weight": 10},
@@ -103,7 +105,8 @@ static func pool_for(item_type: String) -> PackedStringArray:
 ## "+14% increased Damage" are two different draws doing two different things, which is the point of
 ## having both shapes. A pool too thin to fill the count gives everything it has, which cannot happen
 ## with today's tables and is held to that by a test.
-static func roll(item_type: String, count: int, rng: RandomNumberGenerator) -> Array[Dictionary]:
+static func roll(item_type: String, count: int, rng: RandomNumberGenerator,
+		level := 1) -> Array[Dictionary]:
 	var pool := pool_for(item_type)
 	var rolled: Array[Dictionary] = []
 	for i in count:
@@ -111,9 +114,64 @@ static func roll(item_type: String, count: int, rng: RandomNumberGenerator) -> A
 			break
 		var id := _weighted(pool, rng)
 		pool.remove_at(pool.find(id))
-		var band: Array = MODS[id]["range"]
-		rolled.append({"id": id, "value": rng.randi_range(int(band[0]), int(band[1]))})
+		rolled.append({"id": id, "value": reroll_value(id, rng, level)})
 	return rolled
+
+
+## What one modifier rolls between at this level. Its own function because three callers need the
+## same answer and any two of them disagreeing would be invisible: `roll` draws a new modifier here,
+## `reroll_value` draws a fresh number for one already on a piece, and a test reads the band to check
+## that a divined value stayed inside it.
+static func band_for(id: String, level: int) -> Array:
+	var entry: Dictionary = MODS[id]
+	var band: Array = entry["range"]
+	var low := int(band[0])
+	var high := int(band[1])
+	match entry["kind"]:
+		Kind.FLAT:
+			# An amount of a stat, so it grows exactly the way that stat's own numbers do.
+			low = maxi(1, roundi(LootTable.scale(entry["stat"], float(low), level)))
+			high = maxi(1, roundi(LootTable.scale(entry["stat"], float(high), level)))
+		Kind.PERCENT:
+			# A percentage of a stat that has already grown. It takes the multiplier and not the
+			# flat step, which is sized for the stat itself rather than for a percentage of it.
+			low = maxi(1, roundi(low * pow(LootTable.LEVEL_GROWTH, maxi(level - 1, 0))))
+			high = maxi(1, roundi(high * pow(LootTable.LEVEL_GROWTH, maxi(level - 1, 0))))
+		_:
+			# PLAYER: a buff to the player rather than a stat on the piece, so LEVEL_FLAT has
+			# nothing to say about it and it keeps the band as written. One of them is seconds on
+			# the fight clock, which scaled would eventually delete the only way to lose.
+			pass
+	return [low, high]
+
+
+## A fresh number for one modifier, in the band its level allows. What an Orb of Divine spends
+## itself on: the id stays and only the roll moves, which is why it is drawn here rather than by
+## rolling the modifier again from scratch.
+static func reroll_value(id: String, rng: RandomNumberGenerator, level := 1) -> int:
+	var band := band_for(id, level)
+	return rng.randi_range(int(band[0]), int(band[1]))
+
+
+## One more modifier for a piece that already carries some: drawn from what it could take, less what
+## it has. Empty when there is nothing left to give it, which today's tables cannot produce and a
+## test holds them to.
+##
+## Augmentation and Exalted are both this -- they differ only in which pieces they are offered on,
+## which is `OrbTable.can_apply`'s business and not this function's.
+static func add_one(item_type: String, existing: Array[Dictionary], rng: RandomNumberGenerator,
+		level := 1) -> Dictionary:
+	var held := {}
+	for mod in existing:
+		held[str(mod.get("id", ""))] = true
+	var pool := PackedStringArray()
+	for id in pool_for(item_type):
+		if not held.has(id):
+			pool.append(id)
+	if pool.is_empty():
+		return {}
+	var id := _weighted(pool, rng)
+	return {"id": id, "value": reroll_value(id, rng, level)}
 
 
 ## One draw from what is left, by weight -- the same walk LootTable and EnemyRoster use.

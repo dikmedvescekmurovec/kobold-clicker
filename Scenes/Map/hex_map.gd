@@ -87,9 +87,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			_dragging = false
 
 
+## Puts a ground tile down without touching the overlays. For a bulk load, where the caller
+## refreshes the blends of everything it drew once it is all down: set_ground refreshes a cell and
+## its six neighbors, which is seven times the work when a whole map arrives at once.
+func place_ground(cell: Vector2i, tile_name: String) -> void:
+	ground_layer.set_cell(cell, HexTileset.SOURCE_ID, tileset.atlas_coords(tile_name))
+
+
 ## Sets the ground tile and redraws the blend overlays of the cell and its neighbors.
 func set_ground(cell: Vector2i, tile_name: String) -> void:
-	ground_layer.set_cell(cell, HexTileset.SOURCE_ID, tileset.atlas_coords(tile_name))
+	place_ground(cell, tile_name)
 	var env := _env_at(cell)
 	refresh_blends(cell)
 	for next in HexGrid.neighbors(cell):
