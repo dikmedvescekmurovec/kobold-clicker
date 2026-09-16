@@ -36,6 +36,8 @@ var blend_layers: Dictionary[String, TileMapLayer] = {}
 ## here, so the scene file stays untouched while the editor has it open.
 var player: PlayerToken
 var fog: FogOverlay
+## Where MapBuilder puts the treasure chest sprites: over the fog, so a chest reads on uncharted land.
+var chests: Node2D
 
 
 func _ready() -> void:
@@ -56,6 +58,10 @@ func _ready() -> void:
 	add_child(fog)
 	move_child(fog, highlight.get_index())  # Over the terrain and roads, under the outlines.
 	fog.setup(self)
+	chests = Node2D.new()
+	chests.name = "Chests"
+	add_child(chests)
+	move_child(chests, highlight.get_index())
 	player = PlayerToken.new()
 	player.name = "Player"
 	add_child(player)  # Last, so the token draws over the highlight.
@@ -128,6 +134,8 @@ func clear_map() -> void:
 	selected_cell = NO_CELL
 	player.set_cell(NO_CELL)
 	fog.clear()
+	for chest in chests.get_children():
+		chest.free()
 	highlight.queue_redraw()
 
 

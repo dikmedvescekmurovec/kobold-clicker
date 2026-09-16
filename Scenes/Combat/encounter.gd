@@ -78,6 +78,12 @@ const SECONDS := 30.0
 ## rolls a boss anywhere in the game: they are saved for this.
 const ORDINARY := {"enemies": ENEMIES, "seconds": SECONDS, "elite_every": ELITE_EVERY, "boss_last": false}
 const SETTLEMENT := {"enemies": 15, "seconds": 60.0, "elite_every": 5, "boss_last": true}
+## A treasure chest's tile: the mimic alone, on the ordinary clock. `MapBuilder.has_chest` decides
+## where one stands; the mimic is the only enemy it ever fields.
+const CHEST := {"enemies": 1, "seconds": SECONDS, "elite_every": 1, "boss_last": true}
+const MIMIC := "Mimic"
+## How many times the mimic rolls for loot. The first is guaranteed, so it always pays something.
+const MIMIC_ROLLS := 10
 const PROFILES := {
 	"plain": ORDINARY,
 	"road": ORDINARY,
@@ -257,15 +263,20 @@ static func profile_for(variant: String) -> Dictionary:
 ## The fight waiting on `cell`, whose terrain is `env` and whose `variant` is what the world put
 ## there. Commons with an elite at each pitch, drawn from the enemies that live on that terrain and
 ## seeded from the cell, so the tile always fields the same fight.
-static func for_tile(cell: Vector2i, env: String, variant := "") -> Encounter:
+static func for_tile(cell: Vector2i, env: String, variant := "", chest := false) -> Encounter:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(["combat", cell])
 	var fight := Encounter.new()
 	fight.env = env
 	fight.cell = cell
-	fight._take_profile(profile_for(variant))
-	for i in fight.enemies:
-		fight._append_enemy(rng)
+	if chest:
+		fight._take_profile(CHEST)
+		fight.lineup.append(MIMIC)
+		fight.health.append(hp_of(MIMIC, cell))
+	else:
+		fight._take_profile(profile_for(variant))
+		for i in fight.enemies:
+			fight._append_enemy(rng)
 	fight.hp = fight.health[0]
 	return fight
 
@@ -462,12 +473,16 @@ func _strike(automatic: bool) -> bool:
 		# when the clock runs out.
 		# The tile's level is the ceiling on what can fall here, not what falls -- the drop rolls its
 		# own level under it, so fighting deeper improves the odds rather than the prize.
-		var dropped := LootTable.roll(lineup[index], loot_rng,
-				always_drop or (guarantee_elite and on_elite()) or (big and "trophy" in effects),
-				MapBuilder.level_of(cell),
-				drop_rate, item_rarity)
-		if dropped != null:
-			loot_dropped.emit(index, dropped)
+		# A mimic rolls MIMIC_ROLLS times, the first of them certain.
+		var rolls := MIMIC_ROLLS if lineup[index] == MIMIC else 1
+		for roll in rolls:
+			var dropped := LootTable.roll(lineup[index], loot_rng,
+					always_drop or (roll == 0 and (lineup[index] == MIMIC
+					or (guarantee_elite and on_elite()) or (big and "trophy" in effects))),
+					MapBuilder.level_of(cell),
+					drop_rate, item_rarity)
+			if dropped != null:
+				loot_dropped.emit(index, dropped)
 		# Every body carries one, which is the whole difference between gold and gear: nine kills in
 		# ten leave nothing, and all ten leave this.
 		# Gold find lifts the purse here rather than inside `gold_of`, which is what the body is worth

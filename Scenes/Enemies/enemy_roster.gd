@@ -274,12 +274,15 @@ const ENEMIES := {
 		"bounds": Rect2i(11, 52, 112, 57),
 		"sheets": {"idle": "IDLE.png", "walk": "MOVE.png", "attack": "ATTACK1.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
+	# Lives in no environment: it is never drawn for a lineup, only put alone on a chest tile
+	# (`Encounter.for_tile`). A boss and sized HUGE on purpose rather than by measurement, so the
+	# one body carries a boss's health and drop odds.
 	"Mimic": {
-		"tier": Tier.ELITE,
-		"size": Size.MEDIUM,
-		"weight": 16,
+		"tier": Tier.BOSS,
+		"size": Size.HUGE,
+		"weight": 1,
 		"faces": Facing.RIGHT,
-		"environments": ["dirt", "desert", "forest", "mountains"],
+		"environments": [],
 		"dir": "Mimic/Sprite",
 		"frame": Vector2i(158, 125),
 		"bounds": Rect2i(26, 13, 99, 83),

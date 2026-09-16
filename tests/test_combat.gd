@@ -26,6 +26,7 @@ func _run() -> void:
 	_check(_test_backdrop_layouts() == true, "backdrop layout tests ran to the end")
 	_check(_test_a_farm_run_never_ends() == true, "farm run tests ran to the end")
 	_check(_test_a_settlement_is_a_set_piece() == true, "settlement fight tests ran to the end")
+	_check(_test_a_chest_is_a_mimic() == true, "chest fight tests ran to the end")
 	_check(_test_gold() == true, "gold tests ran to the end")
 	_check(_test_experience() == true, "experience tests ran to the end")
 	_check(_test_coins() == true, "coin tests ran to the end")
@@ -1004,6 +1005,31 @@ func _commons(level := 1) -> Equipment:
 ## A settlement is a set piece: fifteen enemies in a minute, an elite every fifth and a boss last.
 ## All three tiers fight it -- what makes a town a longer fight is that people live there -- and a
 ## farm run on one keeps that elite rhythm and never the boss.
+## A chest tile fields the mimic alone, which no other lineup ever does, and it always pays out.
+func _test_a_chest_is_a_mimic() -> bool:
+	for env in _environments():
+		for variant in ["plain", "village"]:
+			var ordinary := Encounter.for_tile(Vector2i(4, 6), env, variant)
+			_check(not Encounter.MIMIC in ordinary.lineup, "no mimic on an ordinary %s %s" % [env, variant])
+	var drops := [0]
+	for attempt in 20:
+		var fight := Encounter.for_tile(Vector2i(4, 6), "grass", "plain", true)
+		_check(fight.lineup == PackedStringArray([Encounter.MIMIC]), "a chest fields the mimic alone")
+		_check(fight.tier_for(0) == EnemyRoster.Tier.BOSS, "and it is a boss")
+		fight.loot_rng.seed = attempt
+		var before: int = drops[0]
+		fight.loot_dropped.connect(func(_i: int, _item: Item) -> void: drops[0] += 1)
+		fight.damage = 1 << 20
+		fight.start()
+		fight.advance(Encounter.WALK_IN)
+		fight.hit()
+		_check(drops[0] > before, "the mimic always drops something")
+		fight.advance(Encounter.DEATH)
+		_check(fight.finished and fight.victory, "beating it takes the tile")
+	_check(drops[0] > 20 * 2, "and usually several things (%d over 20)" % drops[0])
+	return true
+
+
 func _test_a_settlement_is_a_set_piece() -> bool:
 	for variant in ["village", "town", "fortress"]:
 		for env in _environments():

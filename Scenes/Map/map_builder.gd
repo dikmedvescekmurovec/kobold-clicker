@@ -31,6 +31,13 @@ const CENTER := Vector2i.ZERO
 const ACCENT_CHANCE := 0.1
 ## The first town sits exactly this many steps from the center cell, and no town is closer.
 const START_TOWN_DISTANCE := 5
+## How many open tiles hold a treasure chest, and how close to the start the nearest may be. The mimic
+## waits in it: charting the tile fights it alone, and winning the tile takes the chest off the map.
+const CHEST_CHANCE := 0.03
+const CHEST_MIN_DISTANCE := 3
+## The closed brown chest, top-left of the pack's sheet.
+const CHEST_TEXTURE := "res://Assets/Potential/Animated Chests/Chests.png"
+const CHEST_REGION := Rect2(2, 12, 28, 20)
 
 var map: HexMap
 var towns: TownWorld
@@ -57,6 +64,7 @@ var _roads: Dictionary[Vector2i, int] = {}  # road edge mask per world spot
 var _routed_links: Dictionary[String, bool] = {}  # town links already routed, so a road is never laid twice
 var _states: Dictionary[Vector2i, State] = {}
 var _drawn_roads: Dictionary[Vector2i, int] = {}  # road mask each drawn cell shows, to spot the ones that change
+var _chest_sprites: Dictionary[Vector2i, Sprite2D] = {}
 
 
 ## Generates the window and shows the starting tiles. `origin` is the world spot at the center cell (0, 0); its
@@ -183,6 +191,7 @@ func _draw_saved() -> void:
 		_draw_road(cell)
 		if _states[cell] == State.UNCHARTED:
 			map.fog.add_cell(cell)
+		_draw_chest(cell)
 	for cell in _states:
 		if _tiles.has(cell):
 			map.refresh_blends(cell)
@@ -244,6 +253,52 @@ func area_variant(cell: Vector2i) -> String:
 		TownWorld.Tier.FORTRESS:
 			return "fortress"
 	return "road" if road_at(cell) != 0 else "plain"
+
+
+## Whether a treasure chest still stands on `cell`: open land (no town, not near the start) picked by a
+## per-cell roll, until the tile is charted. Derived from the seed rather than saved, the way `_tile_name`
+## is, and a won tile is charted, so nothing about an opened chest needs writing down.
+func has_chest(cell: Vector2i) -> bool:
+	if not _envs.has(cell) or charted(cell) or towns.has_town(_spot(cell)) 			or HexGrid.distance(CENTER, cell) < CHEST_MIN_DISTANCE:
+		return false
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([env_seed, "chest", cell])
+	return rng.randf() < CHEST_CHANCE
+
+
+## The closest chest to the player anywhere on the generated map, fog or not; NO_CELL when there is none.
+## ponytail: scans every generated cell, so call it on arrival rather than per frame.
+func nearest_chest() -> Vector2i:
+	var best := HexMap.NO_CELL
+	var best_steps := -1
+	for cell in _envs:
+		if not has_chest(cell):
+			continue
+		var steps := HexGrid.distance(player_cell, cell)
+		if best_steps == -1 or steps < best_steps:
+			best = cell
+			best_steps = steps
+	return best
+
+
+## Puts the chest sprite on a drawn cell that has one, and takes it off one that no longer does.
+func _draw_chest(cell: Vector2i) -> void:
+	var chest := seen(cell) and has_chest(cell)
+	if chest == _chest_sprites.has(cell):
+		return
+	if not chest:
+		if is_instance_valid(_chest_sprites[cell]):
+			_chest_sprites[cell].queue_free()
+		_chest_sprites.erase(cell)
+		return
+	var sprite := Sprite2D.new()
+	var texture := AtlasTexture.new()
+	texture.atlas = load(CHEST_TEXTURE)
+	texture.region = CHEST_REGION
+	sprite.texture = texture
+	sprite.position = map.ground_layer.map_to_local(cell)
+	map.chests.add_child(sprite)
+	_chest_sprites[cell] = sprite
 
 
 ## The level of a tile, in bands that widen as they go: the middle tile alone is level 1, the next
@@ -463,3 +518,4 @@ func _show(cell: Vector2i, to: State) -> void:
 		map.fog.add_cell(cell)
 	else:
 		map.fog.remove_cell(cell)
+	_draw_chest(cell)

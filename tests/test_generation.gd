@@ -266,6 +266,7 @@ func _test_map_builder() -> bool:
 	var start_town := view.start_town
 	var build_ms := Time.get_ticks_msec() - start
 
+	_check(_test_chests(map, view) == true, "chest tests ran to the end")
 	_check(_test_start_state(map, view) == true, "starting state tests ran to the end")
 	_check(_test_charting(map, view) == true, "charting tests ran to the end")
 	_check(_test_tile_names(view, world) == true, "tile name tests ran to the end")
@@ -275,8 +276,26 @@ func _test_map_builder() -> bool:
 	_check(_test_start_town(map, world, origin, start_town) == true, "first town tests ran to the end")
 	_check(_test_growth(map, view) == true, "map growth tests ran to the end")
 	_check(_test_area_variants(view, world) == true, "backdrop variant tests ran to the end")
+	_check(view.nearest_chest() == HexMap.NO_CELL, "a map charted end to end has no chest left")
 
 	map.queue_free()
+	return true
+
+
+## Chests sit on open land away from the start, are drawn once seen, and go once the tile is charted.
+func _test_chests(map: HexMap, view: MapBuilder) -> bool:
+	var chests := 0
+	for cell in view.to_save().envs:
+		if not view.has_chest(cell):
+			continue
+		chests += 1
+		_check(not view.towns.has_town(view.origin + cell), "no chest on a town")
+		_check(HexGrid.distance(MapBuilder.CENTER, cell) >= MapBuilder.CHEST_MIN_DISTANCE, "no chest by the start")
+	_check(chests > 0, "the map has chests (%d)" % chests)
+	var nearest := view.nearest_chest()
+	_check(nearest != HexMap.NO_CELL and view.has_chest(nearest), "the nearest chest is a chest")
+	for chest in map.chests.get_children():
+		_check(view.seen(map.ground_layer.local_to_map(chest.position)), "only a seen chest is drawn")
 	return true
 
 

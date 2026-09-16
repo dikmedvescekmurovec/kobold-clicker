@@ -216,6 +216,12 @@ var _tip_panel: VBoxContainer
 var _flashes := {}
 ## The weather and the day over the map.
 var _ambient: Ambient
+## The glimmer pinned to the window's edge in the direction of the nearest chest, and which
+## chest that is -- worked out on arrival, which is the only time the player or the map moves.
+var _chest_pointer: Polygon2D
+var _nearest_chest := HexMap.NO_CELL
+## How far in from the window's edge the pointer sits, in screen pixels.
+const CHEST_POINTER_MARGIN := 40.0
 
 
 func _ready() -> void:
@@ -255,6 +261,7 @@ func _ready() -> void:
 	map.add_child(_ambient)
 	_ambient.setup(camera)
 	_update_weather()
+	_nearest_chest = view.nearest_chest()
 	# The world is decided the moment it is generated, so it is written down then: a first run
 	# killed before the player moves would otherwise come back as somewhere else entirely.
 	_save_map()
@@ -310,6 +317,28 @@ func _center_panel(panel: Control) -> void:
 func _process(_delta: float) -> void:
 	if view != null and view.walking:
 		camera.position = _clamp_to_map(map.player.position)
+	if _chest_pointer != null:
+		_place_chest_pointer()
+
+
+## Pins the pointer where the line from the middle of the window to the nearest chest leaves it. A chest
+## already on screen and drawn needs no pointer; one still in the fog of war gets it over its own tile.
+func _place_chest_pointer() -> void:
+	var chest := _nearest_chest
+	var screen := get_viewport().get_visible_rect().size
+	var at := get_viewport().get_canvas_transform() * map.ground_layer.to_global(
+			map.ground_layer.map_to_local(chest))
+	var inside := Rect2(Vector2.ZERO, screen).grow(-CHEST_POINTER_MARGIN)
+	_chest_pointer.visible = chest != HexMap.NO_CELL and map.visible and not (inside.has_point(at) and view.seen(chest))
+	if not _chest_pointer.visible:
+		return
+	var center := screen / 2.0
+	var ray := at - center
+	var fit := 1.0
+	for axis in 2:
+		if absf(ray[axis]) > center[axis] - CHEST_POINTER_MARGIN:
+			fit = minf(fit, (center[axis] - CHEST_POINTER_MARGIN) / absf(ray[axis]))
+	_chest_pointer.position = center + ray * fit
 
 
 ## Built in code so the scene file stays untouched while the Godot editor has it open.
@@ -321,6 +350,20 @@ func _build_ui() -> void:
 	layer.name = "UI"
 	add_child(layer)
 	_ui_layer = layer
+	# A four-point glimmer rather than the chest itself: it hints that something is out there, and
+	# the chest is only seen once its tile is. It twinkles by growing, turning and fading.
+	_chest_pointer = Polygon2D.new()
+	_chest_pointer.polygon = PackedVector2Array([Vector2(0, -6), Vector2(1, -1), Vector2(6, 0),
+			Vector2(1, 1), Vector2(0, 6), Vector2(-1, 1), Vector2(-6, 0), Vector2(-1, -1)])
+	_chest_pointer.color = Color(1.0, 0.95, 0.7)
+	_chest_pointer.hide()
+	layer.add_child(_chest_pointer)
+	var twinkle := _chest_pointer.create_tween().set_loops()
+	twinkle.tween_property(_chest_pointer, "scale", Vector2.ONE * ui_scale * 1.3, 1.2).from(Vector2.ONE * ui_scale * 0.4)
+	twinkle.parallel().tween_property(_chest_pointer, "rotation", PI / 4.0, 1.2).from(0.0)
+	twinkle.parallel().tween_property(_chest_pointer, "modulate:a", 1.0, 1.2).from(0.3)
+	twinkle.tween_property(_chest_pointer, "scale", Vector2.ONE * ui_scale * 0.4, 1.2)
+	twinkle.parallel().tween_property(_chest_pointer, "modulate:a", 0.3, 1.2)
 
 	_panel = _titled_panel("Tile", "Close and deselect the tile", _on_close_pressed)
 	_panel.scale = Vector2(ui_scale, ui_scale)
@@ -1419,7 +1462,10 @@ func _on_chart_pressed() -> void:
 	var variant := view.area_variant(cell)
 	print("Fighting for %s, %s (%s, %s %d)" % [view.name_of(cell), cell, env, variant,
 			CombatScene.layout_for(cell)])
-	_open_fight(Encounter.for_tile(cell, env, variant), cell, false)
+	var chest := view.has_chest(cell)
+	if chest:
+		print("A treasure chest waits on %s" % cell)
+	_open_fight(Encounter.for_tile(cell, env, variant, chest), cell, false)
 
 
 ## Farming the selected tile: the same arena and the same enemies, coming forever, with no clock
@@ -1535,6 +1581,7 @@ func _on_move_pressed() -> void:
 func _on_player_arrived(cell: Vector2i) -> void:
 	print("Arrived at %s" % cell)
 	_update_weather()
+	_nearest_chest = view.nearest_chest()
 	_save_map()
 	_update_buttons()
 	if _chart_target != HexMap.NO_CELL:
