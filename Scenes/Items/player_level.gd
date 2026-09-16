@@ -2,24 +2,22 @@ class_name PlayerLevel
 extends RefCounted
 ## The player's level, and the one place that knows how much experience a level costs.
 ##
-## Nothing reads the level yet -- it is earned, saved and shown, and waits on the systems that would
-## give it something to do. What is settled already is the shape of the curve. A body is worth
-## `Encounter.XP_PER_LEVEL` a level of its tile, so a level is written as a number of ordinary bodies
-## at a tile of that level -- BASE_KILLS, multiplied by LEVEL_XP_GROWTH every level -- times what one
-## of those bodies pays. So the cost grows faster than the drops by construction: a player fighting
-## at their own level needs LEVEL_XP_GROWTH times the bodies each level, and one who walks further
-## out to fight richer tiles only gains linearly on a cost that grows exponentially.
+## The curve is paced by tiles: charting one should be worth about a quarter of a level. A tile fight
+## pays about ten ordinary bodies times the tile's level, and tile levels come in bands that widen
+## as the map spreads out, so what a tile pays climbs very slowly. The cost only has to climb a
+## little faster: BASE_KILLS ordinary level-1 bodies, times LEVEL_XP_GROWTH per level. Charting
+## outward ring by ring, that holds at about four tiles a level past level 90.
 
-## Ordinary bodies at a level-1 tile the first level takes: about two fights.
-const BASE_KILLS := 20
-## What each level multiplies that body count by. The dial for how fast levels thin out.
-const LEVEL_XP_GROWTH := 1.25
+## Ordinary bodies at a level-1 tile the first level takes: about four first-ring tiles.
+const BASE_KILLS := 85
+## What each level multiplies that cost by. Higher thins the levels out as the map grows.
+const LEVEL_XP_GROWTH := 1.03
 
 
 ## The experience it takes to go from `level` to the one after it.
 static func xp_to_next(level: int) -> int:
 	level = maxi(level, 1)
-	return maxi(1, roundi(BASE_KILLS * Encounter.XP_PER_LEVEL * level * pow(LEVEL_XP_GROWTH, level - 1)))
+	return maxi(1, roundi(BASE_KILLS * Encounter.XP_PER_LEVEL * pow(LEVEL_XP_GROWTH, level - 1)))
 
 
 ## `amount` experience added to a player at `level` holding `xp` towards the next. Overflow carries,

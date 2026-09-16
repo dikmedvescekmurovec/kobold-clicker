@@ -111,7 +111,7 @@ const GOLD_GROWTH := 1.12
 ## banded `MapBuilder.level_of` rather than the smooth distance gold uses, and linear rather than
 ## exponential, on purpose: the bands widen, so an exponent per hex step compounds with the square of
 ## the level and would soon pay for a whole level in one body. Linear in the tile's level is what
-## lets `PlayerLevel.xp_to_next` outgrow it everywhere -- see there.
+## keeps a tile's worth of experience growing slowly enough for `PlayerLevel.xp_to_next` to pace it -- see there.
 const XP_PER_LEVEL := 1.0
 
 ## What a click does with nothing equipped. The floor under `damage`, so a player who has never

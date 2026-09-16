@@ -402,21 +402,26 @@ func _test_experience() -> bool:
 	lost.give_up()
 	_check(lost.xp == banked, "and giving up keeps the experience")
 
-	# How many ordinary bodies a level takes, for a player whose level matches the tile they fight on.
-	# It has to climb: the threshold outgrows the drops however far out the player walks.
-	var last_level := 0
-	var last_kills := 0.0
-	for steps in range(0, 400):
-		var here := Vector2i(steps, 0)
-		var level := MapBuilder.level_of(here)
-		if level == last_level:
-			continue
-		var kills := float(PlayerLevel.xp_to_next(level)) / Encounter.xp_of("Skeleton Warrior", here)
-		if last_level > 0:
-			_check(kills > last_kills, "level %d takes %.1f bodies, more than level %d's %.1f"
-					% [level, kills, last_level, last_kills])
-		last_level = level
-		last_kills = kills
+	# A tile is worth about a quarter of a level: charting outward ring by ring, every level up to
+	# 30 takes three to six tiles.
+	var level := 1
+	var held := 0
+	var tiles_this_level := 0
+	var ring := 1
+	while level <= 30:
+		var cell := MapBuilder.CENTER + Vector2i(ring, 0)
+		for tile in 6 * ring:
+			var tile_fight := Encounter.for_tile(cell, "grass")
+			for body in tile_fight.lineup:
+				held += Encounter.xp_of(body, cell)
+			tiles_this_level += 1
+			while held >= PlayerLevel.xp_to_next(level):
+				held -= PlayerLevel.xp_to_next(level)
+				_check(tiles_this_level >= 3 and tiles_this_level <= 6,
+						"level %d took %d tiles" % [level, tiles_this_level])
+				level += 1
+				tiles_this_level = 0
+		ring += 1
 
 	# No orb falls until the player has killed FIRST_ORB_KILLS, across fights.
 	var gated := Encounter.farm(MapBuilder.CENTER + Vector2i(1, 0), "grass")
