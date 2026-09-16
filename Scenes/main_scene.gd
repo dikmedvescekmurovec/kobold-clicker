@@ -59,6 +59,15 @@ const BAG_DRAG_THRESHOLD := 4.0
 const DOLL_TEXTURE := "res://Assets/UI/ui_doll.png"
 const SOCKET_RING_TEXTURE := "res://Assets/UI/ui_socket_ring.png"
 const SOCKET_AMULET_TEXTURE := "res://Assets/UI/ui_socket_amulet.png"
+## The marks the two corner buttons wear. A chest for what has been carried home and a star for what
+## the player has become: both are places to go rather than actions to take, which is what the brown
+## face says and what puts them in a row of their own rather than among the panels' green buttons.
+const CHEST_ICON := "res://Assets/UI/ui_icon_chest.png"
+const STAR_ICON := "res://Assets/UI/ui_icon_star.png"
+## The air between the two, in panel pixels.
+const CORNER_GAP := 4.0
+## The gap between the two skill trees, in panel pixels.
+const SKILL_TREE_GAP := 20
 const DOLL_SCALE := 3.0
 const WORN_WIDTH := BAG_WIDTH
 const WORN_GAP := 6.0
@@ -104,6 +113,15 @@ var _panel: VBoxContainer
 ## The left-hand collection log, the button that opens it, and the rows inside it.
 var _bag_panel: VBoxContainer
 var _bag_button: Button
+## The skills page and its button, beside the bag's. It stands against the same edge, so only ever
+## one of the two is up: opening either closes the other.
+var _skills_panel: VBoxContainer
+var _skills_button: Button
+## What the skills page is showing: the free points over the trees, each tree's view and its reset.
+var _skill_points: Label
+var _skill_views := {}
+var _respec_buttons := {}
+var _skill_card: SkillCard
 ## The player in the top-left corner, over the map and over a fight alike.
 var _character: CharacterPanel
 
@@ -303,6 +321,9 @@ func _build_ui() -> void:
 	buttons.add_child(_farm_button)
 
 	_build_character()
+	# Skills before the bag: building the bag lays its character sheet out, which measures the whole
+	# interface, and `_layout_ui` places every left-hand page including this one.
+	_build_skills(layer)
 	_build_bag(layer)
 
 	get_viewport().size_changed.connect(_layout_ui)
@@ -330,16 +351,128 @@ func _sync_character() -> void:
 	_character.set_state(shown["level"], shown["xp"])
 
 
+## The skills page: the second square button in the corner and the page it opens, built and placed
+## exactly as the bag is and standing against the same edge. The free points stand over the trees, and
+## the trees stand side by side under them, each with the button that buys its points back.
+func _build_skills(layer: CanvasLayer) -> void:
+	_skills_button = _icon_button(STAR_ICON, "What the player has become")
+	# Placed beside the bag's button by `_layout_ui`, once both can be measured.
+	_skills_button.position = Vector2(8, 8)
+	_skills_button.pressed.connect(_on_skills_pressed)
+	layer.add_child(_skills_button)
+
+	_skills_panel = _titled_panel("Skills", "Close the skills panel", _on_left_page_closed)
+	_skills_panel.scale = Vector2(ui_scale, ui_scale)
+	_skills_panel.hide()
+	layer.add_child(_skills_panel)
+	var rows := _body_of(_skills_panel)
+	_skill_points = Label.new()
+	_skill_points.theme_type_variation = "PanelLabel"
+	_skill_points.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	rows.add_child(_skill_points)
+
+	var trees := HBoxContainer.new()
+	trees.add_theme_constant_override("separation", SKILL_TREE_GAP)
+	rows.add_child(trees)
+	for tree: String in SkillTree.trees():
+		var column := VBoxContainer.new()
+		column.add_theme_constant_override("separation", 4)
+		trees.add_child(column)
+		var name_label := Label.new()
+		name_label.theme_type_variation = "PanelLabel"
+		name_label.text = SkillTree.TREES[tree]["label"]
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		column.add_child(name_label)
+		var view := SkillTreeView.new()
+		view.node_pressed.connect(_on_skill_pressed)
+		view.node_hovered.connect(_on_skill_hovered)
+		view.node_unhovered.connect(_hide_skill_card)
+		column.add_child(view)
+		_skill_views[tree] = view
+		# The coin says it costs gold, the number says how much -- the bag's purse, read the same way.
+		var reset := _button("", "LightButton", "Take back every point in %s, for gold" % name_label.text)
+		reset.icon = Coins.icon()
+		reset.pressed.connect(_on_respec_pressed.bind(tree))
+		column.add_child(reset)
+		_respec_buttons[tree] = reset
+
+	# Last on the layer the page stands on, so it is drawn over the page it describes; and carrying the
+	# theme itself, for the orb card's reason.
+	_skill_card = SkillCard.new()
+	_skill_card.theme = UITheme.theme()
+	_skill_card.scale = Vector2(ui_scale, ui_scale)
+	_skill_card.hide()
+	layer.add_child(_skill_card)
+	_refresh_skills()
+
+
+## The page, redrawn from the inventory: free points, both trees, and what each reset would cost.
+func _refresh_skills() -> void:
+	var free := inventory.skills.points(inventory.level)
+	_skill_points.text = "%d skill point%s" % [free, "" if free == 1 else "s"]
+	_skill_points.add_theme_color_override("font_color", Palette.LEAF if free > 0 else Palette.SLATE)
+	for tree: String in _skill_views:
+		_skill_views[tree].fill(tree, inventory.skills.ranks)
+		var reset: Button = _respec_buttons[tree]
+		var spent := inventory.skills.spent(tree)
+		var cost := inventory.respec_cost(tree)
+		reset.text = "Reset %d" % cost if spent > 0 else "Reset"
+		reset.disabled = spent <= 0 or inventory.gold < cost
+	# Whatever the cursor was over has just been freed.
+	_hide_skill_card()
+
+
+## One point into a skill. Refused quietly when it cannot take one -- the card already says why.
+func _on_skill_pressed(id: String) -> void:
+	if not inventory.skills.rank_up(id, inventory.level):
+		return
+	inventory.save(inventory_path)
+	print("Learned %s (%d/%d)" % [SkillTree.node(id)["name"], inventory.skills.rank_of(id),
+			SkillTree.node(id)["max_rank"]])
+	_refresh_skills()
+
+
+func _on_respec_pressed(tree: String) -> void:
+	var cost := inventory.respec_cost(tree)
+	if not inventory.respec(tree):
+		return
+	inventory.save(inventory_path)
+	print("Reset %s for %d gold" % [tree, cost])
+	_refresh_skills()
+	_refresh_gold()
+
+
+## The card beside the skill under the cursor, measured and placed twice for the orb card's reason.
+func _on_skill_hovered(id: String, slot: SkillSlot) -> void:
+	_skill_card.fill(id, inventory.skills, inventory.level)
+	_skill_card.show()
+	_place_skill_card(slot.get_global_rect())
+	_place_skill_card.call_deferred(slot.get_global_rect())
+
+
+func _hide_skill_card() -> void:
+	if _skill_card != null:
+		_skill_card.hide()
+
+
+## Beside the page rather than beside the square: the page stands against the left edge with the map
+## to its right, so there is always room there, and a card laid over the tree would hide the very
+## lines and counts it is being read against. Level with the square, so the eye does not travel.
+func _place_skill_card(anchor: Rect2) -> void:
+	if not _skill_card.visible:
+		return
+	var card := _skill_card.get_combined_minimum_size() * ui_scale
+	var view_size := get_viewport_rect().size
+	var page_right := _skills_panel.position.x + _skills_panel.size.x * ui_scale
+	var spot := Vector2(page_right + SLOT_GAP * ui_scale, anchor.position.y)
+	_skill_card.position = spot.clamp(Vector2.ZERO, (view_size - card).max(Vector2.ZERO))
+
+
 ## The bag: a button under the character panel and the panel it opens, built the same way as the tile
 ## panel opposite and flush against the other edge. Inside it, every item the world has handed over
 ## as a grid of squares, and under that whatever one is being looked at.
 func _build_bag(layer: CanvasLayer) -> void:
-	_bag_button = _button("Items", "WoodButton", "What the monsters have dropped")
-	# It stands on the map rather than inside a panel, so it carries the theme itself: a variation
-	# means nothing to a Control with no themed ancestor.
-	_bag_button.theme = UITheme.theme()
-	_bag_button.disabled = false
-	_bag_button.scale = Vector2(ui_scale, ui_scale)
+	_bag_button = _icon_button(CHEST_ICON, "What the monsters have dropped")
 	# Placed under the character panel by `_layout_ui`, which is the first moment it can be measured.
 	_bag_button.position = Vector2(8, 8)
 	_bag_button.pressed.connect(_on_bag_pressed)
@@ -1092,6 +1225,20 @@ func _button(text: String, variation: String, tooltip: String) -> Button:
 	return button
 
 
+## One of the corner's square buttons: a brown face with a mark on it and no words at all. It takes
+## its size from the mark, which is why both marks are cut on one square (see tools/ui_kit.py), and
+## it carries the theme itself for the reason the bag's button always has -- it stands on the map,
+## and a type variation means nothing to a Control with no themed ancestor.
+func _icon_button(texture: String, tooltip: String) -> Button:
+	var button := _button("", "BrownIconButton", tooltip)
+	button.theme = UITheme.theme()
+	button.disabled = false
+	button.icon = load(texture)
+	button.expand_icon = false
+	button.scale = Vector2(ui_scale, ui_scale)
+	return button
+
+
 ## Both panels are scaled by `ui_scale`, so they are sized in sprite pixels: a height of
 ## view/ui_scale fills the window exactly. Their contents keep their own heights and stack from the
 ## top. The tile panel is flush against the right edge, the item panel against the left; the button
@@ -1104,7 +1251,13 @@ func _layout_ui() -> void:
 	_panel.position = Vector2(view_size.x - width * ui_scale, 0.0)
 	_bag_panel.size = Vector2(_bag_panel.get_combined_minimum_size().x, height)
 	_bag_panel.position = Vector2.ZERO
-	_bag_button.position = Vector2(8, _character.position.y + (_character.size.y + 4) * ui_scale)
+	_skills_panel.size = Vector2(_skills_panel.get_combined_minimum_size().x, height)
+	_skills_panel.position = Vector2.ZERO
+	# The two square buttons in a row under the character panel: what you carry, then what you are.
+	var corner := Vector2(8, _character.position.y + (_character.size.y + 4) * ui_scale)
+	_bag_button.position = corner
+	_skills_button.position = corner + Vector2(
+			(_bag_button.get_combined_minimum_size().x + CORNER_GAP) * ui_scale, 0.0)
 	if _combat != null:
 		_combat.xp_target = _character.xp_point()
 	# The character sheet stands outside the item panel, against its right edge and only as tall as it
@@ -1184,7 +1337,7 @@ func _on_farm_pressed() -> void:
 func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# What the player is wearing, read once as the fight opens. Changing gear mid-fight is not a
 	# thing that can happen -- the bag goes away while one is on -- so there is nothing to keep live.
-	fight.arm(inventory.equipment.totals())
+	fight.arm(inventory.stats())
 	# Until the player has seen their first drop, the first elite they meet is promised one.
 	fight.guarantee_elite = not inventory.first_elite_taken
 	_farming = farming
@@ -1220,11 +1373,10 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	map.hide()
 	map.process_mode = Node.PROCESS_MODE_DISABLED
 	_panel.hide()
-	# The button has to go, not just be covered: a Control takes the mouse before the fight sees it,
-	# so one left in that corner would quietly eat the player's swings.
-	_bag_panel.hide()
-	_worn_panel.hide()
-	_bag_button.hide()
+	# The buttons have to go, not just be covered: a Control takes the mouse before the fight sees
+	# it, so one left in that corner would quietly eat the player's swings.
+	_close_left_pages()
+	_show_corner(false)
 	_character.show()
 
 
@@ -1241,7 +1393,7 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 	_sync_character()
 	map.process_mode = Node.PROCESS_MODE_INHERIT
 	map.show()
-	_bag_button.show()
+	_show_corner(true)
 	var turned_up := PackedStringArray()
 	for drop in _fight_drops:
 		turned_up.append("%s (%s)" % [drop.type, drop.rarity_name()])
@@ -1429,7 +1581,45 @@ func _bank_farm_loot() -> void:
 	_refresh_bag()
 
 
-## The panel takes the button's place while it is open, so the corner never holds both.
+## Both corner buttons at once. They come and go together because what takes them away is never
+## about one of them -- a page standing on their edge, or a fight that must see every click.
+func _show_corner(shown: bool) -> void:
+	_bag_button.visible = shown
+	_skills_button.visible = shown
+
+
+## Every page that stands against the left edge. They share it, so opening one closes the rest and
+## there is one place that knows which those are.
+func _close_left_pages() -> void:
+	_bag_panel.hide()
+	_worn_panel.hide()
+	_skills_panel.hide()
+	_hide_skill_card()
+
+
+## A page takes the corner's place while it is open, so that corner never holds both.
+func _open_left_page(page: VBoxContainer) -> void:
+	_close_left_pages()
+	_layout_ui()
+	page.show()
+	_show_corner(false)
+	# The page covers the left edge, and it stands on a layer above the character panel.
+	_character.hide()
+
+
+## The X on either page: the same two things follow from closing either one.
+func _on_left_page_closed() -> void:
+	_close_left_pages()
+	_show_corner(true)
+	_character.show()
+
+
+func _on_skills_pressed() -> void:
+	# Levels and gold both move while the page is shut, and both change what it says.
+	_refresh_skills()
+	_open_left_page(_skills_panel)
+
+
 func _on_bag_pressed() -> void:
 	# Always opens on the grid: a stat block left over from last time is not what was asked for.
 	# Both selections, not just the bag's -- leaving the other set reopens the bag on a worn piece,
@@ -1437,12 +1627,9 @@ func _on_bag_pressed() -> void:
 	_bag_selected = -1
 	_worn_selected = -1
 	_refresh_bag()
-	_layout_ui()
-	_bag_panel.show()
+	_open_left_page(_bag_panel)
+	# The character sheet is the bag's other half rather than a page of its own, so it comes up with it.
 	_worn_panel.show()
-	_bag_button.hide()
-	# The bag covers the left edge, and the panel stands on a layer above it.
-	_character.hide()
 
 
 ## Quitting with a run still on. The pouch goes in rather than evaporating -- a run that is left
@@ -1452,11 +1639,10 @@ func _exit_tree() -> void:
 	_save_map()
 
 
+## The bag's own X. Closing it is closing a left-hand page and nothing more, but it keeps its name:
+## that is what the tests press, and "close the bag" is what the button means to whoever reads it.
 func _on_bag_closed() -> void:
-	_bag_panel.hide()
-	_worn_panel.hide()
-	_bag_button.show()
-	_character.show()
+	_on_left_page_closed()
 
 
 ## The X closes the panel and drops the selection, so nothing stays outlined on the map.

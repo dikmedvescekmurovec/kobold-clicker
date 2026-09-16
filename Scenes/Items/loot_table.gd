@@ -143,9 +143,15 @@ const STAT_LABELS := {
 	"strength": "Strength",
 	"dexterity": "Dexterity",
 	"intelligence": "Intelligence",
+	# What only the player carries: the Fortune tree's stats. No piece shows or rolls them -- they are
+	# here so a skill spells them the way a stat block would.
+	"item_rarity": "Item Rarity",
+	"gold_find": "Gold Find",
+	"orb_find": "Orb Find",
 }
 const PERCENT_STATS := ["crit_chance", "crit_damage", "block_chance", "move_speed", "dodge_chance",
-	"fire_resist", "cold_resist", "lightning_resist", "leech", "drop_rate"]
+	"fire_resist", "cold_resist", "lightning_resist", "leech", "drop_rate",
+	"item_rarity", "gold_find", "orb_find"]
 ## The percentages that are a *probability*: how often something happens, rather than how much of it
 ## there is. They are the ones a level may not multiply -- see `scale`. Crit damage is not one of
 ## them (500% crit damage is a fine number), and neither is leech, which is a share of a hit.
@@ -186,6 +192,8 @@ const LEVEL_FLAT := {
 	"fire_resist": 1.0, "cold_resist": 1.0, "lightning_resist": 1.0,
 	"leech": 0.2, "life_on_hit": 1.0,
 	"strength": 1.0, "dexterity": 1.0, "intelligence": 1.0,
+	# Nothing rolls these at a level, so a level adds nothing to them.
+	"item_rarity": 0.0, "gold_find": 0.0, "orb_find": 0.0,
 }
 
 ## What a body's tier adds to the ceiling on what it drops, over the tile's own level. The elite at
@@ -334,12 +342,12 @@ static func chance_for(enemy_name: String, drop_rate := 0.0) -> float:
 ## The chance is drawn first and on its own, so a kill that leaves nothing still costs exactly one
 ## draw. That is what keeps the drop rate comparable to before rarities existed.
 static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := false,
-		tile_level := 1, drop_rate := 0.0) -> Item:
+		tile_level := 1, drop_rate := 0.0, item_rarity := 0.0) -> Item:
 	if not guaranteed and rng.randf() >= chance_for(enemy_name, drop_rate):
 		return null
 	var type := _weighted(rng)
 	var tier := EnemyRoster.tier_of(enemy_name)
-	var rarity := ItemRarity.roll(tier, rng)
+	var rarity := ItemRarity.roll(tier, rng, item_rarity)
 	# The tile's level and the body's tier give a ceiling; the piece rolls its own level under it,
 	# so a deep tile is a better place to fight rather than a guaranteed prize.
 	var ceiling := maxi(1, tile_level + int(TIER_LEVEL[tier]))

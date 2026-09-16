@@ -7,6 +7,7 @@ func _run() -> void:
 	_check(_test_sheet() == true, "sheet JSON tests ran to the end")
 	_check(_test_panels(theme) == true, "panel tests ran to the end")
 	_check(_test_buttons(theme) == true, "button tests ran to the end")
+	_check(_test_icon_faces(theme) == true, "icon face tests ran to the end")
 	_check(_test_icon_buttons(theme) == true, "icon button tests ran to the end")
 	_check(_test_controls(theme) == true, "live control tests ran to the end")
 	_check(_test_orb_tray() == true, "orb tray tests ran to the end")
@@ -36,10 +37,15 @@ func _test_sheet() -> bool:
 	var expected: Array[String] = []
 	for variation: String in UITheme.PANELS:
 		expected.append(UITheme.PANELS[variation])
-	for surface: String in ["wood", "light"]:
-		for variant: String in ["normal", "danger"]:
-			for state: String in UITheme.STATES:
-				expected.append("ui_btn_%s_%s_%s" % [surface, variant, state])
+	# Off UITheme's own table rather than off a list written twice: a family the theme asks for and
+	# the sheet does not hold is exactly what the count below is here to catch.
+	for variation: String in UITheme.BUTTONS:
+		for state: String in UITheme.STATES:
+			expected.append("ui_btn_%s_%s_%s" % [UITheme.BUTTONS[variation][0],
+					UITheme.BUTTONS[variation][1], state])
+	for variation: String in UITheme.ICON_FACES:
+		for state: String in UITheme.STATES:
+			expected.append("%s_%s" % [UITheme.ICON_FACES[variation], state])
 	for variation: String in UITheme.ICON_BUTTONS:
 		for state: String in UITheme.STATES:
 			expected.append("%s_%s" % [UITheme.ICON_BUTTONS[variation], state])
@@ -78,6 +84,53 @@ func _test_buttons(theme: Theme) -> bool:
 		_check(pressed.content_margin_bottom == normal.content_margin_bottom - 1,
 				"%s keeps its height when pressed" % variation)
 		_check(theme.has_color("font_disabled_color", variation), "%s dims its label when disabled" % variation)
+	return true
+
+
+## An icon face is a stretched 9-slice like a lettered button, but padded equally on all four sides:
+## the claim is that one wearing a square mark comes out square, whatever the mark is.
+func _test_icon_faces(theme: Theme) -> bool:
+	for variation: String in UITheme.ICON_FACES:
+		_check(theme.get_type_variation_base(variation) == "Button", "%s is a Button" % variation)
+		for state: String in UITheme.STATES:
+			var sprite_name: String = "%s_%s" % [UITheme.ICON_FACES[variation], state]
+			_check(_is_nine_slice(theme.get_stylebox(state, variation), sprite_name, variation) == true,
+					"%s %s is a tiled 9-slice" % [variation, state])
+		var normal := theme.get_stylebox("normal", variation)
+		_check(normal.content_margin_left == UITheme.ICON_FACE_MARGIN
+				and normal.content_margin_right == UITheme.ICON_FACE_MARGIN
+				and normal.content_margin_top == UITheme.ICON_FACE_MARGIN
+				and normal.content_margin_bottom == UITheme.ICON_FACE_MARGIN,
+				"%s pads its mark the same on all four sides" % variation)
+		var pressed := theme.get_stylebox("pressed", variation)
+		_check(pressed.content_margin_top == normal.content_margin_top + 1, "%s sinks when pressed" % variation)
+		_check(pressed.content_margin_bottom == normal.content_margin_bottom - 1,
+				"%s keeps its height when pressed" % variation)
+
+	# The marks themselves, and the size a button wearing one comes out at. Both are cut on one
+	# square by tools/ui_kit.py precisely so the corner's two buttons are the same size; a Button
+	# takes its minimum from its icon, so an untrimmed mark would be the end of that.
+	# The main scene has no class_name, so its constants are read off the script resource itself.
+	var scene := preload("res://Scenes/main_scene.gd")
+	var side := 0
+	for path: String in [scene.CHEST_ICON, scene.STAR_ICON]:
+		var texture: Texture2D = load(path)
+		_check(texture != null, "%s is on disk" % path)
+		if texture == null:
+			continue
+		_check(texture.get_width() == texture.get_height(), "%s is a square" % path)
+		_check(side == 0 or texture.get_width() == side, "%s is the size the other marks are" % path)
+		side = texture.get_width()
+	var button := Button.new()
+	button.theme = theme
+	button.theme_type_variation = UITheme.ICON_FACES.keys()[0]
+	button.icon = load(scene.CHEST_ICON)
+	button.expand_icon = false
+	root.add_child(button)
+	var wanted := side + 2 * UITheme.ICON_FACE_MARGIN
+	_check(button.get_combined_minimum_size() == Vector2(wanted, wanted),
+			"an icon face comes out square (%s)" % button.get_combined_minimum_size())
+	button.queue_free()
 	return true
 
 

@@ -19,7 +19,7 @@ import colorsys
 import json
 import os
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 SRC = "Assets/Potential/2D Pixel UI/PNG"
 POTENTIAL = "Assets/Potential"
@@ -75,6 +75,13 @@ GREEN_RAMP = ["#50a978", "#57c767", "#478773", "#6ae356", "#68c97e", "#80e87c", 
 # further away rather than merely paler.
 DANGER_HUE, DANGER_SAT = 0.017, 0.55
 DISABLED_HUE, DISABLED_SAT, DISABLED_DIM = 0.62, 0.06, 0.80
+# BROWN is the pack's own square button, read off it: the pack draws one at Buttons.png (336, 339),
+# 11x12, in four states on a 16 px pitch -- and that sprite cannot be used. Its face is a diagonal
+# gradient, so no margin leaves a centre flat enough for check() to pass, and at 11x12 it could not
+# hold a 12 px icon anyway. What it is good for is its colour: this hue and saturation, at 0.62 of
+# the green face's lightness. Played on the green button's flat, tileable face the base step comes
+# out #714c2a against the pack's own #70492a -- the pack's brown square, on a face that nine-slices.
+BROWN_HUE, BROWN_SAT, BROWN_DIM = 0.08, 0.46, 0.62
 
 # The gear icons, which are not theme sprites: they go to Assets/Gear as loose PNGs for
 # LootTable.ROOT to load by path, and never enter ui_sheet.png or ui_sheet.json. They are cut here
@@ -132,6 +139,88 @@ PARTS = {
     "ui_doll": ("2D Pixel UI/PNG/Equipment", 50, 336, 43, 46, 1),
     "ui_socket_amulet": ("2D Pixel UI/PNG/Equipment", 99, 337, 10, 13, 1),
     "ui_socket_ring": ("2D Pixel UI/PNG/Equipment", 99, 354, 11, 12, 1),
+}
+
+# The marks the corner's two square buttons wear, off Icons.png -- the same 6-column, 16 px grid the
+# ring and the amulet come off, with rows that are not evenly spaced, so each y and height here is
+# that one icon's measured extent rather than a cell. The chest is row 1, column 3 and the star is
+# row 2, column 2. Scale 1, unlike the gear: these stand on theme art, which is drawn at one source
+# pixel per panel pixel, and doubling them would put a second pitch on the same button.
+#
+# name -> (sheet under Assets/Potential, x, y, w, h, scale), the same 6-tuple as GEAR
+ICONS = {
+    "ui_icon_chest": ("2D Pixel UI/PNG/Icons", 34, 3, 12, 11, 1),
+    "ui_icon_star": ("2D Pixel UI/PNG/Icons", 18, 18, 13, 12, 1),
+}
+# Both icons are centred on one square, so both buttons come out the same size whatever they wear.
+ICON_SIDE = 14
+
+# The skill trees' icons, off "Ability Icons" -- loose 16 px files that carry their own framed square,
+# so an entry is a whole file and nothing is trimmed. One colourway a tree, so a tree reads as one
+# thing: red for Power, and the gold-orange for Fortune, which is the colour loot already speaks in.
+# The pack's Locked mark in each colourway stands in for a node that cannot be learned yet.
+#
+# node id -> (tree, file under "Ability Icons/Icons (All)")
+SKILL_ROOT = "Ability Icons/Icons (All)/"
+SKILL_LOCKED = "Ability Icons/Icons (Base & Locked)/"
+SKILL_OUT = "Assets/Skills"
+SKILL_SIDE = 16
+SKILLS = {
+    "sharpened_edge": ("power", "Red4"),
+    "keen_eye": ("power", "Red9"),
+    "quick_hands": ("power", "Red15"),
+    "battle_rhythm": ("power", "Red1"),
+    "deadly_strikes": ("power", "Red13"),
+    "assassin": ("power", "Red2"),
+    "flurry": ("power", "Red3"),
+    "whirlwind": ("power", "Red8"),
+    "might": ("power", "Red10"),
+    "titan": ("power", "Red5"),
+    "scavenger": ("fortune", "Yellow6"),
+    "prospector": ("fortune", "Yellow10"),
+    "appraiser": ("fortune", "Yellow7"),
+    "fortunes_favour": ("fortune", "Yellow3"),
+    "treasure_hunter": ("fortune", "Yellow15"),
+    "collector": ("fortune", "Yellow8"),
+    "greed": ("fortune", "Yellow14"),
+    "midas": ("fortune", "Yellow9"),
+    "orb_seeker": ("fortune", "Yellow11"),
+    "alchemist": ("fortune", "Yellow12"),
+}
+SKILL_LOCKS = {"power_locked": "RedLocked", "fortune_locked": "YellowLocked"}
+# The sketch's shape, row by row: which node stands in which of three columns, and its parents. Written
+# here only so the preview can draw a tree; SkillTree in the game is where it is actually decided.
+SKILL_LAYOUT = {
+    "power": [
+        ("sharpened_edge", 0, 1, []), ("keen_eye", 1, 0, ["sharpened_edge"]),
+        ("quick_hands", 1, 2, ["sharpened_edge"]), ("battle_rhythm", 2, 1, ["keen_eye", "quick_hands"]),
+        ("deadly_strikes", 3, 0, ["battle_rhythm"]), ("flurry", 3, 1, ["battle_rhythm"]),
+        ("might", 3, 2, ["battle_rhythm"]), ("assassin", 4, 0, ["deadly_strikes"]),
+        ("whirlwind", 4, 1, ["flurry"]), ("titan", 4, 2, ["might"]),
+    ],
+    "fortune": [
+        ("scavenger", 0, 1, []), ("prospector", 1, 0, ["scavenger"]),
+        ("appraiser", 1, 2, ["scavenger"]), ("fortunes_favour", 2, 1, ["prospector", "appraiser"]),
+        ("treasure_hunter", 3, 0, ["fortunes_favour"]), ("greed", 3, 1, ["fortunes_favour"]),
+        ("orb_seeker", 3, 2, ["fortunes_favour"]), ("collector", 4, 0, ["treasure_hunter"]),
+        ("midas", 4, 1, ["greed"]), ("alchemist", 4, 2, ["orb_seeker"]),
+    ],
+}
+# What the face pads its icon by. The game's own copy is UITheme.ICON_FACE_MARGIN -- padding is a
+# decision the theme makes, the way UITheme.BUTTON_MARGIN is; this one is here so the preview draws
+# the button at the size the game will, which is the only size worth judging the icons at.
+ICON_PAD = 4
+# Icons.png is drawn in the wood panel's own brown ramp: the pack means these marks to be engraved
+# on wood, which is why ui_doll above is cut from the same family. On the brown button face they
+# would barely read, so the ramp is mapped onto the pack's cream -- the two lightest steps are the
+# cream panel's own #cda677 and #e5d6a1 (Palette.SLOT_TAN and PANEL_CREAM), and the outline stays a
+# mid brown rather than going white, so the icon keeps an edge against the face it sits on.
+BONE_RAMP = {
+    "#3e1f1d": "#6b4a30",
+    "#603928": "#a98b5e",
+    "#70492a": "#cda677",
+    "#825c2f": "#e5d6a1",
+    "#88682d": "#f4ecc6",
 }
 
 # The character panel in the top-left corner, off the UI pack's character_panel.png. The pack draws
@@ -198,6 +287,11 @@ PIP_TAIL_END = (25, 2)
 PIP_WIDTHS = {"head": 5, "body": 4, "tail": 3}
 
 
+def _rgb(text):
+    """One "#rrggbb" as the opaque RGBA tuple the images are keyed by."""
+    return tuple(int(text[i:i + 2], 16) for i in (1, 3, 5)) + (255,)
+
+
 def _recolor(hue, sat, dim=1.0):
     """A colour map over GREEN_RAMP: the same lightness, another hue and saturation."""
     table = {}
@@ -214,6 +308,12 @@ VARIANTS = {
     "danger": _recolor(DANGER_HUE, DANGER_SAT),
 }
 DISABLED = _recolor(DISABLED_HUE, DISABLED_SAT, DISABLED_DIM)
+# Its own table rather than a fifth entry in VARIANTS: that dict is crossed with both surfaces, and
+# there is only one brown button -- it stands on the map, not on a panel, so the second drop-shadow
+# colour would never be asked for.
+BROWN = _recolor(BROWN_HUE, BROWN_SAT, BROWN_DIM)
+# The order a button's four states are read in, which is the order the previews lay them out in.
+STATE_ORDER = ["normal", "hover", "pressed", "disabled"]
 
 
 def _lift(colors, factor):
@@ -316,6 +416,20 @@ def build():
             sprites[name] = _map_colors(sheet("Buttons").crop((x, row, x + w, row + h)), DISABLED)
             margins[name] = BUTTON_MARGIN
 
+    # The brown face, which is the same rectangle in another key. It has no surface of its own: it
+    # stands on the map rather than on a panel, so it takes the wood row's drop shadow and stops
+    # there -- one family of four rather than the two-by-two above. Its dead face is the same grey
+    # every other family's is, because a switched-off button is not brown any more than it is green.
+    for state, x in BUTTON_STATE_X.items():
+        name = "ui_btn_brown_%s" % state
+        sprites[name] = _map_colors(sheet("Buttons").crop((x, BUTTON_ROW["wood"], x + w,
+                                                           BUTTON_ROW["wood"] + h)), BROWN)
+        margins[name] = BUTTON_MARGIN
+    x = BUTTON_STATE_X["normal"]
+    sprites["ui_btn_brown_disabled"] = _map_colors(
+            sheet("Buttons").crop((x, BUTTON_ROW["wood"], x + w, BUTTON_ROW["wood"] + h)), DISABLED)
+    margins["ui_btn_brown_disabled"] = BUTTON_MARGIN
+
     src, x, y, w, h = CLOSE
     close = _cut_out(sheet("Buttons" if src == "Buttons" else src).crop((x, y, x + w, y + h)), BAR_FACE)
     icons = {
@@ -417,9 +531,81 @@ def orb_preview(cut):
     return out.resize((out.width * 3, out.height * 3), Image.NEAREST)
 
 
+def skills():
+    """Every skill icon and both locked marks, whole files at their own 16 px."""
+    out = {}
+    for name, (_tree, src) in SKILLS.items():
+        out[name] = _cut((SKILL_ROOT + src, 0, 0, SKILL_SIDE, SKILL_SIDE, 1), trim=False)
+    for name, src in SKILL_LOCKS.items():
+        out[name] = _cut((SKILL_LOCKED + src, 0, 0, SKILL_SIDE, SKILL_SIDE, 1), trim=False)
+    for name, image in out.items():
+        if image.size != (SKILL_SIDE, SKILL_SIDE):
+            raise SystemExit("%s is %dx%d, not %d square" % (name, image.width, image.height, SKILL_SIDE))
+    return out
+
+
+def skill_preview(cut):
+    """Both trees on the cream panel at the 2x they are drawn at, laid out as the sketch is.
+
+    Each tree is shown twice: the left copy fresh, where only the root is open and everything else
+    wears the locked mark, and the right copy part-spent, which is the only state worth judging whether
+    twenty icons read as twenty different skills.
+    """
+    cream, ink, lit = (0xE5, 0xD6, 0xA1, 0xFF), (0x3B, 0x2A, 0x1E, 0xFF), (0xE8, 0xB7, 0x3A, 0xFF)
+    side, gap_x, gap_y, pad = SKILL_SIDE * 2, 18, 18, 12
+    tree_w = 3 * side + 2 * gap_x
+    tree_h = 5 * side + 4 * gap_y
+    learned = {"sharpened_edge", "keen_eye", "battle_rhythm", "flurry",
+               "scavenger", "appraiser", "prospector", "fortunes_favour", "greed", "midas"}
+    out = Image.new("RGBA", (pad + 4 * (tree_w + pad), tree_h + 2 * pad), cream)
+    draw = ImageDraw.Draw(out)
+
+    def centre(ox, row, col):
+        return ox + col * (side + gap_x) + side // 2, pad + row * (side + gap_y) + side // 2
+
+    for copy, (tree, nodes) in [(c, t) for t in SKILL_LAYOUT.items() for c in (0, 1)]:
+        index = list(SKILL_LAYOUT).index(tree)
+        ox = pad + (index * 2 + copy) * (tree_w + pad)
+        ranked = learned if copy else set()
+        place = {n: (r, c) for n, r, c, _p in nodes}
+        for name, row, col, parents in nodes:
+            for parent in parents:
+                colour = lit if parent in ranked else ink
+                draw.line([centre(ox, *place[parent]), centre(ox, row, col)], fill=colour, width=2)
+        for name, row, col, parents in nodes:
+            open_ = not parents or any(p in ranked for p in parents)
+            icon = cut[name] if open_ else cut[tree + "_locked"]
+            if open_ and name not in ranked:
+                icon = Image.blend(icon, Image.new("RGBA", icon.size, (0x60, 0x60, 0x60, 0xFF)), 0.45)
+                icon.putalpha(cut[name].getchannel("A"))
+            x, y = centre(ox, row, col)
+            out.alpha_composite(icon.resize((side, side), Image.NEAREST), (x - side // 2, y - side // 2))
+    return out.resize((out.width * 2, out.height * 2), Image.NEAREST)
+
+
 def parts():
     """The equipment screen's furniture, each at its own size -- nothing here sits in a grid."""
     return {name: _cut(entry) for name, entry in PARTS.items()}
+
+
+def icons():
+    """The two button marks, recoloured to the pack's cream and centred on one ICON_SIDE square.
+
+    Centred on a shared square rather than left at their measured sizes because a Button takes its
+    minimum size from its icon: the chest is 12x11 and the star 13x12, so two buttons wearing them
+    raw would be two different sizes standing side by side.
+    """
+    table = {_rgb(dark): _rgb(light) for dark, light in BONE_RAMP.items()}
+    out = {}
+    for name, entry in ICONS.items():
+        art = _map_colors(_cut(entry), table)
+        if art.width > ICON_SIDE or art.height > ICON_SIDE:
+            raise SystemExit("%s is %dx%d, too big for a %d square"
+                             % (name, art.width, art.height, ICON_SIDE))
+        square = Image.new("RGBA", (ICON_SIDE, ICON_SIDE), (0, 0, 0, 0))
+        square.alpha_composite(art, ((ICON_SIDE - art.width) // 2, (ICON_SIDE - art.height) // 2))
+        out[name] = square
+    return out
 
 
 def character():
@@ -610,6 +796,29 @@ def _kind(name):
     return "icon" if name.startswith("ui_close") else "button"
 
 
+def icon_preview(cut, sprites, margins):
+    """Both marks on the brown face, in all four states, on grass.
+
+    On grass rather than on a flat swatch because that is where these two buttons stand -- the map,
+    not a panel -- and the question they raise is whether a cream mark on a brown face reads there.
+    The face is nine-sliced to the size the game draws it at, so the preview also shows the one
+    thing a wrong margin would give away: a seam down the middle of a square button.
+    """
+    side = ICON_SIDE + 2 * ICON_PAD
+    pad = 6
+    names = list(cut)
+    out = Image.new("RGBA", (pad + len(STATE_ORDER) * (side + pad), pad + len(names) * (side + pad)),
+                    (0x3A, 0x54, 0x34, 0xFF))
+    for row, name in enumerate(names):
+        for col, state in enumerate(STATE_ORDER):
+            sprite = "ui_btn_brown_" + state
+            face = nine_slice(sprites[sprite], margins[sprite], (side, side))
+            # Pressed draws the face a pixel lower, so the mark on it drops with it.
+            face.alpha_composite(cut[name], (ICON_PAD, ICON_PAD + (1 if state == "pressed" else 0)))
+            out.alpha_composite(face, (pad + col * (side + pad), pad + row * (side + pad)))
+    return out.resize((out.width * 4, out.height * 4), Image.NEAREST)
+
+
 def nine_slice(image, margin, size):
     """What Godot's StyleBoxTexture will draw: corners kept, edges and centre tiled."""
     left, top, right, bottom = margin
@@ -674,6 +883,13 @@ def main():
     for name, image in parts().items():
         image.save(os.path.join(OUT, name + ".png"))
 
+    # Loose as well, and for the same reason the parts are: a mark is drawn at its own size and the
+    # face behind it is what stretches.
+    mark = icons()
+    icon_preview(mark, sprites, margins).save(os.path.join(QA, "ui_kit_icons.png"))
+    for name, image in mark.items():
+        image.save(os.path.join(OUT, name + ".png"))
+
     # Their own folder, not Assets/Gear: an orb is not a piece of gear and OrbTable loads it by its
     # own ROOT. Unlike GEAR_OUT this one is made here, because it did not exist before this chunk.
     os.makedirs(ORB_OUT, exist_ok=True)
@@ -681,6 +897,13 @@ def main():
     orb_preview(orb).save(os.path.join(QA, "ui_kit_orbs.png"))
     for name, image in orb.items():
         image.save(os.path.join(ORB_OUT, name + ".png"))
+
+    # Their own folder too: SkillTree loads them by path, and a skill is neither gear nor an orb.
+    os.makedirs(SKILL_OUT, exist_ok=True)
+    skill = skills()
+    skill_preview(skill).save(os.path.join(QA, "ui_kit_skills.png"))
+    for name, image in skill.items():
+        image.save(os.path.join(SKILL_OUT, name + ".png"))
 
     # Loose, like the parts: a pip is drawn at its own size and never stretched, so it has no
     # nine-slice and no business in the theme sheet.
@@ -726,6 +949,7 @@ def main():
     print("wrote %d gear icons to %s/ and %s/ui_kit_gear.png" % (len(cut), GEAR_OUT, QA))
     print("wrote %d kill pips to %s/ and %s/ui_kit_pips.png" % (len(pip), OUT, QA))
     print("wrote %d orb icons to %s/ and %s/ui_kit_orbs.png" % (len(orb), ORB_OUT, QA))
+    print("wrote %d button marks to %s/ and %s/ui_kit_icons.png" % (len(mark), OUT, QA))
 
 
 if __name__ == "__main__":

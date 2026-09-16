@@ -108,9 +108,27 @@ const SOCKET_ALPHA := 0.55
 static var _styles := {}
 
 
-## The rarity of something a `tier` enemy was carrying. `rng` belongs to the caller.
-static func roll(tier: EnemyRoster.Tier, rng: RandomNumberGenerator) -> Rarity:
-	var weights: Dictionary = TIER_WEIGHTS[tier]
+## How strongly increased item rarity lifts each step: a step's weight is multiplied by
+## 1 + rarity% x this. Common is never lifted, so the odds move up the ramp rather than every step
+## growing alike, and the rarer a step the harder it is pushed. Unique is zero here and zero in every
+## weight row, and a zero multiplied by anything stays out of reach.
+const RARITY_STEP := {
+	Rarity.COMMON: 0,
+	Rarity.UNCOMMON: 1,
+	Rarity.RARE: 2,
+	Rarity.ELITE: 3,
+	Rarity.UNIQUE: 0,
+}
+## What the weights are blown up by once a rarity bonus is in play, so the lift survives being kept in
+## whole numbers: a 15 weight lifted 3% is 15.45, which would round straight back to 15.
+const RARITY_PRECISION := 100
+
+
+## The rarity of something a `tier` enemy was carrying. `rng` belongs to the caller. `rarity` is the
+## player's increased item rarity in percent; at nothing the table is drawn exactly as written, draw
+## for draw, so a player who has learned nothing sees the same drops a seed always gave.
+static func roll(tier: EnemyRoster.Tier, rng: RandomNumberGenerator, rarity := 0.0) -> Rarity:
+	var weights := weights_for(tier, rarity)
 	var total := 0
 	for step: Rarity in weights:
 		total += int(weights[step])
@@ -121,6 +139,18 @@ static func roll(tier: EnemyRoster.Tier, rng: RandomNumberGenerator) -> Rarity:
 		if pick < 0:
 			return step
 	return Rarity.COMMON
+
+
+## A tier's weights with `rarity` percent increased item rarity applied. The table itself at nothing.
+static func weights_for(tier: EnemyRoster.Tier, rarity := 0.0) -> Dictionary:
+	var weights: Dictionary = TIER_WEIGHTS[tier]
+	if rarity <= 0.0:
+		return weights
+	var lifted := {}
+	for step: Rarity in weights:
+		lifted[step] = roundi(int(weights[step]) * RARITY_PRECISION
+				* (1.0 + rarity / 100.0 * int(RARITY_STEP[step])))
+	return lifted
 
 
 ## The level one dropped piece comes out at: somewhere from its rarity's floor up to `ceiling`,

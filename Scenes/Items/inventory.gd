@@ -30,8 +30,9 @@ const SAVE_PATH := "user://inventory.json"
 ## back from empty-handed -- which is exactly what every bag had until gold was a thing at all. 7
 ## adds the orbs, which are counts and not items, and which a version 6 save has none of for the same
 ## reason it has no gold: they did not exist when it was written. 8 adds the player's level and the
-## experience held towards the next one; a version 7 save comes back at level 1 with none.
-const VERSION := 8
+## experience held towards the next one; a version 7 save comes back at level 1 with none. 9 adds the
+## skills, which a version 8 save has none of -- it comes back with every level's point unspent.
+const VERSION := 9
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -71,6 +72,10 @@ var orbs := {}
 ## the level yet.
 var level := 1
 var xp := 0
+
+## What the player has learned with the points their level earned. Saved here beside the level for
+## the level's reason, and because the points are counted off it.
+var skills := Skills.new()
 
 ## The levels the player has told the game to stop bringing. Levels rather than items, because a
 ## level is what a section of the bag is, and rarity is not consulted: a marked level is done with,
@@ -298,6 +303,28 @@ func add_xp(amount: int) -> int:
 	return after["gained"]
 
 
+## What the player is worth in a fight: what they wear, with what they have learned folded in. The one
+## question the fight asks, so the rule for how the two combine lives in one place.
+func stats() -> Dictionary:
+	return equipment.totals(skills.flat(), skills.percent())
+
+
+## What resetting `tree` would cost now.
+func respec_cost(tree: String) -> int:
+	return SkillTree.respec_cost(level, skills.spent(tree))
+
+
+## Gives back every point in `tree`, paid for out of the purse. Refused when there is nothing to give
+## back or the purse cannot cover it, and then nothing changes.
+func respec(tree: String) -> bool:
+	var cost := respec_cost(tree)
+	if skills.spent(tree) <= 0 or gold < cost:
+		return false
+	gold -= cost
+	skills.reset(tree)
+	return true
+
+
 func total_orbs() -> int:
 	var total := 0
 	for orb: String in orbs:
@@ -322,6 +349,7 @@ func save(path := SAVE_PATH) -> bool:
 		"gold": gold,
 		"level": level,
 		"xp": xp,
+		"skills": skills.to_dict(),
 		"orbs": orbs,
 		"items": saved,
 		"equipped": equipment.to_dict(),
@@ -388,6 +416,9 @@ static func load_from(path := SAVE_PATH) -> Inventory:
 	var saved_xp: Variant = data.get("xp", 0)
 	inventory.level = maxi(1, int(saved_level)) if typeof(saved_level) in [TYPE_INT, TYPE_FLOAT] else 1
 	inventory.add_xp(maxi(0, int(saved_xp)) if typeof(saved_xp) in [TYPE_INT, TYPE_FLOAT] else 0)
+	# Version 8 knew nothing about skills: an absent key is nothing learned. Read after the level,
+	# because what a save may have spent is counted off it.
+	inventory.skills = Skills.from_dict(data.get("skills", {}), inventory.level)
 	# Version 6 knew nothing about orbs, and an absent key reads as none. An orb this build no longer
 	# has is dropped rather than kept as a name nothing can draw -- the same pruning by name that
 	# Item.from_dict does to a retired piece, and the reason orbs are saved by name at all.

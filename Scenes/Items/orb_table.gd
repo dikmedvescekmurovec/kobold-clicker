@@ -219,18 +219,20 @@ static func _room(item: Item) -> int:
 
 
 ## How often this enemy leaves an orb: its tier times its body, and never more than certain. Rolled
-## on its own, beside the gear roll rather than against it, so one body can hand over both.
-static func chance_for(enemy_name: String) -> float:
+## on its own, beside the gear roll rather than against it, so one body can hand over both. `orb_find`
+## lifts it the way `drop_rate` lifts the gear chance: 50 is half again as many orbs.
+static func chance_for(enemy_name: String, orb_find := 0.0) -> float:
 	var tier: float = TIER_CHANCE[EnemyRoster.tier_of(enemy_name)]
 	var size: float = SIZE_CHANCE[EnemyRoster.size_of(enemy_name)]
-	return minf(tier * size, 1.0)
+	return minf(tier * size * (1.0 + maxf(orb_find, 0.0) / 100.0), 1.0)
 
 
 ## One kill's worth of currency: "" for nothing, or the orb that dropped. The chance is drawn first
 ## and on its own, so a kill that leaves nothing costs exactly one draw -- LootTable.roll's rule, and
 ## what keeps the two rates independently tunable.
-static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := false) -> String:
-	if not guaranteed and rng.randf() >= chance_for(enemy_name):
+static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := false,
+		orb_find := 0.0) -> String:
+	if not guaranteed and rng.randf() >= chance_for(enemy_name, orb_find):
 		return ""
 	return _weighted(rng)
 

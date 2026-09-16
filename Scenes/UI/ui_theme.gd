@@ -38,6 +38,15 @@ const BUTTONS := {
 }
 const STATES := ["normal", "hover", "pressed", "disabled"]
 
+## Buttons that frame an icon instead of a label -> the sprite family they are built from. A face
+## like the ones above, stretched to whatever it holds, but padded equally on all four sides, so one
+## wearing a square mark comes out square. "brown" is a key of its own rather than a surface: these
+## stand on the map rather than on a panel, which is also what they are brown for -- a green face in
+## the corner reads as an action to take, and these two are places to go.
+const ICON_FACES := {"BrownIconButton": "ui_btn_brown"}
+## What such a face pads its mark by; tools/ui_kit.py draws its preview at the same number.
+const ICON_FACE_MARGIN := 4
+
 ## Buttons that are a drawn icon rather than a stretched face -> the sprite name they are built from.
 ## The pack draws its close button once, at one size, for every panel it has, so this one is placed
 ## at its own size and never scaled or tiled -- which is also why it carries no content margin and
@@ -131,6 +140,20 @@ static func build() -> Theme:
 		built.set_color("font_disabled_color", variation, DISABLED_FONT_COLOR)
 		built.set_font("font", variation, font)
 		built.set_font_size("font_size", variation, FONT_SIZE)
+
+	for variation: String in ICON_FACES:
+		built.set_type_variation(variation, "Button")
+		for state: String in STATES:
+			var sprite_name: String = "%s_%s" % [ICON_FACES[variation], state]
+			var box := _style(sheet, regions[sprite_name], margins[sprite_name])
+			# The same sink the lettered buttons take: the pack draws the pressed face a pixel lower,
+			# so the mark on it has to drop with the face it is sitting on.
+			var sink := 1 if state == "pressed" else 0
+			box.content_margin_left = ICON_FACE_MARGIN
+			box.content_margin_right = ICON_FACE_MARGIN
+			box.content_margin_top = ICON_FACE_MARGIN + sink
+			box.content_margin_bottom = ICON_FACE_MARGIN - sink
+			built.set_stylebox(state, variation, box)
 
 	for variation: String in ICON_BUTTONS:
 		built.set_type_variation(variation, "Button")

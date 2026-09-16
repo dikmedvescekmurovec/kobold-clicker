@@ -630,7 +630,38 @@ func _test_a_won_fight() -> bool:
 	# And gear has to be worth wearing: the same fight must want fewer clicks than bare hands.
 	_check(rate < _click_rate(far, spare, Encounter.BARE_DAMAGE, 0.0), "gear beats bare hands there")
 	_check(rate > 1.0, "and is not a walkover in farmed gear either (%.1f/s)" % rate)
+
+	# Skills on top of that set. A player at the edge's own level has a point a level past the first to
+	# spend, and all of it in Power is the most skills can do there: it has to help, and it must not
+	# make the edge a fight nobody clicks in. A whole tree is 23 points -- a player at level 24 is
+	# nowhere near a level-6 tile's gear, so the whole tree is only held to helping.
+	var budget := Skills.earned(level)
+	var early := _power_rate(edge, level, spare, budget)
+	var whole := _power_rate(edge, level, spare, SkillTree.capacity("power"))
+	print("Edge fight with Power skills too: %.2f clicks/s on %d points, %.2f on the whole tree"
+			% [early, budget, whole])
+	_check(early < rate, "a level's worth of Power makes the edge easier (%.2f/s)" % early)
+	_check(early > 0.5, "and still wants clicking (%.2f/s)" % early)
+	_check(whole <= early, "the whole tree helps at least as much (%.2f/s)" % whole)
 	return true
+
+
+## The click rate at `edge` in a farmed set of rares with `points` spent down the Power tree's damage
+## path first -- the root, the middle, the flat damage chain -- and then the rest.
+func _power_rate(edge: Vector2i, level: int, spare: float, points: int) -> float:
+	const ORDER := ["sharpened_edge", "keen_eye", "battle_rhythm", "might", "titan", "quick_hands",
+		"flurry", "whirlwind", "deadly_strikes", "assassin"]
+	var skills := Skills.new()
+	var guard := 0
+	while skills.spent() < points and guard < 100:
+		guard += 1
+		for id: String in ORDER:
+			if skills.rank_up(id, points + 1):
+				break
+	var fight := Encounter.for_tile(edge, "grass")
+	fight.arm(_farmed(level, ItemRarity.Rarity.RARE).totals(skills.flat(), skills.percent()))
+	var per_hit := fight.damage * (1.0 + fight.crit_chance / 100.0 * fight.crit_damage / 100.0)
+	return _click_rate(fight, spare, per_hit, fight.attack_speed)
 
 
 ## The clock is the only way to lose, and it keeps running while enemies walk in and die.

@@ -19,6 +19,7 @@ const SCRATCH_MAP := "user://screenshot_ui_map.json"
 func _run() -> void:
 	await _shoot_main_scene()
 	await _shoot_inventory()
+	await _shoot_skills()
 	await _shoot_board()
 	quit()
 
@@ -182,6 +183,40 @@ func _shoot_inventory() -> void:
 	for scratch in [SCRATCH_SAVE, SCRATCH_MAP]:
 		if FileAccess.file_exists(scratch):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch))
+
+
+## The skills page part-spent, with the card up over a skill that cannot be learned yet.
+func _shoot_skills() -> void:
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = MAP_SEED
+	main.inventory_path = SCRATCH_SAVE
+	main.map_path = SCRATCH_MAP
+	root.add_child(main)
+	for i in 3:
+		await process_frame
+	main.inventory.level = 14
+	main.inventory.gold = 900
+	main.inventory.skills = Skills.new()
+	for id in ["sharpened_edge", "sharpened_edge", "sharpened_edge", "sharpened_edge", "sharpened_edge",
+			"keen_eye", "battle_rhythm", "might", "might", "titan",
+			"scavenger", "scavenger", "appraiser"]:
+		main.inventory.skills.rank_up(id, main.inventory.level)
+	main._on_skills_pressed()
+	for i in 2:
+		await process_frame
+	var view: SkillTreeView = main._skill_views["power"]
+	for child: Node in view.get_children():
+		if child is SkillSlot and child.id == "whirlwind":
+			main._on_skill_hovered(child.id, child)
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	var image := root.get_texture().get_image()
+	image.save_png("user://ui_skills.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_skills.png"))
+	main.queue_free()
+	await process_frame
 
 
 ## Every variation and state, at three sizes, on the surface each one is meant to stand on.

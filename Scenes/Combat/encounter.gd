@@ -190,10 +190,10 @@ var orbs := {}
 ## enemies. A tile fight never touches it -- `for_tile` passes its own seeded generator.
 var roster_rng := RandomNumberGenerator.new()
 
-## What the player's gear is worth in a fight, read once by `arm()` rather than looked up per swing.
-## Only these five are read: the rest of what an item carries is still rolled, saved and shown, and
-## waits on the systems that would give it something to do. Four of them decide what a blow is worth;
-## the fifth decides what a body leaves, and is the one thing gear does that a fight cannot see.
+## What the player is worth in a fight -- gear and skills together, `Inventory.stats()` -- read once by
+## `arm()` rather than looked up per swing. Only the ones below are read: the rest of what an item
+## carries is still rolled, saved and shown, and waits on the systems that would give it something to
+## do. Four decide what a blow is worth; the rest decide what a body leaves.
 ## The ceiling on crit chance: crits stay something that happens sometimes, however much gear is
 ## piled up. A chance over certainty is every hit critting, which is a crit meaning nothing.
 const CRIT_CAP := 100.0
@@ -206,6 +206,11 @@ var attack_speed := 0.0
 ## How much more often a body leaves something, as a percentage: 50 is half again as much gear. Read
 ## here and handed to `LootTable.roll`, which is where the cap on a chance already lives.
 var drop_rate := 0.0
+## What the player's skills add to what a body leaves, all three in percent: how far up the rarity ramp
+## a find is pushed, how much fuller a purse is, and how much more often an orb falls.
+var item_rarity := 0.0
+var gold_find := 0.0
+var orb_find := 0.0
 
 ## How much of the next automatic swing has been earned. Only runs while an enemy is standing there
 ## to be hit, so a slow weapon loses nothing to a walk-in and cannot bank swings through a death.
@@ -413,6 +418,9 @@ func arm(stats: Dictionary) -> void:
 	crit_damage = float(stats.get("crit_damage", 0.0))
 	attack_speed = maxf(0.0, float(stats.get("attack_speed", 0.0)))
 	drop_rate = maxf(0.0, float(stats.get("drop_rate", 0.0)))
+	item_rarity = maxf(0.0, float(stats.get("item_rarity", 0.0)))
+	gold_find = maxf(0.0, float(stats.get("gold_find", 0.0)))
+	orb_find = maxf(0.0, float(stats.get("orb_find", 0.0)))
 
 
 ## One blow, from a click or from the weapon swinging itself. Takes `damage` off the enemy in front
@@ -439,12 +447,14 @@ func _strike(automatic: bool) -> bool:
 		# own level under it, so fighting deeper improves the odds rather than the prize.
 		var dropped := LootTable.roll(lineup[index], loot_rng,
 				always_drop or (guarantee_elite and on_elite()), MapBuilder.level_of(cell),
-				drop_rate)
+				drop_rate, item_rarity)
 		if dropped != null:
 			loot_dropped.emit(index, dropped)
 		# Every body carries one, which is the whole difference between gold and gear: nine kills in
 		# ten leave nothing, and all ten leave this.
-		var purse := gold_of(lineup[index], cell)
+		# Gold find lifts the purse here rather than inside `gold_of`, which is what the body is worth
+		# and is read by things that have no player in them.
+		var purse := maxi(1, roundi(gold_of(lineup[index], cell) * (1.0 + gold_find / 100.0)))
 		gold += purse
 		gold_dropped.emit(index, purse)
 		var worth := xp_of(lineup[index], cell)
@@ -453,7 +463,7 @@ func _strike(automatic: bool) -> bool:
 		# A third draw, on its own generator and its own curve. Beside the gear rather than instead
 		# of it: a body that left a sword can leave an orb too, which is what makes the two rates
 		# independent numbers rather than one number split.
-		var orb := OrbTable.roll(lineup[index], orb_rng, always_orb)
+		var orb := OrbTable.roll(lineup[index], orb_rng, always_orb, orb_find)
 		if not orb.is_empty():
 			orbs[orb] = int(orbs.get(orb, 0)) + 1
 			orb_dropped.emit(index, orb)

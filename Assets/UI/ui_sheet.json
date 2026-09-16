@@ -7,10 +7,10 @@
       40
     ],
     "columns": 6,
-    "rows": 4,
+    "rows": 5,
     "sheet_size": [
       288,
-      160
+      200
     ],
     "nine_slice": "StyleBoxTexture with each sprite's own margin; tile the edges and the centre, never stretch them",
     "states": "a Button needs all four styles: normal, hover, pressed, disabled. The pack draws pressed a pixel lower with its drop shadow gone, so the sprite already holds the sink and the style must not add one",
@@ -67,7 +67,7 @@
       "kind": "panel"
     },
     {
-      "name": "ui_btn_light_danger_disabled",
+      "name": "ui_btn_brown_disabled",
       "col": 3,
       "row": 0,
       "x": 144,
@@ -83,7 +83,7 @@
       "kind": "button"
     },
     {
-      "name": "ui_btn_light_danger_hover",
+      "name": "ui_btn_brown_hover",
       "col": 4,
       "row": 0,
       "x": 192,
@@ -99,7 +99,7 @@
       "kind": "button"
     },
     {
-      "name": "ui_btn_light_danger_normal",
+      "name": "ui_btn_brown_normal",
       "col": 5,
       "row": 0,
       "x": 240,
@@ -115,10 +115,74 @@
       "kind": "button"
     },
     {
-      "name": "ui_btn_light_danger_pressed",
+      "name": "ui_btn_brown_pressed",
       "col": 0,
       "row": 1,
       "x": 0,
+      "y": 40,
+      "w": 42,
+      "h": 16,
+      "margin": {
+        "left": 4,
+        "top": 5,
+        "right": 4,
+        "bottom": 4
+      },
+      "kind": "button"
+    },
+    {
+      "name": "ui_btn_light_danger_disabled",
+      "col": 1,
+      "row": 1,
+      "x": 48,
+      "y": 40,
+      "w": 42,
+      "h": 16,
+      "margin": {
+        "left": 4,
+        "top": 5,
+        "right": 4,
+        "bottom": 4
+      },
+      "kind": "button"
+    },
+    {
+      "name": "ui_btn_light_danger_hover",
+      "col": 2,
+      "row": 1,
+      "x": 96,
+      "y": 40,
+      "w": 42,
+      "h": 16,
+      "margin": {
+        "left": 4,
+        "top": 5,
+        "right": 4,
+        "bottom": 4
+      },
+      "kind": "button"
+    },
+    {
+      "name": "ui_btn_light_danger_normal",
+      "col": 3,
+      "row": 1,
+      "x": 144,
+      "y": 40,
+      "w": 42,
+      "h": 16,
+      "margin": {
+        "left": 4,
+        "top": 5,
+        "right": 4,
+        "bottom": 4
+      },
+      "kind": "button"
+    },
+    {
+      "name": "ui_btn_light_danger_pressed",
+      "col": 4,
+      "row": 1,
+      "x": 192,
       "y": 40,
       "w": 42,
       "h": 16,
@@ -132,9 +196,9 @@
     },
     {
       "name": "ui_btn_light_normal_disabled",
-      "col": 1,
+      "col": 5,
       "row": 1,
-      "x": 48,
+      "x": 240,
       "y": 40,
       "w": 42,
       "h": 16,
@@ -148,10 +212,10 @@
     },
     {
       "name": "ui_btn_light_normal_hover",
-      "col": 2,
-      "row": 1,
-      "x": 96,
-      "y": 40,
+      "col": 0,
+      "row": 2,
+      "x": 0,
+      "y": 80,
       "w": 42,
       "h": 16,
       "margin": {
@@ -164,10 +228,10 @@
     },
     {
       "name": "ui_btn_light_normal_normal",
-      "col": 3,
-      "row": 1,
-      "x": 144,
-      "y": 40,
+      "col": 1,
+      "row": 2,
+      "x": 48,
+      "y": 80,
       "w": 42,
       "h": 16,
       "margin": {
@@ -180,10 +244,10 @@
     },
     {
       "name": "ui_btn_light_normal_pressed",
-      "col": 4,
-      "row": 1,
-      "x": 192,
-      "y": 40,
+      "col": 2,
+      "row": 2,
+      "x": 96,
+      "y": 80,
       "w": 42,
       "h": 16,
       "margin": {
@@ -196,10 +260,10 @@
     },
     {
       "name": "ui_btn_wood_danger_disabled",
-      "col": 5,
-      "row": 1,
-      "x": 240,
-      "y": 40,
+      "col": 3,
+      "row": 2,
+      "x": 144,
+      "y": 80,
       "w": 42,
       "h": 16,
       "margin": {
@@ -212,9 +276,9 @@
     },
     {
       "name": "ui_btn_wood_danger_hover",
-      "col": 0,
+      "col": 4,
       "row": 2,
-      "x": 0,
+      "x": 192,
       "y": 80,
       "w": 42,
       "h": 16,
@@ -228,70 +292,6 @@
     },
     {
       "name": "ui_btn_wood_danger_normal",
-      "col": 1,
-      "row": 2,
-      "x": 48,
-      "y": 80,
-      "w": 42,
-      "h": 16,
-      "margin": {
-        "left": 4,
-        "top": 5,
-        "right": 4,
-        "bottom": 4
-      },
-      "kind": "button"
-    },
-    {
-      "name": "ui_btn_wood_danger_pressed",
-      "col": 2,
-      "row": 2,
-      "x": 96,
-      "y": 80,
-      "w": 42,
-      "h": 16,
-      "margin": {
-        "left": 4,
-        "top": 5,
-        "right": 4,
-        "bottom": 4
-      },
-      "kind": "button"
-    },
-    {
-      "name": "ui_btn_wood_normal_disabled",
-      "col": 3,
-      "row": 2,
-      "x": 144,
-      "y": 80,
-      "w": 42,
-      "h": 16,
-      "margin": {
-        "left": 4,
-        "top": 5,
-        "right": 4,
-        "bottom": 4
-      },
-      "kind": "button"
-    },
-    {
-      "name": "ui_btn_wood_normal_hover",
-      "col": 4,
-      "row": 2,
-      "x": 192,
-      "y": 80,
-      "w": 42,
-      "h": 16,
-      "margin": {
-        "left": 4,
-        "top": 5,
-        "right": 4,
-        "bottom": 4
-      },
-      "kind": "button"
-    },
-    {
-      "name": "ui_btn_wood_normal_normal",
       "col": 5,
       "row": 2,
       "x": 240,
@@ -307,7 +307,7 @@
       "kind": "button"
     },
     {
-      "name": "ui_btn_wood_normal_pressed",
+      "name": "ui_btn_wood_danger_pressed",
       "col": 0,
       "row": 3,
       "x": 0,
@@ -323,10 +323,74 @@
       "kind": "button"
     },
     {
-      "name": "ui_close_disabled",
+      "name": "ui_btn_wood_normal_disabled",
       "col": 1,
       "row": 3,
       "x": 48,
+      "y": 120,
+      "w": 42,
+      "h": 16,
+      "margin": {
+        "left": 4,
+        "top": 5,
+        "right": 4,
+        "bottom": 4
+      },
+      "kind": "button"
+    },
+    {
+      "name": "ui_btn_wood_normal_hover",
+      "col": 2,
+      "row": 3,
+      "x": 96,
+      "y": 120,
+      "w": 42,
+      "h": 16,
+      "margin": {
+        "left": 4,
+        "top": 5,
+        "right": 4,
+        "bottom": 4
+      },
+      "kind": "button"
+    },
+    {
+      "name": "ui_btn_wood_normal_normal",
+      "col": 3,
+      "row": 3,
+      "x": 144,
+      "y": 120,
+      "w": 42,
+      "h": 16,
+      "margin": {
+        "left": 4,
+        "top": 5,
+        "right": 4,
+        "bottom": 4
+      },
+      "kind": "button"
+    },
+    {
+      "name": "ui_btn_wood_normal_pressed",
+      "col": 4,
+      "row": 3,
+      "x": 192,
+      "y": 120,
+      "w": 42,
+      "h": 16,
+      "margin": {
+        "left": 4,
+        "top": 5,
+        "right": 4,
+        "bottom": 4
+      },
+      "kind": "button"
+    },
+    {
+      "name": "ui_close_disabled",
+      "col": 5,
+      "row": 3,
+      "x": 240,
       "y": 120,
       "w": 9,
       "h": 10,
@@ -340,10 +404,10 @@
     },
     {
       "name": "ui_close_hover",
-      "col": 2,
-      "row": 3,
-      "x": 96,
-      "y": 120,
+      "col": 0,
+      "row": 4,
+      "x": 0,
+      "y": 160,
       "w": 9,
       "h": 10,
       "margin": {
@@ -356,10 +420,10 @@
     },
     {
       "name": "ui_close_normal",
-      "col": 3,
-      "row": 3,
-      "x": 144,
-      "y": 120,
+      "col": 1,
+      "row": 4,
+      "x": 48,
+      "y": 160,
       "w": 9,
       "h": 10,
       "margin": {
@@ -372,10 +436,10 @@
     },
     {
       "name": "ui_close_pressed",
-      "col": 4,
-      "row": 3,
-      "x": 192,
-      "y": 120,
+      "col": 2,
+      "row": 4,
+      "x": 96,
+      "y": 160,
       "w": 9,
       "h": 10,
       "margin": {

@@ -135,7 +135,13 @@ func items() -> Array[Item]:
 ## applied once at the end -- after everything that contributes to the stat is in, which is the only
 ## point at which the answer does not depend on what order the sockets were read in. A global on a
 ## stat nothing carries scales zero, which is correct: increased damage is worth nothing bare-handed.
-func totals() -> Dictionary:
+##
+## The player's skills come in around that. `skill_flat` is added to the pieces' sum before either
+## multiplier, so a skill's point of damage is scaled by a ring's global exactly as the sword's is.
+## `skill_percent` is applied last and **on its own**: it multiplies the gear's globals rather than
+## adding to them, so a skill and a ring each doing 10% make 21%, not 20%. With neither given this is
+## the set alone, which is every caller that is asking about gear and not about the player.
+func totals(skill_flat := {}, skill_percent := {}) -> Dictionary:
 	var out := {}
 	var global := {}
 	for item in items():
@@ -145,8 +151,12 @@ func totals() -> Dictionary:
 		var percents := item.global_percents()
 		for stat: String in percents:
 			global[stat] = float(global.get(stat, 0.0)) + float(percents[stat])
+	for stat: String in skill_flat:
+		out[stat] = float(out.get(stat, 0.0)) + float(skill_flat[stat])
 	for stat: String in global:
 		out[stat] = float(out.get(stat, 0.0)) * (1.0 + float(global[stat]) / 100.0)
+	for stat: String in skill_percent:
+		out[stat] = float(out.get(stat, 0.0)) * (1.0 + float(skill_percent[stat]) / 100.0)
 	return out
 
 
