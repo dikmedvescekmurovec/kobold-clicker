@@ -104,14 +104,15 @@ const CLOCK_HEIGHT := 8
 ## neighbour's -- a settlement's minute -- ambers at the same place in it.
 const CLOCK_GREEN := 0.6
 const CLOCK_AMBER := 0.3
-## The loot counter's face, as the bag fills. The pack draws that button in one green, so this is a
-## tint multiplied over its art rather than a colour painted on it: FACE_GREEN is what the pack drew
-## (`BAR_FACE` in tools/ui_kit.py) and FACE_DANGER is the pack's own red, the key its danger button
-## is played in -- so a full bag reads as the same red the run is terminated in. Gold sits between
+## The loot counter's face, as the bag fills. It is the brown square the map's corner buttons wear,
+## so this is a tint multiplied over that art rather than a colour painted on it: FACE_BROWN is what
+## ui_kit.py draws (the base step of `ui_btn_brown_normal`) and FACE_DANGER is the pack's own red, the
+## key its danger button is played in -- so an empty bag's counter matches the other square
+## buttons and a full one reads as a warning. Gold sits between
 ## them, and it is a ramp rather than a step at some number of items for the reason the clock ramps:
 ## it is read out of the corner of an eye, and a reddening counter says go and throw something away
 ## a good deal earlier than one that changes all at once.
-const FACE_GREEN := Color("50a978")
+const FACE_BROWN := Color("714c2a")
 const FACE_DANGER := Color("c0443a")
 
 ## The number that floats off a hit: how long it lives, how far it climbs, how far either side of the
@@ -161,6 +162,9 @@ const XP_FADE_SHARE := 0.3
 ## this many times larger again -- whole numbers only, for the reason `zoom` is.
 const XP_GEM_SCALE := 2
 const XP_GEM := preload("res://Assets/UI/xp_gem.png")
+## The marks on the HUD's square buttons, drawn by tools/ui_kit.py to match the map's bag and skills.
+const SACK_ICON := preload("res://Assets/UI/ui_icon_sack.png")
+const FLAG_ICON := preload("res://Assets/UI/ui_icon_flag.png")
 ## How far to either side a find may land. Narrower than the coins' spread, because one sprite has
 ## nothing to be told apart from and a find belongs by the body that dropped it.
 const FIND_SPREAD := 40.0
@@ -424,8 +428,7 @@ func _build_hud() -> void:
 	# Bottom right: what the run has turned up. It is a Control standing in the arena, so it eats the
 	# click that lands on it rather than letting it through as a swing -- which is what is wanted
 	# here, and exactly why the main scene hides its own corner button while a fight is on.
-	_loot_button = Button.new()
-	_loot_button.theme_type_variation = "WoodButton"
+	_loot_button = _square_button(SACK_ICON)
 	_loot_button.scale = Vector2(_ui_scale, _ui_scale)
 	_loot_button.tooltip_text = "What this run has turned up"
 	_loot_button.pressed.connect(_on_loot_pressed)
@@ -434,7 +437,7 @@ func _build_hud() -> void:
 	# moves -- and the tint lands on the box alone, so the newest find's icon and the count beside it
 	# keep their own colours.
 	for state: String in UITheme.STATES:
-		var face: StyleBox = UITheme.theme().get_stylebox(state, "WoodButton").duplicate()
+		var face: StyleBox = UITheme.theme().get_stylebox(state, "BrownIconButton").duplicate()
 		_loot_faces.append(face)
 		_loot_button.add_theme_stylebox_override(state, face)
 	hud.add_child(_loot_button)
@@ -446,9 +449,7 @@ func _build_hud() -> void:
 	# one cannot reach -- which is now a corner rather than the bottom middle, that being where the
 	# enemy's health went.
 	if fight.endless:
-		_terminate = Button.new()
-		_terminate.text = "Terminate"
-		_terminate.theme_type_variation = "WoodDangerButton"
+		_terminate = _square_button(FLAG_ICON)
 		_terminate.scale = Vector2(_ui_scale, _ui_scale)
 		_terminate.tooltip_text = "End the run and keep everything it turned up"
 		_terminate.pressed.connect(_on_terminate_pressed)
@@ -588,6 +589,19 @@ func _build_hud() -> void:
 	close.theme_type_variation = "WoodButton"
 	close.pressed.connect(_on_loot_closed)
 	found.add_child(close)
+
+
+## A brown square with a cream mark, the same button as the map's bag and skills. The loot counter
+## also writes its count on it, so the words are cream to match the mark.
+func _square_button(icon: Texture2D) -> Button:
+	var button := Button.new()
+	button.theme_type_variation = "BrownIconButton"
+	button.icon = icon
+	button.expand_icon = false
+	for item: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		button.add_theme_color_override(item, Palette.PANEL_CREAM)
+	button.add_theme_color_override("font_disabled_color", Palette.STONE_LT)
+	return button
 
 
 ## A word standing on the arena rather than on a panel: its own colour, and the dark outline that is
@@ -945,11 +959,11 @@ func _tint_loot_button() -> void:
 	if is_equal_approx(fill, _loot_filled):
 		return
 	_loot_filled = fill
-	var want := (FACE_GREEN.lerp(Palette.GOLD, fill / 0.5) if fill <= 0.5
+	var want := (FACE_BROWN.lerp(Palette.GOLD, fill / 0.5) if fill <= 0.5
 			else Palette.GOLD.lerp(FACE_DANGER, (fill - 0.5) / 0.5))
 	# A tint multiplies, so what the boxes are given is the colour wanted divided by the colour the
 	# pack drew -- worked out that way round so the constants above are the colours that are seen.
-	var tint := Color(want.r / FACE_GREEN.r, want.g / FACE_GREEN.g, want.b / FACE_GREEN.b)
+	var tint := Color(want.r / FACE_BROWN.r, want.g / FACE_BROWN.g, want.b / FACE_BROWN.b)
 	for face: StyleBox in _loot_faces:
 		(face as StyleBoxTexture).modulate_color = tint
 
@@ -967,7 +981,6 @@ func _show_warning(showing: bool) -> void:
 func _refresh_loot_button() -> void:
 	_loot_button.text = str(_drops.size())
 	_loot_button.disabled = _drops.is_empty()
-	_loot_button.icon = null if _drops.is_empty() else _drops[-1].icon()
 
 
 ## Puts the HUD's corners where they belong. Done every frame rather than anchored, because every

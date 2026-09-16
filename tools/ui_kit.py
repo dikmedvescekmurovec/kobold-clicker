@@ -155,6 +155,46 @@ ICONS = {
 # Both icons are centred on one square, so both buttons come out the same size whatever they wear.
 ICON_SIDE = 14
 
+# The marks no pack draws, for the fight's two square buttons: drawn here in Icons.png's own
+# brown ramp and shading (a dark outline, light from the top left), so that they go through the
+# same BONE_RAMP and the same square as the two cut above and cannot be told apart from them.
+# o is the outline, 1-4 the ramp from dark to light, . is clear.
+ICON_KEY = {"o": "#3e1f1d", "1": "#603928", "2": "#70492a", "3": "#825c2f", "4": "#88682d"}
+ICONS_DRAWN = {
+    # Terminate: a flag on its pole -- leave the field and keep the haul.
+    "ui_icon_flag": """
+        ooo..........
+        o4oooooooo...
+        o4o444443ooo.
+        o4o443333332o
+        o3o333333222o
+        o3o332222221o
+        o3o2222211oo.
+        o2o21ooooo...
+        o2ooo........
+        o2o..........
+        o2o..........
+        o1o..........
+        ooo..........
+    """,
+    # The loot counter: a tied sack.
+    "ui_icon_sack": """
+        ...oo..oo...
+        ...o4oo3o...
+        ....o44o....
+        ....o32o....
+        ...oo21oo...
+        ..o443332o..
+        .o44333322o.
+        o4433333221o
+        o4333333221o
+        o3333332221o
+        o2222222211o
+        .o22222111o.
+        ..oooooooo..
+    """,
+}
+
 # The skill trees' icons, off "Ability Icons" -- loose 16 px files that carry their own framed square,
 # so an entry is a whole file and nothing is trimmed. One colourway a tree, so a tree reads as one
 # thing: red for Power, and the gold-orange for Fortune, which is the colour loot already speaks in.
@@ -303,15 +343,14 @@ def _recolor(hue, sat, dim=1.0):
     return table
 
 
+BROWN = _recolor(BROWN_HUE, BROWN_SAT, BROWN_DIM)
+# Every lettered button is played in the icon buttons' brown, so a word and a mark sit on the same
+# face; only the destructive ones keep the pack's red.
 VARIANTS = {
-    "normal": {},
+    "normal": BROWN,
     "danger": _recolor(DANGER_HUE, DANGER_SAT),
 }
 DISABLED = _recolor(DISABLED_HUE, DISABLED_SAT, DISABLED_DIM)
-# Its own table rather than a fifth entry in VARIANTS: that dict is crossed with both surfaces, and
-# there is only one brown button -- it stands on the map, not on a panel, so the second drop-shadow
-# colour would never be asked for.
-BROWN = _recolor(BROWN_HUE, BROWN_SAT, BROWN_DIM)
 # The order a button's four states are read in, which is the order the previews lay them out in.
 STATE_ORDER = ["normal", "hover", "pressed", "disabled"]
 
@@ -588,17 +627,30 @@ def parts():
     return {name: _cut(entry) for name, entry in PARTS.items()}
 
 
+def _drawn(rows):
+    """One ICONS_DRAWN mark as an image in Icons.png's colours."""
+    lines = [line.strip() for line in rows.strip().splitlines()]
+    art = Image.new("RGBA", (max(len(line) for line in lines), len(lines)), (0, 0, 0, 0))
+    for y, line in enumerate(lines):
+        for x, char in enumerate(line):
+            if char != ".":
+                art.putpixel((x, y), _rgb(ICON_KEY[char]))
+    return art
+
+
 def icons():
-    """The two button marks, recoloured to the pack's cream and centred on one ICON_SIDE square.
+    """The square buttons' marks, recoloured to the pack's cream and centred on one ICON_SIDE square.
 
     Centred on a shared square rather than left at their measured sizes because a Button takes its
     minimum size from its icon: the chest is 12x11 and the star 13x12, so two buttons wearing them
     raw would be two different sizes standing side by side.
     """
     table = {_rgb(dark): _rgb(light) for dark, light in BONE_RAMP.items()}
+    marks = {name: _cut(entry) for name, entry in ICONS.items()}
+    marks.update({name: _drawn(rows) for name, rows in ICONS_DRAWN.items()})
     out = {}
-    for name, entry in ICONS.items():
-        art = _map_colors(_cut(entry), table)
+    for name, art in marks.items():
+        art = _map_colors(art, table)
         if art.width > ICON_SIDE or art.height > ICON_SIDE:
             raise SystemExit("%s is %dx%d, too big for a %d square"
                              % (name, art.width, art.height, ICON_SIDE))

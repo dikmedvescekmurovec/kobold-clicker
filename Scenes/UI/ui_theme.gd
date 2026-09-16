@@ -53,10 +53,9 @@ const ICON_FACE_MARGIN := 4
 ## no pressed sink: the sprite already holds the pixel the face drops by.
 const ICON_BUTTONS := {"CloseButton": "ui_close"}
 
-## One label colour for every button, because every button face is now the same mid-tone: the pack
-## draws green, and the danger and disabled faces are that green replayed in another key at the same
-## lightness. The pack letters its own buttons in near-black, which is what INK is.
-const FONT_COLOR := Palette.INK
+## One label colour for every button: the faces are the pack's green replayed in the icon buttons'
+## brown (or red for danger), and the words are the same cream as the icon buttons' marks.
+const FONT_COLOR := Palette.PANEL_CREAM
 ## A dead button keeps its label but stops shouting: pale grey on the grey face is legible and
 ## plainly switched off, where a dark ink would read as live.
 const DISABLED_FONT_COLOR := Palette.STONE_LT
