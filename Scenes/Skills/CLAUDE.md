@@ -1,0 +1,12 @@
+<!-- Loaded automatically when a file in this folder is read. The project overview and shared rules are in the root CLAUDE.md. -->
+
+## Skills (`Scenes/Skills/`)
+Every level past the first is one skill point, spent in passive trees. The points are **not stored**: the free points are `Skills.earned(level) - spent()`, so a save can never disagree with itself about how many there are.
+
+| File | Contents |
+|---|---|
+| `skill_tree.gd` (`SkillTree`) | The tables and rules, no state. `TREES` holds **Power** and **Fortune**, each ten skills in the one shape they were sketched in: a root, two side skills, a middle skill either side opens, then three chains of two (`row`/`col` on a 5x3 grid). A skill opens once **any** parent has a point. Depth is paid for twice: `max_rank` falls 5 / 3 / 3 / 2 / 1 down the rows (23 a tree) while what a point does grows and widens. Each skill has `flat` (added to the set before anything multiplies) and `percent` (increased, applied as its own multiplier). The Fortune stats -- `drop_rate`, `item_rarity`, `gold_find`, `orb_find` -- are percentages already, so its skills add points of them flat. `can_rank` and `why_not` are one rule written twice, the way `OrbTable`'s are. `respec_cost(level, spent)` is `RESPEC_GOLD * spent * RESPEC_GROWTH ^ (level - 1)` |
+| `skills.gd` (`Skills`) | What the player has learned: `ranks`, id -> points, only for skills with any. `rank_up`, `reset(tree)`, `spent(tree)`, `points(level)`, and `flat()` / `percent()`, the sums `Equipment.totals` takes. `from_dict(data, level)` prunes unknown ids and clamps ranks, then **refunds everything** if the result overspends the level or holds a point nothing leads to -- after a retune there is no honest way to guess which points the player would have kept |
+
+## Rules and gotchas
+- **Skills stack around the gear's globals, not into them.** `Equipment.totals(skill_flat, skill_percent)` adds the pieces, then the skill flats, then applies the gear's `GLOBAL` percents, then the skills' percents as a **separate** multiplier -- so a skill point of damage is scaled by a ring like the sword's own, and a ring's 10% and a skill's 10% make 21%. `totals()` with nothing passed is the set alone. Flat skill damage is large against early gear and shrinks as gear grows exponentially, which is why `test_combat` holds a **level's worth** of Power points at the edge to "helps, still wants clicking" and the whole tree only to "helps".
