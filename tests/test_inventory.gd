@@ -876,14 +876,14 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	# A first fight, whose elite is promised a drop.
 	var target := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
 	main.map.select_cell(target)
-	main._on_discover_pressed()
+	main._on_chart_pressed()
 	_check(not main._bag_button.visible, "the button is out of the way of the fight")
 	var fight: Encounter = main._combat.fight
 	_check(fight.guarantee_elite, "the first elite is promised a drop")
 	fight.loot_rng.seed = WORLD_SEED
 	_play(fight)
 	var combat: CombatScene = main._combat
-	# A discovery fight banks each purse as it lands, the way it banks each find: it is over in a
+	# A charting fight banks each purse as it lands, the way it banks each find: it is over in a
 	# minute, and closing the game halfway through must not cost either.
 	_check(fight.gold > 0, "the fight earned something: %d" % fight.gold)
 	_check(main.inventory.gold == fight.gold,
@@ -1037,7 +1037,7 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	await process_frame
 	var next_cell := HexGrid.neighbor(target, HexGrid.Edge.E)
 	main.map.select_cell(next_cell)
-	main._on_discover_pressed()
+	main._on_chart_pressed()
 	_check(main._combat != null, "a second fight starts")
 	if main._combat != null:
 		_check(not main._combat.fight.guarantee_elite, "the second fight promises nothing")
@@ -1050,7 +1050,7 @@ func _test_the_map_keeps_what_dropped() -> bool:
 
 ## A farm run's finds wait in the pouch and go into the bag in one write when the run ends. It is
 ## the one place the game holds loot back, and the reason is that a run has no end of its own: a
-## discovery fight is over in a minute and writes each find as it lands, and a run could go an hour.
+## charting fight is over in a minute and writes each find as it lands, and a run could go an hour.
 func _test_a_farm_run_holds_its_loot() -> bool:
 	_clear_save()
 	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
@@ -1156,8 +1156,8 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 	_check(saved.gold == earned, "and the gold with them: %d of %d" % [saved.gold, earned])
 
 	# Nothing about the map moved. A run is fought on a tile that is already the player's.
-	_check(main.view.discovered(here), "the tile stays the player's")
-	_check(not main.view.discovered(next_door), "and the run discovered nothing")
+	_check(main.view.charted(here), "the tile stays the player's")
+	_check(not main.view.charted(next_door), "and the run charted nothing")
 	_check(main._bag_button.visible, "the bag is back with the map")
 	main.queue_free()
 	return true

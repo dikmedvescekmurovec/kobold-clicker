@@ -162,7 +162,7 @@ func _test_blends_on_map(map: HexMap) -> bool:
 	return true
 
 
-## The fog greys out the tiles that are seen but not discovered.
+## The fog greys out the tiles that are seen but not charted.
 func _test_fog(map: HexMap) -> bool:
 	var fog := map.fog
 	fog.clear()

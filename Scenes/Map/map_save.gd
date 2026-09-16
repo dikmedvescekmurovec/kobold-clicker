@@ -26,7 +26,9 @@ const VERSION := 2
 
 ## MapBuilder.State by name, lowest value first. Written into every save as the legend its state
 ## rows index, so reordering the enum can never quietly reinterpret a file already on disk.
-const STATE_NAMES := ["hidden", "undiscovered", "discovered"]
+const STATE_NAMES := ["hidden", "uncharted", "charted"]
+## What the states were called before "discover" became "chart", so older saves still read.
+const OLD_STATE_NAMES := {"undiscovered": "uncharted", "discovered": "charted"}
 
 ## Indexes the legends, one character per cell. Six environments and three states need ten of
 ## these; the encoder is given sixty-two so it has no ceiling to walk into later.
@@ -182,7 +184,7 @@ static func load_from(path := SAVE_PATH, problem: Array = [], expect_sheet := ""
 	# States are resolved through the save's own legend, so an enum reordered since cannot shift.
 	var state_legend: Array[int] = []
 	for name: Variant in data.get("states", []):
-		state_legend.append(STATE_NAMES.find(str(name)))
+		state_legend.append(STATE_NAMES.find(OLD_STATE_NAMES.get(str(name), str(name))))
 	if state_legend.has(-1):
 		problem.append("it records a state this build has no name for")
 		return null

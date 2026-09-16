@@ -726,8 +726,8 @@ func _test_hits_only_land_on_a_waiting_enemy() -> bool:
 	return true
 
 
-## Discovering a tile goes through a fight now, so the map has to hand over and take back cleanly:
-## winning discovers the tile as it always did, losing leaves the map exactly as it was.
+## Charting a tile goes through a fight now, so the map has to hand over and take back cleanly:
+## winning charts the tile as it always did, losing leaves the map exactly as it was.
 func _test_the_map_hands_over_and_takes_back() -> void:
 	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
 	main.world_seed = WORLD_SEED
@@ -740,12 +740,12 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 		await process_frame
 
 	var target := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
-	_check(main.view.can_discover(target), "the tile next door can be fought for")
+	_check(main.view.can_chart(target), "the tile next door can be fought for")
 
 	# Losing changes nothing.
 	main.map.select_cell(target)
-	main._on_discover_pressed()
-	_check(main._combat != null, "pressing Discover starts a fight")
+	main._on_chart_pressed()
+	_check(main._combat != null, "pressing Chart starts a fight")
 	_check(not main.map.visible and main.map.process_mode == Node.PROCESS_MODE_DISABLED,
 			"the map stops while the fight is on")
 	main._combat.fight.give_up()
@@ -753,17 +753,17 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 	await process_frame
 	_check(main._combat == null, "the fight is torn down")
 	_check(main.map.visible and main.map.process_mode == Node.PROCESS_MODE_INHERIT, "and the map is back")
-	_check(not main.view.discovered(target), "a lost tile stays undiscovered")
-	_check(main.view.can_discover(target), "and can be fought for again straight away")
+	_check(not main.view.charted(target), "a lost tile stays uncharted")
+	_check(main.view.can_chart(target), "and can be fought for again straight away")
 
-	# Winning discovers it, exactly as pressing Discover used to.
-	main._on_discover_pressed()
+	# Winning charts it, exactly as pressing Chart used to.
+	main._on_chart_pressed()
 	var fight: Encounter = main._combat.fight
 	_play(fight, 10000)
 	_check(fight.victory, "the rematch is won")
 	main._combat._on_back_pressed()
 	await process_frame
-	_check(main.view.discovered(target), "a won tile is discovered")
+	_check(main.view.charted(target), "a won tile is charted")
 	_check(main.map.visible, "and the map is back")
 	main.queue_free()
 

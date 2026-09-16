@@ -103,7 +103,7 @@ var inventory: Inventory
 @onready var map: HexMap = $HexMap
 @onready var camera: Camera2D = $Camera2D
 
-var _discover_button: Button
+var _chart_button: Button
 var _move_button: Button
 var _farm_button: Button
 var _env_rows: VBoxContainer
@@ -158,11 +158,11 @@ var _worn_selected := -1
 var _bag_drag_from := Vector2.ZERO
 var _bag_drag_scroll := 0
 var _bag_dragged := 0.0
-## What the fight going on now has turned up. A discovery fight has already written each of these
+## What the fight going on now has turned up. A charting fight has already written each of these
 ## to the bag as it landed; a farm run has not -- for a run this is the pouch, and it is emptied
 ## into the bag in one go when the run ends.
 var _fight_drops: Array[Item] = []
-## And what it has earned. A discovery fight banks each purse as it lands, the way it banks each
+## And what it has earned. A charting fight banks each purse as it lands, the way it banks each
 ## find; a run holds its gold in here and it goes in with the pouch.
 var _fight_gold := 0
 ## A run's currency, waiting the way its finds and its gold do. Orb name -> how many.
@@ -308,9 +308,9 @@ func _build_ui() -> void:
 	var buttons := VBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 4)
 	rows.add_child(buttons)
-	_discover_button = _button("Discover", "LightButton", "Look at the tile next to you and what lies behind it")
-	_discover_button.pressed.connect(_on_discover_pressed)
-	buttons.add_child(_discover_button)
+	_chart_button = _button("Chart", "LightButton", "Look at the tile next to you and what lies behind it")
+	_chart_button.pressed.connect(_on_chart_pressed)
+	buttons.add_child(_chart_button)
 	_move_button = _button("Move here", "LightButton", "Walk to the selected tile")
 	_move_button.pressed.connect(_on_move_pressed)
 	buttons.add_child(_move_button)
@@ -1304,13 +1304,13 @@ func _clamp_to_map(to: Vector2) -> Vector2:
 	return to.clamp(first, last)
 
 
-## A tile has to be taken before it can be discovered: a lineup of whatever lives on it, against a
+## A tile has to be taken before it can be charted: a lineup of whatever lives on it, against a
 ## clock. How long a lineup and how long a clock is the tile's own -- a settlement is a set piece --
 ## which is what the variant is passed in for, beside picking the backdrop.
-## Winning discovers it as before; losing leaves the map exactly as it was, free to try again.
-func _on_discover_pressed() -> void:
+## Winning charts it as before; losing leaves the map exactly as it was, free to try again.
+func _on_chart_pressed() -> void:
 	var cell := map.selected_cell
-	if not view.can_discover(cell):
+	if not view.can_chart(cell):
 		return
 	var env: String = map.get_tile_info(cell).get("env", "")
 	var variant := view.area_variant(cell)
@@ -1380,7 +1380,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	_character.show()
 
 
-## Back from the fight. The tile is discovered only if it was won; either way the map comes back
+## Back from the fight. The tile is charted only if it was won; either way the map comes back
 ## exactly as it was left.
 func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 	var kills: int = _combat.fight.kills()
@@ -1403,9 +1403,9 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 		# Nothing about the map moves for a run. The tile was already taken; the loot is the whole of it.
 		print("Farmed %s, %d slain" % [cell, kills])
 	elif won:
-		print("Discovered %s, showing %d tile(s) behind it; walking there" % [cell, view.discover(cell)])
+		print("Charted %s, showing %d tile(s) behind it; walking there" % [cell, view.chart(cell)])
 	else:
-		print("Lost the fight for %s; it stays undiscovered" % cell)
+		print("Lost the fight for %s; it stays uncharted" % cell)
 	_farming = false
 	if map.selected_cell != HexMap.NO_CELL:
 		_panel.show()
@@ -1419,7 +1419,7 @@ func _on_move_pressed() -> void:
 	_update_buttons()
 
 
-## The one place the map's own state changes: discovering a tile walks the player onto it, and the
+## The one place the map's own state changes: charting a tile walks the player onto it, and the
 ## map grows on arrival. So this is where it is written down, and a crash costs at most the step in
 ## progress rather than the session.
 func _on_player_arrived(cell: Vector2i) -> void:
@@ -1431,12 +1431,12 @@ func _on_player_arrived(cell: Vector2i) -> void:
 ## A tile is either something to look at or somewhere to go, and neither while the player is walking.
 func _update_buttons() -> void:
 	var cell := map.selected_cell
-	_discover_button.disabled = not view.can_discover(cell)
+	_chart_button.disabled = not view.can_chart(cell)
 	_move_button.disabled = not view.can_move_to(cell)
 	_farm_button.disabled = not view.can_farm(cell)
 
 
-## A kill left something behind. It is the player's whatever the fight does next, so a discovery
+## A kill left something behind. It is the player's whatever the fight does next, so a charting
 ## fight writes it to disk as it lands rather than at the end: closing the game mid-fight cannot
 ## cost a find. A farm run has no end of its own to write at and could run for an hour, so its
 ## finds wait in the pouch and go in as one write when the run is over.
@@ -1456,7 +1456,7 @@ func _on_loot_dropped(index: int, item: Item) -> void:
 	_refresh_bag_room()
 
 
-## A body's purse. It follows the same rule its finds do, and for the same reasons: a discovery
+## A body's purse. It follows the same rule its finds do, and for the same reasons: a charting
 ## fight is over in a minute and writes each one as it lands, so closing the game mid-fight cannot
 ## cost them; a run could go an hour and has no end of its own, so its gold waits here and goes in
 ## with the pouch. Nothing about a purse can be refused -- it is a number, not a square, so the bag's
@@ -1471,7 +1471,7 @@ func _on_gold_gained(amount: int) -> void:
 
 
 ## An orb off a body. It follows gold exactly, and for exactly gold's reasons: banked as it lands in
-## a discovery fight, pouched until the end of a run. Nothing about an orb can be refused either --
+## a charting fight, pouched until the end of a run. Nothing about an orb can be refused either --
 ## it is a count rather than a square, so the cap has nothing to say about it and no rule of the
 ## player's filters it.
 ## A body's experience, banked or pouched exactly as its purse is. The panel is not told here: it fills

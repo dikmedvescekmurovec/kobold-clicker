@@ -1,6 +1,6 @@
 class_name FogOverlay
 extends Node2D
-## Greys out the tiles the player has seen but not discovered yet, so they read as land they know is there
+## Greys out the tiles the player has seen but not charted yet, so they read as land they know is there
 ## but hasn't been looked at. Drawn as a translucent hex over each tile, above the terrain and roads but
 ## below the selection outline, which has to stay readable on a greyed tile.
 

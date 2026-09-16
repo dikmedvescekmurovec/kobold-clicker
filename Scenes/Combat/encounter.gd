@@ -16,7 +16,7 @@ extends RefCounted
 ## Every kill also hands over a purse, which is not rolled for at all -- see `gold_of`.
 ##
 ## Nothing the enemies do can hurt the player: the clock is the only way to lose. Beat the lineup
-## inside `seconds` and the tile is discovered; run out and nothing happens, the tile stays grey and
+## inside `seconds` and the tile is charted; run out and nothing happens, the tile stays grey and
 ## can be tried again. A tile's lineup is seeded from its cell, so the same tile always fields the
 ## same fight, the way everything else about a tile is decided before the player ever reaches it.
 ##

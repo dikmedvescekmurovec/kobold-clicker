@@ -267,7 +267,7 @@ func _test_map_builder() -> bool:
 	var build_ms := Time.get_ticks_msec() - start
 
 	_check(_test_start_state(map, view) == true, "starting state tests ran to the end")
-	_check(_test_discovery(map, view) == true, "discovery tests ran to the end")
+	_check(_test_charting(map, view) == true, "charting tests ran to the end")
 	_check(_test_tile_names(view, world) == true, "tile name tests ran to the end")
 	_check(_test_blends_stay(map, view) == true, "blend stability tests ran to the end")
 	_check(_test_drawn_window(map, view, world, origin, env_seed, start_town, build_ms) == true,
@@ -309,7 +309,7 @@ func _test_tile_names(view: MapBuilder, world: TownWorld) -> bool:
 				"%s is called after what is on it (%s)" % [cell, place])
 
 	# Nothing is named before it is looked at. A cell still in the fog of war has no name, and the
-	# tiles a discovery lifts the fog off are named as they appear -- undiscovered land is land the
+	# tiles a charting lifts the fog off are named as they appear -- uncharted land is land the
 	# player can see, so seeing it is the encounter, not walking onto it.
 	var hidden := Vector2i.ZERO
 	for y in range(view.rect.position.y, view.rect.end.y):
@@ -322,9 +322,9 @@ func _test_tile_names(view: MapBuilder, world: TownWorld) -> bool:
 			"%s is nameless while it is still in the fog" % hidden)
 
 	for cell in HexGrid.neighbors(view.player_cell):
-		if not view.can_discover(cell):
+		if not view.can_chart(cell):
 			continue
-		view.discover(cell)
+		view.chart(cell)
 		view.map.player.finish_walk()
 		var after: Dictionary = view.to_save().names
 		var shown := 0
@@ -333,7 +333,7 @@ func _test_tile_names(view: MapBuilder, world: TownWorld) -> bool:
 				if view.seen(Vector2i(x, y)):
 					shown += 1
 		_check(after.size() == shown and shown > seen,
-				"discovering %s names everything it brought into view (%d of %d)"
+				"charting %s names everything it brought into view (%d of %d)"
 				% [cell, after.size(), shown])
 		break
 	return true
@@ -370,7 +370,7 @@ func _test_area_variants(view: MapBuilder, world: TownWorld) -> bool:
 
 ## The window as the player first sees it.
 func _test_start_state(map: HexMap, view: MapBuilder) -> bool:
-	# The start is a hexagon of 7 tiles: the discovered center, ringed by undiscovered land under the fog.
+	# The start is a hexagon of 7 tiles: the charted center, ringed by uncharted land under the fog.
 	var start_tiles := MapBuilder.start_cells()
 	var rows := {}
 	for cell: Vector2i in start_tiles:
@@ -380,62 +380,62 @@ func _test_start_state(map: HexMap, view: MapBuilder) -> bool:
 	_check(start_tiles.all(func(cell: Vector2i) -> bool: return HexGrid.distance(MapBuilder.CENTER, cell) <= 1),
 			"every starting tile is the center or touches it")
 	_check(map.ground_layer.get_used_cells().size() == start_tiles.size(), "only the 7 starting tiles are drawn")
-	_check(view.state(MapBuilder.CENTER) == MapBuilder.State.DISCOVERED, "the center is discovered")
+	_check(view.state(MapBuilder.CENTER) == MapBuilder.State.CHARTED, "the center is charted")
 	_check(view.state(Vector2i(4, 0)) == MapBuilder.State.HIDDEN, "the rest of the map is in the fog")
 	for cell in HexGrid.neighbors(MapBuilder.CENTER):
-		_check(view.state(cell) == MapBuilder.State.UNDISCOVERED, "%s starts undiscovered" % cell)
+		_check(view.state(cell) == MapBuilder.State.UNCHARTED, "%s starts uncharted" % cell)
 		_check(map.fog.has_cell(cell), "%s is greyed out" % cell)
-	_check(not map.fog.has_cell(MapBuilder.CENTER) and map.fog.cells().size() == 6, "only undiscovered tiles are greyed")
+	_check(not map.fog.has_cell(MapBuilder.CENTER) and map.fog.cells().size() == 6, "only uncharted tiles are greyed")
 	return true
 
 
-## Reaching new land: what may be discovered, what may be walked to, and what each does.
-func _test_discovery(map: HexMap, view: MapBuilder) -> bool:
+## Reaching new land: what may be charted, what may be walked to, and what each does.
+func _test_charting(map: HexMap, view: MapBuilder) -> bool:
 	var start_tiles := MapBuilder.start_cells()
-	# Tiles have to be discovered before the player can go there, and only from the tile they stand on.
+	# Tiles have to be charted before the player can go there, and only from the tile they stand on.
 	var arrivals: Array[Vector2i] = []
 	view.arrived.connect(func(at: Vector2i) -> void: arrivals.append(at))
 	_check(view.player_cell == MapBuilder.CENTER and map.player.cell == MapBuilder.CENTER, "the player starts on the center")
 	_check(not view.can_move_to(MapBuilder.CENTER) and view.route_to(MapBuilder.CENTER).is_empty(),
 			"there is nowhere to walk on the tile they stand on")
-	_check(not view.can_discover(MapBuilder.CENTER) and view.discover(MapBuilder.CENTER) == -1,
-			"the tile they stand on is discovered already")
-	_check(not view.can_discover(Vector2i(4, 0)) and view.discover(Vector2i(4, 0)) == -1, "fog can't be discovered")
+	_check(not view.can_chart(MapBuilder.CENTER) and view.chart(MapBuilder.CENTER) == -1,
+			"the tile they stand on is charted already")
+	_check(not view.can_chart(Vector2i(4, 0)) and view.chart(Vector2i(4, 0)) == -1, "fog can't be charted")
 
 	var rim := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
 	var beyond := HexGrid.neighbor(rim, HexGrid.Edge.E)
-	_check(not view.can_move_to(rim) and not view.move_to(rim), "an undiscovered tile can't be walked to yet")
-	_check(not view.can_discover(beyond), "a tile two steps out is out of reach")
+	_check(not view.can_move_to(rim) and not view.move_to(rim), "an uncharted tile can't be walked to yet")
+	_check(not view.can_chart(beyond), "a tile two steps out is out of reach")
 	var expected_new := HexGrid.neighbors(rim).filter(func(next: Vector2i) -> bool:
 			return view.rect.has_point(next) and not view.seen(next)).size()
-	_check(view.can_discover(rim) and expected_new > 0, "the tile next to the player can be discovered")
-	_check(view.discover(rim) == expected_new, "discovering it lifts the fog off the tiles behind it")
-	_check(view.state(rim) == MapBuilder.State.DISCOVERED and not map.fog.has_cell(rim), "the tile is discovered and clear")
+	_check(view.can_chart(rim) and expected_new > 0, "the tile next to the player can be charted")
+	_check(view.chart(rim) == expected_new, "charting it lifts the fog off the tiles behind it")
+	_check(view.state(rim) == MapBuilder.State.CHARTED and not map.fog.has_cell(rim), "the tile is charted and clear")
 	_check(map.ground_layer.get_used_cells().size() == start_tiles.size() + expected_new, "the newly shown tiles are drawn")
 	for next in HexGrid.neighbors(rim):
 		_check(view.state(next) != MapBuilder.State.HIDDEN, "%s is out of the fog" % next)
-		_check(view.discovered(next) or map.fog.has_cell(next), "%s is discovered or greyed" % next)
+		_check(view.charted(next) or map.fog.has_cell(next), "%s is charted or greyed" % next)
 
-	# Discovering sends the player walking onto the tile by itself.
+	# Charting sends the player walking onto the tile by itself.
 	_check(view.walking and view.player_cell == MapBuilder.CENTER,
 			"the player sets off, and counts as standing where they were until they arrive")
-	_check(arrivals.is_empty() and not view.can_discover(HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.W)),
-			"nothing can be discovered while they are on the way")
+	_check(arrivals.is_empty() and not view.can_chart(HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.W)),
+			"nothing can be charted while they are on the way")
 	_check(not view.can_move_to(MapBuilder.CENTER), "they can't be sent somewhere else mid-walk")
 	map.player.finish_walk()
 	_check(view.player_cell == rim and map.player.cell == rim, "arriving puts the player on the tile")
 	_check(arrivals == ([rim] as Array[Vector2i]), "arriving is reported")
-	_check(map.ground_layer.get_used_cells().size() == start_tiles.size() + expected_new, "arriving discovers nothing by itself")
+	_check(map.ground_layer.get_used_cells().size() == start_tiles.size() + expected_new, "arriving charts nothing by itself")
 
-	# Walking back is not limited to neighbors, but every tile of the route has to be discovered.
-	_check(view.can_discover(beyond) and view.discover(beyond) >= 0, "the next tile out can be discovered from there")
+	# Walking back is not limited to neighbors, but every tile of the route has to be charted.
+	_check(view.can_chart(beyond) and view.chart(beyond) >= 0, "the next tile out can be charted from there")
 	map.player.finish_walk()
 	_check(view.player_cell == beyond, "and walked to in turn")
 	_check(HexGrid.distance(MapBuilder.CENTER, beyond) == 2, "%s is two steps from the center" % beyond)
 	var route := view.route_to(MapBuilder.CENTER)
 	_check(route.size() == 2 and route.back() == MapBuilder.CENTER,
 			"the route back is as short as the distance and ends on the destination")
-	_check(route.all(func(cell: Vector2i) -> bool: return view.discovered(cell)), "every tile of the route is discovered")
+	_check(route.all(func(cell: Vector2i) -> bool: return view.charted(cell)), "every tile of the route is charted")
 	var walked := beyond
 	for step: Vector2i in route:
 		_check(HexGrid.distance(walked, step) == 1, "%s is next to %s" % [step, walked])
@@ -447,7 +447,7 @@ func _test_discovery(map: HexMap, view: MapBuilder) -> bool:
 
 
 func _test_blends_stay(map: HexMap, view: MapBuilder) -> bool:
-	# A tile must be drawn with the blends of all its neighbors, discovered or not, so what is on screen never
+	# A tile must be drawn with the blends of all its neighbors, charted or not, so what is on screen never
 	# changes as the land around it is found.
 	var blends_when_found := {}
 	var blended_when_found := 0
@@ -460,7 +460,7 @@ func _test_blends_stay(map: HexMap, view: MapBuilder) -> bool:
 	_check(map.fog.cells().is_empty(), "revealing the map takes the fog off every tile")
 	for cell: Vector2i in blends_when_found:
 		_check(map.blends_at(cell) == blends_when_found[cell],
-				"%s keeps its blends once its neighbors are discovered (%s, was %s)" % [
+				"%s keeps its blends once its neighbors are charted (%s, was %s)" % [
 						cell, map.blends_at(cell), blends_when_found[cell]])
 	print("Blends kept on %d of %d tiles drawn before their neighbors" % [
 			blended_when_found, blends_when_found.size()])
@@ -581,7 +581,7 @@ func _test_growth(map: HexMap, view: MapBuilder) -> bool:
 		before[cell] = [view.env_at(cell), info["name"], info["road"]]
 	var was := view.rect
 	var toward_edge := Vector2i(was.end.x - MapBuilder.EXPAND_MARGIN, 0)
-	_check(view.discovered(toward_edge) and not view.move_to(toward_edge).is_empty(),
+	_check(view.charted(toward_edge) and not view.move_to(toward_edge).is_empty(),
 			"the player sets off for the eastern edge")
 	var grow_start := Time.get_ticks_msec()
 	map.player.finish_walk()
@@ -612,11 +612,11 @@ func _test_growth(map: HexMap, view: MapBuilder) -> bool:
 	_check(ungenerated == 0, "every cell of the grown map has an environment (%d missing)" % ungenerated)
 	_check(illegal_border == 0, "the new land borders the old legally (%d bad borders)" % illegal_border)
 
-	# The new land is drawn like any other once it is discovered, roads and all.
+	# The new land is drawn like any other once it is charted, roads and all.
 	var beyond_old := Vector2i(was.end.x, 0)
 	_check(view.state(beyond_old) == MapBuilder.State.HIDDEN, "the new land starts in the fog")
 	view.reveal_all()
-	_check(view.discovered(beyond_old) and map.get_tile_info(beyond_old).get("group", "") != "",
+	_check(view.charted(beyond_old) and map.get_tile_info(beyond_old).get("group", "") != "",
 			"and is drawn once revealed")
 	print("Map grown from %s to %s (%d cells) in %d ms" % [was.size, view.rect.size, view.rect.get_area(), grow_ms])
 	return true
@@ -790,8 +790,8 @@ func _test_map_saving() -> bool:
 	# Walk somewhere, so the save holds a half-explored map rather than the seven starting tiles.
 	for step in 6:
 		var ahead := Vector2i(view.player_cell.x + 1, 0)
-		if view.can_discover(ahead):
-			view.discover(ahead)
+		if view.can_chart(ahead):
+			view.chart(ahead)
 			map.player.finish_walk()
 	_check(view.player_cell != MapBuilder.CENTER, "the player has walked off the middle of the map")
 	_check(view.rect != MapBuilder.START_RECT, "and far enough that the window has already grown once")
@@ -978,7 +978,7 @@ func _test_the_map_comes_back() -> bool:
 
 	# Take a tile, which is what a session of this game consists of.
 	var taken := Vector2i(1, 0)
-	main.view.discover(taken)
+	main.view.chart(taken)
 	main.map.player.finish_walk()
 	await process_frame
 	var before := _map_fingerprint(main.map, main.view)

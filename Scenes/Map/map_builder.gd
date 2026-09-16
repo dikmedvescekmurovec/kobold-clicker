@@ -1,23 +1,23 @@
 class_name MapBuilder
 extends RefCounted
-## Generates a window of the world and draws it as the player discovers it: procedural environments, the world's
+## Generates a window of the world and draws it as the player charts it: procedural environments, the world's
 ## towns drawn as the town sprite of the environment they stand on, and the roads between connected towns.
 ## Blend overlays follow automatically, since HexMap.set_ground redraws them.
 ##
 ## Every cell is in one of three states. HIDDEN cells are the fog of war: nothing is drawn for them at all.
-## UNDISCOVERED cells are drawn under a grey veil (HexMap.fog): the player can see the land but hasn't looked at
-## it, and can't go there. DISCOVERED cells are drawn plainly and can be walked to and over.
+## UNCHARTED cells are drawn under a grey veil (HexMap.fog): the player can see the land but hasn't looked at
+## it, and can't go there. CHARTED cells are drawn plainly and can be walked to and over.
 ##
-## The player starts on the center cell (0, 0), the only discovered one, with its six neighbors undiscovered
-## around it. They discover a tile next to the one they stand on, which lifts the fog off the tiles behind it
-## and sends them walking onto it; they can also walk back to any tile they have discovered. Everything is generated up front, so what a tile turns out to be never depends on
+## The player starts on the center cell (0, 0), the only charted one, with its six neighbors uncharted
+## around it. They chart a tile next to the one they stand on, which lifts the fog off the tiles behind it
+## and sends them walking onto it; they can also walk back to any tile they have charted. Everything is generated up front, so what a tile turns out to be never depends on
 ## when it is found.
 
 ## The player has finished walking to `cell`.
 signal arrived(cell: Vector2i)
 
 ## What the player knows about a cell.
-enum State { HIDDEN, UNDISCOVERED, DISCOVERED }
+enum State { HIDDEN, UNCHARTED, CHARTED }
 
 ## Cells the map covers to begin with: 20x11 around cell (0, 0), which the camera puts at the middle of the
 ## screen. It grows from there as the player travels; `rect` is what the map covers now.
@@ -84,16 +84,16 @@ static func create(map: HexMap, towns: TownWorld, origin: Vector2i, env_seed: in
 
 	map.clear_map()
 	# Blends read the environment of every generated cell, not just the drawn ones, so a tile is drawn with the
-	# same overlays whether its neighbors are already discovered or still hidden.
+	# same overlays whether its neighbors are already charted or still hidden.
 	map.hidden_env = builder.env_at
 	# Rebuilding the map hands the player over to the new builder, so any earlier one lets go.
 	for connection in map.player.arrived.get_connections():
 		map.player.arrived.disconnect(connection["callable"])
 	map.player.arrived.connect(builder._on_player_arrived)
 	# The player knows the tile they stand on and can see the ring around it, without having looked at it yet.
-	builder._show(CENTER, State.DISCOVERED)
+	builder._show(CENTER, State.CHARTED)
 	for cell in HexGrid.neighbors(CENTER):
-		builder._show(cell, State.UNDISCOVERED)
+		builder._show(cell, State.UNCHARTED)
 	builder.player_cell = CENTER
 	map.set_player_cell(CENTER)
 	return builder
@@ -107,7 +107,7 @@ static func create(map: HexMap, towns: TownWorld, origin: Vector2i, env_seed: in
 ## Nothing here touches `map`: this is called from the main scene's _exit_tree, where the HexMap
 ## child may already be gone -- which is also why `walking` is not asked about. A walk in progress
 ## is not part of a save. `player_cell` is the last tile actually reached, so a game closed
-## mid-step resumes on the tile behind; the tile being walked to was set DISCOVERED before the walk
+## mid-step resumes on the tile behind; the tile being walked to was set CHARTED before the walk
 ## started, so it costs the step and nothing else.
 func to_save() -> MapSave:
 	var save := MapSave.new()
@@ -181,14 +181,14 @@ func _draw_saved() -> void:
 			continue
 		map.place_ground(cell, _tiles[cell])
 		_draw_road(cell)
-		if _states[cell] == State.UNDISCOVERED:
+		if _states[cell] == State.UNCHARTED:
 			map.fog.add_cell(cell)
 	for cell in _states:
 		if _tiles.has(cell):
 			map.refresh_blends(cell)
 
 
-## The hexagon drawn at the start, in rows of 2, 3 and 2: the discovered center cell and its six undiscovered
+## The hexagon drawn at the start, in rows of 2, 3 and 2: the charted center cell and its six uncharted
 ## neighbors.
 static func start_cells() -> Array[Vector2i]:
 	var cells: Array[Vector2i] = [CENTER]
@@ -263,38 +263,38 @@ func state(cell: Vector2i) -> State:
 	return _states.get(cell, State.HIDDEN)
 
 
-func discovered(cell: Vector2i) -> bool:
-	return state(cell) == State.DISCOVERED
+func charted(cell: Vector2i) -> bool:
+	return state(cell) == State.CHARTED
 
 
-## Whether anything is drawn for a cell: it is discovered, or seen under the fog.
+## Whether anything is drawn for a cell: it is charted, or seen under the fog.
 func seen(cell: Vector2i) -> bool:
 	return state(cell) != State.HIDDEN
 
 
-## Whether the player can discover this cell: it has to be a tile they can see next to the one they stand on,
+## Whether the player can chart this cell: it has to be a tile they can see next to the one they stand on,
 ## and they have to be standing still.
-func can_discover(cell: Vector2i) -> bool:
-	return not walking and state(cell) == State.UNDISCOVERED and HexGrid.distance(cell, player_cell) == 1
+func can_chart(cell: Vector2i) -> bool:
+	return not walking and state(cell) == State.UNCHARTED and HexGrid.distance(cell, player_cell) == 1
 
 
 ## Whether the player can farm this cell: a tile already taken, which the player can go back to and
-## fight on for as long as they like. Unlike discovering, it asks nothing about where they stand --
+## fight on for as long as they like. Unlike charting, it asks nothing about where they stand --
 ## a run is a thing you choose to do, not a step you take.
 func can_farm(cell: Vector2i) -> bool:
-	return not walking and discovered(cell)
+	return not walking and charted(cell)
 
 
-## Whether the player can travel to this cell: a discovered tile other than the one they stand on, with a route
-## of discovered tiles leading to it, and no walk under way.
+## Whether the player can travel to this cell: a charted tile other than the one they stand on, with a route
+## of charted tiles leading to it, and no walk under way.
 func can_move_to(cell: Vector2i) -> bool:
-	return not walking and discovered(cell) and cell != player_cell and not route_to(cell).is_empty()
+	return not walking and charted(cell) and cell != player_cell and not route_to(cell).is_empty()
 
 
 ## The tiles the player would cross on the way to `cell`, the destination last and the tile they stand on left
-## out. Every tile of the route is discovered; the route is empty when none leads there.
+## out. Every tile of the route is charted; the route is empty when none leads there.
 func route_to(cell: Vector2i) -> Array[Vector2i]:
-	if not discovered(cell) or cell == player_cell:
+	if not charted(cell) or cell == player_cell:
 		return []
 	var came_from: Dictionary[Vector2i, Vector2i] = {player_cell: player_cell}
 	var queue: Array[Vector2i] = [player_cell]
@@ -303,7 +303,7 @@ func route_to(cell: Vector2i) -> Array[Vector2i]:
 		var at := queue[i]
 		i += 1
 		for next in HexGrid.neighbors(at):
-			if not discovered(next) or came_from.has(next):
+			if not charted(next) or came_from.has(next):
 				continue
 			came_from[next] = at
 			if next == cell:
@@ -317,10 +317,10 @@ func route_to(cell: Vector2i) -> Array[Vector2i]:
 	return []
 
 
-## Sends the player walking to a discovered tile. They arrive a couple of seconds per tile later, when
+## Sends the player walking to a charted tile. They arrive a couple of seconds per tile later, when
 ## `arrived` is emitted. Returns the tiles they will cross, empty if the walk didn't start.
 func move_to(cell: Vector2i) -> Array[Vector2i]:
-	if walking or not discovered(cell) or cell == player_cell:
+	if walking or not charted(cell) or cell == player_cell:
 		return []
 	var route := route_to(cell)
 	map.player.walk(route)
@@ -400,27 +400,27 @@ func _tile_name(cell: Vector2i) -> String:
 	return "env_%s_%s" % [env, variant]
 
 
-## Discovers a tile the player can see next to them: its grey veil comes off, the tiles behind it come out of
-## the fog as undiscovered land, and the player sets off for it, arriving a couple of seconds later. Returns
-## how many tiles newly showed, or -1 if it can't be discovered.
-func discover(cell: Vector2i) -> int:
-	if not can_discover(cell):
+## Charts a tile the player can see next to them: its grey veil comes off, the tiles behind it come out of
+## the fog as uncharted land, and the player sets off for it, arriving a couple of seconds later. Returns
+## how many tiles newly showed, or -1 if it can't be charted.
+func chart(cell: Vector2i) -> int:
+	if not can_chart(cell):
 		return -1
-	_show(cell, State.DISCOVERED)
+	_show(cell, State.CHARTED)
 	var shown := 0
 	for next in HexGrid.neighbors(cell):
 		if _tiles.has(next) and not seen(next):
-			_show(next, State.UNDISCOVERED)
+			_show(next, State.UNCHARTED)
 			shown += 1
 	# Looking at the tile next door is the first half of going there, so the walk follows by itself.
 	move_to(cell)
 	return shown
 
 
-## Discovers the whole window at once, for tests and screenshots.
+## Charts the whole window at once, for tests and screenshots.
 func reveal_all() -> void:
 	for cell in _tiles:
-		_show(cell, State.DISCOVERED)
+		_show(cell, State.CHARTED)
 
 
 ## Map cells exactly START_TOWN_DISTANCE steps from the center cell (0, 0), where the guaranteed small town may go.
@@ -437,14 +437,14 @@ static func start_town_cells() -> Array[Vector2i]:
 func _show(cell: Vector2i, to: State) -> void:
 	if not _tiles.has(cell) or state(cell) == to:
 		return
-	# Named the moment it is first drawn, undiscovered or not: seeing a place is meeting it, and a
+	# Named the moment it is first drawn, uncharted or not: seeing a place is meeting it, and a
 	# tile the player has been looking at for an hour should not be nameless when they walk in.
 	name_of(cell)
 	if not seen(cell):
 		map.set_ground(cell, _tiles[cell])
 		_draw_road(cell)
 	_states[cell] = to
-	if to == State.UNDISCOVERED:
+	if to == State.UNCHARTED:
 		map.fog.add_cell(cell)
 	else:
 		map.fog.remove_cell(cell)

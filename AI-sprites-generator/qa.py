@@ -370,7 +370,7 @@ def ui(tag):
     text((32, 30), "Blackreach, a small town", ink)
     text((32, 46), "grass 71%   forest 29%", ink)
     headings(24, 88, bone)
-    row(24, 104, "wood", "normal", "Discover")
+    row(24, 104, "wood", "normal", "Chart")
     row(24, 134, "wood", "danger", "Abandon")
     text((24, 164), "buttons on wood", bone)
 

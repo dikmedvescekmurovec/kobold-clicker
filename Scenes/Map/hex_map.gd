@@ -19,7 +19,7 @@ var selected_cell := NO_CELL
 
 ## Environment of cells that aren't drawn yet, as a Callable taking a cell and returning an environment name
 ## ("" when there is none). Whoever generates the map sets it, so a tile can blend with land around it that the
-## player hasn't discovered, and looks the same however late it is drawn.
+## player hasn't charted, and looks the same however late it is drawn.
 var hidden_env := Callable()
 
 var _press_at := Vector2.ZERO
@@ -32,7 +32,7 @@ var blend_layers: Dictionary[String, TileMapLayer] = {}
 @onready var road_layer: TileMapLayer = $RoadLayer
 @onready var highlight: HexHighlight = $Highlight
 
-## Marker for the player's tile, and the grey veil over tiles that aren't discovered yet. Both are created
+## Marker for the player's tile, and the grey veil over tiles that aren't charted yet. Both are created
 ## here, so the scene file stays untouched while the editor has it open.
 var player: PlayerToken
 var fog: FogOverlay
