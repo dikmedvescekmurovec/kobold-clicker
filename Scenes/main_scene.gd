@@ -137,6 +137,8 @@ var _bag_count: Label
 ## What the player has earned, pinned to the bottom of the panel under everything else.
 var _bag_gold: Label
 var _orb_tray: HBoxContainer
+## The line over the tray, which goes with it while the player has never had an orb.
+var _orb_rule: ColorRect
 var _orb_card: OrbCard
 ## What an orb draws from when it is spent. Its own generator, unseeded like the fight's: what a
 ## reroll gives is the attempt's business, and a test that wants a known answer seeds it itself.
@@ -580,10 +582,10 @@ func _build_bag(layer: CanvasLayer) -> void:
 	# section: orbs are not sorted, filtered or chosen between, so the tray wants no heading and no
 	# buttons, and it must never scroll out of sight -- least of all while a piece is open, which is
 	# exactly when it is being used.
-	var orb_rule := ColorRect.new()
-	orb_rule.color = Palette.SLATE
-	orb_rule.custom_minimum_size = Vector2(0, ItemDetails.RULE_HEIGHT)
-	rows.add_child(orb_rule)
+	_orb_rule = ColorRect.new()
+	_orb_rule.color = Palette.SLATE
+	_orb_rule.custom_minimum_size = Vector2(0, ItemDetails.RULE_HEIGHT)
+	rows.add_child(_orb_rule)
 	_orb_tray = HBoxContainer.new()
 	_orb_tray.add_theme_constant_override("separation", ORB_GAP)
 	_orb_tray.custom_minimum_size = Vector2(BAG_WIDTH, 0)
@@ -887,6 +889,9 @@ func _open_piece() -> Item:
 ## no crafting row in the stat block and no arming step; the thing that is already on screen becomes
 ## the thing you press.
 func _refresh_orbs() -> void:
+	# No tray until the first orb: once one has been held it stays, even with every orb spent.
+	_orb_tray.visible = inventory.total_orbs() > 0 or "first_orb" in inventory.tips
+	_orb_rule.visible = _orb_tray.visible
 	for child: Node in _orb_tray.get_children():
 		_orb_tray.remove_child(child)
 		child.queue_free()

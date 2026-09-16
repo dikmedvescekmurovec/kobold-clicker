@@ -2138,6 +2138,14 @@ func _test_tips() -> bool:
 	_check(not main._bag_button.visible and not main._skills_button.visible, "no corner buttons at first")
 	main._check_tips()
 	_check(main._tip_panel == null and main._tip_queue.is_empty(), "and nothing to say")
+	main._refresh_orbs()
+	_check(not main._orb_tray.visible, "no orb tray before the first orb")
+	main.inventory.add_orb("Orb of Chaos")
+	main._refresh_orbs()
+	_check(main._orb_tray.visible, "and one once an orb is held")
+	main.inventory.orbs.clear()
+	main._refresh_orbs()
+	_check(not main._orb_tray.visible, "gone again if it was never seen and none is held")
 
 	main.inventory.add(_piece(ItemRarity.Rarity.COMMON, 1))
 	main.inventory.level = 2
