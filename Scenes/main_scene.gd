@@ -98,6 +98,7 @@ var _discover_button: Button
 var _move_button: Button
 var _farm_button: Button
 var _env_rows: VBoxContainer
+var _tile_title: Label
 var _level_label: Label
 var _panel: VBoxContainer
 ## The left-hand collection log, the button that opens it, and the rows inside it.
@@ -267,6 +268,7 @@ func _build_ui() -> void:
 	_panel.scale = Vector2(ui_scale, ui_scale)
 	_panel.hide()
 	layer.add_child(_panel)
+	_tile_title = _title_of(_panel)
 	var rows := _body_of(_panel)
 
 	# How far out this tile is, which is both how hard it fights and the ceiling on what drops here.
@@ -1076,6 +1078,11 @@ func _body_of(panel: VBoxContainer) -> VBoxContainer:
 	return panel.get_child(1).get_child(0)
 
 
+## A titled panel's title label: the first thing in its header bar.
+func _title_of(panel: VBoxContainer) -> Label:
+	return panel.get_child(0).get_child(0).get_child(0)
+
+
 func _button(text: String, variation: String, tooltip: String) -> Button:
 	var button := Button.new()
 	button.text = text
@@ -1123,6 +1130,8 @@ func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
 	if towns.has_town(spot):
 		line += " | town connected to %s" % [towns.connections(spot)]
 	print(line)
+	var tile_name := view.name_of(cell)
+	_tile_title.text = tile_name if tile_name != "" else "Tile"
 	_level_label.text = "Level %d" % view.level_of(cell)
 	_show_environments(weights)
 	# The rows are filled after _layout_ui ran, and the level line can be wider than the environment
