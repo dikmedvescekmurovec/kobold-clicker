@@ -198,6 +198,9 @@ const FLASH_BRIGHT := Color(1.6, 1.6, 1.6)
 const FLASH_SECONDS := 0.5
 
 var _ui_layer: CanvasLayer
+## Dev only: wipes both saves and starts over. `_resetting` keeps `_exit_tree` from writing them back.
+var _reset_button: Button
+var _resetting := false
 ## Tips earned but not shown yet, and the one that is up.
 var _tip_queue: Array = []
 var _tip_panel: VBoxContainer
@@ -344,6 +347,13 @@ func _build_ui() -> void:
 	# `_button` makes them disabled; these are hidden instead, so a shown one is always pressable.
 	for button: Button in buttons.get_children():
 		button.disabled = false
+
+	_reset_button = _button("Reset", "LightButton", "Dev: delete the saves and start a new game")
+	_reset_button.disabled = false
+	_reset_button.theme = UITheme.theme()
+	_reset_button.scale = Vector2(ui_scale, ui_scale)
+	_reset_button.pressed.connect(_on_reset_pressed)
+	layer.add_child(_reset_button)
 
 	_build_character()
 	# Skills before the bag: building the bag lays its character sheet out, which measures the whole
@@ -1288,6 +1298,7 @@ func _layout_ui() -> void:
 	_bag_button.position = corner
 	_skills_button.position = corner + Vector2(
 			(_bag_button.get_combined_minimum_size().x + CORNER_GAP) * ui_scale, 0.0)
+	_reset_button.position = Vector2(8, view_size.y - (_reset_button.get_combined_minimum_size().y * ui_scale) - 8)
 	if _combat != null:
 		_combat.xp_target = _character.xp_point()
 	# The character sheet stands outside the item panel, against its right edge and only as tall as it
@@ -1642,6 +1653,8 @@ func _bank_kills(kills: int) -> void:
 func _show_corner(shown: bool) -> void:
 	_bag_button.visible = shown and ("first_item" in inventory.tips or "first_orb" in inventory.tips)
 	_skills_button.visible = shown and "level_up" in inventory.tips
+	# Off the map in a release build, and out of a fight's way like the rest of the corner.
+	_reset_button.visible = shown and OS.is_debug_build()
 	if _bag_button.visible:
 		_flash(_bag_button, "opened_bag")
 	if _skills_button.visible:
@@ -1771,10 +1784,21 @@ func _on_bag_pressed() -> void:
 ## Quitting with a run still on. The pouch goes in rather than evaporating -- a run that is left
 ## by closing the window found what it found -- and the map goes down as it stands.
 func _exit_tree() -> void:
+	if _resetting:
+		return
 	_bank_farm_loot()
 	if _combat != null:
 		_bank_kills(_combat.fight.kills())
 	_save_map()
+
+
+## Dev: deletes the inventory and the map and reloads, which generates a new world.
+func _on_reset_pressed() -> void:
+	_resetting = true
+	for path: String in [inventory_path, map_path]:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	get_tree().reload_current_scene()
 
 
 ## The bag's own X. Closing it is closing a left-hand page and nothing more, but it keeps its name:

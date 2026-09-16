@@ -6,6 +6,8 @@
 
 **First-time tips.** `TIPS` lists the one-time pop-ups (first item, first orb, first level-up). `_check_tips` runs after every fight (after banking, so a run's pouch counts) and queues any tip whose `_tip_due` state is now true and whose id is not in `inventory.tips`. They show one at a time, centred, built like the refused-save panel. The corner buttons are driven by the same list: `_show_corner` shows the bag only once `first_item` or `first_orb` is seen, and the star only once `level_up` is. A newly shown button pulses (`_flash`) until it is first pressed, which adds `opened_bag` / `opened_skills` to the same list.
 
+**Dev reset.** A "Reset" button in the bottom-left corner (debug builds only, hidden with the corner buttons) deletes `inventory_path` and `map_path` and reloads the scene; `_resetting` stops `_exit_tree` from writing the saves back on the way out.
+
 ## Rules and gotchas
 - **No orb falls before the player's 50th kill** (`OrbTable.FIRST_ORB_KILLS`). `inventory.kills` counts every kill across fights; `_open_fight` hands what is left of it to `Encounter.orbs_after`, and `_bank_kills` adds a fight's kills when it ends (or the game closes mid-fight).
 - **Orbs follow gold, with one difference: gold is one number and orbs are eight.** A charting fight banks each orb as it lands and a run pouches its own in `_fight_orbs` until it ends, exactly as the gold beside it -- and `_bank_farm_loot` banks them **above** its empty-pouch early return for the same reason the gold is banked there, because a run that turned up currency and no gear has still earned its way. Nothing can refuse an orb either: the bag's cap has nothing to say about a count, no autodiscard rule filters it, and there is no Discard for it.
