@@ -22,6 +22,9 @@ const SCALE := 0.5
 const FOOT_OFFSET := 6
 ## How long the character takes to cross one tile.
 const SECONDS_PER_TILE := 2.0
+## A puff of dust kicked up every DUST_EVERY seconds while walking, drawn under the character.
+const DUST_EVERY := 0.3
+const DUST := Color("c8b48a")
 
 ## The last tile of a walk has been reached.
 signal arrived(cell: Vector2i)
@@ -35,6 +38,7 @@ var _from := Vector2.ZERO
 var _to := Vector2.ZERO
 ## How far along the current step the character is, from 0 to 1.
 var _step := 0.0
+var _dust_left := 0.0
 
 
 func setup(map: HexMap) -> void:
@@ -50,6 +54,19 @@ func setup(map: HexMap) -> void:
 func _process(delta: float) -> void:
 	if is_walking():
 		advance(delta)
+		_kick_dust(delta)
+
+
+## Dust at the feet, on a timer rather than per frame of the run cycle, and put under the character.
+## In `_process` rather than `advance`, so a test walking the token by hand makes no particles.
+func _kick_dust(delta: float) -> void:
+	_dust_left -= delta
+	if _dust_left > 0.0:
+		return
+	_dust_left = DUST_EVERY
+	var puff := Juice.burst(get_parent(), position + Vector2(0, FOOT_OFFSET), DUST, 4, 10.0, 1.5, 0.45, -8.0)
+	puff.spread = 60.0
+	get_parent().move_child(puff, get_index())
 
 
 ## Puts the token on a cell, or on HexMap.NO_CELL to take it off the map. Any walk in progress is dropped.

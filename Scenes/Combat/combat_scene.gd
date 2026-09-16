@@ -145,7 +145,7 @@ const THROW_STAGGER := 0.06
 ## the instant it landed would not be seen at all. The node frees itself at the end of it, so nothing
 ## piles up on the ground however long a run goes on.
 const THROW_FADE := 0.4
-const COIN_REST := 2.0
+const COIN_REST := 0.5
 ## A find lies there longer than a coin: it is the thing worth looking at, it lands once where a
 ## purse lands ten, and it is the only sight of it until the player opens the counter.
 const FIND_REST := 3.0
@@ -178,6 +178,37 @@ const FIND_SPREAD := 40.0
 const BEAM_SCALE := 3.0
 const BEAM_ALPHA := 0.9
 const BEAM_LIFT := 9.0
+## What a landed blow does to the body it lands on: a white flash (modulate over 1 brightens), a
+## squash on its feet, and how long both take to come back.
+const HIT_FLASH := Color(2.5, 2.5, 2.5)
+const HIT_SQUASH := Vector2(1.12, 0.88)
+const HIT_TIME := 0.12
+## How far the arena rattles, in screen pixels: a crit, an ordinary death, and an elite's or a boss's.
+## The backdrop is drawn BACKDROP_BLEED larger than the window so a shake never shows its edge.
+const SHAKE_CRIT := 4.0
+const SHAKE_ELITE := 8.0
+const SHAKE_BOSS := 14.0
+const BACKDROP_BLEED := 1.05
+## How long the game freezes on a kill, by tier. Short: a freeze is felt rather than seen, and a
+## ten-kill fight freezes ten times.
+const STOP_KILL := 0.04
+const STOP_ELITE := 0.08
+const STOP_BOSS := 0.15
+## The burst a body goes out in.
+const DEATH_PIXELS := 28
+## A find at ELITE or better slows the fight to STOP_RARE_SPEED for STOP_RARE real seconds, so the
+## beam coming up is watched rather than glimpsed.
+const STOP_RARE := 0.6
+const STOP_RARE_SPEED := 0.25
+## A damage number arrives this much larger than it settles, over DAMAGE_POP, and drifts sideways by
+## up to DAMAGE_DRIFT as it climbs.
+const DAMAGE_POP_SCALE := 1.6
+const DAMAGE_POP := 0.12
+const DAMAGE_DRIFT := 24.0
+## Coins lie for COIN_REST, then fly into the loot counter over COIN_FLY.
+const COIN_FLY := 0.45
+## How bright the counter flashes as a coin reaches it.
+const BUMP_FLASH := Color(1.6, 1.6, 1.6)
 ## How far the HUD's panels stand off the window edge, in screen pixels.
 const HUD_MARGIN := 8.0
 ## How wide the full-bag warning may run before it wraps, in panel pixels. It is a sentence rather
@@ -203,8 +234,13 @@ var place := ""
 var xp_target := Vector2(-1, -1)
 
 var _ui_scale := 2.0
+## The backdrop and both fighters, which is what a shake rattles -- the HUD stays still over it.
+var _arena: Node2D
 var _player: CombatActor
 var _enemy: CombatActor
+## The enemy's own scale, which a squash springs back to, and the tween doing it.
+var _enemy_scale := Vector2.ONE
+var _enemy_hit: Tween
 var _sound: AudioStreamPlayer
 
 var _hud: Control
@@ -339,13 +375,15 @@ func _build() -> void:
 	var arena := Node2D.new()
 	arena.name = "Arena"
 	add_child(arena)
+	_arena = arena
 
 	var art := backdrop_for(fight.env if fight != null else "", area_variant, area_layout)
 	var backdrop := Sprite2D.new()
 	backdrop.texture = art
 	backdrop.centered = false
 	# Cover the viewport whatever its shape; the ground band stays across the bottom.
-	var cover := maxf(view.x / art.get_width(), view.y / art.get_height())
+	# A little over, so a shake never shows the edge.
+	var cover := maxf(view.x / art.get_width(), view.y / art.get_height()) * BACKDROP_BLEED
 	backdrop.scale = Vector2(cover, cover)
 	backdrop.position = (view - Vector2(art.get_size()) * cover) / 2.0
 	arena.add_child(backdrop)
@@ -629,6 +667,22 @@ func _on_hit_landed(amount: int, crit: bool, automatic: bool) -> void:
 	if automatic:
 		_swing()
 	_show_damage(amount, crit)
+	_jolt_enemy()
+	if crit:
+		Juice.shake(_arena, SHAKE_CRIT)
+
+
+## The body taking a blow: a white flash and a squash onto its feet, both springing back. A blow
+## landing mid-jolt starts it over rather than stacking on it.
+func _jolt_enemy() -> void:
+	if _enemy_hit != null and _enemy_hit.is_valid():
+		_enemy_hit.kill()
+	_enemy.modulate = HIT_FLASH
+	_enemy.scale = _enemy_scale * HIT_SQUASH
+	_enemy_hit = create_tween().set_parallel(true)
+	_enemy_hit.tween_property(_enemy, "modulate", Color.WHITE, HIT_TIME)
+	_enemy_hit.tween_property(_enemy, "scale", _enemy_scale, HIT_TIME) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 ## The player swinging, whether they clicked for it or the weapon did it for them. A swing landing on
@@ -666,10 +720,21 @@ func _show_damage(amount: int, crit: bool) -> void:
 			CRIT_FONT if crit else DAMAGE_FONT).x * _ui_scale
 	var from := Vector2(view.x * ENEMY_X + randf_range(-DAMAGE_SPREAD, DAMAGE_SPREAD) - width * 0.5,
 			view.y * (GROUND - ACTOR_HEIGHT * DAMAGE_HEIGHT))
+	# Pops in large about its own middle and settles, which is what makes a number land rather than
+	# appear. The pivot is in the label's own unscaled pixels, and scaling about it moves the corner,
+	# so `from` is shifted back by what the settled scale would move it.
+	var font_size := CRIT_FONT if crit else DAMAGE_FONT
+	label.pivot_offset = Vector2(width / _ui_scale, font_size) / 2.0
+	from += label.pivot_offset * (_ui_scale - 1.0)
 	label.position = from
+	label.scale = Vector2(_ui_scale, _ui_scale) * DAMAGE_POP_SCALE * (1.25 if crit else 1.0)
 	var float_up := create_tween()
 	float_up.set_parallel(true)
-	float_up.tween_property(label, "position", from + Vector2(0, -DAMAGE_RISE), DAMAGE_TIME)
+	float_up.tween_property(label, "scale", Vector2(_ui_scale, _ui_scale), DAMAGE_POP) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var drift := randf_range(-DAMAGE_DRIFT, DAMAGE_DRIFT)
+	float_up.tween_property(label, "position", from + Vector2(drift, -DAMAGE_RISE), DAMAGE_TIME) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	float_up.tween_property(label, "modulate:a", 0.0, DAMAGE_TIME).set_ease(Tween.EASE_IN)
 	float_up.chain().tween_callback(label.queue_free)
 
@@ -692,7 +757,11 @@ func _drop_origin() -> Vector2:
 ##
 ## `index` is which of a burst this is, so a rich body does not throw its whole purse as one lump;
 ## `spread` is how far to either side it may land and `rest` how long it lies there.
-func _throw(node: Node2D, index: int, from: Vector2, spread: float, rest: float) -> void:
+##
+## `collect` is called after the rest instead of the fade, for something that goes somewhere rather
+## than lying there -- the coins, which fly into the counter.
+func _throw(node: Node2D, index: int, from: Vector2, spread: float, rest: float,
+		collect := Callable()) -> void:
 	node.z_index = 1
 	node.scale = Vector2(_ui_scale, _ui_scale)
 	node.position = from
@@ -715,8 +784,30 @@ func _throw(node: Node2D, index: int, from: Vector2, spread: float, rest: float)
 	# It lies where it fell and then goes.
 	arc.chain().tween_interval(rest)
 	arc.set_parallel(false)
+	if collect.is_valid():
+		arc.tween_callback(collect.bind(node))
+		return
 	arc.tween_property(node, "modulate:a", 0.0, THROW_FADE)
 	arc.tween_callback(node.queue_free)
+
+
+## A coin that has lain its moment flies into the loot counter, gathering speed and shrinking, and
+## the counter flashes as it lands.
+func _collect_coin(coin: Node2D) -> void:
+	var into := _loot_button.position + _loot_button.size * _ui_scale / 2.0
+	var fly := create_tween()
+	fly.set_parallel(true)
+	fly.tween_property(coin, "position", into, COIN_FLY).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	fly.tween_property(coin, "scale", coin.scale * 0.5, COIN_FLY)
+	fly.chain().tween_callback(coin.queue_free)
+	fly.tween_callback(_bump_counter)
+
+
+## A brightening rather than a swell: `_place_corners` pins the counter by its top-left corner every
+## frame, and scaling it about its middle would walk it off the corner.
+func _bump_counter() -> void:
+	_loot_button.modulate = BUMP_FLASH
+	create_tween().tween_property(_loot_button, "modulate", Color.WHITE, HIT_TIME * 2.0)
 
 
 ## The purse coming off a body, as coins thrown out of it. `Coins.count_for` decides how many, so a
@@ -728,7 +819,7 @@ func _show_coins(amount: int) -> void:
 		var coin := AnimatedSprite2D.new()
 		coin.sprite_frames = Coins.frames()
 		coin.play("spin")
-		_throw(coin, i, from, THROW_SPREAD, COIN_REST)
+		_throw(coin, i, from, THROW_SPREAD, COIN_REST, _collect_coin)
 
 
 ## A body's experience, as gems that pop out of it and fly into the character panel. As many as a
@@ -837,7 +928,11 @@ func _on_enemy_coming(_index: int, enemy_name: String, _hp: int) -> void:
 	_enemy.show()
 	var band: float = SIZE_HEIGHT[EnemyRoster.size_of(enemy_name)]
 	var elite := ELITE_SCALE if fight.on_elite() else 1.0
+	if _enemy_hit != null and _enemy_hit.is_valid():
+		_enemy_hit.kill()
+	_enemy.modulate = Color.WHITE
 	_enemy.setup_enemy(enemy_name, view.y * ACTOR_HEIGHT * band * elite)
+	_enemy_scale = _enemy.scale
 	_enemy.position = Vector2(view.x * OFFSCREEN_X, view.y * GROUND)
 	_enemy.play("walk")
 	_slide_enemy()
@@ -895,8 +990,22 @@ func _on_enemy_hit(hp_left: int) -> void:
 		_enemy.play_once("hurt")
 
 
-func _on_enemy_died(_index: int) -> void:
+## A body going down: it bursts in its own colour, and the game holds its breath for a moment --
+## longer, and with the arena rattling, the bigger the thing that fell.
+func _on_enemy_died(index: int) -> void:
 	_enemy.play_once("death")
+	var burst := Juice.burst(self, _drop_origin(), _enemy.tint(), DEATH_PIXELS, 220.0,
+			3.0 * _ui_scale, 0.6, 500.0)
+	burst.z_index = 1
+	match Encounter.tier_in(fight, index):
+		EnemyRoster.Tier.BOSS:
+			Juice.shake(_arena, SHAKE_BOSS, 0.4)
+			Juice.hit_stop(get_tree(), STOP_BOSS)
+		EnemyRoster.Tier.ELITE:
+			Juice.shake(_arena, SHAKE_ELITE, 0.3)
+			Juice.hit_stop(get_tree(), STOP_ELITE)
+		_:
+			Juice.hit_stop(get_tree(), STOP_KILL)
 
 
 ## The one place a find is looked at. A level the player is done with is counted and passed on to
@@ -921,6 +1030,9 @@ func _on_loot_dropped(index: int, item: Item) -> void:
 	# square's border colour was picked for.
 	_show_find(item.icon(), Color.TRANSPARENT if item.rarity == ItemRarity.Rarity.COMMON
 			else ItemRarity.BORDER_COLORS[item.rarity])
+	# The best finds slow the fight, so the beam coming up is watched rather than glimpsed.
+	if item.rarity >= ItemRarity.Rarity.ELITE:
+		Juice.hit_stop(get_tree(), STOP_RARE, STOP_RARE_SPEED)
 	loot_kept.emit(index, item)
 
 

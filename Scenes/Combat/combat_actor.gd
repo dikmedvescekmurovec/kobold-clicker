@@ -142,6 +142,27 @@ func drawn_size() -> Vector2:
 	return Vector2(standing.size) * scale.x
 
 
+## The body's own colour, roughly: the mean of the solid pixels of its first idle frame, lightened a
+## touch because a mean is muddier than any pixel it came from. What a death bursts in.
+func tint() -> Color:
+	var image := sprite_frames.get_frame_texture("idle", 0).get_image() if sprite_frames != null else null
+	if image == null or image.is_empty():
+		return Palette.BONE
+	if image.is_compressed():
+		image.decompress()
+	var sum := Color(0, 0, 0, 0)
+	var solid := 0
+	for y in range(0, image.get_height(), 2):
+		for x in range(0, image.get_width(), 2):
+			var pixel := image.get_pixel(x, y)
+			if pixel.a > 0.5:
+				sum += pixel
+				solid += 1
+	if solid == 0:
+		return Palette.BONE
+	return Color(sum.r / solid, sum.g / solid, sum.b / solid).lightened(0.2)
+
+
 ## The part of a frame an idle sprite fills, across the animation. Uses Image.get_used_rect, which is
 ## native, so reading a sheet to measure it costs little.
 func _standing_rect(sheet: Texture2D, frame: Vector2i, count: int) -> Rect2i:

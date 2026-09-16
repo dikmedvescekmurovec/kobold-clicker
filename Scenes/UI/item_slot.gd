@@ -23,6 +23,7 @@ const SIDE := 40
 const ICON := 32
 ## How solid an empty socket's mark is drawn. Faint enough to read as nothing being there.
 const EMPTY_MARK_ALPHA := 0.35
+const SHINE := preload("res://Scenes/UI/shine.gdshader")
 
 
 func setup(item: Item, selected := false, translucent := false) -> void:
@@ -37,6 +38,12 @@ func setup(item: Item, selected := false, translucent := false) -> void:
 	# Centred by hand: the square is fixed and the icon is fixed, so there is nothing for a container
 	# to work out.
 	icon.position = Vector2(SIDE - ICON, SIDE - ICON) / 2.0
+	# Rare and better glint now and then, so the good pieces catch the eye across the bag.
+	if item.rarity >= ItemRarity.Rarity.RARE:
+		var shine := ShaderMaterial.new()
+		shine.shader = SHINE
+		shine.set_shader_parameter("side", float(ICON))
+		icon.material = shine
 	add_child(icon)
 
 

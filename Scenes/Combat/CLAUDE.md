@@ -14,6 +14,8 @@ A tile already taken can be **farmed** instead (`MapBuilder.can_farm`, the Farm 
 
 `EnemyRoster` lives in `Scenes/Enemies/`, documented there.
 
+**Game feel** (`CombatScene`, through `Juice`): every landed blow flashes and squashes the enemy (`_jolt_enemy`, springing back to `_enemy_scale`), a crit shakes `_arena` (the backdrop is drawn `BACKDROP_BLEED` oversize so no edge shows), a death bursts in `CombatActor.tint()` and freezes the game by tier (`STOP_*`, boss and elite also shake), and an elite-or-better find slows the fight so its beam is watched. Damage numbers pop in about their middle and drift. Coins rest `COIN_REST` then fly into the loot counter, which brightens (a scale bump would walk it off the corner `_place_corners` pins). `HealthBar` leaves a pale ghost of each blow that holds and drains.
+
 ## Rules and gotchas
 - **An endless run has no clock and no loss:** `Encounter.advance` does not touch `time_left` while `endless`, so the only two ways a run finishes are `stop()` and `give_up()`. Anything reading `time_left`, `remaining()` or `enemies` to decide something has to ask `endless` first -- the lineup grows, so `lineup.size()` is the only honest end of it. The one thing a run does keep off its tile is `elite_every`, which is the whole of its rhythm.
 - **Loot belongs to the attempt, not the tile:** a tile's enemies are seeded from its cell, so the same tile always fields the same fight, but `Encounter.loot_rng` is left unseeded (a `RandomNumberGenerator` seeds itself, so there is no `randomize()` to add) and re-fighting a tile can turn up something else. Tests set the seed themselves.

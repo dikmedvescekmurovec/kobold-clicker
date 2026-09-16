@@ -41,6 +41,11 @@ const TROUGH := 2 + 4 * SEGMENTS
 ## The red the trough empties in. Defined here rather than on CombatScene because this is the bar it
 ## belongs to; the fight borrows it back for the crit numbers and for the end of the clock's ramp.
 const FILL := Color("c4453a")
+## What a blow took off, left standing in a pale bar behind the red for GHOST_HOLD seconds and then
+## drained away at GHOST_SPEED channel pixels a second -- so how big a hit was is read off the bar.
+const GHOST := Color("f2d7a6")
+const GHOST_HOLD := 0.25
+const GHOST_SPEED := 60.0
 
 ## The three parts, each in the three tier colourways, keyed by tier so "which frame is which tier"
 ## is stated once. There is no empty colourway, unlike the pips: a bar with nothing standing behind
@@ -66,6 +71,13 @@ var _cap_l: TextureRect
 var _cap_r: TextureRect
 var _tracks: Array[TextureRect] = []
 var _fill: ColorRect
+var _ghost: ColorRect
+## How many channel pixels the ghost covers, kept fractional so it drains smoothly, and how long it
+## still holds before it starts to.
+var _ghost_pixels := 0.0
+var _ghost_wait := 0.0
+## The red's width last drawn, in channel pixels.
+var _shown := 0
 ## What is drawn now, so the textures are only swapped when the tier actually changes. -1 is "nothing
 ## yet", which is what makes the first `show_health` do the work.
 var _tier := -1
@@ -83,6 +95,11 @@ func _init() -> void:
 	for _i in SEGMENTS:
 		_tracks.append(_part(row, TRACK[EnemyRoster.Tier.COMMON]))
 	_cap_r = _part(row, CAP_R[EnemyRoster.Tier.COMMON])
+
+	_ghost = ColorRect.new()
+	_ghost.color = GHOST
+	_ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_ghost)
 
 	_fill = ColorRect.new()
 	_fill.color = FILL
@@ -140,6 +157,32 @@ func show_health(tier: EnemyRoster.Tier, share: float) -> void:
 	if pixels == 0 and share > 0.0:
 		pixels = 1
 	_fill.size = Vector2(pixels * PIXEL, CHANNEL_HEIGHT * PIXEL)
+	_ghost.position = _fill.position
+	# A bar that grew is a new body walking in: the ghost starts where it does. One that shrank has
+	# been hit, and the ghost holds where it was before it follows -- but only a ghost that had caught
+	# up starts a hold. One already holding or draining carries on, so a steady stream of blows cannot
+	# keep it pinned.
+	if pixels > _ghost_pixels:
+		_ghost_pixels = pixels
+	elif pixels < _shown and _ghost_pixels <= _shown:
+		_ghost_wait = GHOST_HOLD
+	_shown = pixels
+	_draw_ghost()
+
+
+func _process(delta: float) -> void:
+	if _ghost_pixels <= _shown:
+		return
+	if _ghost_wait > 0.0:
+		_ghost_wait -= delta
+		return
+	_ghost_pixels = maxf(_ghost_pixels - GHOST_SPEED * delta, _shown)
+	_draw_ghost()
+
+
+## Snapped to whole sprite pixels, like the red in front of it.
+func _draw_ghost() -> void:
+	_ghost.size = Vector2(roundi(_ghost_pixels) * PIXEL, CHANNEL_HEIGHT * PIXEL)
 
 
 ## How wide a tier's bar comes out, in panel pixels. The HUD has no use for it, but the caller that

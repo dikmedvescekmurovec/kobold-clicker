@@ -100,6 +100,12 @@ var view: MapBuilder
 ## Everything the player has picked up, loaded from `inventory_path` and written back as it grows.
 var inventory: Inventory
 
+## The level-up fanfare: how bright the screen flashes, how long the words hang and how big they
+## arrive before settling at LEVEL_UP_FONT, which is a whole multiple of Pixellari's 16.
+const LEVEL_UP_FLASH := Color(1.0, 0.95, 0.75, 0.35)
+const LEVEL_UP_TIME := 1.6
+const LEVEL_UP_FONT := 48
+
 @onready var map: HexMap = $HexMap
 @onready var camera: Camera2D = $Camera2D
 
@@ -206,6 +212,8 @@ var _tip_queue: Array = []
 var _tip_panel: VBoxContainer
 ## Pulses on corner buttons that have not been pressed yet: the pressed-once id -> its tween.
 var _flashes := {}
+## The weather and the day over the map.
+var _ambient: Ambient
 
 
 func _ready() -> void:
@@ -240,6 +248,11 @@ func _ready() -> void:
 	_build_ui()
 	camera.zoom = Vector2(zoom, zoom)
 	camera.position = map.ground_layer.map_to_local(view.player_cell)
+	# A child of the map, so it hides and stops with it while a fight is on.
+	_ambient = Ambient.new()
+	map.add_child(_ambient)
+	_ambient.setup(camera)
+	_update_weather()
 	# The world is decided the moment it is generated, so it is written down then: a first run
 	# killed before the player moves would otherwise come back as somewhere else entirely.
 	_save_map()
@@ -878,6 +891,45 @@ func _refresh_gold() -> void:
 	_bag_gold.text = str(inventory.gold)
 
 
+## The weather for wherever the player now stands.
+func _update_weather() -> void:
+	var ground := map.ground_layer.get_cell_tile_data(view.player_cell)
+	_ambient.set_env(ground.get_custom_data("env") if ground != null else "")
+
+
+## A level gained: the screen flashes warm, the words pop up over the middle and float away. On the
+## character panel's layer, so it stands over a fight as well as the map.
+func _celebrate_level(level: int) -> void:
+	var layer := _character.get_parent()
+	var flash := ColorRect.new()
+	flash.color = LEVEL_UP_FLASH
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(flash)
+	var label := Label.new()
+	label.theme = UITheme.theme()
+	label.theme_type_variation = "PanelLabel"
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.text = "Level %d!" % level
+	label.add_theme_font_size_override("font_size", LEVEL_UP_FONT)
+	label.add_theme_color_override("font_color", Palette.GOLD)
+	label.add_theme_constant_override("outline_size", 8)
+	label.add_theme_color_override("font_outline_color", Palette.INK)
+	layer.add_child(label)
+	var view_size := get_viewport_rect().size
+	var text := label.get_combined_minimum_size()
+	label.pivot_offset = text / 2.0
+	label.position = (view_size - text) / 2.0 - Vector2(0, view_size.y * 0.15)
+	label.scale = Vector2.ONE * 3.0
+	var tween := create_tween().set_parallel(true)
+	tween.tween_property(flash, "modulate:a", 0.0, 0.5)
+	tween.tween_property(label, "scale", Vector2.ONE * 2.0, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "position:y", label.position.y - 30.0, LEVEL_UP_TIME)
+	tween.tween_property(label, "modulate:a", 0.0, 0.4).set_delay(LEVEL_UP_TIME - 0.4)
+	tween.chain().tween_callback(flash.queue_free)
+	tween.tween_callback(label.queue_free)
+
+
 ## The piece the bag currently has open, or null when it is showing the grid. The one place that
 ## knows a stat block can be a bag item *or* a worn one, so everything that asks "what is open"
 ## gets the same answer.
@@ -1478,6 +1530,7 @@ func _on_move_pressed() -> void:
 ## progress rather than the session.
 func _on_player_arrived(cell: Vector2i) -> void:
 	print("Arrived at %s" % cell)
+	_update_weather()
 	_save_map()
 	_update_buttons()
 	if _chart_target != HexMap.NO_CELL:
@@ -1550,6 +1603,8 @@ func _on_xp_gained(amount: int) -> void:
 ## The gems of one body have landed in the bar.
 func _on_xp_absorbed(amount: int) -> void:
 	var gained := _character.absorb(amount)
+	if gained > 0:
+		_celebrate_level(_character.level)
 	if gained > 0 and _farming:
 		print("Level up: %d (banked when the run ends)" % _character.level)
 
