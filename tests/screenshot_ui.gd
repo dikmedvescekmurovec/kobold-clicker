@@ -195,12 +195,12 @@ func _shoot_skills() -> void:
 	root.add_child(main)
 	for i in 3:
 		await process_frame
-	main.inventory.level = 14
+	main.inventory.level = 17
 	main.inventory.gold = 900
 	main.inventory.skills = Skills.new()
 	for id in ["sharpened_edge", "sharpened_edge", "sharpened_edge", "sharpened_edge", "sharpened_edge",
-			"keen_eye", "battle_rhythm", "might", "might", "titan",
-			"scavenger", "scavenger", "appraiser"]:
+			"keen_eye", "keen_eye", "keen_eye", "battle_rhythm", "might", "might", "quick_hands", "titan",
+			"scavenger", "scavenger", "scavenger"]:
 		main.inventory.skills.rank_up(id, main.inventory.level)
 	main._on_skills_pressed()
 	for i in 2:

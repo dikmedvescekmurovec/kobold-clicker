@@ -21,6 +21,7 @@ func _run() -> void:
 	_check(_test_hits_only_land_on_a_waiting_enemy() == true, "hit timing tests ran to the end")
 	_check(_test_what_a_hit_is_worth() == true, "damage tests ran to the end")
 	_check(_test_the_weapon_swings_itself() == true, "attack speed tests ran to the end")
+	_check(_test_capstone_effects() == true, "capstone effect tests ran to the end")
 	_check(_test_backdrops() == true, "backdrop tests ran to the end")
 	_check(_test_backdrop_layouts() == true, "backdrop layout tests ran to the end")
 	_check(_test_a_farm_run_never_ends() == true, "farm run tests ran to the end")
@@ -156,6 +157,83 @@ func _test_the_weapon_swings_itself() -> bool:
 	for i in int(Encounter.SECONDS / 0.05):
 		idle.advance(0.05)
 	_check(idle.finished and idle.victory, "a fast weapon wins the first ring on its own")
+	return true
+
+
+## The last row of each skill tree changes the fight rather than a number.
+func _test_capstone_effects() -> bool:
+	var cell := Vector2i(12, 0)
+	# Execute: a blow that leaves a sliver finishes the body.
+	var exe := Encounter.for_tile(cell, "grass")
+	exe.effects = ["execute"]
+	exe.start()
+	exe.advance(Encounter.WALK_IN)
+	exe.arm({"damage": float(exe.hp - int(exe.enemy_max_hp() * 0.05) - Encounter.BARE_DAMAGE)})
+	exe.hit()
+	_check(exe.phase == Encounter.Phase.DYING, "Execute kills under a tenth (%d left)" % exe.hp)
+
+	# Cleave: what a kill does past the body comes off the next one.
+	var cleave := Encounter.for_tile(cell, "grass")
+	cleave.effects = ["cleave"]
+	cleave.start()
+	cleave.advance(Encounter.WALK_IN)
+	cleave.arm({"damage": float(cleave.hp + 2 - Encounter.BARE_DAMAGE)})
+	cleave.hit()
+	cleave.advance(Encounter.DEATH)
+	_check(cleave.hp == maxi(1, cleave.health[1] - 2), "Cleave carries 2 into the next (%d of %d)"
+			% [cleave.hp, cleave.health[1]])
+
+	# Giant Slayer: an elite takes twice the blow, a common does not.
+	var slayer := Encounter.for_tile(cell, "grass")
+	slayer.effects = ["giant_slayer"]
+	slayer.arm({"damage": 0.0})
+	slayer.start()
+	slayer.advance(Encounter.WALK_IN)
+	var before := slayer.hp
+	slayer.hit()
+	_check(slayer.hp == before - 1, "a common takes one")
+	slayer.index = slayer.enemies - 1
+	slayer.hp = slayer.health[slayer.index]
+	before = slayer.hp
+	slayer.hit()
+	_check(slayer.on_elite() and slayer.hp == before - 2, "the elite takes two")
+
+	# Trophy: the elite always leaves something, with no drop rate at all.
+	var drops := [0]
+	for i in 20:
+		var trophy := Encounter.for_tile(cell, "grass")
+		trophy.effects = ["trophy"]
+		trophy.loot_rng.seed = WORLD_SEED + i
+		trophy.index = trophy.enemies - 1
+		trophy.hp = 1
+		trophy.phase = Encounter.Phase.WAITING
+		trophy.loot_dropped.connect(func(_i: int, _item: Item) -> void: drops[0] += 1)
+		trophy.hit()
+	_check(drops[0] == 20, "Trophy makes every elite drop (%d of 20)" % drops[0])
+
+	# Jackpot and Transmute: over many kills, some purses are fivefold and some orbs come in pairs.
+	var gold := {"plain": 0, "lucky": 0}
+	var orbs := {"plain": 0, "lucky": 0}
+	for kind: String in gold:
+		var run := Encounter.farm(cell, "grass")
+		run.always_orb = true
+		run.arm({"damage": 100000.0})
+		if kind == "lucky":
+			run.effects = ["jackpot", "transmute"]
+		run.loot_rng.seed = WORLD_SEED
+		run.orb_rng.seed = WORLD_SEED
+		run.start()
+		for i in 400:
+			run.advance(Encounter.WALK_IN)
+			run.hit()
+			run.advance(Encounter.DEATH)
+		gold[kind] = run.gold
+		var total := 0
+		for orb: String in run.orbs:
+			total += int(run.orbs[orb])
+		orbs[kind] = total
+	_check(gold["lucky"] > gold["plain"] * 1.2, "Jackpot fills purses (%s)" % [gold])
+	_check(orbs["plain"] == 400 and orbs["lucky"] > 450, "Transmute doubles some orbs (%s)" % [orbs])
 	return true
 
 

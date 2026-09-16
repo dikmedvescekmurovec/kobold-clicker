@@ -237,6 +237,12 @@ var always_drop := false
 ## about crafting wants orbs and no gear, and a test about the pouch wants gear and no orbs.
 var always_orb := false
 
+## The capstone skills the player has learned, by effect id (`Skills.effects()`): the things a skill
+## changes about a fight rather than a number. A fight nobody tells has none.
+var effects: Array = []
+## What the last killing blow did past the body's health, which Cleave carries into the next one.
+var _overkill := 0
+
 
 ## The profile for an area variant, falling back to the ordinary fight: a variant this build has no
 ## entry for is open land as far as the fight is concerned, which is what the backdrop does too.
@@ -433,20 +439,28 @@ func _strike(automatic: bool) -> bool:
 	# Crit damage is what a crit adds, not what it multiplies to: 50 means half again, the way Path
 	# of Exile's crit multiplier reads once you take its base 100 off.
 	var dealt := maxi(1, roundi(damage * (1.0 + crit_damage / 100.0))) if crit else damage
+	var big := EnemyRoster.tier_of(lineup[index]) != EnemyRoster.Tier.COMMON
+	if big and "giant_slayer" in effects:
+		dealt *= 2
 	hp -= dealt
+	# Execute takes what is left once it is a sliver, so the last hits of a big body are not wasted.
+	if hp > 0 and "execute" in effects and hp < enemy_max_hp() * 0.1:
+		hp = 0
 	hit_landed.emit(dealt, crit, automatic)
 	enemy_hit.emit(hp)
 	if hp <= 0:
 		phase = Phase.DYING
 		phase_left = DEATH
 		_swing = 0.0
+		_overkill = -hp if "cleave" in effects else 0
 		enemy_died.emit(index)
 		# The only path to a death, which is why drops survive a loss for free: nothing is rolled
 		# when the clock runs out.
 		# The tile's level is the ceiling on what can fall here, not what falls -- the drop rolls its
 		# own level under it, so fighting deeper improves the odds rather than the prize.
 		var dropped := LootTable.roll(lineup[index], loot_rng,
-				always_drop or (guarantee_elite and on_elite()), MapBuilder.level_of(cell),
+				always_drop or (guarantee_elite and on_elite()) or (big and "trophy" in effects),
+				MapBuilder.level_of(cell),
 				drop_rate, item_rarity)
 		if dropped != null:
 			loot_dropped.emit(index, dropped)
@@ -455,6 +469,9 @@ func _strike(automatic: bool) -> bool:
 		# Gold find lifts the purse here rather than inside `gold_of`, which is what the body is worth
 		# and is read by things that have no player in them.
 		var purse := maxi(1, roundi(gold_of(lineup[index], cell) * (1.0 + gold_find / 100.0)))
+		# Drawn only while Jackpot is learned, so a player without it rolls loot exactly as before.
+		if "jackpot" in effects and loot_rng.randf() < 0.1:
+			purse *= 5
 		gold += purse
 		gold_dropped.emit(index, purse)
 		var worth := xp_of(lineup[index], cell)
@@ -465,8 +482,10 @@ func _strike(automatic: bool) -> bool:
 		# independent numbers rather than one number split.
 		var orb := OrbTable.roll(lineup[index], orb_rng, always_orb, orb_find)
 		if not orb.is_empty():
-			orbs[orb] = int(orbs.get(orb, 0)) + 1
-			orb_dropped.emit(index, orb)
+			var count := 2 if "transmute" in effects and orb_rng.randf() < 0.25 else 1
+			for i in count:
+				orbs[orb] = int(orbs.get(orb, 0)) + 1
+				orb_dropped.emit(index, orb)
 	return true
 
 
@@ -527,7 +546,8 @@ func _advance_phase() -> void:
 			return
 		# The next one is decided the moment the last one falls, so a run never runs dry.
 		_append_enemy(roster_rng)
-	hp = health[index]
+	hp = maxi(1, health[index] - _overkill)
+	_overkill = 0
 	phase = Phase.WALKING_IN
 	phase_left = WALK_IN
 	enemy_coming.emit(index, lineup[index], hp)

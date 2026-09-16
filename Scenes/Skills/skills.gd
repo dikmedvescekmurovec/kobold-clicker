@@ -69,6 +69,15 @@ func percent() -> Dictionary:
 	return _sum("percent")
 
 
+## The effects of every learned skill that has one, for `Encounter.effects`.
+func effects() -> Array:
+	var out := []
+	for id: String in ranks:
+		if SkillTree.node(id).has("effect"):
+			out.append(SkillTree.node(id)["effect"])
+	return out
+
+
 func _sum(kind: String) -> Dictionary:
 	var out := {}
 	for id: String in ranks:

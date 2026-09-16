@@ -30,6 +30,8 @@ func fill(id: String, skills: Skills, level: int) -> void:
 	var most := int(entry["max_rank"])
 	_rows.add_child(ItemDetails.line(str(entry["name"]), Palette.BONE, WIDTH))
 	_rows.add_child(ItemDetails.line("Per point: " + SkillTree.describe(id), Palette.PANEL_CREAM, WIDTH))
+	if entry.has("effect_text"):
+		_rows.add_child(ItemDetails.line(str(entry["effect_text"]), Palette.GOLD, WIDTH))
 	if rank > 0:
 		_rows.add_child(ItemDetails.line("Now: " + SkillTree.describe(id, rank), Palette.LEAF_LT, WIDTH))
 	var refusal := skills.why_not(id, level)

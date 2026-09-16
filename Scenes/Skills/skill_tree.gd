@@ -25,11 +25,16 @@ extends RefCounted
 const RESPEC_GOLD := 5.0
 const RESPEC_GROWTH := 1.12
 
+## Points a tree must already hold per row down before that row opens: the capstones need twelve.
+const POINTS_PER_ROW := 3
+
 const ICON_ROOT := "res://Assets/Skills/"
 
 ## tree id -> what it is called, the locked mark it wears, and its skills. Each skill: its name, the
 ## skills that lead to it, how many points it holds, where it stands (row down, column across, on a
-## three-column grid), and per point what it adds flat and what it increases by percent.
+## three-column grid), and per point what it adds flat and what it increases by percent. The last row
+## also carries an `effect`, which changes how a fight plays rather than a number -- `Encounter` reads
+## it -- and the `effect_text` that says so.
 const TREES := {
 	"power": {
 		"label": "Power",
@@ -50,11 +55,14 @@ const TREES := {
 			"might": {"name": "Might", "parents": ["battle_rhythm"], "max_rank": 2, "row": 3, "col": 2,
 				"flat": {"damage": 1}, "percent": {}},
 			"assassin": {"name": "Assassin", "parents": ["deadly_strikes"], "max_rank": 1, "row": 4, "col": 0,
-				"flat": {}, "percent": {"crit_damage": 15, "crit_chance": 5}},
+				"flat": {}, "percent": {"crit_damage": 15, "crit_chance": 5},
+				"effect": "execute", "effect_text": "Execute: a blow that leaves an enemy under 10% health kills it"},
 			"whirlwind": {"name": "Whirlwind", "parents": ["flurry"], "max_rank": 1, "row": 4, "col": 1,
-				"flat": {}, "percent": {"attack_speed": 10, "damage": 5}},
+				"flat": {}, "percent": {"attack_speed": 10, "damage": 5},
+				"effect": "cleave", "effect_text": "Cleave: damage past a kill carries into the next enemy"},
 			"titan": {"name": "Titan", "parents": ["might"], "max_rank": 1, "row": 4, "col": 2,
-				"flat": {"damage": 2}, "percent": {"damage": 15}},
+				"flat": {"damage": 2}, "percent": {"damage": 15},
+				"effect": "giant_slayer", "effect_text": "Giant Slayer: double damage against elites and bosses"},
 		},
 	},
 	"fortune": {
@@ -76,11 +84,14 @@ const TREES := {
 			"orb_seeker": {"name": "Orb Seeker", "parents": ["fortunes_favour"], "max_rank": 2,
 				"row": 3, "col": 2, "flat": {"orb_find": 10}, "percent": {}},
 			"collector": {"name": "Collector", "parents": ["treasure_hunter"], "max_rank": 1, "row": 4, "col": 0,
-				"flat": {"drop_rate": 15, "item_rarity": 15}, "percent": {}},
+				"flat": {"drop_rate": 15, "item_rarity": 15}, "percent": {},
+				"effect": "trophy", "effect_text": "Trophy: every elite and boss drops an item"},
 			"midas": {"name": "Midas", "parents": ["greed"], "max_rank": 1, "row": 4, "col": 1,
-				"flat": {"gold_find": 30, "drop_rate": 5}, "percent": {}},
+				"flat": {"gold_find": 30, "drop_rate": 5}, "percent": {},
+				"effect": "jackpot", "effect_text": "Jackpot: one purse in ten is five times fuller"},
 			"alchemist": {"name": "Alchemist", "parents": ["orb_seeker"], "max_rank": 1, "row": 4, "col": 2,
-				"flat": {"orb_find": 25, "item_rarity": 10}, "percent": {}},
+				"flat": {"orb_find": 25, "item_rarity": 10}, "percent": {},
+				"effect": "transmute", "effect_text": "Transmute: an orb that falls has a one in four chance to fall twice"},
 		},
 	},
 }
@@ -132,8 +143,13 @@ static func locked_icon(tree: String) -> Texture2D:
 	return icon(TREES[tree]["locked"])
 
 
-## Whether a skill can be reached at all: the root always, anything else once a parent has a point.
+## Whether a skill can be reached at all: its row's worth of points in the tree, and the root always,
+## anything else once a parent has a point.
 static func is_open(id: String, ranks: Dictionary) -> bool:
+	return has_parent(id, ranks) and points_in(tree_of(id), ranks) >= points_for_row(id)
+
+
+static func has_parent(id: String, ranks: Dictionary) -> bool:
 	var parents: Array = node(id)["parents"]
 	if parents.is_empty():
 		return true
@@ -141,6 +157,20 @@ static func is_open(id: String, ranks: Dictionary) -> bool:
 		if int(ranks.get(parent, 0)) > 0:
 			return true
 	return false
+
+
+## Points a tree needs spent before a skill on `id`'s row opens: POINTS_PER_ROW a row down. A learned
+## skill never shuts again, because a tree's points only grow until a reset takes them all.
+static func points_for_row(id: String) -> int:
+	return POINTS_PER_ROW * int(node(id)["row"])
+
+
+static func points_in(tree: String, ranks: Dictionary) -> int:
+	var total := 0
+	for id: String in ranks:
+		if nodes_of(tree).has(id):
+			total += int(ranks[id])
+	return total
 
 
 ## Whether one more point can go into `id`, given what is learned and how many points are free.
@@ -157,11 +187,13 @@ static func why_not(id: String, ranks: Dictionary, free_points: int) -> String:
 		return "No such skill"
 	if int(ranks.get(id, 0)) >= int(entry["max_rank"]):
 		return "Fully learned"
-	if not is_open(id, ranks):
+	if not has_parent(id, ranks):
 		var names := PackedStringArray()
 		for parent: String in entry["parents"]:
 			names.append(node(parent)["name"])
 		return "Needs a point in %s" % " or ".join(names)
+	if not is_open(id, ranks):
+		return "Needs %d points in %s" % [points_for_row(id), TREES[tree_of(id)]["label"]]
 	if free_points <= 0:
 		return "No skill points left"
 	return ""

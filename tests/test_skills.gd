@@ -71,17 +71,34 @@ func _test_spending() -> bool:
 	_check(not skills.rank_up("keen_eye", 20), "a side skill is shut before its root")
 	_check(skills.why_not("keen_eye", 20).begins_with("Needs a point in"), "and it says what it needs")
 	_check(skills.rank_up("sharpened_edge", 20), "the root takes a point")
-	_check(skills.rank_up("keen_eye", 20), "which opens the side skill")
+	_check(skills.why_not("keen_eye", 20) == "Needs 3 points in Power",
+			"a row down wants three points in the tree (%s)" % skills.why_not("keen_eye", 20))
+	skills.rank_up("sharpened_edge", 20)
+	_check(not skills.rank_up("keen_eye", 20), "two is not enough")
+	skills.rank_up("sharpened_edge", 20)
+	_check(skills.rank_up("keen_eye", 20), "three opens the side skill")
 	# Either parent is enough for the skill in the middle.
 	_check(not SkillTree.is_open("quick_hands", {}), "the other side stays shut until its root is in")
+	_check(not skills.rank_up("battle_rhythm", 20), "the middle wants six")
+	skills.rank_up("sharpened_edge", 20)
+	skills.rank_up("sharpened_edge", 20)
 	_check(skills.rank_up("battle_rhythm", 20), "the middle opens off one side alone")
-	_check(skills.points(20) == 16, "three spent of nineteen")
-	for i in 4:
-		skills.rank_up("sharpened_edge", 20)
+	_check(skills.points(20) == 12, "seven spent of nineteen")
 	_check(skills.rank_of("sharpened_edge") == 5, "the root fills to five")
 	_check(not skills.rank_up("sharpened_edge", 20), "and no further")
 	_check(skills.why_not("sharpened_edge", 20) == "Fully learned", "which it says")
 	_check(skills.spent("power") == 7 and skills.spent("fortune") == 0, "spent is counted per tree")
+
+	# The capstone row wants twelve points in its tree before it.
+	for id in ["keen_eye", "keen_eye", "battle_rhythm", "might"]:
+		skills.rank_up(id, 20)
+	_check(skills.spent("power") == 11 and skills.rank_up("might", 20), "eleven, then a twelfth")
+	skills.ranks.erase("might")
+	skills.ranks["deadly_strikes"] = 1
+	_check(not skills.rank_up("assassin", 20), "a capstone is shut at eleven")
+	skills.rank_up("deadly_strikes", 20)
+	_check(skills.rank_up("assassin", 20), "and open at twelve")
+	_check(skills.effects() == ["execute"], "a learned capstone is an effect (%s)" % [skills.effects()])
 
 	# A level-3 player has two points: the third is refused wherever it is aimed.
 	var poor := Skills.new()
@@ -164,12 +181,14 @@ func _test_save() -> bool:
 	var inventory := Inventory.new()
 	inventory.level = 12
 	inventory.skills.rank_up("scavenger", 12)
+	inventory.skills.rank_up("scavenger", 12)
+	inventory.skills.rank_up("scavenger", 12)
 	inventory.skills.rank_up("appraiser", 12)
 	inventory.skills.rank_up("appraiser", 12)
 	_check(inventory.save(TEST_PATH), "saved")
 	var back := Inventory.load_from(TEST_PATH)
 	_check(back.skills.ranks == inventory.skills.ranks, "the skills come back as they were")
-	_check(back.skills.points(back.level) == 8, "with the same points free")
+	_check(back.skills.points(back.level) == 6, "with the same points free")
 
 	# A version 8 save has no skills, and every level's point comes back to spend.
 	var file := FileAccess.open(TEST_PATH, FileAccess.WRITE)
@@ -184,6 +203,8 @@ func _test_save() -> bool:
 	# More spent than the level earned, or a point nothing leads to: all of it comes back.
 	_check(Skills.from_dict({"scavenger": 5}, 3).ranks.is_empty(), "overspending refunds everything")
 	_check(Skills.from_dict({"collector": 1}, 30).ranks.is_empty(), "an orphaned point refunds everything")
+	_check(Skills.from_dict({"sharpened_edge": 5, "keen_eye": 1, "battle_rhythm": 1, "might": 1,
+			"titan": 1}, 30).ranks.is_empty(), "a capstone held on too few points refunds everything")
 	_check(Skills.from_dict("nonsense", 30).ranks.is_empty(), "the wrong shape is nothing learned")
 	return true
 

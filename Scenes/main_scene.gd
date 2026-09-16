@@ -1353,6 +1353,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	fight.arm(inventory.stats())
 	# Until the player has seen their first drop, the first elite they meet is promised one.
 	fight.guarantee_elite = not inventory.first_elite_taken
+	fight.effects = inventory.skills.effects()
 	_farming = farming
 	_banked = false
 	_elite_dropped = false
