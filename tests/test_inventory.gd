@@ -43,6 +43,7 @@ func _run() -> void:
 	_check(_test_orb_tables() == true, "orb table tests ran to the end")
 	_check(_test_orb_verbs() == true, "orb verb tests ran to the end")
 	_check(_test_orb_saving() == true, "orb saving tests ran to the end")
+	_check(_test_player_level() == true, "player level tests ran to the end")
 	_check(_test_bag_order() == true, "bag order tests ran to the end")
 	_check(_test_capacity() == true, "capacity tests ran to the end")
 	_check(_test_autodiscard() == true, "autodiscard tests ran to the end")
@@ -95,6 +96,19 @@ func _test_items() -> bool:
 				reachable = reachable or (mod["kind"] == ModifierTable.Kind.FLAT
 						and mod["stat"] == stat)
 			_check(reachable, "%s can carry %s, but nothing flat rolls it" % [item, stat])
+		# And the same three questions of the globals: a stat with no label reaches the block as a
+		# bare key, a global on a base stat would say the same thing a PERCENT already says, and one
+		# no GLOBAL modifier names is a permission nothing can use.
+		for stat: String in LootTable.globals_of(item):
+			_check(LootTable.STAT_LABELS.has(stat), "%s has no label for global %s" % [item, stat])
+			_check(not stats.has(stat),
+					"%s scales %s globally and has it as a base stat" % [item, stat])
+			var has_global := false
+			for id: String in ModifierTable.MODS:
+				var mod: Dictionary = ModifierTable.MODS[id]
+				has_global = has_global or (mod["kind"] == ModifierTable.Kind.GLOBAL
+						and mod["stat"] == stat)
+			_check(has_global, "%s can scale %s globally, but nothing global rolls it" % [item, stat])
 	return true
 
 
@@ -160,8 +174,8 @@ func _test_totals() -> bool:
 	var two := Equipment.new()
 	two.equip(Equipment.Socket.RING_LEFT, Item.rolled("Gold Ring", ItemRarity.Rarity.COMMON, rng))
 	two.equip(Equipment.Socket.RING_RIGHT, Item.rolled("Gold Ring", ItemRarity.Rarity.COMMON, rng))
-	var one: float = float(LootTable.stats_of("Gold Ring")["fire_resist"])
-	_check(is_equal_approx(two.totals()["fire_resist"], one * 2.0), "two rings are worth two rings")
+	var one: float = float(LootTable.stats_of("Gold Ring")["drop_rate"])
+	_check(is_equal_approx(two.totals()["drop_rate"], one * 2.0), "two rings are worth two rings")
 
 	# Flat before percent, which is the only order that makes both modifiers worth having.
 	var rolled := Item.new()
@@ -178,6 +192,36 @@ func _test_totals() -> bool:
 	affixed.mods = [{"id": "added_strength", "value": 5}]
 	_check(not LootTable.has_stat("Wooden Sword", "strength"), "a sword has no strength of its own")
 	_check(is_equal_approx(affixed.effective_stats()["strength"], 5.0), "and carries it anyway")
+
+	# A global belongs to the set, not to the piece: the ring carrying it is worth no damage at all,
+	# and what it scales is the sword's. Two of them add before they scale, the way the panel reads.
+	var worn := Equipment.new()
+	var blade := Item.new()
+	blade.type = "Wooden Sword"
+	blade.stats = Item.scaled_stats("Wooden Sword", 1)
+	var ring := Item.new()
+	ring.type = "Gold Ring"
+	ring.stats = Item.scaled_stats("Gold Ring", 1)
+	ring.mods = [{"id": "global_increased_damage", "value": 20}]
+	_check(not ring.effective_stats().has("damage"), "a ring with increased damage has no damage")
+	_check(is_equal_approx(float(ring.global_percents()["damage"]), 20.0), "it asks it of the set")
+	worn.equip(Equipment.Socket.WEAPON, blade)
+	worn.equip(Equipment.Socket.RING_LEFT, ring)
+	var blade_damage: float = float(blade.effective_stats()["damage"])
+	_check(is_equal_approx(worn.totals()["damage"], blade_damage * 1.2),
+			"and the sword is what it scales")
+	var other := Item.new()
+	other.type = "Gold Ring"
+	other.stats = Item.scaled_stats("Gold Ring", 1)
+	other.mods = [{"id": "global_increased_damage", "value": 30}]
+	worn.equip(Equipment.Socket.RING_RIGHT, other)
+	_check(is_equal_approx(worn.totals()["damage"], blade_damage * 1.5),
+			"two globals add rather than compound")
+	# A global with nothing to scale scales nothing, rather than conjuring a stat out of a percentage.
+	var bare := Equipment.new()
+	bare.equip(Equipment.Socket.RING_LEFT, ring)
+	_check(is_equal_approx(float(bare.totals().get("damage", 0.0)), 0.0),
+			"increased damage is worth nothing bare-handed")
 	return true
 
 
@@ -228,7 +272,9 @@ func _test_wearing() -> bool:
 ## you hold. Pinned here so a later widening of the tables cannot quietly undo the design.
 func _test_slot_locks() -> bool:
 	var locked := {
-		"damage": ["Wooden Sword"],
+		# Base damage is still the sword's, but the jewellery carries damage as an affix now -- what
+		# is locked is where a click's damage *comes from*, not everything that can add to it.
+		"damage": ["Wooden Sword", "Gold Ring", "Ruby Amulet"],
 		"move_speed": ["Leather Boot"],
 		"block_chance": ["Wooden Shield", "Wooden Torch"],
 	}
@@ -250,6 +296,18 @@ func _test_chances() -> bool:
 	for name in EnemyRoster.names():
 		var chance := LootTable.chance_for(name)
 		_check(chance > 0.0 and chance <= 1.0, "%s drops with a real chance, not %f" % [name, chance])
+	# What the player is wearing lifts it, and the ceiling still holds: +100% drop rate is twice as
+	# much gear, and no amount of it makes a body drop more often than always.
+	for name in EnemyRoster.names():
+		var plain := LootTable.chance_for(name)
+		var doubled := LootTable.chance_for(name, 100.0)
+		_check(is_equal_approx(doubled, minf(plain * 2.0, 1.0)),
+				"%s drops twice as often at +100%% drop rate" % name)
+		_check(doubled <= 1.0, "%s cannot drop more often than always" % name)
+		_check(is_equal_approx(LootTable.chance_for(name, 0.0), plain), "and nothing is nothing")
+	_check(is_equal_approx(LootTable.chance_for("Grass Slime", 900.0),
+			minf(LootTable.chance_for("Grass Slime") * 10.0, 1.0)), "a pile of it still stops at 1")
+
 	# Tier and size both only ever push the chance up.
 	var tiers := [EnemyRoster.Tier.COMMON, EnemyRoster.Tier.ELITE, EnemyRoster.Tier.BOSS]
 	for i in tiers.size() - 1:
@@ -404,11 +462,19 @@ func _test_modifier_tables() -> bool:
 		# PERCENT one needs a piece with the base stat; a FLAT one only needs one allowed to carry it.
 		var carried := false
 		for item in LootTable.items():
-			if mod["kind"] == ModifierTable.Kind.PERCENT:
-				carried = carried or LootTable.has_stat(item, stat)
-			else:
-				carried = carried or LootTable.can_roll(item, stat)
-		_check(carried, "%s names %s, which no item can roll" % [id, stat])
+			match mod["kind"]:
+				ModifierTable.Kind.PERCENT:
+					carried = carried or LootTable.has_stat(item, stat)
+				ModifierTable.Kind.GLOBAL:
+					carried = carried or LootTable.can_globalize(item, stat)
+				_:
+					carried = carried or LootTable.can_roll(item, stat)
+		# Unless it is one of the ones held back on purpose, which have to be named rather than
+		# inferred: a modifier nothing can roll is dead weight, and a dormant one is a system waiting.
+		_check(carried or id in ModifierTable.DORMANT,
+				"%s names %s, which no item can roll" % [id, stat])
+		_check(not (carried and id in ModifierTable.DORMANT),
+				"%s is listed as dormant and can be rolled" % id)
 		_check(not ModifierTable.line({"id": id, "value": int(band[1])}).is_empty(), id + " writes a line")
 	_check(ModifierTable.line({"id": "nonsense", "value": 1}).is_empty(), "an unknown modifier writes nothing")
 
@@ -1128,6 +1194,11 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 	var fight: Encounter = main._combat.fight
 	var combat: CombatScene = main._combat
 	fight.loot_rng.seed = WORLD_SEED
+	# An orb is thrown out of a body exactly as a find is, and no autodiscard rule filters one -- so
+	# the arena is not empty of *everything*, it is empty of finds. Counted rather than seeded away:
+	# what lands is the run's own business, and the check below subtracts it.
+	var orbs: Array = []
+	fight.orb_dropped.connect(func(_index: int, _orb: String) -> void: orbs.append(true))
 	# As above: every body carries something, so the rule has something to throw away at once.
 	fight.always_drop = true
 	_check(combat.bag_room == 0, "a full bag leaves the fight no room")
@@ -1153,7 +1224,9 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 			"the counter never moved")
 	_check(combat._loot_drops.count() == 0 and combat._result_drops.count() == 0,
 			"and neither list has a square in it")
-	_check(combat._finds_shown == 0, "nothing was thrown into the arena")
+	_check(combat._finds_shown == orbs.size(),
+			"nothing but the orbs was thrown into the arena (%d against %d)"
+			% [combat._finds_shown, orbs.size()])
 	_check(main.inventory.total() == Inventory.CAPACITY, "and the bag is exactly as it was")
 	# The rule is about finds. A purse is a number rather than a square, so nothing filters it and a
 	# run that kept nothing still earned its way.
@@ -1469,11 +1542,15 @@ func _test_item_levels() -> bool:
 			_check(value == roundi(value), "every modifier value is whole: %s" % mod)
 			match entry["kind"]:
 				ModifierTable.Kind.FLAT:
-					var low := maxi(1, roundi(LootTable.scale(entry["stat"], float(band[0]), level)))
-					var high := maxi(1, roundi(LootTable.scale(entry["stat"], float(band[1]), level)))
+					# The stat's own per-level step, unless the entry names a smaller one of its own --
+					# which `added_damage` does, its band being sized for a piece that has no damage.
+					var step: float = float(entry.get("level_flat",
+							LootTable.LEVEL_FLAT.get(entry["stat"], 0.0)))
+					var low := maxi(1, roundi(LootTable.scale(entry["stat"], float(band[0]), level, step)))
+					var high := maxi(1, roundi(LootTable.scale(entry["stat"], float(band[1]), level, step)))
 					_check(value >= low and value <= high,
 							"%s rolled %d at level %d, outside %d-%d" % [mod["id"], value, level, low, high])
-				ModifierTable.Kind.PERCENT:
+				ModifierTable.Kind.PERCENT, ModifierTable.Kind.GLOBAL:
 					var grow := pow(LootTable.LEVEL_GROWTH, level - 1)
 					_check(value >= maxi(1, roundi(int(band[0]) * grow))
 							and value <= maxi(1, roundi(int(band[1]) * grow)),
@@ -1825,6 +1902,46 @@ func _test_orb_verbs() -> bool:
 
 ## The orbs through the save, and their standing apart from the bag: not counted against the cap,
 ## not trimmed with it, and dropped by name when a build no longer has them.
+func _test_player_level() -> bool:
+	_check(PlayerLevel.xp_to_next(1) == PlayerLevel.BASE_KILLS * Encounter.base_xp(MapBuilder.CENTER),
+			"the first level costs BASE_KILLS bodies in the middle of the map")
+	for level in range(1, 40):
+		_check(PlayerLevel.xp_to_next(level + 1) > PlayerLevel.xp_to_next(level),
+				"level %d costs more than level %d" % [level + 1, level])
+	var short := PlayerLevel.add(1, 0, PlayerLevel.xp_to_next(1) - 1)
+	_check(short["level"] == 1 and short["gained"] == 0, "one short of a level is no level")
+	var exact := PlayerLevel.add(1, 0, PlayerLevel.xp_to_next(1))
+	_check(exact["level"] == 2 and exact["xp"] == 0, "reaching the threshold levels up")
+	var over := PlayerLevel.xp_to_next(1) + PlayerLevel.xp_to_next(2) + 3
+	var twice := PlayerLevel.add(1, 0, over)
+	_check(twice["level"] == 3 and twice["gained"] == 2 and twice["xp"] == 3,
+			"overflow carries, and pays for two levels: %s" % [twice])
+
+	_clear_save()
+	var bag := Inventory.new()
+	_check(bag.level == 1 and bag.xp == 0, "a new player is level 1 with nothing")
+	_check(bag.add_xp(over) == 2, "the bag levels twice")
+	_check(bag.save(TEST_PATH), "the levelled player saved")
+	var back := Inventory.load_from(TEST_PATH)
+	_check(back.level == 3 and back.xp == 3, "level and experience came back: %d, %d" % [back.level, back.xp])
+
+	# A version 7 save knew nothing about levels.
+	var file := FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	file.store_string('{"version": 7, "gold": 5, "items": []}')
+	file.close()
+	var old := Inventory.load_from(TEST_PATH)
+	_check(old.level == 1 and old.xp == 0 and old.gold == 5, "a version 7 save comes back at level 1")
+	# A hand-edited file comes back obeying the curve.
+	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	file.store_string('{"version": %d, "level": -4, "xp": %d, "items": []}'
+			% [Inventory.VERSION, PlayerLevel.xp_to_next(1) + 1])
+	file.close()
+	var edited := Inventory.load_from(TEST_PATH)
+	_check(edited.level == 2 and edited.xp == 1, "a bad level is clamped and spare experience paid out")
+	_clear_save()
+	return true
+
+
 func _test_orb_saving() -> bool:
 	_clear_save()
 	var bag := Inventory.new()

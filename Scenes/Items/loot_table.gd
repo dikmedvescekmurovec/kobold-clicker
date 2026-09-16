@@ -18,34 +18,42 @@ const ROOT := "res://Assets/Gear/"
 ## weights are relative, not percentages: the amulet is the trophy of the set, and the boot the thing
 ## you end up with six of.
 ##
-## Two lists, and the difference between them is the whole rule.
+## Three lists, and the difference between them is the whole rule.
 ##
 ## `stats` is what the piece *is* -- the handful of numbers it shows, and the only stats a PERCENT
 ## modifier can scale, because "+14% increased Armour" needs armour to increase. `affixes` is what
 ## the piece can *carry*: stats it does not show and has none of, but can still roll a flat modifier
 ## for. A ring has no health of its own and still rolls "+8 Health", which is how Path of Exile has
 ## always done it, and it is what keeps a stat block two lines long while the modifier pool stays deep.
+## `globals` is what the piece can carry a *global* percent for -- a percentage of what the whole set
+## is worth rather than of anything the piece has, which is the only way "+14% increased Damage" can
+## mean anything on a ring. Only the jewellery has one, so "the jewellery carries the global offence"
+## is a property of this table rather than a rule about slots written somewhere else.
 ##
-## Stats span pieces on purpose. Offence lives on the weapon -- `damage` is the sword's alone, or the
-## sword stops being the interesting slot -- while health, armour and the resistances roll nearly
+## Stats span pieces on purpose. Base `damage` lives on the weapon -- the sword is where a click's
+## damage comes from, or it stops being the interesting slot -- while health and armour roll nearly
 ## everywhere, because a stat that adds up across what the player wears is what makes swapping any
 ## single piece worth doing. Two stay locked to one piece by what they are: `move_speed` is the
-## boot's and `block_chance` belongs to a thing you hold.
+## boot's and `block_chance` belongs to a thing you hold. The jewellery is the exception to the
+## weapon's monopoly, and carries its offence as modifiers rather than as base stats: a ring is worth
+## something to a fight without ever being the thing that swings.
+##
+## The resistances are off every piece for now. Nothing can hurt the player, so a resistance defends
+## against nothing -- but their labels, their level steps and the modifiers that roll them are all
+## still written down, so putting them back is one word per item.
 ##
 ## None of it depends on rarity: an elite sword hits like a common one and simply carries more on
-## top. And nothing reads these numbers for gameplay yet; they are shown and saved, and the chunk
-## that makes a click do `damage` will be the one to retune every one of them.
+## top.
 const ITEMS := {
 	"Leather Helmet": {
 		"icon": "Leather Helmet.png", "weight": 3, "slot": "helmet",
 		"stats": {"armor": 3, "health": 5},
-		"affixes": ["energy_shield", "fire_resist", "cold_resist", "lightning_resist", "strength",
-			"intelligence"],
+		"affixes": ["energy_shield", "strength", "intelligence"],
 	},
 	"Leather Boot": {
 		"icon": "Leather Boot.png", "weight": 4, "slot": "boots",
 		"stats": {"move_speed": 5, "dodge_chance": 2},
-		"affixes": ["armor", "health", "fire_resist", "cold_resist", "lightning_resist", "dexterity"],
+		"affixes": ["armor", "health", "dexterity"],
 	},
 	"Wooden Sword": {
 		"icon": "Wooden Sword.png", "weight": 3, "slot": "weapon",
@@ -55,33 +63,37 @@ const ITEMS := {
 	"Wooden Shield": {
 		"icon": "Wooden Shield.png", "weight": 3, "slot": "offhand",
 		"stats": {"armor": 3, "block_chance": 5},
-		"affixes": ["health", "energy_shield", "fire_resist", "cold_resist", "lightning_resist",
-			"strength"],
+		"affixes": ["health", "energy_shield", "strength"],
 	},
 	"Wooden Torch": {
 		"icon": "Wooden Torch.png", "weight": 3, "slot": "offhand",
 		"stats": {"energy_shield": 4, "health_regen": 1.0, "crit_damage": 10},
-		"affixes": ["block_chance", "fire_resist", "cold_resist", "lightning_resist", "intelligence"],
+		"affixes": ["block_chance", "intelligence"],
 	},
 	"Wooden Armor": {
 		"icon": "Wooden Armor.png", "weight": 2, "slot": "body",
 		"stats": {"armor": 5, "health": 10},
-		"affixes": ["energy_shield", "dodge_chance", "fire_resist", "cold_resist",
-			"lightning_resist", "strength"],
+		"affixes": ["energy_shield", "dodge_chance", "strength"],
 	},
+	# The drop-rate piece, and the one place a stat of the player's own is a base stat: a ring is
+	# worn for what it finds. What offence it carries is all modifiers -- flat damage and crit among
+	# the affixes, the two increases in `globals` -- so a ring is worth something to a fight without
+	# ever being the thing that swings.
 	"Gold Ring": {
 		"icon": "Gold Ring.png", "weight": 2, "slot": "ring",
-		"stats": {"fire_resist": 3, "life_on_hit": 1},
-		"affixes": ["health", "health_regen", "cold_resist", "lightning_resist", "strength",
+		"stats": {"drop_rate": 5, "life_on_hit": 1},
+		"affixes": ["health", "health_regen", "damage", "crit_chance", "crit_damage", "strength",
 			"dexterity", "intelligence"],
+		"globals": ["damage", "attack_speed"],
 	},
 	# The catch-all socket, and the rarest: the widest affix pool in the table, so an amulet is the
 	# one piece that can turn up carrying almost anything.
 	"Ruby Amulet": {
 		"icon": "Ruby Amulet.png", "weight": 1, "slot": "amulet",
 		"stats": {"health": 8, "crit_damage": 10},
-		"affixes": ["energy_shield", "health_regen", "crit_chance", "leech", "fire_resist",
-			"cold_resist", "lightning_resist", "strength", "dexterity", "intelligence"],
+		"affixes": ["energy_shield", "health_regen", "crit_chance", "damage", "drop_rate", "leech",
+			"strength", "dexterity", "intelligence"],
+		"globals": ["damage", "attack_speed"],
 	},
 }
 
@@ -126,17 +138,22 @@ const STAT_LABELS := {
 	"life_on_hit": "Life on Hit",
 	# Utility.
 	"move_speed": "Move Speed",
+	"drop_rate": "Drop Rate",
 	# The attributes, which fit any piece because they say nothing about what the piece is.
 	"strength": "Strength",
 	"dexterity": "Dexterity",
 	"intelligence": "Intelligence",
 }
 const PERCENT_STATS := ["crit_chance", "crit_damage", "block_chance", "move_speed", "dodge_chance",
-	"fire_resist", "cold_resist", "lightning_resist", "leech"]
+	"fire_resist", "cold_resist", "lightning_resist", "leech", "drop_rate"]
 ## The percentages that are a *probability*: how often something happens, rather than how much of it
 ## there is. They are the ones a level may not multiply -- see `scale`. Crit damage is not one of
 ## them (500% crit damage is a fine number), and neither is leech, which is a share of a hit.
-const CHANCE_STATS := ["crit_chance", "block_chance", "dodge_chance"]
+##
+## Drop rate is one of them at one remove: it multiplies a probability, so the exponent would walk
+## through the same ceiling it walked through on crit chance -- a level-30 ring would be finding four
+## times what a level-1 one does. The flat step still grows it, at a pace a chance can hold.
+const CHANCE_STATS := ["crit_chance", "block_chance", "dodge_chance", "drop_rate"]
 ## Per second: attacks in one case and health in the other. The two stats that are neither a plain
 ## number nor a percentage.
 const RATE_STATS := ["attack_speed", "health_regen"]
@@ -147,19 +164,25 @@ const LEVEL_GROWTH := 1.12
 
 ## What one level *adds*, on top of that multiplier, per stat.
 ##
-## Per stat because an absolute step has to suit the size of the number it is added to: a point a
-## level is the whole story for damage, which starts at 1, and a rounding error for crit damage,
-## which starts at 50. A multiplier alone would leave a sword reading "Damage 1" for four levels; a
-## flat step alone would do nothing to the large stats. Both together carry the whole range.
+## Per stat because an absolute step has to suit the size of the number it is added to: a fraction of
+## a point a level is most of the story for damage, which starts at 1, and a rounding error for crit
+## damage, which starts at 50. A multiplier alone would leave a sword reading "Damage 1" for four
+## levels; a flat step alone would do nothing to the large stats. Both together carry the range.
 ##
-## Damage is a whole point a level on purpose, so a weapon gains a clean, visible point each time.
+## Damage is a quarter of a point, and that number is about how many things can carry it rather than
+## about how fast a sword should grow. It was a whole point while the sword was the only source; the
+## jewellery carries flat damage now, so four sockets each take the step and the *set* still gains
+## about a point a level. Handing all four the old step put the far edge inside a third of a click a
+## second, which is the frontier stopping being one -- see test_combat's edge-fight line, which is
+## where this number is actually read off.
+##
 ## Every key of STAT_LABELS has an entry here and test_inventory holds that, so a new stat cannot be
 ## added without saying what a level is worth to it.
 const LEVEL_FLAT := {
 	"damage": 1.0,
 	"crit_chance": 1.0, "crit_damage": 5.0, "attack_speed": 0.05,
 	"armor": 2.0, "energy_shield": 2.0, "health": 3.0, "health_regen": 0.1,
-	"block_chance": 1.0, "dodge_chance": 1.0, "move_speed": 1.0,
+	"block_chance": 1.0, "dodge_chance": 1.0, "move_speed": 1.0, "drop_rate": 1.0,
 	"fire_resist": 1.0, "cold_resist": 1.0, "lightning_resist": 1.0,
 	"leech": 0.2, "life_on_hit": 1.0,
 	"strength": 1.0, "dexterity": 1.0, "intelligence": 1.0,
@@ -224,6 +247,19 @@ static func can_roll(item: String, stat: String) -> bool:
 	return has_stat(item, stat) or (ITEMS.has(item) and stat in ITEMS[item]["affixes"])
 
 
+## The stats this piece can roll a *global* percent for -- a percentage of what the whole set is
+## worth rather than of anything the piece has. Most pieces have none, so the key is optional and a
+## missing one is an empty list rather than a crash.
+static func globals_of(item: String) -> Array:
+	return ITEMS[item].get("globals", []) if ITEMS.has(item) else []
+
+
+## The gate on a GLOBAL modifier. Deliberately nothing to do with `has_stat` or `can_roll`: a global
+## scales the player rather than the piece, so a ring needs no damage of its own to increase damage.
+static func can_globalize(item: String, stat: String) -> bool:
+	return stat in globals_of(item)
+
+
 ## What `value` of `stat` is worth at `level`. The one place that knows what a level does to a
 ## number, so a piece's base stats and a modifier's band grow the same way and cannot drift apart.
 ## Level 1 is the number as written, so a level-1 piece is exactly the piece the table describes.
@@ -232,10 +268,14 @@ static func can_roll(item: String, stat: String) -> bool:
 ## the exponent walked straight through it: a plain set of commons reached 163% crit chance by level
 ## 30, which is every hit critting and a stat block that reads as nonsense. The flat step still grows
 ## it -- a point of crit chance a level -- but at a pace the ceiling can hold.
-static func scale(stat: String, value: float, level: int) -> float:
+## `flat` is what one level adds, and defaults to the stat's own step. A modifier band sized for a
+## piece other than the one the step was sized for passes its own -- see ModifierTable's
+## `level_flat`, which is the only caller that does.
+static func scale(stat: String, value: float, level: int, flat := NAN) -> float:
 	var steps := maxi(level - 1, 0)
 	var grown := value if stat in CHANCE_STATS else value * pow(LEVEL_GROWTH, steps)
-	return grown + float(LEVEL_FLAT.get(stat, 0.0)) * steps
+	var step := float(LEVEL_FLAT.get(stat, 0.0)) if is_nan(flat) else flat
+	return grown + step * steps
 
 
 ## A stat written for a person: "Damage 5", "Crit Chance 5%", "Attack Speed 1.0/s".
@@ -272,12 +312,16 @@ static func delta_shows(stat: String, delta: float) -> bool:
 	return roundi(delta) != 0
 
 
-## How often this enemy leaves anything at all: its tier times its body, and never more than certain.
-## Unlike health, a chance has a ceiling.
-static func chance_for(enemy_name: String) -> float:
+## How often this enemy leaves anything at all: its tier times its body, lifted by whatever drop rate
+## the player is wearing, and never more than certain. Unlike health, a chance has a ceiling.
+##
+## `drop_rate` is a percentage the way every stat in PERCENT_STATS is, so 50 is half again as much
+## gear. It is the only stat outside the four the fight reads that does anything at all, and it does
+## it here rather than at the caller so there is one answer to "how often does this body drop".
+static func chance_for(enemy_name: String, drop_rate := 0.0) -> float:
 	var tier: float = TIER_CHANCE[EnemyRoster.tier_of(enemy_name)]
 	var size: float = SIZE_CHANCE[EnemyRoster.size_of(enemy_name)]
-	return minf(tier * size, 1.0)
+	return minf(tier * size * (1.0 + maxf(drop_rate, 0.0) / 100.0), 1.0)
 
 
 ## One kill's worth of loot: null for nothing, or the item that dropped, rarity and modifiers and
@@ -290,8 +334,8 @@ static func chance_for(enemy_name: String) -> float:
 ## The chance is drawn first and on its own, so a kill that leaves nothing still costs exactly one
 ## draw. That is what keeps the drop rate comparable to before rarities existed.
 static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := false,
-		tile_level := 1) -> Item:
-	if not guaranteed and rng.randf() >= chance_for(enemy_name):
+		tile_level := 1, drop_rate := 0.0) -> Item:
+	if not guaranteed and rng.randf() >= chance_for(enemy_name, drop_rate):
 		return null
 	var type := _weighted(rng)
 	var tier := EnemyRoster.tier_of(enemy_name)

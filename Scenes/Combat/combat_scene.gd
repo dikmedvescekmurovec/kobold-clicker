@@ -35,6 +35,12 @@ signal gold_gained(amount: int)
 ## fight is the one thing downstream listens to. Nothing here can refuse it -- there is no cap and no
 ## rule that filters currency -- so unlike a find it has no `kept`/`discarded` pair.
 signal orb_gained(orb: String)
+## A body's experience, re-emitted from `Encounter.xp_dropped` for `gold_gained`'s reason. Emitted the
+## moment the body falls, so the ledger is right however the player leaves.
+signal xp_gained(amount: int)
+## The last gem of one body's experience has reached the character panel. What the panel's bar fills
+## on, so it visibly fills as the gems land rather than before they have set off.
+signal xp_absorbed(amount: int)
 
 ## Where the fighters stand, as a share of the viewport: the grass band of the backdrop.
 const GROUND := 0.86
@@ -142,6 +148,19 @@ const COIN_REST := 2.0
 ## A find lies there longer than a coin: it is the thing worth looking at, it lands once where a
 ## purse lands ten, and it is the only sight of it until the player opens the counter.
 const FIND_REST := 3.0
+## Experience does not lie on the ground: its gems pop out of the body and fly into the character
+## panel's bar. How long the pop takes, how high it goes and how far to either side it may land.
+const XP_POP_TIME := 0.35
+const XP_POP_RISE := 50.0
+const XP_POP_SPREAD := 50.0
+## How long a gem takes to reach the panel, and the share of that at the end over which it shrinks
+## and fades into the bar.
+const XP_FLY_TIME := 0.6
+const XP_FADE_SHARE := 0.3
+## The gem is six pixels; at the panel's own scale it is a speck against a backdrop, so it is drawn
+## this many times larger again -- whole numbers only, for the reason `zoom` is.
+const XP_GEM_SCALE := 2
+const XP_GEM := preload("res://Assets/UI/xp_gem.png")
 ## How far to either side a find may land. Narrower than the coins' spread, because one sprite has
 ## nothing to be told apart from and a find belongs by the body that dropped it.
 const FIND_SPREAD := 40.0
@@ -175,6 +194,9 @@ var area_layout := 1
 ## and means a fight with no map behind it -- the tests and the screenshot scripts -- which then
 ## says the level alone.
 var place := ""
+## Where on the screen experience gems fly to -- the character panel's bar, which stands on a layer
+## above this one. Negative means nowhere, and the gems fade where they popped.
+var xp_target := Vector2(-1, -1)
 
 var _ui_scale := 2.0
 var _player: CombatActor
@@ -232,6 +254,9 @@ var _auto_label: Label
 var _gold_label: Label
 var _orb_label: Label
 var _gold_row: HBoxContainer
+## What the fight earned in experience, the gem and the number, shown beside the purse.
+var _xp_label: Label
+var _xp_row: HBoxContainer
 
 
 ## Starts the fight for `cell`. `ui_scale` matches the map's, so the panels are the same size, and
@@ -251,6 +276,7 @@ func begin(encounter: Encounter, for_cell: Vector2i, ui_scale: float, variant :=
 	fight.loot_dropped.connect(_on_loot_dropped)
 	fight.gold_dropped.connect(_on_gold_dropped)
 	fight.orb_dropped.connect(_on_orb_dropped)
+	fight.xp_dropped.connect(_on_xp_dropped)
 	fight.won.connect(_on_finished.bind(true))
 	fight.lost.connect(_on_finished.bind(false))
 	_build()
@@ -495,6 +521,19 @@ func _build_hud() -> void:
 	_gold_row.add_child(coin)
 	_gold_label = _label("")
 	_gold_row.add_child(_gold_label)
+	# The experience beside the purse, in the same row: both are sums, and both are never nothing.
+	_xp_row = HBoxContainer.new()
+	_xp_row.add_theme_constant_override("separation", 6)
+	_xp_row.hide()
+	_gold_row.add_child(_xp_row)
+	var gem := TextureRect.new()
+	gem.texture = XP_GEM
+	gem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	gem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	gem.custom_minimum_size = Vector2(XP_GEM.get_width(), XP_GEM.get_height()) * XP_GEM_SCALE
+	_xp_row.add_child(gem)
+	_xp_label = _label("")
+	_xp_row.add_child(_xp_label)
 	# What the run turned up in currency, as a count. Which orbs is what the tray in the bag is for,
 	# and each was seen falling out of the body that carried it; a verdict wants the score.
 	_orb_label = _label("")
@@ -678,6 +717,40 @@ func _show_coins(amount: int) -> void:
 		_throw(coin, i, from, THROW_SPREAD, COIN_REST)
 
 
+## A body's experience, as gems that pop out of it and fly into the character panel. As many as a
+## purse of the same size throws coins, for the same reason. `xp_absorbed` goes out with the last one
+## to arrive, carrying the whole amount, so the bar takes it in one step as the burst lands.
+func _show_xp(amount: int) -> void:
+	var from := _drop_origin()
+	var count := Coins.count_for(amount)
+	for i in count:
+		var gem := Sprite2D.new()
+		gem.texture = XP_GEM
+		gem.z_index = 1
+		gem.scale = Vector2.ONE * _ui_scale * XP_GEM_SCALE
+		gem.position = from
+		add_child(gem)
+		var landed := Vector2(from.x + randf_range(-XP_POP_SPREAD, XP_POP_SPREAD), from.y)
+		var tween := create_tween()
+		tween.tween_interval(i * THROW_STAGGER)
+		# Up and out, the first half of a throw -- a gem never comes back down.
+		tween.set_parallel(true)
+		tween.tween_property(gem, "position:x", landed.x, XP_POP_TIME)
+		tween.tween_property(gem, "position:y", from.y - XP_POP_RISE, XP_POP_TIME) 				.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tween.set_parallel(false)
+		if xp_target.x >= 0.0:
+			# Then into the bar, gathering speed, shrinking and fading over the last stretch.
+			var fade := XP_FLY_TIME * XP_FADE_SHARE
+			tween.tween_property(gem, "position", xp_target, XP_FLY_TIME) 					.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+			tween.parallel().tween_property(gem, "scale", gem.scale * 0.5, fade) 					.set_delay(XP_FLY_TIME - fade)
+			tween.parallel().tween_property(gem, "modulate:a", 0.0, fade).set_delay(XP_FLY_TIME - fade)
+		else:
+			tween.tween_property(gem, "modulate:a", 0.0, THROW_FADE)
+		if i == count - 1:
+			tween.tween_callback(func() -> void: xp_absorbed.emit(amount))
+		tween.tween_callback(gem.queue_free)
+
+
 ## A find coming off a body: its own icon, thrown the way the purse is, with the rarity's beam
 ## standing over it. A transparent `glow` means no beam -- a common piece and an orb are drawn plain.
 ##
@@ -846,6 +919,12 @@ func _on_gold_dropped(_index: int, amount: int) -> void:
 	gold_gained.emit(amount)
 
 
+## A body's experience: gems off it, and the amount on to the ledger straight away.
+func _on_xp_dropped(_index: int, amount: int) -> void:
+	_show_xp(amount)
+	xp_gained.emit(amount)
+
+
 ## A find thrown away by hand, from either list. Both show the same drops, so both are filled again
 ## rather than the one that was clicked.
 func _on_drop_discarded(item: Item) -> void:
@@ -955,6 +1034,9 @@ func _on_finished(won: bool) -> void:
 	if fight.gold > 0:
 		_gold_label.text = "+%d" % fight.gold
 		_gold_row.show()
+	if fight.xp > 0:
+		_xp_label.text = "+%d" % fight.xp
+		_xp_row.show()
 	var found_orbs := 0
 	for orb: String in fight.orbs:
 		found_orbs += int(fight.orbs[orb])

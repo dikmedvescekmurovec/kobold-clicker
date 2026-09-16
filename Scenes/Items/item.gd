@@ -74,6 +74,11 @@ func base_stats() -> Dictionary:
 ## A flat modifier can name a stat the piece has none of -- that is what an affix is -- so a stat
 ## can appear here that `base_stats` never had. A percent one never can: the pool only offers it
 ## where there is a base stat to scale.
+##
+## A GLOBAL modifier is not folded in here at all, and falls through both passes for that reason: it
+## is a percentage of what the whole set is worth rather than of anything this piece is, so the one
+## place it can mean anything is `Equipment.totals`. Folded in here, a ring's "+14% increased Damage"
+## would scale the damage a ring has, which is none.
 func effective_stats() -> Dictionary:
 	# Taken once: it is a copy now, not a lookup, so asking twice a stat would be real work.
 	var out := {}
@@ -88,6 +93,18 @@ func effective_stats() -> Dictionary:
 		var entry: Dictionary = ModifierTable.MODS.get(mod.get("id", ""), {})
 		if entry.get("kind") == ModifierTable.Kind.PERCENT:
 			out[entry["stat"]] = float(out.get(entry["stat"], 0.0)) * (1.0 + float(mod["value"]) / 100.0)
+	return out
+
+
+## What this piece asks of the *set*: stat -> the percent its GLOBAL modifiers come to. Summed
+## rather than compounded, for the reason `Equipment.totals` adds rather than multiplies -- two rings
+## of +10% are +20%, which is the arithmetic a player does in their head.
+func global_percents() -> Dictionary:
+	var out := {}
+	for mod in mods:
+		var entry: Dictionary = ModifierTable.MODS.get(mod.get("id", ""), {})
+		if entry.get("kind") == ModifierTable.Kind.GLOBAL:
+			out[entry["stat"]] = float(out.get(entry["stat"], 0.0)) + float(mod["value"])
 	return out
 
 

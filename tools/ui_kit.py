@@ -134,6 +134,31 @@ PARTS = {
     "ui_socket_ring": ("2D Pixel UI/PNG/Equipment", 99, 354, 11, 12, 1),
 }
 
+# The character panel in the top-left corner, off the UI pack's character_panel.png. The pack draws
+# it eight times over -- with and without a portrait, with empty and with filled bars -- so the frame
+# is the empty-circle, empty-trough one, and each bar is cut off the filled variant beside it at the
+# very rectangle it fills, which is what makes a bar land in its trough to the pixel. The loose bars
+# at the foot of the sheet are the same colours but not the same lengths as the troughs, so they are
+# not used.
+#
+# Every x and y here is measured: the frame's bbox in its 96x32 block, and each bar by diffing the
+# empty panel against the filled one -- exactly the pixels that change.
+CHAR_SHEET = "2D Pixel UI/PNG/character_panel"
+CHAR_FRAME = (2, 34, 84, 30)
+# name -> (x, y, w) in the frame; every bar is two pixels tall. The filled panel is 96 px to the right.
+CHAR_BARS = {"hp": (28, 8, 52), "mana": (30, 13, 43), "xp": (29, 18, 38)}
+CHAR_BAR_HEIGHT = 2
+CHAR_FILLED_DX = 96
+# A point inside the portrait circle; the circle is whatever transparent run is joined to it.
+CHAR_CIRCLE_SEED = (14, 14)
+# The player's portrait: the kobold's first idle frame, framed so the eye and the tip of the snout sit
+# in the circle -- the head is twice the circle's width, and the snout is what says kobold -- on the
+# pack's own lilac disc, which the blue hide stands off where the pack's paler blue would not.
+CHAR_KOBOLD = ("Assets/Player/idle.png", 58, 38)
+CHAR_DISC = (120, 124, 195, 255)
+# The XP gem: row 8, column 6 of Icons.png, its whole 6x6 extent.
+XP_GEM = ("2D Pixel UI/PNG/Icons", 85, 117, 6, 6, 1)
+
 # The combat HUD's kill-pip bar, and the one thing here off a second bought pack -- "Pixel UI pack
 # 3", whose 06.png draws a capsule bar the 2D Pixel UI pack has no equivalent of. The game needs that
 # capsule ten pips long and the pack ships it at five, so what is cut here is not the bar but the
@@ -397,6 +422,69 @@ def parts():
     return {name: _cut(entry) for name, entry in PARTS.items()}
 
 
+def character():
+    """The character panel's frame, portrait and three bars, plus the XP gem, each at its own size."""
+    sheet = Image.open(os.path.join(POTENTIAL, CHAR_SHEET + ".png")).convert("RGBA")
+    fx, fy, fw, fh = CHAR_FRAME
+    frame = sheet.crop((fx, fy, fx + fw, fy + fh))
+    out = {"ui_char_frame": frame}
+    for name, (x, y, w) in CHAR_BARS.items():
+        sx, sy = fx + CHAR_FILLED_DX + x, fy + y
+        bar = sheet.crop((sx, sy, sx + w, sy + CHAR_BAR_HEIGHT))
+        if bar.getchannel("A").getextrema()[0] == 0:
+            raise SystemExit("ui_char_bar_%s has a hole -- the bar rectangle is off" % name)
+        if frame.crop((x, y, x + w, y + CHAR_BAR_HEIGHT)).tobytes() == bar.tobytes():
+            raise SystemExit("ui_char_bar_%s is the empty trough -- the filled panel moved" % name)
+        out["ui_char_bar_" + name] = bar
+
+    # The circle: every transparent pixel joined to the seed.
+    alpha = frame.getchannel("A")
+    circle, todo = set(), [CHAR_CIRCLE_SEED]
+    while todo:
+        x, y = todo.pop()
+        if (x, y) in circle or not (0 <= x < fw and 0 <= y < fh) or alpha.getpixel((x, y)):
+            continue
+        circle.add((x, y))
+        todo += [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+    left = min(x for x, _ in circle)
+    top = min(y for _, y in circle)
+    width = max(x for x, _ in circle) - left + 1
+    height = max(y for _, y in circle) - top + 1
+    path, kx, ky = CHAR_KOBOLD
+    kobold = Image.open(path).convert("RGBA")
+    portrait = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    for x, y in circle:
+        pixel = Image.new("RGBA", (1, 1), CHAR_DISC)
+        pixel.alpha_composite(Image.new("RGBA", (1, 1), kobold.getpixel((kx + x - left, ky + y - top))))
+        portrait.putpixel((x - left, y - top), pixel.getpixel((0, 0)))
+    out["ui_char_portrait"] = portrait
+    out["xp_gem"] = _cut(XP_GEM, trim=False)
+    return out, (left, top)
+
+
+def character_preview(cut, portrait_at):
+    """The assembled panel at full, half and nearly empty XP, and the gem at 1x and 4x."""
+    frame = cut["ui_char_frame"]
+    shares = [1.0, 0.5, 0.05]
+    pad = 6
+    out = Image.new("RGBA", (frame.width + 2 * pad, len(shares) * (frame.height + pad) + pad + 30),
+                    (0x3C, 0x5A, 0x3C, 0xFF))
+    for i, share in enumerate(shares):
+        y0 = pad + i * (frame.height + pad)
+        panel = frame.copy()
+        panel.alpha_composite(cut["ui_char_portrait"], portrait_at)
+        for name, (x, y, w) in CHAR_BARS.items():
+            bar = cut["ui_char_bar_" + name]
+            shown = w if name != "xp" else max(1, round(w * share))
+            panel.alpha_composite(bar.crop((0, 0, shown, CHAR_BAR_HEIGHT)), (x, y))
+        out.alpha_composite(panel, (pad, y0))
+    gem = cut["xp_gem"]
+    gy = pad + len(shares) * (frame.height + pad)
+    out.alpha_composite(gem, (pad, gy))
+    out.alpha_composite(gem.resize((gem.width * 4, gem.height * 4), Image.NEAREST), (pad + 12, gy))
+    return out.resize((out.width * 4, out.height * 4), Image.NEAREST)
+
+
 def pips():
     """The three parts a kill-pip bar is built from, in each tier's colourway and in empty grey.
 
@@ -600,6 +688,15 @@ def main():
     pip_preview(pip).save(os.path.join(QA, "ui_kit_pips.png"))
     for name, image in pip.items():
         image.save(os.path.join(OUT, name + ".png"))
+
+    # Loose as well: the frame and its bars are drawn at their own size, and the bars are clipped
+    # rather than stretched as they empty.
+    char, portrait_at = character()
+    character_preview(char, portrait_at).save(os.path.join(QA, "ui_kit_character.png"))
+    for name, image in char.items():
+        image.save(os.path.join(OUT, name + ".png"))
+    print("character panel: portrait at %s, %s" % (portrait_at, ", ".join(
+        "%s %dx%d" % (n, i.width, i.height) for n, i in char.items())))
 
     sheet_image, meta, (cell_w, cell_h, columns, rows) = pack(sprites, margins)
     sheet_image.save(os.path.join(OUT, SHEET))

@@ -103,6 +103,8 @@ var _panel: VBoxContainer
 ## The left-hand collection log, the button that opens it, and the rows inside it.
 var _bag_panel: VBoxContainer
 var _bag_button: Button
+## The player in the top-left corner, over the map and over a fight alike.
+var _character: CharacterPanel
 
 var _bag_scroll: ScrollContainer
 ## One section per level, highest first: a heading with its two buttons, a rule, and that level's
@@ -146,6 +148,8 @@ var _fight_drops: Array[Item] = []
 var _fight_gold := 0
 ## A run's currency, waiting the way its finds and its gold do. Orb name -> how many.
 var _fight_orbs := {}
+## A run's experience, waiting the way its gold does.
+var _fight_xp := 0
 ## Whether the fight on now is a farm run rather than a fight for the tile.
 var _farming := false
 ## Whether the run's pouch has already been emptied into the bag. Both ways out of a run bank it,
@@ -296,13 +300,35 @@ func _build_ui() -> void:
 	_farm_button.pressed.connect(_on_farm_pressed)
 	buttons.add_child(_farm_button)
 
+	_build_character()
 	_build_bag(layer)
 
 	get_viewport().size_changed.connect(_layout_ui)
 	_layout_ui.call_deferred()
 
 
-## The bag: a button in the top-left corner and the panel it opens, built the same way as the tile
+## The character panel, on a layer of its own above the fight: `CombatScene` is a CanvasLayer on
+## layer 2, so anything on the UI layer -- or on layer 2 but added before the fight -- is drawn under
+## the fight's backdrop. It takes no mouse input anywhere, so standing over a fight costs the player no swings.
+func _build_character() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "Character"
+	layer.layer = 3
+	add_child(layer)
+	_character = CharacterPanel.new()
+	_character.scale = Vector2(ui_scale, ui_scale)
+	_character.position = Vector2(8, 8)
+	layer.add_child(_character)
+	_sync_character()
+
+
+## Puts the panel back in step with the ledger: what is banked, plus what a run is still pouching.
+func _sync_character() -> void:
+	var shown := PlayerLevel.add(inventory.level, inventory.xp, _fight_xp if _farming else 0)
+	_character.set_state(shown["level"], shown["xp"])
+
+
+## The bag: a button under the character panel and the panel it opens, built the same way as the tile
 ## panel opposite and flush against the other edge. Inside it, every item the world has handed over
 ## as a grid of squares, and under that whatever one is being looked at.
 func _build_bag(layer: CanvasLayer) -> void:
@@ -312,6 +338,7 @@ func _build_bag(layer: CanvasLayer) -> void:
 	_bag_button.theme = UITheme.theme()
 	_bag_button.disabled = false
 	_bag_button.scale = Vector2(ui_scale, ui_scale)
+	# Placed under the character panel by `_layout_ui`, which is the first moment it can be measured.
 	_bag_button.position = Vector2(8, 8)
 	_bag_button.pressed.connect(_on_bag_pressed)
 	layer.add_child(_bag_button)
@@ -1070,6 +1097,9 @@ func _layout_ui() -> void:
 	_panel.position = Vector2(view_size.x - width * ui_scale, 0.0)
 	_bag_panel.size = Vector2(_bag_panel.get_combined_minimum_size().x, height)
 	_bag_panel.position = Vector2.ZERO
+	_bag_button.position = Vector2(8, _character.position.y + (_character.size.y + 4) * ui_scale)
+	if _combat != null:
+		_combat.xp_target = _character.xp_point()
 	# The character sheet stands outside the item panel, against its right edge and only as tall as it
 	# needs to be -- a wood page next to the cream one, the way the pack draws the spread. The item
 	# panel runs the full height of the window and this one does not, so it is centred against it
@@ -1154,6 +1184,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	_fight_drops.clear()
 	_fight_gold = 0
 	_fight_orbs = {}
+	_fight_xp = 0
 	_combat = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 	_combat.finished.connect(_on_combat_finished.bind(cell))
 	# Not `Encounter.loot_dropped`: the fight applies the player's autodiscard rule, and everything
@@ -1165,6 +1196,8 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	_combat.drop_discarded.connect(_on_drop_discarded)
 	_combat.gold_gained.connect(_on_gold_gained)
 	_combat.orb_gained.connect(_on_orb_gained)
+	_combat.xp_gained.connect(_on_xp_gained)
+	_combat.xp_absorbed.connect(_on_xp_absorbed)
 	add_child(_combat)
 	# Told before the fight is built, so the warning is right on its first frame rather than a frame
 	# later: a run that opens with a full bag should say so as it opens.
@@ -1172,6 +1205,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# What the tile has been called since the player first laid eyes on it. Read off the map rather
 	# than worked out here: the map is what named it and what remembers the name.
 	_combat.place = view.name_of(cell)
+	_combat.xp_target = _character.xp_point()
 	_combat.begin(fight, cell, ui_scale, view.area_variant(cell))
 	# The map keeps its state but stops running, so nothing walks on underneath the fight.
 	map.hide()
@@ -1182,6 +1216,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	_bag_panel.hide()
 	_worn_panel.hide()
 	_bag_button.hide()
+	_character.show()
 
 
 ## Back from the fight. The tile is discovered only if it was won; either way the map comes back
@@ -1193,6 +1228,8 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 	_bank_farm_loot()
 	_combat.queue_free()
 	_combat = null
+	# Gems still in the air when the fight closed never arrive, so the panel is put back on the ledger.
+	_sync_character()
 	map.process_mode = Node.PROCESS_MODE_INHERIT
 	map.show()
 	_bag_button.show()
@@ -1276,6 +1313,25 @@ func _on_gold_gained(amount: int) -> void:
 ## a discovery fight, pouched until the end of a run. Nothing about an orb can be refused either --
 ## it is a count rather than a square, so the cap has nothing to say about it and no rule of the
 ## player's filters it.
+## A body's experience, banked or pouched exactly as its purse is. The panel is not told here: it fills
+## when the gems reach it, on `_on_xp_absorbed`.
+func _on_xp_gained(amount: int) -> void:
+	_fight_xp += amount
+	if _farming:
+		return
+	var gained := inventory.add_xp(amount)
+	inventory.save(inventory_path)
+	if gained > 0:
+		print("Level up: %d" % inventory.level)
+
+
+## The gems of one body have landed in the bar.
+func _on_xp_absorbed(amount: int) -> void:
+	var gained := _character.absorb(amount)
+	if gained > 0 and _farming:
+		print("Level up: %d (banked when the run ends)" % _character.level)
+
+
 func _on_orb_gained(orb: String) -> void:
 	_fight_orbs[orb] = int(_fight_orbs.get(orb, 0)) + 1
 	if _farming:
@@ -1343,10 +1399,14 @@ func _bank_farm_loot() -> void:
 	_banked = true
 	# The gold as well as the finds, and the gold first: a run that turned up nothing but purses --
 	# which most short ones do -- would otherwise be handed back nothing at all.
-	if _fight_drops.is_empty() and _fight_gold == 0 and _fight_orbs.is_empty():
+	if _fight_drops.is_empty() and _fight_gold == 0 and _fight_orbs.is_empty() and _fight_xp == 0:
 		return
 	inventory.gold += _fight_gold
 	_fight_gold = 0
+	# With the gold, above the finds, for the gold's reason.
+	if inventory.add_xp(_fight_xp) > 0:
+		print("Level up: %d" % inventory.level)
+	_fight_xp = 0
 	# Above the finds for the same reason the gold is: a run that turned up currency and no gear has
 	# still earned its way, and nothing here can refuse either of them.
 	for orb: String in _fight_orbs:
@@ -1372,6 +1432,8 @@ func _on_bag_pressed() -> void:
 	_bag_panel.show()
 	_worn_panel.show()
 	_bag_button.hide()
+	# The bag covers the left edge, and the panel stands on a layer above it.
+	_character.hide()
 
 
 ## Quitting with a run still on. The pouch goes in rather than evaporating -- a run that is left
@@ -1385,6 +1447,7 @@ func _on_bag_closed() -> void:
 	_bag_panel.hide()
 	_worn_panel.hide()
 	_bag_button.show()
+	_character.show()
 
 
 ## The X closes the panel and drops the selection, so nothing stays outlined on the map.

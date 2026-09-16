@@ -110,6 +110,8 @@ func _shoot_fight() -> void:
 	main.add_child(combat)
 	# The tile's own name, the way the map would have handed it over.
 	combat.place = TileNames.generate(CELL, ENVIRONMENT, MAP_SEED)
+	# Built here rather than through the main scene, so the gems are told where the panel is by hand.
+	combat.xp_target = main._character.xp_point()
 	combat.begin(fight, CELL, main.ui_scale)
 	main.map.hide()
 	# Let the first enemy finish running in, so the shot shows the fight rather than an empty field.
@@ -123,6 +125,14 @@ func _shoot_fight() -> void:
 		fight.hit()
 		await process_frame
 	await _save(combat, "combat_hurt.png")
+
+	# The first enemy down, and its experience caught in the air between the body and the panel.
+	# Only up to the killing blow: `index` moves on in `advance`, while the body plays its death, so
+	# hitting until it moves would never stop.
+	while fight.phase == Encounter.Phase.WAITING and fight.index == 0:
+		fight.hit()
+	await create_timer(CombatScene.XP_POP_TIME + CombatScene.XP_FLY_TIME * 0.45).timeout
+	await _save(combat, "combat_xp_flight.png")
 
 	# On to the elite at the end, so its size against the commons can be seen.
 	while not fight.on_elite() and not fight.finished:

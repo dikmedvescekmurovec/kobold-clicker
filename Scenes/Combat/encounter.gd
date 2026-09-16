@@ -53,6 +53,9 @@ signal gold_dropped(index: int, amount: int)
 ## against it, so one body can hand over both, and kept for the reason the other two are: nothing is
 ## rolled when the clock runs out, so what came off a body before it is the player's.
 signal orb_dropped(index: int, orb: String)
+## That enemy's experience, which every one of them carries the way it carries a purse. Emitted with
+## the death beside `gold_dropped` and kept for the same reason.
+signal xp_dropped(index: int, amount: int)
 ## The whole lineup is down, with time to spare.
 signal won()
 ## The clock ran out.
@@ -103,6 +106,13 @@ const GOLD_PER_STEP := 1.0
 ## keeps pace with the gear that has to kill for it rather than with the health it has to get
 ## through. Nothing spends gold yet, so the two above are a starting point and a pair of dials.
 const GOLD_GROWTH := 1.12
+
+## What an ordinary common body is worth in experience, per level of the tile it stands on. Off the
+## banded `MapBuilder.level_of` rather than the smooth distance gold uses, and linear rather than
+## exponential, on purpose: the bands widen, so an exponent per hex step compounds with the square of
+## the level and would soon pay for a whole level in one body. Linear in the tile's level is what
+## lets `PlayerLevel.xp_to_next` outgrow it everywhere -- see there.
+const XP_PER_LEVEL := 1.0
 
 ## What a click does with nothing equipped. The floor under `damage`, so a player who has never
 ## found a sword can still take the first tile -- and so the number a click does is never zero.
@@ -163,6 +173,8 @@ var loot_rng := RandomNumberGenerator.new()
 ## What this fight has earned. Every body carries a purse -- there is no chance drawn for it and no
 ## rng behind it -- so unlike the drops this is simply a sum, and the verdict reads it off here.
 var gold := 0
+## What this fight has earned in experience: a sum, like `gold`.
+var xp := 0
 
 ## The orb roll, drawn beside the gear roll and never from the same generator: two rates that are
 ## tuned apart should not be able to shift each other by changing how many numbers one of them draws.
@@ -179,8 +191,9 @@ var orbs := {}
 var roster_rng := RandomNumberGenerator.new()
 
 ## What the player's gear is worth in a fight, read once by `arm()` rather than looked up per swing.
-## Only these four are read: the rest of what an item carries is still rolled, saved and shown, and
-## waits on the systems that would give it something to do.
+## Only these five are read: the rest of what an item carries is still rolled, saved and shown, and
+## waits on the systems that would give it something to do. Four of them decide what a blow is worth;
+## the fifth decides what a body leaves, and is the one thing gear does that a fight cannot see.
 ## The ceiling on crit chance: crits stay something that happens sometimes, however much gear is
 ## piled up. A chance over certainty is every hit critting, which is a crit meaning nothing.
 const CRIT_CAP := 100.0
@@ -190,6 +203,9 @@ var crit_damage := 0.0
 ## Swings a second the weapon takes on its own. Zero with nothing equipped, so a bare-handed fight is
 ## exactly the clicking game this was before gear meant anything.
 var attack_speed := 0.0
+## How much more often a body leaves something, as a percentage: 50 is half again as much gear. Read
+## here and handed to `LootTable.roll`, which is where the cap on a chance already lives.
+var drop_rate := 0.0
 
 ## How much of the next automatic swing has been earned. Only runs while an enemy is standing there
 ## to be hit, so a slow weapon loses nothing to a walk-in and cannot bank swings through a death.
@@ -341,6 +357,17 @@ static func gold_of(enemy_name: String, cell: Vector2i) -> int:
 	return maxi(1, roundi(base_gold(cell) * EnemyRoster.hp_modifier(enemy_name)))
 
 
+## What an ordinary common body on this tile is worth in experience: XP_PER_LEVEL a level of the tile.
+static func base_xp(cell: Vector2i) -> int:
+	return maxi(1, roundi(XP_PER_LEVEL * MapBuilder.level_of(cell)))
+
+
+## What one enemy is worth in experience: the tile's base times what the body was worth to kill,
+## floored at 1 for the reason `gold_of` is.
+static func xp_of(enemy_name: String, cell: Vector2i) -> int:
+	return maxi(1, roundi(base_xp(cell) * EnemyRoster.hp_modifier(enemy_name)))
+
+
 ## The name of the enemy that is out, or "" once the fight is over.
 func enemy_name() -> String:
 	return "" if index >= lineup.size() else lineup[index]
@@ -385,6 +412,7 @@ func arm(stats: Dictionary) -> void:
 	crit_chance = clampf(float(stats.get("crit_chance", 0.0)), 0.0, CRIT_CAP)
 	crit_damage = float(stats.get("crit_damage", 0.0))
 	attack_speed = maxf(0.0, float(stats.get("attack_speed", 0.0)))
+	drop_rate = maxf(0.0, float(stats.get("drop_rate", 0.0)))
 
 
 ## One blow, from a click or from the weapon swinging itself. Takes `damage` off the enemy in front
@@ -410,7 +438,8 @@ func _strike(automatic: bool) -> bool:
 		# The tile's level is the ceiling on what can fall here, not what falls -- the drop rolls its
 		# own level under it, so fighting deeper improves the odds rather than the prize.
 		var dropped := LootTable.roll(lineup[index], loot_rng,
-				always_drop or (guarantee_elite and on_elite()), MapBuilder.level_of(cell))
+				always_drop or (guarantee_elite and on_elite()), MapBuilder.level_of(cell),
+				drop_rate)
 		if dropped != null:
 			loot_dropped.emit(index, dropped)
 		# Every body carries one, which is the whole difference between gold and gear: nine kills in
@@ -418,6 +447,9 @@ func _strike(automatic: bool) -> bool:
 		var purse := gold_of(lineup[index], cell)
 		gold += purse
 		gold_dropped.emit(index, purse)
+		var worth := xp_of(lineup[index], cell)
+		xp += worth
+		xp_dropped.emit(index, worth)
 		# A third draw, on its own generator and its own curve. Beside the gear rather than instead
 		# of it: a body that left a sword can leave an orb too, which is what makes the two rates
 		# independent numbers rather than one number split.

@@ -121,17 +121,32 @@ func items() -> Array[Item]:
 	return all
 
 
-## What the whole set is worth: every worn piece's `effective_stats`, added up stat by stat.
+## What the whole set is worth: every worn piece's `effective_stats`, added up stat by stat, and then
+## whatever the set's GLOBAL modifiers ask of the total.
 ##
-## Adding is the only rule. Two rings of +3 Fire Resistance make 6, two pieces of armour add, and a
-## second source of crit damage adds to the first -- which is exactly why the tables put health and
-## the resistances on nearly every piece. Percent modifiers were already folded into each item
-## before it got here, so nothing scales anything across pieces.
+## Adding is the rule for the first pass. Two rings of +3 Health make 6, two pieces of armour add,
+## and a second source of crit damage adds to the first -- which is exactly why the tables put health
+## and armour on nearly every piece. A piece's own percent modifiers were folded into it before it
+## got here, so nothing there scales anything across pieces.
+##
+## The second pass is the one thing that does, and it is why GLOBAL exists as its own kind: a ring's
+## "+14% increased Damage" is a percentage of what the player deals, which is the sword's number and
+## not the ring's. So the globals are gathered while the stats are added, summed across the set, and
+## applied once at the end -- after everything that contributes to the stat is in, which is the only
+## point at which the answer does not depend on what order the sockets were read in. A global on a
+## stat nothing carries scales zero, which is correct: increased damage is worth nothing bare-handed.
 func totals() -> Dictionary:
 	var out := {}
+	var global := {}
 	for item in items():
-		for stat: String in item.effective_stats():
-			out[stat] = float(out.get(stat, 0.0)) + float(item.effective_stats()[stat])
+		var stats := item.effective_stats()
+		for stat: String in stats:
+			out[stat] = float(out.get(stat, 0.0)) + float(stats[stat])
+		var percents := item.global_percents()
+		for stat: String in percents:
+			global[stat] = float(global.get(stat, 0.0)) + float(percents[stat])
+	for stat: String in global:
+		out[stat] = float(out.get(stat, 0.0)) * (1.0 + float(global[stat]) / 100.0)
 	return out
 
 

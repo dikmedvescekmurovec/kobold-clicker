@@ -2,14 +2,21 @@ class_name ModifierTable
 extends RefCounted
 ## What an item can carry on top of what it is.
 ##
-## Three shapes of modifier, and each is let onto a piece by a different rule.
+## Four shapes of modifier, and each is let onto a piece by a different rule.
 ##
 ## A PERCENT one scales a stat the item already has, so it needs that *base* stat: a boot has no
 ## damage to increase. A FLAT one adds a stat outright, so it needs only that the piece be allowed to
 ## carry it -- LootTable's `affixes` -- which is how a ring with no health of its own rolls "+8
-## Health". A PLAYER one is a buff to the player rather than the item, and can land on anything; the
-## pool of those is deliberately small and every one of them names something this game already has,
-## rather than inventing a currency or a resistance for a system nobody has written.
+## Health". A GLOBAL one is a percentage of what the *whole set* is worth rather than of anything the
+## piece has, so it needs neither: LootTable's `globals` says which pieces may carry one, which today
+## is the jewellery and nothing else. A PLAYER one is a buff to the player rather than the item, and
+## can land on anything; the pool of those is deliberately small and every one of them names
+## something this game already has, rather than inventing a currency for a system nobody has written.
+##
+## Where a modifier is *applied* follows from that. A PERCENT and a FLAT one are folded into the
+## piece by `Item.effective_stats`, because they are numbers the piece is worth. A GLOBAL one is
+## folded in once by `Equipment.totals`, after every worn piece has been added up -- a ring has no
+## damage of its own for "+14% increased Damage" to scale, and the sword's is exactly what it means.
 ##
 ## Which modifiers an item can roll is decided by building the list of candidates first and drawing
 ## from that, never by rolling and checking: a modifier the item cannot carry is never a candidate,
@@ -22,7 +29,8 @@ extends RefCounted
 enum Kind {
 	PERCENT,  ## scales a base stat the item has: "+14% increased Damage"
 	FLAT,     ## adds a stat the item is allowed to carry: "+2 Damage"
-	PLAYER,   ## a buff to the player, and so at home on any item at all: "+6% item find"
+	GLOBAL,   ## scales what the whole set is worth, not the piece: a ring's "+14% increased Damage"
+	PLAYER,   ## a buff to the player, and so at home on any item at all: "+4s on the fight clock"
 }
 
 ## id -> what it does, what it touches, the range it rolls in, and how often it is drawn against the
@@ -34,7 +42,8 @@ const MODS := {
 	"increased_damage": {"kind": Kind.PERCENT, "stat": "damage", "range": [8, 20], "weight": 10},
 	# A point of damage is a lot now that a sword carries one: the whole curve starts at a click for 1
 	# and this is the modifier that can double it, so its band is the tightest in the table.
-	"added_damage": {"kind": Kind.FLAT, "stat": "damage", "range": [1, 2], "weight": 10},
+	"added_damage": {"kind": Kind.FLAT, "stat": "damage", "range": [1, 2], "weight": 10,
+		"level_flat": 0.25},
 	"increased_crit": {"kind": Kind.PERCENT, "stat": "crit_chance", "range": [10, 30], "weight": 10},
 	"added_crit": {"kind": Kind.FLAT, "stat": "crit_chance", "range": [1, 4], "weight": 10},
 	"increased_attack_speed": {"kind": Kind.PERCENT, "stat": "attack_speed", "range": [5, 12], "weight": 10},
@@ -67,10 +76,22 @@ const MODS := {
 	"added_strength": {"kind": Kind.FLAT, "stat": "strength", "range": [2, 8], "weight": 8},
 	"added_dexterity": {"kind": Kind.FLAT, "stat": "dexterity", "range": [2, 8], "weight": 8},
 	"added_intelligence": {"kind": Kind.FLAT, "stat": "intelligence", "range": [2, 8], "weight": 8},
-	# The player-wide four. Each points at something that exists: LootTable.chance_for,
+	# What a body leaves, which is a stat now rather than a player-wide sentence: the Gold Ring shows
+	# it and anything allowed to carry it rolls this.
+	"added_drop_rate": {"kind": Kind.FLAT, "stat": "drop_rate", "range": [3, 10], "weight": 4},
+	# The globals, and the jewellery is the only place they land. A percentage of the whole set is
+	# worth more than a percentage of one piece, so increased damage rolls the smaller of the two
+	# bands here -- the frontier is beaten with what the set adds up to, and test_combat's edge-fight
+	# line is where that band is actually read off. Attack speed has no flat form (see below), so
+	# this is the whole of what a ring can do to it.
+	"global_increased_damage": {"kind": Kind.GLOBAL, "stat": "damage", "range": [5, 12], "weight": 8},
+	"global_increased_attack_speed": {"kind": Kind.GLOBAL, "stat": "attack_speed", "range": [5, 12], "weight": 8},
+	# The player-wide three, and none of them is read yet. Each points at something that exists:
 	# Encounter.seconds, PlayerToken.SECONDS_PER_TILE and ItemRarity.TIER_WEIGHTS. The clock stops at
 	# four seconds because four on a thirty-second fight is already a noticeably easier one.
-	"item_find": {"kind": Kind.PLAYER, "line": "+%d%% item find", "range": [3, 10], "weight": 4},
+	#
+	# There were four: `item_find` was the player-wide way of saying what `drop_rate` now says as a
+	# stat, and one idea under two names is how the two would come to disagree.
 	"fight_clock": {"kind": Kind.PLAYER, "line": "+%ds on the fight clock", "range": [1, 4], "weight": 4},
 	"walk_speed": {"kind": Kind.PLAYER, "line": "+%d%% walk speed", "range": [3, 8], "weight": 4},
 	"item_rarity": {"kind": Kind.PLAYER, "line": "+%d%% better item rarity", "range": [3, 10], "weight": 2},
@@ -78,6 +99,14 @@ const MODS := {
 
 ## No modifier can be drawn without a stat to hang on, so attack speed has no flat form: "+0.2
 ## attacks a second" would be the one fraction in the file.
+
+## The modifiers no item can roll today, and that is on purpose rather than an oversight. The
+## resistances came off every piece when it became clear nothing can hurt the player, so there is
+## nothing for them to defend against -- but a resistance is a system half-written rather than a bad
+## idea, and the table keeps them so that putting them back is a word on an item and nothing else.
+## Written down here because "unreachable" is exactly what a test would otherwise fail on, and a
+## silently unreachable modifier and a deliberately dormant one have to be told apart by name.
+const DORMANT := ["added_fire_resist", "added_cold_resist", "added_lightning_resist"]
 
 
 ## Every modifier this piece could carry: the player-wide ones, which fit anything, plus the ones
@@ -93,6 +122,8 @@ static func pool_for(item_type: String) -> PackedStringArray:
 				fits = true
 			Kind.PERCENT:
 				fits = LootTable.has_stat(item_type, mod["stat"])
+			Kind.GLOBAL:
+				fits = LootTable.can_globalize(item_type, mod["stat"])
 			_:
 				fits = LootTable.can_roll(item_type, mod["stat"])
 		if fits:
@@ -129,12 +160,20 @@ static func band_for(id: String, level: int) -> Array:
 	var high := int(band[1])
 	match entry["kind"]:
 		Kind.FLAT:
-			# An amount of a stat, so it grows exactly the way that stat's own numbers do.
-			low = maxi(1, roundi(LootTable.scale(entry["stat"], float(low), level)))
-			high = maxi(1, roundi(LootTable.scale(entry["stat"], float(high), level)))
-		Kind.PERCENT:
-			# A percentage of a stat that has already grown. It takes the multiplier and not the
-			# flat step, which is sized for the stat itself rather than for a percentage of it.
+			# An amount of a stat, so it grows the way that stat's own numbers do -- unless the entry
+			# says otherwise. `level_flat` is there for the one stat whose per-level step was sized for
+			# the piece that has it as a base stat: a whole point of damage a level is right for the
+			# sword, which is where a click's damage comes from, and four times too much once the
+			# jewellery can add a modifier's worth of damage on every finger. Only the absolute step is
+			# the entry's; the multiplier is the stat's either way.
+			var step: float = float(entry.get("level_flat",
+					LootTable.LEVEL_FLAT.get(entry["stat"], 0.0)))
+			low = maxi(1, roundi(LootTable.scale(entry["stat"], float(low), level, step)))
+			high = maxi(1, roundi(LootTable.scale(entry["stat"], float(high), level, step)))
+		Kind.PERCENT, Kind.GLOBAL:
+			# A percentage of a stat that has already grown -- the piece's own or the whole set's,
+			# which is the same arithmetic. It takes the multiplier and not the flat step, which
+			# is sized for the stat itself rather than for a percentage of it.
 			low = maxi(1, roundi(low * pow(LootTable.LEVEL_GROWTH, maxi(level - 1, 0))))
 			high = maxi(1, roundi(high * pow(LootTable.LEVEL_GROWTH, maxi(level - 1, 0))))
 		_:
@@ -197,7 +236,9 @@ static func line(mod: Dictionary) -> String:
 	match entry["kind"]:
 		Kind.PLAYER:
 			return entry["line"] % value
-		Kind.PERCENT:
+		Kind.PERCENT, Kind.GLOBAL:
+			# The same sentence for both, and honestly so: with one weapon between them, a sword's
+			# increased damage and a ring's are the same claim about the same number.
 			return "+%d%% increased %s" % [value, LootTable.STAT_LABELS[entry["stat"]]]
 		_:
 			# A flat roll on a stat that is itself a percentage adds percentage points, and has to

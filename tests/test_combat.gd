@@ -26,6 +26,7 @@ func _run() -> void:
 	_check(_test_a_farm_run_never_ends() == true, "farm run tests ran to the end")
 	_check(_test_a_settlement_is_a_set_piece() == true, "settlement fight tests ran to the end")
 	_check(_test_gold() == true, "gold tests ran to the end")
+	_check(_test_experience() == true, "experience tests ran to the end")
 	_check(_test_coins() == true, "coin tests ran to the end")
 	_check(_test_orb_drops() == true, "orb drop tests ran to the end")
 	await _test_thrown_finds()
@@ -288,6 +289,56 @@ func _test_gold() -> bool:
 	_check(banked > 0, "a body or two went down before giving up")
 	lost.give_up()
 	_check(lost.gold == banked, "and giving up keeps every purse that fell")
+	return true
+
+
+## Every body's experience: gold's curve on its own dials, summed by the fight, kept by a lost one --
+## and a level costing more killing the further out the player has to go to earn it.
+func _test_experience() -> bool:
+	_check(Encounter.base_xp(MapBuilder.CENTER) == 1, "a body in the middle is worth one experience")
+	_check(Encounter.xp_of("Grass Slime", MapBuilder.CENTER) >= 1, "and never less than one")
+	var far := Vector2i(12, 0)
+	for enemy in EnemyRoster.names():
+		_check(Encounter.xp_of(enemy, far) > Encounter.xp_of(enemy, MapBuilder.CENTER),
+				"%s is worth more further out" % enemy)
+	_check(Encounter.xp_of("Skeleton Warrior", far) < Encounter.xp_of("Medusa", far),
+			"an elite is worth more than a common of the same size")
+
+	var fight := Encounter.for_tile(Vector2i(4, 0), "grass")
+	var drops: Array = []
+	fight.xp_dropped.connect(func(_index: int, amount: int) -> void: drops.append(amount))
+	fight.start()
+	_play(fight, 4000)
+	_check(fight.finished and fight.victory, "the fight was won")
+	_check(drops.size() == Encounter.ENEMIES, "every body gave experience, not %d" % drops.size())
+	var summed := 0
+	for amount: int in drops:
+		summed += amount
+	_check(fight.xp == summed, "the fight holds %d experience, and %d fell" % [fight.xp, summed])
+
+	var lost := Encounter.for_tile(Vector2i(4, 0), "grass")
+	lost.start()
+	_play(lost, 30)
+	var banked := lost.xp
+	_check(banked > 0, "a body or two went down before giving up")
+	lost.give_up()
+	_check(lost.xp == banked, "and giving up keeps the experience")
+
+	# How many ordinary bodies a level takes, for a player whose level matches the tile they fight on.
+	# It has to climb: the threshold outgrows the drops however far out the player walks.
+	var last_level := 0
+	var last_kills := 0.0
+	for steps in range(0, 400):
+		var here := Vector2i(steps, 0)
+		var level := MapBuilder.level_of(here)
+		if level == last_level:
+			continue
+		var kills := float(PlayerLevel.xp_to_next(level)) / Encounter.xp_of("Skeleton Warrior", here)
+		if last_level > 0:
+			_check(kills > last_kills, "level %d takes %.1f bodies, more than level %d's %.1f"
+					% [level, kills, last_level, last_kills])
+		last_level = level
+		last_kills = kills
 	return true
 
 

@@ -29,8 +29,9 @@ const SAVE_PATH := "user://inventory.json"
 ## version 3's `equipped` did. 6 adds the purse, which a version 5 save simply has none of and comes
 ## back from empty-handed -- which is exactly what every bag had until gold was a thing at all. 7
 ## adds the orbs, which are counts and not items, and which a version 6 save has none of for the same
-## reason it has no gold: they did not exist when it was written.
-const VERSION := 7
+## reason it has no gold: they did not exist when it was written. 8 adds the player's level and the
+## experience held towards the next one; a version 7 save comes back at level 1 with none.
+const VERSION := 8
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -64,6 +65,12 @@ var gold := 0
 ## autodiscard rule and never sorted into a level section. A count cannot be the worst thing in a
 ## full bag, so none of the machinery that decides what to destroy has anything to say about it.
 var orbs := {}
+
+## The player's level and the experience held towards the next one -- `PlayerLevel` says what a level
+## costs. Kept here beside the purse for the purse's reason: it is carried, not explored. Nothing reads
+## the level yet.
+var level := 1
+var xp := 0
 
 ## The levels the player has told the game to stop bringing. Levels rather than items, because a
 ## level is what a section of the bag is, and rarity is not consulted: a marked level is done with,
@@ -282,6 +289,15 @@ func spend_orb(orb: String) -> bool:
 
 
 ## Every orb held, counted together. What a fight's verdict says it earned.
+## Banks `amount` experience, levelling up as many times as it pays for. Returns how many levels that
+## was, which is almost always none.
+func add_xp(amount: int) -> int:
+	var after := PlayerLevel.add(level, xp, amount)
+	level = after["level"]
+	xp = after["xp"]
+	return after["gained"]
+
+
 func total_orbs() -> int:
 	var total := 0
 	for orb: String in orbs:
@@ -304,6 +320,8 @@ func save(path := SAVE_PATH) -> bool:
 		"version": VERSION,
 		"first_elite_taken": first_elite_taken,
 		"gold": gold,
+		"level": level,
+		"xp": xp,
 		"orbs": orbs,
 		"items": saved,
 		"equipped": equipment.to_dict(),
@@ -363,6 +381,13 @@ static func load_from(path := SAVE_PATH) -> Inventory:
 	var purse: Variant = data.get("gold", 0)
 	if typeof(purse) in [TYPE_INT, TYPE_FLOAT]:
 		inventory.gold = maxi(0, int(purse))
+	# Version 7 knew nothing about levels: an absent key reads as a fresh level 1. A level below 1 or
+	# experience below nothing in a hand-edited file is clamped rather than guessed at, and experience
+	# already worth a level is paid out, so the file comes back obeying the curve.
+	var saved_level: Variant = data.get("level", 1)
+	var saved_xp: Variant = data.get("xp", 0)
+	inventory.level = maxi(1, int(saved_level)) if typeof(saved_level) in [TYPE_INT, TYPE_FLOAT] else 1
+	inventory.add_xp(maxi(0, int(saved_xp)) if typeof(saved_xp) in [TYPE_INT, TYPE_FLOAT] else 0)
 	# Version 6 knew nothing about orbs, and an absent key reads as none. An orb this build no longer
 	# has is dropped rather than kept as a name nothing can draw -- the same pruning by name that
 	# Item.from_dict does to a retired piece, and the reason orbs are saved by name at all.

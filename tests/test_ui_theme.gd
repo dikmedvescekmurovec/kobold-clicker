@@ -11,6 +11,7 @@ func _run() -> void:
 	_check(_test_controls(theme) == true, "live control tests ran to the end")
 	_check(_test_orb_tray() == true, "orb tray tests ran to the end")
 	_check(_test_health_bar() == true, "health bar tests ran to the end")
+	_check(_test_character_panel() == true, "character panel tests ran to the end")
 	_report("UI theme")
 
 
@@ -273,3 +274,36 @@ func _labels_in(slot: OrbSlot) -> int:
 			found += 1
 	slot.free()
 	return found
+
+
+## The character panel: every bar lies inside the frame, the portrait inside it too, and the XP bar
+## empties by whole sprite pixels, never to nothing while there is anything to show.
+func _test_character_panel() -> bool:
+	var frame := CharacterPanel.FRAME.get_size()
+	var portrait := CharacterPanel.PORTRAIT.get_size()
+	_check(Vector2(CharacterPanel.PORTRAIT_AT) + portrait <= frame, "the portrait fits in the frame")
+	for bar: String in CharacterPanel.BARS:
+		var texture: Texture2D = load(CharacterPanel.ROOT + "ui_char_bar_%s.png" % bar)
+		_check(texture != null, "the %s bar exists" % bar)
+		var end := Vector2(CharacterPanel.BARS[bar]) + texture.get_size()
+		_check(end.x <= frame.x and end.y <= frame.y, "the %s bar lies inside the frame" % bar)
+	var gem: Texture2D = load("res://Assets/UI/xp_gem.png")
+	_check(gem != null and gem.get_size() == Vector2(6, 6), "the gem is the 6 px cut")
+
+	var panel := CharacterPanel.new()
+	root.add_child(panel)
+	var full: int = roundi(load(CharacterPanel.ROOT + "ui_char_bar_xp.png").get_width())
+	_check(panel.shown_pixels("xp") == 0, "no experience shows no bar")
+	_check(panel.shown_pixels("hp") == roundi(load(CharacterPanel.ROOT + "ui_char_bar_hp.png").get_width()),
+			"health stands full")
+	# A level deep enough that one point is far under half a pixel, which would round to nothing.
+	panel.set_state(10, 1)
+	_check(panel.shown_pixels("xp") == 1, "one point still shows one pixel")
+	panel.set_state(1, PlayerLevel.xp_to_next(1) / 2)
+	_check(absi(panel.shown_pixels("xp") - full / 2) <= 1, "half shows half: %d of %d"
+			% [panel.shown_pixels("xp"), full])
+	_check(panel.absorb(PlayerLevel.xp_to_next(1)) == 1 and panel.level == 2, "absorbing a level levels up")
+	_check(panel.size.y > frame.y * CharacterPanel.PIXEL, "the name line stands over the frame")
+	_check(panel.mouse_filter == Control.MOUSE_FILTER_IGNORE, "the panel never takes the mouse")
+	panel.queue_free()
+	return true
