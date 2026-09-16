@@ -55,6 +55,7 @@ func _run() -> void:
 	_check(await _test_a_farm_run_holds_its_loot() == true, "farm run tests ran to the end")
 	_check(await _test_a_rule_keeps_finds_off_the_screen() == true, "autodiscard fight tests ran to the end")
 	_check(await _test_crafting_from_the_bag() == true, "crafting tests ran to the end")
+	_check(await _test_tips() == true, "tip tests ran to the end")
 	_clear_save()
 	_report("inventory")
 
@@ -800,7 +801,11 @@ func _test_the_map_keeps_what_dropped() -> bool:
 		await process_frame
 
 	_check(main.inventory.total() == 0, "a first run starts with nothing")
-	_check(main._bag_button.visible, "the items button is on the map")
+	_check(not main._bag_button.visible and not main._skills_button.visible,
+			"a first run has no corner buttons: nothing for them to open yet")
+	main.inventory.tips.append("first_orb")
+	main._show_corner(true)
+	_check(main._bag_button.visible, "the items button is on the map once its tip is seen")
 	_check(_bag_squares(main).is_empty(), "and the bag is empty")
 
 	main._on_bag_pressed()
@@ -925,6 +930,7 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	_check(main._bag_gold.text == str(main.inventory.gold),
 			"the bag's footer says what is in the purse: %s" % main._bag_gold.text)
 	_check(main._bag_button.visible, "the button is back with the map")
+	_check(main._tip_panel != null, "and the first find has a pop-up")
 
 	# The grid holds one square per item, and a square opens what that item is.
 	main._on_bag_pressed()
@@ -2116,3 +2122,40 @@ func _test_crafting_from_the_bag() -> bool:
 ## The right-hand edge of a panel on the UI layer, in window pixels.
 func _panel_right(panel: Control, ui_scale: float) -> float:
 	return panel.get_global_position().x + panel.size.x * ui_scale
+
+
+## A first find and a first level each put up one pop-up, once, and bring on the corner button they
+## are about, pulsing until it is pressed.
+func _test_tips() -> bool:
+	_clear_save()
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	main.inventory_path = TEST_PATH
+	main.map_path = TEST_MAP_PATH
+	root.add_child(main)
+	await process_frame
+	_check(not main._bag_button.visible and not main._skills_button.visible, "no corner buttons at first")
+	main._check_tips()
+	_check(main._tip_panel == null and main._tip_queue.is_empty(), "and nothing to say")
+
+	main.inventory.add(_piece(ItemRarity.Rarity.COMMON, 1))
+	main.inventory.level = 2
+	main._check_tips()
+	_check(main._tip_panel != null and main._tip_queue.size() == 1, "two tips: one up, one waiting")
+	_check(main._bag_button.visible and main._skills_button.visible, "both buttons come on")
+	_check(main._flashes.has("opened_bag") and main._flashes.has("opened_skills"), "both pulsing")
+	_check(Inventory.load_from(TEST_PATH).tips.has("level_up"), "and the tips are saved")
+	main._on_tip_closed()
+	_check(main._tip_panel != null and main._tip_queue.is_empty(), "closing one shows the next")
+	main._on_tip_closed()
+	main._check_tips()
+	_check(main._tip_panel == null, "and none comes twice")
+
+	main._on_bag_pressed()
+	_check(not main._flashes.has("opened_bag") and main._bag_button.modulate == Color.WHITE,
+			"pressing the bag stops its pulse")
+	_check(main._flashes.has("opened_skills"), "while the star keeps pulsing")
+	main.queue_free()
+	_clear_save()
+	return true

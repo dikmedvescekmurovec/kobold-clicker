@@ -185,6 +185,23 @@ var _combat: CombatScene
 ## written over: overwriting is how a save gets eaten, and the build that wrote it can still read it.
 var _save_blocked := false
 
+## First-time pop-ups, in the order they are shown: id, title, what it says. Each is shown once for the
+## player, after the fight that earned it, and the corner button it is about only appears with it.
+const TIPS := [
+	["first_item", "Spoils of Battle", "The fallen leave treasure behind! Open your bag with the chest in the top-left corner, then look over what you found and gear up for the fights ahead."],
+	["first_orb", "A Spark of Power", "This orb hums with raw magic, and it can reshape your gear. Open a piece in your bag, and the orbs that answer its call glow. Pick one and see what happens."],
+	["level_up", "Power Grows Within", "Battle has hardened you. A skill point awaits, so open the skills page with the star in the top-left corner and choose your path."],
+]
+const FLASH_BRIGHT := Color(1.6, 1.6, 1.6)
+const FLASH_SECONDS := 0.5
+
+var _ui_layer: CanvasLayer
+## Tips earned but not shown yet, and the one that is up.
+var _tip_queue: Array = []
+var _tip_panel: VBoxContainer
+## Pulses on corner buttons that have not been pressed yet: the pressed-once id -> its tween.
+var _flashes := {}
+
 
 func _ready() -> void:
 	# Two different nulls: no file at all is a first run, and a file that cannot be honoured stops.
@@ -283,6 +300,7 @@ func _build_ui() -> void:
 	var layer := CanvasLayer.new()
 	layer.name = "UI"
 	add_child(layer)
+	_ui_layer = layer
 
 	_panel = _titled_panel("Tile", "Close and deselect the tile", _on_close_pressed)
 	_panel.scale = Vector2(ui_scale, ui_scale)
@@ -333,6 +351,8 @@ func _build_ui() -> void:
 
 	get_viewport().size_changed.connect(_layout_ui)
 	_layout_ui.call_deferred()
+	# A new player has nothing for either corner button to open yet.
+	_show_corner(true)
 
 
 ## The character panel, on a layer of its own above the fight: `CombatScene` is a CanvasLayer on
@@ -1424,6 +1444,8 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 	if map.selected_cell != HexMap.NO_CELL:
 		_panel.show()
 	_update_buttons()
+	# After banking, so a run's pouch counts; after the fight, so a pop-up never covers one.
+	_check_tips()
 
 
 ## The player walks to the tile; both buttons stay disabled until they get there.
@@ -1605,8 +1627,86 @@ func _bank_farm_loot() -> void:
 ## Both corner buttons at once. They come and go together because what takes them away is never
 ## about one of them -- a page standing on their edge, or a fight that must see every click.
 func _show_corner(shown: bool) -> void:
-	_bag_button.visible = shown
-	_skills_button.visible = shown
+	_bag_button.visible = shown and ("first_item" in inventory.tips or "first_orb" in inventory.tips)
+	_skills_button.visible = shown and "level_up" in inventory.tips
+	if _bag_button.visible:
+		_flash(_bag_button, "opened_bag")
+	if _skills_button.visible:
+		_flash(_skills_button, "opened_skills")
+
+
+## Whether the thing a tip is about has happened yet.
+func _tip_due(id: String) -> bool:
+	match id:
+		"first_item":
+			return inventory.total() > 0
+		"first_orb":
+			return inventory.total_orbs() > 0
+		"level_up":
+			return inventory.level > 1
+	return false
+
+
+## Queues every tip that has come due and not been shown, and brings on the buttons they unlock.
+func _check_tips() -> void:
+	var added := false
+	for tip: Array in TIPS:
+		if tip[0] not in inventory.tips and _tip_due(tip[0]):
+			inventory.tips.append(tip[0])
+			_tip_queue.append(tip)
+			added = true
+	if added:
+		inventory.save(inventory_path)
+	_show_corner(_combat == null)
+	if _tip_panel == null:
+		_show_next_tip()
+
+
+## One tip at a time, in the middle of the window, built the way the refused-save panel is.
+func _show_next_tip() -> void:
+	if _tip_queue.is_empty():
+		return
+	var tip: Array = _tip_queue.pop_front()
+	_tip_panel = _titled_panel(tip[1], "Close", _on_tip_closed)
+	_tip_panel.scale = Vector2(ui_scale, ui_scale)
+	_ui_layer.add_child(_tip_panel)
+	var label := Label.new()
+	label.theme_type_variation = "PanelLabel"
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.custom_minimum_size.x = minf(get_viewport().get_visible_rect().size.x / ui_scale - REFUSAL_MARGIN, REFUSAL_WIDTH)
+	label.text = tip[2]
+	_body_of(_tip_panel).add_child(label)
+	# Deferred: a wrapped label only knows how tall it is once it has been laid out once.
+	_center_panel.call_deferred(_tip_panel)
+
+
+func _on_tip_closed() -> void:
+	_tip_panel.queue_free()
+	_tip_panel = null
+	_show_next_tip()
+
+
+## Pulses a button until it has been pressed once. The tween is the scene's, so a button hidden for
+## a fight is still pulsing when it comes back.
+func _flash(button: Button, id: String) -> void:
+	if id in inventory.tips or _flashes.has(id):
+		return
+	var tween := create_tween().set_loops()
+	tween.tween_property(button, "modulate", FLASH_BRIGHT, FLASH_SECONDS)
+	tween.tween_property(button, "modulate", Color.WHITE, FLASH_SECONDS)
+	_flashes[id] = [tween, button]
+
+
+## The first press: the pulse stops for good.
+func _stop_flash(id: String) -> void:
+	if id in inventory.tips:
+		return
+	inventory.tips.append(id)
+	inventory.save(inventory_path)
+	if _flashes.has(id):
+		_flashes[id][0].kill()
+		_flashes[id][1].modulate = Color.WHITE
+		_flashes.erase(id)
 
 
 ## Every page that stands against the left edge. They share it, so opening one closes the rest and
@@ -1636,12 +1736,14 @@ func _on_left_page_closed() -> void:
 
 
 func _on_skills_pressed() -> void:
+	_stop_flash("opened_skills")
 	# Levels and gold both move while the page is shut, and both change what it says.
 	_refresh_skills()
 	_open_left_page(_skills_panel)
 
 
 func _on_bag_pressed() -> void:
+	_stop_flash("opened_bag")
 	# Always opens on the grid: a stat block left over from last time is not what was asked for.
 	# Both selections, not just the bag's -- leaving the other set reopens the bag on a worn piece,
 	# which is the very thing this reset exists to prevent.

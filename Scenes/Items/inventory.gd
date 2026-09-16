@@ -53,6 +53,10 @@ var equipment := Equipment.new()
 ## the player rather than once per launch.
 var first_elite_taken := false
 
+## The first-time pop-ups already shown, and the buttons already pressed once, by id. The main scene
+## decides what they mean; this only keeps them, so each is once for the player rather than per launch.
+var tips: Array[String] = []
+
 ## What the player has earned. Not in the bag and not against its cap: a purse is a number rather
 ## than a thing, so it can never be the worst item in a full bag and can never be trimmed. It lives
 ## here rather than beside the map because it is carried, not explored.
@@ -346,6 +350,7 @@ func save(path := SAVE_PATH) -> bool:
 	file.store_string(JSON.stringify({
 		"version": VERSION,
 		"first_elite_taken": first_elite_taken,
+		"tips": tips,
 		"gold": gold,
 		"level": level,
 		"xp": xp,
@@ -374,6 +379,10 @@ static func load_from(path := SAVE_PATH) -> Inventory:
 		push_warning("Inventory: %s is not a save file; starting empty" % path)
 		return inventory
 	inventory.first_elite_taken = bool(data.get("first_elite_taken", false))
+	var seen: Variant = data.get("tips", [])
+	if typeof(seen) == TYPE_ARRAY:
+		for tip: Variant in seen:
+			inventory.tips.append(str(tip))
 	var version := int(data.get("version", 1))
 	if version > VERSION:
 		# A save from a newer build. Guessing at a shape never seen is how a save gets eaten; leaving
