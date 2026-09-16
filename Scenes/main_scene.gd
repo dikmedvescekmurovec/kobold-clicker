@@ -1379,6 +1379,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# Until the player has seen their first drop, the first elite they meet is promised one.
 	fight.guarantee_elite = not inventory.first_elite_taken
 	fight.effects = inventory.skills.effects()
+	fight.orbs_after = maxi(0, OrbTable.FIRST_ORB_KILLS - inventory.kills)
 	_farming = farming
 	_banked = false
 	_elite_dropped = false
@@ -1426,6 +1427,7 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 	# Read before the fight is freed, and before banking, which zeroes the run's own pouch.
 	var earned: int = _combat.fight.gold
 	_bank_farm_loot()
+	_bank_kills(kills)
 	_combat.queue_free()
 	_combat = null
 	# Gems still in the air when the fight closed never arrive, so the panel is put back on the ledger.
@@ -1629,6 +1631,12 @@ func _bank_farm_loot() -> void:
 	_refresh_bag()
 
 
+## A fight's kills go on the player's lifetime count, which is what holds the first orb back.
+func _bank_kills(kills: int) -> void:
+	inventory.kills += kills
+	inventory.save(inventory_path)
+
+
 ## Both corner buttons at once. They come and go together because what takes them away is never
 ## about one of them -- a page standing on their edge, or a fight that must see every click.
 func _show_corner(shown: bool) -> void:
@@ -1764,6 +1772,8 @@ func _on_bag_pressed() -> void:
 ## by closing the window found what it found -- and the map goes down as it stands.
 func _exit_tree() -> void:
 	_bank_farm_loot()
+	if _combat != null:
+		_bank_kills(_combat.fight.kills())
 	_save_map()
 
 

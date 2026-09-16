@@ -417,6 +417,20 @@ func _test_experience() -> bool:
 					% [level, kills, last_level, last_kills])
 		last_level = level
 		last_kills = kills
+
+	# No orb falls until the player has killed FIRST_ORB_KILLS, across fights.
+	var gated := Encounter.farm(MapBuilder.CENTER + Vector2i(1, 0), "grass")
+	gated.orbs_after = 30
+	gated.damage = 1000000
+	gated.orb_rng.seed = WORLD_SEED
+	var orb_kills: Array = []
+	gated.orb_dropped.connect(func(_i: int, _orb: String) -> void: orb_kills.append(gated.kills()))
+	gated.start()
+	while gated.kills() < 400:
+		gated.hit()
+		gated.advance(0.1)
+	_check(not orb_kills.is_empty(), "orbs fall once the kills are made: %d" % orb_kills.size())
+	_check(orb_kills.is_empty() or orb_kills[0] >= 30, "and never before: first at kill %s" % [orb_kills.slice(0, 1)])
 	return true
 
 

@@ -62,6 +62,9 @@ var tips: Array[String] = []
 ## here rather than beside the map because it is carried, not explored.
 var gold := 0
 
+## Every enemy the player has ever killed. It is what holds orbs back until `OrbTable.FIRST_ORB_KILLS`.
+var kills := 0
+
 ## What currency the player is holding: orb name -> how many. Counts rather than objects, because an
 ## orb has nothing to tell apart -- two Orbs of Chaos are the same orb, which is exactly what gear
 ## stopped being when it started rolling modifiers.
@@ -352,6 +355,7 @@ func save(path := SAVE_PATH) -> bool:
 		"first_elite_taken": first_elite_taken,
 		"tips": tips,
 		"gold": gold,
+		"kills": kills,
 		"level": level,
 		"xp": xp,
 		"skills": skills.to_dict(),
@@ -418,6 +422,9 @@ static func load_from(path := SAVE_PATH) -> Inventory:
 	var purse: Variant = data.get("gold", 0)
 	if typeof(purse) in [TYPE_INT, TYPE_FLOAT]:
 		inventory.gold = maxi(0, int(purse))
+	var killed: Variant = data.get("kills", 0)
+	if typeof(killed) in [TYPE_INT, TYPE_FLOAT]:
+		inventory.kills = maxi(0, int(killed))
 	# Version 7 knew nothing about levels: an absent key reads as a fresh level 1. A level below 1 or
 	# experience below nothing in a hand-edited file is clamped rather than guessed at, and experience
 	# already worth a level is paid out, so the file comes back obeying the curve.

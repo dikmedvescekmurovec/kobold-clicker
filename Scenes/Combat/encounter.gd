@@ -237,6 +237,10 @@ var always_drop := false
 ## about crafting wants orbs and no gear, and a test about the pouch wants gear and no orbs.
 var always_orb := false
 
+## Kills this fight has to make before orbs can drop: what is left of `OrbTable.FIRST_ORB_KILLS` for
+## this player. The main scene sets it; zero, the default, means orbs drop from the first body.
+var orbs_after := 0
+
 ## The capstone skills the player has learned, by effect id (`Skills.effects()`): the things a skill
 ## changes about a fight rather than a number. A fight nobody tells has none.
 var effects: Array = []
@@ -480,7 +484,9 @@ func _strike(automatic: bool) -> bool:
 		# A third draw, on its own generator and its own curve. Beside the gear rather than instead
 		# of it: a body that left a sword can leave an orb too, which is what makes the two rates
 		# independent numbers rather than one number split.
-		var orb := OrbTable.roll(lineup[index], orb_rng, always_orb, orb_find)
+		var orb := ""
+		if always_orb or index >= orbs_after:
+			orb = OrbTable.roll(lineup[index], orb_rng, always_orb, orb_find)
 		if not orb.is_empty():
 			var count := 2 if "transmute" in effects and orb_rng.randf() < 0.25 else 1
 			for i in count:
