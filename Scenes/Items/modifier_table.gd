@@ -68,8 +68,8 @@ const MODS := {
 	"added_dexterity": {"kind": Kind.FLAT, "stat": "dexterity", "range": [2, 8], "weight": 8},
 	"added_intelligence": {"kind": Kind.FLAT, "stat": "intelligence", "range": [2, 8], "weight": 8},
 	# The player-wide four. Each points at something that exists: LootTable.chance_for,
-	# Encounter.SECONDS, PlayerToken.SECONDS_PER_TILE and ItemRarity.TIER_WEIGHTS. The clock stops at
-	# four seconds because four on a minute is already a noticeably easier fight.
+	# Encounter.seconds, PlayerToken.SECONDS_PER_TILE and ItemRarity.TIER_WEIGHTS. The clock stops at
+	# four seconds because four on a thirty-second fight is already a noticeably easier one.
 	"item_find": {"kind": Kind.PLAYER, "line": "+%d%% item find", "range": [3, 10], "weight": 4},
 	"fight_clock": {"kind": Kind.PLAYER, "line": "+%ds on the fight clock", "range": [1, 4], "weight": 4},
 	"walk_speed": {"kind": Kind.PLAYER, "line": "+%d%% walk speed", "range": [3, 8], "weight": 4},

@@ -9,8 +9,8 @@ extends PanelContainer
 ## only way to make it match the panel beside it would be to ask for type at `FONT_SIZE * ui_scale`
 ## -- and Pixellari renders cleanly only at its native 16. A tooltip asked for 32 px type comes back
 ## interpolated, sitting next to art that is not. So the card is an ordinary Control on the bag's
-## own CanvasLayer, scaled by `ui_scale` and placed by the scene, exactly as CombatScene's toasts and
-## its full-bag warning are placed, and for exactly the same reason.
+## own CanvasLayer, scaled by `ui_scale` and placed by the scene, exactly as CombatScene's full-bag
+## warning is placed, and for exactly the same reason.
 ##
 ## Three lines, and the third is the one worth having. A player who can see that an orb is grey does
 ## not need to be told it is grey; they need to be told what would have to be true for it not to be,

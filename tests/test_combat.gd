@@ -24,9 +24,12 @@ func _run() -> void:
 	_check(_test_backdrops() == true, "backdrop tests ran to the end")
 	_check(_test_backdrop_layouts() == true, "backdrop layout tests ran to the end")
 	_check(_test_a_farm_run_never_ends() == true, "farm run tests ran to the end")
+	_check(_test_a_settlement_is_a_set_piece() == true, "settlement fight tests ran to the end")
 	_check(_test_gold() == true, "gold tests ran to the end")
 	_check(_test_coins() == true, "coin tests ran to the end")
 	_check(_test_orb_drops() == true, "orb drop tests ran to the end")
+	await _test_thrown_finds()
+	await _test_the_nameplate_wears_the_tier()
 	await _test_the_map_hands_over_and_takes_back()
 	_report("combat")
 
@@ -203,19 +206,21 @@ func _test_backdrop_layouts() -> bool:
 func _test_lineup() -> bool:
 	for env in _environments():
 		var fight := Encounter.for_tile(Vector2i(3, 4), env)
-		_check(fight.lineup.size() == Encounter.ENEMIES, "%s fields %d enemies" % [env, Encounter.ENEMIES])
+		_check(fight.enemies == Encounter.ENEMIES and fight.seconds == Encounter.SECONDS,
+				"%s fights open land's own fight: %d in %.0fs" % [env, fight.enemies, fight.seconds])
+		_check(fight.lineup.size() == fight.enemies, "%s fields %d enemies" % [env, fight.enemies])
 		for i in fight.lineup.size():
 			var enemy: String = fight.lineup[i]
 			var tier := EnemyRoster.tier_of(enemy)
-			var wanted := EnemyRoster.Tier.ELITE if i == Encounter.ENEMIES - 1 else EnemyRoster.Tier.COMMON
+			var wanted := EnemyRoster.Tier.ELITE if i == fight.enemies - 1 else EnemyRoster.Tier.COMMON
 			_check(tier == wanted, "%s sends %s (%s) as number %d" % [env, enemy, tier, i + 1])
 			# The HUD's bar draws a farm run's pips before their enemies are rolled, so it asks the
 			# position rather than the roster. The two must never drift.
-			_check(Encounter.tier_at(i) == tier,
-					"tier_at(%d) agrees with the enemy the lineup put there" % i)
+			_check(fight.tier_for(i) == tier,
+					"tier_for(%d) agrees with the enemy the lineup put there" % i)
 			_check(tier != EnemyRoster.Tier.BOSS, "%s is no boss" % enemy)
 			_check(env in EnemyRoster.environments_of(enemy), "%s lives on %s" % [enemy, env])
-		_check(EnemyRoster.tier_of(fight.lineup[Encounter.ENEMIES - 1]) == EnemyRoster.Tier.ELITE,
+		_check(EnemyRoster.tier_of(fight.lineup[fight.enemies - 1]) == EnemyRoster.Tier.ELITE,
 				"%s ends on an elite" % env)
 
 	# A tile always fields the same fight, however often it is attempted.
@@ -322,6 +327,164 @@ func _test_coins() -> bool:
 	return true
 
 
+## The nameplate's bar drains with the enemy and wears that enemy's tier. Needs a scene rather than an
+## Encounter: the encounter knows the hit points and the view is what turns them into a width.
+##
+## The two halves are one test because they are one claim. The bar and the kill pips both read
+## Encounter.tier_in, so what this really holds is that the frame over the enemy's head and the pip
+## standing for it are the same answer -- a green-framed bar over a common, or a brown one over the
+## elite, would be worse than either of them simply being the wrong colour.
+func _test_the_nameplate_wears_the_tier() -> void:
+	var cell := Vector2i(4, 0)
+	var combat: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
+	root.add_child(combat)
+	var fight := Encounter.for_tile(cell, "grass")
+	combat.begin(fight, cell, 2.0)
+	await process_frame
+	var bar := combat._enemy_bar
+	var full := HealthBar.TROUGH * HealthBar.PIXEL
+
+	# A tile fight opens on a common, and opens full.
+	_check(Encounter.tier_in(fight, 0) == EnemyRoster.Tier.COMMON, "the first of the ten is a common")
+	_check(bar._fill.size.x == full, "a fight opens with the bar full")
+	_check(bar._cap_l.texture == HealthBar.CAP_L[EnemyRoster.Tier.COMMON],
+			"wearing the common frame")
+
+	# Take the enemy down and the red follows it, in proportion. Set rather than hit, so this measures
+	# the bar and not the damage tables -- and measured against the share the fight actually has
+	# rather than against a half, because hit points are whole numbers and the first commons have
+	# very few of them: half of seven is three, and the bar is honest about that.
+	var max_hp := fight.enemy_max_hp()
+	fight.hp = max_hp / 2
+	combat._refresh()
+	var want := float(full) * fight.hp / max_hp
+	_check(absf(bar._fill.size.x - want) <= HealthBar.PIXEL,
+			"%d of %d hit points is %d px of the bar's %d, wanted about %d"
+					% [fight.hp, max_hp, bar._fill.size.x, full, want])
+	fight.hp = 1
+	combat._refresh()
+	_check(bar._fill.size.x > 0.0 and bar._fill.size.x < full / 4.0,
+			"one hit point left still shows, and shows as nearly nothing")
+
+	# Walk the lineup to the elite. The frame changes and the trough does not.
+	var elite := fight.enemies - 1
+	_check(Encounter.tier_in(fight, elite) == EnemyRoster.Tier.ELITE, "the tenth is the elite")
+	fight.index = elite
+	fight.hp = fight.enemy_max_hp()
+	combat._refresh()
+	_check(bar._cap_l.texture == HealthBar.CAP_L[EnemyRoster.Tier.ELITE],
+			"the elite's own frame is worn when it walks in")
+	_check(bar._tracks[0].texture == HealthBar.TRACK[EnemyRoster.Tier.ELITE],
+			"and its rail with it, not only its ends")
+	_check(bar._fill.size.x == full, "an elite at full health is exactly as much red as a common")
+	_check(bar.custom_minimum_size.x > HealthBar.width_of(EnemyRoster.Tier.COMMON),
+			"and its bar is the wider one")
+
+	# The pips beside it are drawn in that same tier, which is the whole reason the lookup was shared
+	# rather than written out twice. The elite is the last of the ten, so it is the last pip.
+	_check(combat._pips._pips[elite].texture == KillPips.BODY[EnemyRoster.Tier.ELITE],
+			"the pip standing for the elite is green, like the frame over its head")
+
+	# Nothing standing means no nameplate at all, rather than an empty frame.
+	fight.index = fight.lineup.size()
+	combat._refresh()
+	_check(not combat._enemy_panel.visible, "with the lineup spent the nameplate goes")
+	combat.queue_free()
+	await process_frame
+
+	# A settlement is a longer fight, so its bar is a longer bar: a pip an enemy, gold at the end,
+	# and the clock still cut to exactly the width of the pips above it.
+	var town: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
+	root.add_child(town)
+	var siege := Encounter.for_tile(cell, "grass", "village")
+	town.begin(siege, cell, 2.0, "village")
+	await process_frame
+	_check(town._pips._pips.size() == siege.enemies,
+			"a village's bar stands %d pips, not %d" % [siege.enemies, town._pips._pips.size()])
+	_check(town._pips._pips[siege.enemies - 1].texture == KillPips.BODY[EnemyRoster.Tier.BOSS],
+			"and the pip at its far end is the boss's gold")
+	_check(town._pips._tail.texture == KillPips.TAIL[EnemyRoster.Tier.BOSS],
+			"which the bar closes in, the way it closes in whatever is at its end")
+	_check(town._clock_fill.get_parent().size.x
+			== KillPips.width_for(siege.enemies) - 2 * CombatScene.BAR_BORDER,
+			"the clock is cut to the pip bar it stands under")
+	town.queue_free()
+	await process_frame
+
+
+## What a body drops lands in the arena, the way its purse does: a sprite thrown out of it, glowing
+## in its rarity above common, and no panel anywhere. Needs a scene rather than an Encounter, because
+## the throwing is the view's half of it.
+func _test_thrown_finds() -> void:
+	var combat: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
+	root.add_child(combat)
+	combat.begin(Encounter.for_tile(Vector2i(4, 0), "grass"), Vector2i(4, 0), 2.0)
+	await process_frame
+	_check(combat._finds_shown == 0, "a fight starts having thrown nothing")
+
+	# A common piece: the icon and nothing else. Counted by what is on the scene rather than only by
+	# the tally, so this fails if the throw ever stops reaching the tree.
+	var before := combat.get_child_count()
+	combat._on_loot_dropped(0, _thrown_piece(ItemRarity.Rarity.COMMON))
+	_check(combat._finds_shown == 1, "a kept find is thrown")
+	_check(combat.get_child_count() == before + 1, "and it is a node in the arena")
+	var plain := combat.get_child(combat.get_child_count() - 1)
+	_check(plain is Sprite2D, "drawn as a sprite, like a coin")
+	_check(plain.get_child_count() == 0, "with no beam over a common piece")
+
+	# A rare one carries the wash of its own colour behind it.
+	var rare := _thrown_piece(ItemRarity.Rarity.RARE)
+	combat._on_loot_dropped(1, rare)
+	_check(combat._finds_shown == 2, "and so is the next")
+	var lit := combat.get_child(combat.get_child_count() - 1)
+	_check(lit.get_child_count() == 1, "a rare piece is thrown with a beam over it")
+	if lit.get_child_count() == 1:
+		var beam := lit.get_child(0) as AnimatedSprite2D
+		_check(beam != null, "the pack's own flame, playing")
+		if beam != null:
+			# The white colourway tinted, which is the whole reason one sheet serves the ramp: white
+			# times a colour is that colour, and any other colourway would come back muddied.
+			var want: Color = ItemRarity.BORDER_COLORS[rare.rarity]
+			_check(is_equal_approx(beam.modulate.r, want.r) and is_equal_approx(beam.modulate.g, want.g)
+					and is_equal_approx(beam.modulate.b, want.b), "in the rarity's own colour")
+			_check(beam.is_playing() and beam.animation == "burn", "and it burns")
+			_check(is_equal_approx(beam.rotation, LootBeam.RISE), "stood up out of the pack's comet")
+			_check(beam.z_index < 0 and beam.position.y < 0.0, "behind the piece and over it")
+
+	# The sheet's geometry, measured rather than guessed, the way the coin's is.
+	var burn := LootBeam.frames()
+	_check(burn.has_animation("burn"), "the beam has a burn")
+	_check(burn.get_frame_count("burn") == LootBeam.FRAMES,
+			"of %d frames, not %d" % [LootBeam.FRAMES, burn.get_frame_count("burn")])
+	_check(burn.get_animation_loop("burn"), "and it loops")
+	_check(LootBeam.SHEET.get_width() == LootBeam.FRAMES * LootBeam.SIZE
+			and LootBeam.SHEET.get_height() == LootBeam.SIZE,
+			"one row of %d square frames: %dx%d" % [LootBeam.FRAMES,
+					LootBeam.SHEET.get_width(), LootBeam.SHEET.get_height()])
+	_check(LootBeam.frames() == LootBeam.frames(), "and it is built once")
+
+	# An orb is thrown the same way and plain: it has no rarity to borrow.
+	combat._on_orb_dropped(2, OrbTable.ORBS.keys()[0])
+	_check(combat._finds_shown == 3, "an orb is thrown too")
+	_check(combat.get_child(combat.get_child_count() - 1).get_child_count() == 0,
+			"and never carries a beam")
+
+	# The toasts are gone, so nothing may still be reaching for them.
+	_check(not ("_toasts" in combat), "there is no toast left to raise")
+	combat.queue_free()
+	await process_frame
+
+
+## A piece to throw. The type is any real one -- what is being checked is the throw, not the roll.
+func _thrown_piece(rarity: ItemRarity.Rarity) -> Item:
+	var item := Item.new()
+	item.type = "Wooden Sword"
+	item.rarity = rarity
+	item.level = 1
+	item.stats = Item.scaled_stats(item.type, 1)
+	return item
+
+
 ## Health grows with the walk from the middle of the map, and with the enemy's own size and tier.
 func _test_health() -> bool:
 	var near := Vector2i(1, 0)
@@ -350,8 +513,8 @@ func _test_health() -> bool:
 
 	# The elite is the wall at the end: it must outlast any common the same tile can send.
 	var fight := Encounter.for_tile(near, "grass")
-	var elite: int = fight.health[Encounter.ENEMIES - 1]
-	for i in Encounter.ENEMIES - 1:
+	var elite: int = fight.health[fight.enemies - 1]
+	for i in fight.enemies - 1:
 		_check(elite > fight.health[i], "the elite outlasts enemy %d" % [i + 1])
 	return true
 
@@ -572,7 +735,7 @@ func _test_a_farm_run_never_ends() -> bool:
 		var is_elite := EnemyRoster.tier_of(fight.lineup[i]) == EnemyRoster.Tier.ELITE
 		if is_elite:
 			elites += 1
-		_check(is_elite == (i % Encounter.ELITE_EVERY == Encounter.ELITE_EVERY - 1),
+		_check(is_elite == (i % fight.elite_every == fight.elite_every - 1),
 				"slot %d is %s, which is not the elite rhythm" % [i, fight.lineup[i]])
 	_check(elites > 0, "a run long enough to pass ten threw up %d elite(s)" % elites)
 
@@ -588,9 +751,9 @@ func _test_a_farm_run_never_ends() -> bool:
 
 	# on_elite() asks the roster, so it is the same question in a tile fight as in a run.
 	var tile := Encounter.for_tile(Vector2i(3, 0), "grass")
-	for i in Encounter.ENEMIES:
+	for i in tile.enemies:
 		tile.index = i
-		_check(tile.on_elite() == (i == Encounter.ENEMIES - 1),
+		_check(tile.on_elite() == (i == tile.enemies - 1),
 				"slot %d of a tile fight reads the wrong way round" % i)
 	return true
 
@@ -601,8 +764,8 @@ func _test_a_farm_run_never_ends() -> bool:
 ## measuring level-1 gear against a frontier fight measures a fight nobody will ever have.
 ## What a set of gear has to be clicked at to beat the fight on `cell` inside `seconds`. Asked of an
 ## armed Encounter rather than worked out beside one, so it uses exactly the numbers the fight will.
-func _rate_for(cell: Vector2i, gear: Equipment, seconds: float) -> float:
-	var fight := Encounter.for_tile(cell, "grass")
+func _rate_for(cell: Vector2i, gear: Equipment, seconds: float, variant := "") -> float:
+	var fight := Encounter.for_tile(cell, "grass", variant)
 	fight.arm(gear.totals())
 	var per_hit := fight.damage * (1.0 + fight.crit_chance / 100.0 * fight.crit_damage / 100.0)
 	return _click_rate(fight, seconds, per_hit, fight.attack_speed)
@@ -643,6 +806,93 @@ func _commons(level := 1) -> Equipment:
 			gear.equip(socket, item)
 			break
 	return gear
+
+
+## A settlement is a set piece: fifteen enemies in a minute, an elite every fifth and a boss last.
+## All three tiers fight it -- what makes a town a longer fight is that people live there -- and a
+## farm run on one keeps that elite rhythm and never the boss.
+func _test_a_settlement_is_a_set_piece() -> bool:
+	for variant in ["village", "town", "fortress"]:
+		for env in _environments():
+			var fight := Encounter.for_tile(Vector2i(4, 6), env, variant)
+			_check(fight.enemies == 15 and fight.seconds == 60.0 and fight.elite_every == 5,
+					"a %s on %s fields %d in %.0fs, an elite every %d"
+					% [variant, env, fight.enemies, fight.seconds, fight.elite_every])
+			_check(fight.time_left == fight.seconds, "and opens with its whole clock")
+			_check(fight.lineup.size() == fight.enemies,
+					"a %s lines up %d, not %d" % [variant, fight.enemies, fight.lineup.size()])
+			_check(fight.remaining() == fight.enemies, "with all of them still to beat")
+			var bosses := 0
+			var elites := 0
+			for i in fight.lineup.size():
+				var tier := EnemyRoster.tier_of(fight.lineup[i])
+				_check(fight.tier_for(i) == tier,
+						"tier_for(%d) agrees with the enemy the lineup put there" % i)
+				_check(env in EnemyRoster.environments_of(fight.lineup[i]),
+						"%s lives on %s" % [fight.lineup[i], env])
+				match tier:
+					EnemyRoster.Tier.BOSS:
+						bosses += 1
+						_check(i == fight.enemies - 1, "the boss is last, not number %d" % [i + 1])
+					EnemyRoster.Tier.ELITE:
+						elites += 1
+						_check(i % fight.elite_every == fight.elite_every - 1,
+								"an elite stands at %d, off the rhythm" % i)
+			_check(bosses == 1, "a %s on %s ends on exactly one boss (%d)" % [variant, env, bosses])
+			# Slots 4 and 9: the boss takes the fifteenth, which would otherwise be the third elite.
+			_check(elites == 2, "and two elites before it (%d)" % elites)
+
+	# The same tile, fought twice, fields the same fifteen -- a settlement is decided before the
+	# player reaches it, like every other tile.
+	_check(Encounter.for_tile(Vector2i(4, 6), "grass", "town").lineup
+			== Encounter.for_tile(Vector2i(4, 6), "grass", "town").lineup,
+			"a settlement keeps its enemies")
+
+	# A variant this build has never heard of is open land as far as the fight is concerned.
+	var plain := Encounter.for_tile(Vector2i(4, 6), "grass", "ruins")
+	_check(plain.enemies == Encounter.ENEMIES and plain.seconds == Encounter.SECONDS
+			and not plain.boss_last, "an unknown variant fights the ordinary fight")
+
+	# A run on a town: the rhythm comes with it and the boss does not.
+	var run := Encounter.farm(Vector2i(4, 6), "grass", "fortress")
+	run.roster_rng.seed = WORLD_SEED
+	run.start()
+	_play(run, 400)
+	_check(run.elite_every == 5, "a run on a fortress throws up an elite every %d" % run.elite_every)
+	_check(run.lineup.size() > run.elite_every * 2,
+			"and runs past two whole cycles of it, at %d" % run.lineup.size())
+	var run_elites := 0
+	for i in run.lineup.size():
+		var tier := EnemyRoster.tier_of(run.lineup[i])
+		_check(tier != EnemyRoster.Tier.BOSS, "no boss comes round in a run (slot %d)" % i)
+		if tier == EnemyRoster.Tier.ELITE:
+			run_elites += 1
+		_check((tier == EnemyRoster.Tier.ELITE) == (i % run.elite_every == run.elite_every - 1),
+				"slot %d is %s, which is not the settlement rhythm" % [i, run.lineup[i]])
+	_check(run_elites > 2, "a long run on a town is thick with elites (%d)" % run_elites)
+
+	# What the set piece actually costs, measured the way the ordinary fight is: the clock less what
+	# goes on walking in and dying, against the health the whole lineup carries. A settlement is a
+	# step up by design -- a boss is worth twelve commons on its own -- so this is reported at three
+	# distances rather than pinned, and only the one claim that has to hold everywhere is checked:
+	# the first ring is where a new player starts, and it must never need gear they have not had a
+	# chance to find.
+	for steps in [1, MapBuilder.START_TOWN_DISTANCE, 12]:
+		var at := Vector2i(steps, 0)
+		var siege := Encounter.for_tile(at, "grass", "village")
+		var spare := siege.seconds - siege.enemies * (Encounter.WALK_IN + Encounter.DEATH)
+		var level := MapBuilder.level_of(at)
+		print("Village %d step(s) out (level %d): %d health, %.1f clicks/s bare, %.1f in commons, %.1f in farmed rares"
+				% [steps, level, _total_health(siege),
+					_click_rate(siege, spare, Encounter.BARE_DAMAGE, 0.0),
+					_rate_for(at, _commons(level), spare, "village"),
+					_rate_for(at, _farmed(level, ItemRarity.Rarity.RARE), spare, "village")])
+	var first := Encounter.for_tile(Vector2i(1, 0), "grass", "village")
+	var room := first.seconds - first.enemies * (Encounter.WALK_IN + Encounter.DEATH)
+	_check(_click_rate(first, room, Encounter.BARE_DAMAGE, 0.0) < 8.0,
+			"a village in the first ring is beatable with nothing on (%.1f/s)"
+			% _click_rate(first, room, Encounter.BARE_DAMAGE, 0.0))
+	return true
 
 
 func _play(fight: Encounter, limit: int) -> int:

@@ -62,7 +62,7 @@ func setup(which: String, count: int, usable: bool) -> void:
 	_icon = TextureRect.new()
 	# The source is 32 and this draws 16, so the texture is stepped down here rather than cut small:
 	# nearest keeps the halving square, and the full-size icon stays on disk for whatever wants it --
-	# the fight's toast draws the same file at its own size.
+	# the orb thrown out of a body in a fight draws the same file at its own size.
 	#
 	# The order of these matters and is the whole reason this is not two lines. A Control's `size` is
 	# clamped to its minimum as it is set, and a TextureRect's minimum is the texture's own size until

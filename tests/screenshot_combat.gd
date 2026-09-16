@@ -4,7 +4,7 @@ extends "res://tests/harness.gd"
 ##   Godot_v4.7.2-stable_win64_console.exe --path . -s res://tests/screenshot_combat.gd
 ##
 ## Saves the opening of a fight, the middle of one, the elite at the end, and the two verdicts, plus
-## a farm run with its counter, its toast, its full-bag warning and its way out, the popup the
+## a farm run with its counter, a find in the air, its full-bag warning and its way out, the popup the
 ## counter opens and one find opened inside it. Also
 ## saves a contact sheet of every enemy's idle frame at the size the fight draws it, which is what
 ## catches a frame or crop measured wrong in EnemyRoster, and one shot per environment on its own
@@ -16,6 +16,9 @@ const CELL := Vector2i(6, 0)
 ## The one settlement shot in every layout, so the four can be put side by side.
 const LAYOUT_ENV := "grass"
 const LAYOUT_VARIANT := "village"
+## The variant the settlement shots are taken on: the set piece -- fifteen enemies, a minute, and a
+## boss at the end -- which is the only place a boss can be looked at.
+const SETTLEMENT_VARIANT := "village"
 const ENVIRONMENT := "grass"
 
 
@@ -101,7 +104,7 @@ func _shoot_fight() -> void:
 	print("Lineup for %s on %s:" % [CELL, ENVIRONMENT])
 	for i in fight.lineup.size():
 		print("  %2d %-18s %3d hp%s" % [i + 1, fight.lineup[i], fight.health[i],
-				"   <- elite" if i == Encounter.ENEMIES - 1 else ""])
+				"   <- elite" if i == fight.enemies - 1 else ""])
 
 	var combat: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 	main.add_child(combat)
@@ -129,6 +132,40 @@ func _shoot_fight() -> void:
 		fight.advance(0.05)
 	await _save(combat, "combat_elite.png")
 
+	# The elite on its last hit point. The nameplate's bar snaps to whole sprite pixels, so this is
+	# where a bar that rounded the wrong way would show as an already-dead enemy still standing.
+	fight.hp = 1
+	combat._refresh()
+	await _save(combat, "combat_nearly_dead.png")
+	fight.hp = fight.enemy_max_hp()
+
+	# And a boss nameplate. A settlement fields one, at the end of fifteen, so this shoots the real
+	# thing -- a village fight with its boss moved to the front, because a shot of the frame is not
+	# worth the two minutes of clicking the fourteen in front of it would take. It is put on the
+	# lineup rather than onto the HUD directly: _refresh redraws the bar from the fight every frame,
+	# so anything written straight onto the bar is gone before the shutter opens. Putting the boss
+	# where the fight can see it is also the only way to shoot the frame through the path the game
+	# would actually use, sprite and name and all.
+	var boss_fight := Encounter.for_tile(CELL, ENVIRONMENT, SETTLEMENT_VARIANT)
+	var bosses := EnemyRoster.in_environment(ENVIRONMENT, EnemyRoster.Tier.BOSS)
+	if not bosses.is_empty():
+		boss_fight.lineup[0] = bosses[0]
+		boss_fight.health[0] = Encounter.hp_of(bosses[0], CELL)
+		boss_fight.hp = boss_fight.health[0]
+		var boss: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
+		main.add_child(boss)
+		boss.place = TileNames.generate(CELL, ENVIRONMENT, MAP_SEED, "small")
+		boss.begin(boss_fight, CELL, main.ui_scale, SETTLEMENT_VARIANT)
+		combat.hide()
+		while boss_fight.phase != Encounter.Phase.WAITING:
+			boss_fight.advance(0.05)
+		boss_fight.hp = int(boss_fight.enemy_max_hp() * 0.7)
+		# The same shot says both things a settlement changed: the gold nameplate, and the longer bar
+		# over it -- fifteen pips with a gold one at the far end, on a minute's clock cut to match.
+		await _save(boss, "combat_boss_bar.png")
+		boss.queue_free()
+		combat.show()
+
 	# The two verdicts.
 	while not fight.finished:
 		if not fight.hit():
@@ -151,10 +188,11 @@ func _shoot_fight() -> void:
 	await _save(lost, "combat_lost.png")
 
 
-## A farm run: no clock, a tally counting up, the counter in the corner with what it has found, and
-## Terminate low and out of the way. Three things are worth looking at here that no other shot has --
-## whether the counter clears the enemy's name panel, whether a toast is readable over the backdrop,
-## and whether Terminate is far enough from where the player is clicking.
+## A farm run: no clock, a tally counting up, the counter in the bottom corner with what it has
+## found, and Terminate up in the opposite one. Three things are worth looking at here that no other
+## shot has -- whether the counter's face has reddened for the full bag, whether a find thrown out of
+## a body reads over the backdrop, and whether Terminate is far enough from where the player is
+## clicking.
 func _shoot_farm() -> void:
 	for child in root.get_children():
 		child.queue_free()
@@ -176,13 +214,14 @@ func _shoot_farm() -> void:
 	# hundred-odd kills away, and this script waits a frame per swing.
 	fight.always_drop = true
 	# And an orb off every body too, for the same reason and at a rarer rate still. It is what puts
-	# an orb toast on this shot beside a find's, which is the only place the two can be compared.
+	# an orb in the air on this shot beside a find, which is the only place the two can be compared.
 	fight.always_orb = true
 	fight.orb_rng.seed = WORLD_SEED
 	var combat: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 	main.add_child(combat)
-	# A run with nowhere to put what it finds, so the shot shows the warning that stands under the
-	# counter while the bag is full. Said before `begin`, so it is up on the first frame.
+	# A run with nowhere to put what it finds, so the counter's face is at the red end of its ramp and
+	# the popup it opens carries the full-bag line. Said before `begin`, so both are right on the
+	# first frame.
 	combat.bag_room = 0
 	combat.place = TileNames.generate(CELL, ENVIRONMENT, MAP_SEED)
 	combat.begin(fight, CELL, main.ui_scale)
@@ -198,9 +237,24 @@ func _shoot_farm() -> void:
 	while fight.phase != Encounter.Phase.WAITING:
 		fight.advance(0.05)
 		await process_frame
+
+	# A find and an orb thrown by hand, so the shot has both in the air rather than depending on a
+	# kill landing on the frame the picture is taken. Thrown at the view rather than dropped through
+	# the encounter: nothing should reach the pouch or the counter for the sake of a screenshot.
+	var showpiece := Item.new()
+	showpiece.type = "Wooden Sword"
+	showpiece.rarity = ItemRarity.Rarity.RARE
+	showpiece.level = 6
+	showpiece.stats = Item.scaled_stats(showpiece.type, showpiece.level)
+	combat._show_find(showpiece.icon(), ItemRarity.BORDER_COLORS[showpiece.rarity])
+	combat._show_find(OrbTable.icon(OrbTable.ORBS.keys()[0]), Color.TRANSPARENT)
+	# Part way through the arc, which is where a thrown thing is most obviously thrown.
+	for i in 12:
+		await process_frame
 	await _save(combat, "combat_farm.png")
 
-	# The popup the counter opens, which for a run is the only way to see what it has turned up.
+	# The popup the counter opens, which for a run is the only way to see what it has turned up --
+	# and, the bag being full, where the warning about that is now said.
 	combat._on_loot_pressed()
 	await _save(combat, "combat_farm_loot.png")
 	# One of them opened, which is where a find can be thrown away by hand -- the way out of a run

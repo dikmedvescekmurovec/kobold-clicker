@@ -1,29 +1,35 @@
 class_name Encounter
 extends RefCounted
-## One tile's fight: ten enemies, one clock, one point of damage per click -- or a farm run, which
-## is the same fight with the count and the clock taken off it.
+## One tile's fight: a lineup of enemies, one clock, one point of damage per click -- or a farm run,
+## which is the same fight with the count and the clock taken off it.
 ##
-## Enemies come out one at a time. Each runs in, stands to be hit, and dies; the next follows. Nine of
-## them are wandering rabble and the tenth is an elite, so every fight ends on something worth the
-## name. Bosses are never rolled here -- they are saved for set pieces.
+## Enemies come out one at a time. Each runs in, stands to be hit, and dies; the next follows. Most
+## of them are wandering rabble, with an elite every `elite_every`, so every fight ends on something
+## worth the name.
+##
+## How long the lineup is, how long the clock runs and how the tiers fall are the tile's own, from
+## PROFILES: open land and roads field ten in thirty seconds ending on an elite, and a settlement is
+## a set piece -- fifteen in a minute, an elite every fifth and a boss last. That is the only place a
+## boss is ever rolled.
 ##
 ## Each kill rolls for loot against LootTable, and what drops is kept whatever the fight does next.
 ## Every kill also hands over a purse, which is not rolled for at all -- see `gold_of`.
 ##
-## Nothing the enemies do can hurt the player: the clock is the only way to lose. Beat all ten inside
-## SECONDS and the tile is discovered; run out and nothing happens, the tile stays grey and can be
-## tried again. A tile's ten are seeded from its cell, so the same tile always fields the same fight,
-## the way everything else about a tile is decided before the player ever reaches it.
+## Nothing the enemies do can hurt the player: the clock is the only way to lose. Beat the lineup
+## inside `seconds` and the tile is discovered; run out and nothing happens, the tile stays grey and
+## can be tried again. A tile's lineup is seeded from its cell, so the same tile always fields the
+## same fight, the way everything else about a tile is decided before the player ever reaches it.
 ##
 ## A farm run (`farm()`) is `endless`: the lineup grows an enemy at a time and is never done, the
 ## clock never runs, and the only ways out are `stop()` and `give_up()`. Nothing about it is seeded
-## from the cell -- a tile always fields the same ten, and never the same run twice.
+## from the cell -- a tile always fields the same lineup, and never the same run twice. It keeps the
+## tile's elite rhythm and never its boss.
 ##
 ## The rules live here with no nodes in sight, so a test can play a whole fight in a few lines --
 ## `advance(delta)` steps the clock the way PlayerToken.advance steps a walk. CombatScene draws it.
 
 ## The next enemy has started running in, and is not yet in reach. `index` counts from 0, so the
-## elite is ENEMIES - 1. The first one is announced by `start()`.
+## elite is at each `elite_every`. The first one is announced by `start()`.
 signal enemy_coming(index: int, enemy_name: String, hp: int)
 ## That enemy has arrived and can now be hit.
 signal enemy_spawned(index: int, enemy_name: String, hp: int)
@@ -47,18 +53,35 @@ signal gold_dropped(index: int, amount: int)
 ## against it, so one body can hand over both, and kept for the reason the other two are: nothing is
 ## rolled when the clock runs out, so what came off a body before it is the player's.
 signal orb_dropped(index: int, orb: String)
-## All ten are down, with time to spare.
+## The whole lineup is down, with time to spare.
 signal won()
 ## The clock ran out.
 signal lost()
 
-## Enemies to beat: the first ENEMIES - 1 are common, the last is the elite.
+## Enemies to beat on an ordinary tile: the first ENEMIES - 1 are common, the last is the elite.
 const ENEMIES := 10
-## One elite every this many enemies. It is what makes the tenth of a tile fight the elite, and it
-## carries that rhythm on forever through a farm run.
+## One elite every this many enemies on an ordinary tile. It is what makes the tenth of a tile fight
+## the elite, and it carries that rhythm on forever through a farm run.
 const ELITE_EVERY := 10
-## How long for all ten together. One clock, running from the first spawn and never stopping.
+## How long an ordinary tile's fight runs. One clock, from the first spawn and never stopping.
 const SECONDS := 30.0
+
+## What a fight is, per what the world put on the tile -- `MapBuilder.area_variant`, which the main
+## scene already reads to pick the backdrop and now reads to pick the fight. Open land and a road
+## are the ordinary fight; a settlement is a set piece, and the three tiers share one entry because
+## what makes a town longer is that people live there, not how many of them.
+##
+## One table, so "a town is a longer fight" is written down once. `boss_last` is the only thing that
+## rolls a boss anywhere in the game: they are saved for this.
+const ORDINARY := {"enemies": ENEMIES, "seconds": SECONDS, "elite_every": ELITE_EVERY, "boss_last": false}
+const SETTLEMENT := {"enemies": 15, "seconds": 60.0, "elite_every": 5, "boss_last": true}
+const PROFILES := {
+	"plain": ORDINARY,
+	"road": ORDINARY,
+	"village": SETTLEMENT,
+	"town": SETTLEMENT,
+	"fortress": SETTLEMENT,
+}
 ## Health of an ordinary body on a tile next to the start, before the enemy's own size and tier.
 ## Tuned against a player with nothing on, who does BARE_DAMAGE a click and has no weapon swinging
 ## for them: ten bodies at this health is a minute of steady clicking and not much room spare. Gear
@@ -92,7 +115,19 @@ const DEATH := 0.5
 ## What the current enemy is doing. Hits only land while it is WAITING.
 enum Phase { WALKING_IN, WAITING, DYING, OVER }
 
-## The enemies of this fight, in the order they come out. ENEMIES long for a tile fight; a farm run
+## What shape of fight this is, from the profile the tile's variant names. Fields rather than consts
+## because a settlement fights a longer fight than the meadow next to it; the defaults are the
+## ordinary tile's, so a fight nobody tells anything is exactly the fight this has always been --
+## which is what every Encounter built by hand (the tests, the screenshot scripts) gets.
+## `enemies` and `seconds` mean nothing while `endless`; `elite_every` is the whole rhythm there.
+var enemies := ENEMIES
+var seconds := SECONDS
+var elite_every := ELITE_EVERY
+## Whether the last of them is a boss. Never true of a farm run: a run has no last enemy, and a boss
+## is the thing a set piece ends on rather than a thing that comes round again.
+var boss_last := false
+
+## The enemies of this fight, in the order they come out. `enemies` long for a tile fight; a farm run
 ## grows it an enemy at a time and it is never finished.
 var lineup: PackedStringArray = []
 ## The health each of them starts with, in the same order. Always as long as `lineup`.
@@ -104,7 +139,7 @@ var cell := Vector2i.ZERO
 ## Whether the enemies never run out: no count to beat and no clock to beat it in.
 var endless := false
 
-## Which one is out, from 0. Reaches ENEMIES once the last of a tile fight is down; endlessly it is
+## Which one is out, from 0. Reaches `enemies` once the last of a tile fight is down; endlessly it is
 ## simply the number already slain.
 var index := 0
 ## The current enemy's remaining health.
@@ -119,7 +154,7 @@ var victory := false
 ## Seconds left of the walking-in or dying that is under way. The scene slides the enemy in over it.
 var phase_left := WALK_IN
 
-## Loot belongs to the attempt, not to the tile. The ten enemies are the tile's, decided before the
+## Loot belongs to the attempt, not to the tile. The enemies are the tile's, decided before the
 ## player ever reaches it, but what they happen to be carrying is rolled fresh each fight, so a tile
 ## fought twice is not a fixed payout. Unseeded on purpose: RandomNumberGenerator seeds itself
 ## randomly, so there is no randomize() to add here. Tests set the seed before they play.
@@ -138,8 +173,8 @@ var orb_rng := RandomNumberGenerator.new()
 ## it when the fight ends, or as it lands, which is the scene's business rather than this one's.
 var orbs := {}
 
-## Which enemy comes next in a farm run. Unseeded for the same reason `loot_rng` is: a tile's ten
-## are decided before the player arrives and a run is not, so two runs on one tile field different
+## Which enemy comes next in a farm run. Unseeded for the same reason `loot_rng` is: a tile's lineup
+## is decided before the player arrives and a run is not, so two runs on one tile field different
 ## enemies. A tile fight never touches it -- `for_tile` passes its own seeded generator.
 var roster_rng := RandomNumberGenerator.new()
 
@@ -161,7 +196,7 @@ var attack_speed := 0.0
 var _swing := 0.0
 
 ## Whether crits go the player's way. Unseeded on purpose, like `loot_rng` and for the same reason:
-## the tile's ten enemies are fixed before the player arrives, but how a given attempt goes is not.
+## the tile's enemies are fixed before the player arrives, but how a given attempt goes is not.
 var crit_rng := RandomNumberGenerator.new()
 
 ## The terrain the fight is on. It picked the enemies, and it picks the backdrop they are drawn on.
@@ -182,15 +217,23 @@ var always_drop := false
 var always_orb := false
 
 
-## The fight waiting on `cell`, whose terrain is `env`. Nine commons and an elite, drawn from the
-## enemies that live on that terrain and seeded from the cell, so the tile always fields the same ten.
-static func for_tile(cell: Vector2i, env: String) -> Encounter:
+## The profile for an area variant, falling back to the ordinary fight: a variant this build has no
+## entry for is open land as far as the fight is concerned, which is what the backdrop does too.
+static func profile_for(variant: String) -> Dictionary:
+	return PROFILES.get(variant, ORDINARY)
+
+
+## The fight waiting on `cell`, whose terrain is `env` and whose `variant` is what the world put
+## there. Commons with an elite at each pitch, drawn from the enemies that live on that terrain and
+## seeded from the cell, so the tile always fields the same fight.
+static func for_tile(cell: Vector2i, env: String, variant := "") -> Encounter:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(["combat", cell])
 	var fight := Encounter.new()
 	fight.env = env
 	fight.cell = cell
-	for i in ENEMIES:
+	fight._take_profile(profile_for(variant))
+	for i in fight.enemies:
 		fight._append_enemy(rng)
 	fight.hp = fight.health[0]
 	return fight
@@ -198,30 +241,60 @@ static func for_tile(cell: Vector2i, env: String) -> Encounter:
 
 ## A farm run on `cell`: the same enemies the tile's terrain fields, coming forever, with no clock
 ## and no count. It ends when the player says so.
-static func farm(cell: Vector2i, env: String) -> Encounter:
+##
+## It keeps the tile's own elite rhythm -- a run on a town throws one up every five -- and never its
+## boss: a boss is what a set piece ends on, and a run does not end.
+static func farm(cell: Vector2i, env: String, variant := "") -> Encounter:
 	var fight := Encounter.new()
 	fight.env = env
 	fight.cell = cell
 	fight.endless = true
+	fight.elite_every = int(profile_for(variant)["elite_every"])
 	fight._append_enemy(fight.roster_rng)
 	fight.hp = fight.health[0]
 	return fight
 
 
-## What tier belongs at `position` in a lineup: an elite every ELITE_EVERY, a common otherwise. Asked
-## of the position rather than of an enemy, so it can answer for a place a farm run has not filled
-## yet -- which is how the HUD's bar draws the ten pips of a cycle before their enemies exist.
-static func tier_at(position: int) -> EnemyRoster.Tier:
-	if position % ELITE_EVERY == ELITE_EVERY - 1:
+## Takes on a profile's numbers, clock included. The one place a fight is told what shape it is.
+func _take_profile(profile: Dictionary) -> void:
+	enemies = int(profile["enemies"])
+	seconds = float(profile["seconds"])
+	elite_every = int(profile["elite_every"])
+	boss_last = bool(profile["boss_last"])
+	time_left = seconds
+
+
+## What tier belongs at `position` in this fight's lineup: the boss that ends a set piece, an elite
+## every `elite_every`, a common otherwise. Asked of the position rather than of an enemy, so it can
+## answer for a place a farm run has not filled yet -- which is how the HUD's bar draws the pips of
+## a cycle before their enemies exist.
+func tier_for(position: int) -> EnemyRoster.Tier:
+	if boss_last and position == enemies - 1:
+		return EnemyRoster.Tier.BOSS
+	if position % elite_every == elite_every - 1:
 		return EnemyRoster.Tier.ELITE
 	return EnemyRoster.Tier.COMMON
 
 
+## The tier of whatever stands at `at` in this fight. Asked of the roster where that enemy has been
+## rolled, because that is what actually walks in, and of the position otherwise, which is the only
+## answer available for the far end of a farm run's lineup. The two agree by construction --
+## `_append_enemy` builds the lineup to `tier_at` -- and test_combat pins that they do.
+##
+## Both things in the HUD that speak in tiers read it here: the kill pips colour their pips by it and
+## the nameplate picks its frame by it, and a fight where those two disagreed about what is standing
+## in front of the player would be worse than either of them being wrong alone.
+static func tier_in(fight: Encounter, at: int) -> EnemyRoster.Tier:
+	if at < fight.lineup.size():
+		return EnemyRoster.tier_of(fight.lineup[at])
+	return fight.tier_for(at)
+
+
 ## Puts one more enemy on the end of the lineup, with the health it starts with. The one place that
-## knows how an enemy joins a fight, so a tile's ten and a farm run's thousandth are built the same
-## way -- an elite every ELITE_EVERY, a common otherwise.
+## knows how an enemy joins a fight, so a tile's lineup and a farm run's thousandth enemy are built
+## the same way -- `tier_for`, and nothing else.
 func _append_enemy(rng: RandomNumberGenerator) -> void:
-	var tier := tier_at(lineup.size())
+	var tier := tier_for(lineup.size())
 	var picked := EnemyRoster.pick(env, tier, rng)
 	if picked.is_empty():
 		# No enemy of that tier lives here. test_enemies guarantees there is one for every
@@ -279,7 +352,7 @@ func enemy_max_hp() -> int:
 
 
 ## Whether the enemy out now is an elite -- the one that ends a tile fight, or one of the elites a
-## farm run throws up every ELITE_EVERY. Asked of the roster rather than of the position, so it is
+## farm run throws up every `elite_every`. Asked of the roster rather than of the position, so it is
 ## the same question in both fights.
 func on_elite() -> bool:
 	return index < lineup.size() and EnemyRoster.tier_of(lineup[index]) == EnemyRoster.Tier.ELITE
@@ -288,7 +361,7 @@ func on_elite() -> bool:
 ## Enemies still to beat, the one out now included. Meaningless while `endless`, where `kills()` is
 ## the number the fight has to show instead.
 func remaining() -> int:
-	return ENEMIES - index
+	return enemies - index
 
 
 ## How many have been put down. Endlessly this is the whole of the score.

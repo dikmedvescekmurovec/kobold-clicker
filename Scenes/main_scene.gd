@@ -674,7 +674,7 @@ func _refresh_bag() -> void:
 
 ## The purse. Its own call rather than a line inside `_refresh_bag`, because a kill moves it and
 ## nothing else: rebuilding every square in the grid for a number at the bottom of the panel is work
-## with nothing to show for it, and there are ten kills to a fight and no end of them to a run.
+## with nothing to show for it, and there are ten or fifteen kills to a fight and no end of them to a run.
 func _refresh_gold() -> void:
 	_bag_gold.text = str(inventory.gold)
 
@@ -872,20 +872,18 @@ func _select_item(index: int) -> void:
 
 ## What one item in the bag is, shown in the grid's place, with Equip under it where there is
 ## somewhere for it to go. ItemDetails writes the lines, so an item reads the same here as it does on
-## the panel at the end of a fight.
-##
-## The piece it would replace is handed to ItemDetails as well, which is what puts the gains and
-## losses under its stats. It is the same piece the equipped page beside it is showing, and for the
-## same reason: both come off the socket Equip targets.
+## the panel at the end of a fight -- and the same as the worn piece beside it: the block says what
+## this piece is and nothing about what it would replace. The character sheet shows that piece whole,
+## which is the comparison, so a second one worked out in signed numbers under the stats said the
+## same thing twice in two different languages.
 func _show_item(index: int) -> void:
 	var item := inventory.items[index]
 	# The emptiest socket it fits, so a bare ring finger fills before a ring already on is swapped.
 	var open := inventory.equipment.sockets_for(item)
-	var socket_worn: Item = null if open.is_empty() else inventory.equipment.item_at(open[0])
-	_fill_detail(item, socket_worn)
+	_fill_detail(item)
 	if not open.is_empty():
 		var socket: Equipment.Socket = open[0]
-		var worn := socket_worn
+		var worn := inventory.equipment.item_at(socket)
 		var equip := _button("Equip", "LightButton", "Wear this in the %s socket%s"
 				% [Equipment.LABELS[socket].to_lower(),
 					"" if worn == null else ", putting %s back in the bag" % worn.display_name()])
@@ -917,18 +915,16 @@ func _show_worn(socket: Equipment.Socket) -> void:
 	_add_back_button("Back to everything you are carrying", _select_socket.bind(-1))
 
 
-## The stat block itself, and whatever buttons were under it cleared off. `against` is the piece this
-## one would replace, where there is one, which ItemDetails turns into the block of gains and losses
-## under the stats.
+## The stat block itself, and whatever buttons were under it cleared off.
 ##
 ## The lines go inside the scroll and the buttons outside it, so only the two lists that can run long
 ## ever move.
-func _fill_detail(item: Item, against: Item = null) -> void:
+func _fill_detail(item: Item) -> void:
 	for child: Node in _bag_detail.get_children():
 		if child != _bag_detail_scroll:
 			_bag_detail.remove_child(child)
 			child.queue_free()
-	ItemDetails.fill(_bag_detail_rows, item, BAG_WIDTH, against)
+	ItemDetails.fill(_bag_detail_rows, item, BAG_WIDTH)
 	_bag_detail_scroll.scroll_vertical = 0
 
 
@@ -1116,16 +1112,19 @@ func _clamp_to_map(to: Vector2) -> Vector2:
 	return to.clamp(first, last)
 
 
-## A tile has to be taken before it can be discovered: ten of whatever lives on it, inside a minute.
+## A tile has to be taken before it can be discovered: a lineup of whatever lives on it, against a
+## clock. How long a lineup and how long a clock is the tile's own -- a settlement is a set piece --
+## which is what the variant is passed in for, beside picking the backdrop.
 ## Winning discovers it as before; losing leaves the map exactly as it was, free to try again.
 func _on_discover_pressed() -> void:
 	var cell := map.selected_cell
 	if not view.can_discover(cell):
 		return
 	var env: String = map.get_tile_info(cell).get("env", "")
-	print("Fighting for %s, %s (%s, %s %d)" % [view.name_of(cell), cell, env,
-			view.area_variant(cell), CombatScene.layout_for(cell)])
-	_open_fight(Encounter.for_tile(cell, env), cell, false)
+	var variant := view.area_variant(cell)
+	print("Fighting for %s, %s (%s, %s %d)" % [view.name_of(cell), cell, env, variant,
+			CombatScene.layout_for(cell)])
+	_open_fight(Encounter.for_tile(cell, env, variant), cell, false)
 
 
 ## Farming the selected tile: the same arena and the same enemies, coming forever, with no clock
@@ -1135,8 +1134,9 @@ func _on_farm_pressed() -> void:
 	if not view.can_farm(cell):
 		return
 	var env: String = map.get_tile_info(cell).get("env", "")
-	print("Farming %s, %s (%s, %s)" % [view.name_of(cell), cell, env, view.area_variant(cell)])
-	_open_fight(Encounter.farm(cell, env), cell, true)
+	var variant := view.area_variant(cell)
+	print("Farming %s, %s (%s, %s)" % [view.name_of(cell), cell, env, variant])
+	_open_fight(Encounter.farm(cell, env, variant), cell, true)
 
 
 ## Puts a fight on the screen, whichever kind it is. Both kinds are opened exactly alike -- armed
@@ -1327,7 +1327,7 @@ func _report_destroyed(destroyed: Array[Item]) -> void:
 
 
 ## Whether the enemy in slot `index` of the fight going on is an elite. Asked of the roster rather
-## than of the position: a farm run's elites come every ELITE_EVERY and there is no last one.
+## than of the position: a farm run's elites come round forever and there is no last one.
 func _dropped_by_elite(index: int) -> bool:
 	if _combat == null or index >= _combat.fight.lineup.size():
 		return false

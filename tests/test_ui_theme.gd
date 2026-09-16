@@ -10,6 +10,7 @@ func _run() -> void:
 	_check(_test_icon_buttons(theme) == true, "icon button tests ran to the end")
 	_check(_test_controls(theme) == true, "live control tests ran to the end")
 	_check(_test_orb_tray() == true, "orb tray tests ran to the end")
+	_check(_test_health_bar() == true, "health bar tests ran to the end")
 	_report("UI theme")
 
 
@@ -194,6 +195,72 @@ func _test_orb_tray() -> bool:
 		_check(_labels_in(OrbSlot.make(orb, 2, true)) == 1, "%s held twice wears a count" % orb)
 		for slot: OrbSlot in [ghost, dim, lit]:
 			slot.free()
+	return true
+
+
+## The nameplate's health bar, held the way the orb tray and the pip bar are: it is assembled from
+## generated parts against constants written down before anything is laid out, so what can go wrong
+## is arithmetic rather than appearance. Two things matter beyond the parts fitting together.
+##
+## The trough has to be the same length in all three tiers, because the fill is a share of it: if a
+## boss's channel were shorter, half a bar would mean a different number of hit points depending on
+## what walked in. And the ornament has to actually grow, which is the whole promise of the elite and
+## boss frames and the one part of "more intricate" that can be stated as a number.
+func _test_health_bar() -> bool:
+	var tiers: Array = [EnemyRoster.Tier.COMMON, EnemyRoster.Tier.ELITE, EnemyRoster.Tier.BOSS]
+	var caps: Array[int] = []
+	var troughs := {}
+	for tier: EnemyRoster.Tier in tiers:
+		var cap_l: Texture2D = HealthBar.CAP_L[tier]
+		var cap_r: Texture2D = HealthBar.CAP_R[tier]
+		var track: Texture2D = HealthBar.TRACK[tier]
+		caps.append(int(cap_l.get_width()))
+		# Every part is one height, or the row they are butted into would step.
+		for part: Texture2D in [cap_l, cap_r, track]:
+			_check(part.get_height() == HealthBar.HEIGHT,
+					"a tier %d part is %d tall, not HEIGHT" % [tier, part.get_height()])
+		_check(cap_l.get_width() == cap_r.get_width(), "tier %d's two caps differ in width" % tier)
+		_check(track.get_width() == 4, "tier %d's track is not the 4 px the trough maths assumes" % tier)
+		# A cap's last column is a channel column, which is the one at each end.
+		troughs[2 + HealthBar.SEGMENTS * track.get_width()] = true
+		_check(HealthBar.width_of(tier)
+				== (cap_l.get_width() + HealthBar.SEGMENTS * track.get_width() + cap_r.get_width())
+				* HealthBar.PIXEL, "tier %d's width_of agrees with its parts" % tier)
+	_check(troughs.size() == 1 and troughs.has(HealthBar.TROUGH),
+			"every tier leaves TROUGH (%d) px of channel: found %s" % [HealthBar.TROUGH, troughs.keys()])
+	_check(caps == [3, 9, 13] and caps[0] < caps[1] and caps[1] < caps[2],
+			"the ornament grows common to elite to boss: caps are %s" % [caps])
+	_check(HealthBar.CHANNEL_TOP + HealthBar.CHANNEL_HEIGHT < HealthBar.HEIGHT,
+			"the channel leaves a rim under it as well as over it")
+
+	# And a live bar: the pieces are laid out at the size they are drawn, the fill sits on the
+	# channel, and it never says nothing while something is still standing.
+	var bar := HealthBar.new()
+	bar.show_health(EnemyRoster.Tier.COMMON, 1.0)
+	var common_width := bar.custom_minimum_size.x
+	_check(common_width == HealthBar.width_of(EnemyRoster.Tier.COMMON),
+			"a common bar measures its own width")
+	for part: TextureRect in ([bar._cap_l, bar._cap_r] as Array[TextureRect]) + bar._tracks:
+		_check(part.custom_minimum_size == part.texture.get_size() * HealthBar.PIXEL,
+				"every piece is laid out at PIXEL, not scaled after the fact")
+	_check(bar._fill.size == Vector2(HealthBar.TROUGH * HealthBar.PIXEL,
+			HealthBar.CHANNEL_HEIGHT * HealthBar.PIXEL), "a full bar fills the whole channel")
+	_check(bar._fill.position.y == HealthBar.CHANNEL_TOP * HealthBar.PIXEL,
+			"the fill sits on the channel rather than over the rim")
+	bar.show_health(EnemyRoster.Tier.COMMON, 0.0)
+	_check(bar._fill.size.x == 0.0, "an empty bar shows no red at all")
+	bar.show_health(EnemyRoster.Tier.COMMON, 0.001)
+	_check(bar._fill.size.x == HealthBar.PIXEL,
+			"an enemy on its last hit point still shows a sliver")
+	# Changing tier moves where the channel starts but not how long it is, and widens the bar.
+	bar.show_health(EnemyRoster.Tier.BOSS, 1.0)
+	_check(bar.custom_minimum_size.x > common_width, "a boss's bar is wider than a common's")
+	_check(bar._fill.size.x == HealthBar.TROUGH * HealthBar.PIXEL,
+			"a boss's full bar is exactly as much red as a common's")
+	_check(bar._fill.position.x
+			== (HealthBar.CAP_L[EnemyRoster.Tier.BOSS].get_width() - 1) * HealthBar.PIXEL,
+			"the fill moved in behind the boss's ornament")
+	bar.free()
 	return true
 
 

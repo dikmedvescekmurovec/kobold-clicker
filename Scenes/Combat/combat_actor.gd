@@ -122,10 +122,19 @@ func _finish(built: SpriteFrames, height: float, mirror: bool) -> void:
 
 
 ## Plays a one-shot animation and returns to idling when it finishes. Looping ones just play.
-func play_once(animation: String) -> void:
-	if not sprite_frames.has_animation(animation):
+##
+## Re-triggered while it is still running, it restarts at `from_frame` rather than being ignored:
+## Godot's `play()` on the animation already playing carries on instead of starting over, so a
+## second swing during a swing would otherwise draw nothing at all. `from_frame` is how far in a
+## re-trigger picks up -- past the wind-up for a swing, from the top for a flinch.
+func play_once(anim: String, from_frame := 0) -> void:
+	if not sprite_frames.has_animation(anim):
 		return
-	play(animation)
+	if is_playing() and animation == anim:
+		frame = mini(from_frame, sprite_frames.get_frame_count(anim) - 1)
+		frame_progress = 0.0
+		return
+	play(anim)
 
 
 ## How wide and tall the fighter is while standing, on screen.

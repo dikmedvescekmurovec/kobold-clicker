@@ -1,4 +1,4 @@
-"""QA for each phase. Usage: python qa.py <phase1|phase2|phase3|showcase|blends|ui|slimes> <tag>
+"""QA for each phase. Usage: python qa.py <phase1|phase2|phase3|showcase|blends|ui|slimes|hpbar> <tag>
 Images are written to qa/<name>_<tag>.png so every run can be viewed under a fresh filename."""
 import hashlib
 import os
@@ -684,6 +684,68 @@ def areas(tag, *only):
     print(" ", A.layout_sheet(tag, envs=envs, made=made))
 
 
+def hpbar(tag):
+    """The combat nameplate's health bar: palette and geometry checks, plus every tier draining."""
+    import hpbar as B
+    from PIL import Image, ImageDraw
+    from hexlib import PALETTE
+    font = _ui_font(12)
+
+    pal = {tuple(int(h.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)) for _, h in PALETTE[1:]}
+    made = B.parts()
+    problems = Counter()
+    for name, im in made.items():
+        problems["off-palette"] += len({p[:3] for p in im.get_flattened_data() if p[3]} - pal)
+        problems["wrong height"] += im.height != B.HEIGHT
+    # The trough has to come out the same length in every tier, or the fill means a different number
+    # of hit points depending on what is standing there.
+    widths = {t: B.bar(t, 1.0, made).width - 2 * (B.cap_width(t) - 1) for t in B.TIERS}
+    problems["trough differs by tier"] += len(set(widths.values())) != 1
+    # And the ornament has to actually grow, which is the whole promise of the elite and boss frames.
+    caps = [B.cap_width(t) for t in ("common", "elite", "boss")]
+    problems["ornament does not grow"] += caps != sorted(set(caps))
+    print("problems:", dict(problems))
+    print("  trough %d px, caps %s" % (B.trough(), dict(zip(B.TIERS, caps))))
+
+    # ---- every tier at every state the player will see it in, on the wood panel it stands over
+    shares = [1.0, 0.75, 0.5, 0.25, 0.06, 0.0]
+    scale, pad, gap = 5, 60, 6
+    tiers = ["common", "elite", "boss"]
+    widest = max(B.bar(t, 1.0, made).width for t in tiers)
+    sheet = Image.new("RGBA", (pad + widest * scale + 12,
+                               len(tiers) * len(shares) * (B.HEIGHT + gap) * scale),
+                      (0x6B, 0x4A, 0x32, 255))
+    draw = ImageDraw.Draw(sheet)
+    row = 0
+    for tier in tiers:
+        for share in shares:
+            im = B.bar(tier, share, made)
+            y = row * (B.HEIGHT + gap) * scale
+            sheet.alpha_composite(im.resize((im.width * scale, im.height * scale), Image.NEAREST),
+                                  (pad, y))
+            if font:
+                draw.text((4, y + 8), "%s %d%%" % (tier[:5], round(share * 100)),
+                          font=font, fill=(240, 238, 220, 255))
+            row += 1
+    sheet.save(f"qa/hpbar_{tag}.png")
+
+    # ---- the parts themselves, blown up, so a bad pixel is visible before it is assembled
+    names = B.names()
+    cell = max(im.width for im in made.values()) + 2
+    board = Image.new("RGBA", (len(names) * cell * scale * 2, (B.HEIGHT + 10) * scale * 2),
+                      (28, 30, 40, 255))
+    draw = ImageDraw.Draw(board)
+    for i, n in enumerate(names):
+        im = made[n]
+        board.alpha_composite(im.resize((im.width * scale * 2, im.height * scale * 2), Image.NEAREST),
+                              (i * cell * scale * 2, 0))
+        if font:
+            draw.text((i * cell * scale * 2 + 2, B.HEIGHT * scale * 2 + 6),
+                      n.replace("ui_hpbar_", ""), font=font, fill=(220, 220, 230, 255))
+    board.save(f"qa/hpbar_parts_{tag}.png")
+    print(f"  wrote qa/hpbar_{tag}.png and qa/hpbar_parts_{tag}.png")
+
+
 def frozen(mode="check"):
     """Desert, which is finished and must not move. `record` prints the table, `check` tests it.
 
@@ -777,5 +839,5 @@ def audit(*_):
 
 if __name__ == "__main__":
     {"phase1": phase1, "phase2": phase2, "phase3": phase3, "showcase": showcase,
-     "blends": blends, "ui": ui, "slimes": slimes, "areas": areas,
+     "blends": blends, "ui": ui, "slimes": slimes, "hpbar": hpbar, "areas": areas,
      "frozen": frozen, "audit": audit}[sys.argv[1]](*sys.argv[2:])

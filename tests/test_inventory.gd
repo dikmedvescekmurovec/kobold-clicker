@@ -1131,7 +1131,14 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 	# As above: every body carries something, so the rule has something to throw away at once.
 	fight.always_drop = true
 	_check(combat.bag_room == 0, "a full bag leaves the fight no room")
-	_check(combat._warning.visible, "so the warning stands while the run goes")
+	# Which is said by the counter's own face and nowhere else until it is opened: the warning is a
+	# line inside its panel now, not a sign standing in the arena.
+	combat._refresh()
+	_check(not combat._warning.is_visible_in_tree(), "the warning stays inside the counter's panel")
+	_check(combat._loot_filled == 1.0, "and the counter's face is at the red end of its ramp")
+	combat._on_loot_pressed()
+	_check(combat._warning.visible, "opening the counter is what says why")
+	combat._on_loot_closed()
 
 	var guard := 0
 	while combat._auto_discarded < 3 and guard < 2000:
@@ -1146,7 +1153,7 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 			"the counter never moved")
 	_check(combat._loot_drops.count() == 0 and combat._result_drops.count() == 0,
 			"and neither list has a square in it")
-	_check(combat._toasts.is_empty(), "nothing was announced")
+	_check(combat._finds_shown == 0, "nothing was thrown into the arena")
 	_check(main.inventory.total() == Inventory.CAPACITY, "and the bag is exactly as it was")
 	# The rule is about finds. A purse is a number rather than a square, so nothing filters it and a
 	# run that kept nothing still earned its way.
@@ -1621,13 +1628,15 @@ func _test_comparing() -> bool:
 	_check("%s · level %d" % [weak.rarity_name(), weak.level] in beside, "with its rarity and level")
 	_check(_socket_squares(main).is_empty(), "and the doll is out of the way while it does")
 
-	# What the swap is worth, under the selected piece's own stats.
+	# The comparison is the piece beside it and nothing else: the stat block says what the selected
+	# piece is, never what the swap would be worth in signed numbers.
 	var change := ItemDetails.deltas(strong, weak)
 	_check(change.has("damage") and change["damage"] > 0.0, "the better sword hits harder")
 	var block := _texts(main._bag_detail)
+	_check(strong.display_name() in block, "the block names the piece that is open: %s" % block)
 	for stat: String in change:
-		_check(LootTable.stat_delta(stat, change[stat]) in block,
-				"the block says what %s would do: %s" % [stat, block])
+		_check(not (LootTable.stat_delta(stat, change[stat]) in block),
+				"and says nothing about what %s would do: %s" % [stat, block])
 
 	# Taking the worn piece off from here keeps the piece being judged open -- it is the whole point
 	# of standing them side by side, and the index it sits at has just moved.
@@ -1639,9 +1648,6 @@ func _test_comparing() -> bool:
 	_check(main._bag_selected == main.inventory.items.find(strong),
 			"and the sword being judged is still the one open")
 	_check("Nothing worn" in _texts(main._worn_body), "with an empty socket beside it")
-	_check(ItemDetails.deltas(strong, weak).size() > 0
-			and not (LootTable.stat_delta("damage", change["damage"]) in _texts(main._bag_detail)),
-			"and no gains against a piece that is no longer worn")
 
 	# A boot on the feet is not what a sword would replace: the page compares against the socket the
 	# Equip button targets and nothing else.

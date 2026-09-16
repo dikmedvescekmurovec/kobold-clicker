@@ -2,7 +2,7 @@ class_name CombatScene
 extends CanvasLayer
 ## Draws one Encounter: the player on the left, the tile's enemies walking in one at a time from the
 ## right, and a click doing a point of damage to whichever is standing there. When it is over, a
-## panel says whether the ten were beaten and lists what they dropped.
+## panel says whether the lineup was beaten and lists what it dropped.
 ##
 ## Everything below the HUD is built in code, so the .tscn stays a stub the editor can hold open --
 ## the same convention as main_scene._build_ui and HexMap._ready. The scene owns no rules: it asks
@@ -13,7 +13,7 @@ extends CanvasLayer
 ## would throw away.
 ##
 ## How far through the fight the player is is said by the KillPips bar under the clock and nowhere
-## else: ten pips in their enemies' tier colours, draining from the left as the enemies go down. A
+## else: a pip an enemy in its tier colour, draining from the left as the enemies go down. A
 ## number saying the same thing is the one thing on that panel a player mid-fight has no time to read.
 
 ## The fight is over. `won` says whether the tile was taken.
@@ -69,10 +69,17 @@ const AREA_LAYOUTS := 4
 ## What to draw when the world asks for a place that has no art: a fight always has a backdrop.
 const AREA_FALLBACK := "res://Assets/Area/grass_plain_1.png"
 const ATTACK_SOUND := preload("res://Assets/Player/attack.mp3")
+## Where a swing re-triggered mid-swing cuts back in: past the wind-up, at the blow. Two frames at
+## CombatActor.FPS is 0.2s, so the picture and the sound come back in at the same instant -- move one
+## and move the other.
+const SWING_RESTART_FRAME := 2
+const SWING_RESTART_SECONDS := 0.2
 
-## The bar behind the enemy's health and the clock, and the two fills.
+## The bar behind the clock and its fill. The enemy's health is a HealthBar now -- a generated
+## sprite frame with a drawn fill -- so the only thing borrowed back from it here is the red, which
+## the crit numbers and the end of the clock's ramp are both keyed to.
 const BAR_BACK := Color(0.08, 0.07, 0.11, 0.85)
-const BAR_HEALTH := Color("c4453a")
+const BAR_HEALTH := HealthBar.FILL
 const BAR_TIME := Color("6fa84a")
 ## How thick a dark border the clock is given, in panel pixels. The HUD stands on the arena itself
 ## rather than on a wood panel, so what is behind it is a backdrop -- a snow field, a desert noon, a
@@ -87,10 +94,19 @@ const LABEL_OUTLINE := 4
 const CLOCK_HEIGHT := 8
 ## Where the clock's colour turns. Above CLOCK_GREEN it is simply green -- a fight that has barely
 ## started must not look like one in trouble -- then it ambers through the middle and reddens over
-## the last stretch. Shares of the clock, not seconds, so retuning Encounter.SECONDS retunes
-## these with it.
+## the last stretch. Shares of the clock, not seconds, so a fight with a longer clock than its
+## neighbour's -- a settlement's minute -- ambers at the same place in it.
 const CLOCK_GREEN := 0.6
 const CLOCK_AMBER := 0.3
+## The loot counter's face, as the bag fills. The pack draws that button in one green, so this is a
+## tint multiplied over its art rather than a colour painted on it: FACE_GREEN is what the pack drew
+## (`BAR_FACE` in tools/ui_kit.py) and FACE_DANGER is the pack's own red, the key its danger button
+## is played in -- so a full bag reads as the same red the run is terminated in. Gold sits between
+## them, and it is a ramp rather than a step at some number of items for the reason the clock ramps:
+## it is read out of the corner of an eye, and a reddening counter says go and throw something away
+## a good deal earlier than one that changes all at once.
+const FACE_GREEN := Color("50a978")
+const FACE_DANGER := Color("c0443a")
 
 ## The number that floats off a hit: how long it lives, how far it climbs, how far either side of the
 ## enemy it may start, and the two sizes it is drawn at. Pixellari renders cleanly at whole multiples
@@ -105,39 +121,44 @@ const CRIT_FONT := 48
 ## A crit is the game's own damage red, the colour the enemy's health bar empties in, rather than
 ## GOLD -- gold is the unique item step and reads as a reward, and a crit is not one.
 const CRIT_COLOR := BAR_HEALTH
-## Where up the enemy the number starts, as a share of its height. Low enough that the whole rise
-## stays clear of the name panel above it.
+## Where up the enemy the number starts, as a share of its height. Low on the body, so the whole
+## rise is read against the enemy it came off rather than against the sky over it.
 const DAMAGE_HEIGHT := 0.45
-## The coins a body throws out as its purse lands. How long the arc takes, how high it goes and how
-## far to either side it may land, all in screen pixels -- the spread is wider than the damage
-## numbers' because a coin is small and three of them landing on one spot reads as one coin.
-const COIN_TIME := 0.5
-const COIN_RISE := 70.0
-const COIN_SPREAD := 90.0
+## The arc everything a body drops is thrown on -- the coins of its purse, the gear off it and the
+## orbs. How long the arc takes, how high it goes and how far to either side it may land, all in
+## screen pixels. The spread is wider than the damage numbers' because a coin is small and three of
+## them landing on one spot reads as one coin.
+const THROW_TIME := 0.5
+const THROW_RISE := 70.0
+const THROW_SPREAD := 90.0
 ## How long each coin after the first is held back, so a rich body does not throw its whole purse as
-## one lump.
-const COIN_STAGGER := 0.06
-## And what happens after it lands: it lies there spinning for a couple of seconds, then goes. The
-## arrive-hold-fade a toast has, for the same reason -- something that vanished the instant it landed
-## would not be seen at all. The node frees itself at the end of it, so nothing piles up on the
-## ground however long a run goes on.
+## one lump. A find is thrown alone, so it never waits.
+const THROW_STAGGER := 0.06
+## And what happens after it lands: it lies there for a while and then goes. Something that vanished
+## the instant it landed would not be seen at all. The node frees itself at the end of it, so nothing
+## piles up on the ground however long a run goes on.
+const THROW_FADE := 0.4
 const COIN_REST := 2.0
-const COIN_FADE := 0.4
+## A find lies there longer than a coin: it is the thing worth looking at, it lands once where a
+## purse lands ten, and it is the only sight of it until the player opens the counter.
+const FIND_REST := 3.0
+## How far to either side a find may land. Narrower than the coins' spread, because one sprite has
+## nothing to be told apart from and a find belongs by the body that dropped it.
+const FIND_SPREAD := 40.0
+## The beam standing over a find: the pack's own little flame, turned upright and drawn in the
+## rarity's colour, so what came off the body is read without a word on it. A child of the sprite, so
+## the arc carries it. Common gets none, the way an ItemSlot rings nothing at common, and neither
+## does an orb -- it has no rarity, and borrowing one would say it did.
+##
+## How big it is drawn against the 16 px the sheet is cut at, how solid, and how far up the icon it
+## stands: a beam rises *off* a thing, so its foot is at the piece and its head is over it.
+const BEAM_SCALE := 3.0
+const BEAM_ALPHA := 0.9
+const BEAM_LIFT := 9.0
 ## How far the HUD's panels stand off the window edge, in screen pixels.
 const HUD_MARGIN := 8.0
-## How far the Terminate button stands off the bottom edge. Further than HUD_MARGIN: it ends the
-## run, and it has to be nowhere near where the player is clicking.
-const TERMINATE_MARGIN := 20.0
-## How long a drop's toast stands before it starts to go, and how long it takes to go.
-const TOAST_TIME := 1.6
-const TOAST_FADE := 0.5
-## How far it slides in from the right as it arrives, and the gap between two of them.
-const TOAST_SLIDE := 24.0
-const TOAST_GAP := 4.0
-## How wide an item's name may run on a toast before it wraps, in panel pixels.
-const TOAST_WIDTH := 110.0
-## How wide the full-bag warning may run before it wraps. Wider than a toast: it is a sentence
-## rather than a name.
+## How wide the full-bag warning may run before it wraps, in panel pixels. It is a sentence rather
+## than a word, so it is given room to be one.
 const WARNING_WIDTH := 130.0
 
 var fight: Encounter
@@ -166,9 +187,9 @@ var _clock_fill: ColorRect
 var _clock_label: Label
 var _tally: VBoxContainer
 var _pips: KillPips
-var _enemy_panel: PanelContainer
+var _enemy_panel: VBoxContainer
 var _enemy_label: Label
-var _enemy_fill: ColorRect
+var _enemy_bar: HealthBar
 var _result: PanelContainer
 var _result_summary: VBoxContainer
 var _result_label: Label
@@ -179,9 +200,10 @@ var _result_drops: DropsView
 var _loot_button: Button
 var _loot_panel: PanelContainer
 var _loot_drops: DropsView
-## The toasts standing now, newest last. They are placed by their order in here, so one leaving
-## closes the gap it left.
-var _toasts: Array[Control] = []
+## How many finds this fight has thrown into the arena -- gear and orbs both. Nothing is drawn from
+## it: the sprites free themselves, and what anybody wants to know is whether something was announced
+## at all, which is what `test_inventory` asks of an autodiscarded find.
+var _finds_shown := 0
 ## Leaves a farm run. Only built for one -- a tile fight is left by beating it or running out.
 var _terminate: Button
 ## What this fight has turned up, in the order it fell. Autodiscarded finds are not in here.
@@ -196,8 +218,12 @@ var autodiscard := Callable()
 ## How many finds that rule has thrown away. Said once, at the end, and never drawn as a square:
 ## the whole point of the rule is not having to look at them.
 var _auto_discarded := 0
-## The standing warning under the counter, while the bag has no room left.
-var _warning: PanelContainer
+## The line inside the counter's own panel, while the bag has no room left.
+var _warning: Label
+## The counter's four faces, one per button state, each a copy of the theme's own box that this
+## scene is free to tint. And the fill they are tinted for, so they are only touched when it moves.
+var _loot_faces: Array[StyleBox] = []
+var _loot_filled := -1.0
 ## The line under the verdict's drops saying how many the rule threw away.
 var _auto_label: Label
 ## And the one over it saying what the fight earned. Gold is said once, at the end: it is not a find
@@ -247,8 +273,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		get_viewport().set_input_as_handled()
-		_player.play_once("attack")
-		_sound.play()
+		_swing()
 		fight.hit()
 		_refresh()
 
@@ -323,7 +348,7 @@ func _build_hud() -> void:
 	_hud = hud
 
 	# Top middle: where the fight is and how it is going -- the place's name and level over the bar
-	# of ten pips draining as the enemies go down, and the clock under it. The
+	# of pips draining as the enemies go down, and the clock under it. The
 	# bar goes first because it is the fight -- the clock is what the fight is measured against, and
 	# a measure belongs under the thing it measures. No panel behind them -- the two are what the
 	# player watches and a panel only puts furniture round them -- so each carries its own dark
@@ -348,7 +373,10 @@ func _build_hud() -> void:
 	if not place.is_empty():
 		header.add_child(_hud_label(place, Palette.BONE))
 	header.add_child(_hud_label("Level %d" % MapBuilder.level_of(cell), Palette.GOLD))
-	_pips = KillPips.new()
+	# As many pips as this fight has enemies -- fifteen on a settlement tile, ten on open land -- or,
+	# for a run, the cycle it repeats between elites.
+	var slots: int = fight.elite_every if fight.endless else fight.enemies
+	_pips = KillPips.new(slots)
 	_pips.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_tally.add_child(_pips)
 	_clock = VBoxContainer.new()
@@ -358,7 +386,7 @@ func _build_hud() -> void:
 	_tally.add_child(_clock)
 	# The border is drawn outside the track, so the track is cut to leave the whole thing exactly as
 	# wide as the pip bar above it: the two are one column and a pixel out would show.
-	var clock_bar := _bar(KillPips.WIDTH - 2 * BAR_BORDER, CLOCK_HEIGHT, BAR_TIME)
+	var clock_bar := _bar(KillPips.width_for(slots) - 2 * BAR_BORDER, CLOCK_HEIGHT, BAR_TIME)
 	_clock_fill = clock_bar.get_child(0)
 	_clock.add_child(_outlined(clock_bar, BAR_BORDER))
 	# The number under its own bar, so the two bars stay next to each other and the clock still
@@ -367,7 +395,7 @@ func _build_hud() -> void:
 	_clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_clock.add_child(_clock_label)
 
-	# Top right: what the run has turned up. It is a Control standing in the arena, so it eats the
+	# Bottom right: what the run has turned up. It is a Control standing in the arena, so it eats the
 	# click that lands on it rather than letting it through as a swing -- which is what is wanted
 	# here, and exactly why the main scene hides its own corner button while a fight is on.
 	_loot_button = Button.new()
@@ -375,23 +403,22 @@ func _build_hud() -> void:
 	_loot_button.scale = Vector2(_ui_scale, _ui_scale)
 	_loot_button.tooltip_text = "What this run has turned up"
 	_loot_button.pressed.connect(_on_loot_pressed)
+	# Its face is the whole of what the HUD says about how full the bag is. A copy of the theme's own
+	# box per state, tinted rather than repainted, so the bevel stays the pack's and only its colour
+	# moves -- and the tint lands on the box alone, so the newest find's icon and the count beside it
+	# keep their own colours.
+	for state: String in UITheme.STATES:
+		var face: StyleBox = UITheme.theme().get_stylebox(state, "WoodButton").duplicate()
+		_loot_faces.append(face)
+		_loot_button.add_theme_stylebox_override(state, face)
 	hud.add_child(_loot_button)
 	_refresh_loot_button()
+	_tint_loot_button()
 
-	# Under it, while the bag has nowhere to put anything: the worst of what is found will be
-	# destroyed when it is banked. Said as it happens rather than at the end, because the whole
-	# reason to say it is to give the player time to go and throw something away themselves.
-	_warning = PanelContainer.new()
-	_warning.theme_type_variation = "WoodPanel"
-	_warning.scale = Vector2(_ui_scale, _ui_scale)
-	_warning.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_warning.hide()
-	hud.add_child(_warning)
-	_warning.add_child(ItemDetails.line(
-			"Bag full -- the worst finds will be destroyed", Palette.RUST, WARNING_WIDTH))
-
-	# Leaving a farm run. Low and in the middle, well away from the enemy: the player is clicking
-	# hard and fast up there, and a stray one must not end the run.
+	# Leaving a farm run. Up in the top-right corner: the player is clicking hard and fast at the
+	# enemy in the middle of the screen, and the button that ends the run has to be somewhere a stray
+	# one cannot reach -- which is now a corner rather than the bottom middle, that being where the
+	# enemy's health went.
 	if fight.endless:
 		_terminate = Button.new()
 		_terminate.text = "Terminate"
@@ -401,20 +428,24 @@ func _build_hud() -> void:
 		_terminate.pressed.connect(_on_terminate_pressed)
 		hud.add_child(_terminate)
 
-	# Over the enemy: its name and health.
-	_enemy_panel = PanelContainer.new()
-	_enemy_panel.theme_type_variation = "WoodPanel"
+	# Centred on the bottom edge: the enemy's name and health, standing on the arena with no panel
+	# behind them -- the same as the place's name and the clock on the top edge, and for the same
+	# reason. These are what the player watches; a panel only puts furniture round them. So the name
+	# is written the way that one is, in bone with the dark outline that is what carries a word over a
+	# snowfield or a noon desert, and the bar brings its own border already.
+	_enemy_panel = VBoxContainer.new()
 	_enemy_panel.scale = Vector2(_ui_scale, _ui_scale)
+	_enemy_panel.add_theme_constant_override("separation", 2)
 	hud.add_child(_enemy_panel)
-	var stack := VBoxContainer.new()
-	stack.add_theme_constant_override("separation", 2)
-	_enemy_panel.add_child(stack)
-	_enemy_label = _label("")
+	_enemy_label = _hud_label("", Palette.BONE)
 	_enemy_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stack.add_child(_enemy_label)
-	var enemy_bar := _bar(120, 6, BAR_HEALTH)
-	_enemy_fill = enemy_bar.get_child(0)
-	stack.add_child(enemy_bar)
+	_enemy_panel.add_child(_enemy_label)
+	# The frame this wears is the enemy's tier, so it changes as the lineup walks in. It is wider for
+	# an elite and wider still for a boss, which the column simply grows to hold -- _place_corners
+	# centres it and has no opinion about how wide it is.
+	_enemy_bar = HealthBar.new()
+	_enemy_bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_enemy_panel.add_child(_enemy_bar)
 
 	# The verdict, hidden until there is one.
 	_result = PanelContainer.new()
@@ -465,7 +496,7 @@ func _build_hud() -> void:
 	_gold_label = _label("")
 	_gold_row.add_child(_gold_label)
 	# What the run turned up in currency, as a count. Which orbs is what the tray in the bag is for,
-	# and each was named by its own toast as it landed; a verdict wants the score.
+	# and each was seen falling out of the body that carried it; a verdict wants the score.
 	_orb_label = _label("")
 	_orb_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_orb_label.hide()
@@ -500,6 +531,14 @@ func _build_hud() -> void:
 	var found_title := _label("Found")
 	found_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	found.add_child(found_title)
+	# What the counter's reddening face means, in words, in the one place the player has already
+	# asked what the run is carrying -- and over the list rather than under it, because it is about
+	# the whole of it. Here rather than out in the arena because this is where something can be done
+	# about it: every square below carries a Discard.
+	_warning = ItemDetails.line(
+			"Bag full -- the worst finds will be destroyed", Palette.RUST, WARNING_WIDTH)
+	_warning.hide()
+	found.add_child(_warning)
 	_loot_drops = DropsView.new()
 	_loot_drops.discardable = true
 	_loot_drops.discarded.connect(_on_drop_discarded)
@@ -535,9 +574,19 @@ func _label(text: String) -> Label:
 ## because a swing that hit nothing is still feedback that the click was heard.
 func _on_hit_landed(amount: int, crit: bool, automatic: bool) -> void:
 	if automatic:
-		_player.play_once("attack")
-		_sound.play()
+		_swing()
 	_show_damage(amount, crit)
+
+
+## The player swinging, whether they clicked for it or the weapon did it for them. A swing landing on
+## top of one still running does not start over from the wind-up -- it cuts back in at the blow, so
+## clicking faster than the animation reads as a run of blows rather than as a stuck first frame.
+## One decision serves both halves: the animation's state is what the sound's offset is read from, so
+## the two can never disagree about whether this is a fresh swing.
+func _swing() -> void:
+	var again := _player.is_playing() and _player.animation == "attack"
+	_player.play_once("attack", SWING_RESTART_FRAME)
+	_sound.play(SWING_RESTART_SECONDS if again else 0.0)
 
 
 ## The number that floats off the enemy. This is the only place the player can read what their gear
@@ -572,47 +621,78 @@ func _show_damage(amount: int, crit: bool) -> void:
 	float_up.chain().tween_callback(label.queue_free)
 
 
+## Where a body's droppings come from: the middle of the enemy standing there. Rather than ENEMY_X
+## the way a damage number is, because a drop lands the same frame the enemy dies and so comes off
+## the thing the player just killed. The walked-in position is the fallback for the case where there
+## is no sprite -- a fight the tests drive with nobody on the field.
+func _drop_origin() -> Vector2:
+	var view := _size()
+	if _enemy != null and _enemy.sprite_frames != null:
+		return _enemy.position - Vector2(0, _enemy.drawn_size().y * 0.5)
+	return Vector2(view.x * ENEMY_X, view.y * (GROUND - ACTOR_HEIGHT * DAMAGE_HEIGHT))
+
+
+## Throws one thing out of the body: an arc onto the ground, a rest where it landed, and a fade.
+## Written once because everything a body drops is thrown the same way -- the coins of its purse, the
+## gear off it and the orbs -- which is the whole of this change: a kill's takings land in the arena
+## rather than being announced in a corner.
+##
+## `index` is which of a burst this is, so a rich body does not throw its whole purse as one lump;
+## `spread` is how far to either side it may land and `rest` how long it lies there.
+func _throw(node: Node2D, index: int, from: Vector2, spread: float, rest: float) -> void:
+	node.z_index = 1
+	node.scale = Vector2(_ui_scale, _ui_scale)
+	node.position = from
+	add_child(node)
+	var to := from.x + randf_range(-spread, spread)
+	var top := from.y - THROW_RISE
+	# An arc, not a rise: across at a steady rate while the height goes up and comes back down.
+	# Two hops on y rather than one tween of the whole position, which is what makes it a jump
+	# rather than a slide.
+	# The hold-back is a delay on each of the three rather than an interval in front of them,
+	# because they all run together and a parallel tween's steps are timed from its own start.
+	var delay := index * THROW_STAGGER
+	var arc := create_tween()
+	arc.set_parallel(true)
+	arc.tween_property(node, "position:x", to, THROW_TIME).set_delay(delay)
+	arc.tween_property(node, "position:y", top, THROW_TIME / 2.0) \
+			.set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	arc.tween_property(node, "position:y", _size().y * GROUND, THROW_TIME / 2.0) \
+			.set_delay(delay + THROW_TIME / 2.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	# It lies where it fell and then goes.
+	arc.chain().tween_interval(rest)
+	arc.set_parallel(false)
+	arc.tween_property(node, "modulate:a", 0.0, THROW_FADE)
+	arc.tween_callback(node.queue_free)
+
+
 ## The purse coming off a body, as coins thrown out of it. `Coins.count_for` decides how many, so a
 ## richer body visibly pays more without the arena filling up -- the count is the log of the amount,
-## not the amount.
-##
-## Spawned where the enemy is rather than at ENEMY_X the way a damage number is: the purse lands the
-## same frame the enemy dies, so the body is still standing there, and the coins come off the thing
-## the player just killed. The walked-in position is the fallback for the case where it is not.
+## not the amount. They are the only thing thrown that spins: a coin is drawn turning and gear is not.
 func _show_coins(amount: int) -> void:
-	var view := _size()
-	var from := Vector2(view.x * ENEMY_X, view.y * (GROUND - ACTOR_HEIGHT * DAMAGE_HEIGHT))
-	if _enemy != null and _enemy.sprite_frames != null:
-		from = _enemy.position - Vector2(0, _enemy.drawn_size().y * 0.5)
-	var ground := view.y * GROUND
+	var from := _drop_origin()
 	for i in Coins.count_for(amount):
 		var coin := AnimatedSprite2D.new()
 		coin.sprite_frames = Coins.frames()
-		coin.z_index = 1
-		coin.scale = Vector2(_ui_scale, _ui_scale)
-		coin.position = from
 		coin.play("spin")
-		add_child(coin)
-		var to := from.x + randf_range(-COIN_SPREAD, COIN_SPREAD)
-		var top := from.y - COIN_RISE
-		# An arc, not a rise: across at a steady rate while the height goes up and comes back down.
-		# Two hops on y rather than one tween of the whole position, which is what makes it a jump
-		# rather than a slide.
-		# The hold-back is a delay on each of the three rather than an interval in front of them,
-		# because they all run together and a parallel tween's steps are timed from its own start.
-		var delay := i * COIN_STAGGER
-		var arc := create_tween()
-		arc.set_parallel(true)
-		arc.tween_property(coin, "position:x", to, COIN_TIME).set_delay(delay)
-		arc.tween_property(coin, "position:y", top, COIN_TIME / 2.0) \
-				.set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		arc.tween_property(coin, "position:y", ground, COIN_TIME / 2.0) \
-				.set_delay(delay + COIN_TIME / 2.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-		# It lies where it fell, still spinning, and then goes.
-		arc.chain().tween_interval(COIN_REST)
-		arc.set_parallel(false)
-		arc.tween_property(coin, "modulate:a", 0.0, COIN_FADE)
-		arc.tween_callback(coin.queue_free)
+		_throw(coin, i, from, THROW_SPREAD, COIN_REST)
+
+
+## A find coming off a body: its own icon, thrown the way the purse is, with the rarity's beam
+## standing over it. A transparent `glow` means no beam -- a common piece and an orb are drawn plain.
+##
+## No name on it. What a find *is* is read in the counter and its list, where there is room for the
+## word and time to read it; what the arena has to say is that the body left something, and the
+## picture says that the moment it lands.
+func _show_find(picture: Texture2D, glow: Color) -> void:
+	_finds_shown += 1
+	var find := Sprite2D.new()
+	find.texture = picture
+	if glow.a > 0.0:
+		var beam := LootBeam.make(glow, BEAM_ALPHA, BEAM_SCALE)
+		beam.position = Vector2(0, -BEAM_LIFT)
+		find.add_child(beam)
+	_throw(find, 0, _drop_origin(), FIND_SPREAD, FIND_REST)
 
 
 ## A track with a fill inside it. The fill is the first child, and its width is set as things change.
@@ -697,7 +777,7 @@ func _refresh() -> void:
 	if not fight.endless:
 		var seconds := ceili(fight.time_left)
 		_clock_label.text = "%d:%02d" % [seconds / 60, seconds % 60]
-		var share := clampf(fight.time_left / Encounter.SECONDS, 0.0, 1.0)
+		var share := clampf(fight.time_left / fight.seconds, 0.0, 1.0)
 		_clock_fill.size.x = _clock_fill.get_parent().size.x * share
 		# The number goes with the bar. They are one clock, and the colour is the part of it read
 		# without looking straight at it.
@@ -713,12 +793,9 @@ func _refresh() -> void:
 	_enemy_panel.show()
 	_enemy_label.text = fight.enemy_name() + ("  (elite)" if fight.on_elite() else "")
 	var share := float(fight.hp) / maxi(fight.enemy_max_hp(), 1)
-	_enemy_fill.size.x = _enemy_fill.get_parent().size.x * maxf(share, 0.0)
-	# Sit the panel over the enemy's head, wherever it has walked to, but never off the screen edge.
-	var panel := _enemy_panel.get_combined_minimum_size() * _ui_scale
-	_enemy_panel.position = Vector2(
-			clampf(_enemy.position.x - panel.x / 2.0, 8.0, view.x - panel.x - 8.0),
-			view.y * GROUND - _enemy.drawn_size().y - panel.y - 8.0)
+	# Encounter.tier_in rather than on_elite(): the pips beside this bar colour themselves through the
+	# same call, so the frame over the enemy and the pip standing for it can never disagree.
+	_enemy_bar.show_health(Encounter.tier_in(fight, fight.index), maxf(share, 0.0))
 
 
 func _on_enemy_spawned(_index: int, _enemy_name: String, _hp: int) -> void:
@@ -737,8 +814,8 @@ func _on_enemy_died(_index: int) -> void:
 
 ## The one place a find is looked at. A level the player is done with is counted and passed on to
 ## whoever is keeping the elite promise, and that is all that happens to it: it does not join
-## `_drops`, does not move the counter, raises no toast and appears in neither list. Everything else
-## goes on exactly as it did, and leaves by `loot_kept`.
+## `_drops`, does not move the counter, is never thrown into the arena and appears in neither list.
+## Everything else goes on exactly as it did, and leaves by `loot_kept`.
 func _on_loot_dropped(index: int, item: Item) -> void:
 	if autodiscard.is_valid() and bool(autodiscard.call(item.level)):
 		_auto_discarded += 1
@@ -748,7 +825,15 @@ func _on_loot_dropped(index: int, item: Item) -> void:
 	_refresh_loot_button()
 	if _loot_panel.visible:
 		_loot_drops.fill(_drops)
-	_toast(item)
+	# Common is thrown plain, the way an ItemSlot rings nothing at common: a glow means "this one is
+	# worth stopping for", and one on everything would mean nothing.
+	#
+	# The ring's colour rather than the text's. They are the two halves of the same ramp and the
+	# choice between them is what is behind the colour: the text half was picked to be read on the
+	# bone panel, and a find is thrown against a snowfield or a noon desert, which is exactly what the
+	# square's border colour was picked for.
+	_show_find(item.icon(), Color.TRANSPARENT if item.rarity == ItemRarity.Rarity.COMMON
+			else ItemRarity.BORDER_COLORS[item.rarity])
 	loot_kept.emit(index, item)
 
 
@@ -774,96 +859,69 @@ func _on_drop_discarded(item: Item) -> void:
 ## The counter in the corner: the newest find, and how many there are. It wears the last thing
 ## that dropped rather than an icon of its own -- no pack here draws a bag, and a picture of what
 ## was just found says more than one would. With nothing found it is a dead button reading 0.
+## Green through gold to red as the bag fills, the way the clock ramps as it runs out. Nobody having
+## said (`bag_room` at -1) is an empty bag: a fight with no bag behind it has nothing to warn about.
+func _tint_loot_button() -> void:
+	var fill := 0.0 if bag_room < 0 else clampf(1.0 - float(bag_room) / Inventory.CAPACITY, 0.0, 1.0)
+	if is_equal_approx(fill, _loot_filled):
+		return
+	_loot_filled = fill
+	var want := (FACE_GREEN.lerp(Palette.GOLD, fill / 0.5) if fill <= 0.5
+			else Palette.GOLD.lerp(FACE_DANGER, (fill - 0.5) / 0.5))
+	# A tint multiplies, so what the boxes are given is the colour wanted divided by the colour the
+	# pack drew -- worked out that way round so the constants above are the colours that are seen.
+	var tint := Color(want.r / FACE_GREEN.r, want.g / FACE_GREEN.g, want.b / FACE_GREEN.b)
+	for face: StyleBox in _loot_faces:
+		(face as StyleBoxTexture).modulate_color = tint
+
+
+## The full-bag line inside the counter's panel. Flipped through here rather than set straight,
+## because it changes the panel's height and the panel is centred on what it holds.
+func _show_warning(showing: bool) -> void:
+	if _warning.visible == showing:
+		return
+	_warning.visible = showing
+	if _loot_panel.visible:
+		_centre_loot()
+
+
 func _refresh_loot_button() -> void:
 	_loot_button.text = str(_drops.size())
 	_loot_button.disabled = _drops.is_empty()
 	_loot_button.icon = null if _drops.is_empty() else _drops[-1].icon()
 
 
-## Puts the two corner panels where they belong. Done every frame rather than anchored, because
-## both are scaled by `_ui_scale` and an anchor knows nothing about that.
+## Puts the HUD's corners where they belong. Done every frame rather than anchored, because every
+## one of them is scaled by `_ui_scale` and an anchor knows nothing about that.
 func _place_corners(view: Vector2) -> void:
 	# The clock and the pips stand in the middle of the top edge. Placed here rather than anchored
 	# for the same reason as the rest: the column is scaled by _ui_scale and an anchor knows nothing
 	# about that.
 	var tally := _tally.get_combined_minimum_size() * _ui_scale
 	_tally.position = Vector2((view.x - tally.x) / 2.0, HUD_MARGIN)
+	# The enemy's nameplate centred on the bottom edge, under the fight rather than in it: the health
+	# of whatever is standing there is the one thing read continuously, and the middle of the bottom
+	# edge is where the eye is already going -- it is directly under the pip bar and the clock, so the
+	# whole of how the fight is going reads down one column. Centred rather than aligned to an edge
+	# because an elite's brackets and a boss's crown widen the panel, and growing it evenly either
+	# side keeps the channel where it was, which is what HealthBar's own TROUGH is for.
+	var plate := _enemy_panel.get_combined_minimum_size() * _ui_scale
+	_enemy_panel.position = Vector2((view.x - plate.x) / 2.0, view.y - plate.y - HUD_MARGIN)
+	# The counter in the bottom right, out at the corner so the nameplate has the middle.
 	var loot := _loot_button.get_combined_minimum_size() * _ui_scale
-	_loot_button.position = Vector2(view.x - loot.x - HUD_MARGIN, HUD_MARGIN)
-	_warning.visible = bag_room == 0
-	if _warning.visible:
-		var warn := _warning.get_combined_minimum_size() * _ui_scale
-		_warning.position = Vector2(view.x - warn.x - HUD_MARGIN, HUD_MARGIN + loot.y + TOAST_GAP)
+	_loot_button.position = Vector2(view.x - loot.x - HUD_MARGIN, view.y - loot.y - HUD_MARGIN)
+	_tint_loot_button()
+	_show_warning(bag_room == 0)
 	if _terminate != null:
 		var leave := _terminate.get_combined_minimum_size() * _ui_scale
-		_terminate.position = Vector2((view.x - leave.x) / 2.0, view.y - leave.y - TERMINATE_MARGIN)
+		_terminate.position = Vector2(view.x - leave.x - HUD_MARGIN, HUD_MARGIN)
 
 
-## A find, announced under the counter and gone again. Nothing stops for it: the run carries on
-## underneath, and the counter is where a drop is read properly.
-func _toast(item: Item) -> void:
-	_toast_of(item.icon(), item.display_name(), item.text_color())
-
-
-## An orb off a body, announced the same way a find is. Its name in BONE rather than in a rarity
-## colour, because an orb has no rarity and borrowing one would say it did -- and not in GOLD either,
-## which is the unique item step and has no business on a currency.
+## An orb off a body, thrown out of it the way a find is. Plain, with no glow: an orb has no rarity,
+## and borrowing a colour from that ramp would say it did.
 func _on_orb_dropped(_index: int, orb: String) -> void:
-	_toast_of(OrbTable.icon(orb), orb, Palette.BONE)
+	_show_find(OrbTable.icon(orb), Color.TRANSPARENT)
 	orb_gained.emit(orb)
-
-
-## One toast: a picture, a name, and the slide-in and fade. Written from an icon and a string rather
-## than from an Item, because a find and an orb are the same announcement and only differ in what
-## they are announcing.
-func _toast_of(picture: Texture2D, name_text: String, color: Color) -> void:
-	var panel := PanelContainer.new()
-	panel.theme_type_variation = "WoodPanel"
-	panel.scale = Vector2(_ui_scale, _ui_scale)
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hud.add_child(panel)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	panel.add_child(row)
-	var icon := TextureRect.new()
-	icon.texture = picture
-	icon.custom_minimum_size = Vector2(ItemSlot.ICON, ItemSlot.ICON)
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	row.add_child(icon)
-	row.add_child(ItemDetails.line(name_text, color, TOAST_WIDTH))
-	_toasts.append(panel)
-	_stack_toasts()
-
-	# It arrives from the right, the side it belongs to, and leaves by fading where it stands.
-	panel.modulate.a = 0.0
-	var home := panel.position
-	panel.position.x += TOAST_SLIDE
-	var tween := create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(panel, "modulate:a", 1.0, TOAST_FADE / 2.0)
-	tween.tween_property(panel, "position:x", home.x, TOAST_FADE / 2.0) \
-			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.set_parallel(false)
-	tween.tween_interval(TOAST_TIME)
-	tween.tween_property(panel, "modulate:a", 0.0, TOAST_FADE)
-	tween.tween_callback(func() -> void:
-		_toasts.erase(panel)
-		panel.queue_free()
-		_stack_toasts())
-
-
-## Lays the standing toasts down the right edge under the counter, oldest at the top. Placed by
-## their order in the array rather than remembered, so one leaving closes the gap it left.
-func _stack_toasts() -> void:
-	var view := _size()
-	var top := HUD_MARGIN + _loot_button.get_combined_minimum_size().y * _ui_scale + TOAST_GAP
-	# The warning stands between the counter and the toasts while it is up, so nothing lands on it.
-	if _warning != null and _warning.visible:
-		top += _warning.get_combined_minimum_size().y * _ui_scale + TOAST_GAP
-	for panel: Control in _toasts:
-		var size := panel.get_combined_minimum_size() * _ui_scale
-		panel.position = Vector2(view.x - size.x - HUD_MARGIN, top)
-		top += size.y + TOAST_GAP
 
 
 func _on_loot_pressed() -> void:
