@@ -147,13 +147,14 @@ func _shoot_inventory() -> void:
 	print("Saved ", ProjectSettings.globalize_path("user://ui_orb_craft.png"))
 
 	# The card, over an orb that cannot be used on what is open -- the case worth photographing,
-	# because it is the only place the game says why a square is grey.
+	# because it is the only place the game says why a square is grey. The *last* such orb rather than
+	# the first: a card near the left end fits inside the bag panel, and the arrangement worth seeing
+	# is the one where it hangs out over the character sheet.
 	var grey: OrbSlot = null
 	for child: Node in main._orb_tray.get_children():
 		if child is OrbSlot and not OrbTable.can_apply((child as OrbSlot).orb,
 				main.inventory.items[main._bag_selected]):
 			grey = child
-			break
 	if grey != null:
 		main._on_orb_hovered(grey.orb, grey)
 		for i in 2:

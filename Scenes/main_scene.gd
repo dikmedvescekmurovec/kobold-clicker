@@ -402,9 +402,16 @@ func _build_bag(layer: CanvasLayer) -> void:
 	_orb_tray.custom_minimum_size = Vector2(BAG_WIDTH, 0)
 	rows.add_child(_orb_tray)
 
+	layer.add_child(_build_worn())
+
 	# The card floats over everything, so it is a child of the layer rather than of the panel -- a
 	# card inside the panel would be clipped by it and would push the tray about as it grew. Scaled
 	# here for the reason everything else in this scene is: it is drawn in panel pixels.
+	#
+	# And added last, after the character sheet, because a CanvasLayer draws its children in tree
+	# order. The card is wider than the right-hand end of the tray has room for -- it is placed at the
+	# square's own x, and five of the eight squares put it out over the sheet standing against the bag
+	# panel's edge. Hanging over that page is the arrangement; being drawn under it is the bug.
 	_orb_card = OrbCard.new()
 	# It stands on the layer rather than inside a panel, so it carries the theme itself: a type
 	# variation means nothing to a Control with no themed ancestor, which is the same reason the
@@ -414,7 +421,6 @@ func _build_bag(layer: CanvasLayer) -> void:
 	_orb_card.hide()
 	layer.add_child(_orb_card)
 
-	layer.add_child(_build_worn())
 	_refresh_bag()
 
 

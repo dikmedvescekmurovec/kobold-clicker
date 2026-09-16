@@ -1952,9 +1952,27 @@ func _test_crafting_from_the_bag() -> bool:
 	_check(sword.mods.is_empty(), "and took the modifiers with it")
 	_check(main.inventory.orb_count("Orb of Scouring") == 0, "the scouring orb was spent")
 
-	# The card says what it is looking at, in all three of the states it can find an orb in.
-	main._on_orb_hovered("Orb of Alchemy", main._orb_tray.get_child(0))
+	# The card says what it is looking at, in all three of the states it can find an orb in. Hovered
+	# over the last square rather than the first, because that is the one the card cannot fit beside:
+	# it is placed at the square's own x and is wider than the tray's right-hand end has room for, so
+	# it hangs out over the character sheet standing against the bag panel.
+	var last_orb: OrbSlot = main._orb_tray.get_child(main._orb_tray.get_child_count() - 1)
+	main._on_orb_hovered(last_orb.orb, last_orb)
 	_check(main._orb_card.visible, "hovering puts the card up")
+	# Placed once by the hover and again deferred, so it is measured after the labels have laid out.
+	for i in 2:
+		await process_frame
+	var card_right: float = main._orb_card.get_global_position().x + main._orb_card.size.x * main.ui_scale
+	# Two checks that only mean anything together: the card really does reach across into the sheet's
+	# column, and it is the later child of the layer, which is the whole of what decides which of the
+	# two the player sees where they meet. Compared across rather than as whole rectangles, because
+	# whether they also meet up and down is a question about the height of the window.
+	_check(card_right > _panel_right(main._bag_panel, main.ui_scale),
+			"the card for the last orb reaches past the bag panel")
+	_check(card_right > main._worn_panel.get_global_position().x,
+			"and into the character sheet's column")
+	_check(main._orb_card.get_index() > main._worn_panel.get_index(),
+			"so it is drawn after the sheet, which cannot then cover it")
 	main._on_orb_unhovered()
 	_check(not main._orb_card.visible, "and leaving takes it down")
 
@@ -1972,3 +1990,6 @@ func _test_crafting_from_the_bag() -> bool:
 	await process_frame
 	_clear_save()
 	return true
+## The right-hand edge of a panel on the UI layer, in window pixels.
+func _panel_right(panel: Control, ui_scale: float) -> float:
+	return panel.get_global_position().x + panel.size.x * ui_scale
