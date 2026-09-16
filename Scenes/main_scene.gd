@@ -199,6 +199,8 @@ const TIPS := [
 	["first_item", "Spoils of Battle", "The fallen leave treasure behind! Open your bag with the chest in the top-left corner, then look over what you found and gear up for the fights ahead."],
 	["first_orb", "A Spark of Power", "This orb hums with raw magic, and it can reshape your gear. Open a piece in your bag, and the orbs that answer its call glow. Pick one and see what happens."],
 	["level_up", "Power Grows Within", "Battle has hardened you. A skill point awaits, so open the skills page with the star in the top-left corner and choose your path."],
+	["first_farm", "The Endless Hunt", "The enemies here will never stop coming, but there is no clock to beat. Fight as long as you like and gather their spoils. When you have had your fill, raise the flag in the top-right corner to head home with everything you found."],
+	["first_chart", "Claim the Land", "Foes stand between you and this land, and the clock at the top of the screen is ticking. Strike them all down before it runs out and the tile is yours. Fall short and nothing is lost, so catch your breath and try again."],
 ]
 const FLASH_BRIGHT := Color(1.6, 1.6, 1.6)
 const FLASH_SECONDS := 0.5
@@ -1481,6 +1483,8 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	_close_left_pages()
 	_show_corner(false)
 	_character.show()
+	# The tips about the fight itself come as it opens rather than after it, when they are needed.
+	_check_tips()
 
 
 ## Back from the fight. The tile is charted only if it was won; either way the map comes back
@@ -1725,6 +1729,10 @@ func _tip_due(id: String) -> bool:
 			return inventory.total_orbs() > 0
 		"level_up":
 			return inventory.level > 1
+		"first_farm":
+			return _farming and _combat != null
+		"first_chart":
+			return not _farming and _combat != null
 	return false
 
 
@@ -1736,7 +1744,8 @@ func _check_tips() -> void:
 			inventory.tips.append(tip[0])
 			_tip_queue.append(tip)
 			added = true
-	if added:
+	# Not mid-fight: a run writes nothing until it ends, and _bank_kills saves the seen tip then.
+	if added and _combat == null:
 		inventory.save(inventory_path)
 	_show_corner(_combat == null)
 	if _tip_panel == null:
@@ -1750,7 +1759,11 @@ func _show_next_tip() -> void:
 	var tip: Array = _tip_queue.pop_front()
 	_tip_panel = _titled_panel(tip[1], "Close", _on_tip_closed)
 	_tip_panel.scale = Vector2(ui_scale, ui_scale)
-	_ui_layer.add_child(_tip_panel)
+	# A fight holds still under a tip: a charting fight's clock must not run while the player reads.
+	if _combat != null:
+		_combat.process_mode = Node.PROCESS_MODE_DISABLED
+	# The character panel's layer, which stands over the fight's, so a tip can come up mid-run.
+	_character.get_parent().add_child(_tip_panel)
 	var label := Label.new()
 	label.theme_type_variation = "PanelLabel"
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1765,6 +1778,8 @@ func _on_tip_closed() -> void:
 	_tip_panel.queue_free()
 	_tip_panel = null
 	_show_next_tip()
+	if _tip_panel == null and _combat != null:
+		_combat.process_mode = Node.PROCESS_MODE_INHERIT
 
 
 ## Pulses a button until it has been pressed once. The tween is the scene's, so a button hidden for
