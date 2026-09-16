@@ -106,6 +106,8 @@ var inventory: Inventory
 var _chart_button: Button
 var _move_button: Button
 var _farm_button: Button
+## The tile the player is walking over to chart, NO_CELL when they aren't.
+var _chart_target := HexMap.NO_CELL
 var _env_rows: VBoxContainer
 var _tile_title: Label
 var _level_label: Label
@@ -304,11 +306,11 @@ func _build_ui() -> void:
 	filler.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	rows.add_child(filler)
 
-	# Two steps to reach new land: look at the tile next to you, then walk onto it.
+	# Only the buttons that can be pressed are shown (`_update_buttons`).
 	var buttons := VBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 4)
 	rows.add_child(buttons)
-	_chart_button = _button("Chart", "LightButton", "Look at the tile next to you and what lies behind it")
+	_chart_button = _button("Chart", "LightButton", "Fight for this tile and what lies behind it")
 	_chart_button.pressed.connect(_on_chart_pressed)
 	buttons.add_child(_chart_button)
 	_move_button = _button("Move here", "LightButton", "Walk to the selected tile")
@@ -319,6 +321,9 @@ func _build_ui() -> void:
 	_farm_button = _button("Farm", "LightButton", "Fight here for as long as you like, for the loot")
 	_farm_button.pressed.connect(_on_farm_pressed)
 	buttons.add_child(_farm_button)
+	# `_button` makes them disabled; these are hidden instead, so a shown one is always pressable.
+	for button: Button in buttons.get_children():
+		button.disabled = false
 
 	_build_character()
 	# Skills before the bag: building the bag lays its character sheet out, which measures the whole
@@ -1312,6 +1317,14 @@ func _on_chart_pressed() -> void:
 	var cell := map.selected_cell
 	if not view.can_chart(cell):
 		return
+	# Not next to it yet: walk to the nearest charted tile beside it, and the fight opens on arrival.
+	var from := view.chart_from(cell)
+	if from != view.player_cell:
+		_chart_target = cell
+		print("Walking to %s to chart %s" % [from, cell])
+		view.move_to(from)
+		_update_buttons()
+		return
 	var env: String = map.get_tile_info(cell).get("env", "")
 	var variant := view.area_variant(cell)
 	print("Fighting for %s, %s (%s, %s %d)" % [view.name_of(cell), cell, env, variant,
@@ -1426,14 +1439,21 @@ func _on_player_arrived(cell: Vector2i) -> void:
 	print("Arrived at %s" % cell)
 	_save_map()
 	_update_buttons()
+	if _chart_target != HexMap.NO_CELL:
+		var target := _chart_target
+		_chart_target = HexMap.NO_CELL
+		# Selecting it again is what the fight reads, in case the player clicked elsewhere on the way.
+		map.select_cell(target)
+		_on_chart_pressed()
 
 
 ## A tile is either something to look at or somewhere to go, and neither while the player is walking.
+## A button that can't be pressed is not shown at all.
 func _update_buttons() -> void:
 	var cell := map.selected_cell
-	_chart_button.disabled = not view.can_chart(cell)
-	_move_button.disabled = not view.can_move_to(cell)
-	_farm_button.disabled = not view.can_farm(cell)
+	_chart_button.visible = view.can_chart(cell)
+	_move_button.visible = view.can_move_to(cell)
+	_farm_button.visible = view.can_farm(cell)
 
 
 ## A kill left something behind. It is the player's whatever the fight does next, so a charting

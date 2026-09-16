@@ -392,7 +392,7 @@ func _test_start_state(map: HexMap, view: MapBuilder) -> bool:
 ## Reaching new land: what may be charted, what may be walked to, and what each does.
 func _test_charting(map: HexMap, view: MapBuilder) -> bool:
 	var start_tiles := MapBuilder.start_cells()
-	# Tiles have to be charted before the player can go there, and only from the tile they stand on.
+	# Tiles have to be charted before the player can go there, and only next to a tile already charted.
 	var arrivals: Array[Vector2i] = []
 	view.arrived.connect(func(at: Vector2i) -> void: arrivals.append(at))
 	_check(view.player_cell == MapBuilder.CENTER and map.player.cell == MapBuilder.CENTER, "the player starts on the center")
@@ -426,6 +426,12 @@ func _test_charting(map: HexMap, view: MapBuilder) -> bool:
 	_check(view.player_cell == rim and map.player.cell == rim, "arriving puts the player on the tile")
 	_check(arrivals == ([rim] as Array[Vector2i]), "arriving is reported")
 	_check(map.ground_layer.get_used_cells().size() == start_tiles.size() + expected_new, "arriving charts nothing by itself")
+
+	# A tile beside any charted tile can be charted; the player starts from the nearest one.
+	var far_side := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.W)
+	_check(view.can_chart(far_side) and view.chart_from(far_side) == MapBuilder.CENTER,
+			"a tile away from the player can be charted, from the charted tile beside it")
+	_check(view.chart_from(beyond) == rim, "a tile next to the player is charted from where they stand")
 
 	# Walking back is not limited to neighbors, but every tile of the route has to be charted.
 	_check(view.can_chart(beyond) and view.chart(beyond) >= 0, "the next tile out can be charted from there")

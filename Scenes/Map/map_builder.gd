@@ -9,7 +9,7 @@ extends RefCounted
 ## it, and can't go there. CHARTED cells are drawn plainly and can be walked to and over.
 ##
 ## The player starts on the center cell (0, 0), the only charted one, with its six neighbors uncharted
-## around it. They chart a tile next to the one they stand on, which lifts the fog off the tiles behind it
+## around it. They chart a tile next to any charted one, which lifts the fog off the tiles behind it
 ## and sends them walking onto it; they can also walk back to any tile they have charted. Everything is generated up front, so what a tile turns out to be never depends on
 ## when it is found.
 
@@ -272,10 +272,25 @@ func seen(cell: Vector2i) -> bool:
 	return state(cell) != State.HIDDEN
 
 
-## Whether the player can chart this cell: it has to be a tile they can see next to the one they stand on,
-## and they have to be standing still.
+## Whether the player can chart this cell: a tile they can see next to any charted one, and they have to be
+## standing still. Every charted tile is reachable, since charting only ever grows out from the start.
 func can_chart(cell: Vector2i) -> bool:
-	return not walking and state(cell) == State.UNCHARTED and HexGrid.distance(cell, player_cell) == 1
+	return not walking and state(cell) == State.UNCHARTED and chart_from(cell) != HexMap.NO_CELL
+
+
+## The charted tile next to `cell` the player is fewest steps from: where they stand if it borders `cell`,
+## otherwise where they walk to first. NO_CELL when no charted tile borders it.
+func chart_from(cell: Vector2i) -> Vector2i:
+	var best := HexMap.NO_CELL
+	var best_steps := -1
+	for next in HexGrid.neighbors(cell):
+		if not charted(next):
+			continue
+		var steps := 0 if next == player_cell else route_to(next).size()
+		if best_steps == -1 or steps < best_steps:
+			best = next
+			best_steps = steps
+	return best
 
 
 ## Whether the player can farm this cell: a tile already taken, which the player can go back to and

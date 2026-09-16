@@ -765,6 +765,20 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 	await process_frame
 	_check(main.view.charted(target), "a won tile is charted")
 	_check(main.map.visible, "and the map is back")
+
+	# A tile away from the player: they walk to the charted tile beside it first, and the fight opens there.
+	main.map.player.finish_walk()
+	var far_side := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.W)
+	main.map.select_cell(far_side)
+	_check(main._chart_button.visible and not main._chart_button.disabled and not main._move_button.visible and not main._farm_button.visible, "only the buttons that can be pressed show")
+	main._on_chart_pressed()
+	_check(main._combat == null and main.view.walking, "charting a tile out of reach walks there first")
+	_check(not main._chart_button.visible, "and hides the buttons on the way")
+	main.map.player.finish_walk()
+	_check(main.view.player_cell == MapBuilder.CENTER and main._combat != null, "the fight opens on arrival")
+	main._combat.fight.give_up()
+	main._combat._on_back_pressed()
+	await process_frame
 	main.queue_free()
 
 
