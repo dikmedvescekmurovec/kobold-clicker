@@ -1032,6 +1032,21 @@ func _test_the_map_comes_back() -> bool:
 	elsewhere.queue_free()
 	await process_frame
 	_clear_map_save()
+
+	# An inventory that cannot be read stops the game as a bad map does: nothing is generated, and
+	# closing the window writes over neither file.
+	var file := FileAccess.open(SCRATCH_INVENTORY, FileAccess.WRITE)
+	file.store_string("{ not a save")
+	file.close()
+	var refused: Node = _open_game()
+	for i in 3:
+		await process_frame
+	_check(refused.view == null, "a corrupt inventory builds no map")
+	refused.queue_free()
+	await process_frame
+	_check(FileAccess.get_file_as_string(SCRATCH_INVENTORY) == "{ not a save", "and is left untouched")
+	_check(not FileAccess.file_exists(TEST_MAP_PATH), "and no map is written beside it")
+	_clear_map_save()
 	return true
 
 

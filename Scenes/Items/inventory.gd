@@ -339,18 +339,14 @@ func total_orbs() -> int:
 	return total
 
 
-## Writes the inventory to `path`. Returns whether it got there; a failed write is worth a warning
-## but never worth stopping play for.
+## Writes the inventory to `path`, whole or not at all (`SafeFile`). Returns whether it got there; a
+## failed write is worth a warning but never worth stopping play for.
 func save(path := SAVE_PATH) -> bool:
-	var file := FileAccess.open(path, FileAccess.WRITE)
-	if file == null:
-		push_warning("Inventory: cannot write %s (%d)" % [path, FileAccess.get_open_error()])
-		return false
 	var saved := []
 	for item in items:
 		saved.append(item.to_dict())
 	# Indented, so the save can be read and edited by a person.
-	file.store_string(JSON.stringify({
+	return SafeFile.write(path, JSON.stringify({
 		"version": VERSION,
 		"first_elite_taken": first_elite_taken,
 		"tips": tips,
@@ -364,24 +360,28 @@ func save(path := SAVE_PATH) -> bool:
 		"equipped": equipment.to_dict(),
 		"autodiscard": autodiscard,
 	}, "\t"))
-	return true
 
 
-## The inventory in `path`, or an empty one when there isn't a usable file there. Missing,
-## unreadable, unparseable and the wrong shape all come back empty: a first run and a corrupt save
-## look the same from here, and neither is an error the player should meet.
-static func load_from(path := SAVE_PATH) -> Inventory:
+## The inventory in `path`, or an empty one when there isn't a usable file there. A missing file is a
+## first run and leaves `problem` empty. A file that is there and cannot be honoured -- unreadable,
+## unparseable, the wrong shape, from a newer build -- also comes back empty, with the reason appended
+## to `problem`: the caller must then **never save**, because the first write would replace everything
+## the player owns with nothing. The same rule as `MapSave.load_from`, and an Array for its reason.
+static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var inventory := Inventory.new()
+	SafeFile.recover(path)
 	if not FileAccess.file_exists(path):
 		return inventory
 	var text := FileAccess.get_file_as_string(path)
 	if text.is_empty():
-		push_warning("Inventory: cannot read " + path)
+		problem.append("it cannot be read")
 		return inventory
-	var data: Variant = JSON.parse_string(text)
-	if typeof(data) != TYPE_DICTIONARY:
-		push_warning("Inventory: %s is not a save file; starting empty" % path)
+	# A JSON instance rather than JSON.parse_string, which pushes an engine error of its own.
+	var reader := JSON.new()
+	if reader.parse(text) != OK or typeof(reader.data) != TYPE_DICTIONARY:
+		problem.append("it is not a save file")
 		return inventory
+	var data: Dictionary = reader.data
 	inventory.first_elite_taken = bool(data.get("first_elite_taken", false))
 	var seen: Variant = data.get("tips", [])
 	if typeof(seen) == TYPE_ARRAY:
@@ -391,16 +391,16 @@ static func load_from(path := SAVE_PATH) -> Inventory:
 	if version > VERSION:
 		# A save from a newer build. Guessing at a shape never seen is how a save gets eaten; leaving
 		# it alone means the build that wrote it can still read it.
-		push_warning("Inventory: %s was written by a newer version (%d); starting empty" % [path, version])
-		return inventory
+		problem.append("it was written by a newer version of the game (%d)" % version)
+		return Inventory.new()
 	if version < 2:
 		inventory._read_v1(data)
 		inventory.trim()
 		return inventory
 	var saved: Variant = data.get("items", [])
 	if typeof(saved) != TYPE_ARRAY:
-		push_warning("Inventory: %s has no items; starting empty" % path)
-		return inventory
+		problem.append("it has no list of items")
+		return Inventory.new()
 	for entry: Variant in saved:
 		var item := Item.from_dict(entry)
 		if item != null:

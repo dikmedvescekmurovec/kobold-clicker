@@ -84,19 +84,15 @@ static func fingerprint(tileset: HexTileset) -> String:
 	return "|".join(parts).sha256_text()
 
 
-## Writes the map to `path`. Returns whether it got there; a failed write is worth a warning but
-## never worth stopping play for.
+## Writes the map to `path`, whole or not at all (`SafeFile`). Returns whether it got there; a failed
+## write is worth a warning but never worth stopping play for.
 func save(path := SAVE_PATH) -> bool:
-	var file := FileAccess.open(path, FileAccess.WRITE)
-	if file == null:
-		push_warning("MapSave: cannot write %s (%d)" % [path, FileAccess.get_open_error()])
-		return false
 	var env_names := _env_names()
 	var road_list: Array[int] = []
 	for spot in roads:
 		road_list.append_array([spot.x, spot.y, roads[spot]])
 	# Indented, so the save can be read by a person -- and the env rows read as a picture of the map.
-	file.store_string(JSON.stringify({
+	return SafeFile.write(path, JSON.stringify({
 		"version": VERSION,
 		"sheet": sheet,
 		"world_seed": world_seed,
@@ -115,7 +111,6 @@ func save(path := SAVE_PATH) -> bool:
 		"roads": road_list,
 		"routed_links": routed_links.keys(),
 	}, "\t"))
-	return true
 
 
 ## The map in `path`, or null. Two different nulls, which the caller has to tell apart:
@@ -130,6 +125,7 @@ func save(path := SAVE_PATH) -> bool:
 ##
 ## `problem` is an out-parameter because an Array is shared where a String would be copied.
 static func load_from(path := SAVE_PATH, problem: Array = [], expect_sheet := "") -> MapSave:
+	SafeFile.recover(path)
 	if not FileAccess.file_exists(path):
 		return null
 	var text := FileAccess.get_file_as_string(path)

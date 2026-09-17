@@ -695,14 +695,29 @@ func _test_saving() -> bool:
 	var file := FileAccess.open(TEST_PATH, FileAccess.WRITE)
 	file.store_string("{ not json at all")
 	file.close()
-	_check(Inventory.load_from(TEST_PATH).total() == 0, "a corrupt save starts empty instead of failing")
+	var problem: Array = []
+	_check(Inventory.load_from(TEST_PATH, problem).total() == 0, "a corrupt save reads as empty instead of failing")
+	_check(not problem.is_empty(), "and says why, so the scene can refuse to play over it")
+	_check(FileAccess.get_file_as_string(TEST_PATH) == "{ not json at all", "and is left on disk untouched")
 
 	# A save from a build that does not exist yet: refused rather than guessed at, so whatever wrote
 	# it can still read it.
 	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
 	file.store_string('{"version": 99, "items": []}')
 	file.close()
-	_check(Inventory.load_from(TEST_PATH).total() == 0, "a save from the future starts empty")
+	problem = []
+	_check(Inventory.load_from(TEST_PATH, problem).total() == 0, "a save from the future reads as empty")
+	_check(not problem.is_empty(), "and is a refusal too")
+
+	# A write is whole or not at all: it goes to a .tmp that is renamed over the save, and a .tmp
+	# left alone by a crash between the two halves of that rename is the save, and is put back.
+	_check(Inventory.new().save(TEST_PATH) and not FileAccess.file_exists(TEST_PATH + SafeFile.TMP),
+			"a finished write leaves no .tmp behind")
+	DirAccess.rename_absolute(TEST_PATH, TEST_PATH + SafeFile.TMP)
+	problem = []
+	Inventory.load_from(TEST_PATH, problem)
+	_check(problem.is_empty() and FileAccess.file_exists(TEST_PATH)
+			and not FileAccess.file_exists(TEST_PATH + SafeFile.TMP), "a lone .tmp is recovered as the save")
 
 	# The shape this game kept before items had rarities.
 	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)

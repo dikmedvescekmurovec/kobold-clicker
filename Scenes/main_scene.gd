@@ -122,10 +122,16 @@ func _ready() -> void:
 	# Two different nulls: no file at all is a first run, and a file that cannot be honoured stops.
 	# Generating a world in its place would write over it on the player's first step, and a map lost
 	# to a bad read is worse than an error message.
+	# The inventory first, and by the same rule: it is what the player owns, and an empty bag saved over
+	# a file that could not be read is that file gone on the first kill.
 	var problem: Array = []
+	inventory = Inventory.load_from(inventory_path, problem)
+	if not problem.is_empty():
+		_refuse_save("inventory", inventory_path, str(problem[0]))
+		return
 	var save := MapSave.load_from(map_path, problem, MapSave.fingerprint(map.tileset))
 	if not problem.is_empty():
-		_refuse_save(str(problem[0]))
+		_refuse_save("map", map_path, str(problem[0]))
 		return
 	# A seed written into the scene is a deliberate request for that world, so it wins over a save
 	# of a different one; 0 means "whatever was being played, else somewhere new". A changed
@@ -143,7 +149,6 @@ func _ready() -> void:
 	print("%s world seed %d (%d towns), map seed %d, first town at cell %s" % [
 			"Loaded" if save else "New", used_world_seed, towns.towns().size(), used_map_seed,
 			view.start_town - map_origin])
-	inventory = Inventory.load_from(inventory_path)
 	map.tile_clicked.connect(_on_tile_clicked)
 	map.dragged.connect(_on_map_dragged)
 	view.arrived.connect(_on_player_arrived)
@@ -169,17 +174,18 @@ func _save_map() -> void:
 	view.to_save().save(map_path)
 
 
-## A save that cannot be honoured. Nothing is generated and nothing is written; the player is told
-## what happened and where the file is, because a console error is not something they can act on
-## and a blank window is worse.
-func _refuse_save(reason: String) -> void:
+## A save that cannot be honoured, `what` being "map" or "inventory". Nothing is generated and nothing
+## is written -- no UI is built, so nothing can reach either save; the player is told what happened
+## and where the file is, because a console error is not something they can act on and a blank window
+## is worse.
+func _refuse_save(what: String, path: String, reason: String) -> void:
 	_save_blocked = true
-	push_error("MapSave: refusing to load %s -- %s" % [map_path, reason])
+	push_error("Refusing to load the saved %s %s -- %s" % [what, path, reason])
 	var layer := CanvasLayer.new()
 	layer.name = "UI"
 	add_child(layer)
 	# The X quits: there is no map behind this to close it onto.
-	var panel := UITheme.titled_panel("Saved map", "Quit", get_tree().quit)
+	var panel := UITheme.titled_panel("Saved %s" % what, "Quit", get_tree().quit)
 	panel.scale = Vector2(ui_scale, ui_scale)
 	layer.add_child(panel)
 	# Fixed width and wrapped, because the one line that matters is a file path: it has no length
@@ -187,9 +193,9 @@ func _refuse_save(reason: String) -> void:
 	# takes its own close button with it. Arbitrary wrapping, since a path need not break on spaces.
 	var rows := UITheme.body_of(panel)
 	var width := minf(get_viewport().get_visible_rect().size.x / ui_scale - REFUSAL_MARGIN, REFUSAL_WIDTH)
-	for line in ["The saved map could not be loaded:", reason + ".",
-			"", "It has been left exactly as it is, at", ProjectSettings.globalize_path(map_path),
-			"", "Move that file aside to start a new world."]:
+	for line in ["The saved %s could not be loaded:" % what, reason + ".",
+			"", "It has been left exactly as it is, at", ProjectSettings.globalize_path(path),
+			"", "Move that file aside to start over without it."]:
 		var label := Label.new()
 		label.theme_type_variation = "PanelLabel"
 		label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
