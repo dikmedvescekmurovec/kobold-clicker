@@ -15,8 +15,13 @@ var gold := 0
 ## Orb name -> how many.
 var orbs := {}
 var xp := 0
+## What the fight has killed and not handed to the bounty boards yet: enemy name -> how many. A tile
+## fight's is always empty, because it counts each body as it falls.
+var slain := {}
 ## Whether this is a farm run, which pouches, rather than a fight for a tile, which banks as it goes.
 var farming: bool
+## The level of the tile being fought on, which a bounty asks about. -1 until the main scene says.
+var tile_level := -1
 
 var _inventory: Inventory
 var _path: String
@@ -65,6 +70,18 @@ func add_xp(amount: int) -> void:
 	_save()
 
 
+## One body down, for the boards that have work out on that monster. The same bank-or-pouch rule
+## everything else here follows: a tile fight counts it and writes it now, a run holds it and hands
+## the lot over at `bank`. The boards are reached through the inventory, which is what this already
+## holds -- nothing here knows there is a page showing them.
+func add_kill(enemy: String) -> void:
+	if farming:
+		slain[enemy] = int(slain.get(enemy, 0)) + 1
+		return
+	if BountyBoard.count_kill(_inventory.towns, enemy, 1, tile_level):
+		_save()
+
+
 ## A find the player's own rule threw away on sight. It is in neither the pouch nor the bag; all that
 ## is left of it is that an elite did hand something over.
 func autodiscarded(by_elite: bool) -> void:
@@ -102,7 +119,7 @@ func bank() -> bool:
 	if not farming or _banked:
 		return false
 	_banked = true
-	if drops.is_empty() and gold == 0 and orbs.is_empty() and xp == 0:
+	if drops.is_empty() and gold == 0 and orbs.is_empty() and xp == 0 and slain.is_empty():
 		return false
 	_inventory.gold += gold
 	gold = 0
@@ -111,6 +128,11 @@ func bank() -> bool:
 	for orb: String in orbs:
 		_inventory.add_orb(orb, int(orbs[orb]))
 	orbs = {}
+	# The run's bodies reach the boards here and nowhere else, so a run that is banked twice cannot
+	# count one goblin twice.
+	for enemy: String in slain:
+		BountyBoard.count_kill(_inventory.towns, enemy, int(slain[enemy]), tile_level)
+	slain = {}
 	for drop: Item in drops:
 		_put_in_bag(drop)
 	_save()

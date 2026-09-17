@@ -17,16 +17,19 @@ extends Node2D
 ## reason `inventory_path` is -- and more sharply, since they all pin a seed, and a pinned seed that
 ## differs from a save is a request for another world that replaces it on the first write.
 @export var map_path := MapSave.SAVE_PATH
+## Dev: every settlement offers every counter (`TownServices.show_all`). Debug builds only, and only
+## on the player's own save, so the tests and the screenshot scripts -- which all point
+## `inventory_path` elsewhere -- still see what a town of each tier really has.
+@export var debug_all_services := true
 
-## Side of the terrain swatch shown next to each environment percentage, in sprite pixels.
-const ENV_ICON := 16
-const ENV_ICON_SIZE := Vector2i(ENV_ICON, ENV_ICON)
-## The marks the two corner buttons wear. A chest for what has been carried home and a star for what
-## the player has become: both are places to go rather than actions to take, which is what the brown
-## face says and what puts them in a row of their own rather than among the panels' green buttons.
+## The marks the three corner buttons wear. A chest for what has been carried home, a star for what
+## the player has become and a scroll for the work they have taken on: all three are places to go
+## rather than actions to take, which is what the brown face says and what puts them in a row of their
+## own rather than among the panels' green buttons.
 const CHEST_ICON := "res://Assets/UI/ui_icon_chest.png"
 const STAR_ICON := "res://Assets/UI/ui_icon_star.png"
-## The air between the two, in panel pixels.
+const SCROLL_ICON := "res://Assets/UI/ui_icon_scroll.png"
+## The air between one and the next, in panel pixels.
 const CORNER_GAP := 4.0
 
 ## The panel that stands in for the map when its save cannot be read: how wide it is allowed to be
@@ -51,18 +54,30 @@ const LEVEL_UP_FONT := 48
 var _chart_button: Button
 var _move_button: Button
 var _farm_button: Button
+var _town_button: Button
+## What a town on the selected tile offers, listed under the land it stands on.
+var _service_rows: VBoxContainer
+## The settlement the player has walked into, on the right edge in the tile panel's place, and the
+## cell it stands on -- kept because the map is still clickable behind the page, so the selection is
+## not what the town is.
+var town_page: TownPage
+var _town_cell := HexMap.NO_CELL
 ## The tile the player is walking over to chart, NO_CELL when they aren't.
 var _chart_target := HexMap.NO_CELL
 var _env_rows: VBoxContainer
 var _tile_title: Label
 var _level_label: Label
 var _panel: VBoxContainer
-## The two left-hand pages and the corner buttons that open them. They share the edge, so only one
-## page is ever up: opening either closes the other.
+## The left-hand pages and the corner buttons that open them. They share the edge, so only one page is
+## ever up: opening any of them closes the rest.
 var bag_page: BagPage
 var skills_page: SkillsPage
+## The bounties taken on, everywhere: a left-hand page like the other two, so progress and the walk to
+## the monster are readable away from the town that posted the work.
+var bounty_page: BountyList
 var _bag_button: Button
 var _skills_button: Button
+var _bounty_button: Button
 ## The player in the top-left corner, over the map and over a fight alike.
 var _character: CharacterPanel
 
@@ -83,6 +98,8 @@ const TIPS := [
 	["level_up", "Power Grows Within", "Battle has hardened you. A skill point awaits, so open the skills page with the star in the top-left corner and choose your path."],
 	["first_farm", "The Endless Hunt", "The enemies here will never stop coming, but there is no clock to beat. Fight as long as you like and gather their spoils. When you have had your fill, raise the flag in the top-right corner to head home with everything you found."],
 	["first_chart", "Claim the Land", "Foes stand between you and this land, and the clock at the top of the screen is ticking. Strike them all down before it runs out and the tile is yours. Fall short and nothing is lost, so catch your breath and try again."],
+	["first_town", "Gates Stand Open", "People live here, and they will deal with a wanderer. Press Enter town on the panel at the right to step inside, where traders buy what you have gathered and sell what they have found. A board by the gate posts work for anyone willing to hunt."],
+	["first_bounty", "Names on the Board", "The board names creatures the town wants gone. Press Accept on a notice and every such creature you strike down counts towards it, one notice at a time. Each shows the land that creature lives on, and the scroll in the top-left corner keeps it wherever you go."],
 ]
 const FLASH_BRIGHT := Color(1.6, 1.6, 1.6)
 const FLASH_SECONDS := 0.5
@@ -108,6 +125,8 @@ func _ready() -> void:
 	# to a bad read is worse than an error message.
 	# The inventory first, and by the same rule: it is what the player owns, and an empty bag saved over
 	# a file that could not be read is that file gone on the first kill.
+	TownServices.show_all = (debug_all_services and OS.is_debug_build()
+			and inventory_path == Inventory.SAVE_PATH)
 	var problem: Array = []
 	inventory = Inventory.load_from(inventory_path, problem)
 	if not problem.is_empty():
@@ -230,8 +249,14 @@ func _build_ui() -> void:
 
 	_env_rows = VBoxContainer.new()
 	_env_rows.add_theme_constant_override("separation", 4)
-	_env_rows.custom_minimum_size = Vector2(ENV_ICON + 46, 0)
+	_env_rows.custom_minimum_size = Vector2(HexTileset.ENV_ICON + 46, 0)
 	rows.add_child(_env_rows)
+
+	# What a settlement on the tile offers, under the land it is built on: the tile says what is there
+	# before the player has walked to it, so the walk can be worth taking for a fortress's smith.
+	_service_rows = VBoxContainer.new()
+	_service_rows.add_theme_constant_override("separation", 4)
+	rows.add_child(_service_rows)
 
 	# An expanding spacer pushes the button to the bottom of the full-height panel.
 	var filler := Control.new()
@@ -253,6 +278,11 @@ func _build_ui() -> void:
 	_farm_button = UITheme.button("Farm", "LightButton", "Fight here for as long as you like, for the loot")
 	_farm_button.pressed.connect(_on_farm_pressed)
 	buttons.add_child(_farm_button)
+	# And a fourth, on the tiles people live on: go inside and trade. It takes standing on the tile
+	# rather than looking at it, because visiting a town is being there.
+	_town_button = UITheme.button("Enter town", "LightButton", "Go inside and see what is traded here")
+	_town_button.pressed.connect(_on_town_pressed)
+	buttons.add_child(_town_button)
 
 	_reset_button = UITheme.button("Reset", "LightButton", "Dev: delete the saves and start a new game")
 	_reset_button.theme = UITheme.theme()
@@ -299,9 +329,25 @@ func _build_pages(layer: CanvasLayer) -> void:
 	_bag_button = UITheme.icon_button(load(CHEST_ICON), "What the monsters have dropped", ui_scale)
 	_bag_button.pressed.connect(_on_bag_pressed)
 	layer.add_child(_bag_button)
+	_bounty_button = UITheme.icon_button(load(SCROLL_ICON), "The work you have taken on", ui_scale)
+	_bounty_button.pressed.connect(_on_bounty_pressed)
+	layer.add_child(_bounty_button)
 	skills_page = SkillsPage.new(inventory, inventory_path, ui_scale)
 	bag_page = BagPage.new(inventory, inventory_path, ui_scale)
-	for page: Control in [skills_page, bag_page]:
+	bounty_page = BountyList.new(inventory, view, ui_scale)
+	bounty_page.show_cell.connect(_on_show_cell)
+	# The town page stands on the other edge, but it is closed by the same X rule and hidden by the
+	# same fight, so it is built and wired here with the two that share the left one.
+	town_page = TownPage.new(inventory, inventory_path, ui_scale)
+	town_page.view = view
+	town_page.tab_changed.connect(_on_town_tab_changed)
+	# What the counter has open goes straight to the bag: the comparison points at what wearing it
+	# would replace, and a purchase reaches the purse and the grid by the same redraw. Back the other
+	# way, the counter redraws around whatever the bag has open, so a piece sold to make room unlocks
+	# the Buy that was greyed out for a full bag.
+	town_page.offer_changed.connect(bag_page.offer)
+	bag_page.selection_changed.connect(town_page.bag_changed)
+	for page: Control in [skills_page, bag_page, bounty_page, town_page]:
 		page.hide()
 		page.closed.connect(_on_left_page_closed)
 		layer.add_child(page)
@@ -355,7 +401,7 @@ func _show_environments(weights: Dictionary) -> void:
 	for env: String in envs:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 6)
-		row.add_child(_env_icon(env))
+		row.add_child(map.tileset.env_icon(env))
 		var percent := Label.new()
 		percent.theme_type_variation = "PanelLabel"
 		percent.text = "%d%%" % round(weights[env] * 100.0)
@@ -364,20 +410,18 @@ func _show_environments(weights: Dictionary) -> void:
 		_env_rows.add_child(row)
 
 
-## A swatch cut from the middle of that environment's own tile on the hex sheet, so the icon always
-## shows the terrain the player sees on the map and there is no second set of art to keep in step.
-func _env_icon(env: String) -> TextureRect:
-	var source := map.tileset.tile_set.get_source(HexTileset.SOURCE_ID) as TileSetAtlasSource
-	var tile_size := map.tileset.tile_size
-	@warning_ignore("integer_division")  # 56 and 64 less 16 are both even, so the swatch is centred
-	var origin := map.tileset.atlas_coords("env_%s_v1" % env) * tile_size + (tile_size - ENV_ICON_SIZE) / 2
-	var atlas := AtlasTexture.new()
-	atlas.atlas = source.texture
-	atlas.region = Rect2(origin, ENV_ICON_SIZE)
-	var icon := TextureRect.new()
-	icon.texture = atlas
-	icon.custom_minimum_size = Vector2(ENV_ICON_SIZE)
-	return icon
+## What the settlement on a tile trades in, one row per counter, and nothing at all where there is no
+## settlement. Shown for any town tile the player can see rather than only the ones they have taken:
+## which town has a blacksmith is exactly the sort of thing that decides where to walk next.
+func _show_services(cell: Vector2i) -> void:
+	UITheme.clear(_service_rows)
+	var tier := view.town_tier(cell)
+	if tier == -1:
+		return
+	_service_rows.add_child(UITheme.rule())
+	_service_rows.add_child(UITheme.label("Services", Palette.SLATE))
+	for service: String in TownServices.services_for(tier, view.origin + cell, towns.seed_value):
+		_service_rows.add_child(UITheme.label(TownServices.label(service)))
 
 
 ## The tile panel is scaled by `ui_scale`, so it is sized in sprite pixels: a height of view/ui_scale
@@ -391,11 +435,15 @@ func _layout_ui() -> void:
 	_panel.position = Vector2(view_size.x - width * ui_scale, 0.0)
 	bag_page.layout()
 	skills_page.layout()
-	# The two square buttons in a row under the character panel: what you carry, then what you are.
+	bounty_page.layout()
+	town_page.layout()
+	# The square buttons in a row under the character panel: what you carry, then what you are, then
+	# what you have promised to do.
 	var corner := Vector2(8, _character.position.y + (_character.size.y + 4) * ui_scale)
+	var step := (_bag_button.get_combined_minimum_size().x + CORNER_GAP) * ui_scale
 	_bag_button.position = corner
-	_skills_button.position = corner + Vector2(
-			(_bag_button.get_combined_minimum_size().x + CORNER_GAP) * ui_scale, 0.0)
+	_skills_button.position = corner + Vector2(step, 0.0)
+	_bounty_button.position = corner + Vector2(step * 2.0, 0.0)
 	_reset_button.position = Vector2(8, view_size.y - (_reset_button.get_combined_minimum_size().y * ui_scale) - 8)
 	if _combat != null:
 		_combat.xp_target = _character.xp_point()
@@ -403,7 +451,9 @@ func _layout_ui() -> void:
 
 func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
 	_update_buttons()
-	_panel.show()
+	# The map is still clickable behind an open town page, which has this edge until the player leaves
+	# it -- and `_close_town` is what brings the panel back, already filled in for whatever was clicked.
+	_panel.visible = _town_cell == HexMap.NO_CELL
 	_layout_ui()
 	var spot := map_origin + cell
 	var weights: Dictionary = info["environments"]
@@ -418,6 +468,7 @@ func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
 	_tile_title.text = tile_name if tile_name != "" else "Tile"
 	_level_label.text = "Level %d" % view.level_of(cell)
 	_show_environments(weights)
+	_show_services(cell)
 	# The rows are filled after _layout_ui ran, and the level line can be wider than the environment
 	# rows that pin the panel's width, so the panel is measured again now that it holds everything.
 	_layout_ui()
@@ -485,6 +536,10 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	fight.effects = inventory.skills.effects()
 	fight.orbs_after = maxi(0, OrbTable.FIRST_ORB_KILLS - inventory.kills)
 	ledger = FightLedger.new(inventory, inventory_path, farming)
+	ledger.tile_level = view.level_of(cell)
+	# Straight off the fight rather than through the scene: what a body was is the fight's business,
+	# and the boards want the monster's name, not a drop. The ledger decides when it reaches them.
+	fight.enemy_died.connect(_on_enemy_died)
 	_combat = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 	_combat.finished.connect(_on_combat_finished.bind(cell))
 	# Not `Encounter.loot_dropped`: the fight applies the player's autodiscard rule, and everything
@@ -510,6 +565,8 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# The map keeps its state but stops running, so nothing walks on underneath the fight.
 	map.hide()
 	map.process_mode = Node.PROCESS_MODE_DISABLED
+	# Before the panel is hidden: leaving a town brings the tile panel back, which a fight then takes away.
+	_close_town()
 	_panel.hide()
 	# The buttons have to go, not just be covered: a Control takes the mouse before the fight sees
 	# it, so one left in that corner would quietly eat the player's swings.
@@ -577,6 +634,10 @@ func _on_player_arrived(cell: Vector2i) -> void:
 		# Selecting it again is what the fight reads, in case the player clicked elsewhere on the way.
 		map.select_cell(target)
 		_on_chart_pressed()
+	# Where standing on a settlement becomes true: walking to one, and the walk a won settlement fight
+	# sends the player on when it charts the tile. Last, so a walk that ends in a fight has opened it
+	# first and a pop-up holds that fight still rather than letting its clock run under it.
+	_check_tips()
 
 
 ## A tile is either something to look at or somewhere to go, and neither while the player is walking.
@@ -586,6 +647,7 @@ func _update_buttons() -> void:
 	_chart_button.visible = view.can_chart(cell)
 	_move_button.visible = view.can_move_to(cell)
 	_farm_button.visible = view.can_farm(cell)
+	_town_button.visible = view.can_visit(cell)
 
 
 ## A kill left something behind. Whether it goes straight into the bag or waits in the run's pouch is
@@ -634,6 +696,13 @@ func _refresh_bag_room() -> void:
 		_combat.bag_room = ledger.room_left()
 
 
+## A body has fallen. What it was goes to the ledger, which is what knows whether a bounty hears about
+## it now or when the run banks.
+func _on_enemy_died(index: int) -> void:
+	if _combat != null and index < _combat.fight.lineup.size():
+		ledger.add_kill(_combat.fight.lineup[index])
+
+
 ## Whether the enemy in slot `index` of the fight going on is an elite. Asked of the roster rather
 ## than of the position: a farm run's elites come round forever and there is no last one.
 func _dropped_by_elite(index: int) -> bool:
@@ -649,11 +718,14 @@ func _bank_run() -> void:
 		bag_page.refresh()
 
 
-## Both corner buttons at once. They come and go together because what takes them away is never
+## Every corner button at once. They come and go together because what takes them away is never
 ## about one of them -- a page standing on their edge, or a fight that must see every click.
 func _show_corner(shown: bool) -> void:
 	_bag_button.visible = shown and ("first_item" in inventory.tips or "first_orb" in inventory.tips)
 	_skills_button.visible = shown and "level_up" in inventory.tips
+	# The journal has nothing in it until the player has stood at a board, which is also when their
+	# kills start counting towards one.
+	_bounty_button.visible = shown and BountyBoard.any_seen(inventory.towns)
 	# Off the map in a release build, and out of a fight's way like the rest of the corner.
 	_reset_button.visible = shown and OS.is_debug_build()
 	if _bag_button.visible:
@@ -675,6 +747,10 @@ func _tip_due(id: String) -> bool:
 			return ledger.farming and _combat != null
 		"first_chart":
 			return not ledger.farming and _combat != null
+		"first_town":
+			return view != null and view.can_visit(view.player_cell)
+		"first_bounty":
+			return BountyBoard.any_seen(inventory.towns)
 	return false
 
 
@@ -689,7 +765,9 @@ func _check_tips() -> void:
 	# Not mid-fight: a run writes nothing until it ends, and `bank_kills` saves the seen tip then.
 	if added and _combat == null:
 		inventory.save(inventory_path)
-	_show_corner(_combat == null)
+	# A page standing on that corner takes it away exactly as a fight does, and a tip can come due
+	# while one is open: walking into a town, or arriving somewhere with the bag up.
+	_show_corner(_combat == null and not _left_page_up())
 	if _tip_panel == null:
 		_show_next_tip()
 
@@ -752,6 +830,12 @@ func _stop_flash(id: String) -> void:
 func _close_left_pages() -> void:
 	bag_page.hide()
 	skills_page.hide()
+	bounty_page.hide()
+
+
+## Whether one of them is up, which is the other thing that takes the corner buttons away.
+func _left_page_up() -> bool:
+	return bag_page.visible or skills_page.visible or bounty_page.visible
 
 
 ## A page takes the corner's place while it is open, so that corner never holds both.
@@ -764,11 +848,26 @@ func _open_left_page(page: Control) -> void:
 	_character.hide()
 
 
-## The X on either page: the same two things follow from closing either one.
+## The X on any page: the same things follow from closing any of them. A town page and the bag in
+## shop mode are one thing on screen, so either X puts both away.
 func _on_left_page_closed() -> void:
 	_close_left_pages()
+	_close_town()
 	_show_corner(true)
 	_character.show()
+
+
+## Leaves the town: the page goes, the bag stops being a shop, and the tile panel takes its edge back.
+## Does nothing when there is no town open, so every path out of one can call it.
+func _close_town() -> void:
+	if not town_page.visible:
+		return
+	town_page.hide()
+	_town_cell = HexMap.NO_CELL
+	bag_page.shop(PackedStringArray())
+	if map.selected_cell != HexMap.NO_CELL:
+		_panel.show()
+	_update_buttons()
 
 
 func _on_skills_pressed() -> void:
@@ -782,6 +881,59 @@ func _on_bag_pressed() -> void:
 	_stop_flash("opened_bag")
 	bag_page.open()
 	_open_left_page(bag_page)
+
+
+func _on_bounty_pressed() -> void:
+	# Kills land while the page is shut, and so do new boards.
+	bounty_page.open()
+	_open_left_page(bounty_page)
+
+
+## A bounty said where its monster lives and the player asked to be shown: every page gets out of the
+## way, the tile is selected and the camera walks over to it, so what happens next is the tile panel's
+## own Move here, Farm or Chart rather than a third way of doing those.
+func _on_show_cell(cell: Vector2i) -> void:
+	_on_left_page_closed()
+	map.select_cell(cell)
+	camera.position = _clamp_to_map(map.ground_layer.map_to_local(cell))
+
+
+## Inside the settlement the player is standing on: the town page takes the tile panel's edge and the
+## bag opens on the other one in shop mode, so what is being sold is already laid out beside the
+## counter buying it. The two are one thing on screen and close together.
+func _on_town_pressed() -> void:
+	var cell := map.selected_cell
+	if not view.can_visit(cell):
+		return
+	var spot := view.origin + cell
+	var tier := view.town_tier(cell)
+	var services := TownServices.services_for(tier, spot, towns.seed_value)
+	print("Entered %s, %s (%s): %s" % [view.name_of(cell), cell, spot, services])
+	_town_cell = cell
+	# The page is what marks the town visited and fills its shelves, and it saves when it does: one
+	# place walks into a town, so there is one place the save has to be right.
+	town_page.open(view.name_of(cell), services, cell, spot, tier)
+	_panel.hide()
+	town_page.show()
+	_stand_at_counter()
+	_open_left_page(bag_page)
+	_layout_ui()
+	# Drawing the board is reading it, and a town always opens on its board (`TownServices.ORDER`), so
+	# this is where the tip about the bounties comes due.
+	_check_tips()
+
+
+## Another counter opened: the bag buys what that counter buys and nothing else.
+func _on_town_tab_changed(_service: String) -> void:
+	_stand_at_counter()
+
+
+## Points the bag at the town page's open tab. The town's own cell rather than whatever is selected:
+## the map is still clickable behind the page, and what an orb is worth is a property of the town the
+## player walked into, not of the tile they last looked at.
+func _stand_at_counter() -> void:
+	var tab := town_page.open_tab()
+	bag_page.shop(PackedStringArray() if tab.is_empty() else PackedStringArray([tab]), _town_cell)
 
 
 ## Quitting with a run still on. The pouch goes in rather than evaporating -- a run that is left

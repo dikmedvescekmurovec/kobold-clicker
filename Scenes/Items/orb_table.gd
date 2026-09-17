@@ -17,7 +17,13 @@ extends RefCounted
 ## three faces of one piece of knowledge, and splitting them is how they come to disagree.
 ##
 ## No orb ever touches a piece's level or its base stats. Those are frozen when it is rolled and stay
-## frozen; rarity and modifiers are what an orb exists to change.
+## frozen; rarity and modifiers are what an orb exists to change. (A blacksmith's upgrade does move
+## them, which is the one exception in the game and lives in `Scenes/Town/blacksmith.gd`.)
+##
+## Two things a smith leaves on a piece are the orbs' business, and both are handled in one place
+## each. A **broken** piece refuses every orb, so the branches below never see one. A **locked**
+## modifier survives all eight: `_reroll_at` puts it back and fills the rest around it, Divine steps
+## over its value, and Scouring stops one step short of common rather than stripping it.
 
 const ROOT := "res://Assets/Orbs/"
 
@@ -122,6 +128,9 @@ static func describe(orb: String) -> String:
 static func can_apply(orb: String, item: Item) -> bool:
 	if item == null or not ORBS.has(orb):
 		return false
+	# One answer for all eight: a piece the hammer ruined is out of the game as far as crafting goes.
+	if item.broken:
+		return false
 	match orb:
 		"Orb of Transmutation":
 			return item.rarity == ItemRarity.Rarity.COMMON
@@ -138,7 +147,12 @@ static func can_apply(orb: String, item: Item) -> bool:
 		"Orb of Divine":
 			return not item.mods.is_empty()
 		"Orb of Scouring":
-			return item.rarity != ItemRarity.Rarity.COMMON
+			if item.rarity == ItemRarity.Rarity.COMMON:
+				return false
+			# A locked piece is scoured back to an uncommon carrying its lock and no further, so one
+			# already standing there is as bare as it goes.
+			return not (item.rarity == ItemRarity.Rarity.UNCOMMON and item.mods.size() == 1
+					and not item.locked_mod().is_empty())
 	return false
 
 
@@ -151,6 +165,8 @@ static func why_not(orb: String, item: Item) -> String:
 	if item == null or not ORBS.has(orb) or can_apply(orb, item):
 		return ""
 	var piece := "%s %s" % [item.rarity_name(), item.display_name()]
+	if item.broken:
+		return "A broken piece cannot be changed"
 	match orb:
 		"Orb of Transmutation":
 			return "Only a common piece can be transmuted"
@@ -201,19 +217,47 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator) -> bool:
 			# The ids stay and only the numbers move: that is the whole difference between this and
 			# Chaos, and the reason a piece with the right modifiers and poor rolls is worth keeping.
 			for mod in item.mods:
+				# A locked modifier is locked at the roll it was locked at. Paying the smith and then
+				# rerolling the number would be paying to keep a line and losing it anyway.
+				if bool(mod.get("locked", false)):
+					continue
 				mod["value"] = ModifierTable.reroll_value(str(mod["id"]), rng, item.level)
 		"Orb of Scouring":
-			item.rarity = ItemRarity.Rarity.COMMON
-			item.mods.clear()
+			var kept := item.locked_mod()
+			if kept.is_empty():
+				item.rarity = ItemRarity.Rarity.COMMON
+				item.mods.clear()
+			else:
+				# A common carrying a modifier is a contradiction in `ItemRarity.MOD_COUNT`, so a
+				# locked piece is stripped to the lowest step that can still hold its one line.
+				item.rarity = ItemRarity.Rarity.UNCOMMON
+				var left: Array[Dictionary] = [kept]
+				item.mods = left
 	return true
 
 
 ## Sets the piece to a rarity and gives it that rarity's own fresh handful of modifiers. Four of the
 ## eight end here, because "what rarity is it now" and "how many modifiers does it carry" are one
 ## question in this game -- ItemRarity.MOD_COUNT is the join, and nothing else may answer it.
+##
+## A locked modifier is one of that handful rather than an extra on top: it is put back first and the
+## draw fills what is left around it, so the rarity's ceiling holds exactly as it does on a piece
+## with no lock. `ModifierTable.add_one` already draws only what the piece is not carrying, which is
+## what keeps the lock from being rolled a second time.
 static func _reroll_at(item: Item, rarity: ItemRarity.Rarity, rng: RandomNumberGenerator) -> void:
 	item.rarity = rarity
-	item.mods = ModifierTable.roll(item.type, ItemRarity.mod_count(rarity, rng), rng, item.level)
+	var count := ItemRarity.mod_count(rarity, rng)
+	var kept := item.locked_mod()
+	if kept.is_empty():
+		item.mods = ModifierTable.roll(item.type, count, rng, item.level)
+		return
+	var mods: Array[Dictionary] = [kept]
+	for i in count - 1:
+		var extra := ModifierTable.add_one(item.type, mods, rng, item.level)
+		if extra.is_empty():
+			break
+		mods.append(extra)
+	item.mods = mods
 
 
 ## The most modifiers this piece's rarity allows. A common's is zero, which is what makes a common
@@ -239,6 +283,15 @@ static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := f
 	if not guaranteed and rng.randf() >= chance_for(enemy_name, orb_find):
 		return ""
 	return _weighted(rng)
+
+
+## An orb a vendor would have on its shelf: two draws, and the rarer of the two. What a shop is for
+## is the orb nobody has seen fall, so the shelf leans up the table -- and it leans by drawing twice
+## rather than by carrying a second set of weights, so tuning a drop rate tunes the shelf with it.
+static func roll_favoured(rng: RandomNumberGenerator) -> String:
+	var first := _weighted(rng)
+	var second := _weighted(rng)
+	return first if int(ORBS[first]["weight"]) <= int(ORBS[second]["weight"]) else second
 
 
 ## An orb picked by weight. Integer weights, so walking the table cannot drift.

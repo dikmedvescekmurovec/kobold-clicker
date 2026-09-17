@@ -42,6 +42,7 @@ func _run() -> void:
 	_check(_test_saving() == true, "saving tests ran to the end")
 	_check(_test_orb_tables() == true, "orb table tests ran to the end")
 	_check(_test_orb_verbs() == true, "orb verb tests ran to the end")
+	_check(_test_locks_and_breaks() == true, "lock and break tests ran to the end")
 	_check(_test_orb_saving() == true, "orb saving tests ran to the end")
 	_check(_test_player_level() == true, "player level tests ran to the end")
 	_check(_test_bag_order() == true, "bag order tests ran to the end")
@@ -1919,6 +1920,98 @@ func _test_orb_verbs() -> bool:
 	# Nothing at all is refused without a fuss rather than crashing.
 	_check(not OrbTable.can_apply("Orb of Chaos", null), "an orb refuses a piece that is not there")
 	_check(OrbTable.why_not("Orb of Chaos", null).is_empty(), "and has nothing to say about it")
+	return true
+
+
+## The two marks a blacksmith leaves on a piece, read against the orbs. A **lock** has to survive all
+## eight, and a **break** has to stop all eight -- and what a reroll leaves behind is a draw rather
+## than a rule until it has been drawn a few thousand times, so the lock is walked through random
+## orbs over many seeds rather than through one example of each.
+func _test_locks_and_breaks() -> bool:
+	const RUNS := 200
+	const BLOWS := 12
+	var rng := RandomNumberGenerator.new()
+	var orbs := OrbTable.orbs()
+	var landed := {}
+	for run in RUNS:
+		rng.seed = run
+		var piece := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 7)
+		_check(Blacksmith.lock(piece, rng), "a rare piece takes a lock")
+		var pinned := piece.locked_mod().duplicate()
+		for blow in BLOWS:
+			var orb: String = orbs[rng.randi_range(0, orbs.size() - 1)]
+			if not OrbTable.can_apply(orb, piece):
+				continue
+			_check(OrbTable.apply(orb, piece, rng), "%s lands" % orb)
+			landed[orb] = int(landed.get(orb, 0)) + 1
+			var still := piece.locked_mod()
+			_check(str(still.get("id", "")) == str(pinned["id"]),
+					"%s leaves the locked modifier where it found it" % orb)
+			# Divine is the one that would move it, and the one this is really asking about.
+			_check(int(still.get("value", -1)) == int(pinned["value"]),
+					"%s leaves the locked value alone" % orb)
+			var locks := 0
+			for mod in piece.mods:
+				if bool(mod.get("locked", false)):
+					locks += 1
+			_check(locks == 1, "there is exactly one lock after a %s" % orb)
+			# The lock is one of the rarity's handful and never an extra on top of it.
+			_check(piece.mods.size() <= int(ItemRarity.MOD_COUNT[piece.rarity][1]),
+					"%s keeps a %s piece inside its own ceiling (%d mods)"
+					% [orb, piece.rarity_name(), piece.mods.size()])
+			# Which is also why a locked piece can never be scoured to common, and so can never be
+			# transmuted: a common carrying a modifier is a contradiction in MOD_COUNT.
+			_check(piece.rarity != ItemRarity.Rarity.COMMON, "a locked piece never lands on common")
+			_check(not OrbTable.can_apply("Orb of Transmutation", piece),
+					"and so is never offered a transmutation")
+	# The walk has to have actually used the orbs it is meant to be testing.
+	for orb: String in ["Orb of Chaos", "Orb of Alchemy", "Orb of Alteration", "Orb of Divine",
+			"Orb of Scouring"]:
+		_check(int(landed.get(orb, 0)) > 0, "%s was tried against a lock (%s)" % [orb, landed])
+	# Scouring is the one with a rule of its own: back to uncommon carrying the lock and nothing else.
+	rng.seed = WORLD_SEED
+	var scoured := Item.rolled("Wooden Sword", ItemRarity.Rarity.ELITE, rng, 5)
+	_check(Blacksmith.lock(scoured, rng), "an elite takes a lock")
+	var kept := scoured.locked_mod().duplicate()
+	_check(OrbTable.apply("Orb of Scouring", scoured, rng), "and is scoured")
+	_check(scoured.rarity == ItemRarity.Rarity.UNCOMMON, "a locked piece is scoured to uncommon")
+	_check(scoured.mods.size() == 1 and str(scoured.mods[0]["id"]) == str(kept["id"]),
+			"carrying its lock and nothing else")
+	_check(not OrbTable.can_apply("Orb of Scouring", scoured), "and there is nothing left to scour")
+	_check(not OrbTable.why_not("Orb of Scouring", scoured).is_empty(), "which it says")
+
+	# The line says so wherever a piece is written out, because Item writes it rather than a panel.
+	var marked := 0
+	for text in scoured.mod_lines():
+		if "(locked)" in text:
+			marked += 1
+	_check(marked == 1, "exactly one line says it is locked (%s)" % [scoured.mod_lines()])
+
+	# A broken piece is out of the game as far as the orbs are concerned, and each of the eight says so.
+	var ruined := Item.rolled("Leather Boot", ItemRarity.Rarity.RARE, rng, 4)
+	var was_mods := ruined.mods.duplicate(true)
+	var was_rarity := ruined.rarity
+	ruined.broken = true
+	for orb: String in OrbTable.ORBS:
+		_check(not OrbTable.can_apply(orb, ruined), "%s refuses a broken piece" % orb)
+		_check(not OrbTable.why_not(orb, ruined).is_empty(), "%s says why" % orb)
+		_check(not OrbTable.apply(orb, ruined, rng), "%s does nothing to one" % orb)
+	_check(ruined.mods == was_mods and ruined.rarity == was_rarity,
+			"a broken piece comes through all eight untouched")
+	_check(not Blacksmith.can_lock(ruined), "and the smith will not lock it either")
+
+	# Both marks go into the save, and a piece written before there was a smith reads as whole.
+	var back := Item.from_dict(ruined.to_dict())
+	_check(back != null and back.broken, "broken round-trips")
+	_check(back.to_dict() == ruined.to_dict(), "and the broken piece round-trips exactly")
+	var copy := Item.from_dict(scoured.to_dict())
+	_check(copy != null and copy.locked_mod() == scoured.locked_mod(),
+			"the lock comes back on the line it was on")
+	_check(copy.to_dict() == scoured.to_dict(), "and the locked piece round-trips exactly")
+	var plain := Item.rolled("Wooden Shield", ItemRarity.Rarity.UNCOMMON, rng, 2)
+	var old := plain.to_dict()
+	old.erase("broken")
+	_check(not Item.from_dict(old).broken, "a save with no word on it reads as whole")
 	return true
 
 

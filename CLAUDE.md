@@ -9,13 +9,14 @@ Use the console build, so output reaches the terminal: `C:\Users\Dik\Godot_v4.7.
 |---|---|
 | Import sprites and refresh the class cache (after adding scripts or sprites) | `--headless --path . --editor --quit` |
 | **All tests** (run before calling anything done) | `python tests/run_all.py` -- every `tests/test_*.gd`, failing on a non-zero exit **or any `SCRIPT ERROR`**: Godot exits 0 when a script a suite depends on does not parse, so a bare exit code lies |
-| One or more suites | `python tests/run_all.py combat inventory` -- `hex_map` (map, tileset), `generation` (generation, towns, map builder, map save), `ui_theme`, `enemies` (roster, sprite geometry), `combat`, `skills`, `inventory` (loot, rarity, inventory, save) |
+| One or more suites | `python tests/run_all.py combat inventory` -- `hex_map` (map, tileset), `generation` (generation, towns, map builder, map save), `ui_theme`, `enemies` (roster, sprite geometry), `combat`, `skills`, `inventory` (loot, rarity, inventory, save), `town` (services, prices, selling, buying, vendor stock, town state, bounty board) |
 | A suite with its full output | `--headless --path . -s res://tests/test_<suite>.gd` |
 | Run the game briefly | `--headless --path . --quit-after 30` |
+| The town balance table (prices against what a fight pays, at tile levels 1/3/5/8/10) | `--headless --path . -s res://tests/balance_town.gd` -- prints only, asserts nothing; run it before and after moving a dial in `Scenes/Town/` |
 | Screenshots (opens a window) | `--path . -s res://tests/screenshot_map.gd`, saved to `%APPDATA%\Godot\app_userdata\Incremendal Side Scroller\` |
 | Cut the UI sprites, the gear, orb and skill icons, the corner buttons' marks and the kill pips out of the bought packs | `python tools/ui_kit.py` (plain Python, no Godot) |
 | Cut the loot beam out of the bought effects pack | `python tools/loot_beam.py` (plain Python, no Godot) |
-| UI screenshots (opens a window) | `--path . -s res://tests/screenshot_ui.gd` -- `ui_*.png`: the tile panel, the bag, an item open, orb crafting, the orb card, the comparison, the skills page, the theme kit |
+| UI screenshots (opens a window) | `--path . -s res://tests/screenshot_ui.gd` -- `ui_*.png`: the tile panel, the bag, an item open, orb crafting, the orb card, the comparison, the skills page, a town tile's panel, the town page at each of its counters, a piece off a vendor's shelf open with its Buy button (`ui_town_buy.png`), the blacksmith with a piece held up to him (`ui_town_smith.png`) and what he leaves on one (`ui_town_broken.png`), a bounty board with one posting finished (`ui_town_bounties.png`), the bounty journal away from town (`ui_bounty_journal.png`), the theme kit |
 | Combat screenshots (opens a window) | `--path . -s res://tests/screenshot_combat.gd` -- `combat_*.png`: each fight state (start, hurt, elite, won, lost, nearly dead, boss bar, drop), a farm run, one fight per environment and variant (`combat_area_*`), one settlement in its four layouts (`combat_layout_*`), and `combat_roster.png` |
 
 "UID duplicate" warnings come from duplicated asset folders under `Assets/` and are harmless.
@@ -29,13 +30,15 @@ Each code folder has its own `CLAUDE.md`: a one-line description per file plus t
 
 **Combat** — details in `Scenes/Combat/CLAUDE.md`: `encounter.gd` (`Encounter`), `fight_ledger.gd` (`FightLedger`), `drops_view.gd` (`DropsView`), `combat_actor.gd` (`CombatActor`), `combat_scene.tscn` / `combat_scene.gd` (`CombatScene`)
 
+**Towns** — details in `Scenes/Town/CLAUDE.md`: `town_services.gd` (`TownServices`), `town_prices.gd` (`TownPrices`), `town_state.gd` (`TownState`), `vendor_stock.gd` (`VendorStock`), `blacksmith.gd` (`Blacksmith`), `bounty_board.gd` (`BountyBoard`)
+
 **Enemies** — details in `Scenes/Enemies/CLAUDE.md`: `enemy_roster.gd` (`EnemyRoster`)
 
 **Skills** — details in `Scenes/Skills/CLAUDE.md`: `skill_tree.gd` (`SkillTree`), `skills.gd` (`Skills`)
 
 **Items** — details in `Scenes/Items/CLAUDE.md`: `loot_table.gd` (`LootTable`), `item_rarity.gd` (`ItemRarity`), `modifier_table.gd` (`ModifierTable`), `equipment.gd` (`Equipment`), `item.gd` (`Item`), `orb_table.gd` (`OrbTable`), `inventory.gd` (`Inventory`)
 
-**UI** — details in `Scenes/UI/CLAUDE.md`: `bag_page.gd` (`BagPage`), `skills_page.gd` (`SkillsPage`), `character_panel.gd` (`CharacterPanel`), `juice.gd` (`Juice`), `palette.gd` (`Palette`), `item_details.gd` (`ItemDetails`), `item_slot.gd` (`ItemSlot`), `coins.gd` (`Coins`), `kill_pips.gd` (`KillPips`), `health_bar.gd` (`HealthBar`), `orb_slot.gd` (`OrbSlot`), `orb_card.gd` (`OrbCard`), `loot_beam.gd` (`LootBeam`), `skill_slot.gd` (`SkillSlot`), `skill_tree_view.gd` (`SkillTreeView`), `skill_card.gd` (`SkillCard`), `ui_theme.gd` (`UITheme`)
+**UI** — details in `Scenes/UI/CLAUDE.md`: `bag_page.gd` (`BagPage`), `skills_page.gd` (`SkillsPage`), `town_page.gd` (`TownPage`), `bounty_list.gd` (`BountyList`), `character_panel.gd` (`CharacterPanel`), `juice.gd` (`Juice`), `palette.gd` (`Palette`), `item_details.gd` (`ItemDetails`), `item_slot.gd` (`ItemSlot`), `coins.gd` (`Coins`), `kill_pips.gd` (`KillPips`), `health_bar.gd` (`HealthBar`), `orb_slot.gd` (`OrbSlot`), `orb_card.gd` (`OrbCard`), `loot_beam.gd` (`LootBeam`), `skill_slot.gd` (`SkillSlot`), `skill_tree_view.gd` (`SkillTreeView`), `skill_card.gd` (`SkillCard`), `ui_theme.gd` (`UITheme`)
 
 ## Sprites
 The sprites are generated by `AI-sprites-generator/` (Python, exported through Aseprite). Its README holds the palette, geometry, adjacency table and blend rules. `AI-sprites/` is build output: change the generator, preview with `qa.py` and get the user's approval, then run `build.py`.

@@ -37,11 +37,11 @@ func _init() -> void:
 
 ## Fills the card for one orb. `held` is how many the player has, and `against` is the piece the bag
 ## has open -- null when none is, which is the tray at rest and the case where there is nothing to
-## refuse.
+## refuse. `sell_for` is what a vendor beside the bag pays for one, and 0 everywhere else.
 ##
 ## Bone for the name and cream for the sentence: the card stands on the pack's wood page, and the
 ## darker half of the palette was picked to be read on the white one.
-func fill(orb: String, held: int, against: Item) -> void:
+func fill(orb: String, held: int, against: Item, sell_for := 0) -> void:
 	for child: Node in _rows.get_children():
 		_rows.remove_child(child)
 		child.queue_free()
@@ -54,6 +54,11 @@ func fill(orb: String, held: int, against: Item) -> void:
 		# whether that is because it was spent or because it has never been found.
 		status = "Not found yet"
 		tone = Palette.STONE_LT
+	elif against == null and sell_for > 0:
+		# What the square does now, rather than what is in it: with a vendor beside the bag and no piece
+		# open, pressing it is a sale and the price is the one thing the player needs before they press.
+		status = "Sell for %d" % sell_for
+		tone = Palette.LEAF_LT
 	elif against == null:
 		status = "You hold %d" % held
 	elif OrbTable.can_apply(orb, against):

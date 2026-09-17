@@ -7,6 +7,9 @@ extends Control
 
 ## The bag's X was pressed.
 signal closed
+## The piece the bag has open changed, bag item or worn, and null when it went back to the grid.
+## Whoever is standing beside the bag acts on what is open in it -- the blacksmith's counter does.
+signal selection_changed(item: Item)
 
 ## Five squares to a row: a heading with Auto and Clear needs that much width at 16 px. The gutter is
 ## the pack's own seven-to-one square-to-gutter proportion.
@@ -27,6 +30,13 @@ const SOCKET_AMULET_TEXTURE := preload("res://Assets/UI/ui_socket_amulet.png")
 const DOLL_SCALE := 3.0
 ## The comparison is as wide as the bag, so the two stat blocks wrap alike.
 const WORN_WIDTH := WIDTH
+## And what it gives way to while the bag stands in a town, where a third panel wants the same window.
+## A 1152 px window at ui_scale 2 is 576 panel pixels: the bag panel takes 240, `WORN_GAP` 6 and the
+## town page 160, which leaves 170 for this panel and 146 for what is inside it. Of the three it is
+## the only one that reads at any width -- the bag's grid is five squares wide or it is not the bag,
+## and the town page is three shelf squares wide or its prices cannot be read off it.
+## See `Scenes/Town/DESIGN.md`.
+const SHOP_WORN_WIDTH := 146.0
 ## The air between the bag panel and the sheet.
 const WORN_GAP := 6.0
 ## Each socket's centre in the doll sprite's own pixels, before DOLL_SCALE. Measured off the sprite:
@@ -46,6 +56,17 @@ const DOLL_SOCKETS := {
 var inventory: Inventory
 var _save_path: String
 var _ui_scale: float
+
+## What the counter the bag is standing at buys, by `TownServices` name -- the town page's open tab
+## and not everything the town offers, so the gear merchant's Sell button and the orb vendor's tray
+## are never both live at once. Empty everywhere else, which is what leaves Discard as Discard and the
+## tray as crafting alone.
+var _services: PackedStringArray = []
+## That town's cell, which is what an orb is worth there.
+var _town_cell := Vector2i.ZERO
+## The piece the counter beside the bag has open for sale, or null. It is not in the bag and never
+## becomes selected here; all it does is point the comparison at what buying it would replace.
+var _offered: Item
 
 var _panel: VBoxContainer
 var _count: Label
@@ -156,6 +177,30 @@ func open() -> void:
 	refresh()
 
 
+## Stands the bag at a counter that buys `services`, or takes it away from one with none. The bag is
+## where a sale happens rather than a second grid on the town page: what the player wants to sell is
+## already laid out here, and two grids of the same items is two places to hunt through.
+func shop(services: PackedStringArray, town_cell := Vector2i.ZERO) -> void:
+	_services = services
+	_town_cell = town_cell
+	_offered = null
+	open()
+
+
+## Points the comparison at what the counter has open for sale, and redraws around it -- so a piece
+## on a vendor's shelf is judged against what is worn, which is the question a shop is read to
+## answer. null puts it back to the bag's own selection, and a purchase arrives the same way: the
+## purse, the grid and the tray are all redrawn by the same call.
+func offer(item: Item) -> void:
+	_offered = item
+	refresh()
+
+
+## Whether the town the bag is standing in buys this. False everywhere outside one.
+func _buys(service: String) -> bool:
+	return service in _services
+
+
 func refresh_gold() -> void:
 	_gold.text = str(inventory.gold)
 
@@ -233,11 +278,19 @@ func _section_heading(level: int) -> HBoxContainer:
 	auto.toggled.connect(_on_autodiscard_toggled.bind(level))
 	row.add_child(auto)
 
+	# In a town that buys gear the same button sells the handful instead of destroying it: it is the
+	# same act -- being done with a level -- and the merchant is simply a better way to do it.
 	var held := inventory.count_at(level)
-	var clear := UITheme.button("Clear", "LightDangerButton",
-			"Throw away the %d item(s) held at level %d" % [held, level])
+	var selling := _buys(TownServices.GEAR)
+	var worth := TownPrices.sell_total(inventory.items.filter(
+			func(item: Item) -> bool: return item.level == level)) if selling else 0
+	var clear := UITheme.button("Sell all" if selling else "Clear",
+			"LightButton" if selling else "LightDangerButton",
+			"Sell the %d item(s) held at level %d for %d gold" % [held, level, worth] if selling
+			else "Throw away the %d item(s) held at level %d" % [held, level])
 	clear.disabled = held == 0
-	clear.pressed.connect(_on_clear_level_pressed.bind(level))
+	clear.pressed.connect(_on_sell_level_pressed.bind(level) if selling
+			else _on_clear_level_pressed.bind(level))
 	row.add_child(clear)
 	return row
 
@@ -252,6 +305,17 @@ func _on_autodiscard_toggled(on: bool, level: int) -> void:
 func _on_clear_level_pressed(level: int) -> void:
 	var gone := inventory.discard_level(level)
 	print("Discarded %d item(s) at level %d" % [gone.size(), level])
+	inventory.save(_save_path)
+	_select_item(-1)
+
+
+## A whole level over the counter. The price is summed off what `discard_level` hands back, so the
+## purse is paid for exactly what left the bag rather than for what was in it a moment ago.
+func _on_sell_level_pressed(level: int) -> void:
+	var gone := inventory.discard_level(level)
+	var paid := TownPrices.sell_total(gone)
+	inventory.gold += paid
+	print("Sold %d item(s) at level %d for %d gold" % [gone.size(), level, paid])
 	inventory.save(_save_path)
 	_select_item(-1)
 
@@ -288,6 +352,7 @@ func _select_item(index: int) -> void:
 	_selected = index
 	_worn_selected = -1
 	refresh()
+	selection_changed.emit(_open_piece())
 
 
 ## -1 closes it.
@@ -295,6 +360,7 @@ func _select_socket(socket: int) -> void:
 	_worn_selected = socket
 	_selected = -1
 	refresh()
+	selection_changed.emit(_open_piece())
 
 
 ## A bag item's block, with Equip (into the emptiest socket it fits), Discard and Back.
@@ -310,10 +376,20 @@ func _show_item(index: int) -> void:
 					"" if worn == null else ", putting %s back in the bag" % worn.display_name()])
 		equip.pressed.connect(_on_equip_pressed.bind(item, socket))
 		_detail.add_child(equip)
-	# No confirmation: two clicks deep already, and asking twice teaches clicking through.
-	var discard := UITheme.button("Discard", "LightDangerButton", "Throw this away for good")
-	discard.pressed.connect(_on_discard_pressed.bind(item))
-	_detail.add_child(discard)
+	# In a town that buys gear, the button that got rid of a piece sells it instead: one button in one
+	# place, so there is never a Discard sitting next to a Sell for the player to press by mistake.
+	# No confirmation either way: two clicks deep already, and asking twice teaches clicking through.
+	if _buys(TownServices.GEAR):
+		var price := TownPrices.sell_price(item)
+		var sell := UITheme.button("Sell %d" % price, "LightButton",
+				"Sell this to the merchant for %d gold" % price)
+		sell.icon = Coins.icon()
+		sell.pressed.connect(_on_sell_pressed.bind(item))
+		_detail.add_child(sell)
+	else:
+		var discard := UITheme.button("Discard", "LightDangerButton", "Throw this away for good")
+		discard.pressed.connect(_on_discard_pressed.bind(item))
+		_detail.add_child(discard)
 	_add_back_button(_select_item.bind(-1))
 
 
@@ -374,13 +450,33 @@ func _on_discard_pressed(item: Item) -> void:
 	_select_item(-1)
 
 
+## One piece over the counter. Priced and taken out first, paid for second, so a piece that was no
+## longer in the bag can never be paid for twice.
+func _on_sell_pressed(item: Item) -> void:
+	var price := TownPrices.sell_price(item)
+	if inventory.remove(item):
+		inventory.gold += price
+		print("Sold %s (%s, level %d) for %d gold" % [item.type, item.rarity_name(), item.level, price])
+		inventory.save(_save_path)
+	_select_item(-1)
+
+
 ## The sheet redrawn: the comparison while a bag item is open, the doll otherwise.
 func _refresh_worn() -> void:
 	_doll = null
 	UITheme.clear(_worn_body)
-	if _selected >= 0 and _selected < inventory.total():
-		_show_compare(inventory.items[_selected])
-	else:
+	# What is being judged: the counter's piece first, because the shelf is where the player is
+	# looking while one is open there, and the bag's own selection otherwise.
+	var judged := _offered
+	if judged == null and _selected >= 0 and _selected < inventory.total():
+		judged = inventory.items[_selected]
+	# In a town the page on the far edge needs the room, and the doll is the one thing on this side
+	# that can go without taking a decision with it: the comparison is what says whether to sell, and
+	# nothing is worn while the bag is being emptied over a counter.
+	_worn_panel.visible = judged != null or _services.is_empty()
+	if judged != null:
+		_show_compare(judged)
+	elif _worn_panel.visible:
 		_show_doll()
 	# The two states differ in size. Measured again deferred: a container's minimum is only right once
 	# it has laid out its new children.
@@ -464,19 +560,20 @@ func _show_compare(item: Item) -> void:
 		_show_doll()
 		return
 	_worn_panel.theme_type_variation = "TextPanel"
-	_worn_body.custom_minimum_size = Vector2(WORN_WIDTH, 0)
+	var width: float = SHOP_WORN_WIDTH if not _services.is_empty() else WORN_WIDTH
+	_worn_body.custom_minimum_size = Vector2(width, 0)
 	var socket: Equipment.Socket = open_sockets[0]
 	var worn := inventory.equipment.item_at(socket)
 	var heading := UITheme.vbox(2)
 	heading.add_child(UITheme.label("Equipped · %s" % Equipment.LABELS[socket], Palette.SLATE))
-	heading.add_child(UITheme.rule(WORN_WIDTH))
+	heading.add_child(UITheme.rule(width))
 	_worn_body.add_child(heading)
 	if worn == null:
-		_worn_body.add_child(ItemDetails.line("Nothing worn", Palette.SLATE, WORN_WIDTH))
+		_worn_body.add_child(ItemDetails.line("Nothing worn", Palette.SLATE, width))
 		return
 	# Its own box: ItemDetails.fill empties whatever it is given.
 	var column := UITheme.vbox(2)
-	ItemDetails.fill(column, worn, WORN_WIDTH)
+	ItemDetails.fill(column, worn, width)
 	_worn_body.add_child(column)
 	_worn_body.add_child(_unequip_button(_on_compare_unequip_pressed.bind(item, socket)))
 
@@ -518,7 +615,14 @@ func refresh_orbs() -> void:
 ## survives: crafting adds nothing to the bag and takes nothing out.
 func _on_orb_pressed(orb: String) -> void:
 	var item := _open_piece()
-	if item == null or inventory.orb_count(orb) <= 0:
+	if inventory.orb_count(orb) <= 0:
+		return
+	# With a vendor beside the bag and no piece open, the square is a sale; with a piece open it is a
+	# craft, exactly as it always was. So standing in a town never costs the player the crafting tray,
+	# and closing the piece they have open is the whole of how they switch between the two.
+	if item == null:
+		if _buys(TownServices.ORBS):
+			_sell_orb(orb)
 		return
 	if not OrbTable.apply(orb, item, _craft_rng):
 		return
@@ -528,9 +632,28 @@ func _on_orb_pressed(orb: String) -> void:
 	refresh()
 
 
+## One orb over the counter. Spent first and paid second, the way crafting applies first and spends
+## second: `spend_orb` is false when there is none to spend, so nothing is ever paid for an orb the
+## player does not have.
+func _sell_orb(orb: String) -> void:
+	var price := TownPrices.orb_sell_price(orb, _town_cell)
+	if not inventory.spend_orb(orb):
+		return
+	inventory.gold += price
+	print("Sold %s for %d gold" % [orb, price])
+	inventory.save(_save_path)
+	refresh()
+
+
+## What a vendor beside the bag pays for one of these, and 0 where none does -- which is what the card
+## reads to decide whether to quote a price or count what is held.
+func _orb_price(orb: String) -> int:
+	return TownPrices.orb_sell_price(orb, _town_cell) if _buys(TownServices.ORBS) else 0
+
+
 ## Placed now and again deferred: the first pass measures labels that have not laid out yet.
 func _on_orb_hovered(orb: String, slot: OrbSlot) -> void:
-	_orb_card.fill(orb, inventory.orb_count(orb), _open_piece())
+	_orb_card.fill(orb, inventory.orb_count(orb), _open_piece(), _orb_price(orb))
 	_orb_card.show()
 	_place_orb_card(slot.get_global_rect())
 	_place_orb_card.call_deferred(slot.get_global_rect())

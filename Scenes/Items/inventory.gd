@@ -31,8 +31,10 @@ const SAVE_PATH := "user://inventory.json"
 ## adds the orbs, which are counts and not items, and which a version 6 save has none of for the same
 ## reason it has no gold: they did not exist when it was written. 8 adds the player's level and the
 ## experience held towards the next one; a version 7 save comes back at level 1 with none. 9 adds the
-## skills, which a version 8 save has none of -- it comes back with every level's point unspent.
-const VERSION := 9
+## skills, which a version 8 save has none of -- it comes back with every level's point unspent. 10
+## adds the towns the player has walked into, which a version 9 save simply has none of: an absent key
+## and no town visited read the same, the way version 4's `autodiscard` did.
+const VERSION := 10
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -83,6 +85,10 @@ var xp := 0
 ## What the player has learned with the points their level earned. Saved here beside the level for
 ## the level's reason, and because the points are counted off it.
 var skills := Skills.new()
+
+## What the settlements the player has walked into hold. Here rather than beside the map because a
+## town's shelf and the purse that empties it move together, and one save is one write.
+var towns := TownState.new()
 
 ## The levels the player has told the game to stop bringing. Levels rather than items, because a
 ## level is what a section of the bag is, and rarity is not consulted: a marked level is done with,
@@ -355,6 +361,7 @@ func save(path := SAVE_PATH) -> bool:
 		"level": level,
 		"xp": xp,
 		"skills": skills.to_dict(),
+		"towns": towns.to_dict(),
 		"orbs": orbs,
 		"items": saved,
 		"equipped": equipment.to_dict(),
@@ -435,6 +442,9 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	# Version 8 knew nothing about skills: an absent key is nothing learned. Read after the level,
 	# because what a save may have spent is counted off it.
 	inventory.skills = Skills.from_dict(data.get("skills", {}), inventory.level)
+	# Version 9 knew nothing about towns, and an absent key reads as no settlement walked into yet --
+	# which is what every save had before there was anything in one to do.
+	inventory.towns = TownState.from_dict(data.get("towns", {}))
 	# Version 6 knew nothing about orbs, and an absent key reads as none. An orb this build no longer
 	# has is dropped rather than kept as a name nothing can draw -- the same pruning by name that
 	# Item.from_dict does to a retired piece, and the reason orbs are saved by name at all.

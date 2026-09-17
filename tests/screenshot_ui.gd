@@ -20,6 +20,7 @@ func _run() -> void:
 	await _shoot_main_scene()
 	await _shoot_inventory()
 	await _shoot_skills()
+	await _shoot_town()
 	await _shoot_board()
 	quit()
 
@@ -217,6 +218,193 @@ func _shoot_skills() -> void:
 	print("Saved ", ProjectSettings.globalize_path("user://ui_skills.png"))
 	main.queue_free()
 	await process_frame
+
+
+## A settlement: what the tile panel says about one from outside, then the inside of it -- each
+## counter's shelf with the bag standing beside it, and one piece off the shelf open with its price.
+## The whole point of these is the width and the height: the town page, the bag and the comparison
+## have to share a 1152x648 window and the shelf has to fit down the page, so they are full-window
+## shots.
+func _shoot_town() -> void:
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = MAP_SEED
+	main.inventory_path = SCRATCH_SAVE
+	main.map_path = SCRATCH_MAP
+	root.add_child(main)
+	for i in 3:
+		await process_frame
+	# A bag worth selling out of: two levels of it, so a heading's Sell all is photographed beside one
+	# that is not, and a spread of rarities, because the price is what changes with them.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	for spec in [["Wooden Sword", ItemRarity.Rarity.ELITE, 6], ["Leather Boot", ItemRarity.Rarity.RARE, 6],
+			["Gold Ring", ItemRarity.Rarity.UNCOMMON, 6], ["Wooden Shield", ItemRarity.Rarity.COMMON, 6],
+			["Wooden Armor", ItemRarity.Rarity.COMMON, 3], ["Wooden Torch", ItemRarity.Rarity.COMMON, 3],
+			["Ruby Amulet", ItemRarity.Rarity.RARE, 3]]:
+		main.inventory.add(Item.rolled(spec[0], spec[1], rng, spec[2]))
+	# A purse that can actually afford the shelf, so the Buy button is photographed live rather than
+	# greyed out with the reason -- and the smith's lock, which is the dearest thing in a town by a
+	# distance, so his counter is photographed with both buttons alive.
+	main.inventory.gold = 60000
+	main.inventory.add_orb("Orb of Transmutation", 11)
+	main.inventory.add_orb("Orb of Chaos", 2)
+	main.inventory.add_orb("Orb of Exalted")
+	# Something worn, so the comparison beside an open piece is a whole stat block rather than the one
+	# short line an empty socket gets -- that is the widest the character sheet ever is, and the width
+	# is the whole question these shots exist to answer.
+	var worn := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 4)
+	main.inventory.add(worn)
+	main.inventory.equip(worn, Equipment.Socket.WEAPON)
+
+	# Every first-time pop-up marked seen. Walking into a town checks them, and a bag filled by hand
+	# has earned several: they come up in the middle of the window, and what these shots are of is the
+	# pages behind them.
+	for tip: Array in main.TIPS:
+		main.inventory.tips.append(str(tip[0]))
+
+	# Standing on the village the map guarantees five tiles out, which is the first town any player
+	# reaches. Uncharted land cannot be clicked, so the window is charted first.
+	var town: Vector2i = main.view.start_town - main.view.origin
+	main.view.reveal_all()
+	main.view.player_cell = town
+	main.map.set_player_cell(town)
+	main.map.select_cell(town)
+	main._update_buttons()
+	main.camera.position = main.map.ground_layer.map_to_local(town)
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_tile_panel_town.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_tile_panel_town.png"))
+
+	# Inside, with every counter: the guaranteed start town is a village, which by the rules has one
+	# vendor and no smith, and the shot that has to be checked is the one where a page carries every
+	# tab it can.
+	main.towns._tiers[main.view.start_town] = TownWorld.Tier.FORTRESS
+	# A pinned shelf, so the shot is the same shop every time and can be read against the last one.
+	main.town_page._stock_rng.seed = WORLD_SEED
+	main._on_town_pressed()
+	for i in 2:
+		await process_frame
+
+	# The board, which is the tab a town opens on: the one posting taken on, part worked off, over the
+	# others waiting on it with their Accept greyed, each with the swatches and the nearest tile.
+	var board := BountyBoard.bounties(main.inventory.towns.visit(main.view.origin + town))
+	if board.size() > 1:
+		BountyBoard.accept(main.inventory.towns, board[0])
+		BountyBoard.count_kill(main.inventory.towns, str(board[0][BountyBoard.ENEMY]),
+				int(board[0][BountyBoard.NEED]) / 3)
+	main.town_page._fill()
+	main.town_page.layout()
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_town_bounties.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_town_bounties.png"))
+
+	# The gear merchant, with a piece open, which is where the Sell button that replaces Discard lives.
+	# So this shot has both halves of the counter at once: what it sells on the right, what it buys on
+	# the left.
+	main.town_page._on_tab_pressed(TownServices.GEAR)
+	main.bag_page._select_item(0)
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_town_gear.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_town_gear.png"))
+
+	# One piece off the shelf, open: the price on the Buy button, and the comparison beside the bag
+	# saying what wearing it would replace. The square whose piece fills a socket that is worn, so the
+	# comparison is a whole stat block rather than "Nothing worn".
+	main.bag_page._select_item(-1)
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	var shelf := VendorStock.items(main.inventory.towns.visit(main.view.origin + town))
+	var picked := 0
+	var best := -1
+	for at in shelf.size():
+		var piece: Item = shelf[at]
+		if piece == null or main.inventory.equipment.item_at(
+				main.inventory.equipment.sockets_for(piece)[0]) == null:
+			continue
+		# And the best of those, so the block is photographed carrying modifiers rather than as the four
+		# bare lines a common has.
+		if piece.rarity > best:
+			best = piece.rarity
+			picked = at
+	main.town_page._on_shelf_input(press, picked)
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_town_buy.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_town_buy.png"))
+
+	# The other counter: no piece open, so the tray sells rather than crafts, with the card up over an
+	# orb saying what it fetches -- and the vendor's own six orbs on the page beside it, priced.
+	main.town_page._close_offer(true)
+	main.bag_page._select_item(-1)
+	main.town_page._on_tab_pressed(TownServices.ORBS)
+	for i in 2:
+		await process_frame
+	for child: Node in main.bag_page._orb_tray.get_children():
+		if child is OrbSlot and (child as OrbSlot).orb == "Orb of Exalted":
+			main.bag_page._on_orb_hovered((child as OrbSlot).orb, child)
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_town_orbs.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_town_orbs.png"))
+
+	# The smith, with the rare amulet open in the bag: he has no shelf, so his counter is the piece the
+	# player is holding up to him, his two prices, and what the hammer would make of it. The bag on the
+	# other edge is the same piece, which is the whole arrangement this shot is here to check.
+	#
+	# The level-3 piece rather than one of the level-6 ones, because five tiles out the ground only
+	# allows level 5 and the deeper pieces photograph the cap's refusal instead of a live hammer.
+	main.bag_page._hide_orb_card()
+	main.town_page._on_tab_pressed(TownServices.SMITH)
+	main.bag_page._select_item(6)
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_town_smith.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_town_smith.png"))
+
+	# And what he leaves behind, on the elite sword: a locked modifier, which every orb now works
+	# around, and a break, which is the end of the piece as far as crafting goes. Both are read off the
+	# stat block on the left, and both grey the counter on the right with one reason between them.
+	var marked: Item = main.inventory.items[0]
+	Blacksmith.lock(marked, rng)
+	marked.broken = true
+	main.bag_page._select_item(0)
+	for i in 2:
+		await process_frame
+	# Wound down to the modifiers: an elite carries more lines than the block is tall, and the locked
+	# one is what this shot is here for.
+	main.bag_page._detail_scroll.scroll_vertical = 9999
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_town_broken.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_town_broken.png"))
+
+	# And out of the town again, where the same postings are read off the journal in the corner: the
+	# town that posted them over the top, the swatches and the nearest tile under each, and the line
+	# that says a finished one is paid for back where it was taken on.
+	main._on_left_page_closed()
+	main._on_bounty_pressed()
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_bounty_journal.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_bounty_journal.png"))
+	main.queue_free()
+	await process_frame
+	for scratch in [SCRATCH_SAVE, SCRATCH_MAP]:
+		if FileAccess.file_exists(scratch):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch))
 
 
 ## Every variation and state, at three sizes, on the surface each one is meant to stand on.

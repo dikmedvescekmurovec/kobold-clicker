@@ -6,6 +6,8 @@ extends RefCounted
 const SHEET_JSON := SheetMeta.SHEET_JSON
 const SOURCE_ID := 0
 const CUSTOM_DATA := ["name", "group", "env", "kind"]
+## Side of the terrain swatch the interface shows beside an environment's name, in sprite pixels.
+const ENV_ICON := 16
 
 var tile_set: TileSet
 var tile_size: Vector2i
@@ -42,6 +44,23 @@ func atlas_coords(tile_name: String) -> Vector2i:
 		push_error("Unknown tile: " + tile_name)
 		return Vector2i(-1, -1)
 	return _coords[tile_name]
+
+
+## A swatch of one environment, cut from the middle of that environment's own tile on the sheet, so
+## the icon always shows the terrain the player sees on the map and there is no second set of art to
+## keep in step. It lives here rather than in a panel because the sheet and its grid do: the tile
+## panel and the bounty board both ask for one, and two cuts of the same square would drift.
+func env_icon(env: String) -> TextureRect:
+	var side := Vector2i(ENV_ICON, ENV_ICON)
+	@warning_ignore("integer_division")  # 56 and 64 less 16 are both even, so the swatch is centred
+	var origin := atlas_coords("env_%s_v1" % env) * tile_size + (tile_size - side) / 2
+	var atlas := AtlasTexture.new()
+	atlas.atlas = (tile_set.get_source(SOURCE_ID) as TileSetAtlasSource).texture
+	atlas.region = Rect2(origin, side)
+	var icon := TextureRect.new()
+	icon.texture = atlas
+	icon.custom_minimum_size = Vector2(side)
+	return icon
 
 
 ## Road overlay connecting exactly these HexGrid.Edge values (any order), or "" if no such sprite exists.

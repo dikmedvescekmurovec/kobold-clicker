@@ -155,7 +155,8 @@ ICONS = {
 # Both icons are centred on one square, so both buttons come out the same size whatever they wear.
 ICON_SIDE = 14
 
-# The marks no pack draws, for the fight's two square buttons: drawn here in Icons.png's own
+# The marks no pack draws, for the fight's two square buttons and the corner's bounty journal: drawn
+# here in Icons.png's own
 # brown ramp and shading (a dark outline, light from the top left), so that they go through the
 # same BONE_RAMP and the same square as the two cut above and cannot be told apart from them.
 # o is the outline, 1-4 the ramp from dark to light, . is clear.
@@ -192,6 +193,21 @@ ICONS_DRAWN = {
         o2222222211o
         .o22222111o.
         ..oooooooo..
+    """,
+    # The bounty journal: a notice off the board, rolled at both ends with two lines of writing on it.
+    # Wider than it is tall, unlike the chest and the star, so it reads as paper rather than as a thing.
+    "ui_icon_scroll": """
+        ooooooooooooo
+        o22222222221o
+        ooooooooooooo
+        .o444444444o.
+        .o4ooooo444o.
+        .o444444444o.
+        .o4oooooo44o.
+        .o444444444o.
+        ooooooooooooo
+        o22222222221o
+        ooooooooooooo
     """,
 }
 

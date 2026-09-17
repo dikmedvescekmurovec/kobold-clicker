@@ -281,6 +281,49 @@ func nearest_chest() -> Vector2i:
 	return best
 
 
+## Every environment the map has actually generated within `steps` of `cell`, however little of it the
+## player has seen. What it is for is a bounty board: a town only posts monsters that live on land
+## that is really out there, so a target is always something that can be walked to and found.
+## ponytail: scans every generated cell, so ask it on walking into a town rather than per frame.
+func envs_within(cell: Vector2i, steps: int) -> PackedStringArray:
+	var found := PackedStringArray()
+	for near in _envs:
+		if HexGrid.distance(cell, near) <= steps and not (_envs[near] in found):
+			found.append(_envs[near])
+	return found
+
+
+## The closest tile to the player whose land is one of `envs`, and NO_CELL when they have seen none.
+## Only tiles they have laid eyes on: pointing at land under the fog of war would be telling them
+## about a place they have not found. A **charted** tile wins a tie, because a charted one can be
+## walked to and farmed where a merely seen one is only somewhere to head for.
+##
+## Measured from where the player stands rather than from whoever is asking, and **never a
+## settlement**: a town is a set piece rather than hunting ground, and the one the player is standing
+## in would otherwise be the nearest tile of its own land every time it was asked.
+##
+## `min_level` leaves out land shallower than that: a bounty counts kills only on land as deep as the
+## town that posted it, and pointing at a tile that would not count is worse than pointing at none.
+## ponytail: scans every seen cell, like `nearest_chest`; it is asked when a page is drawn.
+func nearest_env(envs: PackedStringArray, min_level := 0) -> Vector2i:
+	var best := HexMap.NO_CELL
+	var best_steps := -1
+	var best_charted := false
+	for cell in _states:
+		if not seen(cell) or not (env_at(cell) in envs) or towns.has_town(_spot(cell)) \
+				or level_of(cell) < min_level:
+			continue
+		var steps := HexGrid.distance(player_cell, cell)
+		var is_charted := charted(cell)
+		if best_steps != -1 and (steps > best_steps
+				or (steps == best_steps and not (is_charted and not best_charted))):
+			continue
+		best = cell
+		best_steps = steps
+		best_charted = is_charted
+	return best
+
+
 ## Puts the chest sprite on a drawn cell that has one, and takes it off one that no longer does.
 func _draw_chest(cell: Vector2i) -> void:
 	var chest := seen(cell) and has_chest(cell)
@@ -353,6 +396,19 @@ func chart_from(cell: Vector2i) -> Vector2i:
 ## a run is a thing you choose to do, not a step you take.
 func can_farm(cell: Vector2i) -> bool:
 	return not walking and charted(cell)
+
+
+## The tier of the settlement on `cell`, or -1 where there is no town. The one place outside this file
+## a cell is crossed to a world spot for the towns' sake, so nobody else has to know about `origin`.
+func town_tier(cell: Vector2i) -> int:
+	return towns.tier_at(_spot(cell))
+
+
+## Whether the player can walk into the town on `cell`: a charted settlement they are already standing
+## on, and no walk under way. Standing on it rather than beside it, because visiting a town is being
+## there -- unlike farming, which is a thing you choose to do from anywhere.
+func can_visit(cell: Vector2i) -> bool:
+	return not walking and charted(cell) and cell == player_cell and town_tier(cell) != -1
 
 
 ## Whether the player can travel to this cell: a charted tile other than the one they stand on, with a route

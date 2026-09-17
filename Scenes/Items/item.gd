@@ -9,7 +9,9 @@ extends RefCounted
 ## stats are all worked out once and stored on it, so it is worth exactly the same on every load
 ## for as long as it is held, whatever happens to the tables afterwards. LootTable is where a new
 ## piece is rolled from and still owns the slot, the icon, the affix list and the labels; it is not
-## where a piece already in the bag gets its numbers.
+## where a piece already in the bag gets its numbers. The one hand that moves a level afterwards is
+## the fortress smith (`Blacksmith`), and it moves the base stats with it, to exactly what
+## `scaled_stats` would have rolled there.
 ##
 ## A drop is one object with two references -- the main scene's inventory and the fight's summary
 ## both point at it. That is fine while nothing changes an item after it falls; the first verb that
@@ -20,11 +22,15 @@ var rarity: ItemRarity.Rarity = ItemRarity.Rarity.COMMON
 ## How deep the tile was that gave this up. Scales everything the piece is worth, and is rolled
 ## under what that tile allowed rather than handed out at it.
 var level := 1
-## [{"id": String, "value": int}], in the order they were drawn.
+## [{"id": String, "value": int}], in the order they were drawn. One of them may carry
+## `"locked": true`, which the smith puts there and every orb then works around.
 var mods: Array[Dictionary] = []
 ## The piece's own numbers, scaled by its level when it was rolled. Stored rather than worked out
 ## on demand: that is what keeps a held piece the piece it was.
 var stats: Dictionary = {}
+## A smith's upgrade that went wrong. A broken piece is worn and sold as it always was -- for half --
+## and nothing may change it again: no orb, no upgrade, no lock.
+var broken := false
 
 
 ## A fresh drop: the piece, its rarity, its level, and however many modifiers that rarity carries.
@@ -108,6 +114,15 @@ func global_percents() -> Dictionary:
 	return out
 
 
+## The one modifier a smith has pinned to this piece, or {} when none is. The dictionary itself, not
+## a copy: whoever holds it holds the modifier, which is how the orbs put it back where they found it.
+func locked_mod() -> Dictionary:
+	for mod in mods:
+		if bool(mod.get("locked", false)):
+			return mod
+	return {}
+
+
 func rarity_name() -> String:
 	return ItemRarity.name_of(rarity)
 
@@ -129,13 +144,16 @@ func stat_lines() -> PackedStringArray:
 	return lines
 
 
-## "+14% increased Damage", "+6% item find" -- in the order they rolled.
+## "+14% increased Damage", "+6% item find" -- in the order they rolled, with the smith's lock said
+## on the line it belongs to. Said here rather than by whoever is drawing, so a locked modifier reads
+## the same in the bag, in the comparison, on a vendor's shelf and over a fresh drop.
 func mod_lines() -> PackedStringArray:
 	var lines := PackedStringArray()
 	for mod in mods:
 		var line := ModifierTable.line(mod)
-		if not line.is_empty():
-			lines.append(line)
+		if line.is_empty():
+			continue
+		lines.append((line + " (locked)") if bool(mod.get("locked", false)) else line)
 	return lines
 
 
@@ -147,7 +165,9 @@ func to_dict() -> Dictionary:
 		"rarity": rarity_name(),
 		"level": level,
 		"stats": stats.duplicate(),
+		# Deep, so a modifier's lock goes into the save on the line it belongs to.
 		"mods": mods.duplicate(true),
+		"broken": broken,
 	}
 
 
@@ -169,6 +189,8 @@ static func from_dict(data: Variant) -> Item:
 	item.type = item_type
 	item.rarity = step
 	item.level = maxi(1, int(saved.get("level", 1)))
+	# Absent is whole, which is what every save written before there was a smith to break one means.
+	item.broken = bool(saved.get("broken", false))
 	# A save written before pieces carried their own numbers has none to read, and what such a
 	# piece was worth when it was written is exactly the table unscaled -- so that is what it keeps.
 	var saved_stats: Variant = saved.get("stats", null)
@@ -188,5 +210,10 @@ static func from_dict(data: Variant) -> Item:
 			var id := str(entry.get("id", ""))
 			if not ModifierTable.MODS.has(id):
 				continue
-			item.mods.append({"id": id, "value": int(entry.get("value", 0))})
+			var mod := {"id": id, "value": int(entry.get("value", 0))}
+			# Written only where it is true, so a rolled modifier and a saved one are the same
+			# dictionary and nothing has to strip a false out of the comparison.
+			if bool(entry.get("locked", false)):
+				mod["locked"] = true
+			item.mods.append(mod)
 	return item

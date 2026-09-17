@@ -15,6 +15,9 @@ extends RefCounted
 ## Empties `rows` and writes `item` into it. `width` is what a line may use before it wraps -- the
 ## font is only legible at its native 16 px, so a long modifier has to wrap rather than shrink.
 ##
+## What a smith has left on a piece reads here and so reads everywhere a piece is shown: "Broken"
+## under its rarity, and the word on the locked modifier's own line, which `Item.mod_lines` puts there.
+##
 ## `against` is the piece this one would replace, when there is one: it adds a last block saying what
 ## wearing this would gain or lose, which is the question the bag is actually being read to answer.
 static func fill(rows: VBoxContainer, item: Item, width: float, against: Item = null) -> void:
@@ -24,6 +27,10 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Item = 
 	# Rarity and level on one line: they are the two things that say what a piece is worth, and they
 	# are rolled together off the same body.
 	rows.add_child(line("%s · level %d" % [item.rarity_name(), item.level], item.text_color(), width))
+	# Under what the piece is, because that is what it now is: still worn, still sold, and never to be
+	# changed again. In the colour a loss is written in, so it is not read as a line it rolled.
+	if item.broken:
+		rows.add_child(line("Broken", Palette.RUST, width))
 	rows.add_child(UITheme.rule())
 	# What the swap is worth goes first, straight under the name, and what the piece is follows it.
 	# It is the answer the block is opened for, and an elite carrying six modifiers is taller than

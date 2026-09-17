@@ -371,8 +371,14 @@ static func base_hp(cell: Vector2i) -> int:
 ## is what this body was worth, and two tiles at opposite ends of one level band are not worth the
 ## same. At the very middle no steps have been taken, so this is BASE_GOLD exactly.
 static func base_gold(cell: Vector2i) -> int:
-	var steps := HexGrid.distance(MapBuilder.CENTER, cell)
-	return maxi(1, roundi((BASE_GOLD + GOLD_PER_STEP * steps) * pow(GOLD_GROWTH, steps)))
+	return gold_at_steps(HexGrid.distance(MapBuilder.CENTER, cell))
+
+
+## The same purse asked of a walk rather than of a tile: what an ordinary common body `steps` out from
+## the middle of the map is carrying. Split out of `base_gold` so a price can be quoted in bodies
+## without a cell to point at -- `TownPrices` reads it at the first step of a level band.
+static func gold_at_steps(steps: int) -> int:
+	return maxi(1, roundi((BASE_GOLD + GOLD_PER_STEP * maxi(steps, 0)) * pow(GOLD_GROWTH, maxi(steps, 0))))
 
 
 ## What one enemy is carrying: the tile's purse times what the body was worth to kill. The same
