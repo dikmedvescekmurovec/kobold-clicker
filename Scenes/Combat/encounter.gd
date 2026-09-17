@@ -30,15 +30,15 @@ extends RefCounted
 
 ## The next enemy has started running in, and is not yet in reach. `index` counts from 0, so the
 ## elite is at each `elite_every`. The first one is announced by `start()`.
-signal enemy_coming(index: int, enemy_name: String, hp: int)
+signal enemy_coming(index: int, enemy_name: String, hp: float)
 ## That enemy has arrived and can now be hit.
-signal enemy_spawned(index: int, enemy_name: String, hp: int)
+signal enemy_spawned(index: int, enemy_name: String, hp: float)
 ## The enemy took a hit and has this much health left.
-signal enemy_hit(hp_left: int)
+signal enemy_hit(hp_left: float)
 ## A blow landed, for whoever is drawing the fight: how much it was worth, whether it crit, and
 ## whether the weapon swung it rather than the player. Separate from `enemy_hit` because that one
 ## says what the enemy has left and this one says what the player just did.
-signal hit_landed(amount: int, crit: bool, automatic: bool)
+signal hit_landed(amount: float, crit: bool, automatic: bool)
 ## The enemy's health reached zero; its death plays before the next one comes out.
 signal enemy_died(index: int)
 ## That enemy was carrying something. Emitted with the death, so the drop reads as coming off the
@@ -48,7 +48,7 @@ signal loot_dropped(index: int, item: Item)
 ## That enemy was carrying a purse, which every one of them is. Emitted with the death beside
 ## `loot_dropped`, and kept for the same free reason: nothing is rolled when the clock runs out, so
 ## what came off a body before it is the player's however the fight ends.
-signal gold_dropped(index: int, amount: int)
+signal gold_dropped(index: int, amount: float)
 ## That enemy was carrying an orb, which about one in twenty is. Rolled beside the gear rather than
 ## against it, so one body can hand over both, and kept for the reason the other two are: nothing is
 ## rolled when the clock runs out, so what came off a body before it is the player's.
@@ -146,8 +146,10 @@ var boss_last := false
 ## The enemies of this fight, in the order they come out. `enemies` long for a tile fight; a farm run
 ## grows it an enemy at a time and it is never finished.
 var lineup: PackedStringArray = []
-## The health each of them starts with, in the same order. Always as long as `lineup`.
-var health: PackedInt32Array = []
+## The health each of them starts with, in the same order. Always as long as `lineup`. Whole numbers
+## in doubles rather than ints: health climbs exponentially with the walk and would pass int64 a few
+## hundred hexes out on a map that has no edge.
+var health: PackedFloat64Array = []
 
 ## The tile this is fought on. Kept because a farm run picks its enemies as it goes and every one
 ## of them is sized against the distance from the middle of the map.
@@ -159,7 +161,7 @@ var endless := false
 ## simply the number already slain.
 var index := 0
 ## The current enemy's remaining health.
-var hp := 0
+var hp := 0.0
 var phase := Phase.WALKING_IN
 ## Seconds left on the clock. Untouched while `endless` -- a farm run has no clock to spend.
 var time_left := SECONDS
@@ -177,9 +179,11 @@ var phase_left := WALK_IN
 var loot_rng := RandomNumberGenerator.new()
 
 ## What this fight has earned. Every body carries a purse -- there is no chance drawn for it and no
-## rng behind it -- so unlike the drops this is simply a sum, and the verdict reads it off here.
-var gold := 0
-## What this fight has earned in experience: a sum, like `gold`.
+## rng behind it -- so unlike the drops this is simply a sum, and the verdict reads it off here. A
+## whole number in a double, for the reason `health` is.
+var gold := 0.0
+## What this fight has earned in experience: a sum, like `gold`. An int, because experience is linear
+## in the tile's level rather than exponential in the walk and has nowhere near int64 to climb.
 var xp := 0
 
 ## The orb roll, drawn beside the gear roll and never from the same generator: two rates that are
@@ -203,7 +207,7 @@ var roster_rng := RandomNumberGenerator.new()
 ## The ceiling on crit chance: crits stay something that happens sometimes, however much gear is
 ## piled up. A chance over certainty is every hit critting, which is a crit meaning nothing.
 const CRIT_CAP := 100.0
-var damage := BARE_DAMAGE
+var damage: float = BARE_DAMAGE
 var crit_chance := 0.0
 var crit_damage := 0.0
 ## Swings a second the weapon takes on its own. Zero with nothing equipped, so a bare-handed fight is
@@ -251,7 +255,7 @@ var orbs_after := 0
 ## changes about a fight rather than a number. A fight nobody tells has none.
 var effects: Array = []
 ## What the last killing blow did past the body's health, which Cleave carries into the next one.
-var _overkill := 0
+var _overkill := 0.0
 
 
 ## The profile for an area variant, falling back to the ordinary fight: a variant this build has no
@@ -355,13 +359,15 @@ func start() -> void:
 
 ## What one enemy is worth on this tile: an ordinary body grows with the distance from the middle of
 ## the map, and the enemy's own size and tier multiply it (a slime halves it, an elite trebles it).
-static func hp_of(enemy_name: String, cell: Vector2i) -> int:
-	return maxi(1, roundi(base_hp(cell) * EnemyRoster.hp_modifier(enemy_name)))
+static func hp_of(enemy_name: String, cell: Vector2i) -> float:
+	return maxf(1.0, roundf(base_hp(cell) * EnemyRoster.hp_modifier(enemy_name)))
 
 
-## The health of an ordinary common body on this tile, before the enemy's own multiplier.
-static func base_hp(cell: Vector2i) -> int:
-	return maxi(1, roundi(BASE_HP * pow(HP_GROWTH, HexGrid.distance(MapBuilder.CENTER, cell))))
+## The health of an ordinary common body on this tile, before the enemy's own multiplier. A whole
+## number, but a double rather than an int: the map has no edge and this is exponential in the walk,
+## so an int64 overflowed a few hundred hexes out.
+static func base_hp(cell: Vector2i) -> float:
+	return maxf(1.0, roundf(BASE_HP * pow(HP_GROWTH, HexGrid.distance(MapBuilder.CENTER, cell))))
 
 
 ## What an ordinary common body on this tile is carrying, before its own multiplier. Grows with the
@@ -370,23 +376,26 @@ static func base_hp(cell: Vector2i) -> int:
 ## The distance is the smooth one `base_hp` uses and not the banded `MapBuilder.level_of` -- a purse
 ## is what this body was worth, and two tiles at opposite ends of one level band are not worth the
 ## same. At the very middle no steps have been taken, so this is BASE_GOLD exactly.
-static func base_gold(cell: Vector2i) -> int:
+static func base_gold(cell: Vector2i) -> float:
 	return gold_at_steps(HexGrid.distance(MapBuilder.CENTER, cell))
 
 
 ## The same purse asked of a walk rather than of a tile: what an ordinary common body `steps` out from
 ## the middle of the map is carrying. Split out of `base_gold` so a price can be quoted in bodies
 ## without a cell to point at -- `TownPrices` reads it at the first step of a level band.
-static func gold_at_steps(steps: int) -> int:
-	return maxi(1, roundi((BASE_GOLD + GOLD_PER_STEP * maxi(steps, 0)) * pow(GOLD_GROWTH, maxi(steps, 0))))
+##
+## Whole gold in a double, the way `base_hp` is: a purse is exponential in the walk too, and every
+## price in the game is quoted off this one.
+static func gold_at_steps(steps: int) -> float:
+	return maxf(1.0, roundf((BASE_GOLD + GOLD_PER_STEP * maxi(steps, 0)) * pow(GOLD_GROWTH, maxi(steps, 0))))
 
 
 ## What one enemy is carrying: the tile's purse times what the body was worth to kill. The same
 ## `hp_modifier` its health is built from, so a thing that took four times the clicking hands over
 ## four times the gold and nobody has to keep a second table in step with the first. Floored at 1,
 ## which is what keeps a slime (half an ordinary body) from rounding away to nothing.
-static func gold_of(enemy_name: String, cell: Vector2i) -> int:
-	return maxi(1, roundi(base_gold(cell) * EnemyRoster.hp_modifier(enemy_name)))
+static func gold_of(enemy_name: String, cell: Vector2i) -> float:
+	return maxf(1.0, roundf(base_gold(cell) * EnemyRoster.hp_modifier(enemy_name)))
 
 
 ## What an ordinary common body on this tile is worth in experience: XP_PER_LEVEL a level of the tile.
@@ -406,8 +415,8 @@ func enemy_name() -> String:
 
 
 ## The health the current enemy started with, for drawing a bar against `hp`.
-func enemy_max_hp() -> int:
-	return 0 if index >= lineup.size() else health[index]
+func enemy_max_hp() -> float:
+	return 0.0 if index >= lineup.size() else health[index]
 
 
 ## Whether the enemy out now is an elite -- the one that ends a tile fight, or one of the elites a
@@ -437,7 +446,7 @@ func hit() -> bool:
 ## What the player's gear is worth, from `Equipment.totals()`. Called before the fight starts; a
 ## fight nobody arms is a bare-handed one, which is what every test that does not care gets.
 func arm(stats: Dictionary) -> void:
-	damage = maxi(BARE_DAMAGE, roundi(float(stats.get("damage", 0.0))) + BARE_DAMAGE)
+	damage = maxf(BARE_DAMAGE, roundf(float(stats.get("damage", 0.0))) + BARE_DAMAGE)
 	# Clamped, because a chance is not a quantity: eight pieces each adding crit chance can total
 	# more than certainty, and a save written before LootTable.CHANCE_STATS holds pieces that do it on
 	# their own. Past the cap every hit crit, which is a crit meaning nothing.
@@ -459,21 +468,21 @@ func _strike(automatic: bool) -> bool:
 	var crit := crit_chance > 0.0 and crit_rng.randf() * 100.0 < crit_chance
 	# Crit damage is what a crit adds, not what it multiplies to: 50 means half again, the way Path
 	# of Exile's crit multiplier reads once you take its base 100 off.
-	var dealt := maxi(1, roundi(damage * (1.0 + crit_damage / 100.0))) if crit else damage
+	var dealt := maxf(1.0, roundf(damage * (1.0 + crit_damage / 100.0))) if crit else damage
 	var big := EnemyRoster.tier_of(lineup[index]) != EnemyRoster.Tier.COMMON
 	if big and "giant_slayer" in effects:
 		dealt *= 2
 	hp -= dealt
 	# Execute takes what is left once it is a sliver, so the last hits of a big body are not wasted.
 	if hp > 0 and "execute" in effects and hp < enemy_max_hp() * 0.1:
-		hp = 0
+		hp = 0.0
 	hit_landed.emit(dealt, crit, automatic)
 	enemy_hit.emit(hp)
 	if hp <= 0:
 		phase = Phase.DYING
 		phase_left = DEATH
 		_swing = 0.0
-		_overkill = -hp if "cleave" in effects else 0
+		_overkill = -hp if "cleave" in effects else 0.0
 		enemy_died.emit(index)
 		# The only path to a death, which is why drops survive a loss for free: nothing is rolled
 		# when the clock runs out.
@@ -493,7 +502,7 @@ func _strike(automatic: bool) -> bool:
 		# ten leave nothing, and all ten leave this.
 		# Gold find lifts the purse here rather than inside `gold_of`, which is what the body is worth
 		# and is read by things that have no player in them.
-		var purse := maxi(1, roundi(gold_of(lineup[index], cell) * (1.0 + gold_find / 100.0)))
+		var purse := maxf(1.0, roundf(gold_of(lineup[index], cell) * (1.0 + gold_find / 100.0)))
 		# Drawn only while Jackpot is learned, so a player without it rolls loot exactly as before.
 		if "jackpot" in effects and loot_rng.randf() < 0.1:
 			purse *= 5
@@ -573,8 +582,8 @@ func _advance_phase() -> void:
 			return
 		# The next one is decided the moment the last one falls, so a run never runs dry.
 		_append_enemy(roster_rng)
-	hp = maxi(1, health[index] - _overkill)
-	_overkill = 0
+	hp = maxf(1.0, health[index] - _overkill)
+	_overkill = 0.0
 	phase = Phase.WALKING_IN
 	phase_left = WALK_IN
 	enemy_coming.emit(index, lineup[index], hp)

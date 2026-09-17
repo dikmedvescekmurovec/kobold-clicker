@@ -40,8 +40,6 @@ const STOCK_GAP := 4
 ## just over forty, and a price is no use to anybody cut off after three.
 const STOCK_CELL := ItemSlot.SIDE + 4
 const BODY_WIDTH := STOCK_COLS * STOCK_CELL + (STOCK_COLS - 1) * STOCK_GAP
-## Tabs two to a row, so a fortress's four still fit that width.
-const TAB_COLS := 2
 const TAB_GAP := 4
 ## The coin beside a price on a square, at half the sprite's own 16 -- a whole-number step, the way
 ## the orb tray halves its icons. Full size it would take a fifth of the shelf's width and leave a
@@ -52,14 +50,17 @@ const PRICE_COIN := 8
 ## it has to reach the foot of a 648 px window without going past it.
 const ROW_GAP := 4
 
-## What each counter is short for on its tab. The full name is the heading under them, so a tab is one
-## word: two tabs reading "Gear merchant" would be wider than the window has left over.
-const TAB_LABELS := {
-	TownServices.BOUNTIES: "Board",
-	TownServices.GEAR: "Gear",
-	TownServices.ORBS: "Orbs",
-	TownServices.SMITH: "Smith",
+## What each counter wears on its tab. A mark rather than a word, so a fortress's four stand in one
+## row: in words they took two, and the second row was what pushed the gear tab past the window's
+## foot. The full name is the heading under them and the tab's tooltip.
+const TAB_ICONS := {
+	TownServices.BOUNTIES: "res://Assets/UI/ui_icon_scroll.png",
+	TownServices.GEAR: "res://Assets/UI/ui_icon_sword.png",
+	TownServices.ORBS: "res://Assets/UI/ui_icon_gem.png",
+	TownServices.SMITH: "res://Assets/UI/ui_icon_anvil.png",
 }
+## How far a tab that is not the open one is faded, so the open one is read off the row at a glance.
+const TAB_REST := Color(1, 1, 1, 0.55)
 
 ## The counters this build has actually built, and so the only ones that get a tab: a service not
 ## named here is listed in the tile panel and given none, which is how a town would advertise a
@@ -188,14 +189,15 @@ func layout() -> void:
 
 func _fill() -> void:
 	UITheme.clear(_rows)
-	var tabs := GridContainer.new()
-	tabs.columns = TAB_COLS
-	tabs.add_theme_constant_override("h_separation", TAB_GAP)
-	tabs.add_theme_constant_override("v_separation", TAB_GAP)
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", TAB_GAP)
 	_rows.add_child(tabs)
 	var group := ButtonGroup.new()
 	for service: String in _tabs:
-		var tab := UITheme.button(str(TAB_LABELS[service]), "LightButton", TownServices.label(service))
+		var tab := UITheme.button("", "BrownIconButton", TownServices.label(service))
+		tab.icon = load(TAB_ICONS[service])
+		if service != _open_tab:
+			tab.modulate = TAB_REST
 		tab.toggle_mode = true
 		tab.button_group = group
 		tab.button_pressed = service == _open_tab
@@ -226,7 +228,7 @@ func _fill() -> void:
 	body.add_child(_shelf())
 	# New stock now, for gold: directly under the shelf it replaces, so it is never under the fold -- this shelf only, and dearer every time for good: the town remembers.
 	var price := TownPrices.reroll_price(_cell, VendorStock.rerolls(_drawer, _shelf_key()))
-	var reroll := UITheme.button("Restock %d" % price, "LightButton",
+	var reroll := UITheme.button("Restock %s" % BigNumber.format(price), "LightButton",
 			"Clear this shelf for new stock. Each time costs twice the last")
 	reroll.icon = Coins.icon()
 	reroll.disabled = inventory.gold < price
@@ -258,7 +260,7 @@ func _shelf() -> GridContainer:
 			# can cover it and grey when it cannot, which is the state it already draws for "held but
 			# no use to you". A grey one still takes the cursor and says why in its tooltip.
 			var square := OrbSlot.make(orb, 1, inventory.gold >= price)
-			square.tooltip_text = "%s, %d gold%s" % [orb, price,
+			square.tooltip_text = "%s, %s gold%s" % [orb, BigNumber.format(price),
 					"" if inventory.gold >= price else ". " + _why_not(price, false)]
 			square.pressed.connect(_on_buy_orb.bind(at))
 			grid.add_child(_price_cell(square, price))
@@ -296,7 +298,7 @@ func _scrolled(gap: int) -> VBoxContainer:
 ## One square with what it costs under it. The price is on the shelf rather than behind a click
 ## because six squares with no numbers on them are six questions, and a shop that has to be opened
 ## six times to be read is a shop nobody reads.
-func _price_cell(square: Control, price: int) -> VBoxContainer:
+func _price_cell(square: Control, price: float) -> VBoxContainer:
 	var cell := UITheme.vbox(2, STOCK_CELL)
 	square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	cell.add_child(square)
@@ -318,7 +320,7 @@ func _price_cell(square: Control, price: int) -> VBoxContainer:
 	# Clipped rather than allowed to push: gold grows with the walk, and a six-figure price out at the
 	# frontier would widen the shelf into the panel beside it. The whole number is in the square's
 	# tooltip and on the Buy button.
-	var label := UITheme.label(str(price), Palette.SLATE)
+	var label := UITheme.label(BigNumber.format(price), Palette.SLATE)
 	label.clip_text = true
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -350,8 +352,9 @@ func _fill_offer() -> void:
 
 	var price := TownPrices.buy_price(_offer)
 	var refused := _why_not(price, true)
-	var buy := UITheme.button("Buy %d" % price, "LightButton", refused if not refused.is_empty()
-			else "Buy this and put it in your bag for %d gold" % price)
+	var buy := UITheme.button("Buy %s" % BigNumber.format(price), "LightButton",
+			refused if not refused.is_empty()
+			else "Buy this and put it in your bag for %s gold" % BigNumber.format(price))
 	buy.icon = Coins.icon()
 	buy.disabled = not refused.is_empty()
 	buy.pressed.connect(_on_buy_item)
@@ -396,9 +399,9 @@ func _fill_board() -> void:
 		# The one thing this board can do that the journal cannot: pay. A bounty is handed in where it
 		# was taken on, so the button is here and nowhere else.
 		elif BountyBoard.ready(bounty):
-			var reward := int(bounty.get(BountyBoard.GOLD, 0))
-			var claim := UITheme.button("Claim %d" % reward, "LightButton",
-					"Hand this in for %d gold" % reward)
+			var reward := float(bounty.get(BountyBoard.GOLD, 0))
+			var claim := UITheme.button("Claim %s" % BigNumber.format(reward), "LightButton",
+					"Hand this in for %s gold" % BigNumber.format(reward))
 			claim.icon = Coins.icon()
 			claim.pressed.connect(_on_claim_pressed.bind(bounty))
 			row.add_child(claim)
@@ -435,13 +438,13 @@ func _on_accept_pressed(bounty: Dictionary) -> void:
 func _on_claim_pressed(bounty: Dictionary) -> void:
 	if not BountyBoard.claim(bounty):
 		return
-	var reward := int(bounty.get(BountyBoard.GOLD, 0))
+	var reward := float(bounty.get(BountyBoard.GOLD, 0))
 	var orb := str(bounty.get(BountyBoard.ORB, ""))
 	inventory.gold += reward
 	if not orb.is_empty():
 		inventory.add_orb(orb)
-	print("Claimed the bounty on %s for %d gold%s" % [str(bounty.get(BountyBoard.ENEMY, "")), reward,
-			"" if orb.is_empty() else " and one " + orb])
+	print("Claimed the bounty on %s for %s gold%s" % [str(bounty.get(BountyBoard.ENEMY, "")),
+			BigNumber.format(reward), "" if orb.is_empty() else " and one " + orb])
 	inventory.save(_save_path)
 	_fill()
 	layout()
@@ -463,7 +466,7 @@ func _on_reroll_pressed() -> void:
 		return
 	inventory.gold -= price
 	VendorStock.reroll(_drawer, _shelf_key(), _tier, _cell, _stock_rng)
-	print("Restocked the %s shelf for %d gold" % [_shelf_key(), price])
+	print("Restocked the %s shelf for %s gold" % [_shelf_key(), BigNumber.format(price)])
 	inventory.save(_save_path)
 	_fill()
 	layout()
@@ -483,21 +486,23 @@ func _fill_smith() -> void:
 	if _bag_piece == null:
 		_rows.add_child(_sign("Open a piece in your bag and he will work on it."))
 		return
-	_rows.add_child(_sign(_bag_piece.display_name(), _bag_piece.text_color()))
+	_rows.add_child(ItemDetails.line(_bag_piece.display_name(), _bag_piece.text_color(), BODY_WIDTH))
 	var cap := _upgrade_cap()
 	var up_price := TownPrices.upgrade_price(_bag_piece)
 	var up_why := _smith_why_not(Blacksmith.why_not_upgrade(_bag_piece, cap), up_price)
 	_rows.add_child(_smith_button("Upgrade", up_price, up_why,
-			"Take this to level %d for %d gold" % [_bag_piece.level + 1, up_price], _on_upgrade_pressed))
+			"Take this to level %d for %s gold"
+			% [_bag_piece.level + 1, BigNumber.format(up_price)], _on_upgrade_pressed))
 	# What the press would buy and what it risks, and only while it can be pressed: with the button
 	# grey the line under it is the reason, and both would not fit down the page.
 	if up_why.is_empty():
-		_rows.add_child(_sign("To level %d, cap %d. %d%% to break."
+		_rows.add_child(_sign("Level %d of %d. %d%% to break."
 				% [_bag_piece.level + 1, cap, roundi(Blacksmith.BREAK_CHANCE * 100.0)], Palette.SLATE))
 	var lock_price := TownPrices.lock_price(_bag_piece)
 	var lock_why := _smith_why_not(Blacksmith.why_not_lock(_bag_piece), lock_price)
 	_rows.add_child(_smith_button("Lock", lock_price, lock_why,
-			"Pin one of its modifiers for good, for %d gold" % lock_price, _on_lock_pressed))
+			"Pin one of its modifiers for good, for %s gold" % BigNumber.format(lock_price),
+			_on_lock_pressed))
 	var said := []
 	for why: String in [up_why, lock_why]:
 		if why.is_empty() or why in said:
@@ -508,9 +513,9 @@ func _fill_smith() -> void:
 
 ## One of the smith's two, with the coin and the price on it the way a Buy carries them, and the
 ## reason in its tooltip when it is dead.
-func _smith_button(text: String, price: int, refused: String, tooltip: String,
+func _smith_button(text: String, price: float, refused: String, tooltip: String,
 		action: Callable) -> Button:
-	var button := UITheme.button("%s %d" % [text, price], "LightButton",
+	var button := UITheme.button("%s %s" % [text, BigNumber.format(price)], "LightButton",
 			refused if not refused.is_empty() else tooltip)
 	button.icon = Coins.icon()
 	button.disabled = not refused.is_empty()
@@ -520,7 +525,7 @@ func _smith_button(text: String, price: int, refused: String, tooltip: String,
 
 ## The smith's own refusal, or one of the two the page owns: a piece that is worn rather than carried
 ## (the bag is where crafting happens, and the doll is not the bag), and a purse that cannot pay.
-func _smith_why_not(rule: String, price: int) -> String:
+func _smith_why_not(rule: String, price: float) -> String:
 	if not rule.is_empty():
 		return rule
 	if not inventory.items.has(_bag_piece):
@@ -545,12 +550,12 @@ func _on_upgrade_pressed() -> void:
 	inventory.gold -= price
 	if Blacksmith.upgrade(_bag_piece, cap, _smith_rng):
 		_smith_note = ""
-		print("Upgraded %s to level %d for %d gold"
-				% [_bag_piece.display_name(), _bag_piece.level, price])
+		print("Upgraded %s to level %d for %s gold"
+				% [_bag_piece.display_name(), _bag_piece.level, BigNumber.format(price)])
 	else:
 		_smith_note = "The hammer broke it."
-		print("Broke %s at level %d for %d gold"
-				% [_bag_piece.display_name(), _bag_piece.level, price])
+		print("Broke %s at level %d for %s gold"
+				% [_bag_piece.display_name(), _bag_piece.level, BigNumber.format(price)])
 	_smith_done()
 
 
@@ -562,8 +567,8 @@ func _on_lock_pressed() -> void:
 	inventory.gold -= price
 	if not Blacksmith.lock(_bag_piece, _smith_rng):
 		return
-	print("Locked %s on %s for %d gold"
-			% [ModifierTable.line(_bag_piece.locked_mod()), _bag_piece.display_name(), price])
+	print("Locked %s on %s for %s gold" % [ModifierTable.line(_bag_piece.locked_mod()),
+			_bag_piece.display_name(), BigNumber.format(price)])
 	_smith_done()
 
 
@@ -580,7 +585,7 @@ func _smith_done() -> void:
 ## Why this cannot be bought, or "" when it can. The bag's refusal is not a nicety: `Inventory.add`
 ## on a full bag destroys the worst piece in it, so buying into one would be paying a vendor to throw
 ## something away. An orb passes `needs_room` false -- orbs are counts, outside the cap entirely.
-func _why_not(price: int, needs_room: bool) -> String:
+func _why_not(price: float, needs_room: bool) -> String:
 	if inventory.gold < price:
 		return "Your purse is short."
 	if needs_room and inventory.is_full():
@@ -624,8 +629,8 @@ func _on_buy_item() -> void:
 	inventory.gold -= price
 	inventory.add(_offer)
 	VendorStock.take(_drawer, VendorStock.ITEMS, _offer_at)
-	print("Bought %s (%s, level %d) for %d gold"
-			% [_offer.type, _offer.rarity_name(), _offer.level, price])
+	print("Bought %s (%s, level %d) for %s gold"
+			% [_offer.type, _offer.rarity_name(), _offer.level, BigNumber.format(price)])
 	inventory.save(_save_path)
 	_close_offer(true)
 
@@ -639,7 +644,7 @@ func _on_buy_orb(orb: String, at: int) -> void:
 	inventory.gold -= price
 	inventory.add_orb(orb)
 	VendorStock.take(_drawer, VendorStock.ORBS, at)
-	print("Bought %s for %d gold" % [orb, price])
+	print("Bought %s for %s gold" % [orb, BigNumber.format(price)])
 	inventory.save(_save_path)
 	_fill()
 	layout()
@@ -658,7 +663,7 @@ func _on_tab_pressed(service: String) -> void:
 ## A wrapped line of the page's own width. Word wrapping rather than the refusal panel's arbitrary
 ## kind: these are sentences, not file paths.
 static func _sign(text: String, color: Variant = null) -> Label:
-	var label := UITheme.label(text, color)
+	var label := UITheme.label(text, color, true)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.custom_minimum_size.x = BODY_WIDTH
 	return label

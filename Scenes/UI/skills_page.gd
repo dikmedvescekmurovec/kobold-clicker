@@ -76,7 +76,7 @@ func open() -> void:
 		var reset: Button = _respec_buttons[tree]
 		var spent := inventory.skills.spent(tree)
 		var cost := inventory.respec_cost(tree)
-		reset.text = "Reset %d" % cost if spent > 0 else "Reset"
+		reset.text = "Reset %s" % BigNumber.format(cost) if spent > 0 else "Reset"
 		reset.disabled = spent <= 0 or inventory.gold < cost
 	# Whatever the cursor was over has just been redrawn.
 	_hide_card()
@@ -103,7 +103,7 @@ func _on_respec_pressed(tree: String) -> void:
 	if not inventory.respec(tree):
 		return
 	inventory.save(_save_path)
-	print("Reset %s for %d gold" % [tree, cost])
+	print("Reset %s for %s gold" % [tree, BigNumber.format(cost)])
 	open()
 
 

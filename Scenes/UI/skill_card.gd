@@ -29,11 +29,11 @@ func fill(id: String, skills: Skills, level: int) -> void:
 	var rank := skills.rank_of(id)
 	var most := int(entry["max_rank"])
 	_rows.add_child(ItemDetails.line(str(entry["name"]), Palette.BONE, WIDTH))
-	_rows.add_child(ItemDetails.line("Per point: " + SkillTree.describe(id), Palette.PANEL_CREAM, WIDTH))
+	_rows.add_child(ItemDetails.line("Per point: " + SkillTree.describe(id), Palette.PANEL_CREAM, WIDTH, true))
 	if entry.has("effect_text"):
-		_rows.add_child(ItemDetails.line(str(entry["effect_text"]), Palette.GOLD, WIDTH))
+		_rows.add_child(ItemDetails.line(str(entry["effect_text"]), Palette.GOLD, WIDTH, true))
 	if rank > 0:
-		_rows.add_child(ItemDetails.line("Now: " + SkillTree.describe(id, rank), Palette.LEAF_LT, WIDTH))
+		_rows.add_child(ItemDetails.line("Now: " + SkillTree.describe(id, rank), Palette.LEAF_LT, WIDTH, true))
 	var refusal := skills.why_not(id, level)
 	var status := "Click to learn (%d/%d)" % [rank, most]
 	var tone := Palette.LEAF_LT
@@ -43,5 +43,5 @@ func fill(id: String, skills: Skills, level: int) -> void:
 	elif not refusal.is_empty():
 		status = refusal
 		tone = Palette.RUST
-	_rows.add_child(ItemDetails.line(status, tone, WIDTH))
+	_rows.add_child(ItemDetails.line(status, tone, WIDTH, true))
 	reset_size()

@@ -166,6 +166,8 @@ static func band_for(id: String, level: int) -> Array:
 			# sword, which is where a click's damage comes from, and four times too much once the
 			# jewellery can add a modifier's worth of damage on every finger. Only the absolute step is
 			# the entry's; the multiplier is the stat's either way.
+			# ponytail: a band stays whole ints, which pass int64 near item level 370 -- far past
+			# where a monster's health would have; retype the pair to float then.
 			var step: float = float(entry.get("level_flat",
 					LootTable.LEVEL_FLAT.get(entry["stat"], 0.0)))
 			low = maxi(1, roundi(LootTable.scale(entry["stat"], float(low), level, step)))
@@ -245,4 +247,6 @@ static func line(mod: Dictionary) -> String:
 			# say so: "+10% Fire Resistance", never "+10 Fire Resistance".
 			var stat: String = entry["stat"]
 			var unit := "%" if stat in LootTable.PERCENT_STATS else ""
-			return "+%d%s %s" % [value, unit, LootTable.STAT_LABELS[stat]]
+			# The one number here that grows with the level, so it is written the way every other
+			# growing quantity is (`BigNumber`) rather than spelled out to twenty digits.
+			return "+%s%s %s" % [BigNumber.format(value), unit, LootTable.STAT_LABELS[stat]]

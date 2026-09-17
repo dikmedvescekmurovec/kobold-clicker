@@ -944,7 +944,7 @@ func _test_the_map_keeps_what_dropped() -> bool:
 					main.inventory.total(), main.ledger.drops.size()])
 	_check(main.inventory.total() > 0, "the promised elite paid out")
 	_check(main.inventory.first_elite_taken, "and is not promised again")
-	_check(main.bag_page._gold.text == str(main.inventory.gold),
+	_check(main.bag_page._gold.text == BigNumber.format(main.inventory.gold),
 			"the bag's footer says what is in the purse: %s" % main.bag_page._gold.text)
 	_check(main._bag_button.visible, "the button is back with the map")
 	_check(main._tip_panel != null, "and the first find has a pop-up")
@@ -1157,7 +1157,7 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 
 	# Terminating is the end of the run, and the moment the pouch goes into the bag.
 	var pouch: Array[Item] = main.ledger.drops.duplicate()
-	var earned: int = main.ledger.gold
+	var earned: float = main.ledger.gold
 	combat._on_terminate_pressed()
 	await process_frame
 	_check(fight.finished and fight.victory, "terminating ends the run, and not as a loss")
@@ -1172,7 +1172,7 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 	_check(main.inventory.gold == earned,
 			"and so did its gold, in one go: %d of %d" % [main.inventory.gold, earned])
 	_check(main.ledger.gold == 0, "leaving the pouch empty, so the next run starts from nothing")
-	_check(main.bag_page._gold.text == str(earned),
+	_check(main.bag_page._gold.text == BigNumber.format(earned),
 			"the bag's footer says so: %s" % main.bag_page._gold.text)
 	var saved := Inventory.load_from(TEST_PATH)
 	_check(saved.total() == pouch.size(), "the file on disk holds them too")

@@ -10,8 +10,9 @@ extends RefCounted
 
 ## What the fight has turned up, banked or not. Kept after banking, for the report.
 var drops: Array[Item] = []
-## The three below are zeroed by `bank`, so a second call has nothing to repeat.
-var gold := 0
+## The three below are zeroed by `bank`, so a second call has nothing to repeat. Gold is a whole
+## number in a double, the way `Encounter.gold` is: a purse grows exponentially with the walk.
+var gold := 0.0
 ## Orb name -> how many.
 var orbs := {}
 var xp := 0
@@ -46,7 +47,7 @@ func add_loot(item: Item, by_elite: bool) -> void:
 	_save()
 
 
-func add_gold(amount: int) -> void:
+func add_gold(amount: float) -> void:
 	gold += amount
 	if farming:
 		return
@@ -119,10 +120,10 @@ func bank() -> bool:
 	if not farming or _banked:
 		return false
 	_banked = true
-	if drops.is_empty() and gold == 0 and orbs.is_empty() and xp == 0 and slain.is_empty():
+	if drops.is_empty() and gold == 0.0 and orbs.is_empty() and xp == 0 and slain.is_empty():
 		return false
 	_inventory.gold += gold
-	gold = 0
+	gold = 0.0
 	_add_xp(xp)
 	xp = 0
 	for orb: String in orbs:

@@ -224,7 +224,7 @@ static func _flat_line(stat: String, value: float) -> String:
 
 ## What resetting a tree with `spent` points in it costs a player at `level`. Nothing, when nothing is
 ## spent: there is nothing to buy back.
-static func respec_cost(level: int, spent: int) -> int:
+static func respec_cost(level: int, spent: int) -> float:
 	if spent <= 0:
-		return 0
-	return maxi(1, roundi(RESPEC_GOLD * spent * pow(RESPEC_GROWTH, maxi(level, 1) - 1)))
+		return 0.0
+	return maxf(1.0, roundf(RESPEC_GOLD * spent * pow(RESPEC_GROWTH, maxi(level, 1) - 1)))

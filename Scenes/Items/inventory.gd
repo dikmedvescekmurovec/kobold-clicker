@@ -61,8 +61,10 @@ var tips: Array[String] = []
 
 ## What the player has earned. Not in the bag and not against its cap: a purse is a number rather
 ## than a thing, so it can never be the worst item in a full bag and can never be trimmed. It lives
-## here rather than beside the map because it is carried, not explored.
-var gold := 0
+## here rather than beside the map because it is carried, not explored. A whole number in a double,
+## for the reason every growing quantity is one (`BigNumber`): a purse climbs exponentially with the
+## walk and would pass int64 out past the two hundredth hex.
+var gold := 0.0
 
 ## Every enemy the player has ever killed. It is what holds orbs back until `OrbTable.FIRST_ORB_KILLS`.
 var kills := 0
@@ -323,7 +325,7 @@ func stats() -> Dictionary:
 
 
 ## What resetting `tree` would cost now.
-func respec_cost(tree: String) -> int:
+func respec_cost(tree: String) -> float:
 	return SkillTree.respec_cost(level, skills.spent(tree))
 
 
@@ -428,7 +430,7 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	# in a hand-edited file comes back as nothing rather than as a debt.
 	var purse: Variant = data.get("gold", 0)
 	if typeof(purse) in [TYPE_INT, TYPE_FLOAT]:
-		inventory.gold = maxi(0, int(purse))
+		inventory.gold = maxf(0.0, float(purse))
 	var killed: Variant = data.get("kills", 0)
 	if typeof(killed) in [TYPE_INT, TYPE_FLOAT]:
 		inventory.kills = maxi(0, int(killed))

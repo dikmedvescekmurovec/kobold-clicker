@@ -173,11 +173,11 @@ func _orbs() -> void:
 		row += ("%.1f" % (TownPrices.ORB_BODIES * TownPrices.commonest()
 				/ float(OrbTable.ORBS[orb]["weight"]))).lpad(9)
 		for level: int in LEVELS:
-			row += ("%s/%s" % [TownPrices.orb_value(orb, _cell(level)),
-					TownPrices.orb_sell_price(orb, _cell(level))]).lpad(CELL_W)
+			row += ("%s/%s" % [_gold(TownPrices.orb_value(orb, _cell(level))),
+					_gold(TownPrices.orb_sell_price(orb, _cell(level)))]).lpad(CELL_W)
 		print(row)
 	print("buy/sell. A body at those levels: %s" % [_each(func(level: int) -> String:
-			return str(TownPrices.gold_at_level(level)))])
+			return _gold(TownPrices.gold_at_level(level)))])
 
 
 ## The same numbers said as fights, which is the only unit a player has.
@@ -272,4 +272,4 @@ func _row(label: String, cells: Array) -> void:
 
 
 func _gold(amount: float) -> String:
-	return "%d" % roundi(amount)
+	return BigNumber.format(amount)

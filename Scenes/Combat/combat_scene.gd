@@ -30,7 +30,7 @@ signal drop_discarded(item: Item)
 ## A body's purse. Re-emitted from `Encounter.gold_dropped` rather than left for the main scene to
 ## hear directly, for the reason `loot_kept` is: the fight is the one thing downstream listens to,
 ## so the first rule that is ever applied to gold has one place to live.
-signal gold_gained(amount: int)
+signal gold_gained(amount: float)
 ## An orb off a body. Re-emitted from `Encounter.orb_dropped` for the reason `gold_gained` is: the
 ## fight is the one thing downstream listens to. Nothing here can refuse it -- there is no cap and no
 ## rule that filters currency -- so unlike a find it has no `kept`/`discarded` pair.
@@ -663,7 +663,7 @@ func _label(text: String) -> Label:
 ## weapon working on its own looks like the player is doing it rather than like the enemy losing
 ## health for no reason. A click has already played both -- it plays them whether or not it lands,
 ## because a swing that hit nothing is still feedback that the click was heard.
-func _on_hit_landed(amount: int, crit: bool, automatic: bool) -> void:
+func _on_hit_landed(amount: float, crit: bool, automatic: bool) -> void:
 	if automatic:
 		_swing()
 	_show_damage(amount, crit)
@@ -698,8 +698,9 @@ func _swing() -> void:
 
 ## The number that floats off the enemy. This is the only place the player can read what their gear
 ## is worth: everything else about a hit looks the same whether it took one point off or nine.
-func _show_damage(amount: int, crit: bool) -> void:
-	var label := _label(("%d!" % amount) if crit else str(amount))
+func _show_damage(amount: float, crit: bool) -> void:
+	var written := BigNumber.format(amount)
+	var label := _label((written + "!") if crit else written)
 	label.add_theme_color_override("font_color", CRIT_COLOR if crit else Palette.BONE)
 	label.add_theme_font_size_override("font_size", CRIT_FONT if crit else DAMAGE_FONT)
 	label.z_index = 1
@@ -813,7 +814,7 @@ func _bump_counter() -> void:
 ## The purse coming off a body, as coins thrown out of it. `Coins.count_for` decides how many, so a
 ## richer body visibly pays more without the arena filling up -- the count is the log of the amount,
 ## not the amount. They are the only thing thrown that spins: a coin is drawn turning and gear is not.
-func _show_coins(amount: int) -> void:
+func _show_coins(amount: float) -> void:
 	var from := _drop_origin()
 	for i in Coins.count_for(amount):
 		var coin := AnimatedSprite2D.new()
@@ -920,7 +921,7 @@ func _clock_color(share: float) -> Color:
 # ---- drawing what the encounter is doing
 
 ## Puts the enemy that is on its way onto the field, off screen and running.
-func _on_enemy_coming(_index: int, enemy_name: String, _hp: int) -> void:
+func _on_enemy_coming(_index: int, enemy_name: String, _hp: float) -> void:
 	if enemy_name.is_empty():
 		_enemy.hide()
 		return
@@ -974,18 +975,18 @@ func _refresh() -> void:
 		return
 	_enemy_panel.show()
 	_enemy_label.text = fight.enemy_name() + ("  (elite)" if fight.on_elite() else "")
-	var share := float(fight.hp) / maxi(fight.enemy_max_hp(), 1)
+	var share := fight.hp / maxf(fight.enemy_max_hp(), 1.0)
 	# Encounter.tier_in rather than on_elite(): the pips beside this bar colour themselves through the
 	# same call, so the frame over the enemy and the pip standing for it can never disagree.
 	_enemy_bar.show_health(Encounter.tier_in(fight, fight.index), maxf(share, 0.0))
 
 
-func _on_enemy_spawned(_index: int, _enemy_name: String, _hp: int) -> void:
+func _on_enemy_spawned(_index: int, _enemy_name: String, _hp: float) -> void:
 	_enemy.play("idle")
 	_slide_enemy()
 
 
-func _on_enemy_hit(hp_left: int) -> void:
+func _on_enemy_hit(hp_left: float) -> void:
 	if hp_left > 0:
 		_enemy.play_once("hurt")
 
@@ -1040,7 +1041,7 @@ func _on_loot_dropped(index: int, item: Item) -> void:
 ## total still lives on the Encounter and the verdict still reads it at the end -- what the coins say
 ## is that something was earned here, which is the half of it a number at the end of the fight cannot
 ## tell the player while they are fighting.
-func _on_gold_dropped(_index: int, amount: int) -> void:
+func _on_gold_dropped(_index: int, amount: float) -> void:
 	_show_coins(amount)
 	gold_gained.emit(amount)
 
@@ -1156,11 +1157,11 @@ func _on_finished(won: bool) -> void:
 		_result_label.text = "Success" if won else "Failed"
 		_result_detail.text = "The tile is yours" if won else "Out of time"
 	_loot_panel.hide()
-	if fight.gold > 0:
-		_gold_label.text = "+%d" % fight.gold
+	if fight.gold > 0.0:
+		_gold_label.text = "+%s" % BigNumber.format(fight.gold)
 		_gold_row.show()
 	if fight.xp > 0:
-		_xp_label.text = "+%d" % fight.xp
+		_xp_label.text = "+%s" % BigNumber.format(fight.xp)
 		_xp_row.show()
 	var found_orbs := 0
 	for orb: String in fight.orbs:

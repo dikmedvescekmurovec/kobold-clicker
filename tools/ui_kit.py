@@ -209,6 +209,91 @@ ICONS_DRAWN = {
         o22222222221o
         ooooooooooooo
     """,
+    # The town's counters, one mark a tab (the board wears the scroll above). Gear: a sword, guard across.
+    "ui_icon_sword": """
+        ..........ooo
+        .........o44o
+        ........o443o
+        .......o443o.
+        .o....o443o..
+        o3o..o443o...
+        .o3oo443o....
+        ..o3443o.....
+        ...o33o......
+        ..o21o3o.....
+        .o21o.o3o....
+        o21o...o3o...
+        ooo.....oo...
+    """,
+    # Orbs: a cut gem, table facet over the pavilion.
+    "ui_icon_gem": """
+        ..ooooooooo..
+        .o444o333o2o.
+        o4444o333o22o
+        ooooooooooooo
+        o333o22222o1o
+        .o33o2222o1o.
+        ..o3o222o1o..
+        ...o3o2o1o...
+        ....o321o....
+        .....o1o.....
+        ......o......
+    """,
+    # The smith: his anvil, horn to the left and the square heel to the right, as a real one is --
+    # a symmetrical one reads as an hourglass. A hammer at this size is a letter T.
+    "ui_icon_anvil": """
+        ....ooooooooo
+        oooo44444444o
+        o33333333333o
+        .ooo3333333oo
+        ....oo3333oo.
+        .....o3333o..
+        .....o3333o..
+        ....o222222o.
+        ...o22222222o
+        ...o11111111o
+        ...oooooooooo
+    """,
+    # Clear a level out of the bag: a bin, lid and ribs.
+    "ui_icon_trash": """
+        ....ooo....
+        ...o444o...
+        ooooooooooo
+        o444444433o
+        ooooooooooo
+        .o4o4o3o2o.
+        .o4o4o3o2o.
+        .o4o4o3o2o.
+        .o4o4o3o2o.
+        .o4o4o3o2o.
+        .o4443322o.
+        ..ooooooo..
+    """,
+    # Auto: a funnel -- what is found at this level is filtered out before it reaches the bag.
+    "ui_icon_filter": """
+        ooooooooooooo
+        o44444444433o
+        .o444444332o.
+        ..o4444332o..
+        ...o44332o...
+        ....o432o....
+        ....o432o....
+        ....o432o....
+        ....o32oo....
+        ....ooo......
+    """,
+    # Back, out of an open piece to the bag's grid.
+    "ui_icon_back": """
+        ....oo.....
+        ...o4o.....
+        ..o44oooooo
+        .o44444443o
+        o444333332o
+        .o33222221o
+        ..o32oooooo
+        ...o2o.....
+        ....oo.....
+    """,
 }
 
 # The skill trees' icons, off "Ability Icons" -- loose 16 px files that carry their own framed square,

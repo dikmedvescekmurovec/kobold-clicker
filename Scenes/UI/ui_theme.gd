@@ -16,6 +16,13 @@ extends RefCounted
 const SHEET_JSON := "res://Assets/UI/ui_sheet.json"
 const FONT := "res://Assets/Pixellari.ttf"
 const FONT_SIZE := 16   # Pixellari is a pixel font: 16 is its native size, below ~14 the glyphs break up
+## Body text -- stat lines, modifiers, card bodies -- is set in a second, smaller pixel font, because
+## Pixellari cannot shrink and a stat block in it is half a window tall. Native size only, as above.
+const SMALL_FONT := "res://Assets/ArkPixel10.ttf"
+const SMALL_FONT_SIZE := 10
+## The face pads its 7 px capitals out to a 14 px line; this much comes off the top and the bottom of
+## every line, which leaves 11 and still clears the ascenders and the descenders.
+const SMALL_FONT_TRIM := Vector2i(2, 1)   # x: top, y: bottom
 
 ## Panel variations, based on PanelContainer so they can hold and pad their contents. "HeaderBar" is
 ## the green title bar: it is a panel like the others rather than part of the panel below it, so it
@@ -106,6 +113,15 @@ static func build() -> Theme:
 	built.set_type_variation("PanelLabel", "Label")
 	built.set_color("font_color", "PanelLabel", Palette.INK)
 	built.set_font_size("font_size", "PanelLabel", FONT_SIZE)
+
+	built.set_type_variation("SmallLabel", "Label")
+	built.set_color("font_color", "SmallLabel", Palette.INK)
+	var small := FontVariation.new()
+	small.base_font = load(SMALL_FONT)
+	small.set_spacing(TextServer.SPACING_TOP, -SMALL_FONT_TRIM.x)
+	small.set_spacing(TextServer.SPACING_BOTTOM, -SMALL_FONT_TRIM.y)
+	built.set_font("font", "SmallLabel", small)
+	built.set_font_size("font_size", "SmallLabel", SMALL_FONT_SIZE)
 
 	for variation: String in PANELS:
 		built.set_type_variation(variation, "PanelContainer")
@@ -205,10 +221,10 @@ static func icon_button(texture: Texture2D, tooltip: String, ui_scale: float) ->
 	return made
 
 
-## A panel label, in the theme's ink unless `color` says otherwise.
-static func label(text := "", color: Variant = null) -> Label:
+## A panel label, in the theme's ink unless `color` says otherwise. `small` sets it in the body font.
+static func label(text := "", color: Variant = null, small := false) -> Label:
 	var made := Label.new()
-	made.theme_type_variation = "PanelLabel"
+	made.theme_type_variation = "SmallLabel" if small else "PanelLabel"
 	made.text = text
 	if color != null:
 		made.add_theme_color_override("font_color", color)

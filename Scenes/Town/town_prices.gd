@@ -63,7 +63,7 @@ static var _commonest := 0.0
 
 
 ## What a body on the first tile of level `level` carries. The unit every price in a town is quoted in.
-static func gold_at_level(level: int) -> int:
+static func gold_at_level(level: int) -> float:
 	var at := maxi(level, 1)
 	@warning_ignore("integer_division")  # n(n - 1) is always even, so the triangular number is whole
 	var steps := at * (at - 1) / 2
@@ -75,13 +75,13 @@ static func gold_at_level(level: int) -> int:
 ## back to the village you started at should not be worth less than selling it where you found it.
 ## A broken piece fetches half: it is still worth wearing and still worth selling, and the merchant
 ## knows as well as the player does that nothing can be done with it again.
-static func sell_price(item: Item) -> int:
+static func sell_price(item: Item) -> float:
 	if item == null:
-		return 0
+		return 0.0
 	var step := float(RARITY_MULT[item.rarity]) if item.rarity < RARITY_MULT.size() else 1.0
 	if item.broken:
 		step *= 0.5
-	return maxi(1, roundi(gold_at_level(item.level) * step * SELL_BODIES))
+	return maxf(1.0, roundf(gold_at_level(item.level) * step * SELL_BODIES))
 
 
 ## What a merchant asks for a piece off its own shelf: what it would pay for one, the other way up.
@@ -89,35 +89,35 @@ static func sell_price(item: Item) -> int:
 ## The same `SELL_SHARE` the orbs are quoted at, and the whole of why there is no loop to stand in at
 ## one counter -- buying back what was just sold costs five times what it fetched. Read off
 ## `sell_price` rather than written out again, so the two can never be tuned apart.
-static func buy_price(item: Item) -> int:
+static func buy_price(item: Item) -> float:
 	var paid := sell_price(item)
-	return 0 if paid <= 0 else maxi(1, roundi(paid / SELL_SHARE))
+	return 0.0 if paid <= 0.0 else maxf(1.0, roundf(paid / SELL_SHARE))
 
 
 ## What the smith asks to take a piece one level up: the piece's own level in bodies, times the dial.
 ## The level it is at rather than the one it is going to, so the quote on the button is read against
 ## the piece the player is looking at.
-static func upgrade_price(item: Item) -> int:
-	return 0 if item == null else maxi(1, roundi(gold_at_level(item.level) * UPGRADE_BODIES))
+static func upgrade_price(item: Item) -> float:
+	return 0.0 if item == null else maxf(1.0, roundf(gold_at_level(item.level) * UPGRADE_BODIES))
 
 
 ## And what he asks to pin a modifier to it, off the same level and the same curve -- so a lock is
 ## always the same number of upgrades, wherever in the map it is bought.
-static func lock_price(item: Item) -> int:
-	return 0 if item == null else maxi(1, roundi(gold_at_level(item.level) * LOCK_BODIES))
+static func lock_price(item: Item) -> float:
+	return 0.0 if item == null else maxf(1.0, roundf(gold_at_level(item.level) * LOCK_BODIES))
 
 
 ## What the town on `town_cell` asks to clear its shelves and fill them again, having done so `rerolls`
 ## times already. Pegged to the town, as an orb is: what is being bought
 ## is that town's stock.
-static func reroll_price(town_cell: Vector2i, rerolls: int) -> int:
-	return maxi(1, roundi(gold_at_level(MapBuilder.level_of(town_cell)) * REROLL_BODIES
+static func reroll_price(town_cell: Vector2i, rerolls: int) -> float:
+	return maxf(1.0, roundf(gold_at_level(MapBuilder.level_of(town_cell)) * REROLL_BODIES
 			* pow(REROLL_GROWTH, maxi(rerolls, 0))))
 
 
 ## What a whole handful is worth, for the button that sells a level at once.
-static func sell_total(items: Array) -> int:
-	var total := 0
+static func sell_total(items: Array) -> float:
+	var total := 0.0
 	for item: Item in items:
 		total += sell_price(item)
 	return total
@@ -129,19 +129,19 @@ static func sell_total(items: Array) -> int:
 ##
 ## Pegged to the town rather than to the orb, because an orb has no level of its own -- what makes one
 ## worth more out at the frontier is that everything out there is.
-static func orb_value(orb: String, town_cell: Vector2i) -> int:
+static func orb_value(orb: String, town_cell: Vector2i) -> float:
 	if not OrbTable.ORBS.has(orb):
-		return 0
+		return 0.0
 	var weight := float(OrbTable.ORBS[orb]["weight"])
 	if weight <= 0.0:
-		return 0
-	return maxi(1, roundi(gold_at_level(MapBuilder.level_of(town_cell)) * ORB_BODIES * commonest() / weight))
+		return 0.0
+	return maxf(1.0, roundf(gold_at_level(MapBuilder.level_of(town_cell)) * ORB_BODIES * commonest() / weight))
 
 
 ## What a vendor pays for one orb: `SELL_SHARE` of what it asks, the same share gear is sold at.
-static func orb_sell_price(orb: String, town_cell: Vector2i) -> int:
+static func orb_sell_price(orb: String, town_cell: Vector2i) -> float:
 	var value := orb_value(orb, town_cell)
-	return 0 if value <= 0 else maxi(1, roundi(value * SELL_SHARE))
+	return 0.0 if value <= 0.0 else maxf(1.0, roundf(value * SELL_SHARE))
 
 
 ## The weight of the orb that falls most often, which every other orb's price is a multiple of.

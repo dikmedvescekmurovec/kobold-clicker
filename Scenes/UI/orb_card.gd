@@ -41,12 +41,12 @@ func _init() -> void:
 ##
 ## Bone for the name and cream for the sentence: the card stands on the pack's wood page, and the
 ## darker half of the palette was picked to be read on the white one.
-func fill(orb: String, held: int, against: Item, sell_for := 0) -> void:
+func fill(orb: String, held: int, against: Item, sell_for := 0.0) -> void:
 	for child: Node in _rows.get_children():
 		_rows.remove_child(child)
 		child.queue_free()
 	_rows.add_child(ItemDetails.line(orb, Palette.BONE, WIDTH))
-	_rows.add_child(ItemDetails.line(OrbTable.describe(orb), Palette.PANEL_CREAM, WIDTH))
+	_rows.add_child(ItemDetails.line(OrbTable.describe(orb), Palette.PANEL_CREAM, WIDTH, true))
 	var status := ""
 	var tone := Palette.PANEL_CREAM
 	if held <= 0:
@@ -54,10 +54,10 @@ func fill(orb: String, held: int, against: Item, sell_for := 0) -> void:
 		# whether that is because it was spent or because it has never been found.
 		status = "Not found yet"
 		tone = Palette.STONE_LT
-	elif against == null and sell_for > 0:
+	elif against == null and sell_for > 0.0:
 		# What the square does now, rather than what is in it: with a vendor beside the bag and no piece
 		# open, pressing it is a sale and the price is the one thing the player needs before they press.
-		status = "Sell for %d" % sell_for
+		status = "Sell for %s" % BigNumber.format(sell_for)
 		tone = Palette.LEAF_LT
 	elif against == null:
 		status = "You hold %d" % held
@@ -67,6 +67,6 @@ func fill(orb: String, held: int, against: Item, sell_for := 0) -> void:
 	else:
 		status = OrbTable.why_not(orb, against)
 		tone = Palette.RUST
-	_rows.add_child(ItemDetails.line(status, tone, WIDTH))
+	_rows.add_child(ItemDetails.line(status, tone, WIDTH, true))
 	# The card is measured the frame after it is filled, so whoever places it has a size to place.
 	reset_size()

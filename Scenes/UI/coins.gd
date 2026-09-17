@@ -17,24 +17,30 @@ const FRAMES := 9
 ## Frames a second. Nine frames at twelve is a turn every three quarters of a second, slow enough to
 ## read as a coin rather than as a flicker.
 const FPS := 12.0
+## The most coins one body throws, however fat the purse. Ten is already a spray; past that they
+## overlap into a smear and cost a frame for nothing.
+const MOST := 10
 
 ## Built once and kept: a coin is drawn in three places and there are ten kills to a fight.
 static var _icon: AtlasTexture
 static var _frames: SpriteFrames
 
 
-## How many coins a purse throws out: 1 + log10 of it, floored. One coin up to nine gold, two up to
-## ninety-nine, three up to nine hundred and ninety-nine. Uncapped -- the log is the cap, and a purse
-## would have to reach a million before a body threw seven.
+## How many coins a purse throws out: 1 + log10 of it, floored, and never more than `MOST`. One coin
+## up to nine gold, two up to ninety-nine, three up to nine hundred and ninety-nine.
 ##
 ## Counted in whole tens rather than written with `log()`, which is the same answer and cannot be
 ## off by one: log(1000) / log(10) comes back as 2.999999999999999 in doubles, and floored that is a
 ## thousand gold throwing three coins instead of four.
-static func count_for(amount: int) -> int:
+##
+## The count used to run uncapped, because the decade was the cap while an int was the ceiling: seven
+## coins at a million, nineteen at the top of int64. A purse is a float now, so 1e300 would throw
+## three hundred and one -- `MOST` is the burst a body can actually be seen to spill.
+static func count_for(amount: float) -> int:
 	var count := 1
-	var left := maxi(amount, 1)
-	while left >= 10:
-		left /= 10
+	var left := maxf(amount, 1.0)
+	while left >= 10.0 and count < MOST:
+		left /= 10.0
 		count += 1
 	return count
 

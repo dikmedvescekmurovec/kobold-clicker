@@ -31,6 +31,8 @@ const STAR_ICON := "res://Assets/UI/ui_icon_star.png"
 const SCROLL_ICON := "res://Assets/UI/ui_icon_scroll.png"
 ## The air between one and the next, in panel pixels.
 const CORNER_GAP := 4.0
+## Screen pixels between the tile panel and the window's corner; the corner buttons' own inset.
+const PANEL_INSET := 8.0
 
 ## The panel that stands in for the map when its save cannot be read: how wide it is allowed to be
 ## in panel pixels, and the air it keeps either side of it on a window too narrow for that.
@@ -258,11 +260,6 @@ func _build_ui() -> void:
 	_service_rows.add_theme_constant_override("separation", 4)
 	rows.add_child(_service_rows)
 
-	# An expanding spacer pushes the button to the bottom of the full-height panel.
-	var filler := Control.new()
-	filler.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	rows.add_child(filler)
-
 	# Only the buttons that can be pressed are shown (`_update_buttons`).
 	var buttons := VBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 4)
@@ -424,15 +421,12 @@ func _show_services(cell: Vector2i) -> void:
 		_service_rows.add_child(UITheme.label(TownServices.label(service)))
 
 
-## The tile panel is scaled by `ui_scale`, so it is sized in sprite pixels: a height of view/ui_scale
-## fills the window exactly. It stands flush against the right edge; the left-hand pages lay
-## themselves out against the other.
+## The tile panel is a card as big as what it holds, in the bottom-right corner: a full-height column
+## for a name, a level and a button covered a quarter of the map. The left-hand pages lay themselves
+## out against the other edge.
 func _layout_ui() -> void:
 	var view_size := Vector2(get_viewport().get_visible_rect().size)
-	var height := view_size.y / ui_scale
-	var width := _panel.get_combined_minimum_size().x
-	_panel.size = Vector2(width, height)
-	_panel.position = Vector2(view_size.x - width * ui_scale, 0.0)
+	_place_panel()
 	bag_page.layout()
 	skills_page.layout()
 	bounty_page.layout()
@@ -582,7 +576,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 	var kills: int = _combat.fight.kills()
 	# Read before the fight is freed, and before banking, which zeroes the run's own pouch.
-	var earned: int = _combat.fight.gold
+	var earned: float = _combat.fight.gold
 	_bank_run()
 	ledger.bank_kills(kills)
 	_combat.queue_free()
@@ -595,8 +589,9 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 	var turned_up := PackedStringArray()
 	for drop in ledger.drops:
 		turned_up.append("%s (%s)" % [drop.type, drop.rarity_name()])
-	print("The fight turned up: %s, and %d gold"
-			% ["nothing" if turned_up.is_empty() else ", ".join(turned_up), earned])
+	print("The fight turned up: %s, and %s gold"
+			% ["nothing" if turned_up.is_empty() else ", ".join(turned_up),
+				BigNumber.format(earned)])
 	if ledger.farming:
 		# Nothing about the map moves for a run. The tile was already taken; the loot is the whole of it.
 		print("Farmed %s, %d slain" % [cell, kills])
@@ -648,6 +643,15 @@ func _update_buttons() -> void:
 	_move_button.visible = view.can_move_to(cell)
 	_farm_button.visible = view.can_farm(cell)
 	_town_button.visible = view.can_visit(cell)
+	_place_panel()
+
+
+## Shrinks the tile panel to what it holds now and stands it in the corner. Called whenever a row or
+## a button comes or goes, because the card's height is its contents'.
+func _place_panel() -> void:
+	var view_size := Vector2(get_viewport().get_visible_rect().size)
+	_panel.reset_size()
+	_panel.position = view_size - _panel.size * ui_scale - Vector2(PANEL_INSET, PANEL_INSET)
 
 
 ## A kill left something behind. Whether it goes straight into the bag or waits in the run's pouch is
@@ -661,7 +665,7 @@ func _on_loot_dropped(index: int, item: Item) -> void:
 	_refresh_bag_room()
 
 
-func _on_gold_gained(amount: int) -> void:
+func _on_gold_gained(amount: float) -> void:
 	ledger.add_gold(amount)
 	bag_page.refresh_gold()
 

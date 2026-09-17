@@ -16,6 +16,10 @@ signal selection_changed(item: Item)
 const GRID_COLS := 5
 const SLOT_GAP := ItemSlot.SIDE / 7
 ## Fixed, so the panel keeps its width as the bag fills.
+## The marks on a level's two buttons, and how far Auto's face is darkened while it is held down.
+const AUTO_ICON := "res://Assets/UI/ui_icon_filter.png"
+const CLEAR_ICON := "res://Assets/UI/ui_icon_trash.png"
+const AUTO_HELD := Color(0.6, 0.6, 0.6)
 const WIDTH := GRID_COLS * ItemSlot.SIDE + (GRID_COLS - 1) * SLOT_GAP
 ## All eight orbs in one row, exactly WIDTH wide (test_ui_theme holds the arithmetic).
 const ORB_COLS := 8
@@ -202,7 +206,7 @@ func _buys(service: String) -> bool:
 
 
 func refresh_gold() -> void:
-	_gold.text = str(inventory.gold)
+	_gold.text = BigNumber.format(inventory.gold)
 
 
 ## The bag stretched to the window's height, and the sheet centred against its right edge.
@@ -258,7 +262,8 @@ func refresh() -> void:
 		_hide_item()
 
 
-## A level's heading: its name, Auto (stop bringing this level) and Clear (drop what is held).
+## A level's heading: its name, Auto (a funnel that stays down while the level is being thrown away
+## as it drops) and Clear (a bin: drop what is held).
 func _section_heading(level: int) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", SLOT_GAP)
@@ -270,11 +275,16 @@ func _section_heading(level: int) -> HBoxContainer:
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(title)
 
-	var auto := UITheme.button("Auto", "LightButton",
-			"Stop throwing away what is found at level %d" % level if ruled
-			else "Throw away everything found at level %d from now on" % level)
+	var auto := UITheme.button("", "BrownIconButton",
+			"Auto is on: what is found at level %d is thrown away. Press to stop" % level if ruled
+			else "Auto: throw away everything found at level %d from now on" % level)
+	auto.icon = load(AUTO_ICON)
 	auto.toggle_mode = true
 	auto.button_pressed = ruled
+	# Held down is the pack's pressed face, a pixel lower -- and darkened as well, because that pixel
+	# alone is a press being watched and not a state being read off a column of headings.
+	if ruled:
+		auto.self_modulate = AUTO_HELD
 	auto.toggled.connect(_on_autodiscard_toggled.bind(level))
 	row.add_child(auto)
 
@@ -283,11 +293,15 @@ func _section_heading(level: int) -> HBoxContainer:
 	var held := inventory.count_at(level)
 	var selling := _buys(TownServices.GEAR)
 	var worth := TownPrices.sell_total(inventory.items.filter(
-			func(item: Item) -> bool: return item.level == level)) if selling else 0
-	var clear := UITheme.button("Sell all" if selling else "Clear",
-			"LightButton" if selling else "LightDangerButton",
-			"Sell the %d item(s) held at level %d for %d gold" % [held, level, worth] if selling
+			func(item: Item) -> bool: return item.level == level)) if selling else 0.0
+	# Selling keeps its words, as every button that moves money does; throwing away is a bin.
+	var clear := UITheme.button("Sell all" if selling else "",
+			"LightButton" if selling else "BrownIconButton",
+			"Sell the %d item(s) held at level %d for %s gold"
+			% [held, level, BigNumber.format(worth)] if selling
 			else "Throw away the %d item(s) held at level %d" % [held, level])
+	if not selling:
+		clear.icon = load(CLEAR_ICON)
 	clear.disabled = held == 0
 	clear.pressed.connect(_on_sell_level_pressed.bind(level) if selling
 			else _on_clear_level_pressed.bind(level))
@@ -315,7 +329,8 @@ func _on_sell_level_pressed(level: int) -> void:
 	var gone := inventory.discard_level(level)
 	var paid := TownPrices.sell_total(gone)
 	inventory.gold += paid
-	print("Sold %d item(s) at level %d for %d gold" % [gone.size(), level, paid])
+	print("Sold %d item(s) at level %d for %s gold"
+			% [gone.size(), level, BigNumber.format(paid)])
 	inventory.save(_save_path)
 	_select_item(-1)
 
@@ -363,11 +378,13 @@ func _select_socket(socket: int) -> void:
 	selection_changed.emit(_open_piece())
 
 
-## A bag item's block, with Equip (into the emptiest socket it fits), Discard and Back.
+## A bag item's block, with Back, Equip (into the emptiest socket it fits) and Discard in one row:
+## stacked, the three of them were a quarter of the page.
 func _show_item(index: int) -> void:
 	var item := inventory.items[index]
 	var open_sockets := inventory.equipment.sockets_for(item)
 	_fill_detail(item)
+	var actions := _action_row(_select_item.bind(-1))
 	if not open_sockets.is_empty():
 		var socket: Equipment.Socket = open_sockets[0]
 		var worn := inventory.equipment.item_at(socket)
@@ -375,30 +392,33 @@ func _show_item(index: int) -> void:
 				% [Equipment.LABELS[socket].to_lower(),
 					"" if worn == null else ", putting %s back in the bag" % worn.display_name()])
 		equip.pressed.connect(_on_equip_pressed.bind(item, socket))
-		_detail.add_child(equip)
+		equip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		actions.add_child(equip)
 	# In a town that buys gear, the button that got rid of a piece sells it instead: one button in one
 	# place, so there is never a Discard sitting next to a Sell for the player to press by mistake.
 	# No confirmation either way: two clicks deep already, and asking twice teaches clicking through.
 	if _buys(TownServices.GEAR):
 		var price := TownPrices.sell_price(item)
-		var sell := UITheme.button("Sell %d" % price, "LightButton",
-				"Sell this to the merchant for %d gold" % price)
+		var sell := UITheme.button("Sell %s" % BigNumber.format(price), "LightButton",
+				"Sell this to the merchant for %s gold" % BigNumber.format(price))
 		sell.icon = Coins.icon()
 		sell.pressed.connect(_on_sell_pressed.bind(item))
-		_detail.add_child(sell)
+		sell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		actions.add_child(sell)
 	else:
 		var discard := UITheme.button("Discard", "LightDangerButton", "Throw this away for good")
 		discard.pressed.connect(_on_discard_pressed.bind(item))
-		_detail.add_child(discard)
-	_add_back_button(_select_item.bind(-1))
+		discard.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		actions.add_child(discard)
 
 
 ## A worn piece's block. No Discard: the cap is the bag's alone, so nothing pushes the player to
 ## destroy what they wear.
 func _show_worn(socket: Equipment.Socket) -> void:
 	_fill_detail(inventory.equipment.item_at(socket))
-	_detail.add_child(_unequip_button(_on_unequip_pressed.bind(socket)))
-	_add_back_button(_select_socket.bind(-1))
+	var unequip := _unequip_button(_on_unequip_pressed.bind(socket))
+	unequip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_action_row(_select_socket.bind(-1)).add_child(unequip)
 
 
 ## The lines go inside the scroll and the buttons outside it, so Equip is never scrolled away.
@@ -408,12 +428,18 @@ func _fill_detail(item: Item) -> void:
 	_detail_scroll.scroll_vertical = 0
 
 
-func _add_back_button(action: Callable) -> void:
-	var back := UITheme.button("Back", "LightButton", "Back to everything you are carrying")
-	back.pressed.connect(action)
-	_detail.add_child(back)
+## The row under an open piece, begun with Back at its own width; what is added after it should
+## expand to share the rest.
+func _action_row(back_action: Callable) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	var back := UITheme.button("", "BrownIconButton", "Back to everything you are carrying")
+	back.icon = load("res://Assets/UI/ui_icon_back.png")
+	back.pressed.connect(back_action)
+	row.add_child(back)
+	_detail.add_child(row)
 	_scroll.hide()
 	_detail.show()
+	return row
 
 
 func _hide_item() -> void:
@@ -456,7 +482,8 @@ func _on_sell_pressed(item: Item) -> void:
 	var price := TownPrices.sell_price(item)
 	if inventory.remove(item):
 		inventory.gold += price
-		print("Sold %s (%s, level %d) for %d gold" % [item.type, item.rarity_name(), item.level, price])
+		print("Sold %s (%s, level %d) for %s gold"
+				% [item.type, item.rarity_name(), item.level, BigNumber.format(price)])
 		inventory.save(_save_path)
 	_select_item(-1)
 
@@ -640,15 +667,15 @@ func _sell_orb(orb: String) -> void:
 	if not inventory.spend_orb(orb):
 		return
 	inventory.gold += price
-	print("Sold %s for %d gold" % [orb, price])
+	print("Sold %s for %s gold" % [orb, BigNumber.format(price)])
 	inventory.save(_save_path)
 	refresh()
 
 
 ## What a vendor beside the bag pays for one of these, and 0 where none does -- which is what the card
 ## reads to decide whether to quote a price or count what is held.
-func _orb_price(orb: String) -> int:
-	return TownPrices.orb_sell_price(orb, _town_cell) if _buys(TownServices.ORBS) else 0
+func _orb_price(orb: String) -> float:
+	return TownPrices.orb_sell_price(orb, _town_cell) if _buys(TownServices.ORBS) else 0.0
 
 
 ## Placed now and again deferred: the first pass measures labels that have not laid out yet.

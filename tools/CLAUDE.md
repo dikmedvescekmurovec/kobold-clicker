@@ -9,7 +9,7 @@ The interface is **cut, not generated**, from packs under `Assets/Potential/`. `
 | Kill-pip parts: head, body, tail x three tiers + empty grey (`PIP_*`) | `Pixel UI pack 3/06.png` | 12 loose PNGs in `Assets/UI/` | `ui_kit_pips.png` |
 | Gear icons (`GEAR`), doll and socket marks (`PARTS`) | RPG pack; ring and amulet off `Icons.png` | `Assets/Gear/` (32x32), `Assets/UI/` | `ui_kit_gear.png` |
 | Orb icons (`ORBS`) | `OreAndGem/OreGemSpritesheet.png`, 10x5 on a 32 px pitch | `Assets/Orbs/` | `ui_kit_orbs.png` |
-| Corner-button marks (`ICONS` cut: chest, star; `ICONS_DRAWN` drawn as letter rows: flag, sack, scroll) | `Icons.png` | `Assets/UI/ui_icon_*.png` | `ui_kit_icons.png` |
+| Button marks (`ICONS` cut: chest, star; `ICONS_DRAWN` drawn as letter rows: flag, sack, scroll, the town tabs' sword, gem and anvil, and the bag's back arrow, bin and Auto funnel) | `Icons.png` | `Assets/UI/ui_icon_*.png` | `ui_kit_icons.png` |
 | Skill icons + Locked marks (`SKILLS`, `SKILL_LOCKS`) | `Ability Icons/` | `Assets/Skills/<skill id>.png` | `ui_kit_skills.png` |
 | Character panel frame, bars, portrait, xp gem (`CHAR_*`, `XP_GEM`) | `2D Pixel UI/PNG/character_panel` | `Assets/UI/ui_char_*.png` | `ui_kit_character.png` |
 | Loot beam (`tools/loot_beam.py`) | `Effects`, "Mini Falem", white colourway only | `Assets/Effects/loot_beam.png`, a 15-frame strip | |

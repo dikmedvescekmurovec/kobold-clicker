@@ -127,7 +127,8 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 	coin.size = Vector2(REWARD_COIN, REWARD_COIN)
 	coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	pay.add_child(coin)
-	pay.add_child(UITheme.label(str(int(bounty.get(BountyBoard.GOLD, 0))), Palette.SLATE))
+	pay.add_child(UITheme.label(BigNumber.format(float(bounty.get(BountyBoard.GOLD, 0))),
+			Palette.SLATE))
 	lines.add_child(pay)
 	var orb := str(bounty.get(BountyBoard.ORB, ""))
 	if not orb.is_empty():
@@ -190,7 +191,7 @@ static func progress_bar(have: int, need: int, width: float) -> Control:
 
 ## A wrapped line of the page's own width. Word wrapping, because these are sentences.
 static func wrapped(text: String, width: float, color: Variant = null) -> Label:
-	var label := UITheme.label(text, color)
+	var label := UITheme.label(text, color, true)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.custom_minimum_size.x = width
 	return label

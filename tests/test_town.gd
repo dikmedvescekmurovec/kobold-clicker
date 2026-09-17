@@ -102,7 +102,7 @@ func _test_prices() -> bool:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = WORLD_SEED
 	_check(TownPrices.sell_price(null) == 0, "nothing is worth nothing")
-	var last := 0
+	var last := 0.0
 	for rarity: ItemRarity.Rarity in [ItemRarity.Rarity.COMMON, ItemRarity.Rarity.UNCOMMON,
 			ItemRarity.Rarity.RARE, ItemRarity.Rarity.ELITE]:
 		var piece := Item.rolled("Wooden Sword", rarity, rng, 6)
@@ -134,7 +134,7 @@ func _test_prices() -> bool:
 		var value := TownPrices.orb_value(orb, TOWN_CELL)
 		_check(value > 0, "%s is worth something" % orb)
 		_check(TownPrices.orb_sell_price(orb, TOWN_CELL)
-				== maxi(1, roundi(value * TownPrices.SELL_SHARE)), "%s sells at the share" % orb)
+				== maxf(1.0, roundf(value * TownPrices.SELL_SHARE)), "%s sells at the share" % orb)
 		_check(TownPrices.orb_sell_price(orb, TOWN_CELL) < value,
 				"%s is never bought back for what it fetched" % orb)
 		_check(TownPrices.orb_value(orb, Vector2i(30, 0)) > value, "%s is worth more out deep" % orb)
@@ -248,7 +248,7 @@ func _test_stock() -> bool:
 	_check(not VendorStock.orbs(drawer)[5].is_empty() and VendorStock.rerolls(drawer, VendorStock.ORBS) == 1,
 			"which has a count of its own")
 	_check(VendorStock.rerolls(drawer, VendorStock.ITEMS) == 1, "that does not touch the gear shelf's")
-	_check(TownPrices.reroll_price(TOWN_CELL, 1) == roundi(first_price * TownPrices.REROLL_GROWTH),
+	_check(TownPrices.reroll_price(TOWN_CELL, 1) == roundf(first_price * TownPrices.REROLL_GROWTH),
 			"the next costs twice as much")
 	_check(TownPrices.reroll_price(TOWN_CELL, 5) > first_price * 30, "and the sixth thirty times")
 	_check(VendorStock.kills_left(drawer, stocked + VendorStock.RESTOCK_KILLS - 1) == 1,
@@ -435,7 +435,7 @@ func _test_smith() -> bool:
 	var whole := Item.rolled("Ruby Amulet", ItemRarity.Rarity.RARE, rng, 7)
 	var was_worth := TownPrices.sell_price(whole)
 	whole.broken = true
-	_check(absi(TownPrices.sell_price(whole) * 2 - was_worth) <= 1,
+	_check(absf(TownPrices.sell_price(whole) * 2.0 - was_worth) <= 1.0,
 			"a broken piece fetches half (%d of %d)" % [TownPrices.sell_price(whole), was_worth])
 	return true
 
@@ -473,7 +473,7 @@ func _test_bounties() -> bool:
 				else BountyBoard.NEED_COMMON), "%s asks for its tier's count (%d)" % [enemy, need])
 		_check(int(bounty[BountyBoard.HAVE]) == 0, "%s starts at nothing" % enemy)
 		_check(not bool(bounty[BountyBoard.DONE]), "and is not handed in")
-		_check(int(bounty[BountyBoard.GOLD]) == maxi(1, roundi(Encounter.gold_of(enemy, TOWN_CELL)
+		_check(float(bounty[BountyBoard.GOLD]) == maxf(1.0, roundf(Encounter.gold_of(enemy, TOWN_CELL)
 				* need * BountyBoard.REWARD_MULT)), "%s pays what its bodies are worth" % enemy)
 		_check((not str(bounty[BountyBoard.ORB]).is_empty()) == (tier == EnemyRoster.Tier.ELITE),
 				"only the elite posting carries an orb (%s)" % enemy)
@@ -657,15 +657,17 @@ func _test_selling() -> void:
 
 	# Out of a town nothing has changed: the piece is thrown away, not sold.
 	page._select_item(inventory.items.find(piece))
-	_check(_button(page._detail, "Discard") != null, "outside a town a piece is discarded")
-	_check(_button(page._detail, "Sell") == null, "and there is nothing to sell it to")
-	_check(_button(page._sections.get_child(0), "Clear") != null, "and a level is cleared")
+	_check(_deep_button(page._detail, "Discard") != null, "outside a town a piece is discarded")
+	_check(_deep_button(page._detail, "Sell") == null, "and there is nothing to sell it to")
+	_check(page._sections.get_child(0).get_children().any(func(child: Node) -> bool:
+			return child is Button and (child as Button).tooltip_text.begins_with("Throw away the")),
+			"and a level is cleared")
 
 	# At the gear merchant the same two buttons buy instead.
 	page.shop(PackedStringArray([TownServices.GEAR]), TOWN_CELL)
 	page._select_item(inventory.items.find(piece))
-	var sell := _button(page._detail, "Sell")
-	_check(sell != null and _button(page._detail, "Discard") == null,
+	var sell := _deep_button(page._detail, "Sell")
+	_check(sell != null and _deep_button(page._detail, "Discard") == null,
 			"at the merchant the piece is sold rather than thrown away")
 	_check(_button(page._sections.get_child(0), "Sell all") != null, "and a level is sold at once")
 	var price := TownPrices.sell_price(piece)
@@ -684,7 +686,7 @@ func _test_selling() -> void:
 	# At the orb vendor the tray sells and the gear button is gone.
 	page.shop(PackedStringArray([TownServices.ORBS]), TOWN_CELL)
 	page._select_item(0)
-	_check(_button(page._detail, "Discard") != null and _button(page._detail, "Sell") == null,
+	_check(_deep_button(page._detail, "Discard") != null and _deep_button(page._detail, "Sell") == null,
 			"the orb vendor does not buy gear")
 	page._select_item(-1)
 	var orb_price := TownPrices.orb_sell_price("Orb of Chaos", TOWN_CELL)
@@ -704,7 +706,7 @@ func _test_selling() -> void:
 	# A board is a counter for work, not for goods: nothing is bought or sold over one.
 	page.shop(PackedStringArray([TownServices.BOUNTIES]), TOWN_CELL)
 	page._select_item(0)
-	_check(_button(page._detail, "Discard") != null and _button(page._detail, "Sell") == null,
+	_check(_deep_button(page._detail, "Discard") != null and _deep_button(page._detail, "Sell") == null,
 			"over a bounty board a piece is thrown away rather than sold")
 	page._select_item(-1)
 	var carried := inventory.orb_count("Orb of Chaos")
@@ -714,7 +716,7 @@ func _test_selling() -> void:
 	# Leaving the town puts every one of those back.
 	page.shop(PackedStringArray())
 	page._select_item(0)
-	_check(_button(page._detail, "Discard") != null and _button(page._detail, "Sell") == null,
+	_check(_deep_button(page._detail, "Discard") != null and _deep_button(page._detail, "Sell") == null,
 			"outside a town Discard is Discard again")
 	page.queue_free()
 	await process_frame

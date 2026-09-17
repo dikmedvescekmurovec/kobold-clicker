@@ -67,13 +67,13 @@ func _test_what_a_hit_is_worth() -> bool:
 	armed.start()
 	armed.advance(Encounter.WALK_IN)
 	var landed: Array = []
-	armed.hit_landed.connect(func(amount: int, crit: bool, auto: bool) -> void:
+	armed.hit_landed.connect(func(amount: float, crit: bool, auto: bool) -> void:
 		landed.append([amount, crit, auto]))
 	var full := armed.hp
 	armed.hit()
 	_check(armed.damage == 5, "four points of gear plus the fist is five")
 	_check(armed.hp == full - 5, "and five comes off")
-	_check(landed.size() == 1 and landed[0] == [5, false, false],
+	_check(landed.size() == 1 and landed[0] == [5.0, false, false],
 			"the blow is reported as a click for five")
 
 	# A certain crit adds its crit damage, and no more: 50 is half again, not fifty times.
@@ -82,7 +82,7 @@ func _test_what_a_hit_is_worth() -> bool:
 	critting.start()
 	critting.advance(Encounter.WALK_IN)
 	var crits: Array = []
-	critting.hit_landed.connect(func(_a: int, crit: bool, _auto: bool) -> void: crits.append(crit))
+	critting.hit_landed.connect(func(_a: float, crit: bool, _auto: bool) -> void: crits.append(crit))
 	var start_hp := critting.hp
 	critting.hit()
 	_check(critting.hp == start_hp - 6, "a crit on four damage at +50%% is six, not %d"
@@ -95,7 +95,7 @@ func _test_what_a_hit_is_worth() -> bool:
 	never.start()
 	never.advance(Encounter.WALK_IN)
 	var any := [false]
-	never.hit_landed.connect(func(_a: int, crit: bool, _auto: bool) -> void: any[0] = any[0] or crit)
+	never.hit_landed.connect(func(_a: float, crit: bool, _auto: bool) -> void: any[0] = any[0] or crit)
 	for i in 200:
 		never.hit()
 		if never.phase != Encounter.Phase.WAITING:
@@ -109,7 +109,7 @@ func _test_what_a_hit_is_worth() -> bool:
 	sometimes.start()
 	sometimes.advance(Encounter.WALK_IN)
 	var tally := [0, 0]
-	sometimes.hit_landed.connect(func(_a: int, crit: bool, _auto: bool) -> void:
+	sometimes.hit_landed.connect(func(_a: float, crit: bool, _auto: bool) -> void:
 		tally[0] += 1
 		tally[1] += 1 if crit else 0)
 	for i in 2000:
@@ -134,7 +134,7 @@ func _test_the_weapon_swings_itself() -> bool:
 	fight.arm({"damage": 0.0, "crit_chance": 0.0, "crit_damage": 0.0, "attack_speed": 2.0})
 	fight.start()
 	var automatic := [0]
-	fight.hit_landed.connect(func(_a: int, _c: bool, auto: bool) -> void:
+	fight.hit_landed.connect(func(_a: float, _c: bool, auto: bool) -> void:
 		if auto:
 			automatic[0] += 1)
 
@@ -181,7 +181,7 @@ func _test_capstone_effects() -> bool:
 	cleave.arm({"damage": float(cleave.hp + 2 - Encounter.BARE_DAMAGE)})
 	cleave.hit()
 	cleave.advance(Encounter.DEATH)
-	_check(cleave.hp == maxi(1, cleave.health[1] - 2), "Cleave carries 2 into the next (%d of %d)"
+	_check(cleave.hp == maxf(1.0, cleave.health[1] - 2), "Cleave carries 2 into the next (%d of %d)"
 			% [cleave.hp, cleave.health[1]])
 
 	# Giant Slayer: an elite takes twice the blow, a common does not.
@@ -349,14 +349,14 @@ func _test_gold() -> bool:
 	# what fell off it, and nothing is rolled for.
 	var fight := Encounter.for_tile(Vector2i(4, 0), "grass")
 	var purses: Array = []
-	fight.gold_dropped.connect(func(_index: int, amount: int) -> void: purses.append(amount))
+	fight.gold_dropped.connect(func(_index: int, amount: float) -> void: purses.append(amount))
 	fight.start()
 	_play(fight, 4000)
 	_check(fight.finished and fight.victory, "the fight was won")
 	_check(purses.size() == Encounter.ENEMIES, "all %d bodies paid, not %d"
 			% [Encounter.ENEMIES, purses.size()])
-	var summed := 0
-	for purse: int in purses:
+	var summed := 0.0
+	for purse: float in purses:
 		summed += purse
 	_check(fight.gold == summed, "the fight holds %d gold, and %d fell" % [fight.gold, summed])
 
@@ -504,7 +504,7 @@ func _test_the_nameplate_wears_the_tier() -> void:
 	# rather than against a half, because hit points are whole numbers and the first commons have
 	# very few of them: half of seven is three, and the bar is honest about that.
 	var max_hp := fight.enemy_max_hp()
-	fight.hp = max_hp / 2
+	fight.hp = floorf(max_hp / 2.0)
 	combat._refresh()
 	var want := float(full) * fight.hp / max_hp
 	_check(absf(bar._fill.size.x - want) <= HealthBar.PIXEL,
@@ -660,9 +660,18 @@ func _test_health() -> bool:
 		_check(Encounter.hp_of(enemy, far) > Encounter.hp_of(enemy, near), "%s is tougher further out" % enemy)
 	_check(Encounter.hp_of("Grass Slime", near) < Encounter.hp_of("Skeleton Warrior", near), "a slime is the softest")
 
+	# The map has no edge, and health is exponential in the walk: an int64 ran out about 250 hexes
+	# out and came back negative, which made the frontier a walkover. A double reaches some 4,200.
+	var deep := Encounter.base_hp(MapBuilder.CENTER + Vector2i(300, 0))
+	var shallower := Encounter.base_hp(MapBuilder.CENTER + Vector2i(299, 0))
+	_check(is_finite(deep) and deep > 0.0,
+			"a body 300 steps out has real health (%s)" % BigNumber.format(deep))
+	_check(deep > shallower, "and more of it than one 299 steps out (%s)"
+			% BigNumber.format(shallower))
+
 	# The elite is the wall at the end: it must outlast any common the same tile can send.
 	var fight := Encounter.for_tile(near, "grass")
-	var elite: int = fight.health[fight.enemies - 1]
+	var elite: float = fight.health[fight.enemies - 1]
 	for i in fight.enemies - 1:
 		_check(elite > fight.health[i], "the elite outlasts enemy %d" % [i + 1])
 	return true
@@ -675,8 +684,8 @@ func _test_a_won_fight() -> bool:
 	var spawned: Array[int] = []
 	var died: Array[int] = []
 	var results: Array[bool] = []
-	fight.enemy_coming.connect(func(_i: int, n: String, _hp: int) -> void: coming.append(n))
-	fight.enemy_spawned.connect(func(i: int, _n: String, _hp: int) -> void: spawned.append(i))
+	fight.enemy_coming.connect(func(_i: int, n: String, _hp: float) -> void: coming.append(n))
+	fight.enemy_spawned.connect(func(i: int, _n: String, _hp: float) -> void: spawned.append(i))
 	fight.enemy_died.connect(func(i: int) -> void: died.append(i))
 	fight.won.connect(func() -> void: results.append(true))
 	fight.lost.connect(func() -> void: results.append(false))
@@ -885,7 +894,7 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 ## Every point of health in a fight, the whole ten.
 func _total_health(fight: Encounter) -> float:
 	var total := 0.0
-	for hp: int in fight.health:
+	for hp: float in fight.health:
 		total += hp
 	return total
 

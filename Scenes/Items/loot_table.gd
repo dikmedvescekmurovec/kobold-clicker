@@ -293,7 +293,9 @@ static func stat_line(stat: String, value: float) -> String:
 		return "%s %d%%" % [label, roundi(value)]
 	if stat in RATE_STATS:
 		return "%s %.1f/s" % [label, value]
-	return "%s %d" % [label, roundi(value)]
+	# A quantity, which grows with the walk: written through the one formatter, so a late stat is
+	# "1.23e6" rather than twenty digits across a panel (`BigNumber`).
+	return "%s %s" % [label, BigNumber.format(value)]
 
 
 ## The same stat as a difference: "Damage +13", "Crit Chance -2%", "Attack Speed +0.3/s".
@@ -308,7 +310,8 @@ static func stat_delta(stat: String, delta: float) -> String:
 		return "%s %+d%%" % [label, roundi(delta)]
 	if stat in RATE_STATS:
 		return "%s %+.1f/s" % [label, delta]
-	return "%s %+d" % [label, roundi(delta)]
+	# `signed` is what keeps the sign on a gain, which is the whole of what a delta line means.
+	return "%s %s" % [label, BigNumber.format(delta, true)]
 
 
 ## Whether a difference is worth saying at all. A delta that rounds to nothing on the line would read
@@ -317,7 +320,9 @@ static func stat_delta(stat: String, delta: float) -> String:
 static func delta_shows(stat: String, delta: float) -> bool:
 	if stat in RATE_STATS:
 		return absf(delta) >= 0.05
-	return roundi(delta) != 0
+	# Rounded as a float rather than through `roundi`, which is what the line is written with: a
+	# difference past int64 would come back out of an int as anything at all.
+	return roundf(delta) != 0.0
 
 
 ## How often this enemy leaves anything at all: its tier times its body, lifted by whatever drop rate

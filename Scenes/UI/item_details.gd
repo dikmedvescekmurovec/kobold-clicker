@@ -12,8 +12,7 @@ extends RefCounted
 ## own width and its own way back. The lines want a bone background: the darker half of the rarity
 ## ramp is chosen to be read on the white panel, not on wood.
 
-## Empties `rows` and writes `item` into it. `width` is what a line may use before it wraps -- the
-## font is only legible at its native 16 px, so a long modifier has to wrap rather than shrink.
+## Empties `rows` and writes `item` into it. `width` is what a line may use before it wraps.
 ##
 ## What a smith has left on a piece reads here and so reads everywhere a piece is shown: "Broken"
 ## under its rarity, and the word on the locked modifier's own line, which `Item.mod_lines` puts there.
@@ -26,11 +25,11 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Item = 
 	rows.add_child(line(item.display_name(), item.text_color(), width))
 	# Rarity and level on one line: they are the two things that say what a piece is worth, and they
 	# are rolled together off the same body.
-	rows.add_child(line("%s · level %d" % [item.rarity_name(), item.level], item.text_color(), width))
+	rows.add_child(line("%s · level %d" % [item.rarity_name(), item.level], item.text_color(), width, true))
 	# Under what the piece is, because that is what it now is: still worn, still sold, and never to be
 	# changed again. In the colour a loss is written in, so it is not read as a line it rolled.
 	if item.broken:
-		rows.add_child(line("Broken", Palette.RUST, width))
+		rows.add_child(line("Broken", Palette.RUST, width, true))
 	rows.add_child(UITheme.rule())
 	# What the swap is worth goes first, straight under the name, and what the piece is follows it.
 	# It is the answer the block is opened for, and an elite carrying six modifiers is taller than
@@ -43,12 +42,12 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Item = 
 				# is, so the sign carries the whole meaning and no table is needed to say which way is
 				# up; one that ever inverted would need one here, and there is none.
 				rows.add_child(line(LootTable.stat_delta(stat, change[stat]),
-						Palette.LEAF if change[stat] > 0.0 else Palette.RUST, width))
+						Palette.LEAF if change[stat] > 0.0 else Palette.RUST, width, true))
 			rows.add_child(UITheme.rule())
 	for text in item.stat_lines():
-		rows.add_child(line(text, Palette.INK, width))
+		rows.add_child(line(text, Palette.INK, width, true))
 	for text in item.mod_lines():
-		rows.add_child(line(text, Palette.RUST, width))
+		rows.add_child(line(text, Palette.RUST, width, true))
 
 
 ## What wearing `item` instead of `against` would change: stat -> the signed difference.
@@ -74,10 +73,10 @@ static func deltas(item: Item, against: Item) -> Dictionary:
 	return out
 
 
-## One line of it.
-static func line(text: String, color: Color, width: float) -> Label:
+## One line of it; `small` sets it in the body font, which is everything under the name.
+static func line(text: String, color: Color, width: float, small := false) -> Label:
 	var label := Label.new()
-	label.theme_type_variation = "PanelLabel"
+	label.theme_type_variation = "SmallLabel" if small else "PanelLabel"
 	label.text = text
 	label.add_theme_color_override("font_color", color)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
