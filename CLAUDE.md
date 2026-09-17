@@ -8,13 +8,9 @@ Use the console build, so output reaches the terminal: `C:\Users\Dik\Godot_v4.7.
 | Task | Arguments (run from the project folder) |
 |---|---|
 | Import sprites and refresh the class cache (after adding scripts or sprites) | `--headless --path . --editor --quit` |
-| Map and tileset tests | `--headless --path . -s res://tests/test_hex_map.gd` |
-| Generation, town, map builder and map save tests | `--headless --path . -s res://tests/test_generation.gd` |
-| UI theme tests | `--headless --path . -s res://tests/test_ui_theme.gd` |
-| Enemy roster and sprite geometry tests | `--headless --path . -s res://tests/test_enemies.gd` |
-| Combat tests | `--headless --path . -s res://tests/test_combat.gd` |
-| Skill tree tests | `--headless --path . -s res://tests/test_skills.gd` |
-| Loot, rarity, inventory and save tests | `--headless --path . -s res://tests/test_inventory.gd` |
+| **All tests** (run before calling anything done) | `python tests/run_all.py` -- every `tests/test_*.gd`, failing on a non-zero exit **or any `SCRIPT ERROR`**: Godot exits 0 when a script a suite depends on does not parse, so a bare exit code lies |
+| One or more suites | `python tests/run_all.py combat inventory` -- `hex_map` (map, tileset), `generation` (generation, towns, map builder, map save), `ui_theme`, `enemies` (roster, sprite geometry), `combat`, `skills`, `inventory` (loot, rarity, inventory, save) |
+| A suite with its full output | `--headless --path . -s res://tests/test_<suite>.gd` |
 | Run the game briefly | `--headless --path . --quit-after 30` |
 | Screenshots (opens a window) | `--path . -s res://tests/screenshot_map.gd`, saved to `%APPDATA%\Godot\app_userdata\Incremendal Side Scroller\` |
 | Cut the UI sprites, the gear, orb and skill icons, the corner buttons' marks and the kill pips out of the bought packs | `python tools/ui_kit.py` (plain Python, no Godot) |
