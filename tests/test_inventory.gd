@@ -56,6 +56,7 @@ func _run() -> void:
 	_check(await _test_a_rule_keeps_finds_off_the_screen() == true, "autodiscard fight tests ran to the end")
 	_check(await _test_crafting_from_the_bag() == true, "crafting tests ran to the end")
 	_check(await _test_tips() == true, "tip tests ran to the end")
+	_check(_test_fight_ledger() == true, "fight ledger tests ran to the end")
 	_clear_save()
 	_report("inventory")
 
@@ -937,9 +938,9 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	main._combat._on_back_pressed()
 	await process_frame
 
-	_check(main.inventory.total() == main._fight_drops.size(),
+	_check(main.inventory.total() == main.ledger.drops.size(),
 			"everything the fight dropped was kept: %d of %d" % [
-					main.inventory.total(), main._fight_drops.size()])
+					main.inventory.total(), main.ledger.drops.size()])
 	_check(main.inventory.total() > 0, "the promised elite paid out")
 	_check(main.inventory.first_elite_taken, "and is not promised again")
 	_check(main.bag_page._gold.text == str(main.inventory.gold),
@@ -1105,28 +1106,28 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 	fight.always_drop = true
 
 	var guard := 0
-	while main._fight_drops.size() < 3 and guard < 2000:
+	while main.ledger.drops.size() < 3 and guard < 2000:
 		guard += 1
 		if not fight.hit():
 			fight.advance(1.0 / 8.0)
-	_check(main._fight_drops.size() >= 3, "a run long enough turns up several things: %d"
-			% main._fight_drops.size())
+	_check(main.ledger.drops.size() >= 3, "a run long enough turns up several things: %d"
+			% main.ledger.drops.size())
 	_check(not fight.finished, "and it is still going")
 	_check(main.inventory.total() == 0, "none of which is in the bag yet: %d" % main.inventory.total())
 	_check(not FileAccess.file_exists(TEST_PATH), "and nothing has been written to disk")
 	# The gold waits with them, and for the same reason: a run has no end of its own to write at.
-	_check(main._fight_gold > 0, "the run has earned something: %d" % main._fight_gold)
-	_check(main._fight_gold == fight.gold, "and the fight agrees what: %d" % fight.gold)
+	_check(main.ledger.gold > 0, "the run has earned something: %d" % main.ledger.gold)
+	_check(main.ledger.gold == fight.gold, "and the fight agrees what: %d" % fight.gold)
 	_check(main.inventory.gold == 0, "none of it in the purse yet: %d" % main.inventory.gold)
-	_check(combat._loot_button.text == str(main._fight_drops.size()),
+	_check(combat._loot_button.text == str(main.ledger.drops.size()),
 			"the counter has been keeping score all along")
 
 	# The counter opens the same list the verdict shows, and one of them opens properly.
 	combat._on_loot_pressed()
 	await process_frame
 	_check(combat._loot_panel.visible, "the counter opens the popup")
-	_check(combat._loot_drops.count() == main._fight_drops.size(), "holding every find")
-	var found: Item = main._fight_drops[0]
+	_check(combat._loot_drops.count() == main.ledger.drops.size(), "holding every find")
+	var found: Item = main.ledger.drops[0]
 	combat._loot_drops.inspect(0)
 	await process_frame
 	_check(combat._loot_drops.inspecting(), "and a square in it opens the item")
@@ -1138,15 +1139,15 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 			"and its rarity and level")
 	# Throwing one away from the popup, which is the promised way out of a run that has found more
 	# than the bag can hold. The run is still holding its pouch, so this is the whole of it.
-	var before: int = main._fight_drops.size()
-	var doomed: Item = main._fight_drops[0]
+	var before: int = main.ledger.drops.size()
+	var doomed: Item = main.ledger.drops[0]
 	combat._loot_drops.inspect(0)
 	combat._loot_drops._on_discard_pressed()
 	await process_frame
-	_check(not main._fight_drops.has(doomed), "Discard takes a find out of the run's pouch")
-	_check(main._fight_drops.size() == before - 1, "and only that one")
-	_check(combat._drops.size() == main._fight_drops.size(), "the fight agrees about what is left")
-	_check(combat._loot_button.text == str(main._fight_drops.size()), "and so does the counter")
+	_check(not main.ledger.drops.has(doomed), "Discard takes a find out of the run's pouch")
+	_check(main.ledger.drops.size() == before - 1, "and only that one")
+	_check(combat._drops.size() == main.ledger.drops.size(), "the fight agrees about what is left")
+	_check(combat._loot_button.text == str(main.ledger.drops.size()), "and so does the counter")
 	_check(main.inventory.total() == 0, "nothing was in the bag to take it out of")
 
 	combat._on_loot_closed()
@@ -1154,8 +1155,8 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 	_check(not combat._loot_panel.visible, "and Close puts it away")
 
 	# Terminating is the end of the run, and the moment the pouch goes into the bag.
-	var pouch: Array[Item] = main._fight_drops.duplicate()
-	var earned: int = main._fight_gold
+	var pouch: Array[Item] = main.ledger.drops.duplicate()
+	var earned: int = main.ledger.gold
 	combat._on_terminate_pressed()
 	await process_frame
 	_check(fight.finished and fight.victory, "terminating ends the run, and not as a loss")
@@ -1169,7 +1170,7 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 				"and it is the same item %d, modifiers and all" % i)
 	_check(main.inventory.gold == earned,
 			"and so did its gold, in one go: %d of %d" % [main.inventory.gold, earned])
-	_check(main._fight_gold == 0, "leaving the pouch empty, so the next run starts from nothing")
+	_check(main.ledger.gold == 0, "leaving the pouch empty, so the next run starts from nothing")
 	_check(main.bag_page._gold.text == str(earned),
 			"the bag's footer says so: %s" % main.bag_page._gold.text)
 	var saved := Inventory.load_from(TEST_PATH)
@@ -1239,7 +1240,7 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 			fight.advance(1.0 / 8.0)
 	_check(combat._auto_discarded >= 3, "the rule threw several away: %d" % combat._auto_discarded)
 	# None of them touched anything the player can see.
-	_check(main._fight_drops.is_empty(), "none of them reached the pouch")
+	_check(main.ledger.drops.is_empty(), "none of them reached the pouch")
 	_check(combat._drops.is_empty(), "or the fight's own list")
 	_check(combat._loot_button.text == "0" and combat._loot_button.disabled,
 			"the counter never moved")
@@ -1251,7 +1252,7 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 	_check(main.inventory.total() == Inventory.CAPACITY, "and the bag is exactly as it was")
 	# The rule is about finds. A purse is a number rather than a square, so nothing filters it and a
 	# run that kept nothing still earned its way.
-	_check(main._fight_gold > 0, "the gold came all the same: %d" % main._fight_gold)
+	_check(main.ledger.gold > 0, "the gold came all the same: %d" % main.ledger.gold)
 
 	# Said once, at the end, as a number.
 	var thrown := combat._auto_discarded
@@ -2180,5 +2181,48 @@ func _test_tips() -> bool:
 			"pressing the bag stops its pulse")
 	_check(main._flashes.has("opened_skills"), "while the star keeps pulsing")
 	main.queue_free()
+	_clear_save()
+	return true
+
+
+## The bank-or-pouch rule on its own, with no scene: a tile fight banks each gain as it lands and a
+## run holds all of it until `bank`, which is safe to call twice.
+func _test_fight_ledger() -> bool:
+	_clear_save()
+	var sword := Item.new()
+	sword.type = LootTable.ITEMS.keys()[0]
+	var orb: String = OrbTable.ORBS.keys()[0]
+
+	var bag := Inventory.new()
+	var tile := FightLedger.new(bag, TEST_PATH)
+	tile.add_loot(sword, true)
+	tile.add_gold(7)
+	tile.add_orb(orb)
+	tile.add_xp(1)
+	var on_disk := Inventory.load_from(TEST_PATH)
+	_check(bag.items.has(sword) and bag.gold == 7 and bag.orb_count(orb) == 1 and bag.xp + bag.level > 1,
+			"a tile fight banks every gain as it lands")
+	_check(on_disk.total() == 1 and on_disk.gold == 7 and on_disk.first_elite_taken, "and writes it down")
+	_check(tile.pending_xp() == 0 and not tile.bank(), "so it has nothing pending and nothing to bank")
+	_check(tile.discard(sword) and bag.total() == 0, "a find thrown away comes back out of the bag")
+
+	bag = Inventory.new()
+	var run := FightLedger.new(bag, TEST_PATH, true)
+	run.add_loot(sword, false)
+	run.add_gold(7)
+	run.add_orb(orb)
+	run.add_xp(1)
+	_check(bag.total() == 0 and bag.gold == 0 and bag.total_orbs() == 0, "a run holds what it earns")
+	_check(run.pending_xp() == 1 and run.room_left() == Inventory.CAPACITY - 1,
+			"and counts its pouch against the panel and the bag's room")
+	_check(run.bank() and bag.items.has(sword) and bag.gold == 7 and bag.orb_count(orb) == 1,
+			"banking empties the pouch into the bag")
+	_check(not run.bank() and bag.gold == 7 and bag.total() == 1, "and a second call repeats none of it")
+	_check(Inventory.load_from(TEST_PATH).gold == 7, "in one write")
+
+	bag = Inventory.new()
+	var purse := FightLedger.new(bag, TEST_PATH, true)
+	purse.add_gold(3)
+	_check(purse.bank() and bag.gold == 3, "a run that found only gold is still paid")
 	_clear_save()
 	return true

@@ -66,25 +66,9 @@ var _skills_button: Button
 ## The player in the top-left corner, over the map and over a fight alike.
 var _character: CharacterPanel
 
-## What the fight going on now has turned up. A charting fight has already written each of these
-## to the bag as it landed; a farm run has not -- for a run this is the pouch, and it is emptied
-## into the bag in one go when the run ends.
-var _fight_drops: Array[Item] = []
-## And what it has earned. A charting fight banks each purse as it lands, the way it banks each
-## find; a run holds its gold in here and it goes in with the pouch.
-var _fight_gold := 0
-## A run's currency, waiting the way its finds and its gold do. Orb name -> how many.
-var _fight_orbs := {}
-## A run's experience, waiting the way its gold does.
-var _fight_xp := 0
-## Whether the fight on now is a farm run rather than a fight for the tile.
-var _farming := false
-## Whether the run's pouch has already been emptied into the bag. Both ways out of a run bank it,
-## and this is what keeps the second from repeating the first.
-var _banked := false
-## Whether an elite has handed something over in the fight going on. It is what retires the promise
-## of a first drop, and a run's elites are not at any fixed place in its lineup.
-var _elite_dropped := false
+## What the fight going on now has earned, and whether it is banked yet. Never null: between fights
+## it is the last fight's, or an empty one, so `ledger.farming` can always be asked.
+var ledger: FightLedger
 ## The fight in front of the map, while there is one.
 var _combat: CombatScene
 ## Whether the map on disk was refused, which stops every write to it. A refused save is never
@@ -129,6 +113,7 @@ func _ready() -> void:
 	if not problem.is_empty():
 		_refuse_save("inventory", inventory_path, str(problem[0]))
 		return
+	ledger = FightLedger.new(inventory, inventory_path)
 	var save := MapSave.load_from(map_path, problem, MapSave.fingerprint(map.tileset))
 	if not problem.is_empty():
 		_refuse_save("map", map_path, str(problem[0]))
@@ -301,7 +286,7 @@ func _build_character() -> void:
 
 ## Puts the panel back in step with the ledger: what is banked, plus what a run is still pouching.
 func _sync_character() -> void:
-	var shown := PlayerLevel.add(inventory.level, inventory.xp, _fight_xp if _farming else 0)
+	var shown := PlayerLevel.add(inventory.level, inventory.xp, ledger.pending_xp())
 	_character.set_state(shown["level"], shown["xp"])
 
 
@@ -499,13 +484,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	fight.guarantee_elite = not inventory.first_elite_taken
 	fight.effects = inventory.skills.effects()
 	fight.orbs_after = maxi(0, OrbTable.FIRST_ORB_KILLS - inventory.kills)
-	_farming = farming
-	_banked = false
-	_elite_dropped = false
-	_fight_drops.clear()
-	_fight_gold = 0
-	_fight_orbs = {}
-	_fight_xp = 0
+	ledger = FightLedger.new(inventory, inventory_path, farming)
 	_combat = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 	_combat.finished.connect(_on_combat_finished.bind(cell))
 	# Not `Encounter.loot_dropped`: the fight applies the player's autodiscard rule, and everything
@@ -517,7 +496,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	_combat.drop_discarded.connect(_on_drop_discarded)
 	_combat.gold_gained.connect(_on_gold_gained)
 	_combat.orb_gained.connect(_on_orb_gained)
-	_combat.xp_gained.connect(_on_xp_gained)
+	_combat.xp_gained.connect(ledger.add_xp)
 	_combat.xp_absorbed.connect(_on_xp_absorbed)
 	add_child(_combat)
 	# Told before the fight is built, so the warning is right on its first frame rather than a frame
@@ -547,8 +526,8 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 	var kills: int = _combat.fight.kills()
 	# Read before the fight is freed, and before banking, which zeroes the run's own pouch.
 	var earned: int = _combat.fight.gold
-	_bank_farm_loot()
-	_bank_kills(kills)
+	_bank_run()
+	ledger.bank_kills(kills)
 	_combat.queue_free()
 	_combat = null
 	# Gems still in the air when the fight closed never arrive, so the panel is put back on the ledger.
@@ -557,18 +536,18 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 	map.show()
 	_show_corner(true)
 	var turned_up := PackedStringArray()
-	for drop in _fight_drops:
+	for drop in ledger.drops:
 		turned_up.append("%s (%s)" % [drop.type, drop.rarity_name()])
 	print("The fight turned up: %s, and %d gold"
 			% ["nothing" if turned_up.is_empty() else ", ".join(turned_up), earned])
-	if _farming:
+	if ledger.farming:
 		# Nothing about the map moves for a run. The tile was already taken; the loot is the whole of it.
 		print("Farmed %s, %d slain" % [cell, kills])
 	elif won:
 		print("Charted %s, showing %d tile(s) behind it; walking there" % [cell, view.chart(cell)])
 	else:
 		print("Lost the fight for %s; it stays uncharted" % cell)
-	_farming = false
+	ledger.farming = false
 	if map.selected_cell != HexMap.NO_CELL:
 		_panel.show()
 	_update_buttons()
@@ -609,113 +588,50 @@ func _update_buttons() -> void:
 	_farm_button.visible = view.can_farm(cell)
 
 
-## A kill left something behind. It is the player's whatever the fight does next, so a charting
-## fight writes it to disk as it lands rather than at the end: closing the game mid-fight cannot
-## cost a find. A farm run has no end of its own to write at and could run for an hour, so its
-## finds wait in the pouch and go in as one write when the run is over.
+## A kill left something behind. Whether it goes straight into the bag or waits in the run's pouch is
+## the ledger's rule (`FightLedger`); what is left to do here is show it.
 func _on_loot_dropped(index: int, item: Item) -> void:
-	_fight_drops.append(item)
-	_elite_dropped = _elite_dropped or _dropped_by_elite(index)
 	print("Dropped %s (%s, level %d, %d modifier(s))"
 			% [item.type, item.rarity_name(), item.level, item.mods.size()])
-	if _farming:
-		_refresh_bag_room()
-		return
-	_report_destroyed(inventory.add(item))
-	if _elite_dropped:
-		inventory.first_elite_taken = true
-	inventory.save(inventory_path)
-	bag_page.refresh()
-	_refresh_bag_room()
-
-
-## A body's purse. It follows the same rule its finds do, and for the same reasons: a charting
-## fight is over in a minute and writes each one as it lands, so closing the game mid-fight cannot
-## cost them; a run could go an hour and has no end of its own, so its gold waits here and goes in
-## with the pouch. Nothing about a purse can be refused -- it is a number, not a square, so the bag's
-## cap has nothing to say about it and no rule of the player's filters it.
-func _on_gold_gained(amount: int) -> void:
-	_fight_gold += amount
-	if _farming:
-		return
-	inventory.gold += amount
-	inventory.save(inventory_path)
-	bag_page.refresh_gold()
-
-
-## An orb off a body. It follows gold exactly, and for exactly gold's reasons: banked as it lands in
-## a charting fight, pouched until the end of a run. Nothing about an orb can be refused either --
-## it is a count rather than a square, so the cap has nothing to say about it and no rule of the
-## player's filters it.
-## A body's experience, banked or pouched exactly as its purse is. The panel is not told here: it fills
-## when the gems reach it, on `_on_xp_absorbed`.
-func _on_xp_gained(amount: int) -> void:
-	_fight_xp += amount
-	if _farming:
-		return
-	var gained := inventory.add_xp(amount)
-	inventory.save(inventory_path)
-	if gained > 0:
-		print("Level up: %d" % inventory.level)
-
-
-## The gems of one body have landed in the bar.
-func _on_xp_absorbed(amount: int) -> void:
-	var gained := _character.absorb(amount)
-	if gained > 0:
-		_celebrate_level(_character.level)
-	if gained > 0 and _farming:
-		print("Level up: %d (banked when the run ends)" % _character.level)
-
-
-func _on_orb_gained(orb: String) -> void:
-	_fight_orbs[orb] = int(_fight_orbs.get(orb, 0)) + 1
-	if _farming:
-		return
-	inventory.add_orb(orb)
-	inventory.save(inventory_path)
-	bag_page.refresh_orbs()
-
-
-## A find the player's own rule threw away on sight. It is never in the pouch and never in the bag,
-## so the only thing left to do with it is retire the promise of a first elite drop: an elite did
-## hand something over, and a rule the player set themselves is not a reason to promise it again.
-func _on_loot_autodiscarded(index: int, item: Item) -> void:
-	print("Autodiscarded %s (%s, level %d)" % [item.type, item.rarity_name(), item.level])
-	if not _dropped_by_elite(index):
-		return
-	_elite_dropped = true
-	if _farming:
-		return
-	inventory.first_elite_taken = true
-	inventory.save(inventory_path)
-
-
-## A find the player threw away by hand, from the fight's own panel. A run is still holding its
-## pouch, so dropping it there is the whole of it; a tile fight has already banked it, so it comes
-## out of the bag and off the disk too.
-func _on_drop_discarded(item: Item) -> void:
-	_fight_drops.erase(item)
-	if not _farming and inventory.remove(item):
-		inventory.save(inventory_path)
+	ledger.add_loot(item, _dropped_by_elite(index))
+	if not ledger.farming:
 		bag_page.refresh()
 	_refresh_bag_room()
 
 
-## Tells the fight how much room is left, which is what puts the full-bag warning up. A run's pouch
-## is not in the bag yet but is going there, so it counts against the room it will need.
+func _on_gold_gained(amount: int) -> void:
+	ledger.add_gold(amount)
+	bag_page.refresh_gold()
+
+
+func _on_orb_gained(orb: String) -> void:
+	ledger.add_orb(orb)
+	bag_page.refresh_orbs()
+
+
+## The gems of one body have landed in the bar. The panel fills here rather than when the experience
+## is earned, which is the ledger's business.
+func _on_xp_absorbed(amount: int) -> void:
+	if _character.absorb(amount) > 0:
+		_celebrate_level(_character.level)
+
+
+func _on_loot_autodiscarded(index: int, item: Item) -> void:
+	print("Autodiscarded %s (%s, level %d)" % [item.type, item.rarity_name(), item.level])
+	ledger.autodiscarded(_dropped_by_elite(index))
+
+
+## A find the player threw away by hand, from the fight's own panel.
+func _on_drop_discarded(item: Item) -> void:
+	if ledger.discard(item):
+		bag_page.refresh()
+	_refresh_bag_room()
+
+
+## Tells the fight how much room is left, which is what puts the full-bag warning up.
 func _refresh_bag_room() -> void:
-	if _combat == null:
-		return
-	_combat.bag_room = maxi(0, inventory.room_left() - (_fight_drops.size() if _farming else 0))
-
-
-## Says what the bag had to destroy to fit what was found. Nothing is said when nothing went, which
-## is almost always.
-func _report_destroyed(destroyed: Array[Item]) -> void:
-	for item: Item in destroyed:
-		print("The bag was full: destroyed %s (%s, level %d)"
-				% [item.type, item.rarity_name(), item.level])
+	if _combat != null:
+		_combat.bag_room = ledger.room_left()
 
 
 ## Whether the enemy in slot `index` of the fight going on is an elite. Asked of the roster rather
@@ -726,40 +642,11 @@ func _dropped_by_elite(index: int) -> bool:
 	return EnemyRoster.tier_of(_combat.fight.lineup[index]) == EnemyRoster.Tier.ELITE
 
 
-## Empties a farm run's pouch into the bag, in one write. Called both on the way out of a run and
-## on the way out of the game, so quitting mid-run cannot cost the finds; `_banked` is what keeps
-## the second call from repeating the first.
-func _bank_farm_loot() -> void:
-	if not _farming or _banked:
-		return
-	_banked = true
-	# The gold as well as the finds, and the gold first: a run that turned up nothing but purses --
-	# which most short ones do -- would otherwise be handed back nothing at all.
-	if _fight_drops.is_empty() and _fight_gold == 0 and _fight_orbs.is_empty() and _fight_xp == 0:
-		return
-	inventory.gold += _fight_gold
-	_fight_gold = 0
-	# With the gold, above the finds, for the gold's reason.
-	if inventory.add_xp(_fight_xp) > 0:
-		print("Level up: %d" % inventory.level)
-	_fight_xp = 0
-	# Above the finds for the same reason the gold is: a run that turned up currency and no gear has
-	# still earned its way, and nothing here can refuse either of them.
-	for orb: String in _fight_orbs:
-		inventory.add_orb(orb, int(_fight_orbs[orb]))
-	_fight_orbs = {}
-	for drop: Item in _fight_drops:
-		_report_destroyed(inventory.add(drop))
-	if _elite_dropped:
-		inventory.first_elite_taken = true
-	inventory.save(inventory_path)
-	bag_page.refresh()
-
-
-## A fight's kills go on the player's lifetime count, which is what holds the first orb back.
-func _bank_kills(kills: int) -> void:
-	inventory.kills += kills
-	inventory.save(inventory_path)
+## Empties a farm run's pouch into the bag. Called on the way out of a run and on the way out of the
+## game, so quitting mid-run cannot cost the finds; the ledger keeps the second from repeating the first.
+func _bank_run() -> void:
+	if ledger.bank():
+		bag_page.refresh()
 
 
 ## Both corner buttons at once. They come and go together because what takes them away is never
@@ -785,9 +672,9 @@ func _tip_due(id: String) -> bool:
 		"level_up":
 			return inventory.level > 1
 		"first_farm":
-			return _farming and _combat != null
+			return ledger.farming and _combat != null
 		"first_chart":
-			return not _farming and _combat != null
+			return not ledger.farming and _combat != null
 	return false
 
 
@@ -799,7 +686,7 @@ func _check_tips() -> void:
 			inventory.tips.append(tip[0])
 			_tip_queue.append(tip)
 			added = true
-	# Not mid-fight: a run writes nothing until it ends, and _bank_kills saves the seen tip then.
+	# Not mid-fight: a run writes nothing until it ends, and `bank_kills` saves the seen tip then.
 	if added and _combat == null:
 		inventory.save(inventory_path)
 	_show_corner(_combat == null)
@@ -900,11 +787,12 @@ func _on_bag_pressed() -> void:
 ## Quitting with a run still on. The pouch goes in rather than evaporating -- a run that is left
 ## by closing the window found what it found -- and the map goes down as it stands.
 func _exit_tree() -> void:
-	if _resetting:
+	# A refused save built nothing, so there is nothing to bank and nothing that may be written.
+	if _resetting or _save_blocked:
 		return
-	_bank_farm_loot()
+	_bank_run()
 	if _combat != null:
-		_bank_kills(_combat.fight.kills())
+		ledger.bank_kills(_combat.fight.kills())
 	_save_map()
 
 

@@ -27,7 +27,7 @@ Each code folder has its own `CLAUDE.md` holding the per-file descriptions and t
 
 **Main scene** — `Scenes/main_scene.gd`: seeds, zoom, `ui_scale`, and the whole UI built in code (tile panel, corner buttons, skills page, bag, character sheet, orb tray). Details and cross-area rules in `Scenes/CLAUDE.md`.
 
-**Combat** — details in `Scenes/Combat/CLAUDE.md`: `encounter.gd` (`Encounter`), `drops_view.gd` (`DropsView`), `combat_actor.gd` (`CombatActor`), `combat_scene.tscn` / `combat_scene.gd` (`CombatScene`)
+**Combat** — details in `Scenes/Combat/CLAUDE.md`: `encounter.gd` (`Encounter`), `fight_ledger.gd` (`FightLedger`), `drops_view.gd` (`DropsView`), `combat_actor.gd` (`CombatActor`), `combat_scene.tscn` / `combat_scene.gd` (`CombatScene`)
 
 **Enemies** — details in `Scenes/Enemies/CLAUDE.md`: `enemy_roster.gd` (`EnemyRoster`)
 
