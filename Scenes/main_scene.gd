@@ -414,7 +414,7 @@ func _show_environments(weights: Dictionary) -> void:
 		_env_rows.add_child(row)
 
 
-## What the settlement on a tile trades in, one row per counter, and nothing at all where there is no
+## What the settlement on a tile trades in, one mark per counter, and nothing at all where there is no
 ## settlement. Shown for any town tile the player can see rather than only the ones they have taken:
 ## which town has a blacksmith is exactly the sort of thing that decides where to walk next.
 func _show_services(cell: Vector2i) -> void:
@@ -424,8 +424,21 @@ func _show_services(cell: Vector2i) -> void:
 		return
 	_service_rows.add_child(UITheme.rule())
 	_service_rows.add_child(UITheme.label("Services", Palette.SLATE))
+	# The marks the town page's tabs wear, so a counter looks the same from the road as from inside;
+	# the name is the tooltip, as it is on the tab.
+	var icons := HBoxContainer.new()
+	icons.add_theme_constant_override("separation", 6)
 	for service: String in TownServices.services_for(tier, view.origin + cell, towns.seed_value):
-		_service_rows.add_child(UITheme.label(TownServices.label(service)))
+		# On the tab's brown face too: the marks are cut pale for it and wash out on the cream panel.
+		var face := PanelContainer.new()
+		face.add_theme_stylebox_override("panel", UITheme.theme().get_stylebox("normal", "BrownIconButton"))
+		face.tooltip_text = TownServices.label(service)
+		var icon := TextureRect.new()
+		icon.texture = load(TownPage.TAB_ICONS[service])
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		face.add_child(icon)
+		icons.add_child(face)
+	_service_rows.add_child(icons)
 
 
 ## The tile panel is a card as big as what it holds, in the bottom-right corner: a full-height column
