@@ -50,7 +50,7 @@ What the first run said, and what moved:
 - **`LOCK_BODIES` 500 -> 2500.** The table caught this one outright: 500 bodies is **50 tile fights**, at every level, including the 3.77 million at level 10 that reads enormous and is four sessions' farming. A lock is meant to be the one thing in the game that cannot be rolled away and the largest sink there is; 2500 bodies is **250 fights** (18.9 million at level 10, 2500 at level 1), which is a season rather than an afternoon, and still reachable at any depth because the purse at the deep end of a band pays three times what its first tile does. It is no longer "twenty-five upgrades" -- the ratio was rhetoric, since no piece can be walked twenty-five levels -- it is simply the biggest number in the game.
 - **`UPGRADE_BODIES` 20.0 stayed.** Two tile fights a level at every depth, which is exactly "affordable every few fights at the piece's level", and a fifth of what a plain elite costs off a shelf.
 - **`BREAK_CHANCE` 0.05 stayed.** Twenty upgrades to a break is forty fights' gold gambled before the hammer is expected to land wrong, and a piece walked five levels has survived five real chances at 77%. Nothing in the table argues with it.
-- **`RESTOCK_KILLS` 100 stayed.** A shelf common is 15 kills of gold, so a hundred kills buys a piece or two of a six-square shelf and never the shelf. That is the shape it should have: the shelf outlasts the purse, so calling in is a choice of one thing rather than a sweep, and the count is about the session out rather than about what was spent.
+- **`RESTOCK_KILLS` is gone** (see "A shelf turns over when it is paid for" below); the table's hundred-kill session is still the unit a run is measured in.
 - **`NEED_COMMON` 24, `NEED_ELITE` 5 and `REWARD_MULT` 3.0 stayed.** A common posting pays **5.4 fights' purse** for 24 bodies, which is 2.7 fights of fighting; an elite posting pays 4.9 fights' purse plus an orb for five elites, which come round once a fight. So a board roughly trebles what those same bodies paid on their own and never approaches a shelf's prices, which is where a bounty belongs: worth going out of the way for, never a better living than the fighting itself. The elite posting is dearer in kills than the common one, and that is fine -- the three postings are worked off by the same walk, and the elite one is the only thing on the board that pays currency.
 
 ## What a vendor has, and why it is worth gold
@@ -66,7 +66,7 @@ What makes the shelf worth its five-times price is that it is **luck you would o
 
 Stock is **written down, never re-derived**. A shelf is rolled, and the project's rule for rolled things is that they go in the save: what a vendor happens to have is not a property of the world, it is something that happened to the player, and a later build's tables must not quietly restock a town they have already walked out of. It lives in that town's own drawer in `TownState`, so a purchase moves the purse, the bag and the shelf in one write.
 
-`RESTOCK_KILLS` **100** -- ten tiles' worth of fighting (`Encounter.ENEMIES` is ten). A vendor is worth calling on again after a proper session out, and never worth standing next to and re-rolling; the shelf is filled **on the way in** and nowhere else, so it cannot change while it is being looked at. A bought square stays on the shelf with nothing on it until then, which says "you bought that" where closing the gap would have said "there were only five". Buying does not bring the restock forward, for the same reason: the count is about how long the player has been away, not about how much they spent. The balance table is what says a hundred is the right hundred: a plain piece off a shelf is fifteen kills of gold and an elite one is two hundred, so a session out buys a square or two and never the shelf, and calling in is a choice of one thing rather than a sweep.
+**A shelf turns over when it is paid for, and at no other time.** It first restocked itself every hundred kills, and the user took that out with the board's clock: a number of kills is arbitrary, and with Restock on the page there were two answers to "when is this shelf new" where one does. So the shelf is filled **the first time a town is walked into** and then only by Restock, whose doubling price is the whole brake. It still cannot change while it is being looked at except by the player's own press. A bought square stays on the shelf with nothing on it until then, which says "you bought that" where closing the gap would have said "there were only five".
 
 ## The smith, and the two things he is for
 
@@ -84,7 +84,7 @@ Two decisions make the lock what it is. The **smith picks the modifier, not the 
 
 Both prices are `gold_at_level(item.level)` times their dial -- the piece's own level, like `sell_price`, so the quote on the button is read against the piece in front of the player, and so that walking a piece up the map gets dearer with every step the way the ground it is walking towards does. At level 5 that is 680 gold to upgrade and 85,000 to lock; at level 10, 150,880 and 18,857,500, against an elite of the same level that sells for 316,806 and costs 1,584,030 off a shelf. Those are the figures the balance table is read against, above.
 
-He acts on the piece **the bag has open** (`BagPage.selection_changed`), never on a worn one: the crafting rule the orb tray has always obeyed, for the reason it has always obeyed it -- the bag is where no fight and no socket is holding a second reference to the same object. His tab is the only counter with no shelf, so it is the piece's name, the two prices with a coin on each, what the hammer would make of it, and the reasons either button is grey, each said once. A break is the one thing that happens on that page the player did not ask for, so it is said out loud in rust as well as written into the piece's own stat block, where "Broken" stands under its rarity and reads the same in the bag, in the comparison, over a drop and on a shelf.
+He acts on the piece **the bag has open** (`BagPage.selection_changed`), never on a worn one: the crafting rule the orb tray has always obeyed, for the reason it has always obeyed it -- the bag is where no fight and no socket is holding a second reference to the same object. His tab is the only counter with no shelf, so it is the piece's name, the two prices with a coin on each, what the hammer would make of it, and the reason a button is grey in that button's tooltip. A break is the one thing that happens on that page the player did not ask for, so it is said out loud in rust as well as written into the piece's own stat block, where "Broken" stands under its rarity and reads the same in the bag, in the comparison, over a drop and on a shelf.
 
 ## The board, and the one thing it is really for
 
@@ -133,7 +133,14 @@ posting carries **Accept**, only an accepted posting counts kills, and nothing e
 until that one is **handed in** (finished is not enough: the walk back is part of the job). The board
 therefore has no Show -- Accept stands where it stood -- and the journal, which now lists the one
 bounty that is out, keeps it. `see` is still set where the tab is drawn, and is now only what puts the
-journal in the corner. A restock keeps the accepted posting and posts fresh work over the rest.
+journal in the corner.
+
+**New work comes when the old work is done.** The board first shared the shelves' clock -- a hundred
+kills and everything a town kept turned over -- and the user turned that down as arbitrary: a number
+of kills has nothing to do with a board, and it wiped work the player had been meaning to get to. So
+`restock` is refused until the board is `cleared` (all three handed in), and it is asked on the way in
+and at every Claim, so handing in the third posts the next three under the player's hand. Nothing is
+ever kept across one, because nothing is ever out when one happens.
 
 **A bounty is done where the town is, not on the doorstep.** A kill counts only on a tile of the
 posting town's level or deeper (`LEVEL` on the posting, `FightLedger.tile_level` from the fight): a
@@ -145,9 +152,9 @@ fight's own bars.
 
 **A shelf can be bought fresh.** Restock, directly under the six squares, clears that shelf for gold:
 `REROLL_BODIES` (thirty, two plain pieces thrown away) at the town's level, doubling with every reroll
-this town has ever sold -- the count is saved with the town and never reset, not by a free restock and not by closing the game. Doubling is the whole design: the first is an
+this town has ever sold -- the count is saved with the town and never reset, closing the game included. Doubling is the whole design: the first is an
 errand's change, the sixth is thirty-two of them, so a purse cannot be stood at a counter and turned
-into the one piece it wants. Paying never moves the kills clock and never touches the board. The two vendors are two counters:
+into the one piece it wants. Paying never touches the board. The two vendors are two counters:
 Restock clears the open tab's shelf only and each keeps its own count, so hunting an orb does not make
 the gear merchant dearer.
 
@@ -159,6 +166,22 @@ the fighting happens -- and it is the same rows, so a posting reads the same in 
 appears once a board has been read, for the reason the bag and the skills buttons only appear once
 there is something in them.
 
+**A posting is a card, not a paragraph.** The user drew it: the monster's picture in a frame, two
+lines under it, and Info beside Accept along the foot. The first cut wrote everything out -- bar,
+reward, level, swatches, nearest -- and three of those was a column of text nobody's eye landed on.
+The picture is `EnemyRoster.portrait`, the first idle frame cut to its own pixels rather than to
+`bounds`, which is the union of every animation and leaves a creature with a long swing small in its
+own frame. Where the monster lives is still the point of a board, so it is one press away behind
+**Info** rather than gone, and the journal -- which is opened for exactly that -- starts with it open.
+Claim lost its figure because it now shares a row with Info and a reward grows without limit; the
+figure is on the card above it.
+
+**A dead button says why in its tooltip and nowhere else.** Buy, Restock, Upgrade and Lock each used
+to put their refusal under themselves in rust ("Your purse is short."). The user took the lines out:
+they were the page talking about itself, they cost height the column does not have, and at a counter
+where most things are out of reach most of the time they made the page read as a list of complaints.
+The grey is the statement; the reason is for whoever asks, which is what a tooltip is.
+
 ## Making the counter obvious
 
 The first cut of this page was two tabs and a sentence telling the player to go and press something in the bag, and the verdict on it was "I don't understand how to buy orbs". A counter has two halves and only one of them is on this page, so **both have to be said on it**: a **Buy** heading over the six squares, each square's price under it in coin and figures, and under the shelf one line saying where the selling happens -- the bag on the left for gear, the orb tray for orbs. Nothing on the page is a verb the player has to guess at.
@@ -169,7 +192,7 @@ That width is the whole shape of the page. Three squares across plus their gutte
 
 The smith is what finally broke that budget. A fortress carries three tabs and so a **second row of them**, which cost the gear tab fifteen panel pixels it did not have -- and Tier 4's board makes four tabs on the same two rows, so the row is here to stay. Rather than shave the shelf or drop a line, everything under the counter's **name** now sits in a scroll (`_scrolled`), the way an open piece's modifiers already did: the tabs and the counter's name stay pinned above it, the Buy button stays pinned below it, and what runs past the foot of a 648 px window is the shelf's own tail rather than a button. It also means the page survives a window the game has not been shown in yet. One line was shortened with it -- "Stock: 100 kills" rather than a sentence -- because the restock is the least urgent thing on the page and was costing two lines to say what fits on one.
 
-A piece off the shelf **opens like any other piece**: the same `ItemDetails` block the bag writes, with Buy and its price under it, and the comparison on the other edge pointed at what is worn in that socket. So judging a purchase is the same act as judging a drop, and the player learns one thing rather than two. Buy is greyed **with the reason written out** when the purse is short or the bag is full -- the bag's refusal is not a nicety, because `Inventory.add` on a full bag destroys the worst piece in it, and a vendor who takes your gold and throws away your boots is a bug with a receipt.
+A piece off the shelf **opens like any other piece**: the same `ItemDetails` block the bag writes, with Buy and its price under it, and the comparison on the other edge pointed at what is worn in that socket. So judging a purchase is the same act as judging a drop, and the player learns one thing rather than two. Buy is greyed, **with the reason in its tooltip**, when the purse is short or the bag is full -- the bag's refusal is not a nicety, because `Inventory.add` on a full bag destroys the worst piece in it, and a vendor who takes your gold and throws away your boots is a bug with a receipt.
 
 ## Where it stands on screen, and what gives way
 

@@ -33,6 +33,10 @@ const REWARD_COIN := 8
 const BAR_HEIGHT := 8
 const BAR_BORDER := 1
 const COUNT_OVERHANG := 9
+## A card: the air inside its frame, how tall the monster's picture stands, and the air around it.
+const CARD_PAD := 4
+const PORTRAIT := 40
+const PORTRAIT_PAD := 2
 
 var inventory: Inventory
 var view: MapBuilder
@@ -84,12 +88,10 @@ func open() -> void:
 				_rows.add_child(UITheme.rule(WIDTH))
 			posted += 1
 			listed += 1
-			var row := BountyList.row(bounty, view, WIDTH, _on_show_pressed)
 			# A finished bounty is paid for where it was taken on, which is the one thing this page
 			# cannot do and so the one thing it has to say.
-			if BountyBoard.ready(bounty):
-				row.add_child(wrapped("Finished. Claim it at %s." % town, WIDTH, Palette.LEAF))
-			_rows.add_child(row)
+			_rows.add_child(BountyList.row(bounty, view, WIDTH, _on_show_pressed,
+					"Finished. Claim it at %s." % town if BountyBoard.ready(bounty) else ""))
 	if listed == 0:
 		_rows.add_child(wrapped("No work is out. Accept a bounty at a board.", WIDTH, Palette.SLATE))
 
@@ -100,62 +102,128 @@ func layout() -> void:
 	_panel.position = Vector2.ZERO
 
 
-## One posting written out, for this page and for the board that posted it: who, how far along, what
-## it pays, the land that monster lives on as the tile panel's own swatches, and the nearest piece of
-## that land the player has seen, with a Show button that puts the map on it.
+## One posting as a card, for this page and for the board that posted it: the monster's picture in a
+## frame, its name and how many, what it pays, and a row of buttons along the foot -- **Info** and
+## whatever the caller adds through `actions_of` (the board's Accept or Claim) or the Show built here.
+## An accepted posting carries its progress bar; `note` is one leaf-green line over the buttons.
+##
+## Info folds out the part a wanted poster has no room for: the level of land a kill has to fall on,
+## the land that monster lives on as the tile panel's own swatches, and the nearest piece of it the
+## player has seen. It starts open on the journal (a valid `on_show`), which is read for exactly that,
+## and shut on the board, where three postings have to share a 284 px column.
 ##
 ## The swatches and the line under them are the whole reason a board is worth reading: "Werewolf" says
 ## nothing about where to go, and a player who has to guess which of six terrains to walk is being
 ## sent on an errand rather than given one.
 static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
-		on_show: Callable) -> VBoxContainer:
-	var lines := UITheme.vbox(LINE_GAP, width)
+		on_show: Callable, note := "") -> PanelContainer:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", _flat(Color.TRANSPARENT, CARD_PAD))
+	var inner := width - CARD_PAD * 2
+	var lines := UITheme.vbox(LINE_GAP, inner)
+	card.add_child(lines)
 	var enemy := str(bounty.get(BountyBoard.ENEMY, ""))
-	lines.add_child(UITheme.label(enemy))
-	lines.add_child(progress_bar(int(bounty.get(BountyBoard.HAVE, 0)),
-			int(bounty.get(BountyBoard.NEED, 0)), width))
-	var pay := HBoxContainer.new()
-	pay.add_theme_constant_override("separation", 2)
-	var coin := TextureRect.new()
+	var known := EnemyRoster.ENEMIES.has(enemy)
+	var frame := PanelContainer.new()
+	frame.add_theme_stylebox_override("panel", _flat(Palette.SLOT_TAN, PORTRAIT_PAD))
+	var face := TextureRect.new()
 	# Set before the texture and the size: a TextureRect's minimum is its own texture until
-	# `expand_mode` says otherwise, so a 16 px coin asked for 8 comes back 16.
-	coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	coin.texture = Coins.icon()
-	coin.custom_minimum_size = Vector2(REWARD_COIN, REWARD_COIN)
-	coin.size = Vector2(REWARD_COIN, REWARD_COIN)
-	coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	pay.add_child(coin)
+	# `expand_mode` says otherwise, and the packs' frames run to 245 px.
+	face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	face.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	face.texture = EnemyRoster.portrait(enemy) if known else null
+	face.custom_minimum_size = Vector2(0, PORTRAIT)
+	frame.add_child(face)
+	lines.add_child(frame)
+	var need := int(bounty.get(BountyBoard.NEED, 0))
+	# How many is said once: by the bar once the work is taken on, beside the name until then.
+	var taken := BountyBoard.is_active(bounty)
+	var title := UITheme.label(enemy if taken else "%s x%d" % [enemy, need])
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lines.add_child(title)
+	if taken:
+		lines.add_child(progress_bar(int(bounty.get(BountyBoard.HAVE, 0)), need, inner))
+	var pay := HBoxContainer.new()
+	pay.alignment = BoxContainer.ALIGNMENT_CENTER
+	pay.add_theme_constant_override("separation", 2)
+	pay.add_child(_icon(Coins.icon(), REWARD_COIN))
 	pay.add_child(UITheme.label(BigNumber.format(float(bounty.get(BountyBoard.GOLD, 0))),
-			Palette.SLATE))
-	lines.add_child(pay)
+			Palette.SLATE, true))
+	# The orb as its own picture, the tray's size, and its name for whoever hovers: a word here was
+	# the one reward on the card that had to be read rather than seen.
 	var orb := str(bounty.get(BountyBoard.ORB, ""))
 	if not orb.is_empty():
-		lines.add_child(wrapped("and one %s" % orb, width, Palette.SLATE))
+		var gem := _icon(OrbTable.icon(orb), OrbSlot.ICON)
+		gem.tooltip_text = orb
+		pay.add_child(gem)
+	lines.add_child(pay)
+
+	var details := UITheme.vbox(LINE_GAP, inner)
+	details.visible = on_show.is_valid()
+	lines.add_child(details)
 	var depth := int(bounty.get(BountyBoard.LEVEL, 0))
 	if depth > 1:
-		lines.add_child(wrapped("On level %d land or deeper." % depth, width, Palette.SLATE))
-	if map_view == null or not EnemyRoster.ENEMIES.has(enemy):
-		return lines
-	var envs := EnemyRoster.environments_of(enemy)
-	var swatches := HBoxContainer.new()
-	swatches.add_theme_constant_override("separation", 2)
-	for env: String in envs:
-		swatches.add_child(map_view.map.tileset.env_icon(env))
-	lines.add_child(swatches)
-	var near := map_view.nearest_env(envs, depth)
-	if near == HexMap.NO_CELL:
-		lines.add_child(wrapped("Nearest: none you have seen yet.", width, Palette.SLATE))
-		return lines
-	lines.add_child(wrapped("Nearest: %s" % map_view.name_of(near), width, Palette.SLATE))
+		details.add_child(wrapped("On level %d land or deeper." % depth, inner, Palette.SLATE))
+	var near := HexMap.NO_CELL
+	if map_view != null and known:
+		var envs := EnemyRoster.environments_of(enemy)
+		var swatches := HBoxContainer.new()
+		swatches.add_theme_constant_override("separation", 2)
+		for env: String in envs:
+			swatches.add_child(map_view.map.tileset.env_icon(env))
+		details.add_child(swatches)
+		near = map_view.nearest_env(envs, depth)
+		details.add_child(wrapped("Nearest: %s" % (map_view.name_of(near) if near != HexMap.NO_CELL
+				else "none you have seen yet."), inner, Palette.SLATE))
+	if not note.is_empty():
+		lines.add_child(wrapped(note, inner, Palette.LEAF))
+
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", LINE_GAP)
+	lines.add_child(actions)
+	var info := UITheme.button("Info", "LightButton", "Where it lives")
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.pressed.connect(func() -> void: details.visible = not details.visible)
+	actions.add_child(info)
 	# The board passes no callable: it offers Accept instead, and Show is the journal's.
-	if not on_show.is_valid():
-		return lines
-	var button := UITheme.button("Show", "LightButton", "Put the map on %s" % map_view.name_of(near))
-	button.pressed.connect(on_show.bind(near))
-	lines.add_child(button)
-	return lines
+	if on_show.is_valid() and near != HexMap.NO_CELL:
+		var button := UITheme.button("Show", "LightButton", "Put the map on %s" % map_view.name_of(near))
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.pressed.connect(on_show.bind(near))
+		actions.add_child(button)
+	return card
+
+
+## The button row along a card's foot, where the board puts its Accept or its Claim beside Info.
+static func actions_of(card: PanelContainer) -> HBoxContainer:
+	return card.get_child(0).get_child(-1)
+
+
+## A reward's picture at `side` panel pixels, a whole-number step down from its sprite.
+static func _icon(texture: Texture2D, side: int) -> TextureRect:
+	var icon := TextureRect.new()
+	# Set before the texture and the size: a TextureRect's minimum is its own texture until
+	# `expand_mode` says otherwise, so a 16 px coin asked for 8 comes back 16.
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.texture = texture
+	icon.custom_minimum_size = Vector2(side, side)
+	icon.size = Vector2(side, side)
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return icon
+
+
+## A card's frame and the portrait's socket: the pack's slot brown as a one-pixel line, the way
+## `ItemSlot` draws its own square.
+static func _flat(fill: Color, pad: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = Palette.SLOT_TAN_DK
+	style.set_border_width_all(1)
+	style.set_content_margin_all(pad)
+	return style
 
 
 ## How far along a posting is, as a bar: an ink trough filling with leaf, snapped to whole panel pixels,

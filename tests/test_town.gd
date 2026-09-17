@@ -183,15 +183,14 @@ func _test_save() -> bool:
 
 
 ## What a vendor has on its shelf: six of each, the same six under the same seed, a bought square
-## that stays empty, and a restock that comes when the kills say so and not before.
+## that stays empty, and a restock that comes when it is paid for and at no other time.
 func _test_stock() -> bool:
 	var drawer := {}
 	var rng := RandomNumberGenerator.new()
 	rng.seed = WORLD_SEED
 	_check(VendorStock.items(drawer).is_empty() and VendorStock.orbs(drawer).is_empty(),
 			"a town nobody has walked into has nothing on its shelves")
-	_check(VendorStock.kills_left(drawer, 40) == 0, "and is due a stocking the moment someone does")
-	_check(VendorStock.restock(drawer, TownWorld.Tier.SMALL, TOWN_CELL, 40, rng),
+	_check(VendorStock.restock(drawer, TownWorld.Tier.SMALL, TOWN_CELL, rng),
 			"the shelves are filled on the way in")
 	var items := VendorStock.items(drawer)
 	var orbs := VendorStock.orbs(drawer)
@@ -207,7 +206,7 @@ func _test_stock() -> bool:
 	var twin := {}
 	var twin_rng := RandomNumberGenerator.new()
 	twin_rng.seed = WORLD_SEED
-	VendorStock.restock(twin, TownWorld.Tier.SMALL, TOWN_CELL, 40, twin_rng)
+	VendorStock.restock(twin, TownWorld.Tier.SMALL, TOWN_CELL, twin_rng)
 	_check(twin[VendorStock.ITEMS] == drawer[VendorStock.ITEMS], "the same seed deals the same pieces")
 	_check(twin[VendorStock.ORBS] == drawer[VendorStock.ORBS], "and the same orbs")
 
@@ -220,17 +219,11 @@ func _test_stock() -> bool:
 			and VendorStock.orbs(drawer)[5].is_empty(), "and so does a bought orb")
 	_check(VendorStock.items(drawer)[3] != null, "the square beside it is untouched")
 
-	var stocked := 40
-	_check(VendorStock.kills_left(drawer, stocked) == VendorStock.RESTOCK_KILLS,
-			"the whole count stands right after a stocking")
-	_check(not VendorStock.restock(drawer, TownWorld.Tier.SMALL, TOWN_CELL,
-			stocked + VendorStock.RESTOCK_KILLS - 1, rng), "one kill short is no restock")
-	_check(VendorStock.kills_left(drawer, stocked + VendorStock.RESTOCK_KILLS - 1) == 1,
-			"and the count says how short")
+	_check(not VendorStock.restock(drawer, TownWorld.Tier.SMALL, TOWN_CELL, rng),
+			"walking in again stocks nothing")
 	_check(VendorStock.items(drawer)[2] == null, "so the bought square is still empty")
 
-	# Or paid for: fresh shelves now, each one twice the last, and the free restock neither moved nor
-	# charged for.
+	# Paid for: fresh shelves now, each one twice the last.
 	var first_price := TownPrices.reroll_price(TOWN_CELL, VendorStock.rerolls(drawer, VendorStock.ITEMS))
 	_check(VendorStock.rerolls(drawer, VendorStock.ITEMS) == 0 and first_price > 0,
 			"a first reroll has a price (%d)" % first_price)
@@ -251,23 +244,11 @@ func _test_stock() -> bool:
 	_check(TownPrices.reroll_price(TOWN_CELL, 1) == roundf(first_price * TownPrices.REROLL_GROWTH),
 			"the next costs twice as much")
 	_check(TownPrices.reroll_price(TOWN_CELL, 5) > first_price * 30, "and the sixth thirty times")
-	_check(VendorStock.kills_left(drawer, stocked + VendorStock.RESTOCK_KILLS - 1) == 1,
-			"paying does not move the free restock")
-	VendorStock.take(drawer, VendorStock.ITEMS, 2)
-	VendorStock.take(drawer, VendorStock.ORBS, 5)
-	_check(VendorStock.restock(drawer, TownWorld.Tier.SMALL, TOWN_CELL,
-			stocked + VendorStock.RESTOCK_KILLS, rng), "and at the count it restocks")
-	_check(VendorStock.items(drawer)[2] != null and not VendorStock.orbs(drawer)[5].is_empty(),
-			"which fills the empty squares")
-	_check(VendorStock.rerolls(drawer, VendorStock.ITEMS) == 1 and VendorStock.rerolls(drawer, VendorStock.ORBS) == 1,
-			"and a free restock does not forgive what the town has been paid")
 	var kept := Inventory.new()
 	kept.towns.visit(Vector2i(130, 128)).merge(drawer.duplicate(true))
 	kept.save(TEST_PATH)
 	_check(VendorStock.rerolls(Inventory.load_from(TEST_PATH).towns.visit(Vector2i(130, 128)),
-			VendorStock.ITEMS) == 1, "nor does closing the game")
-	_check(VendorStock.kills_left(drawer, stocked + VendorStock.RESTOCK_KILLS) == VendorStock.RESTOCK_KILLS,
-			"and starts the count again")
+			VendorStock.ITEMS) == 1, "and closing the game does not forgive what the town has been paid")
 
 	# A hand-edited or half-written shelf is no shelf, never a guess at one.
 	_check(VendorStock.items({VendorStock.ITEMS: "nonsense"}).is_empty(), "the wrong shape is no stock")
@@ -282,8 +263,6 @@ func _test_stock() -> bool:
 	var back := Inventory.load_from(TEST_PATH).towns.visit(Vector2i(130, 128))
 	_check(VendorStock.items(back).size() == VendorStock.SIZE, "six pieces come back")
 	_check(VendorStock.orbs(back) == VendorStock.orbs(drawer), "the same orbs come back")
-	_check(VendorStock.kills_left(back, stocked + VendorStock.RESTOCK_KILLS)
-			== VendorStock.RESTOCK_KILLS, "and so does when it was stocked")
 	var first: Item = VendorStock.items(back)[0]
 	var was: Item = VendorStock.items(drawer)[0]
 	_check(first.type == was.type and first.rarity == was.rarity and first.level == was.level
@@ -449,7 +428,7 @@ func _test_bounties() -> bool:
 	var drawer := {}
 	_check(BountyBoard.bounties(drawer).is_empty(), "a board nobody has walked up to has nothing on it")
 	_check(not BountyBoard.seen(drawer), "and has not been read")
-	_check(BountyBoard.bounties({VendorStock.STOCKED_AT: 0}).is_empty(),
+	_check(BountyBoard.bounties({VendorStock.ITEMS: []}).is_empty(),
 			"a town saved before there were boards has none")
 	_check(BountyBoard.restock(drawer, envs, TOWN_CELL, rng), "the board is posted with the shelves")
 
@@ -549,22 +528,28 @@ func _test_bounties() -> bool:
 	_check(not BountyBoard.claim(finished), "exactly once")
 	_check(not BountyBoard.ready(finished), "and is not waiting to be paid again")
 
-	# The restock keeps the accepted work exactly as it was and posts fresh work over the rest.
-	_check(BountyBoard.accept(state, working), "with that handed in, the next can be accepted")
-	BountyBoard.count_kill(state, str(working[BountyBoard.ENEMY]), 2)
-	var carried := int(working[BountyBoard.HAVE])
-	_check(carried == 2, "the other common has two against it (%d)" % carried)
-	_check(BountyBoard.restock(town, envs, TOWN_CELL, rng), "the restock posts the empty square again")
+	# New work comes when the old work is all handed in, and not a posting sooner.
+	_check(not BountyBoard.cleared(town), "one handed in of three is not a cleared board")
+	_check(not BountyBoard.restock(town, envs, TOWN_CELL, rng), "so nothing new is posted over it")
+	_check(BountyBoard.bounties(town)[0] == finished, "and the board is as it was")
+	for bounty: Dictionary in BountyBoard.bounties(town):
+		if bool(bounty[BountyBoard.DONE]):
+			continue
+		_check(BountyBoard.accept(state, bounty), "with the last handed in, the next can be accepted")
+		BountyBoard.count_kill(state, str(bounty[BountyBoard.ENEMY]), int(bounty[BountyBoard.NEED]))
+		_check(BountyBoard.claim(bounty), "and handed in in its turn")
+	_check(BountyBoard.cleared(town), "all three handed in is a cleared board")
+	_check(BountyBoard.restock(town, envs, TOWN_CELL, rng), "which is what brings new work")
 	var after := BountyBoard.bounties(town)
 	_check(after.size() == BountyBoard.COMMONS + BountyBoard.ELITES,
 			"the board is full again (%d)" % after.size())
-	var kept := 0
 	for bounty: Dictionary in after:
-		_check(not bool(bounty[BountyBoard.DONE]), "nothing on it is already handed in")
-		if str(bounty[BountyBoard.ENEMY]) == str(working[BountyBoard.ENEMY]):
-			kept += 1
-			_check(int(bounty[BountyBoard.HAVE]) == carried, "the work in progress kept its progress")
-	_check(kept == 1, "and is still the posting it was")
+		_check(not bool(bounty[BountyBoard.DONE]) and int(bounty[BountyBoard.HAVE]) == 0,
+				"and everything on it is fresh")
+	BountyBoard.accept(state, after[0])
+	BountyBoard.count_kill(state, str(after[0][BountyBoard.ENEMY]), 3)
+	var carried := int(after[0][BountyBoard.HAVE])
+	_check(carried == 3, "the new work taken on has three against it (%d)" % carried)
 
 	# The board goes in the save with the town it belongs to, kills and all.
 	var inventory := Inventory.new()
@@ -955,8 +940,8 @@ func _test_board() -> void:
 			int(bounty[BountyBoard.NEED]))
 	page._fill()
 	var claim := _deep_button(page._rows, "Claim")
-	_check(claim != null and claim.text == "Claim %d" % reward,
-			"the finished one carries its reward (%s)" % [claim.text if claim != null else "no button"])
+	_check(claim != null and claim.tooltip_text.contains(str(reward)),
+			"the finished one carries its reward (%s)" % [claim.tooltip_text if claim != null else "no button"])
 	if claim != null:
 		claim.pressed.emit()
 	_check(inventory.gold == reward and reward > 0,

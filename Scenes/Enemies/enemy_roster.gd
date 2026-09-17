@@ -601,3 +601,24 @@ static func frame_paths(name: String, animation: String) -> PackedStringArray:
 		frames.append(path)
 		n += 1
 	return frames
+
+
+## The enemy standing still, as one picture: the first idle frame cut down to the pixels it uses. Not
+## `bounds`, which is the union of every animation and leaves a creature with a long swing small in
+## the middle of its own portrait. Null when the pack has no idle.
+static func portrait(name: String) -> AtlasTexture:
+	var path := sheet_path(name, "idle")
+	var cell := Rect2i(Vector2i.ZERO, frame_size(name))
+	if path.is_empty():
+		var files := frame_paths(name, "idle")
+		if files.is_empty():
+			return null
+		path = files[0]
+	var image := _sheet_image(path)
+	if image == null:
+		return null
+	var used := image.get_region(cell).get_used_rect()
+	var atlas := AtlasTexture.new()
+	atlas.atlas = load(path)
+	atlas.region = Rect2(used if used.size != Vector2i.ZERO else cell)
+	return atlas

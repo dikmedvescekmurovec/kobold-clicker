@@ -288,13 +288,19 @@ func _shoot_town() -> void:
 	for i in 2:
 		await process_frame
 
-	# The board, which is the tab a town opens on: the one posting taken on, part worked off, over the
-	# others waiting on it with their Accept greyed, each with the swatches and the nearest tile.
+	# The board as a town opens on it: three cards, each a picture, a name, a reward, Info and Accept.
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_town_board.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_town_board.png"))
+
+	# And with one posting taken on and part worked off, which is then the only card it shows.
 	var board := BountyBoard.bounties(main.inventory.towns.visit(main.view.origin + town))
 	if board.size() > 1:
-		BountyBoard.accept(main.inventory.towns, board[0])
-		BountyBoard.count_kill(main.inventory.towns, str(board[0][BountyBoard.ENEMY]),
-				int(board[0][BountyBoard.NEED]) / 3)
+		# The elite, which is last and the one that pays an orb, so the shot has the orb's picture in it.
+		var taken: Dictionary = board[-1]
+		BountyBoard.accept(main.inventory.towns, taken)
+		BountyBoard.count_kill(main.inventory.towns, str(taken[BountyBoard.ENEMY]),
+				maxi(int(taken[BountyBoard.NEED]) / 3, 1))
 	main.town_page._fill()
 	main.town_page.layout()
 	for i in 2:

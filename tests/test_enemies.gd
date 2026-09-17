@@ -18,6 +18,7 @@ func _run() -> void:
 	_check(_test_frames_divide_their_sheets(), "every sheet is a whole number of frames")
 	_check(_test_frames_fall_on_gutters(), "no frame boundary cuts through a sprite")
 	_check(_test_bounds_hold_every_frame(), "the shared crop holds every frame of every animation")
+	_check(_test_every_enemy_has_a_portrait(), "every enemy has a picture for a bounty card")
 	_report("enemy roster")
 
 
@@ -56,6 +57,16 @@ func _test_every_entry_names_its_facing() -> bool:
 		var facing := EnemyRoster.facing_of(name)
 		_check(facing == EnemyRoster.Facing.LEFT or facing == EnemyRoster.Facing.RIGHT,
 				name + " faces left or right")
+	return true
+
+
+## A bounty card is a picture of its monster, so an enemy with no first idle frame is a blank card.
+func _test_every_enemy_has_a_portrait() -> bool:
+	for name in EnemyRoster.names():
+		var face := EnemyRoster.portrait(name)
+		_check(face != null and face.region.size.x > 0 and face.region.size.y > 0
+				and Rect2(Vector2.ZERO, EnemyRoster.frame_size(name)).encloses(face.region),
+				name + " has a portrait inside its first idle frame")
 	return true
 
 

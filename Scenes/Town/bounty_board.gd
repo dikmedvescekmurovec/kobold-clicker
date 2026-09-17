@@ -16,7 +16,7 @@ extends RefCounted
 ## A posting is `{enemy, need, have, gold, orb, accepted, done}`. Only an **accepted** posting counts
 ## kills, and only one posting anywhere may be accepted at a time -- a bounty is a job taken on, not a
 ## tally that runs by itself -- until it is handed in. `have` stops at `need`; `done` is a bounty
-## handed in, which stays on the board, spent, until the next restock replaces it.
+## handed in, which stays on the board, spent, until the whole board is `cleared` and posted afresh.
 
 ## The drawer's keys, named here because what a board *is* is this file's business.
 const BOUNTIES := "bounties"
@@ -57,36 +57,35 @@ const REWARD_MULT := 3.0
 const BOUNTY_RANGE := 4
 
 
-## Fills the board back up to `COMMONS` + `ELITES` postings, keeping the one the player has accepted
-## and not handed in -- progress they have made is theirs until they cash it in -- and posting fresh
-## work over everything else. Says whether anything was posted.
+## Posts a fresh board of `COMMONS` + `ELITES`, and only over one that is `cleared`: new work comes
+## when the old work is done, not on a clock. Says whether anything was posted.
 ##
 ## `envs` is the land near the town (`MapBuilder.envs_within`) and `cell` the town's own cell, which
 ## is what the reward is priced against.
 static func restock(drawer: Dictionary, envs: PackedStringArray, cell: Vector2i,
 		rng: RandomNumberGenerator) -> bool:
+	if not cleared(drawer):
+		return false
 	var posted := []
 	var taken := {}
-	var short := {EnemyRoster.Tier.COMMON: COMMONS, EnemyRoster.Tier.ELITE: ELITES}
-	for bounty: Dictionary in bounties(drawer):
-		var enemy := str(bounty.get(ENEMY, ""))
-		if not is_active(bounty) or not EnemyRoster.ENEMIES.has(enemy):
-			continue
-		posted.append(bounty)
-		taken[enemy] = true
-		var tier := EnemyRoster.tier_of(enemy)
-		short[tier] = int(short.get(tier, 0)) - 1
-	var filled := false
 	for tier: int in [EnemyRoster.Tier.COMMON, EnemyRoster.Tier.ELITE]:
-		for i in maxi(int(short[tier]), 0):
+		for i in (ELITES if tier == EnemyRoster.Tier.ELITE else COMMONS):
 			var enemy := _target(envs, tier, taken, rng)
 			if enemy.is_empty():
 				continue
 			taken[enemy] = true
 			posted.append(_posting(enemy, tier, cell, rng))
-			filled = true
 	drawer[BOUNTIES] = posted
-	return filled
+	return not posted.is_empty()
+
+
+## Whether every posting on the board has been handed in, which is what brings new work. A board
+## with nothing on it -- never posted, or posted where nothing lives -- is cleared too.
+static func cleared(drawer: Dictionary) -> bool:
+	for bounty: Dictionary in bounties(drawer):
+		if not bool(bounty.get(DONE, false)):
+			return false
+	return true
 
 
 ## What is posted on a board, with anything that is not a posting stepped over -- a save edited by

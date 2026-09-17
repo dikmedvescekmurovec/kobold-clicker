@@ -134,19 +134,19 @@ func _ready() -> void:
 ## tab, and the tabs open the page: what tier of settlement it is went the way of every other row
 ## that was not paying for itself once the shelf wanted the room (`Scenes/Town/DESIGN.md`).
 ##
-## This is also where a town's shelves are filled: on the way in, and again on the way in after
-## `VendorStock.RESTOCK_KILLS` more kills. Walking in is the only thing that stocks a vendor, so the
-## player can never watch a shelf change under them.
+## This is also where a town's shelves are filled, the first time it is walked into. After that a
+## shelf is new only when Restock is paid for.
 func open(town_name: String, services: PackedStringArray, cell: Vector2i, spot: Vector2i,
 		tier: int) -> void:
 	_cell = cell
 	_tier = tier
 	_title.text = town_name if not town_name.is_empty() else "Town"
 	_drawer = inventory.towns.visit(spot)
-	# One clock for everything a town keeps: the shelves and the board are filled by the same walk in
-	# and the same hundred kills, so a player who comes back to a restocked vendor finds new work too.
-	if VendorStock.restock(_drawer, tier, cell, inventory.kills, _stock_rng):
-		BountyBoard.restock(_drawer, _board_land(), cell, _stock_rng)
+	# The shelves are filled once and the board whenever all its work has been handed in. Both are
+	# asked, so not `or`, which would skip the board whenever the shelves had news.
+	var stocked := VendorStock.restock(_drawer, tier, cell, _stock_rng)
+	var posted := BountyBoard.restock(_drawer, _board_land(), cell, _stock_rng)
+	if stocked or posted:
 		inventory.save(_save_path)
 	_tabs = PackedStringArray()
 	for service: String in services:
@@ -228,17 +228,15 @@ func _fill() -> void:
 	body.add_child(_shelf())
 	# New stock now, for gold: directly under the shelf it replaces, so it is never under the fold -- this shelf only, and dearer every time for good: the town remembers.
 	var price := TownPrices.reroll_price(_cell, VendorStock.rerolls(_drawer, _shelf_key()))
+	var short := _why_not(price, false)
 	var reroll := UITheme.button("Restock %s" % BigNumber.format(price), "LightButton",
-			"Clear this shelf for new stock. Each time costs twice the last")
+			short if not short.is_empty()
+			else "Clear this shelf for new stock. Each time costs twice the last")
 	reroll.icon = Coins.icon()
-	reroll.disabled = inventory.gold < price
+	reroll.disabled = not short.is_empty()
 	reroll.pressed.connect(_on_reroll_pressed)
 	body.add_child(reroll)
 	body.add_child(_sign(str(SELL_SIGNS[_open_tab])))
-	# Short enough to stay on one line at this width: it is the least urgent thing on the page and the
-	# one that would otherwise push the rest of it under the fold.
-	body.add_child(_sign("Stock: %d kills"
-			% VendorStock.kills_left(_drawer, inventory.kills), Palette.SLATE))
 
 
 ## The six squares. A bought one stays on the shelf with nothing on it, so what is gone is as plain
@@ -339,7 +337,7 @@ static func _sold_square(side: float) -> VBoxContainer:
 	square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	square.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	square.add_theme_stylebox_override("panel", ItemRarity.slot_style(ItemRarity.Rarity.COMMON))
-	square.tooltip_text = "Bought. The vendor fills the shelf again after a while out fighting"
+	square.tooltip_text = "Bought. Restock fills the shelf again"
 	cell.add_child(square)
 	return cell
 
@@ -359,10 +357,6 @@ func _fill_offer() -> void:
 	buy.disabled = not refused.is_empty()
 	buy.pressed.connect(_on_buy_item)
 	_rows.add_child(buy)
-	# Said out loud as well as drawn grey. A dead button explains nothing, and "the bag is full" is
-	# the one refusal the player can do something about without leaving the counter.
-	if not refused.is_empty():
-		_rows.add_child(_sign(refused, Palette.RUST))
 	var back := UITheme.button("Back", "LightButton", "Back to what the vendor has")
 	back.pressed.connect(_close_offer.bind(true))
 	_rows.add_child(back)
@@ -387,33 +381,31 @@ func _fill_board() -> void:
 	for bounty: Dictionary in BountyBoard.bounties(_drawer):
 		if bool(bounty.get(BountyBoard.DONE, false)) or (busy and not BountyBoard.is_active(bounty)):
 			continue
-		if posted > 0:
-			body.add_child(UITheme.rule(BODY_WIDTH))
 		posted += 1
 		# No Show here: the board is where work is taken on, and the journal is where it is followed.
-		var row := BountyList.row(bounty, view, BODY_WIDTH, Callable())
-		if not BountyBoard.is_active(bounty):
-			var accept := UITheme.button("Accept", "LightButton", "Take this work on")
-			accept.pressed.connect(_on_accept_pressed.bind(bounty))
-			row.add_child(accept)
+		var taken := BountyBoard.is_active(bounty)
+		var row := BountyList.row(bounty, view, BODY_WIDTH, Callable(),
+				"Accepted." if taken and not BountyBoard.ready(bounty) else "")
+		var action: Button
+		if not taken:
+			action = UITheme.button("Accept", "LightButton", "Take this work on")
+			action.pressed.connect(_on_accept_pressed.bind(bounty))
 		# The one thing this board can do that the journal cannot: pay. A bounty is handed in where it
-		# was taken on, so the button is here and nowhere else.
+		# was taken on, so the button is here and nowhere else. The figure is on the card above it and
+		# in the tooltip: beside Info there is no room for a reward that grows with the walk.
 		elif BountyBoard.ready(bounty):
-			var reward := float(bounty.get(BountyBoard.GOLD, 0))
-			var claim := UITheme.button("Claim %s" % BigNumber.format(reward), "LightButton",
-					"Hand this in for %s gold" % BigNumber.format(reward))
-			claim.icon = Coins.icon()
-			claim.pressed.connect(_on_claim_pressed.bind(bounty))
-			row.add_child(claim)
-		else:
-			row.add_child(_sign("Accepted.", Palette.LEAF))
+			action = UITheme.button("Claim", "LightButton", "Hand this in for %s gold"
+					% BigNumber.format(float(bounty.get(BountyBoard.GOLD, 0))))
+			action.icon = Coins.icon()
+			action.pressed.connect(_on_claim_pressed.bind(bounty))
+		if action != null:
+			action.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			BountyList.actions_of(row).add_child(action)
 		body.add_child(row)
 	if posted == 0:
 		body.add_child(_sign("Hand in the bounty you have taken first." if busy
 				else "Nothing is posted here now."))
-	# The same clock the shelves keep, said the same short way.
-	body.add_child(_sign("New work: %d kills"
-			% VendorStock.kills_left(_drawer, inventory.kills), Palette.SLATE))
+	body.add_child(_sign("New work once all of it is handed in.", Palette.SLATE))
 
 
 ## The land around the town, which is every monster a board may post: a target has to live somewhere
@@ -443,6 +435,8 @@ func _on_claim_pressed(bounty: Dictionary) -> void:
 	inventory.gold += reward
 	if not orb.is_empty():
 		inventory.add_orb(orb)
+	# The last one handed in is what brings new work, there and then.
+	BountyBoard.restock(_drawer, _board_land(), _cell, _stock_rng)
 	print("Claimed the bounty on %s for %s gold%s" % [str(bounty.get(BountyBoard.ENEMY, "")),
 			BigNumber.format(reward), "" if orb.is_empty() else " and one " + orb])
 	inventory.save(_save_path)
@@ -477,9 +471,8 @@ func _on_reroll_pressed() -> void:
 ## crafting rule the orb tray has always obeyed -- from the bag, where no fight and no socket is
 ## holding a second reference to the same piece.
 ##
-## The two prices, what an upgrade would make of the piece and what it risks, and under both of them
-## the reasons either button is grey, each said once: a broken piece greys the pair for the same
-## reason, and this counter is three shelf squares wide.
+## The two prices, and what an upgrade would make of the piece and what it risks. Why a button is
+## grey is in that button's tooltip and nowhere else on the page.
 func _fill_smith() -> void:
 	if not _smith_note.is_empty():
 		_rows.add_child(_sign(_smith_note, Palette.RUST))
@@ -493,8 +486,7 @@ func _fill_smith() -> void:
 	_rows.add_child(_smith_button("Upgrade", up_price, up_why,
 			"Take this to level %d for %s gold"
 			% [_bag_piece.level + 1, BigNumber.format(up_price)], _on_upgrade_pressed))
-	# What the press would buy and what it risks, and only while it can be pressed: with the button
-	# grey the line under it is the reason, and both would not fit down the page.
+	# What the press would buy and what it risks, and only while it can be pressed.
 	if up_why.is_empty():
 		_rows.add_child(_sign("Level %d of %d. %d%% to break."
 				% [_bag_piece.level + 1, cap, roundi(Blacksmith.BREAK_CHANCE * 100.0)], Palette.SLATE))
@@ -503,12 +495,6 @@ func _fill_smith() -> void:
 	_rows.add_child(_smith_button("Lock", lock_price, lock_why,
 			"Pin one of its modifiers for good, for %s gold" % BigNumber.format(lock_price),
 			_on_lock_pressed))
-	var said := []
-	for why: String in [up_why, lock_why]:
-		if why.is_empty() or why in said:
-			continue
-		said.append(why)
-		_rows.add_child(_sign(why, Palette.RUST))
 
 
 ## One of the smith's two, with the coin and the price on it the way a Buy carries them, and the

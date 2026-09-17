@@ -19,7 +19,7 @@ const LEVELS := [1, 3, 5, 8, 10]
 const ENV := "grass"
 ## What the table measures a price in besides gold: one ordinary tile fight of `Encounter.ENEMIES`.
 const FIGHT_KILLS := Encounter.ENEMIES
-## And the session the shelves are stocked against (`VendorStock.RESTOCK_KILLS`).
+## And a session out: ten tile fights.
 const RUN_KILLS := 100
 
 const LABEL_W := 32
