@@ -46,7 +46,7 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Item = 
 			rows.add_child(UITheme.rule())
 	for text in item.stat_lines():
 		rows.add_child(line(text, Palette.INK, width, true))
-	for text in item.mod_lines():
+	for text in item.mod_lines(Settings.item_details):
 		rows.add_child(line(text, Palette.RUST, width, true))
 
 

@@ -412,6 +412,7 @@ func _build() -> void:
 	arena.add_child(_enemy)
 
 	_sound = AudioStreamPlayer.new()
+	_sound.bus = Settings.SFX_BUS
 	_sound.stream = ATTACK_SOUND
 	add_child(_sound)
 
@@ -710,6 +711,10 @@ func _swing() -> void:
 ## The number that floats off the enemy. This is the only place the player can read what their gear
 ## is worth: everything else about a hit looks the same whether it took one point off or nine.
 func _show_damage(amount: float, crit: bool) -> void:
+	if Settings.animations == Settings.Anim.NONE:
+		return
+	# LOW keeps the number and its rise, without the pop or the wander.
+	var lively := Settings.animations == Settings.Anim.DEFAULT
 	var written := BigNumber.format(amount)
 	var label := _label((written + "!") if crit else written)
 	label.add_theme_color_override("font_color", CRIT_COLOR if crit else Palette.BONE)
@@ -739,12 +744,13 @@ func _show_damage(amount: float, crit: bool) -> void:
 	label.pivot_offset = Vector2(width / _ui_scale, font_size) / 2.0
 	from += label.pivot_offset * (_ui_scale - 1.0)
 	label.position = from
-	label.scale = Vector2(_ui_scale, _ui_scale) * DAMAGE_POP_SCALE * (1.25 if crit else 1.0)
+	if lively:
+		label.scale = Vector2(_ui_scale, _ui_scale) * DAMAGE_POP_SCALE * (1.25 if crit else 1.0)
 	var float_up := create_tween()
 	float_up.set_parallel(true)
 	float_up.tween_property(label, "scale", Vector2(_ui_scale, _ui_scale), DAMAGE_POP) \
 			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	var drift := randf_range(-DAMAGE_DRIFT, DAMAGE_DRIFT)
+	var drift := randf_range(-DAMAGE_DRIFT, DAMAGE_DRIFT) if lively else 0.0
 	float_up.tween_property(label, "position", from + Vector2(drift, -DAMAGE_RISE), DAMAGE_TIME) \
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	float_up.tween_property(label, "modulate:a", 0.0, DAMAGE_TIME).set_ease(Tween.EASE_IN)
@@ -826,8 +832,11 @@ func _bump_counter() -> void:
 ## richer body visibly pays more without the arena filling up -- the count is the log of the amount,
 ## not the amount. They are the only thing thrown that spins: a coin is drawn turning and gear is not.
 func _show_coins(amount: float) -> void:
+	# The amount has already gone to the ledger; the coins only say so. LOW says it with one.
+	if Settings.animations == Settings.Anim.NONE:
+		return
 	var from := _drop_origin()
-	for i in Coins.count_for(amount):
+	for i in Coins.count_for(amount) if Settings.animations == Settings.Anim.DEFAULT else 1:
 		var coin := AnimatedSprite2D.new()
 		coin.sprite_frames = Coins.frames()
 		coin.play("spin")
@@ -838,8 +847,12 @@ func _show_coins(amount: float) -> void:
 ## purse of the same size throws coins, for the same reason. `xp_absorbed` goes out with the last one
 ## to arrive, carrying the whole amount, so the bar takes it in one step as the burst lands.
 func _show_xp(amount: int) -> void:
+	# With nothing thrown the bar still has to fill, so it takes the amount now.
+	if Settings.animations == Settings.Anim.NONE:
+		xp_absorbed.emit(amount)
+		return
 	var from := _drop_origin()
-	var count := Coins.count_for(amount)
+	var count := Coins.count_for(amount) if Settings.animations == Settings.Anim.DEFAULT else 1
 	for i in count:
 		var gem := Sprite2D.new()
 		gem.texture = XP_GEM
@@ -875,6 +888,8 @@ func _show_xp(amount: int) -> void:
 ## word and time to read it; what the arena has to say is that the body left something, and the
 ## picture says that the moment it lands.
 func _show_find(picture: Texture2D, glow: Color) -> void:
+	if Settings.animations == Settings.Anim.NONE:
+		return
 	_finds_shown += 1
 	var find := Sprite2D.new()
 	find.texture = picture
@@ -1006,9 +1021,10 @@ func _on_enemy_hit(hp_left: float) -> void:
 ## longer, and with the arena rattling, the bigger the thing that fell.
 func _on_enemy_died(index: int) -> void:
 	_enemy.play_once("death")
-	var burst := Juice.burst(self, _drop_origin(), _enemy.tint(), DEATH_PIXELS, 220.0,
-			3.0 * _ui_scale, 0.6, 500.0)
-	burst.z_index = 1
+	if Settings.animations != Settings.Anim.NONE:
+		var burst := Juice.burst(self, _drop_origin(), _enemy.tint(), DEATH_PIXELS, 220.0,
+				3.0 * _ui_scale, 0.6, 500.0)
+		burst.z_index = 1
 	match Encounter.tier_in(fight, index):
 		EnemyRoster.Tier.BOSS:
 			Juice.shake(_arena, SHAKE_BOSS, 0.4)

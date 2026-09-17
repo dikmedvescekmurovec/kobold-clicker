@@ -45,6 +45,9 @@ static func fade_ramp() -> Gradient:
 ## player time. The latest call wins: one landing during another replaces it, so a kill's short
 ## freeze cannot cut short the slow-motion a rare find it dropped has just asked for.
 static func hit_stop(tree: SceneTree, seconds: float, slow := 0.0) -> void:
+	# The one guard for every caller: a freeze and a shake are the first things a lower level gives up.
+	if Settings.animations != Settings.Anim.DEFAULT:
+		return
 	_stops += 1
 	var mine := _stops
 	Engine.time_scale = slow
@@ -59,6 +62,8 @@ static var _stops := 0
 ## Rattles `node` about where it stands, dying away over `time`. Offsets are whole pixels so the art
 ## stays on the grid; a shake landing on a shake replaces it rather than drifting the node's home.
 static func shake(node: Node2D, strength: float, time := 0.2) -> void:
+	if Settings.animations != Settings.Anim.DEFAULT:
+		return
 	var home: Vector2 = node.get_meta("shake_home", node.position)
 	node.set_meta("shake_home", home)
 	if node.has_meta("shake_tween"):

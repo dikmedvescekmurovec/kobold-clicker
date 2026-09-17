@@ -32,6 +32,7 @@ func _run() -> void:
 	_check(_test_coins() == true, "coin tests ran to the end")
 	_check(_test_orb_drops() == true, "orb drop tests ran to the end")
 	await _test_thrown_finds()
+	await _test_settings()
 	await _test_the_nameplate_wears_the_tier()
 	await _test_the_map_hands_over_and_takes_back()
 	_report("combat")
@@ -625,6 +626,59 @@ func _test_thrown_finds() -> void:
 
 
 ## A piece to throw. The type is any real one -- what is being checked is the throw, not the roll.
+## The settings: they come back off their file, a fight with animations off throws nothing and still
+## fills the bar, and a detailed modifier line carries the band it rolled in. Every static is put back,
+## since the suites after this one in the file read them.
+func _test_settings() -> void:
+	Settings.path = "user://test_settings.cfg"
+	Settings.sfx = false
+	Settings.animations = Settings.Anim.LOW
+	Settings.item_details = true
+	Settings.save()
+	Settings.sfx = true
+	Settings.animations = Settings.Anim.DEFAULT
+	Settings.item_details = false
+	Settings.load_settings()
+	_check(not Settings.sfx and Settings.animations == Settings.Anim.LOW and Settings.item_details,
+			"settings come back off their file")
+	Settings.apply_audio()
+	_check(AudioServer.is_bus_mute(AudioServer.get_bus_index(Settings.SFX_BUS)), "a muted SFX bus is muted")
+	_check(not AudioServer.is_bus_mute(AudioServer.get_bus_index(Settings.MUSIC_BUS)), "and music is not")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Settings.path))
+	Settings.path = ""
+
+	var piece := _thrown_piece(ItemRarity.Rarity.COMMON)
+	piece.mods = [{"id": "increased_damage", "value": 14}]
+	var band := ModifierTable.band_for("increased_damage", piece.level)
+	_check(piece.mod_lines(true)[0] == "+14(%d-%d)%% increased Damage" % band,
+			"a detailed line carries its band: %s" % piece.mod_lines(true)[0])
+
+	Settings.animations = Settings.Anim.NONE
+	var combat: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
+	root.add_child(combat)
+	combat.begin(Encounter.for_tile(Vector2i(4, 0), "grass"), Vector2i(4, 0), 2.0)
+	await process_frame
+	var absorbed: Array[int] = []
+	combat.xp_absorbed.connect(func(amount: int) -> void: absorbed.append(amount))
+	var before := combat.get_child_count()
+	combat._on_xp_dropped(0, 25)
+	combat._on_gold_dropped(0, 1000.0)
+	combat._on_loot_dropped(0, piece)
+	combat._show_damage(5.0, true)
+	_check(absorbed == [25], "with animations off the bar takes its experience at once")
+	_check(combat.get_child_count() == before and combat._finds_shown == 0, "and nothing is thrown")
+	_check(combat._drops.size() == 1, "though the find is still kept")
+	Settings.animations = Settings.Anim.LOW
+	combat._on_gold_dropped(0, 1000.0)
+	_check(combat.get_child_count() == before + 1, "on low a purse is one coin")
+	combat.queue_free()
+	await process_frame
+	Settings.sfx = true
+	Settings.animations = Settings.Anim.DEFAULT
+	Settings.item_details = false
+	Settings.apply_audio()
+
+
 func _thrown_piece(rarity: ItemRarity.Rarity) -> Item:
 	var item := Item.new()
 	item.type = "Wooden Sword"

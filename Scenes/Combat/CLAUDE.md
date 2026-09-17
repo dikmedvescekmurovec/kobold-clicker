@@ -25,5 +25,6 @@ A tile is taken by beating a lineup of enemies against a clock; a taken tile can
 - **Colours ramp, they do not switch:** `_clock_color` and the counter's face are both shares of the whole, so retuning `Encounter.SECONDS` or the bag's cap retunes them.
 - **`Palette.GOLD` is the unique item step:** the verdict's gold total is in the panel's own colour behind a coin.
 - **The clock bar is `KillPips.WIDTH` less its border,** so pips and clock are one column to the pixel.
+- **`Settings.animations` thins the view and never the fight:** at `LOW` a body throws one coin and one gem, a number neither pops nor drifts, and `Juice` shakes and freezes nothing; at `NONE` nothing is thrown or written and no body bursts -- but `_show_xp` still emits `xp_absorbed` (at once), and gold, finds and orbs had already gone out by their own signals. Anything new that is only for show asks the level; anything that carries an amount must not be behind it.
 - **`Juice.hit_stop`: the latest call wins,** so a kill's freeze cannot cut short an elite find's slow-motion.
 - **`arm` clamps crit chance to `CRIT_CAP`;** crit damage is what a crit *adds* (50 = half again). An auto-swing only lands while an enemy is standing, so nothing banks through a walk-in.

@@ -435,6 +435,21 @@ func _shoot_town() -> void:
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_bounty_journal.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_bounty_journal.png"))
+
+	# The settings, behind the corner's cog, and then the question its Reset asks.
+	main._on_left_page_closed()
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_corner.png")
+	main._on_settings_pressed()
+	for shot: String in ["ui_settings", "ui_settings_reset"]:
+		for i in 2:
+			await process_frame
+		await RenderingServer.frame_post_draw
+		root.get_texture().get_image().save_png("user://%s.png" % shot)
+		print("Saved ", ProjectSettings.globalize_path("user://%s.png" % shot))
+		main.settings_page._ask(true)
 	main.queue_free()
 	await process_frame
 	for scratch in [SCRATCH_SAVE, SCRATCH_MAP]:

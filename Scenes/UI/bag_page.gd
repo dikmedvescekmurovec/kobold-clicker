@@ -378,7 +378,7 @@ func _ask(id: String, title: String, question: String, verb: String, variation: 
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", SLOT_GAP)
 	body.add_child(buttons)
-	var skip := _check_box("Don't show this again")
+	var skip := check_box("Don't show this again")
 	for made: Button in [UITheme.button("Cancel", "LightButton", ""), UITheme.button(verb, variation, "")]:
 		made.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		buttons.add_child(made)
@@ -421,7 +421,7 @@ func _close_confirm() -> void:
 ## A tick box as the rest of the interface would draw one: the brown button face, small, held down
 ## with a cream tick on it while it is on -- the way Auto holds. The row's words press it too. Named
 ## `TICK_NAME` so whoever wants its state (`_ask`, a test) can find it.
-static func _check_box(text: String) -> HBoxContainer:
+static func check_box(text: String) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", SLOT_GAP)
 	var marks: Array[ImageTexture] = []

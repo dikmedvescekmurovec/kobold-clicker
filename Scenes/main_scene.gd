@@ -29,6 +29,8 @@ extends Node2D
 const CHEST_ICON := "res://Assets/UI/ui_icon_chest.png"
 const STAR_ICON := "res://Assets/UI/ui_icon_star.png"
 const SCROLL_ICON := "res://Assets/UI/ui_icon_scroll.png"
+## And a fourth that is about the game rather than the player: the settings, behind a cog.
+const COG_ICON := "res://Assets/UI/ui_icon_cog.png"
 ## The air between one and the next, in panel pixels.
 const CORNER_GAP := 4.0
 ## The panel that stands in for the map when its save cannot be read: how wide it is allowed to be
@@ -51,7 +53,7 @@ const LEVEL_UP_FONT := 48
 @onready var camera: Camera2D = $Camera2D
 
 var _chart_button: Button
-## Dev: charts the selected tile with no fight. Debug builds only, like `_reset_button`.
+## Dev: charts the selected tile with no fight. Debug builds only.
 var _skip_button: Button
 var _move_button: Button
 var _farm_button: Button
@@ -76,9 +78,12 @@ var skills_page: SkillsPage
 ## The bounties taken on, everywhere: a left-hand page like the other two, so progress and the walk to
 ## the monster are readable away from the town that posted the work.
 var bounty_page: BountyList
+## Sound, animations, what an item says, and Reset. A left-hand page like the rest, always on offer.
+var settings_page: SettingsPage
 var _bag_button: Button
 var _skills_button: Button
 var _bounty_button: Button
+var _settings_button: Button
 ## The player in the top-left corner, over the map and over a fight alike.
 var _character: CharacterPanel
 
@@ -106,8 +111,7 @@ const FLASH_BRIGHT := Color(1.6, 1.6, 1.6)
 const FLASH_SECONDS := 0.5
 
 var _ui_layer: CanvasLayer
-## Dev only: wipes both saves and starts over. `_resetting` keeps `_exit_tree` from writing them back.
-var _reset_button: Button
+## Set by the settings page's Reset, which wipes both saves: it keeps `_exit_tree` from writing them back.
 var _resetting := false
 ## Tips earned but not shown yet, and the one that is up.
 var _tip_queue: Array = []
@@ -128,6 +132,11 @@ func _ready() -> void:
 	# a file that could not be read is that file gone on the first kill.
 	TownServices.show_all = (debug_all_services and OS.is_debug_build()
 			and inventory_path == Inventory.SAVE_PATH)
+	# The player's own settings only beside the player's own save, for the same reason: a test or a
+	# screenshot sees the defaults and writes nothing.
+	Settings.path = Settings.SAVE_PATH if inventory_path == Inventory.SAVE_PATH else ""
+	Settings.load_settings()
+	Settings.apply_audio()
 	var problem: Array = []
 	inventory = Inventory.load_from(inventory_path, problem)
 	if not problem.is_empty():
@@ -286,12 +295,6 @@ func _build_ui() -> void:
 	_town_button.pressed.connect(_on_town_pressed)
 	buttons.add_child(_town_button)
 
-	_reset_button = UITheme.button("Reset", "LightButton", "Dev: delete the saves and start a new game")
-	_reset_button.theme = UITheme.theme()
-	_reset_button.scale = Vector2(ui_scale, ui_scale)
-	_reset_button.pressed.connect(_on_reset_pressed)
-	layer.add_child(_reset_button)
-
 	_build_character()
 	_build_pages(layer)
 
@@ -334,10 +337,15 @@ func _build_pages(layer: CanvasLayer) -> void:
 	_bounty_button = UITheme.icon_button(load(SCROLL_ICON), "The work you have taken on", ui_scale)
 	_bounty_button.pressed.connect(_on_bounty_pressed)
 	layer.add_child(_bounty_button)
+	_settings_button = UITheme.icon_button(load(COG_ICON), "Settings", ui_scale)
+	_settings_button.pressed.connect(_on_settings_pressed)
+	layer.add_child(_settings_button)
 	skills_page = SkillsPage.new(inventory, inventory_path, ui_scale)
 	bag_page = BagPage.new(inventory, inventory_path, ui_scale)
 	bounty_page = BountyList.new(inventory, view, ui_scale)
 	bounty_page.show_cell.connect(_on_show_cell)
+	settings_page = SettingsPage.new(ui_scale)
+	settings_page.reset_pressed.connect(_on_reset_pressed)
 	# The town page stands on the other edge, but it is closed by the same X rule and hidden by the
 	# same fight, so it is built and wired here with the two that share the left one.
 	town_page = TownPage.new(inventory, inventory_path, ui_scale)
@@ -349,7 +357,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 	# the Buy that was greyed out for a full bag.
 	town_page.offer_changed.connect(bag_page.offer)
 	bag_page.selection_changed.connect(town_page.bag_changed)
-	for page: Control in [skills_page, bag_page, bounty_page, town_page]:
+	for page: Control in [skills_page, bag_page, bounty_page, settings_page, town_page]:
 		page.hide()
 		page.closed.connect(_on_left_page_closed)
 		layer.add_child(page)
@@ -366,6 +374,8 @@ func _update_weather() -> void:
 ## A level gained: the screen flashes warm, the words pop up over the middle and float away. On the
 ## character panel's layer, so it stands over a fight as well as the map.
 func _celebrate_level(level: int) -> void:
+	if Settings.animations == Settings.Anim.NONE:
+		return
 	var layer := _character.get_parent()
 	var flash := ColorRect.new()
 	flash.color = LEVEL_UP_FLASH
@@ -444,11 +454,11 @@ func _show_services(cell: Vector2i) -> void:
 ## The tile panel is a full-height column against the right edge, its buttons at its foot. The
 ## left-hand pages lay themselves out against the other edge.
 func _layout_ui() -> void:
-	var view_size := Vector2(get_viewport().get_visible_rect().size)
 	_place_panel()
 	bag_page.layout()
 	skills_page.layout()
 	bounty_page.layout()
+	settings_page.layout()
 	town_page.layout()
 	# The square buttons in a row under the character panel: what you carry, then what you are, then
 	# what you have promised to do.
@@ -457,7 +467,7 @@ func _layout_ui() -> void:
 	_bag_button.position = corner
 	_skills_button.position = corner + Vector2(step, 0.0)
 	_bounty_button.position = corner + Vector2(step * 2.0, 0.0)
-	_reset_button.position = Vector2(8, view_size.y - (_reset_button.get_combined_minimum_size().y * ui_scale) - 8)
+	_settings_button.position = corner + Vector2(step * 3.0, 0.0)
 	if _combat != null:
 		_combat.xp_target = _character.xp_point()
 
@@ -752,8 +762,8 @@ func _show_corner(shown: bool) -> void:
 	# The journal has nothing in it until the player has stood at a board, which is also when their
 	# kills start counting towards one.
 	_bounty_button.visible = shown and BountyBoard.any_seen(inventory.towns)
-	# Off the map in a release build, and out of a fight's way like the rest of the corner.
-	_reset_button.visible = shown and OS.is_debug_build()
+	# Nothing earns the settings: they are there from the first step.
+	_settings_button.visible = shown
 	if _bag_button.visible:
 		_flash(_bag_button, "opened_bag")
 	if _skills_button.visible:
@@ -857,11 +867,12 @@ func _close_left_pages() -> void:
 	bag_page.hide()
 	skills_page.hide()
 	bounty_page.hide()
+	settings_page.hide()
 
 
 ## Whether one of them is up, which is the other thing that takes the corner buttons away.
 func _left_page_up() -> bool:
-	return bag_page.visible or skills_page.visible or bounty_page.visible
+	return bag_page.visible or skills_page.visible or bounty_page.visible or settings_page.visible
 
 
 ## A page takes the corner's place while it is open, so that corner never holds both.
@@ -913,6 +924,11 @@ func _on_bounty_pressed() -> void:
 	# Kills land while the page is shut, and so do new boards.
 	bounty_page.open()
 	_open_left_page(bounty_page)
+
+
+func _on_settings_pressed() -> void:
+	settings_page.open()
+	_open_left_page(settings_page)
 
 
 ## A bounty said where its monster lives and the player asked to be shown: every page gets out of the
@@ -974,7 +990,8 @@ func _exit_tree() -> void:
 	_save_map()
 
 
-## Dev: deletes the inventory and the map and reloads, which generates a new world.
+## The settings page's Reset, once confirmed: deletes the inventory and the map and reloads, which
+## generates a new world. The settings are a file of their own and stay.
 func _on_reset_pressed() -> void:
 	_resetting = true
 	for path: String in [inventory_path, map_path]:

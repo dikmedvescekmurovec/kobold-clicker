@@ -147,12 +147,23 @@ func stat_lines() -> PackedStringArray:
 ## "+14% increased Damage", "+6% item find" -- in the order they rolled, with the smith's lock said
 ## on the line it belongs to. Said here rather than by whoever is drawing, so a locked modifier reads
 ## the same in the bag, in the comparison, on a vendor's shelf and over a fresh drop.
-func mod_lines() -> PackedStringArray:
+##
+## `detailed` puts the band the value rolled in at this piece's level beside it, "+14(8-20)% increased Damage":
+## what a Divine could make of it. A smith's upgrade lifts the level and not the roll, so a value can
+## sit under its band, which is the truth about it.
+func mod_lines(detailed := false) -> PackedStringArray:
 	var lines := PackedStringArray()
 	for mod in mods:
 		var line := ModifierTable.line(mod)
 		if line.is_empty():
 			continue
+		if detailed:
+			# Every modifier's line opens with its number, so the band goes hard against it and ahead
+			# of its unit: "+4(1-4)s". The number may be `BigNumber`'s "1.23e6".
+			var number := RegEx.create_from_string("^\\+[0-9.e]+").search(line)
+			if number != null:
+				line = "%s(%d-%d)%s" % ([number.get_string()] + ModifierTable.band_for(str(mod["id"]), level)
+						+ [line.substr(number.get_end())])
 		lines.append((line + " (locked)") if bool(mod.get("locked", false)) else line)
 	return lines
 

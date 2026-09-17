@@ -346,6 +346,22 @@ ICONS_DRAWN = {
         o2oo..
         ooo...
     """,
+    # Settings, the corner's fourth button: a cog, four teeth square and four on the slant.
+    "ui_icon_cog": """
+        .....ooo.....
+        ..oo.o4o.oo..
+        .o4ooo4ooo3o.
+        .o444444333o.
+        ..o44ooo33o..
+        ooo4o...o3ooo
+        o444o...o322o
+        ooo3o...o2ooo
+        ..o33ooo22o..
+        .o333322222o.
+        .o3ooo2ooo1o.
+        ..oo.o2o.oo..
+        .....ooo.....
+    """,
 }
 
 # The skill trees' icons, off "Ability Icons" -- loose 16 px files that carry their own framed square,
