@@ -178,3 +178,99 @@ static func _style(sheet: Texture2D, region: Rect2, margin: Dictionary) -> Style
 	box.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
 	box.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
 	return box
+
+
+# Builders for the Controls the scenes make in code, so each is put together one way.
+
+## The line drawn between two blocks of text on a panel.
+const RULE_HEIGHT := 1
+
+
+static func button(text: String, variation: String, tooltip: String) -> Button:
+	var made := Button.new()
+	made.text = text
+	made.theme_type_variation = variation
+	made.tooltip_text = tooltip
+	return made
+
+
+## A brown face with a mark and no words. It stands on the map with no themed ancestor, so it carries
+## the theme itself.
+static func icon_button(texture: Texture2D, tooltip: String, ui_scale: float) -> Button:
+	var made := button("", "BrownIconButton", tooltip)
+	made.theme = theme()
+	made.icon = texture
+	made.expand_icon = false
+	made.scale = Vector2(ui_scale, ui_scale)
+	return made
+
+
+## A panel label, in the theme's ink unless `color` says otherwise.
+static func label(text := "", color: Variant = null) -> Label:
+	var made := Label.new()
+	made.theme_type_variation = "PanelLabel"
+	made.text = text
+	if color != null:
+		made.add_theme_color_override("font_color", color)
+	return made
+
+
+static func rule(width := 0.0) -> ColorRect:
+	var made := ColorRect.new()
+	made.color = Palette.SLATE
+	made.custom_minimum_size = Vector2(width, RULE_HEIGHT)
+	return made
+
+
+static func vbox(separation: int, width := 0.0) -> VBoxContainer:
+	var made := VBoxContainer.new()
+	made.add_theme_constant_override("separation", separation)
+	made.custom_minimum_size = Vector2(width, 0)
+	return made
+
+
+## A green title bar with an X at its right end over a cream body. Two panels stacked rather than the
+## pack's one headered sprite, whose bar is 13 px and too short for Pixellari (see tools/ui_kit.py).
+## Fill the body through `body_of`.
+static func titled_panel(title_text: String, tooltip: String, on_close: Callable) -> VBoxContainer:
+	var stack := vbox(0)
+	stack.theme = theme()
+	var bar := PanelContainer.new()
+	bar.theme_type_variation = "HeaderBar"
+	stack.add_child(bar)
+	var header := HBoxContainer.new()
+	bar.add_child(header)
+	var title := label(title_text)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	header.add_child(title)
+	# A drawn X at the size the pack drew it: a Button with no text has no minimum size of its own.
+	var close := button("", "CloseButton", tooltip)
+	close.custom_minimum_size = Vector2(icon_size("CloseButton"))
+	close.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	close.pressed.connect(on_close)
+	header.add_child(close)
+	var body := PanelContainer.new()
+	body.theme_type_variation = "TextPanel"
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stack.add_child(body)
+	body.add_child(vbox(6))
+	return stack
+
+
+static func body_of(panel: VBoxContainer) -> VBoxContainer:
+	return panel.get_child(1).get_child(0)
+
+
+static func title_of(panel: VBoxContainer) -> Label:
+	return panel.get_child(0).get_child(0).get_child(0)
+
+
+## Frees every child but `keep`, taking each out of the tree at once: a queued child still counts in
+## hit-tests and minimum sizes until the frame ends.
+static func clear(parent: Node, keep: Node = null) -> void:
+	for child: Node in parent.get_children():
+		if child != keep:
+			parent.remove_child(child)
+			child.queue_free()

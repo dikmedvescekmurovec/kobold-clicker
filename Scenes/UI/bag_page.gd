@@ -1,0 +1,549 @@
+class_name BagPage
+extends Control
+## The bag against the left edge, with the character sheet standing beside it and the orb tray at its
+## foot. Showing or hiding this node opens or closes all of it. Design notes in Scenes/UI/CLAUDE.md.
+##
+## Children, in draw order: the bag panel, the sheet, then the orb card, which overhangs the sheet.
+
+## The bag's X was pressed.
+signal closed
+
+## Five squares to a row: a heading with Auto and Clear needs that much width at 16 px. The gutter is
+## the pack's own seven-to-one square-to-gutter proportion.
+const GRID_COLS := 5
+const SLOT_GAP := ItemSlot.SIDE / 7
+## Fixed, so the panel keeps its width as the bag fills.
+const WIDTH := GRID_COLS * ItemSlot.SIDE + (GRID_COLS - 1) * SLOT_GAP
+## All eight orbs in one row, exactly WIDTH wide (test_ui_theme holds the arithmetic).
+const ORB_COLS := 8
+const ORB_GAP := (WIDTH - ORB_COLS * OrbSlot.SIDE) / (ORB_COLS - 1)
+## How far a press may travel, in panel pixels, and still be a click rather than a drag.
+const DRAG_THRESHOLD := 4.0
+
+const DOLL_TEXTURE := preload("res://Assets/UI/ui_doll.png")
+const SOCKET_RING_TEXTURE := preload("res://Assets/UI/ui_socket_ring.png")
+const SOCKET_AMULET_TEXTURE := preload("res://Assets/UI/ui_socket_amulet.png")
+## The smallest whole number that keeps 40 px sockets on the head, chest and feet from touching.
+const DOLL_SCALE := 3.0
+## The comparison is as wide as the bag, so the two stat blocks wrap alike.
+const WORN_WIDTH := WIDTH
+## The air between the bag panel and the sheet.
+const WORN_GAP := 6.0
+## Each socket's centre in the doll sprite's own pixels, before DOLL_SCALE. Measured off the sprite:
+## head y 0-16 on x 14-27, chest y 17-33, feet y 34-45, shield hand x 0-8, sword hand x 37-40. The
+## jewellery sits in a row below the figure.
+const DOLL_SOCKETS := {
+	Equipment.Socket.HELMET: Vector2(21, 8),
+	Equipment.Socket.OFFHAND: Vector2(4, 26),
+	Equipment.Socket.BODY: Vector2(21, 25),
+	Equipment.Socket.WEAPON: Vector2(38, 25),
+	Equipment.Socket.BOOTS: Vector2(21, 41),
+	Equipment.Socket.RING_LEFT: Vector2(4, 58),
+	Equipment.Socket.AMULET: Vector2(21, 58),
+	Equipment.Socket.RING_RIGHT: Vector2(38, 58),
+}
+
+var inventory: Inventory
+var _save_path: String
+var _ui_scale: float
+
+var _panel: VBoxContainer
+var _count: Label
+var _gold: Label
+var _scroll: ScrollContainer
+## One heading, rule and grid per level, highest first. Each square carries its item's `bag_index`.
+var _sections: VBoxContainer
+## The stat block: lines that scroll, and buttons under them that do not.
+var _detail: VBoxContainer
+var _detail_scroll: ScrollContainer
+var _detail_rows: VBoxContainer
+## The open bag item as an index into `inventory.items`, or -1. At most one of this and
+## `_worn_selected` is set: both open into the grid's place.
+var _selected := -1
+## The open worn piece as an `Equipment.Socket`, or -1.
+var _worn_selected := -1
+var _drag_from := Vector2.ZERO
+var _drag_scroll := 0
+var _dragged := 0.0
+
+var _worn_panel: PanelContainer
+var _worn_body: VBoxContainer
+## The doll, while the sheet is showing it rather than a comparison.
+var _doll: Control
+
+var _orb_rule: ColorRect
+var _orb_tray: HBoxContainer
+var _orb_card: OrbCard
+## What a spent orb rolls with. Unseeded: a test that wants a known answer seeds it.
+var _craft_rng := RandomNumberGenerator.new()
+
+
+func _init(player_inventory: Inventory, save_path: String, ui_scale: float) -> void:
+	inventory = player_inventory
+	_save_path = save_path
+	_ui_scale = ui_scale
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	theme = UITheme.theme()
+
+
+func _ready() -> void:
+	_panel = UITheme.titled_panel("Items", "Close the item panel", closed.emit)
+	_panel.scale = Vector2(_ui_scale, _ui_scale)
+	add_child(_panel)
+	var rows := UITheme.body_of(_panel)
+
+	# How full it is and the purse, the two things true of the whole bag, on one line at the top.
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", SLOT_GAP)
+	top.custom_minimum_size = Vector2(WIDTH, 0)
+	rows.add_child(top)
+	_count = UITheme.label()
+	_count.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(_count)
+	var coin := TextureRect.new()
+	coin.texture = Coins.icon()
+	coin.custom_minimum_size = Vector2(Coins.SIZE, Coins.SIZE)
+	coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	top.add_child(coin)
+	# Slate rather than GOLD: amber on cream is too weak a pairing.
+	_gold = UITheme.label("", Palette.SLATE)
+	top.add_child(_gold)
+
+	# Wheel scrolling is the container's, dragging is `_on_grid_input`'s; no bar is drawn.
+	_scroll = _scroll_box()
+	_scroll.gui_input.connect(_on_grid_input)
+	rows.add_child(_scroll)
+	_sections = UITheme.vbox(SLOT_GAP, WIDTH)
+	_scroll.add_child(_sections)
+
+	_detail = UITheme.vbox(2, WIDTH)
+	_detail.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_detail.hide()
+	rows.add_child(_detail)
+	_detail_scroll = _scroll_box()
+	_detail.add_child(_detail_scroll)
+	_detail_rows = UITheme.vbox(2, WIDTH)
+	_detail_scroll.add_child(_detail_rows)
+
+	# The tray comes after both expanding children, so it is a footer under whichever is up.
+	_orb_rule = UITheme.rule()
+	rows.add_child(_orb_rule)
+	_orb_tray = HBoxContainer.new()
+	_orb_tray.add_theme_constant_override("separation", ORB_GAP)
+	_orb_tray.custom_minimum_size = Vector2(WIDTH, 0)
+	rows.add_child(_orb_tray)
+
+	_worn_body = UITheme.vbox(SLOT_GAP)
+	_worn_panel = PanelContainer.new()
+	_worn_panel.theme_type_variation = "WoodPanel"
+	_worn_panel.scale = Vector2(_ui_scale, _ui_scale)
+	_worn_panel.add_child(_worn_body)
+	add_child(_worn_panel)
+
+	# After the sheet: it hangs over the sheet for most of the tray, and tree order decides who is on top.
+	_orb_card = OrbCard.new()
+	_orb_card.scale = Vector2(_ui_scale, _ui_scale)
+	_orb_card.hide()
+	add_child(_orb_card)
+
+	refresh()
+
+
+## Opens on the grid, never on a stat block left over from last time.
+func open() -> void:
+	_selected = -1
+	_worn_selected = -1
+	refresh()
+
+
+func refresh_gold() -> void:
+	_gold.text = str(inventory.gold)
+
+
+## The bag stretched to the window's height, and the sheet centred against its right edge.
+func layout() -> void:
+	var view_size := get_viewport_rect().size
+	_panel.size = Vector2(_panel.get_combined_minimum_size().x, view_size.y / _ui_scale)
+	_panel.position = Vector2.ZERO
+	_worn_panel.size = _worn_panel.get_combined_minimum_size()
+	_worn_panel.position = Vector2((_panel.size.x + WORN_GAP) * _ui_scale,
+			(view_size.y - _worn_panel.size.y * _ui_scale) / 2.0)
+
+
+static func _scroll_box() -> ScrollContainer:
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	return scroll
+
+
+## Everything redrawn from the inventory, reopening whatever was open.
+func refresh() -> void:
+	# Cleared at once: the click hit-test walks these children, and a queued square is still one.
+	UITheme.clear(_sections)
+	var by_level := {}
+	for i in inventory.order():
+		by_level.get_or_add(inventory.items[i].level, []).append(i)
+	for level: int in inventory.levels():
+		_sections.add_child(_section_heading(level))
+		_sections.add_child(UITheme.rule())
+		# A level with a rule and no items keeps its heading, the only place the rule can be undone.
+		if not by_level.has(level):
+			continue
+		var grid := GridContainer.new()
+		grid.columns = GRID_COLS
+		grid.add_theme_constant_override("h_separation", SLOT_GAP)
+		grid.add_theme_constant_override("v_separation", SLOT_GAP)
+		_sections.add_child(grid)
+		for i: int in by_level[level]:
+			var slot := ItemSlot.make(inventory.items[i], i == _selected)
+			slot.set_meta("bag_index", i)
+			grid.add_child(slot)
+	_count.text = "%d / %d" % [inventory.total(), Inventory.CAPACITY]
+	_count.add_theme_color_override("font_color", Palette.RUST if inventory.is_full() else Palette.SLATE)
+	refresh_gold()
+	refresh_orbs()
+	_refresh_worn()
+	if _selected >= 0 and _selected < inventory.total():
+		_show_item(_selected)
+	elif _worn_selected >= 0 and inventory.equipment.item_at(_worn_selected) != null:
+		_show_worn(_worn_selected)
+	else:
+		_hide_item()
+
+
+## A level's heading: its name, Auto (stop bringing this level) and Clear (drop what is held).
+func _section_heading(level: int) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", SLOT_GAP)
+	# The rule is said in words and colour: the toggle's pressed face is too quiet to read a state off.
+	var ruled := inventory.autodiscards(level)
+	var title := UITheme.label("Level %d auto" % level if ruled else "Level %d" % level,
+			Palette.RUST if ruled else Palette.SLATE)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(title)
+
+	var auto := UITheme.button("Auto", "LightButton",
+			"Stop throwing away what is found at level %d" % level if ruled
+			else "Throw away everything found at level %d from now on" % level)
+	auto.toggle_mode = true
+	auto.button_pressed = ruled
+	auto.toggled.connect(_on_autodiscard_toggled.bind(level))
+	row.add_child(auto)
+
+	var held := inventory.count_at(level)
+	var clear := UITheme.button("Clear", "LightDangerButton",
+			"Throw away the %d item(s) held at level %d" % [held, level])
+	clear.disabled = held == 0
+	clear.pressed.connect(_on_clear_level_pressed.bind(level))
+	row.add_child(clear)
+	return row
+
+
+## Touches nothing already held: that is Clear's job.
+func _on_autodiscard_toggled(on: bool, level: int) -> void:
+	inventory.set_autodiscard(level, on)
+	inventory.save(_save_path)
+	_select_item(-1)
+
+
+func _on_clear_level_pressed(level: int) -> void:
+	var gone := inventory.discard_level(level)
+	print("Discarded %d item(s) at level %d" % [gone.size(), level])
+	inventory.save(_save_path)
+	_select_item(-1)
+
+
+## A press that stays put clicks the square under it; one that travels drags the list. The squares
+## ignore the mouse so a drag starting on one still reaches here.
+func _on_grid_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_drag_from = event.position
+			_drag_scroll = _scroll.scroll_vertical
+			_dragged = 0.0
+		elif _dragged < DRAG_THRESHOLD:
+			_on_clicked(event.position + Vector2(0.0, _scroll.scroll_vertical))
+	elif event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+		_dragged += absf(event.relative.y)
+		_scroll.scroll_vertical = _drag_scroll - int(event.position.y - _drag_from.y)
+
+
+## Opens the square under `at` (in the sections' own space), or closes the block on bare panel.
+func _on_clicked(at: Vector2) -> void:
+	for section: Node in _sections.get_children():
+		if not (section is GridContainer):
+			continue
+		for slot: Control in section.get_children():
+			if Rect2((section as Control).position + slot.position, slot.size).has_point(at):
+				var index: int = slot.get_meta("bag_index", -1)
+				_select_item(-1 if index == _selected else index)
+				return
+	_select_item(-1)
+
+
+func _select_item(index: int) -> void:
+	_selected = index
+	_worn_selected = -1
+	refresh()
+
+
+## -1 closes it.
+func _select_socket(socket: int) -> void:
+	_worn_selected = socket
+	_selected = -1
+	refresh()
+
+
+## A bag item's block, with Equip (into the emptiest socket it fits), Discard and Back.
+func _show_item(index: int) -> void:
+	var item := inventory.items[index]
+	var open_sockets := inventory.equipment.sockets_for(item)
+	_fill_detail(item)
+	if not open_sockets.is_empty():
+		var socket: Equipment.Socket = open_sockets[0]
+		var worn := inventory.equipment.item_at(socket)
+		var equip := UITheme.button("Equip", "LightButton", "Wear this in the %s socket%s"
+				% [Equipment.LABELS[socket].to_lower(),
+					"" if worn == null else ", putting %s back in the bag" % worn.display_name()])
+		equip.pressed.connect(_on_equip_pressed.bind(item, socket))
+		_detail.add_child(equip)
+	# No confirmation: two clicks deep already, and asking twice teaches clicking through.
+	var discard := UITheme.button("Discard", "LightDangerButton", "Throw this away for good")
+	discard.pressed.connect(_on_discard_pressed.bind(item))
+	_detail.add_child(discard)
+	_add_back_button(_select_item.bind(-1))
+
+
+## A worn piece's block. No Discard: the cap is the bag's alone, so nothing pushes the player to
+## destroy what they wear.
+func _show_worn(socket: Equipment.Socket) -> void:
+	_fill_detail(inventory.equipment.item_at(socket))
+	_detail.add_child(_unequip_button(_on_unequip_pressed.bind(socket)))
+	_add_back_button(_select_socket.bind(-1))
+
+
+## The lines go inside the scroll and the buttons outside it, so Equip is never scrolled away.
+func _fill_detail(item: Item) -> void:
+	UITheme.clear(_detail, _detail_scroll)
+	ItemDetails.fill(_detail_rows, item, WIDTH)
+	_detail_scroll.scroll_vertical = 0
+
+
+func _add_back_button(action: Callable) -> void:
+	var back := UITheme.button("Back", "LightButton", "Back to everything you are carrying")
+	back.pressed.connect(action)
+	_detail.add_child(back)
+	_scroll.hide()
+	_detail.show()
+
+
+func _hide_item() -> void:
+	_detail.hide()
+	_scroll.show()
+
+
+## Greyed on a full bag rather than destroying something to make room.
+func _unequip_button(action: Callable) -> Button:
+	var full := inventory.is_full()
+	var button := UITheme.button("Unequip", "LightButton",
+			"The bag is full" if full else "Take this off and put it back in the bag")
+	button.disabled = full
+	button.pressed.connect(action)
+	return button
+
+
+func _on_equip_pressed(item: Item, socket: Equipment.Socket) -> void:
+	if inventory.equip(item, socket):
+		inventory.save(_save_path)
+	_select_item(-1)
+
+
+func _on_unequip_pressed(socket: Equipment.Socket) -> void:
+	if inventory.unequip(socket):
+		inventory.save(_save_path)
+	_select_socket(-1)
+
+
+func _on_discard_pressed(item: Item) -> void:
+	if inventory.remove(item):
+		print("Discarded %s (%s, level %d)" % [item.type, item.rarity_name(), item.level])
+		inventory.save(_save_path)
+	_select_item(-1)
+
+
+## The sheet redrawn: the comparison while a bag item is open, the doll otherwise.
+func _refresh_worn() -> void:
+	_doll = null
+	UITheme.clear(_worn_body)
+	if _selected >= 0 and _selected < inventory.total():
+		_show_compare(inventory.items[_selected])
+	else:
+		_show_doll()
+	# The two states differ in size. Measured again deferred: a container's minimum is only right once
+	# it has laid out its new children.
+	layout()
+	layout.call_deferred()
+
+
+## The eight sockets laid over the figure by hand, translucent so the body shows through.
+func _show_doll() -> void:
+	_worn_panel.theme_type_variation = "WoodPanel"
+	_worn_body.custom_minimum_size = Vector2.ZERO
+	_doll = Control.new()
+	var figure := TextureRect.new()
+	figure.texture = DOLL_TEXTURE
+	figure.scale = Vector2(DOLL_SCALE, DOLL_SCALE)
+	figure.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	figure.position = _doll_origin()
+	_doll.add_child(figure)
+	var art: Vector2 = DOLL_TEXTURE.get_size() * DOLL_SCALE + _doll_origin()
+	for socket: Equipment.Socket in DOLL_SOCKETS:
+		art = art.max(_socket_spot(socket) + Vector2(ItemSlot.SIDE, ItemSlot.SIDE))
+	_doll.custom_minimum_size = art
+	_doll.gui_input.connect(_on_doll_input)
+	for socket: Equipment.Socket in DOLL_SOCKETS:
+		var item := inventory.equipment.item_at(socket)
+		var chosen := _worn_selected == socket
+		var slot := (ItemSlot.make(item, chosen, true) if item != null
+				else ItemSlot.empty(Equipment.LABELS[socket], _socket_mark(socket), chosen, true))
+		slot.position = _socket_spot(socket)
+		slot.size = Vector2(ItemSlot.SIDE, ItemSlot.SIDE)
+		slot.set_meta("socket", socket)
+		_doll.add_child(slot)
+	_worn_body.add_child(_doll)
+
+
+## How far the doll is pushed right and down so no socket hangs off the page.
+func _doll_origin() -> Vector2:
+	var least := Vector2.ZERO
+	for socket: Equipment.Socket in DOLL_SOCKETS:
+		least = least.min(_socket_corner(socket))
+	return -least.min(Vector2.ZERO)
+
+
+## A socket square's top-left before the doll is shifted to fit.
+func _socket_corner(socket: Equipment.Socket) -> Vector2:
+	return (DOLL_SOCKETS[socket] * DOLL_SCALE - Vector2(ItemSlot.SIDE, ItemSlot.SIDE) / 2.0).floor()
+
+
+func _socket_spot(socket: Equipment.Socket) -> Vector2:
+	return _socket_corner(socket) + _doll_origin()
+
+
+## The faint mark an empty ring or amulet socket carries; the figure explains the rest.
+func _socket_mark(socket: Equipment.Socket) -> Texture2D:
+	if socket == Equipment.Socket.AMULET:
+		return SOCKET_AMULET_TEXTURE
+	if socket in [Equipment.Socket.RING_LEFT, Equipment.Socket.RING_RIGHT]:
+		return SOCKET_RING_TEXTURE
+	return null
+
+
+## A click on a filled socket opens it; a second click on the open one closes it.
+func _on_doll_input(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed):
+		return
+	for slot: Control in _doll.get_children():
+		if not slot.has_meta("socket") or not Rect2(slot.position, slot.size).has_point(event.position):
+			continue
+		var socket: Equipment.Socket = slot.get_meta("socket")
+		if inventory.equipment.item_at(socket) == null:
+			continue
+		_select_socket(-1 if socket == _worn_selected else socket)
+		return
+
+
+## What the open item would replace: the socket Equip targets, so the page shows exactly what
+## pressing it would take off.
+func _show_compare(item: Item) -> void:
+	var open_sockets := inventory.equipment.sockets_for(item)
+	if open_sockets.is_empty():
+		_show_doll()
+		return
+	_worn_panel.theme_type_variation = "TextPanel"
+	_worn_body.custom_minimum_size = Vector2(WORN_WIDTH, 0)
+	var socket: Equipment.Socket = open_sockets[0]
+	var worn := inventory.equipment.item_at(socket)
+	var heading := UITheme.vbox(2)
+	heading.add_child(UITheme.label("Equipped · %s" % Equipment.LABELS[socket], Palette.SLATE))
+	heading.add_child(UITheme.rule(WORN_WIDTH))
+	_worn_body.add_child(heading)
+	if worn == null:
+		_worn_body.add_child(ItemDetails.line("Nothing worn", Palette.SLATE, WORN_WIDTH))
+		return
+	# Its own box: ItemDetails.fill empties whatever it is given.
+	var column := UITheme.vbox(2)
+	ItemDetails.fill(column, worn, WORN_WIDTH)
+	_worn_body.add_child(column)
+	_worn_body.add_child(_unequip_button(_on_compare_unequip_pressed.bind(item, socket)))
+
+
+## Keeps the judged piece open, found again by identity: the piece coming back moves every index.
+func _on_compare_unequip_pressed(item: Item, socket: Equipment.Socket) -> void:
+	if inventory.unequip(socket):
+		inventory.save(_save_path)
+	_select_item(inventory.items.find(item))
+
+
+## The piece the bag has open, bag item or worn, or null on the grid.
+func _open_piece() -> Item:
+	if _selected >= 0 and _selected < inventory.total():
+		return inventory.items[_selected]
+	if _worn_selected >= 0:
+		return inventory.equipment.item_at(_worn_selected)
+	return null
+
+
+## Every orb held, lit; with a piece open, only the ones that can do something to it stay lit.
+func refresh_orbs() -> void:
+	# No tray until the first orb; once seen it stays, even with every orb spent.
+	_orb_tray.visible = inventory.total_orbs() > 0 or "first_orb" in inventory.tips
+	_orb_rule.visible = _orb_tray.visible
+	UITheme.clear(_orb_tray)
+	var against := _open_piece()
+	for orb: String in OrbTable.orbs():
+		var slot := OrbSlot.make(orb, inventory.orb_count(orb), against == null or OrbTable.can_apply(orb, against))
+		slot.pressed.connect(_on_orb_pressed)
+		slot.hovered.connect(_on_orb_hovered.bind(slot))
+		slot.unhovered.connect(_hide_orb_card)
+		_orb_tray.add_child(slot)
+	# The square it described has just been freed.
+	_hide_orb_card()
+
+
+## Applied first and spent second, so an orb with nothing to do is never consumed. The selection
+## survives: crafting adds nothing to the bag and takes nothing out.
+func _on_orb_pressed(orb: String) -> void:
+	var item := _open_piece()
+	if item == null or inventory.orb_count(orb) <= 0:
+		return
+	if not OrbTable.apply(orb, item, _craft_rng):
+		return
+	inventory.spend_orb(orb)
+	inventory.save(_save_path)
+	print("Spent %s on %s (%s, level %d)" % [orb, item.display_name(), item.rarity_name(), item.level])
+	refresh()
+
+
+## Placed now and again deferred: the first pass measures labels that have not laid out yet.
+func _on_orb_hovered(orb: String, slot: OrbSlot) -> void:
+	_orb_card.fill(orb, inventory.orb_count(orb), _open_piece())
+	_orb_card.show()
+	_place_orb_card(slot.get_global_rect())
+	_place_orb_card.call_deferred(slot.get_global_rect())
+
+
+func _hide_orb_card() -> void:
+	_orb_card.hide()
+
+
+## Above the square: the screen edge is on one side of the tray and the sheet on the other.
+func _place_orb_card(anchor: Rect2) -> void:
+	if not _orb_card.visible:
+		return
+	var card := _orb_card.get_combined_minimum_size() * _ui_scale
+	var spot := Vector2(anchor.position.x, anchor.position.y - card.y - SLOT_GAP * _ui_scale)
+	_orb_card.position = spot.clamp(Vector2.ZERO, (get_viewport_rect().size - card).max(Vector2.ZERO))

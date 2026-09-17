@@ -205,12 +205,9 @@ func _is_nine_slice(box: StyleBox, sprite_name: String, what: String) -> bool:
 ## fixed squares and a gap worked out from what is left over, so a change to either number that broke
 ## the arithmetic would show as a tray a few pixels out rather than as anything that looks wrong.
 func _test_orb_tray() -> bool:
-	# The main scene has no class_name -- it is a scene's script, not a type anything constructs --
-	# so its constants are read off the script resource itself.
-	var scene := preload("res://Scenes/main_scene.gd")
-	var cols: int = scene.ORB_COLS
-	var gap: int = scene.ORB_GAP
-	var width: int = scene.BAG_WIDTH
+	var cols: int = BagPage.ORB_COLS
+	var gap: int = BagPage.ORB_GAP
+	var width: int = BagPage.WIDTH
 	var assembled := cols * OrbSlot.SIDE + (cols - 1) * gap
 	_check(assembled == width,
 			"eight orbs and their gaps come to %d, not the grid's %d" % [assembled, width])

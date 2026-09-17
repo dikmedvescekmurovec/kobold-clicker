@@ -115,7 +115,7 @@ func _shoot_inventory() -> void:
 	image.save_png("user://ui_inventory.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_inventory.png"))
 
-	var panel: Control = main._bag_panel
+	var panel: Control = main.bag_page._panel
 	# The panel as it is actually laid out, not as small as it could be: it is stretched to the window
 	# height, and its minimum size is now only the few rows at the top of it.
 	var rect := Rect2i(Rect2(panel.position, panel.size * panel.scale))
@@ -128,7 +128,7 @@ func _shoot_inventory() -> void:
 	# The stat block, open on the elite sword -- the newest item, and the only shot that shows what a
 	# modifier reads like. A rare sword is worn, so this is also the comparison: the elite piece on
 	# the left, what it would replace on the right, and what the swap is worth under its stats.
-	main._select_item(main.inventory.total() - 1)
+	main.bag_page._select_item(main.inventory.total() - 1)
 	for i in 2:
 		await process_frame
 	await RenderingServer.frame_post_draw
@@ -139,8 +139,8 @@ func _shoot_inventory() -> void:
 	# The tray doing its second job. The elite sword is still open, so the orbs that can touch an
 	# elite stand lit beside the ones that cannot -- which is the whole of the crafting interface and
 	# the one thing no still of the grid can show.
-	var tray_rect := Rect2(main._orb_tray.get_global_position(),
-			main._orb_tray.size * Vector2(main.ui_scale, main.ui_scale))
+	var tray_rect := Rect2(main.bag_page._orb_tray.get_global_position(),
+			main.bag_page._orb_tray.size * Vector2(main.ui_scale, main.ui_scale))
 	var craft := image.get_region(Rect2i(tray_rect).grow(12)
 			.intersection(Rect2i(Vector2i.ZERO, image.get_size())))
 	craft.resize(craft.get_width() * 3, craft.get_height() * 3, Image.INTERPOLATE_NEAREST)
@@ -152,27 +152,27 @@ func _shoot_inventory() -> void:
 	# the first: a card near the left end fits inside the bag panel, and the arrangement worth seeing
 	# is the one where it hangs out over the character sheet.
 	var grey: OrbSlot = null
-	for child: Node in main._orb_tray.get_children():
+	for child: Node in main.bag_page._orb_tray.get_children():
 		if child is OrbSlot and not OrbTable.can_apply((child as OrbSlot).orb,
-				main.inventory.items[main._bag_selected]):
+				main.inventory.items[main.bag_page._selected]):
 			grey = child
 	if grey != null:
-		main._on_orb_hovered(grey.orb, grey)
+		main.bag_page._on_orb_hovered(grey.orb, grey)
 		for i in 2:
 			await process_frame
 		await RenderingServer.frame_post_draw
 		image = root.get_texture().get_image()
 		image.save_png("user://ui_orb_card.png")
 		print("Saved ", ProjectSettings.globalize_path("user://ui_orb_card.png"))
-		main._on_orb_unhovered()
+		main.bag_page._hide_orb_card()
 
 	# The two pages together and nothing else, doubled. The whole question the spread exists to
 	# answer is whether the two columns read as one comparison, and that cannot be judged from a shot
 	# of the map with them off in the corner.
-	var spread := Rect2i(Rect2(main._bag_panel.position,
-			main._bag_panel.size * main._bag_panel.scale))
-	spread = spread.merge(Rect2i(Rect2(main._worn_panel.position,
-			main._worn_panel.size * main._worn_panel.scale)))
+	var spread := Rect2i(Rect2(main.bag_page._panel.position,
+			main.bag_page._panel.size * main.bag_page._panel.scale))
+	spread = spread.merge(Rect2i(Rect2(main.bag_page._worn_panel.position,
+			main.bag_page._worn_panel.size * main.bag_page._worn_panel.scale)))
 	spread = spread.grow(8).intersection(Rect2i(Vector2i.ZERO, image.get_size()))
 	var pages := image.get_region(spread)
 	pages.resize(pages.get_width() * 2, pages.get_height() * 2, Image.INTERPOLATE_NEAREST)
@@ -205,10 +205,10 @@ func _shoot_skills() -> void:
 	main._on_skills_pressed()
 	for i in 2:
 		await process_frame
-	var view: SkillTreeView = main._skill_views["power"]
+	var view: SkillTreeView = main.skills_page._skill_views["power"]
 	for child: Node in view.get_children():
 		if child is SkillSlot and child.id == "whirlwind":
-			main._on_skill_hovered(child.id, child)
+			main.skills_page._on_skill_hovered(child.id, child)
 	for i in 2:
 		await process_frame
 	await RenderingServer.frame_post_draw

@@ -809,11 +809,11 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	_check(_bag_squares(main).is_empty(), "and the bag is empty")
 
 	main._on_bag_pressed()
-	_check(main._bag_panel.visible and not main._bag_button.visible, "the panel takes the button's place")
-	_check(is_zero_approx(main._bag_panel.position.x), "and sits against the left edge")
-	_check(not main._bag_detail.visible, "with no stat block until a square is clicked")
-	main._on_bag_closed()
-	_check(not main._bag_panel.visible and main._bag_button.visible, "closing it gives the button back")
+	_check(main.bag_page.visible and not main._bag_button.visible, "the panel takes the button's place")
+	_check(is_zero_approx(main.bag_page._panel.position.x), "and sits against the left edge")
+	_check(not main.bag_page._detail.visible, "with no stat block until a square is clicked")
+	main._on_left_page_closed()
+	_check(not main.bag_page.visible and main._bag_button.visible, "closing it gives the button back")
 
 	# The equipment page: its own panel beside the item panel, eight sockets, all empty.
 	main._on_bag_pressed()
@@ -821,19 +821,19 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	_check(_socket_squares(main).size() == Equipment.sockets().size(),
 			"the doll has %d sockets, not %d"
 			% [Equipment.sockets().size(), _socket_squares(main).size()])
-	_check(main._worn_panel.visible, "the character sheet opens with the bag")
-	_check(main._worn_panel.position.x >= main._bag_panel.size.x * main.ui_scale,
+	_check(main.bag_page.visible, "the character sheet opens with the bag")
+	_check(main.bag_page._worn_panel.position.x >= main.bag_page._panel.size.x * main.ui_scale,
 			"and stands outside the item panel, not inside it")
 
 	# The sockets are placed by hand on the silhouette, which is the one thing here no layout code
 	# would catch going wrong: a socket with no spot would pile up at the origin, and two that
 	# overlap would leave one of them unclickable wherever they cross.
 	for socket: Equipment.Socket in Equipment.sockets():
-		_check(main.DOLL_SOCKETS.has(socket),
+		_check(main.bag_page.DOLL_SOCKETS.has(socket),
 				"the %s socket has nowhere to sit on the doll" % Equipment.LABELS[socket])
 	var placed := {}
-	for socket: Equipment.Socket in main.DOLL_SOCKETS:
-		var spot: Vector2 = main._socket_spot(socket)
+	for socket: Equipment.Socket in main.bag_page.DOLL_SOCKETS:
+		var spot: Vector2 = main.bag_page._socket_spot(socket)
 		_check(spot.x >= 0.0 and spot.y >= 0.0,
 				"the %s socket hangs off the page at %s" % [Equipment.LABELS[socket], spot])
 		var box := Rect2(spot, Vector2(ItemSlot.SIDE, ItemSlot.SIDE))
@@ -844,8 +844,8 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	# And the page is big enough to hold every one of them.
 	for socket: Equipment.Socket in placed:
 		var box: Rect2 = placed[socket]
-		_check(box.end.x <= main._doll.custom_minimum_size.x
-				and box.end.y <= main._doll.custom_minimum_size.y,
+		_check(box.end.x <= main.bag_page._doll.custom_minimum_size.x
+				and box.end.y <= main.bag_page._doll.custom_minimum_size.y,
 				"the %s socket runs off the page" % Equipment.LABELS[socket])
 
 	# Wearing a sword through the panel: out of the bag, into the socket, and worth something.
@@ -853,10 +853,10 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	rng.seed = WORLD_SEED
 	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng)
 	main.inventory.add(sword)
-	main._select_item(0)
+	main.bag_page._select_item(0)
 	await process_frame
-	_check(main._bag_detail.visible, "the sword's stat block opens")
-	main._on_equip_pressed(sword, Equipment.Socket.WEAPON)
+	_check(main.bag_page._detail.visible, "the sword's stat block opens")
+	main.bag_page._on_equip_pressed(sword, Equipment.Socket.WEAPON)
 	await process_frame
 	_check(main.inventory.total() == 0, "wearing it takes it out of the bag")
 	_check(main.inventory.equipment.item_at(Equipment.Socket.WEAPON) == sword, "and puts it on")
@@ -866,17 +866,17 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	_check(armed.attack_speed > 0.0, "with the weapon swinging on its own")
 
 	# And off again, back to where it came from.
-	main._select_socket(Equipment.Socket.WEAPON)
+	main.bag_page._select_socket(Equipment.Socket.WEAPON)
 	await process_frame
-	_check(main._bag_detail.visible, "a worn piece opens the same way")
-	main._on_unequip_pressed(Equipment.Socket.WEAPON)
+	_check(main.bag_page._detail.visible, "a worn piece opens the same way")
+	main.bag_page._on_unequip_pressed(Equipment.Socket.WEAPON)
 	await process_frame
 	_check(main.inventory.total() == 1 and main.inventory.items[0] == sword, "taking it off gives it back")
 	_check(main.inventory.equipment.worn.is_empty(), "and leaves the socket empty")
 	main.inventory.items.clear()
 	main.inventory.save(TEST_PATH)
-	main._select_item(-1)
-	main._on_bag_closed()
+	main.bag_page._select_item(-1)
+	main._on_left_page_closed()
 
 	# A first fight, whose elite is promised a drop.
 	var target := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
@@ -927,8 +927,8 @@ func _test_the_map_keeps_what_dropped() -> bool:
 					main.inventory.total(), main._fight_drops.size()])
 	_check(main.inventory.total() > 0, "the promised elite paid out")
 	_check(main.inventory.first_elite_taken, "and is not promised again")
-	_check(main._bag_gold.text == str(main.inventory.gold),
-			"the bag's footer says what is in the purse: %s" % main._bag_gold.text)
+	_check(main.bag_page._gold.text == str(main.inventory.gold),
+			"the bag's footer says what is in the purse: %s" % main.bag_page._gold.text)
 	_check(main._bag_button.visible, "the button is back with the map")
 	_check(main._tip_panel != null, "and the first find has a pop-up")
 
@@ -938,19 +938,19 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	var squares := _bag_squares(main)
 	_check(squares.size() == main.inventory.total(),
 			"the sections hold every item: %d of %d" % [squares.size(), main.inventory.total()])
-	main._select_item(0)
+	main.bag_page._select_item(0)
 	await process_frame
-	_check(main._bag_detail.visible, "clicking a square opens its stat block")
+	_check(main.bag_page._detail.visible, "clicking a square opens its stat block")
 	var newest: Item = main.inventory.items[0]
 	# Read out of the whole block, not off its direct children: the lines live inside the scroll that
 	# keeps a long piece from pushing Equip off the bottom of the panel.
-	var block := _texts(main._bag_detail)
+	var block := _texts(main.bag_page._detail)
 	_check(newest.display_name() in block, "which names the item")
 	_check("%s · level %d" % [newest.rarity_name(), newest.level] in block,
 			"and its rarity and level")
-	main._select_item(-1)
+	main.bag_page._select_item(-1)
 	await process_frame
-	_check(not main._bag_detail.visible, "and it closes again")
+	_check(not main.bag_page._detail.visible, "and it closes again")
 
 	# The hand-written gesture: a press that stays put opens a square, one that travels scrolls the
 	# grid and opens nothing. Driven straight at the handler, because a headless run has no mouse.
@@ -959,13 +959,13 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	_press(main, on_first, true)
 	_press(main, on_first, false)
 	await process_frame
-	_check(main._bag_detail.visible, "a press that stays put is a click")
-	main._select_item(-1)
+	_check(main.bag_page._detail.visible, "a press that stays put is a click")
+	main.bag_page._select_item(-1)
 	_press(main, on_first, true)
-	_drag(main, on_first, main.BAG_DRAG_THRESHOLD * 4.0)
+	_drag(main, on_first, BagPage.DRAG_THRESHOLD * 4.0)
 	_press(main, on_first, false)
 	await process_frame
-	_check(not main._bag_detail.visible, "a press that travels is a drag, and opens nothing")
+	_check(not main.bag_page._detail.visible, "a press that travels is a drag, and opens nothing")
 
 	# Sections. Two levels means two grids with a heading each, and a square in the second section is
 	# the case the flat-grid arithmetic this replaced would have got wrong.
@@ -973,11 +973,11 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	main.inventory.add(_piece(ItemRarity.Rarity.COMMON, 1))
 	var deeper := _piece(ItemRarity.Rarity.RARE, 6)
 	main.inventory.add(deeper)
-	main._select_item(-1)
+	main.bag_page._select_item(-1)
 	await process_frame
 	var grids := 0
 	var headings := PackedStringArray()
-	for section: Node in main._bag_sections.get_children():
+	for section: Node in main.bag_page._sections.get_children():
 		if section is GridContainer:
 			grids += 1
 		elif section is HBoxContainer:
@@ -995,15 +995,15 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	# Read before the click: opening a square rebuilds the sections, and the square that was clicked
 	# is gone by the time the answer is checked.
 	var second_index: int = second.get_meta("bag_index", -1)
-	main._on_bag_clicked(_square_spot(second))
+	main.bag_page._on_clicked(_square_spot(second))
 	await process_frame
-	_check(main._bag_selected == second_index,
+	_check(main.bag_page._selected == second_index,
 			"a click in the second section opens that section's item")
 
 	# Throwing one away by hand, from the bag.
-	main._select_item(main.inventory.items.find(deeper))
+	main.bag_page._select_item(main.inventory.items.find(deeper))
 	await process_frame
-	main._on_discard_pressed(deeper)
+	main.bag_page._on_discard_pressed(deeper)
 	await process_frame
 	_check(not main.inventory.items.has(deeper), "Discard takes the piece out of the bag")
 	_check(_bag_squares(main).size() == 1, "and off the panel")
@@ -1011,12 +1011,12 @@ func _test_the_map_keeps_what_dropped() -> bool:
 
 	# A level with a rule on it and nothing in it keeps its heading, which is the only place the rule
 	# can be turned off again.
-	main._on_autodiscard_toggled(true, 9)
+	main.bag_page._on_autodiscard_toggled(true, 9)
 	await process_frame
 	_check(main.inventory.autodiscards(9), "the Auto button sets the rule")
 	_check(Inventory.load_from(TEST_PATH).autodiscards(9), "and writes it")
 	var empty_heading := false
-	for section: Node in main._bag_sections.get_children():
+	for section: Node in main.bag_page._sections.get_children():
 		if not (section is HBoxContainer):
 			continue
 		for label: Node in section.get_children():
@@ -1025,10 +1025,10 @@ func _test_the_map_keeps_what_dropped() -> bool:
 			if label is Label and (label as Label).text == "Level 9 auto":
 				empty_heading = true
 	_check(empty_heading, "a level with a rule and no items still has its heading")
-	main._on_clear_level_pressed(1)
+	main.bag_page._on_clear_level_pressed(1)
 	await process_frame
 	_check(main.inventory.total() == 0, "Clear empties a level")
-	main._on_autodiscard_toggled(false, 9)
+	main.bag_page._on_autodiscard_toggled(false, 9)
 
 	var saved := Inventory.load_from(TEST_PATH)
 	_check(saved.total() == main.inventory.total(), "the file on disk holds the same count")
@@ -1155,8 +1155,8 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 	_check(main.inventory.gold == earned,
 			"and so did its gold, in one go: %d of %d" % [main.inventory.gold, earned])
 	_check(main._fight_gold == 0, "leaving the pouch empty, so the next run starts from nothing")
-	_check(main._bag_gold.text == str(earned),
-			"the bag's footer says so: %s" % main._bag_gold.text)
+	_check(main.bag_page._gold.text == str(earned),
+			"the bag's footer says so: %s" % main.bag_page._gold.text)
 	var saved := Inventory.load_from(TEST_PATH)
 	_check(saved.total() == pouch.size(), "the file on disk holds them too")
 	_check(saved.gold == earned, "and the gold with them: %d of %d" % [saved.gold, earned])
@@ -1258,7 +1258,7 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 ## rectangle, so a test asking what the bag holds has to walk the sections the way the click does.
 func _bag_squares(main: Node) -> Array:
 	var squares := []
-	for section: Node in main._bag_sections.get_children():
+	for section: Node in main.bag_page._sections.get_children():
 		if not (section is GridContainer):
 			continue
 		for slot: Node in section.get_children():
@@ -1271,9 +1271,9 @@ func _bag_squares(main: Node) -> Array:
 ## page's two states apart.
 func _socket_squares(main: Node) -> Array:
 	var squares := []
-	if main._doll == null:
+	if main.bag_page._doll == null:
 		return squares
-	for slot: Node in main._doll.get_children():
+	for slot: Node in main.bag_page._doll.get_children():
 		if slot.has_meta("socket"):
 			squares.append(slot)
 	return squares
@@ -1590,7 +1590,7 @@ func _press(main: Node, at: Vector2, down: bool) -> void:
 	event.button_index = MOUSE_BUTTON_LEFT
 	event.pressed = down
 	event.position = at
-	main._on_bag_grid_input(event)
+	main.bag_page._on_grid_input(event)
 
 
 ## The cursor moving `by` pixels down the grid with the button held.
@@ -1599,7 +1599,7 @@ func _drag(main: Node, from: Vector2, by: float) -> void:
 	event.button_mask = MOUSE_BUTTON_MASK_LEFT
 	event.position = from + Vector2(0, by)
 	event.relative = Vector2(0, by)
-	main._on_bag_grid_input(event)
+	main.bag_page._on_grid_input(event)
 
 
 ## One item as a string, so two of them can be compared across a save.
@@ -1701,10 +1701,10 @@ func _test_comparing() -> bool:
 		await process_frame
 	_check(not _socket_squares(main).is_empty(), "with nothing selected the page is the doll")
 
-	main._select_item(main.inventory.items.find(strong))
+	main.bag_page._select_item(main.inventory.items.find(strong))
 	for i in 2:
 		await process_frame
-	var beside := _texts(main._worn_body)
+	var beside := _texts(main.bag_page._worn_body)
 	_check("Equipped · %s" % Equipment.LABELS[Equipment.Socket.WEAPON] in beside,
 			"selecting a sword names the socket it would go in: %s" % beside)
 	_check(weak.display_name() in beside, "and shows the sword already in it")
@@ -1715,7 +1715,7 @@ func _test_comparing() -> bool:
 	# piece is, never what the swap would be worth in signed numbers.
 	var change := ItemDetails.deltas(strong, weak)
 	_check(change.has("damage") and change["damage"] > 0.0, "the better sword hits harder")
-	var block := _texts(main._bag_detail)
+	var block := _texts(main.bag_page._detail)
 	_check(strong.display_name() in block, "the block names the piece that is open: %s" % block)
 	for stat: String in change:
 		_check(not (LootTable.stat_delta(stat, change[stat]) in block),
@@ -1723,14 +1723,14 @@ func _test_comparing() -> bool:
 
 	# Taking the worn piece off from here keeps the piece being judged open -- it is the whole point
 	# of standing them side by side, and the index it sits at has just moved.
-	main._on_compare_unequip_pressed(strong, Equipment.Socket.WEAPON)
+	main.bag_page._on_compare_unequip_pressed(strong, Equipment.Socket.WEAPON)
 	for i in 2:
 		await process_frame
 	_check(main.inventory.equipment.item_at(Equipment.Socket.WEAPON) == null, "Unequip takes it off")
 	_check(main.inventory.items.has(weak), "and gives it back to the bag")
-	_check(main._bag_selected == main.inventory.items.find(strong),
+	_check(main.bag_page._selected == main.inventory.items.find(strong),
 			"and the sword being judged is still the one open")
-	_check("Nothing worn" in _texts(main._worn_body), "with an empty socket beside it")
+	_check("Nothing worn" in _texts(main.bag_page._worn_body), "with an empty socket beside it")
 
 	# A boot on the feet is not what a sword would replace: the page compares against the socket the
 	# Equip button targets and nothing else.
@@ -1741,18 +1741,18 @@ func _test_comparing() -> bool:
 	boot.stats = Item.scaled_stats(boot.type, 1)
 	main.inventory.add(boot)
 	main.inventory.equip(boot, Equipment.Socket.BOOTS)
-	main._select_item(main.inventory.items.find(strong))
+	main.bag_page._select_item(main.inventory.items.find(strong))
 	for i in 2:
 		await process_frame
-	var still := _texts(main._worn_body)
+	var still := _texts(main.bag_page._worn_body)
 	_check("Nothing worn" in still, "a worn boot leaves the weapon socket empty")
 	_check(not (boot.display_name() in still), "and is not what the sword is compared against")
 
-	main._select_item(-1)
+	main.bag_page._select_item(-1)
 	await process_frame
 	_check(_socket_squares(main).size() == Equipment.sockets().size(),
 			"closing the block brings the doll back, with every socket on it")
-	main._on_bag_closed()
+	main._on_left_page_closed()
 	main.queue_free()
 	_clear_save()
 	return true
@@ -2033,7 +2033,7 @@ func _test_crafting_from_the_bag() -> bool:
 	main.inventory.add_orb("Orb of Transmutation", 2)
 	main.inventory.add_orb("Orb of Scouring", 1)
 	main._on_bag_pressed()
-	main._select_item(0)
+	main.bag_page._select_item(0)
 	for i in 2:
 		await process_frame
 
@@ -2041,7 +2041,7 @@ func _test_crafting_from_the_bag() -> bool:
 	# has not, which is the whole of what the lit/grey split says.
 	var lit: Array = []
 	var grey: Array = []
-	for child: Node in main._orb_tray.get_children():
+	for child: Node in main.bag_page._orb_tray.get_children():
 		var orb: String = child.orb
 		if main.inventory.orb_count(orb) <= 0:
 			continue
@@ -2051,11 +2051,11 @@ func _test_crafting_from_the_bag() -> bool:
 			grey.append(orb)
 	_check(lit == ["Orb of Transmutation"], "only transmutation is lit on a common, got %s" % [lit])
 	_check(grey == ["Orb of Scouring"], "scouring is grey on a common, got %s" % [grey])
-	_check(main._orb_tray.get_child_count() == OrbTable.ORBS.size(),
+	_check(main.bag_page._orb_tray.get_child_count() == OrbTable.ORBS.size(),
 			"the tray draws every orb, held or not")
 
 	# Pressed, exactly as a click on the square does it.
-	main._on_orb_pressed("Orb of Transmutation")
+	main.bag_page._on_orb_pressed("Orb of Transmutation")
 	for i in 2:
 		await process_frame
 	_check(sword.rarity == ItemRarity.Rarity.UNCOMMON, "the sword came up uncommon")
@@ -2063,18 +2063,18 @@ func _test_crafting_from_the_bag() -> bool:
 	_check(main.inventory.orb_count("Orb of Transmutation") == 1, "one orb was spent")
 	# Crafting adds nothing and removes nothing, so the selection is still the same piece -- which is
 	# what lets the player watch a piece change rather than go hunting for it again.
-	_check(main._bag_selected == 0, "the block stayed open on the same piece")
-	_check(main._bag_detail.visible, "and is still showing")
+	_check(main.bag_page._selected == 0, "the block stayed open on the same piece")
+	_check(main.bag_page._detail.visible, "and is still showing")
 
 	# That orb now has nothing to do, and pressing it again must not cost the player the second one.
 	# The square is grey and ignores the click; the handler is checked too, because the guarantee is
 	# apply first and spend only if it landed.
-	main._on_orb_pressed("Orb of Transmutation")
+	main.bag_page._on_orb_pressed("Orb of Transmutation")
 	_check(main.inventory.orb_count("Orb of Transmutation") == 1, "a refused orb is not spent")
 	_check(sword.rarity == ItemRarity.Rarity.UNCOMMON, "and the piece did not change again")
 
 	# Scouring is lit now, and takes it all back.
-	main._on_orb_pressed("Orb of Scouring")
+	main.bag_page._on_orb_pressed("Orb of Scouring")
 	for i in 2:
 		await process_frame
 	_check(sword.rarity == ItemRarity.Rarity.COMMON, "scouring brought it back to common")
@@ -2085,25 +2085,25 @@ func _test_crafting_from_the_bag() -> bool:
 	# over the last square rather than the first, because that is the one the card cannot fit beside:
 	# it is placed at the square's own x and is wider than the tray's right-hand end has room for, so
 	# it hangs out over the character sheet standing against the bag panel.
-	var last_orb: OrbSlot = main._orb_tray.get_child(main._orb_tray.get_child_count() - 1)
-	main._on_orb_hovered(last_orb.orb, last_orb)
-	_check(main._orb_card.visible, "hovering puts the card up")
+	var last_orb: OrbSlot = main.bag_page._orb_tray.get_child(main.bag_page._orb_tray.get_child_count() - 1)
+	main.bag_page._on_orb_hovered(last_orb.orb, last_orb)
+	_check(main.bag_page._orb_card.visible, "hovering puts the card up")
 	# Placed once by the hover and again deferred, so it is measured after the labels have laid out.
 	for i in 2:
 		await process_frame
-	var card_right: float = main._orb_card.get_global_position().x + main._orb_card.size.x * main.ui_scale
+	var card_right: float = main.bag_page._orb_card.get_global_position().x + main.bag_page._orb_card.size.x * main.ui_scale
 	# Two checks that only mean anything together: the card really does reach across into the sheet's
 	# column, and it is the later child of the layer, which is the whole of what decides which of the
 	# two the player sees where they meet. Compared across rather than as whole rectangles, because
 	# whether they also meet up and down is a question about the height of the window.
-	_check(card_right > _panel_right(main._bag_panel, main.ui_scale),
+	_check(card_right > _panel_right(main.bag_page._panel, main.ui_scale),
 			"the card for the last orb reaches past the bag panel")
-	_check(card_right > main._worn_panel.get_global_position().x,
+	_check(card_right > main.bag_page._worn_panel.get_global_position().x,
 			"and into the character sheet's column")
-	_check(main._orb_card.get_index() > main._worn_panel.get_index(),
+	_check(main.bag_page._orb_card.get_index() > main.bag_page._worn_panel.get_index(),
 			"so it is drawn after the sheet, which cannot then cover it")
-	main._on_orb_unhovered()
-	_check(not main._orb_card.visible, "and leaving takes it down")
+	main.bag_page._hide_orb_card()
+	_check(not main.bag_page._orb_card.visible, "and leaving takes it down")
 
 	# Everything crafted goes through the save unchanged, which is the whole point of a piece being
 	# frozen: what came back is what was put in, orbs and all.
@@ -2138,14 +2138,14 @@ func _test_tips() -> bool:
 	_check(not main._bag_button.visible and not main._skills_button.visible, "no corner buttons at first")
 	main._check_tips()
 	_check(main._tip_panel == null and main._tip_queue.is_empty(), "and nothing to say")
-	main._refresh_orbs()
-	_check(not main._orb_tray.visible, "no orb tray before the first orb")
+	main.bag_page.refresh_orbs()
+	_check(not main.bag_page._orb_tray.visible, "no orb tray before the first orb")
 	main.inventory.add_orb("Orb of Chaos")
-	main._refresh_orbs()
-	_check(main._orb_tray.visible, "and one once an orb is held")
+	main.bag_page.refresh_orbs()
+	_check(main.bag_page._orb_tray.visible, "and one once an orb is held")
 	main.inventory.orbs.clear()
-	main._refresh_orbs()
-	_check(not main._orb_tray.visible, "gone again if it was never seen and none is held")
+	main.bag_page.refresh_orbs()
+	_check(not main.bag_page._orb_tray.visible, "gone again if it was never seen and none is held")
 
 	main.inventory.add(_piece(ItemRarity.Rarity.COMMON, 1))
 	main.inventory.level = 2

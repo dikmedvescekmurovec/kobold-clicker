@@ -12,10 +12,6 @@ extends RefCounted
 ## own width and its own way back. The lines want a bone background: the darker half of the rarity
 ## ramp is chosen to be read on the white panel, not on wood.
 
-## The rule drawn between what the piece is and what it rolled.
-const RULE_HEIGHT := 1
-
-
 ## Empties `rows` and writes `item` into it. `width` is what a line may use before it wraps -- the
 ## font is only legible at its native 16 px, so a long modifier has to wrap rather than shrink.
 ##
@@ -28,7 +24,7 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Item = 
 	# Rarity and level on one line: they are the two things that say what a piece is worth, and they
 	# are rolled together off the same body.
 	rows.add_child(line("%s · level %d" % [item.rarity_name(), item.level], item.text_color(), width))
-	rows.add_child(_rule())
+	rows.add_child(UITheme.rule())
 	# What the swap is worth goes first, straight under the name, and what the piece is follows it.
 	# It is the answer the block is opened for, and an elite carrying six modifiers is taller than
 	# the panel -- last, it would be the one thing the player had to scroll to find.
@@ -41,7 +37,7 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Item = 
 				# up; one that ever inverted would need one here, and there is none.
 				rows.add_child(line(LootTable.stat_delta(stat, change[stat]),
 						Palette.LEAF if change[stat] > 0.0 else Palette.RUST, width))
-			rows.add_child(_rule())
+			rows.add_child(UITheme.rule())
 	for text in item.stat_lines():
 		rows.add_child(line(text, Palette.INK, width))
 	for text in item.mod_lines():
@@ -69,14 +65,6 @@ static func deltas(item: Item, against: Item) -> Dictionary:
 		if not LootTable.delta_shows(stat, out[stat]):
 			out.erase(stat)
 	return out
-
-
-## The line drawn between two blocks of it.
-static func _rule() -> ColorRect:
-	var rule := ColorRect.new()
-	rule.color = Palette.SLATE
-	rule.custom_minimum_size = Vector2(0, RULE_HEIGHT)
-	return rule
 
 
 ## One line of it.
