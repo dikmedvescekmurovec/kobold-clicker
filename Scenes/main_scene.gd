@@ -54,6 +54,8 @@ const LEVEL_UP_FONT := 48
 @onready var camera: Camera2D = $Camera2D
 
 var _chart_button: Button
+## Dev: charts the selected tile with no fight. Debug builds only, like `_reset_button`.
+var _skip_button: Button
 var _move_button: Button
 var _farm_button: Button
 var _town_button: Button
@@ -267,7 +269,12 @@ func _build_ui() -> void:
 	_chart_button = UITheme.button("Chart", "LightButton", "Fight for this tile and what lies behind it")
 	_chart_button.pressed.connect(_on_chart_pressed)
 	buttons.add_child(_chart_button)
-	_move_button = UITheme.button("Move here", "LightButton", "Walk to the selected tile")
+	_skip_button = UITheme.button("Skip fight", "LightButton", "Dev: chart this tile without fighting for it")
+	_skip_button.pressed.connect(func() -> void:
+		print("Dev: charted %s, showing %d tile(s) behind it" % [map.selected_cell, view.chart(map.selected_cell)])
+		_update_buttons())
+	buttons.add_child(_skip_button)
+	_move_button =UITheme.button("Move here", "LightButton", "Walk to the selected tile")
 	_move_button.pressed.connect(_on_move_pressed)
 	buttons.add_child(_move_button)
 	# And a third thing to do with a tile you have already taken: stand on it and fight until you
@@ -640,6 +647,7 @@ func _on_player_arrived(cell: Vector2i) -> void:
 func _update_buttons() -> void:
 	var cell := map.selected_cell
 	_chart_button.visible = view.can_chart(cell)
+	_skip_button.visible = _chart_button.visible and OS.is_debug_build()
 	_move_button.visible = view.can_move_to(cell)
 	_farm_button.visible = view.can_farm(cell)
 	_town_button.visible = view.can_visit(cell)

@@ -16,6 +16,7 @@
 - **Fights:** `_open_fight` arms an `Encounter` from `inventory.stats()`, makes a `FightLedger`, hides the map and every left-hand Control, and wires `CombatScene`'s signals to the ledger. `_on_combat_finished` banks, charts the tile if it was won, and brings the map back.
 - **Tips (`TIPS`, `_check_tips`):** one-time pop-ups, one at a time, on layer 3. Seen ids live in `inventory.tips`, which also drives which corner buttons exist and whether they still pulse (`_flash`, `opened_bag` / `opened_skills`). A tip over a fight pauses the fight's processing. Each is checked where the thing it is about becomes true: `_open_fight` and `_on_combat_finished` for the fighting ones, `_on_player_arrived` for `first_town` (which is how a won settlement fight reaches it too) and `_on_town_pressed` for `first_bounty`, since a town always opens on its board. `_check_tips` puts the corner buttons back, so it asks `_left_page_up` as well as the fight: a page on that edge takes them away exactly as a fight does.
 - **Dev reset:** a debug-build-only button deletes both saves and reloads; `_resetting` stops `_exit_tree` writing them back.
+- **Dev skip fight:** a debug-build-only button under Chart calls `view.chart` on the selected tile with no fight, so no loot, kills or tips come of it.
 
 ## Rules and gotchas
 - **A save that cannot be read is refused, never overwritten.** `_refuse_save` runs before any UI exists, so nothing can write; `_save_blocked` also stops `_save_map` and `_exit_tree`. Only a *missing* file means a fresh start.
