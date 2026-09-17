@@ -95,7 +95,7 @@ func _shoot_inventory() -> void:
 	main.inventory.add_orb("Orb of Transmutation", 12)
 	main.inventory.add_orb("Orb of Alteration", 3)
 	main.inventory.add_orb("Orb of Chaos")
-	main.inventory.add_orb("Orb of Scouring", 2)
+	main.inventory.add_orb("Orb of Divine", 2)
 	# Most of a set worn, so the shot shows what an equipped socket looks like against an empty one.
 	# The offhand and one ring are left bare on purpose: the empty squares and their marks are half
 	# of what this panel has to get right.
@@ -115,6 +115,20 @@ func _shoot_inventory() -> void:
 	var image := root.get_texture().get_image()
 	image.save_png("user://ui_inventory.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_inventory.png"))
+
+	# The card beside a hovered piece. The cursor is put over the first square in the bag, because the
+	# card asks the viewport where the mouse is and nothing else.
+	for slot: ItemSlot in root.get_tree().get_nodes_in_group(ItemSlot.GROUP):
+		if slot.is_visible_in_tree() and slot.has_meta("bag_index"):
+			root.warp_mouse(slot.get_global_rect().get_center())
+			break
+	for i in 3:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_item_card.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_item_card.png"))
+	root.warp_mouse(Vector2.ZERO)
+	await process_frame
 
 	var panel: Control = main.bag_page._panel
 	# The panel as it is actually laid out, not as small as it could be: it is stretched to the window
@@ -319,6 +333,21 @@ func _shoot_town() -> void:
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_town_gear.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_town_gear.png"))
+
+	# The question a heading's coins ask before a whole level goes over the counter.
+	main.bag_page._select_item(-1)
+	for button: Button in main.bag_page._sections.find_children("", "Button", true, false):
+		if button.tooltip_text.begins_with("Sell the"):
+			button.pressed.emit()
+			break
+	# Ticked, which is the state with the mark in it.
+	(main.bag_page._confirm.find_child(BagPage.TICK_NAME, true, false) as Button).button_pressed = true
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_confirm_sell.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_confirm_sell.png"))
+	main.bag_page._close_confirm()
 
 	# One piece off the shelf, open: the price on the Buy button, and the comparison beside the bag
 	# saying what wearing it would replace. The square whose piece fills a socket that is worn, so the

@@ -654,7 +654,9 @@ func _test_selling() -> void:
 	var sell := _deep_button(page._detail, "Sell")
 	_check(sell != null and _deep_button(page._detail, "Discard") == null,
 			"at the merchant the piece is sold rather than thrown away")
-	_check(_button(page._sections.get_child(0), "Sell all") != null, "and a level is sold at once")
+	_check(page._sections.get_child(0).get_children().any(func(child: Node) -> bool:
+			return child is Button and (child as Button).tooltip_text.begins_with("Sell the")),
+			"and a level is sold at once")
 	var price := TownPrices.sell_price(piece)
 	if sell != null:
 		sell.pressed.emit()
@@ -724,12 +726,33 @@ func _test_buying() -> void:
 
 	# A piece off the shelf opens the way a piece in the bag does, with a price on the button.
 	var offered: Item = VendorStock.items(drawer)[0]
+	# The card beside a hovered square goes away with the press and stays away. Every redraw makes
+	# new squares and `VendorStock.items` makes new pieces, so it is the place that is remembered.
+	var card := ItemCard.new(1.0)
+	root.add_child(card)
+	# Asked by hand below: left running, it would ask about the real cursor every frame and forget.
+	card.set_process(false)
+	await process_frame
+	var spot := Vector2.ZERO
+	for square: ItemSlot in get_nodes_in_group(ItemSlot.GROUP):
+		if page.is_ancestor_of(square):
+			spot = square.get_global_rect().get_center()
+			break
+	_check(card.hovered(spot, false) != null, "a shelf square has its card")
+	card.hovered(spot, true)
+	page._on_shelf_input(_press(), 0)
+	await process_frame
+	_check(card.hovered(spot, false) == null, "and a press on it puts the card away")
+	page._close_offer(true)
+	await process_frame
+	_check(card.hovered(spot + Vector2.ONE, false) == null, "even with the shelf back under the cursor")
+	card.queue_free()
 	page._on_shelf_input(_press(), 0)
 	_check(page._offer != null and page._offer.type == offered.type, "pressing a square opens the piece")
 	var price := TownPrices.buy_price(offered)
 	_check(price > TownPrices.sell_price(offered),
 			"a vendor asks more than it pays (%d over %d)" % [price, TownPrices.sell_price(offered)])
-	var buy := _button(page._rows, "Buy")
+	var buy := _deep_button(page._rows, "Buy")
 	_check(buy != null and buy.text == "Buy %d" % price, "the button carries the price (%s)"
 			% [buy.text if buy != null else "no button"])
 
@@ -742,7 +765,7 @@ func _test_buying() -> void:
 			block = child
 	_check(block != null and block.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED,
 			"an open offer's lines scroll")
-	_check(block != null and buy != null and buy.get_index() > block.get_index(),
+	_check(block != null and buy != null and buy.get_parent().get_index() > block.get_index(),
 			"with the Buy button pinned under them")
 
 	# A short purse buys nothing, and the button says so rather than letting the press through.
@@ -760,7 +783,7 @@ func _test_buying() -> void:
 	while not inventory.is_full():
 		inventory.add(Item.rolled("Leather Boot", ItemRarity.Rarity.COMMON, rng, 1))
 	page._fill()
-	buy = _button(page._rows, "Buy")
+	buy = _deep_button(page._rows, "Buy")
 	_check(buy != null and buy.disabled, "a full bag kills the button too")
 	page._on_buy_item()
 	_check(inventory.total() == Inventory.CAPACITY and inventory.gold == price * 4,
@@ -769,7 +792,7 @@ func _test_buying() -> void:
 	# Room and gold both: the piece crosses, the purse pays and the square empties.
 	inventory.remove(inventory.items[0])
 	page._fill()
-	buy = _button(page._rows, "Buy")
+	buy = _deep_button(page._rows, "Buy")
 	_check(buy != null and not buy.disabled, "with room and gold the button is live")
 	page._on_buy_item()
 	_check(inventory.gold == price * 3, "the purse paid the price (%d, want %d)"

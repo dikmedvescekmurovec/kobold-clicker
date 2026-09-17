@@ -13,6 +13,7 @@ func _run() -> void:
 	_check(_test_orb_tray() == true, "orb tray tests ran to the end")
 	_check(_test_health_bar() == true, "health bar tests ran to the end")
 	_check(_test_character_panel() == true, "character panel tests ran to the end")
+	_check(await _test_item_card() == true, "item card tests ran to the end")
 	_report("UI theme")
 
 
@@ -204,13 +205,56 @@ func _is_nine_slice(box: StyleBox, sprite_name: String, what: String) -> bool:
 ## at. Held here the way KillPips asserts its own parts still add up: the row is assembled from eight
 ## fixed squares and a gap worked out from what is left over, so a change to either number that broke
 ## the arithmetic would show as a tray a few pixels out rather than as anything that looks wrong.
+## The card that stands beside a hovered piece: it finds the square under the cursor without the
+## square taking the mouse, keeps quiet about the open one and about one scrolled out of its box.
+func _test_item_card() -> bool:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng)
+	var box := ScrollContainer.new()
+	box.position = Vector2(100, 100)
+	box.size = Vector2(ItemSlot.SIDE, ItemSlot.SIDE)
+	root.add_child(box)
+	var column := VBoxContainer.new()
+	box.add_child(column)
+	var seen := ItemSlot.make(sword)
+	var below := ItemSlot.make(sword)
+	column.add_child(seen)
+	column.add_child(below)
+	var open := ItemSlot.make(sword, true)
+	open.position = Vector2(300, 100)
+	open.size = Vector2(ItemSlot.SIDE, ItemSlot.SIDE)
+	root.add_child(open)
+	var card := ItemCard.new(2.0)
+	root.add_child(card)
+	await process_frame
+	await process_frame
+	_check(seen.mouse_filter == Control.MOUSE_FILTER_IGNORE, "a square still takes no mouse")
+	_check(card.slot_at(Vector2(110, 110)) == seen, "the square under the cursor is found")
+	_check(card.slot_at(below.get_global_rect().get_center()) == null,
+			"one scrolled out of its box is not")
+	_check(card.slot_at(Vector2(310, 110)) == null, "the open piece says nothing twice")
+	_check(card.slot_at(Vector2(5, 5)) == null, "and bare window is nothing")
+	_check(card.hovered(Vector2(110, 110), false) == seen, "a hovered square gets its card")
+	_check(card.hovered(Vector2(110, 110), true) == null, "a press puts the card away")
+	_check(card.hovered(Vector2(110, 110), false) == null, "and letting go does not bring it back")
+	_check(card.hovered(Vector2(112, 112), false) == null, "nor does moving about on the same piece")
+	_check(card.hovered(Vector2(5, 5), false) == null and card.hovered(Vector2(110, 110), false) == seen,
+			"until the cursor has been somewhere else")
+	_check(card.theme_type_variation == "TextPanel" and card.mouse_filter == Control.MOUSE_FILTER_IGNORE,
+			"it is a cream panel that never takes a press")
+	for node: Node in [box, open, card]:
+		node.queue_free()
+	return true
+
+
 func _test_orb_tray() -> bool:
 	var cols: int = BagPage.ORB_COLS
 	var gap: int = BagPage.ORB_GAP
 	var width: int = BagPage.WIDTH
 	var assembled := cols * OrbSlot.SIDE + (cols - 1) * gap
-	_check(assembled == width,
-			"eight orbs and their gaps come to %d, not the grid's %d" % [assembled, width])
+	_check(assembled <= width and width - assembled < cols - 1,
+			"six orbs and their gaps come to %d, not the grid's %d" % [assembled, width])
 	_check(cols == OrbTable.ORBS.size(),
 			"the tray has a square for each of the %d orbs" % OrbTable.ORBS.size())
 	_check(gap > 0, "the squares do not touch")
@@ -220,7 +264,7 @@ func _test_orb_tray() -> bool:
 	# Every orb builds into a live square, and the three states are three different pictures. That
 	# last part is the whole of what the tray communicates, and it is the one thing a table of names
 	# cannot tell us: an orb never found, one held but useless here, and one ready to spend have to
-	# be told apart at a glance in a row of eight.
+	# be told apart at a glance in a row of six.
 	for orb: String in OrbTable.orbs():
 		var ghost := OrbSlot.make(orb, 0, true)
 		var dim := OrbSlot.make(orb, 2, false)

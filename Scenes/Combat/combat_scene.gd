@@ -334,7 +334,19 @@ func _process(delta: float) -> void:
 
 ## A click anywhere in the arena is a swing. The fail state is the clock, so asking the player to
 ## hit a moving sprite as well would be a second difficulty on top of the one the fight is about.
+##
+## Escape is the fight's own X: the loot popup if it is up, else Terminate on a run, else Back under a
+## verdict. A tile fight has no way out but the clock, so there it does nothing.
 func _unhandled_input(event: InputEvent) -> void:
+	if fight != null and event.is_action_pressed("ui_cancel"):
+		get_viewport().set_input_as_handled()
+		if _loot_panel.visible:
+			_on_loot_closed()
+		elif fight.finished:
+			_on_back_pressed()
+		elif fight.endless:
+			_on_terminate_pressed()
+		return
 	if fight == null or fight.finished:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -589,9 +601,8 @@ func _build_hud() -> void:
 	_auto_label.modulate = Color(1.0, 1.0, 1.0, 0.6)
 	_auto_label.hide()
 	_result_summary.add_child(_auto_label)
-	var back := Button.new()
-	back.text = "Back to the map"
-	back.theme_type_variation = "WoodButton"
+	var back := UITheme.back_button("Back to the map")
+	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	back.pressed.connect(_on_back_pressed)
 	_result_summary.add_child(back)
 

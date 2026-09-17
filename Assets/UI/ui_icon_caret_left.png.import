@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://y15be1piiewh"
-path="res://.godot/imported/Orb of Augmentation.png-da827682b80aa5d27731e4daa4901879.ctex"
+uid="uid://bapinhtttmiil"
+path="res://.godot/imported/ui_icon_caret_left.png-db998f0eec72daba8916118d0ab583d8.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Orbs/Orb of Augmentation.png"
-dest_files=["res://.godot/imported/Orb of Augmentation.png-da827682b80aa5d27731e4daa4901879.ctex"]
+source_file="res://Assets/UI/ui_icon_caret_left.png"
+dest_files=["res://.godot/imported/ui_icon_caret_left.png-db998f0eec72daba8916118d0ab583d8.ctex"]
 
 [params]
 

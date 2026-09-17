@@ -200,6 +200,7 @@ static func _style(sheet: Texture2D, region: Rect2, margin: Dictionary) -> Style
 
 ## The line drawn between two blocks of text on a panel.
 const RULE_HEIGHT := 1
+const BACK_ICON := "res://Assets/UI/ui_icon_back.png"
 
 
 static func button(text: String, variation: String, tooltip: String) -> Button:
@@ -218,6 +219,15 @@ static func icon_button(texture: Texture2D, tooltip: String, ui_scale: float) ->
 	made.icon = texture
 	made.expand_icon = false
 	made.scale = Vector2(ui_scale, ui_scale)
+	return made
+
+
+## The way back out of whatever is open: the brown face with the arrow, never the word. Its parent
+## must be themed; it keeps its own width, so what shares its row should expand.
+static func back_button(tooltip: String) -> Button:
+	var made := button("", "BrownIconButton", tooltip)
+	made.icon = load(BACK_ICON)
+	made.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	return made
 
 

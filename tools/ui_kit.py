@@ -106,21 +106,19 @@ GEAR = {
 # rect and a test holds every icon to it.
 GEAR_SIDE = 32
 
-# The eight orbs, off "OreAndGem" -- a 10x5 grid of 50 gems on an exact 32 px pitch, so an entry is
+# The six orbs, off "OreAndGem" -- a 10x5 grid of 50 gems on an exact 32 px pitch, so an entry is
 # only ever a cell of it. The picks are made for distinctness across the tray as much as for the
-# colours Path of Exile trained the idea into: the eight stand side by side in one row, so no two of
+# colours Path of Exile trained the idea into: the six stand side by side in one row, so no two of
 # them may read as the same stone at a glance.
 #
 # name -> (sheet under Assets/Potential, x, y, w, h, scale), the same 6-tuple as GEAR
 ORBS = {
     "Orb of Transmutation": ("OreAndGem/OreGemSpritesheet", 9 * 32, 1 * 32, 32, 32, 1),
-    "Orb of Augmentation": ("OreAndGem/OreGemSpritesheet", 1 * 32, 3 * 32, 32, 32, 1),
     "Orb of Alteration": ("OreAndGem/OreGemSpritesheet", 7 * 32, 1 * 32, 32, 32, 1),
     "Orb of Alchemy": ("OreAndGem/OreGemSpritesheet", 9 * 32, 3 * 32, 32, 32, 1),
     "Orb of Chaos": ("OreAndGem/OreGemSpritesheet", 6 * 32, 2 * 32, 32, 32, 1),
     "Orb of Exalted": ("OreAndGem/OreGemSpritesheet", 5 * 32, 1 * 32, 32, 32, 1),
     "Orb of Divine": ("OreAndGem/OreGemSpritesheet", 8 * 32, 2 * 32, 32, 32, 1),
-    "Orb of Scouring": ("OreAndGem/OreGemSpritesheet", 9 * 32, 4 * 32, 32, 32, 1),
 }
 # What OrbSlot draws an orb at: half the source, which is the whole reason the centring below is
 # fussier than the gear's. Written here because the preview has to show that size to be worth looking
@@ -269,6 +267,19 @@ ICONS_DRAWN = {
         .o4443322o.
         ..ooooooo..
     """,
+    # Sell a level to the merchant, the bin's place at a counter: two stacks of coins, edge on.
+    "ui_icon_coins": """
+        .......oooo.
+        ......o4443o
+        ......o2221o
+        ......o4443o
+        .oooo.o2221o
+        o4443oo4443o
+        o2221oo2221o
+        o4443oo4443o
+        o2221oo2221o
+        .oooo..oooo.
+    """,
     # Auto: a funnel -- what is found at this level is filtered out before it reaches the bag.
     "ui_icon_filter": """
         ooooooooooooo
@@ -293,6 +304,47 @@ ICONS_DRAWN = {
         ..o32oooooo
         ...o2o.....
         ....oo.....
+    """,
+    # Swap, on the bag's comparison: two arrows chasing each other round -- the other ring finger.
+    "ui_icon_swap": """
+        ....ooooo.....
+        ..ooo444oooo..
+        .oo44ooo4o4oo.
+        .o4ooo.oo444oo
+        oo4o...o44444o
+        o3oo...ooooooo
+        o3o........o3o
+        o3o........o3o
+        ooooooo...oo3o
+        o22222o...o2oo
+        oo222oo.ooo2o.
+        .oo2o2ooo22oo.
+        ..oooo222ooo..
+        .....ooooo....
+    """,
+    # Hide the comparison: a caret pointing back at the bag it folds into.
+    "ui_icon_caret_left": """
+        ...ooo
+        ..oo4o
+        .oo44o
+        oo44oo
+        o33oo.
+        oo33oo
+        .oo22o
+        ..oo2o
+        ...ooo
+    """,
+    # And show it again: the same caret pointing out to where it opens.
+    "ui_icon_caret_right": """
+        ooo...
+        o4oo..
+        o44oo.
+        oo44oo
+        .oo33o
+        oo33oo
+        o22oo.
+        o2oo..
+        ooo...
     """,
 }
 

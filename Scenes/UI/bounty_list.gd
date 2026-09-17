@@ -66,6 +66,8 @@ func _ready() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	UITheme.body_of(_panel).add_child(scroll)
 	_rows = UITheme.vbox(ROW_GAP, WIDTH)
+	# At least as tall as the scroll, so the accepted card can take the column.
+	_rows.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_rows)
 	open()
 
@@ -139,6 +141,9 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 	var need := int(bounty.get(BountyBoard.NEED, 0))
 	# How many is said once: by the bar once the work is taken on, beside the name until then.
 	var taken := BountyBoard.is_active(bounty)
+	# The one bounty that is out takes the whole column it is given, on the board and the journal alike.
+	if taken:
+		card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var title := UITheme.label(enemy if taken else "%s x%d" % [enemy, need])
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lines.add_child(title)
@@ -181,6 +186,8 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", LINE_GAP)
+	# At the card's foot however tall the card has been stretched.
+	actions.size_flags_vertical = Control.SIZE_EXPAND | Control.SIZE_SHRINK_END
 	lines.add_child(actions)
 	var info := UITheme.button("Info", "LightButton", "Where it lives")
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL

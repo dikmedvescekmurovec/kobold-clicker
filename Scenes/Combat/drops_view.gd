@@ -61,19 +61,20 @@ func _init() -> void:
 	_inspect_rows = VBoxContainer.new()
 	_inspect_rows.add_theme_constant_override("separation", 2)
 	rows.add_child(_inspect_rows)
-	# Above Back rather than beside it: the two are not a pair of alternatives, and a destructive
-	# button sharing a row with the way out is a button that gets hit on the way out.
+	# One row, the arrow first and Discard taking the rest, as under a piece open in the bag
+	# (`BagPage._action_row`) -- and so this arrow never stacks over the verdict's own.
+	var actions := HBoxContainer.new()
+	rows.add_child(actions)
+	var done := UITheme.back_button("Back to what was found")
+	done.pressed.connect(inspect.bind(-1))
+	actions.add_child(done)
 	_discard = Button.new()
 	_discard.text = "Discard"
 	_discard.theme_type_variation = "LightDangerButton"
+	_discard.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_discard.hide()
 	_discard.pressed.connect(_on_discard_pressed)
-	rows.add_child(_discard)
-	var done := Button.new()
-	done.text = "Back"
-	done.theme_type_variation = "LightButton"
-	done.pressed.connect(inspect.bind(-1))
-	rows.add_child(done)
+	actions.add_child(_discard)
 
 
 ## Draws `items` as squares, in the order they fell, and closes whatever was open. Nothing is

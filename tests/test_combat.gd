@@ -873,6 +873,38 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 	_check(main.view.charted(target), "a won tile is charted")
 	_check(main.map.visible, "and the map is back")
 
+	# Escape: Terminate on a run, Back under its verdict, then the tile panel's X.
+	main.map.player.finish_walk()
+	main._on_farm_pressed()
+	main.map.player.finish_walk()
+	_check(main._combat != null and main._combat.fight.endless, "a run starts on the won tile")
+	var escape := InputEventAction.new()
+	escape.action = "ui_cancel"
+	escape.pressed = true
+	Input.parse_input_event(escape)
+	await process_frame
+	await process_frame
+	_check(main._combat != null and main._combat.fight.finished, "Escape ends a farm run")
+	Input.parse_input_event(escape)
+	await process_frame
+	await process_frame
+	_check(main._combat == null, "again leaves its verdict")
+	_check(main._panel.visible, "with the tile panel still up")
+	# A tip that came due with the run is what Escape closes first, one press each.
+	for i in main.TIPS.size():
+		if main._tip_panel == null:
+			break
+		Input.parse_input_event(escape)
+		await process_frame
+		await process_frame
+	_check(main._tip_panel == null and main._panel.visible, "a tip takes the press before the panel does")
+	Input.parse_input_event(escape)
+	await process_frame
+	await process_frame
+	_check(not main._panel.visible and main.map.selected_cell == HexMap.NO_CELL,
+			"and once more closes the tile panel")
+	main.map.select_cell(target)
+
 	# A tile away from the player: they walk to the charted tile beside it first, and the fight opens there.
 	main.map.player.finish_walk()
 	var far_side := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.W)

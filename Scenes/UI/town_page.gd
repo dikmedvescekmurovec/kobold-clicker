@@ -7,8 +7,8 @@ extends Control
 ## A counter is two halves and the page is only one of them. **Buying** happens here, because a
 ## vendor's shelf is the vendor's; **selling** happens in the bag on the other edge, because what the
 ## player wants to sell is already laid out there and a second grid of the same items would be a
-## second place to hunt through. So every tab says both: six squares with their prices under a Buy
-## heading, and a line saying where the selling is done.
+## second place to hunt through. So a tab is six squares with their prices under a Buy heading, and
+## the bag's own Sell button is what says where the selling is done.
 ##
 ## The smith is the same arrangement with no shelf at all: he works on whatever the bag has open, and
 ## his tab is the two prices for it and the reasons he will not. The board is the third shape again:
@@ -66,14 +66,6 @@ const TAB_REST := Color(1, 1, 1, 0.55)
 ## named here is listed in the tile panel and given none, which is how a town would advertise a
 ## counter this build has not built yet without offering a tab that does nothing.
 const COUNTERS := [TownServices.BOUNTIES, TownServices.GEAR, TownServices.ORBS, TownServices.SMITH]
-
-## Where the *other* half of a vendor's counter is, in the game's voice, said under its shelf: the
-## bag is already open on the far edge and this is what points at it. The smith has no shelf and no
-## entry here -- what he works on is whatever the bag has open, which his own tab says.
-const SELL_SIGNS := {
-	TownServices.GEAR: "Sell from the bag on the left.",
-	TownServices.ORBS: "Sell from the orb tray on the left.",
-}
 
 var inventory: Inventory
 ## The map the town stands on, set from outside the way the fight's is. The board needs it and only
@@ -226,7 +218,7 @@ func _fill() -> void:
 	var body := _scrolled(ROW_GAP)
 	body.add_child(UITheme.label("Buy"))
 	body.add_child(_shelf())
-	# New stock now, for gold: directly under the shelf it replaces, so it is never under the fold -- this shelf only, and dearer every time for good: the town remembers.
+	# New stock now, for gold: pinned at the page's foot, under the scroll, where every counter keeps its buttons -- this shelf only, and dearer every time for good: the town remembers.
 	var price := TownPrices.reroll_price(_cell, VendorStock.rerolls(_drawer, _shelf_key()))
 	var short := _why_not(price, false)
 	var reroll := UITheme.button("Restock %s" % BigNumber.format(price), "LightButton",
@@ -235,8 +227,7 @@ func _fill() -> void:
 	reroll.icon = Coins.icon()
 	reroll.disabled = not short.is_empty()
 	reroll.pressed.connect(_on_reroll_pressed)
-	body.add_child(reroll)
-	body.add_child(_sign(str(SELL_SIGNS[_open_tab])))
+	_rows.add_child(reroll)
 
 
 ## The six squares. A bought one stays on the shelf with nothing on it, so what is gone is as plain
@@ -289,6 +280,8 @@ func _scrolled(gap: int) -> VBoxContainer:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_rows.add_child(scroll)
 	var lines := UITheme.vbox(gap, BODY_WIDTH)
+	# At least as tall as the scroll, so a row that asks to expand (an accepted bounty's card) can.
+	lines.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(lines)
 	return lines
 
@@ -356,10 +349,14 @@ func _fill_offer() -> void:
 	buy.icon = Coins.icon()
 	buy.disabled = not refused.is_empty()
 	buy.pressed.connect(_on_buy_item)
-	_rows.add_child(buy)
-	var back := UITheme.button("Back", "LightButton", "Back to what the vendor has")
+	buy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# One row, the arrow first, as under a piece open in the bag (`BagPage._action_row`).
+	var row := HBoxContainer.new()
+	var back := UITheme.back_button("Back to what the vendor has")
 	back.pressed.connect(_close_offer.bind(true))
-	_rows.add_child(back)
+	row.add_child(back)
+	row.add_child(buy)
+	_rows.add_child(row)
 
 
 ## The board. Three postings, each saying who, how far along, what it pays and -- the whole reason a
@@ -405,7 +402,6 @@ func _fill_board() -> void:
 	if posted == 0:
 		body.add_child(_sign("Hand in the bounty you have taken first." if busy
 				else "Nothing is posted here now."))
-	body.add_child(_sign("New work once all of it is handed in.", Palette.SLATE))
 
 
 ## The land around the town, which is every monster a board may post: a target has to live somewhere
@@ -480,6 +476,10 @@ func _fill_smith() -> void:
 		_rows.add_child(_sign("Open a piece in your bag and he will work on it."))
 		return
 	_rows.add_child(ItemDetails.line(_bag_piece.display_name(), _bag_piece.text_color(), BODY_WIDTH))
+	# Air that takes the slack, so the buttons stand at the page's foot as every counter's do.
+	var slack := Control.new()
+	slack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_rows.add_child(slack)
 	var cap := _upgrade_cap()
 	var up_price := TownPrices.upgrade_price(_bag_piece)
 	var up_why := _smith_why_not(Blacksmith.why_not_upgrade(_bag_piece, cap), up_price)

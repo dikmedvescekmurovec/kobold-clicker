@@ -1,6 +1,6 @@
 class_name OrbTable
 extends RefCounted
-## The eight orbs: what each one is, what it does to a piece, and how often a body carries one.
+## The six orbs: what each one is, what it does to a piece, and how often a body carries one.
 ##
 ## The same shape as LootTable -- const tables and static accessors, no nodes -- and the same
 ## philosophy about the drop rate: TIER_CHANCE and SIZE_CHANCE multiply into `chance_for`, so the
@@ -11,7 +11,7 @@ extends RefCounted
 ## a number. That is what keeps Item, ItemSlot, DropsView and the bag's ordering untouched by this
 ## chunk: there is nothing new for them to sort, cap, filter or draw.
 ##
-## What an orb *does* is the one thing here that cannot be a table. Eight verbs, eight branches of
+## What an orb *does* is the one thing here that cannot be a table. Six verbs, six branches of
 ## one match, in one file -- because the rule that decides whether an orb is offered (`can_apply`),
 ## the rule that carries it out (`apply`) and the sentence that explains a refusal (`why_not`) are
 ## three faces of one piece of knowledge, and splitting them is how they come to disagree.
@@ -22,13 +22,13 @@ extends RefCounted
 ##
 ## Two things a smith leaves on a piece are the orbs' business, and both are handled in one place
 ## each. A **broken** piece refuses every orb, so the branches below never see one. A **locked**
-## modifier survives all eight: `_reroll_at` puts it back and fills the rest around it, Divine steps
-## over its value, and Scouring stops one step short of common rather than stripping it.
+## modifier survives all six: `_reroll_at` puts it back and fills the rest around it, and Divine steps
+## over its value.
 
 const ROOT := "res://Assets/Orbs/"
 
-## The order the tray draws them in, and it never changes: eight fixed squares whose places the
-## player learns. Cheap and frequent first, running to the rare and the destructive.
+## The order the tray draws them in, and it never changes: six fixed squares whose places the
+## player learns. Cheap and frequent first, running to the rare.
 ##
 ## `does` is the sentence the hover card reads out, written as a whole statement rather than a
 ## fragment, because it is the only explanation of an orb anywhere in the game.
@@ -40,10 +40,6 @@ const ORBS := {
 	"Orb of Transmutation": {
 		"icon": "Orb of Transmutation.png", "weight": 24,
 		"does": "Lifts a common piece to uncommon and rolls it fresh modifiers.",
-	},
-	"Orb of Augmentation": {
-		"icon": "Orb of Augmentation.png", "weight": 20,
-		"does": "Adds one more modifier to an uncommon piece.",
 	},
 	"Orb of Alteration": {
 		"icon": "Orb of Alteration.png", "weight": 18,
@@ -64,10 +60,6 @@ const ORBS := {
 	"Orb of Divine": {
 		"icon": "Orb of Divine.png", "weight": 4,
 		"does": "Rerolls the value of every modifier, keeping the modifiers themselves.",
-	},
-	"Orb of Scouring": {
-		"icon": "Orb of Scouring.png", "weight": 16,
-		"does": "Strips a piece back to a bare common.",
 	},
 }
 
@@ -109,7 +101,7 @@ static func icon_path(orb: String) -> String:
 	return ROOT + str(ORBS[orb]["icon"])
 
 
-## The sprite, loaded once. The same cache LootTable keeps, for the same reason: eight squares are
+## The sprite, loaded once. The same cache LootTable keeps, for the same reason: six squares are
 ## rebuilt every time the bag refreshes, and a kill refreshes it.
 static func icon(orb: String) -> Texture2D:
 	if not _icons.has(orb):
@@ -128,14 +120,12 @@ static func describe(orb: String) -> String:
 static func can_apply(orb: String, item: Item) -> bool:
 	if item == null or not ORBS.has(orb):
 		return false
-	# One answer for all eight: a piece the hammer ruined is out of the game as far as crafting goes.
+	# One answer for all six: a piece the hammer ruined is out of the game as far as crafting goes.
 	if item.broken:
 		return false
 	match orb:
 		"Orb of Transmutation":
 			return item.rarity == ItemRarity.Rarity.COMMON
-		"Orb of Augmentation":
-			return item.rarity == ItemRarity.Rarity.UNCOMMON and item.mods.size() < _room(item)
 		"Orb of Alteration":
 			return item.rarity == ItemRarity.Rarity.UNCOMMON
 		"Orb of Alchemy":
@@ -146,13 +136,6 @@ static func can_apply(orb: String, item: Item) -> bool:
 			return item.mods.size() < _room(item)
 		"Orb of Divine":
 			return not item.mods.is_empty()
-		"Orb of Scouring":
-			if item.rarity == ItemRarity.Rarity.COMMON:
-				return false
-			# A locked piece is scoured back to an uncommon carrying its lock and no further, so one
-			# already standing there is as bare as it goes.
-			return not (item.rarity == ItemRarity.Rarity.UNCOMMON and item.mods.size() == 1
-					and not item.locked_mod().is_empty())
 	return false
 
 
@@ -170,10 +153,6 @@ static func why_not(orb: String, item: Item) -> String:
 	match orb:
 		"Orb of Transmutation":
 			return "Only a common piece can be transmuted"
-		"Orb of Augmentation":
-			if item.rarity != ItemRarity.Rarity.UNCOMMON:
-				return "Only an uncommon piece can be augmented"
-			return "This %s already carries all it can" % piece
 		"Orb of Alteration":
 			return "Only an uncommon piece can be altered"
 		"Orb of Alchemy":
@@ -186,8 +165,6 @@ static func why_not(orb: String, item: Item) -> String:
 			return "This %s already carries all it can" % piece
 		"Orb of Divine":
 			return "This %s has no modifiers to reroll" % piece
-		"Orb of Scouring":
-			return "This %s is already bare" % piece
 	return "Cannot be used on this %s" % piece
 
 
@@ -202,7 +179,7 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator) -> bool:
 	match orb:
 		"Orb of Transmutation":
 			_reroll_at(item, ItemRarity.Rarity.UNCOMMON, rng)
-		"Orb of Augmentation", "Orb of Exalted":
+		"Orb of Exalted":
 			var extra := ModifierTable.add_one(item.type, item.mods, rng, item.level)
 			if extra.is_empty():
 				return false
@@ -222,22 +199,11 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator) -> bool:
 				if bool(mod.get("locked", false)):
 					continue
 				mod["value"] = ModifierTable.reroll_value(str(mod["id"]), rng, item.level)
-		"Orb of Scouring":
-			var kept := item.locked_mod()
-			if kept.is_empty():
-				item.rarity = ItemRarity.Rarity.COMMON
-				item.mods.clear()
-			else:
-				# A common carrying a modifier is a contradiction in `ItemRarity.MOD_COUNT`, so a
-				# locked piece is stripped to the lowest step that can still hold its one line.
-				item.rarity = ItemRarity.Rarity.UNCOMMON
-				var left: Array[Dictionary] = [kept]
-				item.mods = left
 	return true
 
 
 ## Sets the piece to a rarity and gives it that rarity's own fresh handful of modifiers. Four of the
-## eight end here, because "what rarity is it now" and "how many modifiers does it carry" are one
+## six end here, because "what rarity is it now" and "how many modifiers does it carry" are one
 ## question in this game -- ItemRarity.MOD_COUNT is the join, and nothing else may answer it.
 ##
 ## A locked modifier is one of that handful rather than an extra on top: it is put back first and the

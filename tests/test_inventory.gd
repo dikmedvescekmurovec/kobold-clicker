@@ -1042,9 +1042,35 @@ func _test_the_map_keeps_what_dropped() -> bool:
 			if label is Label and (label as Label).text == "Level 9 auto":
 				empty_heading = true
 	_check(empty_heading, "a level with a rule and no items still has its heading")
-	main.bag_page._on_clear_level_pressed(1)
+	# The bin asks first, and Cancel leaves the level alone.
+	var held: int = main.inventory.total()
+	_press_bin(main)
+	_check(main.bag_page._confirm != null and main.inventory.total() == held,
+			"the bin asks before it throws a level away")
+	_confirm_button(main, "Cancel").pressed.emit()
+	_check(main.bag_page._confirm == null and main.inventory.total() == held, "Cancel keeps the level")
+	# Escape is that Cancel, and the bag under the question stays up.
+	_press_bin(main)
+	var escape := InputEventAction.new()
+	escape.action = "ui_cancel"
+	escape.pressed = true
+	Input.parse_input_event(escape)
+	await process_frame
+	await process_frame
+	_check(main.bag_page._confirm == null and main.inventory.total() == held and main.bag_page.visible,
+			"Escape cancels the question and nothing else")
+	# Yes with the box ticked empties it, and the question is not asked again.
+	_press_bin(main)
+	var box: Button = main.bag_page._confirm.find_child(BagPage.TICK_NAME, true, false)
+	_check(box != null, "the question carries its tick box")
+	box.button_pressed = true
+	_confirm_button(main, "Discard").pressed.emit()
 	await process_frame
 	_check(main.inventory.total() == 0, "Clear empties a level")
+	_check(Inventory.load_from(TEST_PATH).tips.has(BagPage.SKIP_CONFIRM + "clear"),
+			"and not being asked again is written down")
+	main.bag_page._ask("clear", "", "", "", "LightButton", func() -> void: pass)
+	_check(main.bag_page._confirm == null, "so the next press asks nothing")
 	main.bag_page._on_autodiscard_toggled(false, 9)
 
 	var saved := Inventory.load_from(TEST_PATH)
@@ -1269,6 +1295,22 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 	_check(main.inventory.gold > 0, "but it banked its gold: %d" % main.inventory.gold)
 	main.queue_free()
 	return true
+
+
+## Presses the first level heading's bin, found by its tooltip as the mark has no words.
+func _press_bin(main: Node) -> void:
+	for button: Button in main.bag_page._sections.find_children("", "Button", true, false):
+		if button.tooltip_text.begins_with("Throw away the") and not button.disabled:
+			button.pressed.emit()
+			return
+
+
+## A button of the question standing over the bag, by its words.
+func _confirm_button(main: Node, text: String) -> Button:
+	for button: Button in main.bag_page._confirm.find_children("", "Button", true, false):
+		if button.text == text:
+			return button
+	return null
 
 
 ## Every square the bag is showing, in the order the sections lay them out. The grid is no longer one
@@ -1696,6 +1738,10 @@ func _test_deltas() -> bool:
 	return true
 
 
+func _line_of(item: Item) -> String:
+	return "%s · level %d" % [item.rarity_name(), item.level]
+
+
 ## The side-by-side: what is selected in the bag, and what it would replace on the page beside it.
 func _test_comparing() -> bool:
 	_clear_save()
@@ -1765,20 +1811,59 @@ func _test_comparing() -> bool:
 	_check("Nothing worn" in still, "a worn boot leaves the weapon socket empty")
 	_check(not (boot.display_name() in still), "and is not what the sword is compared against")
 
+	# Two rings worn and a third open: Swap turns the page to the other finger, and Equip with it.
+	var rings: Array[Item] = []
+	for level in [2, 3, 4]:
+		var ring := Item.new()
+		ring.type = "Gold Ring"
+		ring.rarity = ItemRarity.Rarity.COMMON
+		ring.level = level
+		ring.stats = Item.scaled_stats(ring.type, level)
+		main.inventory.add(ring)
+		rings.append(ring)
+	main.inventory.equip(rings[0], Equipment.Socket.RING_LEFT)
+	main.inventory.equip(rings[1], Equipment.Socket.RING_RIGHT)
+	main.bag_page._select_item(main.inventory.items.find(rings[2]))
+	_check(_line_of(rings[0]) in _texts(main.bag_page._worn_body), "a ring is judged against the left one first")
+	main.bag_page._on_swap_pressed()
+	_check(_line_of(rings[1]) in _texts(main.bag_page._worn_body), "Swap turns to the right one")
+	main.bag_page._on_fold_pressed()
+	var folded := _texts(main.bag_page._worn_body)
+	_check(not main.bag_page._worn_panel.visible and main.bag_page._show_button.visible,
+			"Hide takes the whole panel away and leaves Show in its place")
+	_check(not (_line_of(rings[1]) in folded), "Hide folds the block away: %s" % folded)
+	main.bag_page._on_fold_pressed()
+	for button: Button in main.bag_page._detail.find_children("", "Button", true, false):
+		if button.text == "Equip":
+			button.pressed.emit()
+	_check(main.inventory.equipment.item_at(Equipment.Socket.RING_RIGHT) == rings[2]
+			and main.inventory.equipment.item_at(Equipment.Socket.RING_LEFT) == rings[0],
+			"and Equip replaces the ring that was showing")
+
 	main.bag_page._select_item(-1)
 	await process_frame
 	_check(_socket_squares(main).size() == Equipment.sockets().size(),
 			"closing the block brings the doll back, with every socket on it")
+	# The doll folds away by the same flag, so it stays put away when a piece is opened.
+	main.bag_page._on_fold_pressed()
+	_check(not main.bag_page._worn_panel.visible and main.bag_page._show_button.visible,
+			"Hide takes the doll away too and leaves Show in its place")
+	main.bag_page._select_item(0)
+	_check(not main.bag_page._worn_panel.visible, "and the comparison stays hidden with it")
+	main.bag_page._on_fold_pressed()
+	main.bag_page._select_item(-1)
+	_check(main.bag_page._worn_panel.visible and not main.bag_page._show_button.visible,
+			"Show brings the doll back")
 	main._on_left_page_closed()
 	main.queue_free()
 	_clear_save()
 	return true
 
 
-## The orb tables themselves: eight orbs, eight icons that resolve, and a drop curve that runs the
+## The orb tables themselves: six orbs, six icons that resolve, and a drop curve that runs the
 ## right way round. Nothing here crafts anything -- this is the file being well formed.
 func _test_orb_tables() -> bool:
-	_check(OrbTable.ORBS.size() == 8, "there are eight orbs")
+	_check(OrbTable.ORBS.size() == 6, "there are six orbs")
 	for orb: String in OrbTable.ORBS:
 		_check(ResourceLoader.exists(OrbTable.icon_path(orb)),
 				"%s has an icon at %s" % [orb, OrbTable.icon_path(orb)])
@@ -1796,13 +1881,13 @@ func _test_orb_tables() -> bool:
 	var seen := {}
 	for i in 4000:
 		var orb := OrbTable.roll("Skeleton Warrior", rng, true)
-		_check(OrbTable.ORBS.has(orb), "a drawn orb is one of the eight")
+		_check(OrbTable.ORBS.has(orb), "a drawn orb is one of the six")
 		seen[orb] = true
-	_check(seen.size() == 8, "every orb can be drawn, saw %d" % seen.size())
+	_check(seen.size() == 6, "every orb can be drawn, saw %d" % seen.size())
 	return true
 
 
-## The eight verbs, each against a piece it should take and a piece it should refuse. The rule under
+## The six verbs, each against a piece it should take and a piece it should refuse. The rule under
 ## all of them: rarity and modifiers may move, level and base stats may not.
 func _test_orb_verbs() -> bool:
 	var rng := RandomNumberGenerator.new()
@@ -1818,7 +1903,7 @@ func _test_orb_verbs() -> bool:
 	var band: Array = ItemRarity.MOD_COUNT[ItemRarity.Rarity.UNCOMMON]
 	_check(common.mods.size() >= int(band[0]) and common.mods.size() <= int(band[1]),
 			"transmutation rolls uncommon's own band, got %d" % common.mods.size())
-	# The rule that holds for every one of the eight, checked here where a piece has just changed as
+	# The rule that holds for every one of the six, checked here where a piece has just changed as
 	# much as an orb can change it.
 	_check(common.level == was_level, "an orb never moves a piece's level")
 	_check(common.base_stats() == was_stats, "an orb never moves a piece's base stats")
@@ -1826,23 +1911,10 @@ func _test_orb_verbs() -> bool:
 	_check(not OrbTable.why_not("Orb of Transmutation", common).is_empty(),
 			"a refused transmutation says why")
 
-	# --- Augmentation: fills an uncommon up, then refuses ---
 	var magic := Item.rolled("Wooden Shield", ItemRarity.Rarity.UNCOMMON, rng, 3)
-	var ceiling := int(ItemRarity.MOD_COUNT[ItemRarity.Rarity.UNCOMMON][1])
-	while magic.mods.size() < ceiling:
-		var before := magic.mods.size()
-		_check(OrbTable.can_apply("Orb of Augmentation", magic), "an uncommon with room takes one")
-		_check(OrbTable.apply("Orb of Augmentation", magic, rng), "augmentation lands")
-		_check(magic.mods.size() == before + 1, "augmentation adds exactly one")
-	_check(not OrbTable.can_apply("Orb of Augmentation", magic), "a full uncommon refuses")
-	# No modifier twice on one piece, which is what add_one draws without replacement for.
-	var ids := {}
-	for mod in magic.mods:
-		ids[str(mod["id"])] = true
-	_check(ids.size() == magic.mods.size(), "augmentation never repeats a modifier")
 
 	# --- Alteration: rerolls an uncommon, and it stays uncommon ---
-	_check(OrbTable.can_apply("Orb of Alteration", magic), "a full uncommon can still be altered")
+	_check(OrbTable.can_apply("Orb of Alteration", magic), "an uncommon can be altered")
 	_check(OrbTable.apply("Orb of Alteration", magic, rng), "alteration lands")
 	_check(magic.rarity == ItemRarity.Rarity.UNCOMMON, "alteration keeps the rarity")
 
@@ -1899,17 +1971,6 @@ func _test_orb_verbs() -> bool:
 				"a divined %s stays in its band" % mod["id"])
 	_check(not OrbTable.can_apply("Orb of Divine", bare), "a bare common has nothing to divine")
 
-	# --- Scouring: back to nothing, and refused once it is there ---
-	_check(OrbTable.can_apply("Orb of Scouring", divine), "an elite can be scoured")
-	var scoured_level := divine.level
-	var scoured_stats := divine.base_stats()
-	_check(OrbTable.apply("Orb of Scouring", divine, rng), "scouring lands")
-	_check(divine.rarity == ItemRarity.Rarity.COMMON, "scouring makes it common")
-	_check(divine.mods.is_empty(), "scouring takes every modifier")
-	_check(divine.level == scoured_level, "scouring never moves the level")
-	_check(divine.base_stats() == scoured_stats, "scouring never moves the base stats")
-	_check(not OrbTable.can_apply("Orb of Scouring", divine), "a bare common refuses a scouring")
-
 	# `why_not` is the exact complement of `can_apply`, for every orb against every piece the suite
 	# has in hand -- so the card can ask one question rather than two and never go silent.
 	for orb: String in OrbTable.ORBS:
@@ -1924,7 +1985,7 @@ func _test_orb_verbs() -> bool:
 
 
 ## The two marks a blacksmith leaves on a piece, read against the orbs. A **lock** has to survive all
-## eight, and a **break** has to stop all eight -- and what a reroll leaves behind is a draw rather
+## six, and a **break** has to stop all six -- and what a reroll leaves behind is a draw rather
 ## than a rule until it has been drawn a few thousand times, so the lock is walked through random
 ## orbs over many seeds rather than through one example of each.
 func _test_locks_and_breaks() -> bool:
@@ -1935,8 +1996,10 @@ func _test_locks_and_breaks() -> bool:
 	var landed := {}
 	for run in RUNS:
 		rng.seed = run
-		var piece := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 7)
-		_check(Blacksmith.lock(piece, rng), "a rare piece takes a lock")
+		# Half start uncommon: nothing lowers a rarity, so that is the only way Alteration meets a lock.
+		var start := ItemRarity.Rarity.UNCOMMON if run % 2 == 0 else ItemRarity.Rarity.RARE
+		var piece := Item.rolled("Wooden Sword", start, rng, 7)
+		_check(Blacksmith.lock(piece, rng), "a piece with modifiers takes a lock")
 		var pinned := piece.locked_mod().duplicate()
 		for blow in BLOWS:
 			var orb: String = orbs[rng.randi_range(0, orbs.size() - 1)]
@@ -1959,35 +2022,26 @@ func _test_locks_and_breaks() -> bool:
 			_check(piece.mods.size() <= int(ItemRarity.MOD_COUNT[piece.rarity][1]),
 					"%s keeps a %s piece inside its own ceiling (%d mods)"
 					% [orb, piece.rarity_name(), piece.mods.size()])
-			# Which is also why a locked piece can never be scoured to common, and so can never be
+			# No orb takes a piece down a rarity, so a locked piece is never a common and never
 			# transmuted: a common carrying a modifier is a contradiction in MOD_COUNT.
 			_check(piece.rarity != ItemRarity.Rarity.COMMON, "a locked piece never lands on common")
 			_check(not OrbTable.can_apply("Orb of Transmutation", piece),
 					"and so is never offered a transmutation")
 	# The walk has to have actually used the orbs it is meant to be testing.
-	for orb: String in ["Orb of Chaos", "Orb of Alchemy", "Orb of Alteration", "Orb of Divine",
-			"Orb of Scouring"]:
+	for orb: String in ["Orb of Chaos", "Orb of Alchemy", "Orb of Alteration", "Orb of Divine"]:
 		_check(int(landed.get(orb, 0)) > 0, "%s was tried against a lock (%s)" % [orb, landed])
-	# Scouring is the one with a rule of its own: back to uncommon carrying the lock and nothing else.
 	rng.seed = WORLD_SEED
-	var scoured := Item.rolled("Wooden Sword", ItemRarity.Rarity.ELITE, rng, 5)
-	_check(Blacksmith.lock(scoured, rng), "an elite takes a lock")
-	var kept := scoured.locked_mod().duplicate()
-	_check(OrbTable.apply("Orb of Scouring", scoured, rng), "and is scoured")
-	_check(scoured.rarity == ItemRarity.Rarity.UNCOMMON, "a locked piece is scoured to uncommon")
-	_check(scoured.mods.size() == 1 and str(scoured.mods[0]["id"]) == str(kept["id"]),
-			"carrying its lock and nothing else")
-	_check(not OrbTable.can_apply("Orb of Scouring", scoured), "and there is nothing left to scour")
-	_check(not OrbTable.why_not("Orb of Scouring", scoured).is_empty(), "which it says")
+	var pinned_piece := Item.rolled("Wooden Sword", ItemRarity.Rarity.ELITE, rng, 5)
+	_check(Blacksmith.lock(pinned_piece, rng), "an elite takes a lock")
 
 	# The line says so wherever a piece is written out, because Item writes it rather than a panel.
 	var marked := 0
-	for text in scoured.mod_lines():
+	for text in pinned_piece.mod_lines():
 		if "(locked)" in text:
 			marked += 1
-	_check(marked == 1, "exactly one line says it is locked (%s)" % [scoured.mod_lines()])
+	_check(marked == 1, "exactly one line says it is locked (%s)" % [pinned_piece.mod_lines()])
 
-	# A broken piece is out of the game as far as the orbs are concerned, and each of the eight says so.
+	# A broken piece is out of the game as far as the orbs are concerned, and each of the six says so.
 	var ruined := Item.rolled("Leather Boot", ItemRarity.Rarity.RARE, rng, 4)
 	var was_mods := ruined.mods.duplicate(true)
 	var was_rarity := ruined.rarity
@@ -1997,17 +2051,17 @@ func _test_locks_and_breaks() -> bool:
 		_check(not OrbTable.why_not(orb, ruined).is_empty(), "%s says why" % orb)
 		_check(not OrbTable.apply(orb, ruined, rng), "%s does nothing to one" % orb)
 	_check(ruined.mods == was_mods and ruined.rarity == was_rarity,
-			"a broken piece comes through all eight untouched")
+			"a broken piece comes through all six untouched")
 	_check(not Blacksmith.can_lock(ruined), "and the smith will not lock it either")
 
 	# Both marks go into the save, and a piece written before there was a smith reads as whole.
 	var back := Item.from_dict(ruined.to_dict())
 	_check(back != null and back.broken, "broken round-trips")
 	_check(back.to_dict() == ruined.to_dict(), "and the broken piece round-trips exactly")
-	var copy := Item.from_dict(scoured.to_dict())
-	_check(copy != null and copy.locked_mod() == scoured.locked_mod(),
+	var copy := Item.from_dict(pinned_piece.to_dict())
+	_check(copy != null and copy.locked_mod() == pinned_piece.locked_mod(),
 			"the lock comes back on the line it was on")
-	_check(copy.to_dict() == scoured.to_dict(), "and the locked piece round-trips exactly")
+	_check(copy.to_dict() == pinned_piece.to_dict(), "and the locked piece round-trips exactly")
 	var plain := Item.rolled("Wooden Shield", ItemRarity.Rarity.UNCOMMON, rng, 2)
 	var old := plain.to_dict()
 	old.erase("broken")
@@ -2108,7 +2162,7 @@ func _test_orb_saving() -> bool:
 	var edited := {
 		"version": Inventory.VERSION, "first_elite_taken": false, "gold": 0,
 		"items": [], "equipped": {}, "autodiscard": [],
-		"orbs": {"Orb of Chaos": 2, "Orb of Nonsense": 9, "Orb of Scouring": -4},
+		"orbs": {"Orb of Chaos": 2, "Orb of Scouring": 9, "Orb of Divine": -4},
 	}
 	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
 	file.store_string(JSON.stringify(edited, "\t"))
@@ -2140,7 +2194,7 @@ func _test_crafting_from_the_bag() -> bool:
 	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 4)
 	main.inventory.add(sword)
 	main.inventory.add_orb("Orb of Transmutation", 2)
-	main.inventory.add_orb("Orb of Scouring", 1)
+	main.inventory.add_orb("Orb of Divine", 1)
 	main._on_bag_pressed()
 	main.bag_page._select_item(0)
 	for i in 2:
@@ -2159,7 +2213,7 @@ func _test_crafting_from_the_bag() -> bool:
 		else:
 			grey.append(orb)
 	_check(lit == ["Orb of Transmutation"], "only transmutation is lit on a common, got %s" % [lit])
-	_check(grey == ["Orb of Scouring"], "scouring is grey on a common, got %s" % [grey])
+	_check(grey == ["Orb of Divine"], "divine is grey on a common, got %s" % [grey])
 	_check(main.bag_page._orb_tray.get_child_count() == OrbTable.ORBS.size(),
 			"the tray draws every orb, held or not")
 
@@ -2182,13 +2236,12 @@ func _test_crafting_from_the_bag() -> bool:
 	_check(main.inventory.orb_count("Orb of Transmutation") == 1, "a refused orb is not spent")
 	_check(sword.rarity == ItemRarity.Rarity.UNCOMMON, "and the piece did not change again")
 
-	# Scouring is lit now, and takes it all back.
-	main.bag_page._on_orb_pressed("Orb of Scouring")
+	# Divine is lit now that there are modifiers to reroll.
+	main.bag_page._on_orb_pressed("Orb of Divine")
 	for i in 2:
 		await process_frame
-	_check(sword.rarity == ItemRarity.Rarity.COMMON, "scouring brought it back to common")
-	_check(sword.mods.is_empty(), "and took the modifiers with it")
-	_check(main.inventory.orb_count("Orb of Scouring") == 0, "the scouring orb was spent")
+	_check(sword.rarity == ItemRarity.Rarity.UNCOMMON, "divine kept the rarity")
+	_check(main.inventory.orb_count("Orb of Divine") == 0, "the divine orb was spent")
 
 	# The card says what it is looking at, in all three of the states it can find an orb in. Hovered
 	# over the last square rather than the first, because that is the one the card cannot fit beside:
@@ -2220,7 +2273,7 @@ func _test_crafting_from_the_bag() -> bool:
 	main.inventory.save(TEST_PATH)
 	var back := Inventory.load_from(TEST_PATH)
 	_check(back.orb_count("Orb of Transmutation") == 1, "the unspent orb survived the save")
-	_check(back.orb_count("Orb of Scouring") == 0, "the spent one did not come back")
+	_check(back.orb_count("Orb of Divine") == 0, "the spent one did not come back")
 	_check(back.items.size() == 1, "the sword came back")
 	_check(back.items[0].to_dict() == before, "the crafted sword round-trips exactly")
 

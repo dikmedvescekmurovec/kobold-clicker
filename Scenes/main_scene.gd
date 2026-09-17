@@ -31,9 +31,6 @@ const STAR_ICON := "res://Assets/UI/ui_icon_star.png"
 const SCROLL_ICON := "res://Assets/UI/ui_icon_scroll.png"
 ## The air between one and the next, in panel pixels.
 const CORNER_GAP := 4.0
-## Screen pixels between the tile panel and the window's corner; the corner buttons' own inset.
-const PANEL_INSET := 8.0
-
 ## The panel that stands in for the map when its save cannot be read: how wide it is allowed to be
 ## in panel pixels, and the air it keeps either side of it on a window too narrow for that.
 const REFUSAL_WIDTH := 300.0
@@ -262,9 +259,10 @@ func _build_ui() -> void:
 	_service_rows.add_theme_constant_override("separation", 4)
 	rows.add_child(_service_rows)
 
-	# Only the buttons that can be pressed are shown (`_update_buttons`).
+	# Only the buttons that can be pressed are shown (`_update_buttons`), at the column's foot.
 	var buttons := VBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 4)
+	buttons.size_flags_vertical = Control.SIZE_EXPAND | Control.SIZE_SHRINK_END
 	rows.add_child(buttons)
 	_chart_button = UITheme.button("Chart", "LightButton", "Fight for this tile and what lies behind it")
 	_chart_button.pressed.connect(_on_chart_pressed)
@@ -355,6 +353,8 @@ func _build_pages(layer: CanvasLayer) -> void:
 		page.hide()
 		page.closed.connect(_on_left_page_closed)
 		layer.add_child(page)
+	# After the pages, so it is drawn over them: tree order is draw order on a CanvasLayer.
+	layer.add_child(ItemCard.new(ui_scale))
 
 
 ## The weather for wherever the player now stands.
@@ -441,9 +441,8 @@ func _show_services(cell: Vector2i) -> void:
 	_service_rows.add_child(icons)
 
 
-## The tile panel is a card as big as what it holds, in the bottom-right corner: a full-height column
-## for a name, a level and a button covered a quarter of the map. The left-hand pages lay themselves
-## out against the other edge.
+## The tile panel is a full-height column against the right edge, its buttons at its foot. The
+## left-hand pages lay themselves out against the other edge.
 func _layout_ui() -> void:
 	var view_size := Vector2(get_viewport().get_visible_rect().size)
 	_place_panel()
@@ -667,12 +666,14 @@ func _update_buttons() -> void:
 	_place_panel()
 
 
-## Shrinks the tile panel to what it holds now and stands it in the corner. Called whenever a row or
-## a button comes or goes, because the card's height is its contents'.
+## Stands the tile panel against the whole right edge, as `TownPage.layout` has its page, so Enter
+## town changes what the column holds and not where it is. Called whenever a row or a button comes
+## or goes, because the column's width is its contents'.
 func _place_panel() -> void:
 	var view_size := Vector2(get_viewport().get_visible_rect().size)
 	_panel.reset_size()
-	_panel.position = view_size - _panel.size * ui_scale - Vector2(PANEL_INSET, PANEL_INSET)
+	_panel.size.y = view_size.y / ui_scale
+	_panel.position = Vector2(view_size.x - _panel.size.x * ui_scale, 0.0)
 
 
 ## A kill left something behind. Whether it goes straight into the bag or waits in the run's pouch is
@@ -980,6 +981,22 @@ func _on_reset_pressed() -> void:
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	get_tree().reload_current_scene()
+
+
+## Escape is every X at once: the tip if one is up, otherwise the pages, the town and the tile panel
+## together. A fight answers for itself (`CombatScene._unhandled_input`) and gets the key first, being
+## further down the tree -- except under a tip, where it is not processing and the tip is what closes.
+func _unhandled_input(event: InputEvent) -> void:
+	if not event.is_action_pressed("ui_cancel"):
+		return
+	get_viewport().set_input_as_handled()
+	if _tip_panel != null:
+		_on_tip_closed()
+	elif _combat == null:
+		if _left_page_up() or town_page.visible:
+			_on_left_page_closed()
+		if _panel.visible:
+			_on_close_pressed()
 
 
 ## The X closes the panel and drops the selection, so nothing stays outlined on the map.

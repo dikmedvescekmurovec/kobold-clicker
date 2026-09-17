@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://6m0yomgdruix"
-path="res://.godot/imported/Orb of Scouring.png-3852e5cced0267ac457815a91198a5fb.ctex"
+uid="uid://bwht2ytjbygaw"
+path="res://.godot/imported/ui_icon_coins.png-42524da72f898e43400d560c02800942.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Orbs/Orb of Scouring.png"
-dest_files=["res://.godot/imported/Orb of Scouring.png-3852e5cced0267ac457815a91198a5fb.ctex"]
+source_file="res://Assets/UI/ui_icon_coins.png"
+dest_files=["res://.godot/imported/ui_icon_coins.png-42524da72f898e43400d560c02800942.ctex"]
 
 [params]
 

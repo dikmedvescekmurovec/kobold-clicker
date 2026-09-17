@@ -24,9 +24,19 @@ const ICON := 32
 ## How solid an empty socket's mark is drawn. Faint enough to read as nothing being there.
 const EMPTY_MARK_ALPHA := 0.35
 const SHINE := preload("res://Scenes/UI/shine.gdshader")
+## Every square holding a piece is in this group, which is how `ItemCard` finds the one under the
+## cursor without any square having to take the mouse.
+const GROUP := "item_slots"
+
+## What the square holds (null for an empty socket) and whether it is the one its page has open.
+var item: Item
+var selected := false
 
 
-func setup(item: Item, selected := false, translucent := false) -> void:
+func setup(held: Item, open := false, translucent := false) -> void:
+	item = held
+	selected = open
+	add_to_group(GROUP)
 	custom_minimum_size = Vector2(SIDE, SIDE)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_theme_stylebox_override("panel", ItemRarity.slot_style(item.rarity, selected, translucent))

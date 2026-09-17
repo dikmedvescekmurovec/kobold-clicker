@@ -198,8 +198,8 @@ static func reroll_value(id: String, rng: RandomNumberGenerator, level := 1) -> 
 ## it has. Empty when there is nothing left to give it, which today's tables cannot produce and a
 ## test holds them to.
 ##
-## Augmentation and Exalted are both this -- they differ only in which pieces they are offered on,
-## which is `OrbTable.can_apply`'s business and not this function's.
+## Exalted is this -- which pieces it is offered on is `OrbTable.can_apply`'s business and not this
+## function's.
 static func add_one(item_type: String, existing: Array[Dictionary], rng: RandomNumberGenerator,
 		level := 1) -> Dictionary:
 	var held := {}
