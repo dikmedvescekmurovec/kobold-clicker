@@ -36,7 +36,7 @@ const START_TOWN_DISTANCE := 5
 const CHEST_CHANCE := 0.03
 const CHEST_MIN_DISTANCE := 3
 ## The closed brown chest, top-left of the pack's sheet.
-const CHEST_TEXTURE := "res://Assets/Potential/Animated Chests/Chests.png"
+const CHEST_TEXTURE := "res://Assets/Chests/Chests.png"
 const CHEST_REGION := Rect2(2, 12, 28, 20)
 
 var map: HexMap
