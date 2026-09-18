@@ -609,15 +609,18 @@ func _odds_row(row: Dictionary, striped: bool) -> PanelContainer:
 ## What a reading costs here. The roads, once told in this town, are told again for nothing: they
 ## are read off the world, and the world has not moved.
 func _fortune_price(reading: String) -> float:
-	if reading == FortuneTeller.ROADS and bool(_drawer.get(FortuneTeller.ROADS_TOLD, false)):
+	if reading == FortuneTeller.ROADS and FortuneTeller.asked(_drawer, reading):
 		return 0.0
 	return TownPrices.fortune_price(reading, _cell)
 
 
-## Why she will not give this reading, or "" when she will.
+## Why she will not give this reading, or "" when she will. Each is sold once a settlement; the roads,
+## already paid for, are the one told again.
 func _fortune_why_not(reading: String) -> String:
 	if view == null:
 		return "She sees nothing here."
+	if reading != FortuneTeller.ROADS and FortuneTeller.asked(_drawer, reading):
+		return "She has read that here already."
 	match reading:
 		FortuneTeller.TREASURE:
 			var told := FortuneTeller.chest(inventory.fortunes)
@@ -655,9 +658,9 @@ func _on_reading_pressed(reading: String) -> void:
 		scour_pressed.emit(price)
 		return
 	inventory.gold -= price
+	_drawer[FortuneTeller.ASKED + reading] = true
 	match reading:
 		FortuneTeller.ROADS:
-			_drawer[FortuneTeller.ROADS_TOLD] = true
 			_said = reading
 		FortuneTeller.TREASURE:
 			var spot := view.origin + _near_chest

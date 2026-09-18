@@ -1412,6 +1412,10 @@ func _test_fortune_page() -> void:
 	var named: String = UniqueTable.UNIQUES[peeked[0]]["name"]
 	_check(_said(main.town_page._rows).contains(named), "by name (%s)" % named)
 	main.town_page._on_reading_closed()
+	await process_frame
+	# Each reading is sold once a settlement: the star is gone, but not the fact it was bought here.
+	_check(_deep_button(main.town_page._rows, "Relic").disabled, "one relic a settlement")
+	_check(_deep_button(main.town_page._rows, "Treasure").disabled, "and one star, even with the last one gone")
 
 	# A piece read: the bag's open piece, as the smith's is.
 	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, RandomNumberGenerator.new())
@@ -1424,6 +1428,11 @@ func _test_fortune_page() -> void:
 	main.town_page.bag_changed(null)
 	await process_frame
 	_check(_deep_button(main.town_page._rows, "Appraise") != null, "and put away with the piece")
+	main.town_page.bag_changed(sword)
+	await process_frame
+	_check(_deep_button(main.town_page._rows, "Appraise").disabled, "and one piece read a settlement")
+	main.town_page.bag_changed(null)
+	await process_frame
 
 	# The scour: the town closes, the map is aimed at, Escape costs nothing, a click pays once.
 	_deep_button(main.town_page._rows, "Scour").pressed.emit()

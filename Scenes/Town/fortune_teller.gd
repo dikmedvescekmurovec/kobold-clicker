@@ -35,8 +35,9 @@ const LABELS := {
 	SCOUR: "Scour",
 }
 
-## The town drawer's key: the roads were paid for here, so they are told again for nothing.
-const ROADS_TOLD := "fortune_roads"
+## The town drawer's key, before a reading's name: each is sold once a settlement. The roads, paid for,
+## are told again for nothing; every other reading is refused there from then on.
+const ASKED := "fortune_"
 ## `inventory.fortunes`' keys.
 const CHEST := "chest"
 const PEEKED := "peeked"
@@ -175,6 +176,11 @@ static func chest(fortunes: Dictionary) -> Vector2i:
 static func peeked(fortunes: Dictionary) -> Array:
 	var saved: Variant = fortunes.get(PEEKED, [])
 	return saved if typeof(saved) == TYPE_ARRAY else []
+
+
+## Whether `reading` has been paid for in the town whose drawer this is.
+static func asked(drawer: Dictionary, reading: String) -> bool:
+	return bool(drawer.get(ASKED + reading, false))
 
 
 static func scoured(fortunes: Dictionary) -> bool:
