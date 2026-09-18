@@ -1,4 +1,4 @@
-"""QA for each phase. Usage: python qa.py <phase1|phase2|phase3|showcase|blends|ui|slimes|hpbar> <tag>
+"""QA for each phase. Usage: python qa.py <phase1|phase2|phase3|showcase|blends|ui|slimes|hpbar|gear> <tag>
 Images are written to qa/<name>_<tag>.png so every run can be viewed under a fresh filename."""
 import hashlib
 import os
@@ -746,6 +746,71 @@ def hpbar(tag):
     print(f"  wrote qa/hpbar_{tag}.png and qa/hpbar_parts_{tag}.png")
 
 
+def gear(tag):
+    """The generated item-base icons: checks, then every one of them on the bag's socket among the
+    pack's own gear, borders off, at 4x and at 1x. The test of the sheet is that the drawn ones
+    cannot be picked out from the cut ones at a glance."""
+    import gear as G
+    from PIL import Image
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    sys.path.insert(0, os.path.join(root, "tools"))
+    import ui_kit as K
+
+    made = G.icons()
+    again = G.icons()
+    problems = Counter()
+    colours = {}
+    for name, im in made.items():
+        problems["wrong size"] += im.size != (G.SIDE, G.SIDE)
+        problems["not the same twice"] += im.tobytes() != again[name].tobytes()
+        problems["doubled pixels"] += K._doubled(im)
+        # Hard alpha like the pack: a pixel is in or it is out.
+        problems["soft alpha"] += sum(0 < p[3] < 255 for p in im.get_flattened_data())
+        # The white ring has to be whole for _outlined to know it for a border, so the art
+        # itself may not reach the edge of the square.
+        bare = K._outlined(im)
+        problems["art clipped by the square"] += bare.tobytes() == im.tobytes()
+        colours[name] = len({p[:3] for p in bare.get_flattened_data() if p[3]})
+    # The pack holds 235 to 557 colours an icon; a dagger is half a sword's pixels and holds about
+    # 120. Far under that and a drawing has gone flat.
+    thin = {n: k for n, k in colours.items() if k < 100}
+    problems["flat (under 100 colours)"] += len(thin)
+    # One finish for all sixty-nine, cut and drawn alike: every opaque pixel that touches clear is
+    # outline ink. Counted over the whole sheet as tools/ui_kit.py assembles it, so a pack piece is
+    # held to the rule a drawn one is. (base_gear itself stops on an icon under the floor.)
+    here = os.getcwd()
+    os.chdir(root)
+    try:
+        bases = K.base_gear()
+    finally:
+        os.chdir(here)
+    drawn = {t[0] for _slot, tiers in K.BASE_KINDS.values() for t in tiers if t[1] == K.DRAWN}
+    for label, names in (("drawn", drawn), ("cut", set(bases) - drawn)):
+        shares = [K.outline_share(bases[n]) for n in names]
+        problems["outline under the floor"] += sum(v < K.OUTLINE_FLOOR for v in shares)
+        print("  %s: %d icons, edge in outline ink %.0f%%-%.0f%%" % (label, len(shares), 100 * min(shares),
+                                                                     100 * max(shares)))
+    print("icons:", len(made), " colours an icon: %d-%d" % (min(colours.values()), max(colours.values())))
+    print("problems:", dict(problems), thin or "")
+
+    pack = ["Weapon & Tool/Iron Sword", "Equipment/Leather Boot", "Equipment/Iron Helmet", "Weapon & Tool/Knife",
+            "Equipment/Wooden Armor", "Equipment/Wizard Hat", "Weapon & Tool/Iron Shield", "Equipment/Iron Boot",
+            "Equipment/Leather Helmet", "Weapon & Tool/Golden Sword", "Equipment/Helm", "Weapon & Tool/Hammer"]
+    cells = list(made.values())
+    for i, name in enumerate(pack):
+        cells.insert(i * 5 + 2, Image.open(os.path.join(root, K.POTENTIAL, K._RPG + name + ".png")).convert("RGBA"))
+    cols, zoom, cell = 10, 4, 36
+    rows = ceil_div(len(cells), cols)
+    sheet = Image.new("RGBA", (cols * cell * zoom, rows * (cell * zoom + cell)), (0x8A, 0x6F, 0x4E, 255))
+    for i, im in enumerate(cells):
+        im = K._outlined(im)
+        x, y = (i % cols) * cell * zoom, (i // cols) * (cell * zoom + cell)
+        sheet.alpha_composite(im.resize((G.SIDE * zoom,) * 2, Image.NEAREST), (x + 2 * zoom, y + 2 * zoom))
+        sheet.alpha_composite(im, (x + (cell * zoom - G.SIDE) // 2, y + cell * zoom))
+    sheet.save(f"qa/gear_{tag}.png")
+    print(f"  wrote qa/gear_{tag}.png")
+
+
 def frozen(mode="check"):
     """Desert, which is finished and must not move. `record` prints the table, `check` tests it.
 
@@ -839,5 +904,6 @@ def audit(*_):
 
 if __name__ == "__main__":
     {"phase1": phase1, "phase2": phase2, "phase3": phase3, "showcase": showcase,
-     "blends": blends, "ui": ui, "slimes": slimes, "hpbar": hpbar, "areas": areas,
+     "blends": blends, "ui": ui, "slimes": slimes, "hpbar": hpbar, "gear": gear,
+     "areas": areas,
      "frozen": frozen, "audit": audit}[sys.argv[1]](*sys.argv[2:])

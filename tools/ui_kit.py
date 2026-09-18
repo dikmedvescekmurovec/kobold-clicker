@@ -16,8 +16,11 @@ Writes Assets/UI/ (the sheet, the loose sprites and ui_sheet.json) and tools/qa/
 """
 
 import colorsys
+import io
 import json
 import os
+import sys
+import zipfile
 
 from PIL import Image, ImageDraw
 
@@ -83,28 +86,30 @@ DISABLED_HUE, DISABLED_SAT, DISABLED_DIM = 0.62, 0.06, 0.80
 # out #714c2a against the pack's own #70492a -- the pack's brown square, on a face that nine-slices.
 BROWN_HUE, BROWN_SAT, BROWN_DIM = 0.08, 0.46, 0.62
 
-# The gear icons, which are not theme sprites: they go to Assets/Gear as loose PNGs for
-# LootTable.ROOT to load by path, and never enter ui_sheet.png or ui_sheet.json. They are cut here
-# all the same, because this is the file that records which rectangle of which bought sheet is which
-# sprite, and a second script saying the same thing in a second way is how the two drift apart.
+# The gear icons are not theme sprites: they go to Assets/Gear as loose PNGs for LootTable.ROOT to
+# load by path, and never enter ui_sheet.png or ui_sheet.json. They are assembled here all the same
+# (BASE_KINDS, UNIQUE_GEAR), because this is the file that records which rectangle of which bought
+# sheet is which sprite, and a second script saying the same thing a second way is how the two drift
+# apart. The table that stood here, GEAR, wrote the first four -- two of them a ring and an amulet
+# doubled off Icons.png -- and is gone: every base is BASE_KINDS' now, and a second table writing
+# the same file names after it would put a bordered or a doubled copy back over the finished one.
 #
-# name -> (sheet under Assets/Potential, x, y, w, h, scale)
-#
-# The four icons that shipped with the game are 32x32 art from "Pixel Art Icon Pack - RPG". Nothing
-# in any pack here draws a ring or an amulet, so those two come off the UI pack's Icons.png, which is
-# a 6-column grid on a 16 px pitch (96 px wide) with rows that are not evenly spaced -- the y and the
-# height below are each the measured extent of that one icon, not a cell of a regular grid. Its art
-# is 12 px where the RPG pack's is 28, so it is doubled to land at a comparable size in the bag; that
-# doubles its pixel too, which is why only the two pieces with no alternative are taken from it.
-GEAR = {
-    "Gold Ring": ("2D Pixel UI/PNG/Icons", 82, 130, 12, 12, 2),
-    "Ruby Amulet": ("2D Pixel UI/PNG/Icons", 3, 146, 10, 12, 2),
-    "Wooden Torch": ("Pixel Art Icon Pack - RPG/Weapon & Tool/Torch", 0, 0, 32, 32, 1),
-    "Leather Helmet": ("Pixel Art Icon Pack - RPG/Equipment/Leather Helmet", 0, 0, 32, 32, 1),
-}
+# a source 6-tuple: (sheet under Assets/Potential, x, y, w, h, scale); see _cut for a sheet in a zip
 # Every gear icon is drawn on a square of this side, centred, because ItemSlot draws a fixed 32x32
 # rect and a test holds every icon to it.
 GEAR_SIDE = 32
+# The lightest a recoloured pixel may come out. It was set when every icon wore the pack's white
+# border, which had to stay the lightest thing in the sprite; the border is ink now (_outlined), and
+# what the ceiling still does is keep a lifted recolour -- glass, bleached bone -- from burning out
+# to paper white on the socket.
+GREY_CEILING = 0.88
+# The lightest the outline ink may be: see _outlined.
+OUTLINE_INK = 0.16
+# The least of an icon's edge that has to be that ink for a base to be written or shown. Not 1.0:
+# the pack leaves the odd edge pixel out of its border, one or two an icon.
+OUTLINE_FLOOR = 0.97
+_FOUR = ((1, 0), (-1, 0), (0, 1), (0, -1))
+_EIGHT = _FOUR + ((1, 1), (1, -1), (-1, 1), (-1, -1))
 
 # The unique items' icons, keyed by `UniqueTable`'s ids and written to Assets/Gear/Unique. Nine come
 # straight off the RPG pack, which draws more gear than the eight base pieces use. The pack draws no
@@ -114,7 +119,7 @@ GEAR_SIDE = 32
 # 0.55-0.72; the amulet's stone and setting are 0.95-0.12), what it adds to the hue, and what it
 # multiplies the saturation and the lightness by.
 #
-# id -> (the GEAR 6-tuple, [(hue_low, hue_high, hue_add, sat_mul, light_mul), ...][, (grey_hue, grey_sat)])
+# id -> (a source 6-tuple, [(hue_low, hue_high, hue_add, sat_mul, light_mul), ...][, (grey_hue, grey_sat)])
 _RING = ("2D Pixel UI/PNG/Icons", 82, 130, 12, 12, 2)
 _AMULET = ("2D Pixel UI/PNG/Icons", 3, 146, 10, 12, 2)
 _RPG = "Pixel Art Icon Pack - RPG/"
@@ -163,16 +168,139 @@ UNIQUE_GEAR = {
     "rag_and_bone_sack": ((_RPG + "Equipment/Leather Armor", 0, 0, 32, 32, 1), []),
 }
 UNIQUE_OUT = "Assets/Gear/Unique"
+# The ten of those that are doubled Icons.png art -- four rings, three amulets, the boots, the
+# cuirass and the shield -- drawn instead by AI-sprites-generator/gear.py (its UNIQUES, by the same
+# ids), the way the base jewels were and for the same reason. They are on their own flag because
+# they are on their own approval: off, a run writes the doubled ones as before and shows the drawn
+# ones beside them on tools/qa/ui_kit_uniques_drawn.png; on, the drawn ones are what is written and
+# those ten entries of UNIQUE_GEAR can go.
+UNIQUE_DRAWN = ["knucklebone_ring", "the_tithe", "berserkers_band", "magpies_band", "hourglass_amulet",
+                "gravediggers_charm", "gamblers_die", "dominoes", "snowball", "bulwark"]
+UNIQUE_DRAWN_EXPORT = False
 # Whether the icons are written into the game or only onto the preview. Off until the preview has been
 # looked at: `UniqueTable.icon` falls back to the base piece's picture while a file is missing.
 UNIQUE_EXPORT = True
+
+# The item bases: fifteen kinds a slot can draw, each in four tiers, plus the torch's two and the
+# seven pieces of jewellery. Sixty-nine names in all.
+#
+# The user chose one look for all of them -- the RPG pack's, which is what the leather and wooden
+# pieces the game shipped with are -- and asked two more things of it: no white border, and a higher
+# tier that is a more intricate *drawing*, not the same one in another colour. So a cell here comes
+# from one of two places and both end the same way, through `_outlined`:
+#
+#   a 6-tuple  cut from the pack, where it draws the right object at its own resolution. The six
+#              leather and wooden pieces the game shipped with are these too, cut from the pack
+#              again rather than read back out of Assets/Gear: a build that reads what it wrote
+#              outlines an outline on its second run. Two of them, the sword and the shield, are
+#              not among the unpacked files any more and come straight out of the pack's zip;
+#   DRAWN      generated by AI-sprites-generator/gear.py in the pack's look, measured off the pack
+#              (see gearlib.py). The pack draws about twenty pieces of gear, so this is most cells,
+#              and it is every ring and amulet: the two on disk are 12 px art doubled, which is the
+#              other thing this sheet was sent back for, so they are replaced with the rest.
+#
+# Two rounds before this one recoloured a single silhouette per kind (`MATERIALS`, `_tighten`) and
+# filled the gaps from the Raven Fantasy Icons pack and Icons.png. Both were turned down. Raven's
+# 32x32.png is its 16x16.png doubled pixel for pixel, so beside the RPG pack's 1 px art it reads as
+# another game, exactly as the doubled Icons.png jewels did; and four colours of one drawing do not
+# say four tiers. `_doubled` is asked of every cell now and a build stops on a yes.
+#
+# A unique may share its base's picture, as it would in the game this borrows its items from: the
+# pack's Iron Helmet, Helm, Iron Armor and Iron Boot are also spiked_helm, sunscorched_cowl,
+# rimeplate and meadowstriders, which wear a gold frame and a name of their own. Where the pack has
+# a second drawing to give the base instead it does -- the shield is drawn, because the pack's one
+# shield is duelists_buckler.
+#
+# kind -> (slot, [(item name, source[, tint]), ...])
+DRAWN = "drawn"
+_RPG_ZIP = "Pixel Art Icon Pack - RPG.zip!"
+BASE_KINDS = {
+    # The pack draws an iron sword and a golden one, plain and jewelled, and the wooden one is on
+    # disk; the steel one between them is drawn -- fullered, wrapped, a knobbed guard. (The pack's
+    # Silver Sword is the obvious steel and is left alone: it is metronome, unrecoloured.)
+    "sword": ("Weapon", [
+        ("Wooden Sword", (_RPG_ZIP + "Weapon & Tool/Wooden Sword", 0, 0, 32, 32, 1)), ("Iron Sword", (_RPG + "Weapon & Tool/Iron Sword", 0, 0, 32, 32, 1)),
+        ("Steel Sword", DRAWN), ("Golden Sword", (_RPG + "Weapon & Tool/Golden Sword", 0, 0, 32, 32, 1))]),
+    # All four drawn, and short. The pack's Knife was the iron tier until it stood in the row: it
+    # is 28 px corner to corner, the same as the sword above it, and a dagger has to read small
+    # before it reads as anything else.
+    "dagger": ("Weapon", [
+        ("Bone Knife", DRAWN), ("Iron Dagger", DRAWN), ("Steel Stiletto", DRAWN), ("Golden Kris", DRAWN)]),
+    # Four heads, because the four names promise four weapons. The pack's Hammer is stonebreaker.
+    "mace": ("Weapon", [
+        ("Wooden Club", DRAWN), ("Iron Mace", DRAWN), ("Steel Morningstar", DRAWN), ("Golden Sceptre", DRAWN)]),
+    # The pack's swords already run corner to corner, so a two-hander cannot be longer: it is
+    # heavier -- half again the blade, a grip for two hands, a guard right across the square.
+    "greatsword": ("Weapon", [
+        ("Wooden Greatsword", DRAWN), ("Iron Claymore", DRAWN),
+        ("Steel Zweihander", DRAWN), ("Golden Greatsword", DRAWN)]),
+
+    "shield": ("Offhand", [
+        ("Wooden Shield", (_RPG_ZIP + "Weapon & Tool/Wooden Shield", 0, 0, 32, 32, 1)), ("Iron Shield", DRAWN), ("Steel Kite Shield", DRAWN), ("Golden Aegis", DRAWN)]),
+    "buckler": ("Offhand", [
+        ("Hide Buckler", DRAWN), ("Iron Buckler", DRAWN), ("Steel Targe", DRAWN), ("Golden Buckler", DRAWN)]),
+    # Two tiers. The second was the pack torch with its own flame grown by code (`_blaze`), and was
+    # turned down twice for still being the first one: it is drawn now, a caged brand with a fire
+    # three times the size.
+    "torch": ("Offhand", [("Wooden Torch", (_RPG + "Weapon & Tool/Torch", 0, 0, 32, 32, 1)), ("Blazing Torch", DRAWN)]),
+
+    # The pack's three helmets are a ladder as they stand -- a cap, an open-faced helmet, a great
+    # helm -- and the gold one is that great helm drawn again with a circlet and a plume.
+    "helm": ("Helmet", [
+        ("Leather Helmet", (_RPG + "Equipment/Leather Helmet", 0, 0, 32, 32, 1)), ("Iron Helmet", (_RPG + "Equipment/Iron Helmet", 0, 0, 32, 32, 1)),
+        ("Steel Helm", (_RPG + "Equipment/Helm", 0, 0, 32, 32, 1)), ("Golden Helm", DRAWN)]),
+    "hood": ("Helmet", [
+        ("Hide Hood", DRAWN), ("Leather Hood", DRAWN), ("Studded Hood", DRAWN), ("Shadow Hood", DRAWN)]),
+    # The pack's one hat is the second rung, dyed the blue its name has always meant here; the
+    # drawn ones are built the way it is, shorter below it and taller and busier above.
+    "hat": ("Helmet", [
+        ("Apprentice Hat", DRAWN), ("Wizard Hat", (_RPG + "Equipment/Wizard Hat", 0, 0, 32, 32, 1), "silk"),
+        ("Sage's Hat", DRAWN), ("Archmage's Hat", DRAWN)]),
+
+    "plate": ("Body", [
+        ("Wooden Armor", (_RPG + "Equipment/Wooden Armor", 0, 0, 32, 32, 1)), ("Iron Armor", (_RPG + "Equipment/Iron Armor", 0, 0, 32, 32, 1)),
+        ("Steel Plate", DRAWN), ("Golden Plate", DRAWN)]),
+    # The pack calls a strapped backpack its leather armour (it is rag_and_bone_sack), so all drawn.
+    "jerkin": ("Body", [
+        ("Hide Jerkin", DRAWN), ("Leather Jerkin", DRAWN), ("Studded Jerkin", DRAWN), ("Shadow Leathers", DRAWN)]),
+    "robe": ("Body", [
+        ("Linen Robe", DRAWN), ("Silk Robe", DRAWN), ("Sage's Robe", DRAWN), ("Archmage's Robe", DRAWN)]),
+
+    "boot": ("Boots", [
+        ("Leather Boot", (_RPG + "Equipment/Leather Boot", 0, 0, 32, 32, 1)), ("Studded Boot", DRAWN), ("Ranger's Boot", DRAWN), ("Shadow Boot", DRAWN)]),
+    "greaves": ("Boots", [
+        ("Bronze Greaves", DRAWN), ("Iron Greaves", (_RPG + "Equipment/Iron Boot", 0, 0, 32, 32, 1)),
+        ("Steel Greaves", DRAWN), ("Golden Greaves", DRAWN)]),
+    "slippers": ("Boots", [
+        ("Linen Slippers", DRAWN), ("Silk Slippers", DRAWN), ("Sage's Slippers", DRAWN),
+        ("Archmage's Slippers", DRAWN)]),
+
+    # Untiered, so here the drawing parts one piece from the next rather than one tier from the
+    # last: a stone on a gold band, a broad riveted band, a ring cut from jade; four pendants of
+    # four shapes.
+    "ring": ("Ring", [("Gold Ring", DRAWN), ("Iron Band", DRAWN), ("Jade Ring", DRAWN)]),
+    "amulet": ("Amulet", [
+        ("Ruby Amulet", DRAWN), ("Gold Amulet", DRAWN), ("Sapphire Amulet", DRAWN), ("Emerald Amulet", DRAWN)]),
+}
+# The one dye a cut piece takes, as `_shift` wants it: the pack's warm band landed on a hue, and the
+# greys given the same. Everything drawn is dyed where it is drawn (gearlib.TINTS).
+#
+# tint -> ([(hue_low, hue_high, hue_add, sat_mul, light_mul), ...], (grey_hue, grey_sat, grey_light_mul))
+BASE_TINTS = {
+    "silk": ([(0.0, 0.25, 0.51, 1.9, 1.05)], (0.6, 0.45, 1.05)),
+}
+# Whether the base icons are written into the game or only onto the preview. It was off through five
+# rounds of that preview, which is this project's standing rule for art, and the user turned it on.
+# Turn it off again before trying a new look: every source is under Assets/Potential or drawn, never
+# a file this writes, so a run is the same the second time as the first.
+BASES_EXPORT = True
 
 # The six orbs, off "OreAndGem" -- a 10x5 grid of 50 gems on an exact 32 px pitch, so an entry is
 # only ever a cell of it. The picks are made for distinctness across the tray as much as for the
 # colours Path of Exile trained the idea into: the six stand side by side in one row, so no two of
 # them may read as the same stone at a glance.
 #
-# name -> (sheet under Assets/Potential, x, y, w, h, scale), the same 6-tuple as GEAR
+# name -> (sheet under Assets/Potential, x, y, w, h, scale), a source 6-tuple
 ORBS = {
     "Orb of Transmutation": ("OreAndGem/OreGemSpritesheet", 9 * 32, 1 * 32, 32, 32, 1),
     "Orb of Alteration": ("OreAndGem/OreGemSpritesheet", 7 * 32, 1 * 32, 32, 32, 1),
@@ -206,7 +334,7 @@ PARTS = {
 # row 2, column 2. Scale 1, unlike the gear: these stand on theme art, which is drawn at one source
 # pixel per panel pixel, and doubling them would put a second pitch on the same button.
 #
-# name -> (sheet under Assets/Potential, x, y, w, h, scale), the same 6-tuple as GEAR
+# name -> (sheet under Assets/Potential, x, y, w, h, scale), a source 6-tuple
 ICONS = {
     "ui_icon_chest": ("2D Pixel UI/PNG/Icons", 34, 3, 12, 11, 1),
     "ui_icon_star": ("2D Pixel UI/PNG/Icons", 18, 18, 13, 12, 1),
@@ -223,7 +351,10 @@ ICON_SIDE = 14
 # brown ramp and shading (a dark outline, light from the top left), so that they go through the
 # same BONE_RAMP and the same square as the two cut above and cannot be told apart from them.
 # o is the outline, 1-4 the ramp from dark to light, . is clear.
-ICON_KEY = {"o": "#3e1f1d", "1": "#603928", "2": "#70492a", "3": "#825c2f", "4": "#88682d"}
+ICON_KEY = {"o": "#3e1f1d", "1": "#603928", "2": "#70492a", "3": "#825c2f", "4": "#88682d",
+            # The close button's own colours, which BONE_RAMP leaves alone: its teal frame, its cream
+            # face, the light along that face's top left, and the black of its X. For ui_icon_info.
+            "t": "#38605b", "c": "#e5d6a1", "l": "#fbf5bd", "k": "#151419"}
 ICONS_DRAWN = {
     # Terminate: a flag on its pole -- leave the field and keep the haul.
     "ui_icon_flag": """
@@ -383,6 +514,22 @@ ICONS_DRAWN = {
         ...o42o..
         ...o21o..
         ...oooo..
+    """,
+    # Info, on the collection log: an "i" on a disc in the close button's colours (12x12), worn by no
+    # button -- it stands on the panel and says its piece in a tooltip. Mockup: qa/info_icon_m2.png, C.
+    "ui_icon_info": """
+        ....tttt....
+        ..ttlllltt..
+        .tllckkccct.
+        .tlcckkccct.
+        tlccccccccct
+        tlcckkkcccct
+        tlccckkcccct
+        tlccckkcccct
+        .tlcckkccct.
+        .tcckkkkcct.
+        ..ttcccctt..
+        ....tttt....
     """,
     # Swap, on the bag's comparison: two arrows chasing each other round -- the other ring finger.
     "ui_icon_swap": """
@@ -757,7 +904,14 @@ def _cut(entry, trim=True):
     has to be the same width, whether or not its own art reaches the edge of the rectangle.
     """
     src, x, y, w, h, scale = entry
-    art = Image.open(os.path.join(POTENTIAL, src + ".png")).convert("RGBA").crop((x, y, x + w, y + h))
+    if ".zip!" in src:
+        # A sheet still inside its pack's zip: "<the zip>!<the path in it>". Nothing is unpacked.
+        archive, inner = src.split("!")
+        with zipfile.ZipFile(os.path.join(POTENTIAL, archive)) as pack_zip:
+            sheet = Image.open(io.BytesIO(pack_zip.read(inner + ".png")))
+    else:
+        sheet = Image.open(os.path.join(POTENTIAL, src + ".png"))
+    art = sheet.convert("RGBA").crop((x, y, x + w, y + h))
     box = art.getbbox() if trim else None
     if box:
         art = art.crop(box)
@@ -766,26 +920,9 @@ def _cut(entry, trim=True):
     return art
 
 
-def gear():
-    """The gear icons, each centred on its own GEAR_SIDE square.
-
-    Centred rather than left where the measurement found it: an icon sitting off-centre in its
-    square reads as a mistake once there is a grid of them.
-    """
-    out = {}
-    for name, entry in GEAR.items():
-        art = _cut(entry)
-        if art.width > GEAR_SIDE or art.height > GEAR_SIDE:
-            raise SystemExit("%s is %dx%d, too big for a %d square"
-                             % (name, art.width, art.height, GEAR_SIDE))
-        square = Image.new("RGBA", (GEAR_SIDE, GEAR_SIDE), (0, 0, 0, 0))
-        square.alpha_composite(art, ((GEAR_SIDE - art.width) // 2, (GEAR_SIDE - art.height) // 2))
-        out[name] = square
-    return out
-
-
 def _squared(name, art):
-    """`art` centred on a GEAR_SIDE square, the way gear() centres its own."""
+    """`art` centred on a GEAR_SIDE square. Centred rather than left where the measurement found it:
+    an icon sitting off-centre in its square reads as a mistake once there is a grid of them."""
     if art.width > GEAR_SIDE or art.height > GEAR_SIDE:
         raise SystemExit("%s is %dx%d, too big for a %d square"
                          % (name, art.width, art.height, GEAR_SIDE))
@@ -794,9 +931,108 @@ def _squared(name, art):
     return square
 
 
+def _outlined(art):
+    """`art` ending in a dark outline one pixel thick, all the way round: the finish every base wears.
+
+    Where the outline goes is where the RPG pack puts its white border. Measured off all 105 of its
+    icons, that border is pure (255, 255, 255), one pixel thick, and it is every opaque pixel that
+    touches clear on one of its four sides plus the odd corner fill that touches it only diagonally.
+    So it is found from the outside in -- a pure white pixel with clear among its eight neighbours
+    -- and never by colour over the whole sprite: the pack also puts pure white on a blade glint and
+    in the heart of the torch flame, a handful of pixels an icon, and none of them touches clear.
+    Every pixel of that ring is painted ink. The pack ships some pieces without the border (four of
+    the six originals in Assets/Gear are those: the sword, the shield, the boot, the wooden armour),
+    and a drawing may come with none, so where under half the edge is white the ring is *added*: the
+    clear pixels on the four sides of the art. Either way the art inside is never touched and the
+    outline stands outside it, inside the 32 square.
+
+    An earlier version cleared a border pixel wherever what it stood against was already dark, to
+    keep the line thin. It was turned down: the pack shades towards its edge in mid browns that are
+    dark enough to pass that test and nowhere near as dark as ink, so a cut piece ended in 56% ink
+    on average (the leather boot in 1%) where a drawn one ended in 88%, and the two read as two
+    finishes on one sheet. One rule now, and tools and qa both count it: every opaque pixel that
+    touches clear is ink.
+
+    The ink is the sprite's own: the hue and saturation of its darkest twentieth, no lighter than
+    OUTLINE_INK -- on the pack's pale pieces (the bow, the skull, the candle) the darkest tone is a
+    mid brown, and a mid brown line on a tan socket is no line at all. The pack's few ghost pixels
+    (alpha under 14, round the hammer) are cleared first.
+    """
+    out = art.copy()
+    px = out.load()
+    w, h = out.size
+    for y in range(h):
+        for x in range(w):
+            if px[x, y][3] < 128:
+                px[x, y] = (0, 0, 0, 0)
+
+    def around(x, y, ways):
+        return [(x + dx, y + dy) for dx, dy in ways]
+
+    def clear(spot):
+        return not (0 <= spot[0] < w and 0 <= spot[1] < h) or px[spot][3] == 0
+
+    solid = {(x, y) for y in range(h) for x in range(w) if px[x, y][3]}
+    if not solid:
+        return out
+    ring = {spot for spot in solid if px[spot][:3] == (255, 255, 255)
+            and any(clear(near) for near in around(*spot, _EIGHT))}
+    edge = [spot for spot in solid if any(clear(near) for near in around(*spot, _FOUR))]
+    if 2 * len(ring) < len(edge):
+        # No border to repaint, so the ring is added -- on a canvas a pixel bigger each way if the
+        # art runs to the edge of this one; the callers centre whatever comes back on the square.
+        if any(x in (0, w - 1) or y in (0, h - 1) for x, y in solid):
+            grown = Image.new("RGBA", (w + 2, h + 2), (0, 0, 0, 0))
+            grown.alpha_composite(out, (1, 1))
+            return _outlined(grown)
+        ring = {near for spot in edge for near in around(*spot, _FOUR) if near not in solid}
+    inside = sorted(solid - ring, key=lambda spot: colorsys.rgb_to_hls(*[v / 255 for v in px[spot][:3]])[1])
+    if not inside:
+        return out
+    dark = inside[:max(1, len(inside) // 20)]
+    mean = [sum(px[spot][k] for spot in dark) / len(dark) / 255 for k in range(3)]
+    hue, lightness, sat = colorsys.rgb_to_hls(*mean)
+    ink = tuple(round(v * 255) for v in colorsys.hls_to_rgb(hue, min(lightness, OUTLINE_INK), sat)) + (255,)
+    for spot in ring:
+        px[spot] = ink
+    return out
+
+
+def outline_share(art):
+    """How much of `art`'s edge -- its opaque pixels that touch clear -- is outline ink, 0 to 1."""
+    px = art.load()
+    w, h = art.size
+    edge = [px[x, y] for y in range(h) for x in range(w) if px[x, y][3] and any(
+        not (0 <= x + dx < w and 0 <= y + dy < h) or px[x + dx, y + dy][3] == 0 for dx, dy in _FOUR)]
+    inked = [p for p in edge if colorsys.rgb_to_hls(*[v / 255 for v in p[:3]])[1] <= OUTLINE_INK + 0.02]
+    return len(inked) / max(1, len(edge))
+
+
+def _doubled(art):
+    """Whether `art` is smaller art blown up: every 2x2 block of it, from its own corner, one colour.
+
+    The preview asks this of every cell, because it is the one thing about a source the eye gets
+    wrong at 3x and right at 1x: a doubled icon beside a true one reads as a different game.
+    """
+    box = art.getbbox()
+    if not box:
+        return False
+    art = art.crop(box)
+    if art.width % 2 or art.height % 2:
+        return False
+    half = art.resize((art.width // 2, art.height // 2), Image.NEAREST)
+    return half.resize(art.size, Image.NEAREST).tobytes() == art.tobytes()
+
+
 def _shift(art, bands, grey=None):
     """`art` with every pixel whose hue falls in a band moved: see UNIQUE_GEAR. Greys are left alone --
-    the outline and the amulet's cord have no hue worth the name."""
+    the outline and the amulet's cord have no hue worth the name.
+
+    `grey` is (hue, saturation) and may name a third number, what to multiply those pixels' lightness
+    by. Without it an iron piece and a steel one come out the same value wherever a pack drew its
+    metal colourless, which is most of the armour in them: the band's own light_mul never reaches
+    those pixels, and hue and saturation alone cannot say dark.
+    """
     out = art.copy()
     px = out.load()
     for y in range(out.height):
@@ -809,20 +1045,54 @@ def _shift(art, bands, grey=None):
                 # Steel has no hue to move, so it is given one: only where `grey` asks, and never the
                 # white outline or the black line, which a hue would do nothing to anyway.
                 if grey and 0.15 < light < 0.95:
-                    px[x, y] = tuple(round(c * 255) for c in colorsys.hls_to_rgb(grey[0], light, grey[1])) + (a,)
+                    dim = grey[2] if len(grey) > 2 else 1.0
+                    # Never past the white outline: a pack that draws its steel bright already sits
+                    # near the ceiling, and a steel recipe that suits the RPG pack turns Raven's
+                    # morningstar into a snowball without this.
+                    px[x, y] = tuple(round(c * 255) for c in colorsys.hls_to_rgb(
+                            grey[0], min(light * dim, GREY_CEILING), grey[1])) + (a,)
                 continue
             for low, high, add, sat_mul, light_mul in bands:
                 if low <= hue <= high:
-                    moved = colorsys.hls_to_rgb((hue + add) % 1.0, min(light * light_mul, 1.0),
+                    moved = colorsys.hls_to_rgb((hue + add) % 1.0,
+                                                min(light * light_mul, GREY_CEILING),
                                                 min(sat * sat_mul, 1.0))
                     px[x, y] = tuple(round(c * 255) for c in moved) + (a,)
                     break
     return out
 
 
+def _generator():
+    """AI-sprites-generator/gear.py, which draws what no pack does."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "AI-sprites-generator"))
+    import gear
+    return gear
+
+
 def unique_gear():
     """The unique items' icons, each on its own GEAR_SIDE square."""
-    return {name: _squared(name, _shift(_cut(entry[0]), *entry[1:])) for name, entry in UNIQUE_GEAR.items()}
+    out = {}
+    for name, entry in UNIQUE_GEAR.items():
+        art = _cut(entry[0])
+        # The seventeen off the RPG pack take the bases' finish, so the collection log and the bag
+        # are one look. The ten doubled off Icons.png carry a dark line of their own and are left
+        # as they are until the drawn ones that replace them are approved: see UNIQUE_DRAWN.
+        out[name] = _squared(name, _shift(art if _doubled(art) else _outlined(art), *entry[1:]))
+    if UNIQUE_DRAWN_EXPORT:
+        out.update(unique_drawn())
+    return out
+
+
+def unique_drawn():
+    """The ten drawn unique icons, finished the way every base is."""
+    draw = _generator().UNIQUES
+    out = {}
+    for name in UNIQUE_DRAWN:
+        art = _outlined(draw[name]())
+        if _doubled(art) or outline_share(art) < OUTLINE_FLOOR:
+            raise SystemExit("%s: doubled, or its edge is not outline ink" % name)
+        out[name] = _squared(name, art.crop(art.getbbox()))
+    return out
 
 
 def unique_preview(cut):
@@ -845,10 +1115,106 @@ def unique_preview(cut):
     return out.resize((out.width * 3, out.height * 3), Image.NEAREST)
 
 
+def unique_drawn_preview(drawn):
+    """The ten doubled unique icons as they are cut now and, under each, as drawn -- both in the gold
+    ring a unique wears, at 3x, and the ten again at 1x along the bottom, cut then drawn."""
+    socket, gold, ink = (0x8A, 0x6F, 0x4E, 0xFF), (0xE8, 0xB8, 0x3C, 0xFF), (0x3B, 0x2A, 0x1E, 0xFF)
+    now = {name: _squared(name, _shift(_cut(UNIQUE_GEAR[name][0]), *UNIQUE_GEAR[name][1:])) for name in drawn}
+    zoom, side, pad = 3, GEAR_SIDE + 8, 6
+    top = (2 * side + 3 * pad) * zoom + 14
+    out = Image.new("RGBA", (pad * zoom + len(drawn) * (side + pad) * zoom, top + 2 * (side + pad) + pad),
+                    (0xE8, 0xDC, 0xC0, 0xFF))
+    draw = ImageDraw.Draw(out)
+    for i, name in enumerate(drawn):
+        x = (pad + i * (side + pad)) * zoom
+        for j, art in enumerate((now[name], drawn[name])):
+            cell = Image.new("RGBA", (side, side), gold)
+            cell.paste(Image.new("RGBA", (side - 4, side - 4), socket), (2, 2))
+            cell.alpha_composite(art, (4, 4))
+            out.paste(cell.resize((side * zoom,) * 2, Image.NEAREST), (x, (pad + j * (side + pad)) * zoom))
+            out.paste(cell, (pad * zoom + i * (side + pad), top + j * (side + pad)))
+        draw.text((x, (2 * side + 3 * pad) * zoom - 2), name, fill=ink)
+    return out
+
+
+def base_gear():
+    """All sixty-nine bases, cut or drawn as BASE_KINDS says, every one through `_outlined`.
+
+    Nothing is read out of Assets/Gear, which is where these are written. A doubled icon stops the
+    build, and so does one whose edge is not outline ink: see `_doubled` and `outline_share`.
+    """
+    generator = _generator()
+    out = {}
+    for _slot, tiers in BASE_KINDS.values():
+        for tier in tiers:
+            name, source = tier[0], tier[1]
+            if source == DRAWN:
+                art = generator.ICONS[name]()
+            else:
+                art = _cut(source)
+            art = _outlined(art)
+            if len(tier) > 2:
+                art = _shift(art, *BASE_TINTS[tier[2]])
+            if _doubled(art):
+                raise SystemExit("%s is doubled art: every 2x2 block of it is one colour" % name)
+            if outline_share(art) < OUTLINE_FLOOR:
+                raise SystemExit("%s: only %d%% of its edge is outline ink" % (name, 100 * outline_share(art)))
+            out[name] = _squared(name, art.crop(art.getbbox()))
+    return out
+
+
+def base_preview(cut):
+    """All sixty-nine bases: a row to a kind, a column to a tier, grouped under their slot.
+
+    Drawn at this size because the question is whether four tiers of one kind can be told apart at
+    the 32 px the bag draws them at, whether a drawn piece can be picked out from a cut one, and
+    whether a dagger still reads smaller than a sword. So the rows put a family side by side, and a
+    cell says under its name where it came from.
+
+    And at the right of every row the same four again at 1x, on the socket at the size the bag
+    actually draws it. That strip is the one that settles it: three times life size flatters a
+    drawing, and a tier that only separates when it is enlarged has not separated.
+    """
+    cream, socket, ink = (0xE8, 0xDC, 0xC0, 0xFF), (0x8A, 0x6F, 0x4E, 0xFF), (0x3B, 0x2A, 0x1E, 0xFF)
+    faint = (0x8A, 0x78, 0x60, 0xFF)
+    zoom, gutter, pad, label, head = 3, 104, 8, 24, 22
+    side, life = (GEAR_SIDE + 8) * zoom, GEAR_SIDE + 8
+    cell_w, cell_h = side + pad, side + label + pad
+    columns = max(len(tiers) for _s, tiers in BASE_KINDS.values())
+    slots = [slot for slot, _t in BASE_KINDS.values()]
+    height = pad + len(BASE_KINDS) * cell_h + len(set(slots)) * head
+    strip = pad + columns * (life + 2)
+    out = Image.new("RGBA", (gutter + columns * cell_w + strip + pad, height), cream)
+    draw = ImageDraw.Draw(out)
+    y, shown = pad, None
+    for kind, (slot, tiers) in BASE_KINDS.items():
+        if slot != shown:
+            draw.line([(pad, y + head - 6), (out.width - pad, y + head - 6)], fill=ink)
+            draw.text((pad, y + 4), slot.upper(), fill=ink)
+            draw.text((gutter + columns * cell_w + pad, y + 4), "AT 1X", fill=ink)
+            y += head
+            shown = slot
+        draw.text((pad, y + side // 2 - 4), kind, fill=ink)
+        for i, tier in enumerate(tiers):
+            name, source = tier[0], tier[1]
+            x = gutter + i * cell_w
+            out.paste(Image.new("RGBA", (side, side), socket), (x, y))
+            art = cut[name]
+            out.alpha_composite(art.resize((GEAR_SIDE * zoom,) * 2, Image.NEAREST), (x + 4 * zoom, y + 4 * zoom))
+            lx = gutter + columns * cell_w + pad + i * (life + 2)
+            ly = y + (side - life) // 2
+            out.paste(Image.new("RGBA", (life, life), socket), (lx, ly))
+            out.alpha_composite(art, (lx + 4, ly + 4))
+            draw.text((x, y + side + 2), name, fill=ink)
+            draw.text((x, y + side + 13), "drawn" if source == DRAWN else "cut from the pack", fill=faint)
+        y += cell_h
+    return out
+
+
 def orbs():
     """The orb icons, on the same GEAR_SIDE square the gear uses -- but centred on an even offset.
 
-    That is the one thing gear() does not have to care about. OrbSlot draws an orb at half size, and
+    That is the one thing the gear icons do not have to care about. OrbSlot draws an orb at half size, and
     a 2:1 step keeps whichever pixel column is even; an odd offset shifts the art into the other
     phase and the icon loses a column it did not have to lose. So the art is nudged to an even x and
     y, which costs at most one pixel of centring and is invisible beside what it buys.
@@ -1117,29 +1483,6 @@ def pip_preview(cut):
     return out.resize((out.width * 5, out.height * 5), Image.NEAREST)
 
 
-def gear_preview(cut):
-    """Every gear icon the game has, new and old together, on the tan socket the bag draws them on.
-
-    The point of showing them together is the one thing that can go wrong here: the new icons come
-    off a different sheet at a different pixel size, and whether they sit next to the old four
-    without looking pasted in is a question for eyes, not for an assertion.
-    """
-    socket = (0x8A, 0x6F, 0x4E, 0xFF)
-    held = dict(cut)
-    for file in sorted(os.listdir(GEAR_OUT)) if os.path.isdir(GEAR_OUT) else []:
-        name = os.path.splitext(file)[0]
-        if file.endswith(".png") and name not in held:
-            held[name] = Image.open(os.path.join(GEAR_OUT, file)).convert("RGBA")
-    order = sorted(held, key=lambda n: (n not in cut, n))
-    side, pad = GEAR_SIDE + 8, 6
-    out = Image.new("RGBA", (pad + len(order) * (side + pad), side + 2 * pad), (0xE8, 0xDC, 0xC0, 0xFF))
-    for i, name in enumerate(order):
-        x = pad + i * (side + pad)
-        out.paste(Image.new("RGBA", (side, side), socket), (x, pad))
-        out.alpha_composite(held[name], (x + 4, pad + 4))
-    return out.resize((out.width * 3, out.height * 3), Image.NEAREST)
-
-
 def pack(sprites, margins):
     """One grid, cells as wide and tall as the largest sprite. Panels first, then the buttons."""
     order = sorted(sprites, key=lambda n: (not n.startswith("ui_panel"), n))
@@ -1249,10 +1592,6 @@ def main():
     os.makedirs(QA, exist_ok=True)
     preview(sprites, margins).save(os.path.join(QA, "ui_kit_tiling.png"))
 
-    cut = gear()
-    gear_preview(cut).save(os.path.join(QA, "ui_kit_gear.png"))
-    for name, image in cut.items():
-        image.save(os.path.join(GEAR_OUT, name + ".png"))
     for name, image in parts().items():
         image.save(os.path.join(OUT, name + ".png"))
 
@@ -1262,6 +1601,14 @@ def main():
         os.makedirs(UNIQUE_OUT, exist_ok=True)
         for name, image in unique.items():
             image.save(os.path.join(UNIQUE_OUT, name + ".png"))
+
+    unique_drawn_preview(unique_drawn()).save(os.path.join(QA, "ui_kit_uniques_drawn.png"))
+
+    bases = base_gear()
+    base_preview(bases).save(os.path.join(QA, "ui_kit_bases.png"))
+    if BASES_EXPORT:
+        for name, image in bases.items():
+            image.save(os.path.join(GEAR_OUT, name + ".png"))
 
     # Loose as well, and for the same reason the parts are: a mark is drawn at its own size and the
     # face behind it is what stretches.
@@ -1326,7 +1673,10 @@ def main():
         }, f, indent=2)
     print("wrote %s (%dx%d, %d sprites) and %s/ui_kit_tiling.png"
           % (SHEET, sheet_image.width, sheet_image.height, len(sprites), QA))
-    print("wrote %d gear icons to %s/ and %s/ui_kit_gear.png" % (len(cut), GEAR_OUT, QA))
+    print("wrote %d unique icons %s and %s/ui_kit_uniques.png"
+          % (len(unique), "to %s/" % UNIQUE_OUT if UNIQUE_EXPORT else "to the preview only", QA))
+    print("wrote %d base icons %s and %s/ui_kit_bases.png"
+          % (len(bases), "to %s/" % GEAR_OUT if BASES_EXPORT else "to the preview only", QA))
     print("wrote %d kill pips to %s/ and %s/ui_kit_pips.png" % (len(pip), OUT, QA))
     print("wrote %d orb icons to %s/ and %s/ui_kit_orbs.png" % (len(orb), ORB_OUT, QA))
     print("wrote %d button marks to %s/ and %s/ui_kit_icons.png" % (len(mark), OUT, QA))

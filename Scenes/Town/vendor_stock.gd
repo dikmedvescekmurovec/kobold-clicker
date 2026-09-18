@@ -80,19 +80,22 @@ static func _fill(drawer: Dictionary, key: String, tier: int, cell: Vector2i,
 ## One piece for the shelf: the drop tables, leaning the player's way.
 ##
 ## Three leans, and all three are the tables already there rather than a second set of numbers. The
-## type is drawn off `LootTable`'s own weights, so a shop deals in the same eight pieces a body does.
-## The rarity is rolled off the tier *above* the rabble around the town -- a village trades as well
-## as its elites do, a town and a fortress as well as a boss does -- so a vendor is a better class of
+## type is drawn off `LootTable`'s own weights, so a shop deals in the same kinds a body does. The
+## rarity is rolled off the tier *above* the rabble around the town -- a village trades as well as
+## its elites do, a town and a fortress as well as a boss does -- so a vendor is a better class of
 ## luck rather than a different game. And the level is the **better of two rolls** under what that
 ## tier could drop here, which lifts the middle of the band without ever passing the ceiling the
 ## ground itself sets.
+##
+## The level is settled first and handed to the draw, so a shelf is gated by what it deals the way
+## the ground is: no vendor offers a material the piece's own level has not unlocked.
 static func roll_item(tier: int, cell: Vector2i, rng: RandomNumberGenerator) -> Item:
 	var carried := EnemyRoster.Tier.ELITE if tier == TownWorld.Tier.SMALL else EnemyRoster.Tier.BOSS
 	var rarity := ItemRarity.roll(carried, rng)
 	var ceiling := maxi(1, MapBuilder.level_of(cell) + int(LootTable.TIER_LEVEL[carried]))
 	var level := maxi(ItemRarity.roll_level(rarity, ceiling, rng),
 			ItemRarity.roll_level(rarity, ceiling, rng))
-	return Item.rolled(LootTable._weighted(rng), rarity, rng, level)
+	return Item.rolled(LootTable._weighted(rng, level), rarity, rng, level)
 
 
 ## The six pieces on the shelf, with a `null` where one has been bought. Empty for a town that has

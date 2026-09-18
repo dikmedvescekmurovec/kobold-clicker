@@ -16,6 +16,7 @@ func _run() -> void:
 	_check(_test_towns() == true, "town tests ran to the end")
 	_check(_test_roads() == true, "road tests ran to the end")
 	_check(_test_map_builder() == true, "map builder tests ran to the end")
+	_check(_test_sight() == true, "sight tests ran to the end")
 	_check(_test_tile_levels() == true, "tile level tests ran to the end")
 	_check(_test_map_saving() == true, "map save tests ran to the end")
 	_check(await _test_the_map_comes_back() == true, "map reload tests ran to the end")
@@ -469,6 +470,108 @@ func _test_charting(map: HexMap, view: MapBuilder) -> bool:
 	map.player.finish_walk()
 	_check(view.player_cell == MapBuilder.CENTER, "the player walks the whole route")
 	return true
+
+
+## How far a charted tile sees: one ring for a player carrying nothing, `sight` rings with a torch in
+## hand. On its own map, because it needs land nobody has looked at yet on every side of the tile it
+## takes; any origin will do, since the fog has nothing to do with what is on the ground.
+func _test_sight() -> bool:
+	var map: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
+	root.add_child(map)
+	var world := TownWorld.generate(WORLD_SEED)
+	var view := MapBuilder.create(map, world, Vector2i(128, 128), 99)
+
+	# Bare-handed: the six tiles behind the one being taken, and nothing a step further out.
+	var rim := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
+	var ring := _unseen_within(view, rim, 1)
+	var second := _unseen_within(view, rim, 2)
+	_check(second.size() > ring.size(), "there is unseen land two steps behind %s to find at all" % rim)
+	_check(view.chart(rim) == ring.size(), "charting with no torch shows the first ring (%d)" % ring.size())
+	map.player.finish_walk()
+	for cell in ring:
+		_check(view.state(cell) == MapBuilder.State.UNCHARTED, "%s came out of the fog" % cell)
+	for cell in second:
+		_check(cell in ring or view.state(cell) == MapBuilder.State.HIDDEN,
+				"%s is two steps out and stays in the fog" % cell)
+
+	# A torch: every generated tile the player has not seen within its sight, and still nothing beyond.
+	var beyond := HexGrid.neighbor(rim, HexGrid.Edge.E)
+	var near := _unseen_within(view, beyond, 1)
+	var far := _unseen_within(view, beyond, 2)
+	var farther := _unseen_within(view, beyond, 3)
+	_check(far.size() > near.size() and farther.size() > far.size(),
+			"there is unseen land at two and three steps from %s" % beyond)
+	# What the player already knows must survive the torch: _show on a seen tile would put a charted
+	# one back under the veil, and a second lifting must not be counted twice either.
+	var known := {}
+	for cell in _cells_within(beyond, 3):
+		if view.seen(cell) and cell != beyond:
+			known[cell] = view.state(cell)
+	_check(known.values().has(MapBuilder.State.CHARTED) and known.values().has(MapBuilder.State.UNCHARTED),
+			"the torch's reach covers tiles that are already charted and already seen")
+	_check(view.chart(beyond, 2) == far.size(), "a sight of 2 shows every unseen tile within two steps (%d)" % far.size())
+	map.player.finish_walk()
+	for cell in far:
+		_check(view.state(cell) == MapBuilder.State.UNCHARTED, "%s is out of the fog two steps away" % cell)
+	for cell in farther:
+		_check(cell in far or view.state(cell) == MapBuilder.State.HIDDEN,
+				"%s is three steps out and stays in the fog" % cell)
+	for cell: Vector2i in known:
+		_check(view.state(cell) == known[cell], "%s kept what the player knew about it" % cell)
+
+	# Seen is not taken: the fog is off the far ring, but charting still only ever grows outward from
+	# a tile already charted, so those tiles are somewhere to head for rather than somewhere to take.
+	var outer := HexMap.NO_CELL
+	for cell: Vector2i in far:
+		if HexGrid.distance(beyond, cell) == 2 and view.chart_from(cell) == HexMap.NO_CELL:
+			outer = cell
+			break
+	_check(outer != HexMap.NO_CELL, "the torch showed a tile with no charted tile beside it")
+	_check(view.state(outer) == MapBuilder.State.UNCHARTED and not view.can_chart(outer),
+			"%s can be looked at but not charted until something beside it is" % outer)
+
+	# A tile the torch found is a tile the player has met: it is named as it appears, and the name and
+	# the fog over it both come back off the save like any other tile's.
+	var save := view.to_save()
+	_check(save.names.has(outer) and view.name_of(outer) == save.names[outer],
+			"%s was named the moment the torch found it (%s)" % [outer, view.name_of(outer)])
+	var other: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
+	root.add_child(other)
+	var restored := MapBuilder.restore(other, TownWorld.from_dict(save.towns), save)
+	_check(restored.state(outer) == MapBuilder.State.UNCHARTED and other.fog.has_cell(outer),
+			"%s comes back out of the save still under the veil" % outer)
+	_check(restored.name_of(outer) == view.name_of(outer), "and still called what it was called")
+
+	# A sight of 0 is a sight of 1: nobody is blinded by carrying nothing.
+	var next_out := HexGrid.neighbor(beyond, HexGrid.Edge.E)
+	var next_ring := _unseen_within(view, next_out, 1)
+	_check(view.can_chart(next_out) and view.chart(next_out, 0) == next_ring.size(),
+			"a sight under 1 charts as an empty hand does (%d)" % next_ring.size())
+	map.player.finish_walk()
+
+	map.queue_free()
+	other.queue_free()
+	return true
+
+
+## Every cell within `steps` of `cell`, spelled out here rather than asked of the map, so the test
+## measures the reveal against the grid itself.
+func _cells_within(cell: Vector2i, steps: int) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for y in range(cell.y - steps, cell.y + steps + 1):
+		for x in range(cell.x - steps, cell.x + steps + 1):
+			if HexGrid.distance(cell, Vector2i(x, y)) <= steps:
+				cells.append(Vector2i(x, y))
+	return cells
+
+
+## Of those, the ones a chart could show: land the map has generated that the player has not seen.
+func _unseen_within(view: MapBuilder, cell: Vector2i, steps: int) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for near in _cells_within(cell, steps):
+		if view.env_at(near) != "" and not view.seen(near):
+			cells.append(near)
+	return cells
 
 
 func _test_blends_stay(map: HexMap, view: MapBuilder) -> bool:

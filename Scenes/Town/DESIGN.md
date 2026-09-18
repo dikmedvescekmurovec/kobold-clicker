@@ -59,7 +59,7 @@ A shelf is six things. Six is small enough that every square can be read at a gl
 
 What makes the shelf worth its five-times price is that it is **luck you would otherwise have to farm for**, and it is made out of the drop tables rather than out of a second set of numbers:
 
-- the **type** is `LootTable`'s own weights, so a shop deals in the same eight pieces a body does and the amulet is as rare on a shelf as it is on the ground;
+- the **type** is `LootTable`'s own weights, so a shop deals in the same kinds a body does and the amulet is as rare on a shelf as it is on the ground. The level is settled first and handed to the draw, so the materials a shelf offers are gated exactly as the ground's are: no counter hands over a Steel Helm at a level that could not have dropped one;
 - the **rarity** is rolled at the tier *above* the rabble that walks around the town -- a village trades as well as its elites do, a town and a fortress as well as a boss does. So a vendor is a better class of luck rather than a different game, and tuning `ItemRarity.TIER_WEIGHTS` tunes the shops with it;
 - the **level** is the better of two rolls under what that tier could drop on that ground. It lifts the middle of the band without ever passing the ceiling the ground sets, which is what keeps a shop from walking a player past the frontier -- the same rule the blacksmith's cap will obey.
 - an **orb** is two draws of the ordinary drop table with the rarer kept. What a shop is for is the orb nobody has seen fall, and doing it by drawing twice means the orb rates stay the one place an orb's rarity is written down.

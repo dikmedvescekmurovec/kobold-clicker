@@ -17,15 +17,19 @@ extends RefCounted
 ## What a smith has left on a piece reads here and so reads everywhere a piece is shown: "Broken"
 ## under its rarity, and the locked modifier (`Item.locked_line`) in ink among the rust.
 ##
-## `against` is the piece this one would replace, when there is one: it adds a last block saying what
+## `against` is what this one would replace, when there is anything: it adds a last block saying what
 ## wearing this would gain or lose, which is the question the bag is actually being read to answer.
-static func fill(rows: VBoxContainer, item: Item, width: float, against: Item = null) -> void:
+## A list rather than one piece, because a greatsword takes the offhand off with the weapon.
+static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[Item] = []) -> void:
 	for child: Node in rows.get_children():
 		child.queue_free()
 	rows.add_child(line(item.display_name(), item.text_color(), width))
 	# Rarity and level on one line: they are the two things that say what a piece is worth, and they
-	# are rolled together off the same body.
-	rows.add_child(line("%s · level %d" % [item.rarity_name(), item.level], item.text_color(), width, true))
+	# are rolled together off the same body. A piece that needs both hands says so here as well: it
+	# costs a socket, which is as much a part of what it is worth as its level is.
+	rows.add_child(line("%s · level %d%s" % [item.rarity_name(), item.level,
+			" · Two-handed" if LootTable.two_handed(item.type) else ""],
+			item.text_color(), width, true))
 	# Under what the piece is, because that is what it now is: still worn, still sold, and never to be
 	# changed again. In the colour a loss is written in, so it is not read as a line it rolled.
 	if item.broken:
@@ -44,7 +48,7 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Item = 
 	# block is opened for, and an elite carrying six modifiers is taller than the panel -- last, it
 	# would be the one thing the player had to scroll to find.
 	var blocks: Array[Array] = [[], [], []]
-	if against != null:
+	if not against.is_empty():
 		var change := deltas(item, against)
 		for stat: String in change:
 			# Leaf for a gain and rust for a loss. Every stat the game has is better the larger it
@@ -77,15 +81,24 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Item = 
 
 ## What wearing `item` instead of `against` would change: stat -> the signed difference.
 ##
+## `against` is everything the swap takes off (`Equipment.displaced_by`) added up, not merely the
+## piece in the socket being filled: a greatsword costs the sword *and* the shield, and a shield put
+## on over a greatsword costs the whole of the greatsword. One piece is the ordinary case, and it
+## reads exactly as it always did.
+##
 ## Worked out from `effective_stats` rather than the base tables, because that is what the piece is
 ## actually worth once its own modifiers are folded in -- and a flat modifier can put a stat on one
 ## side that the other has none of at all, which is why this runs over the union of both.
 ##
 ## A plain Dictionary rather than a list of Labels, so what the comparison says can be checked
 ## without building an interface to read it off.
-static func deltas(item: Item, against: Item) -> Dictionary:
+static func deltas(item: Item, against: Array[Item]) -> Dictionary:
 	var mine := item.effective_stats()
-	var theirs := against.effective_stats()
+	var theirs := {}
+	for piece: Item in against:
+		var stats := piece.effective_stats()
+		for stat: String in stats:
+			theirs[stat] = float(theirs.get(stat, 0.0)) + float(stats[stat])
 	var out := {}
 	for stat: String in mine:
 		out[stat] = float(mine[stat]) - float(theirs.get(stat, 0.0))

@@ -298,6 +298,13 @@ func _test_stock_rolls() -> bool:
 		shelf_level += piece.level
 		_check(piece.level <= ceiling and piece.level >= 1,
 				"a shelf piece stays under what the ground allows (%d over %d)" % [piece.level, ceiling])
+		# And is made of something its own level has unlocked: a vendor hands its level to the draw,
+		# so no counter deals a material the ground under it could not.
+		var row: Dictionary = LootTable.ITEMS[piece.type]
+		var levels: Array = LootTable.KINDS[row["kind"]].get("tier_levels", LootTable.TIER_MIN_LEVEL)
+		_check(piece.level >= int(levels[int(row["tier"])]),
+				"a level-%d %s is under the level its material needs (%d)"
+						% [piece.level, piece.type, levels[row["tier"]]])
 	var drop_rarity := 0
 	var drop_level := 0
 	for i in ROLLS:

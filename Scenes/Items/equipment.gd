@@ -95,12 +95,39 @@ func item_at(socket: Socket) -> Item:
 	return worn.get(socket)
 
 
-## Puts `item` on and hands back whatever came off, which the caller owes back to the bag. Refuses a
-## piece the socket does not take rather than putting a boot on the player's head.
-func equip(socket: Socket, item: Item) -> Item:
+## Whether what is in the weapon hand takes both of them, which is what closes the offhand.
+func two_handed_worn() -> bool:
+	var weapon: Item = worn.get(Socket.WEAPON)
+	return weapon != null and LootTable.two_handed(weapon.type)
+
+
+## Everything that would come off if `item` went into `socket`, in the order the sockets are declared
+## in. Usually the socket's own piece and nothing else -- but a greatsword needs the hand the offhand
+## is in, and an offhand needs the hand a greatsword has both of, so one piece going on can take two
+## off. Worked out here rather than at `equip`, so the bag can ask what a swap would cost *before*
+## making it, and the button that greys and the call that refuses cannot disagree.
+func displaced_by(socket: Socket, item: Item) -> Array[Item]:
+	var out: Array[Item] = []
 	if not fits(socket, item):
-		return null
-	var removed: Item = worn.get(socket)
+		return out
+	if worn.has(socket):
+		out.append(worn[socket])
+	if socket == Socket.WEAPON and LootTable.two_handed(item.type) and worn.has(Socket.OFFHAND):
+		out.append(worn[Socket.OFFHAND])
+	elif socket == Socket.OFFHAND and two_handed_worn():
+		out.append(worn[Socket.WEAPON])
+	return out
+
+
+## Puts `item` on and hands back everything that came off, which the caller owes back to the bag --
+## `displaced_by`'s list, so what was promised is exactly what happens. Refuses a piece the socket
+## does not take rather than putting a boot on the player's head, and then nothing comes off.
+func equip(socket: Socket, item: Item) -> Array[Item]:
+	var removed := displaced_by(socket, item)
+	if not fits(socket, item):
+		return removed
+	for piece: Item in removed:
+		worn.erase(worn.find_key(piece))
 	worn[socket] = item
 	return removed
 
@@ -210,4 +237,9 @@ static func from_dict(data: Variant) -> Equipment:
 		var item := Item.from_dict(data[key])
 		if item != null and fits(socket, item):
 			gear.worn[socket] = item
+	# A file holding an offhand beside a two-hander is a save that has drifted -- from a build before
+	# greatswords, or edited by hand. The weapon is what the player chose, so the offhand is the piece
+	# that goes, by the same pruning rule as a socket that no longer fits.
+	if gear.two_handed_worn():
+		gear.worn.erase(Socket.OFFHAND)
 	return gear

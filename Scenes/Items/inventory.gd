@@ -263,16 +263,25 @@ func remove(item: Item) -> bool:
 	return true
 
 
+## Whether `item` would go into `socket` at all: it has to fit, and the bag has to hold everything
+## that comes off. One piece leaving the bag makes room for one coming back, which is why a swap
+## never needed a guard -- but a greatsword takes the offhand's piece off as well, and two coming
+## back into a full bag would destroy something to make room for a hand the player had two of.
+func can_equip(item: Item, socket: Equipment.Socket) -> bool:
+	return Equipment.fits(socket, item) \
+			and items.size() - 1 + equipment.displaced_by(socket, item).size() <= CAPACITY
+
+
 ## Takes `item` out of the bag and puts it on, and drops whatever it displaced back into the bag.
 ##
 ## The two halves move together here rather than at the call site, because the one thing that must
 ## never happen is a piece being in both places or in neither -- and every caller getting that right
-## separately is the same bug waiting in as many places as there are callers.
+## separately is the same bug waiting in as many places as there are callers. Refused, nothing moves
+## at all: the piece is still in the bag and the sockets are as they were.
 func equip(item: Item, socket: Equipment.Socket) -> bool:
-	if not Equipment.fits(socket, item) or not remove(item):
+	if not can_equip(item, socket) or not remove(item):
 		return false
-	var displaced := equipment.equip(socket, item)
-	if displaced != null:
+	for displaced: Item in equipment.equip(socket, item):
 		items.append(displaced)
 	return true
 
@@ -280,10 +289,10 @@ func equip(item: Item, socket: Equipment.Socket) -> bool:
 ## Takes the socket's piece off and puts it back in the bag. False if the socket was empty, and
 ## false if the bag is full.
 ##
-## Taking a piece off is the one thing the player can do that grows the bag, so it is the one thing
-## that has to refuse. Trimming here would destroy something to make room for a piece they only
-## wanted a closer look at, which is a trap. `equip` needs no such guard: it takes one out before it
-## puts one back.
+## Taking a piece off grows the bag, so it has to refuse. Trimming here would destroy something to
+## make room for a piece they only wanted a closer look at, which is a trap. `equip` refuses for the
+## same reason and by the same arithmetic (`can_equip`): one going on usually pays for the one coming
+## off, but a two-hander takes two off for one.
 func unequip(socket: Equipment.Socket) -> bool:
 	if is_full():
 		return false

@@ -65,7 +65,12 @@ static func rolled_unique(id: String, rng: RandomNumberGenerator, item_level := 
 	return item
 
 
-## The piece's own numbers, scaled by its level. Worked out once, when it is rolled.
+## The piece's own numbers, scaled by its level and then by what its kind and its material are worth
+## (`LootTable.power_of`). Worked out once, when it is rolled.
+##
+## The level first and the power after, which is the one place that order is decided: a level adds a
+## flat step as well as multiplying, so a dagger written weaker in the table would have caught a
+## sword up by level 10. This way it is 60% of one at every level.
 ##
 ## Stored as the number it displays: a rate keeps one decimal because it is read as one, and
 ## everything else is whole. So a sword gains a clean point of damage a level, the stat block and
@@ -76,6 +81,7 @@ static func scaled_stats(item_type: String, item_level: int) -> Dictionary:
 	var table := LootTable.stats_of(item_type)
 	for stat: String in table:
 		var raw := LootTable.scale(stat, float(table[stat]), item_level)
+		raw *= LootTable.power_of(item_type, stat)
 		out[stat] = snappedf(raw, 0.1) if stat in LootTable.RATE_STATS else float(roundi(raw))
 	return out
 

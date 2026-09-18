@@ -21,6 +21,7 @@ func _run() -> void:
 	_check(_test_hits_only_land_on_a_waiting_enemy() == true, "hit timing tests ran to the end")
 	_check(_test_what_a_hit_is_worth() == true, "damage tests ran to the end")
 	_check(_test_the_weapon_swings_itself() == true, "attack speed tests ran to the end")
+	_check(_test_bleed() == true, "bleed tests ran to the end")
 	_check(_test_capstone_effects() == true, "capstone effect tests ran to the end")
 	_check(_test_unique_drops() == true, "unique drop tests ran to the end")
 	_check(_test_unique_effects() == true, "unique effect tests ran to the end")
@@ -36,6 +37,7 @@ func _run() -> void:
 	_check(_test_experience() == true, "experience tests ran to the end")
 	_check(_test_coins() == true, "coin tests ran to the end")
 	_check(_test_orb_drops() == true, "orb drop tests ran to the end")
+	_check(_test_drop_rate_finds_everything() == true, "drop rate tests ran to the end")
 	await _test_thrown_finds()
 	await _test_settings()
 	await _test_the_nameplate_wears_the_tier()
@@ -164,6 +166,116 @@ func _test_the_weapon_swings_itself() -> bool:
 	for i in int(Encounter.SECONDS / 0.05):
 		idle.advance(0.05)
 	_check(idle.finished and idle.victory, "a fast weapon wins the first ring on its own")
+	return true
+
+
+## The mace's Bleed: a share of the blow that goes on coming off while the body stands there, the
+## deepest wound and never a pile of them, and a death it can bring about on its own.
+func _test_bleed() -> bool:
+	# Twenty points at a quarter is five a second, and the bar moves with it.
+	var mace := _standing([], {"damage": 19.0, "bleed": 25.0}, 1000.0)
+	_check(mace.bleed == 25.0, "the fight is armed with what the mace leaves behind")
+	mace.hit()
+	_check(mace.hp == 980.0 and mace._bleed == 5.0,
+			"a blow of 20 at a quarter leaves 5 a second (%s)" % mace._bleed)
+	var left: Array = []
+	mace.enemy_hit.connect(func(hp_left: float) -> void: left.append(hp_left))
+	mace.advance(2.0)
+	_check(is_equal_approx(mace.hp, 970.0), "two seconds of it cost ten (%s)" % (980.0 - mace.hp))
+	_check(left == [970.0], "and the bar is told once (%s)" % [left])
+
+	# A wound is deepened, never stacked: only a bigger blow than the one that opened it counts.
+	mace.hit()
+	_check(mace._bleed == 5.0, "an equal blow neither stacks nor deepens (%s)" % mace._bleed)
+	mace.damage = 5.0
+	mace.hit()
+	_check(mace._bleed == 5.0, "and a weaker one leaves the deeper wound alone (%s)" % mace._bleed)
+	mace.damage = 20.0
+	mace.crit_chance = 100.0
+	mace.crit_damage = 100.0
+	mace.hit()
+	_check(mace._bleed == 10.0, "a crit's bigger blow does deepen it (%s)" % mace._bleed)
+
+	# It kills with nobody swinging, and that death pays exactly what any other death pays.
+	var last := _standing([], {"damage": 9.0, "bleed": 100.0}, 30.0)
+	last.always_drop = true
+	last.loot_rng.seed = WORLD_SEED
+	var finds: Array = []
+	var purses: Array = []
+	var earned: Array = []
+	var deaths: Array = []
+	last.loot_dropped.connect(func(_i: int, item: Item) -> void: finds.append(item))
+	last.gold_dropped.connect(func(_i: int, amount: float) -> void: purses.append(amount))
+	last.xp_dropped.connect(func(_i: int, amount: int) -> void: earned.append(amount))
+	last.enemy_died.connect(func(i: int) -> void: deaths.append(i))
+	last.hit()
+	_check(last.hp == 20.0 and last._bleed == 10.0, "ten a second on a body with twenty left")
+	last.advance(2.0)
+	_check(last.hp <= 0.0 and last.phase == Encounter.Phase.DYING,
+			"the wound finishes it with nobody swinging (%s left)" % last.hp)
+	_check(deaths == [0] and finds.size() == 1 and purses.size() == 1 and earned.size() == 1,
+			"and the body pays out like any other (%d find(s), %d purse(s))" % [finds.size(), purses.size()])
+	_check(last.gold == purses[0] and last.xp == earned[0], "into the fight's own sums")
+	last.advance(Encounter.DEATH)
+	_check(last.kills() == 1, "it counts as a kill (%d)" % last.kills())
+
+	# The wound belongs to that body: the next one walks in whole and bleeds nothing until it is cut.
+	_check(last._bleed == 0.0, "the wound does not follow the body off the field")
+	last.advance(Encounter.WALK_IN)
+	var fresh := last.hp
+	last.advance(1.0)
+	_check(last.hp == fresh, "and the next one loses nothing until it is cut (%s of %s)" % [last.hp, fresh])
+
+	# Nothing comes off a body already going down, nor off one still running in.
+	var dying := _standing([], {"damage": 19.0, "bleed": 50.0}, 30.0)
+	dying.hit()
+	dying.hit()
+	_check(dying.phase == Encounter.Phase.DYING and dying._bleed == 10.0,
+			"the wound outlives the blow that killed")
+	var spilt := dying.hp
+	dying.advance(Encounter.DEATH * 0.5)
+	_check(dying.hp == spilt, "a body going down loses nothing more")
+	dying.advance(Encounter.DEATH * 0.5)
+	dying._bleed = 10.0
+	var coming := dying.hp
+	dying.advance(Encounter.WALK_IN * 0.5)
+	_check(dying.phase == Encounter.Phase.WALKING_IN and dying.hp == coming,
+			"and neither does one still running in")
+
+	# Restless dead: a body that gets back up gets up whole.
+	var grave := _standing(["restless:dirt"], {"damage": 19.0, "bleed": 50.0}, 30.0, "dirt")
+	grave.hit()
+	_check(grave._bleed == 10.0, "the wound is open when it falls")
+	grave.hit()
+	# Forced rather than rolled for: the rising is one body in ten, and this is about the wound.
+	grave._rise = true
+	grave.advance(Encounter.DEATH)
+	_check(grave._has_risen and grave._bleed == 0.0, "a body that gets back up gets up whole")
+	grave.advance(Encounter.WALK_IN)
+	var risen := grave.hp
+	grave.advance(1.0)
+	_check(grave.hp == risen, "and loses nothing standing there (%s of %s)" % [grave.hp, risen])
+
+	# A weapon with no bleed on it fights exactly the fight this was -- a stat at zero is a stat
+	# absent -- and one with bleed on it gets there sooner. The same seeded tile, blow for blow.
+	var scores := []
+	for worn: Dictionary in [{}, {"bleed": 0.0}, {"bleed": 100.0}]:
+		var stats := {"damage": 4.0, "crit_chance": 50.0, "crit_damage": 50.0, "attack_speed": 1.0}
+		stats.merge(worn)
+		var fight := Encounter.for_tile(Vector2i(4, 0), "grass")
+		fight.arm(stats)
+		fight.crit_rng.seed = WORLD_SEED
+		fight.loot_rng.seed = WORLD_SEED
+		fight.orb_rng.seed = WORLD_SEED
+		fight.start()
+		var clicks := _play(fight, 4000)
+		scores.append([clicks, fight.time_left, fight.gold, fight.xp, fight.victory])
+	_check(scores[0] == scores[1],
+			"no bleed is the fight this always was (%s against %s)" % [scores[0], scores[1]])
+	# Fewer clicks, which is what a bleed is for. Not less clock: the walk-ins and the deaths are
+	# eleven of those seconds whatever the player does, so the clock is no measure of the fighting.
+	_check(int(scores[2][0]) < int(scores[0][0]) and bool(scores[2][4]),
+			"and a bleeding weapon wins it in fewer (%s against %s)" % [scores[2], scores[0]])
 	return true
 
 
@@ -793,8 +905,29 @@ func _test_a_won_fight() -> bool:
 	var plain := _rate_for(edge, _commons(level), spare)
 	_check(plain >= 8.0, "the far edge is past a plain set of commons (%.1f/s)" % plain)
 
+	# The other half of what "plain" means now that a slot has materials: the same set in the best one
+	# the edge's own level unlocks, the second of four. The design's line is the one above -- a
+	# plain set is past what a person can click -- and the best material comes in just under it, at
+	# 7.7/s against the wooden set's 9.2. It is pinned here rather than smoothed over: LootTable's
+	# TIER_POWER would have to come down from 0.20 to 0.10 for a top-material sword set to want eight
+	# clicks again, and that is a dial in another file and a decision of its own.
+	var best := _rate_for(edge, _best_commons(level), spare)
+	_check(best < plain, "the best material at the edge is worth finding (%.1f/s against %.1f)"
+			% [best, plain])
+	_check(best > 7.0, "and the far edge is still past a plain set whatever it is made of (%.1f/s)"
+			% best)
+	# What each kind of weapon wants in that same plain set, reported rather than pinned: the mace's
+	# bleed counted as the free damage it is, and the greatsword without the offhand it costs.
+	for kind: String in ["sword", "dagger", "mace", "greatsword"]:
+		var held := Encounter.for_tile(edge, "grass")
+		held.arm(_best_commons(level, kind).totals())
+		var blow := held.damage * (1.0 + held.crit_chance / 100.0 * held.crit_damage / 100.0)
+		print("Edge fight in top-material commons, %s: %.1f a blow, %.1f swings/s, %d%% bleed, %.1f clicks/s"
+				% [kind, blow, held.attack_speed, held.bleed,
+					_click_rate(held, spare, blow, held.attack_speed + held.bleed / 100.0)])
+
 	var far := Encounter.for_tile(edge, "grass")
-	far.arm(_farmed(level, ItemRarity.Rarity.RARE).totals())
+	far.arm(_typical_farmed(edge, ItemRarity.Rarity.RARE).totals())
 	var per_hit := far.damage * (1.0 + far.crit_chance / 100.0 * far.crit_damage / 100.0)
 	var rate := _click_rate(far, spare, per_hit, far.attack_speed)
 	print("Edge fight in a farmed set of rares: %d health, %.2f a hit, %.1f swings/s free, %.1f clicks/s"
@@ -809,8 +942,8 @@ func _test_a_won_fight() -> bool:
 	# make the edge a fight nobody clicks in. A whole tree is 23 points -- a player at level 24 is
 	# nowhere near a level-6 tile's gear, so the whole tree is only held to helping.
 	var budget := Skills.earned(level)
-	var early := _power_rate(edge, level, spare, budget)
-	var whole := _power_rate(edge, level, spare, SkillTree.capacity("power"))
+	var early := _power_rate(edge, spare, budget)
+	var whole := _power_rate(edge, spare, SkillTree.capacity("power"))
 	print("Edge fight with Power skills too: %.2f clicks/s on %d points, %.2f on the whole tree"
 			% [early, budget, whole])
 	_check(early < rate, "a level's worth of Power makes the edge easier (%.2f/s)" % early)
@@ -821,7 +954,7 @@ func _test_a_won_fight() -> bool:
 
 ## The click rate at `edge` in a farmed set of rares with `points` spent down the Power tree's damage
 ## path first -- the root, the middle, the flat damage chain -- and then the rest.
-func _power_rate(edge: Vector2i, level: int, spare: float, points: int) -> float:
+func _power_rate(edge: Vector2i, spare: float, points: int) -> float:
 	const ORDER := ["sharpened_edge", "keen_eye", "battle_rhythm", "might", "titan", "quick_hands",
 		"flurry", "whirlwind", "deadly_strikes", "assassin"]
 	var skills := Skills.new()
@@ -832,7 +965,7 @@ func _power_rate(edge: Vector2i, level: int, spare: float, points: int) -> float
 			if skills.rank_up(id, points + 1):
 				break
 	var fight := Encounter.for_tile(edge, "grass")
-	fight.arm(_farmed(level, ItemRarity.Rarity.RARE).totals(skills.flat(), skills.percent()))
+	fight.arm(_typical_farmed(edge, ItemRarity.Rarity.RARE).totals(skills.flat(), skills.percent()))
 	var per_hit := fight.damage * (1.0 + fight.crit_chance / 100.0 * fight.crit_damage / 100.0)
 	return _click_rate(fight, spare, per_hit, fight.attack_speed)
 
@@ -1083,11 +1216,37 @@ func _rate_for(cell: Vector2i, gear: Equipment, seconds: float, variant := "") -
 	return _click_rate(fight, seconds, per_hit, fight.attack_speed)
 
 
-## A set the player has farmed for: the same pieces at the same level, carrying the modifiers a
-## rarity buys. Seeded, so the frontier is measured against the same set on every run.
-func _farmed(level: int, rarity: ItemRarity.Rarity) -> Equipment:
+## How many farmed sets the frontier is measured against. An odd handful, so there is a middle one.
+const FARMED_SETS := 7
+
+## The set the frontier is actually held to: FARMED_SETS of them rolled at `cell`'s level, and the
+## middling one handed back -- the one whose fight wants the median number of clicks a second.
+##
+## A single seeded set was the reference until a modifier joined the jewellery's pool: the same seed
+## then drew a different stream and the set happened to roll +14 flat damage on both jewels, which
+## took the far edge from wanting clicks to a walkover (0.56/s) without a single number in the game
+## changing. Measured over fifty seeds the edge wants 0.85 to 7.24 clicks a second, median 2.8, and
+## that old seed sat below every one of them. A median cannot be moved that way by one lucky draw:
+## the pool would have to move the whole distribution, which is exactly when the frontier has really
+## changed and the check should have something to say.
+func _typical_farmed(cell: Vector2i, rarity: ItemRarity.Rarity, variant := "") -> Equipment:
+	var level := MapBuilder.level_of(cell)
+	var fight := Encounter.for_tile(cell, "grass", variant)
+	var spare := fight.seconds - fight.enemies * (Encounter.WALK_IN + Encounter.DEATH)
+	var ranked := []
+	for take in FARMED_SETS:
+		var gear := _farmed(level, rarity, take)
+		ranked.append([_rate_for(cell, gear, spare, variant), gear])
+	ranked.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) < float(b[0]))
+	return ranked[FARMED_SETS / 2][1]
+
+
+## One set the player has farmed for: the same pieces at the same level, carrying the modifiers a
+## rarity buys. Seeded on `take` as well as the level, so a handful of them can be rolled and the
+## middle one taken -- see `_typical_farmed`, which is what the frontier is measured against.
+func _farmed(level: int, rarity: ItemRarity.Rarity, take := 0) -> Equipment:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash(["farmed", level, rarity])
+	rng.seed = hash(["farmed", level, rarity, take])
 	var gear := Equipment.new()
 	for socket: Equipment.Socket in Equipment.sockets():
 		for type in LootTable.items():
@@ -1118,6 +1277,43 @@ func _commons(level := 1) -> Equipment:
 			gear.equip(socket, item)
 			break
 	return gear
+
+
+## The same plain set in the best *material* `level` has unlocked, with `weapon`'s kind in hand. The
+## rest of the sockets keep the kind `_commons` picks -- the first the table writes for the slot --
+## so the only two things that differ from it are the materials and what is being swung. A two-handed
+## weapon leaves the offhand empty, which is what it pays for its damage.
+func _best_commons(level: int, weapon := "sword") -> Equipment:
+	var gear := Equipment.new()
+	var held := _material(weapon, level)
+	for socket: Equipment.Socket in Equipment.sockets():
+		var slot: String = Equipment.TAKES[socket]
+		if slot == "offhand" and LootTable.two_handed(held):
+			continue
+		var type := held
+		if slot != "weapon":
+			for plain in LootTable.items():
+				if LootTable.slot_of(plain) == slot:
+					type = _material(str(LootTable.ITEMS[plain]["kind"]), level)
+					break
+		var item := Item.new()
+		item.type = type
+		item.level = level
+		item.stats = Item.scaled_stats(type, level)
+		gear.equip(socket, item)
+	return gear
+
+
+## The best material of `kind` at `level`: the last of its tiers the level has reached.
+func _material(kind: String, level: int) -> String:
+	var row: Dictionary = LootTable.KINDS[kind]
+	var levels: Array = row.get("tier_levels", LootTable.TIER_MIN_LEVEL)
+	var tiers: Array = row["tiers"]
+	var best := 0
+	for tier in tiers.size():
+		if level >= int(levels[tier]):
+			best = tier
+	return str(tiers[best])
 
 
 ## A settlement is a set piece: fifteen enemies in a minute, an elite every fifth and a boss last.
@@ -1223,7 +1419,8 @@ func _test_a_settlement_is_a_set_piece() -> bool:
 				% [steps, level, _total_health(siege),
 					_click_rate(siege, spare, Encounter.BARE_DAMAGE, 0.0),
 					_rate_for(at, _commons(level), spare, "village"),
-					_rate_for(at, _farmed(level, ItemRarity.Rarity.RARE), spare, "village")])
+					_rate_for(at, _typical_farmed(at, ItemRarity.Rarity.RARE, "village"), spare,
+							"village")])
 	var first := Encounter.for_tile(Vector2i(1, 0), "grass", "village")
 	var room := first.seconds - first.enemies * (Encounter.WALK_IN + Encounter.DEATH)
 	_check(_click_rate(first, room, Encounter.BARE_DAMAGE, 0.0) < 8.0,
@@ -1425,7 +1622,7 @@ func _test_unique_effects() -> bool:
 func _test_uniques_keep_the_edge() -> bool:
 	var edge := Vector2i(20, 0)
 	var level := MapBuilder.level_of(edge)
-	var gear := _farmed(level, ItemRarity.Rarity.RARE)
+	var gear := _typical_farmed(edge, ItemRarity.Rarity.RARE)
 	# The most a clicker can stack: every piece whose rule is more damage on a click, on its home
 	# ground, with a full bag for the Harness to count.
 	var worn := {
@@ -1438,7 +1635,10 @@ func _test_uniques_keep_the_edge() -> bool:
 		var piece := Item.rolled_unique(worn[socket], rng, level)
 		for mod in piece.mods:
 			mod["value"] = int(ModifierTable.band_for(str(mod["id"]), level)[1])
-		_check(gear.equip(socket, piece) != null, "%s takes a farmed piece's place" % worn[socket])
+		gear.equip(socket, piece)
+		# Asked of the socket rather than of what `equip` handed back: it returns everything it
+		# displaced now, and an empty list means both "it did not fit" and "there was nothing there".
+		_check(gear.item_at(socket) == piece, "%s takes a farmed piece's place" % worn[socket])
 	var stats := gear.totals()
 	stats["bag_pieces"] = Inventory.CAPACITY
 	var fight := Encounter.for_tile(edge, "grass")
@@ -1453,7 +1653,7 @@ func _test_uniques_keep_the_edge() -> bool:
 			* (1.0 + fight._unique_more(false)) * (Encounter.GAMBLE[0] + Encounter.GAMBLE[1]) / 2.0
 	# The rate the same farmed set wants at the edge with no unique on it: what "a fight" means here.
 	var ordinary := Encounter.for_tile(edge, "grass")
-	var plain := _rate_for(edge, _farmed(level, ItemRarity.Rarity.RARE),
+	var plain := _rate_for(edge, _typical_farmed(edge, ItemRarity.Rarity.RARE),
 			ordinary.seconds - ordinary.enemies * (Encounter.WALK_IN + Encounter.DEATH))
 	# The map has no edge, so the set cannot be held to one tile. What it can be held to is what it
 	# buys: walk outward until the fight wants that many clicks again, and count the steps. The set
@@ -1801,4 +2001,71 @@ func _test_orb_drops() -> bool:
 	quiet.start()
 	_play(quiet, 4000)
 	_check(seen.size() < Encounter.ENEMIES, "an ordinary fight does not empty the table")
+	return true
+
+
+## Drop rate is the broad finder: gear, uniques, orbs and the purse alike. Where a narrow stat covers
+## the same ground the two are **added**, the way two global percents are, so which of them carries
+## the number cannot change the answer.
+func _test_drop_rate_finds_everything() -> bool:
+	var cell := Vector2i(12, 0)
+	# One body's purse, with nothing on and with the finders arranged three ways.
+	var purses := {}
+	for worn: Array in [["none", {}], ["drop", {"drop_rate": 50.0}], ["gold", {"gold_find": 50.0}],
+			["both", {"gold_find": 20.0, "drop_rate": 30.0}]]:
+		var fight := Encounter.for_tile(cell, "grass")
+		var stats: Dictionary = worn[1]
+		stats["damage"] = 1.0e9
+		fight.arm(stats)
+		fight.start()
+		fight.advance(Encounter.WALK_IN)
+		fight.hit()
+		purses[worn[0]] = fight.gold
+	# Within the half gold the purse is rounded to, which is all a whole-number purse can promise.
+	_check(absf(purses["drop"] - purses["none"] * 1.5) <= 0.5,
+			"50%% drop rate is half again a purse (%s)" % [purses])
+	_check(purses["gold"] == purses["drop"], "and gold find of the same size is the same purse")
+	_check(purses["both"] == purses["drop"],
+			"20 and 30 add to the same half again, rather than compounding to 56%% (%s)" % [purses])
+	_check(purses["none"] == Encounter.gold_of(Encounter.for_tile(cell, "grass").lineup[0], cell),
+			"and with neither finder a purse is exactly what the body is worth (%s)" % purses["none"])
+
+	# The orb roll the same way, and equality rather than statistics: the same seeded run with 60% of
+	# orb find, of drop rate, or of the two split turns up the very same orbs, because the roll is
+	# handed one number. What the rate itself is, is checked against the table underneath.
+	var runs := {}
+	var bodies: Array = []
+	for worn: Array in [["none", {}], ["orb", {"orb_find": 60.0}], ["drop", {"drop_rate": 60.0}],
+			["split", {"orb_find": 20.0, "drop_rate": 40.0}]]:
+		var run := Encounter.farm(cell, "grass")
+		run.roster_rng.seed = WORLD_SEED
+		run.orb_rng.seed = WORLD_SEED
+		var stats: Dictionary = worn[1]
+		stats["damage"] = 1.0e9
+		run.arm(stats)
+		var orbs: Array = []
+		run.orb_dropped.connect(func(_i: int, orb: String) -> void: orbs.append(orb))
+		if worn[0] == "split":
+			bodies = []
+			run.enemy_died.connect(func(i: int) -> void: bodies.append(run.lineup[i]))
+		run.start()
+		_play(run, 400)
+		runs[worn[0]] = orbs
+	_check(runs["drop"] == runs["orb"] and runs["split"] == runs["orb"],
+			"drop rate reaches the orb roll, added to orb find (%d found, %d, %d)"
+			% [runs["orb"].size(), runs["drop"].size(), runs["split"].size()])
+	_check(runs["none"].size() < runs["orb"].size(),
+			"and with neither, fewer fall (%d against %d)" % [runs["none"].size(), runs["orb"].size()])
+
+	# The rate those bodies were actually rolled at: OrbTable's own answer for the summed figure,
+	# summed over the bodies that fell. Seeded, so this is a measurement and not a coin toss.
+	var wanted := 0.0
+	var bare := 0.0
+	for body: String in bodies:
+		wanted += OrbTable.chance_for(body, 60.0)
+		bare += OrbTable.chance_for(body)
+	_check(absf(runs["split"].size() - wanted) < wanted * 0.4,
+			"%d orbs off %d bodies, where the summed rate wants %.1f" % [runs["split"].size(),
+					bodies.size(), wanted])
+	_check(wanted > bare * 1.5, "which is well past what the bare rate would have paid (%.1f)" % bare)
 	return true

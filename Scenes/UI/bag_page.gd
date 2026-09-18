@@ -596,10 +596,19 @@ func _show_item(index: int) -> void:
 	var actions := _action_row(_select_item.bind(-1))
 	if not open_sockets.is_empty():
 		var socket: Equipment.Socket = open_sockets[_socket_pick % open_sockets.size()]
-		var worn := inventory.equipment.item_at(socket)
-		var equip := UITheme.button("Equip", "LightButton", "Wear this in the %s socket%s"
-				% [Equipment.LABELS[socket].to_lower(),
-					"" if worn == null else ", putting %s back in the bag" % worn.display_name()])
+		# Everything the press would take off, named: a two-hander hands back the offhand as well, and
+		# the tooltip is the only place the player is told so before pressing.
+		var coming_off := PackedStringArray()
+		for piece: Item in inventory.equipment.displaced_by(socket, item):
+			coming_off.append(piece.display_name())
+		# Greyed rather than destroying a piece to make room for what comes off -- `_unequip_button`'s
+		# rule, and the reason is in the tooltip as it is there.
+		var full := not inventory.can_equip(item, socket)
+		var equip := UITheme.button("Equip", "LightButton", "The bag is full" if full
+				else "Wear this in the %s socket%s" % [Equipment.LABELS[socket].to_lower(),
+					"" if coming_off.is_empty()
+					else ", putting %s back in the bag" % ", ".join(coming_off)])
+		equip.disabled = full
 		equip.pressed.connect(_on_equip_pressed.bind(item, socket))
 		equip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		actions.add_child(equip)
@@ -742,8 +751,18 @@ func _show_doll() -> void:
 	for socket: Equipment.Socket in DOLL_SOCKETS:
 		var item := inventory.equipment.item_at(socket)
 		var chosen := _worn_selected == socket
-		var slot := (ItemSlot.make(item, chosen, true) if item != null
-				else ItemSlot.empty(Equipment.LABELS[socket], _socket_mark(socket), chosen, true))
+		var slot: ItemSlot
+		if item != null:
+			slot = ItemSlot.make(item, chosen, true)
+		elif socket == Equipment.Socket.OFFHAND and inventory.equipment.two_handed_worn():
+			# The hand is not empty, it is full of the weapon. So the socket wears that weapon's own
+			# icon as its faint mark, the way a bare ring socket wears the pack's ring: it reads as
+			# taken rather than as somewhere left to fill.
+			var weapon := inventory.equipment.item_at(Equipment.Socket.WEAPON)
+			slot = ItemSlot.empty("%s takes both hands" % weapon.display_name(), weapon.icon(),
+					chosen, true)
+		else:
+			slot = ItemSlot.empty(Equipment.LABELS[socket], _socket_mark(socket), chosen, true)
 		slot.position = _socket_spot(socket)
 		slot.size = Vector2(ItemSlot.SIDE, ItemSlot.SIDE)
 		slot.set_meta("socket", socket)
@@ -796,6 +815,10 @@ func _on_doll_input(event: InputEvent) -> void:
 		if not slot.has_meta("socket") or not Rect2(slot.position, slot.size).has_point(event.position):
 			continue
 		var socket: Equipment.Socket = slot.get_meta("socket")
+		# The offhand square is the two-hander's other half while one is worn, so a press there opens
+		# the weapon rather than nothing: what it draws is what it answers for.
+		if socket == Equipment.Socket.OFFHAND and inventory.equipment.two_handed_worn():
+			socket = Equipment.Socket.WEAPON
 		if inventory.equipment.item_at(socket) == null:
 			continue
 		if _armed != "":
@@ -816,7 +839,6 @@ func _show_compare(item: Item) -> void:
 	var width: float = SHOP_WORN_WIDTH if not _services.is_empty() else WORN_WIDTH
 	_worn_body.custom_minimum_size = Vector2(width, 0)
 	var socket: Equipment.Socket = open_sockets[_socket_pick % open_sockets.size()]
-	var worn := inventory.equipment.item_at(socket)
 	# Swap and Hide sit beside the heading where there is room for them. At a counter there is not --
 	# heading and marks together run past `SHOP_WORN_WIDTH` -- so there they take a row under the rule.
 	var heading := UITheme.vbox(2)
@@ -843,14 +865,20 @@ func _show_compare(item: Item) -> void:
 	fold.icon = load(HIDE_ICON)
 	fold.pressed.connect(_on_fold_pressed)
 	tools.add_child(fold)
-	if worn == null:
+	# What the press would take off, which is the socket's own piece and, for a two-hander, the offhand
+	# with it -- so the page never says "Nothing worn" over a greatsword the swap would cost. Each
+	# block carries the Unequip that belongs to *it*, or the second one would take the wrong piece off.
+	var losing := inventory.equipment.displaced_by(socket, item)
+	if losing.is_empty():
 		_worn_body.add_child(ItemDetails.line("Nothing worn", Palette.SLATE, width))
 		return
-	# Its own box: ItemDetails.fill empties whatever it is given.
-	var column := UITheme.vbox(2)
-	ItemDetails.fill(column, worn, width)
-	_worn_body.add_child(column)
-	_worn_body.add_child(_unequip_button(_on_compare_unequip_pressed.bind(item, socket)))
+	for piece: Item in losing:
+		# Its own box: ItemDetails.fill empties whatever it is given.
+		var column := UITheme.vbox(2)
+		ItemDetails.fill(column, piece, width)
+		_worn_body.add_child(column)
+		var from: Equipment.Socket = inventory.equipment.worn.find_key(piece)
+		_worn_body.add_child(_unequip_button(_on_compare_unequip_pressed.bind(item, from)))
 
 
 func _on_swap_pressed() -> void:

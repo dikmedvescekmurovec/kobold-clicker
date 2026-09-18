@@ -528,30 +528,39 @@ func _tile_name(cell: Vector2i) -> String:
 	return "env_%s_%s" % [env, variant]
 
 
-## Charts a tile the player can see next to them: its grey veil comes off, the tiles behind it come out of
-## the fog as uncharted land, and the player sets off for it, arriving a couple of seconds later. Returns
-## how many tiles newly showed, or -1 if it can't be charted.
-func chart(cell: Vector2i) -> int:
+## Charts a tile the player can see next to them: its grey veil comes off, the land within `sight` steps of
+## it comes out of the fog as uncharted, and the player sets off for it, arriving a couple of seconds later.
+## `sight` is the one ring behind the tile for a player carrying nothing and further with a torch in hand;
+## anything under 1 is that one ring. Returns how many tiles newly showed, or -1 if it can't be charted.
+##
+## The caller reads the torch at the moment it charts and never again, so a torch put on afterwards uncovers
+## nothing and one taken off hides nothing: what a tile showed when it was taken is what it showed.
+func chart(cell: Vector2i, sight := 1) -> int:
 	if not can_chart(cell):
 		return -1
 	_show(cell, State.CHARTED)
-	var shown := 0
-	for next in HexGrid.neighbors(cell):
-		if _tiles.has(next) and not seen(next):
-			_show(next, State.UNCHARTED)
-			shown += 1
+	var shown := _reveal_around(cell, maxi(sight, 1))
 	# Looking at the tile next door is the first half of going there, so the walk follows by itself.
 	move_to(cell)
 	return shown
 
 
 ## The fortuneteller's scour: every tile round `center` that is still in the dark comes out of it as
-## uncharted land, to be looked at and walked towards but not yet stood on. Tiles already seen are
-## left alone -- `_show` would put a charted one back under the veil -- and land the map has not
-## generated is not there to show. Returns how many tiles showed, 0 when the spell would do nothing.
+## uncharted land, to be looked at and walked towards but not yet stood on. Returns how many tiles
+## showed, 0 when the spell would do nothing.
 func scour(center: Vector2i) -> int:
+	return _reveal_around(center, FortuneTeller.SCOUR_RADIUS)
+
+
+## Takes the fog off every tile within `radius` steps of `center` that the map has generated and the
+## player has not seen yet, and says how many that was. Tiles already seen are left alone -- `_show`
+## would put a charted one back under the veil -- and land the map has not generated is not there to
+## show. Nothing is left permanently dark by that last rule: `expand_if_needed` keeps every tile the
+## player has stood on at least EXPAND_MARGIN cells inside `rect`, and a chart is one step off such a
+## tile, so a few steps of sight cannot reach past the generated window.
+func _reveal_around(center: Vector2i, radius: int) -> int:
 	var shown := 0
-	for cell in FortuneTeller.scour_cells(center):
+	for cell in FortuneTeller.scour_cells(center, radius):
 		if _tiles.has(cell) and not seen(cell):
 			_show(cell, State.UNCHARTED)
 			shown += 1

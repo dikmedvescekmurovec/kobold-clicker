@@ -203,7 +203,8 @@ var roster_rng := RandomNumberGenerator.new()
 ## What the player is worth in a fight -- gear and skills together, `Inventory.stats()` -- read once by
 ## `arm()` rather than looked up per swing. Only the ones below are read: the rest of what an item
 ## carries is still rolled, saved and shown, and waits on the systems that would give it something to
-## do. Four decide what a blow is worth; the rest decide what a body leaves.
+## do. Five decide what a blow does to the body in front of the player; the rest decide what it
+## leaves when it goes down.
 ## The ceiling on crit chance: crits stay something that happens sometimes, however much gear is
 ## piled up. A chance over certainty is every hit critting, which is a crit meaning nothing.
 const CRIT_CAP := 100.0
@@ -213,11 +214,18 @@ var crit_damage := 0.0
 ## Swings a second the weapon takes on its own. Zero with nothing equipped, so a bare-handed fight is
 ## exactly the clicking game this was before gear meant anything.
 var attack_speed := 0.0
-## How much more often a body leaves something, as a percentage: 50 is half again as much gear. Read
-## here and handed to `LootTable.roll`, which is where the cap on a chance already lives.
+## What a blow leaves behind, as a percentage of it: 20 means the body goes on losing a fifth of that
+## blow every second it stands there. A mace's, and nothing else's. Wounds do not stack -- a blow
+## either deepens the one wound or does nothing to it -- so a fast weapon cannot pile them up.
+var bleed := 0.0
+## The broad finder, as a percentage: 50 is half again as much of everything a body leaves. It lifts
+## how often gear falls (`LootTable.roll`, where the cap on a chance already lives) and how often a
+## unique does, and it lifts the purse and the orb roll beside the two narrow stats below -- which
+## each lift one thing only, and carry the bigger numbers for it. Where it meets one of them it is
+## **added** to it, the way two global percents add rather than compounding.
 var drop_rate := 0.0
-## What the player's skills add to what a body leaves, all three in percent: how far up the rarity ramp
-## a find is pushed, how much fuller a purse is, and how much more often an orb falls.
+## What the player's skills and jewellery add to what a body leaves, all three in percent: how far up
+## the rarity ramp a find is pushed, how much fuller a purse is, and how much more often an orb falls.
 var item_rarity := 0.0
 var gold_find := 0.0
 var orb_find := 0.0
@@ -225,6 +233,11 @@ var orb_find := 0.0
 ## How much of the next automatic swing has been earned. Only runs while an enemy is standing there
 ## to be hit, so a slow weapon loses nothing to a walk-in and cannot bank swings through a death.
 var _swing := 0.0
+
+## Damage a second the body in front of the player is losing to the wound the last blow left: the
+## deepest one it has taken, never a sum of them. It belongs to that body and to no other, so it is
+## cleared with `_struck` as the next one comes on and a body that gets back up gets up whole.
+var _bleed := 0.0
 
 ## Whether crits go the player's way. Unseeded on purpose, like `loot_rng` and for the same reason:
 ## the tile's enemies are fixed before the player arrives, but how a given attempt goes is not.
@@ -614,6 +627,7 @@ func arm(stats: Dictionary) -> void:
 		seconds += minf(floorf(float(stats.get("health", 0.0)) / HEARTWOOD_HEALTH), HEARTWOOD_MOST)
 		time_left = seconds
 	attack_speed = maxf(0.0, float(stats.get("attack_speed", 0.0)))
+	bleed = maxf(0.0, float(stats.get("bleed", 0.0)))
 	drop_rate = maxf(0.0, float(stats.get("drop_rate", 0.0)))
 	item_rarity = maxf(0.0, float(stats.get("item_rarity", 0.0)))
 	gold_find = maxf(0.0, float(stats.get("gold_find", 0.0)))
@@ -661,9 +675,15 @@ func _strike(automatic: bool, riposte := false) -> bool:
 		# Dominoes: felled by the first blow it took, so it chains through Cleave's carried damage.
 		_domino = first and "domino" in effects
 		_kill()
-	# Bulwark: the chance to block is the chance to swing again at once. Never off its own extra blow.
-	elif not riposte and "riposte" in effects and crit_rng.randf() * 100.0 < block_chance:
-		_strike(automatic, true)
+	else:
+		# The mace's Bleed: the body goes on losing this share of the blow every second it stands.
+		# The deeper wound wins and nothing adds, so what a mace is worth is the size of one blow and
+		# not how many of them land -- a weapon that swung twice as fast would otherwise bleed twice
+		# as hard for free.
+		_bleed = maxf(_bleed, dealt * bleed / 100.0)
+		# Bulwark: the chance to block is the chance to swing again at once. Never off its own extra blow.
+		if not riposte and "riposte" in effects and crit_rng.randf() * 100.0 < block_chance:
+			_strike(automatic, true)
 	return true
 
 
@@ -730,8 +750,11 @@ func _kill() -> void:
 	# Every body carries one, which is the whole difference between gold and gear: nine kills in
 	# ten leave nothing, and all ten leave this.
 	# Gold find lifts the purse here rather than inside `gold_of`, which is what the body is worth
-	# and is read by things that have no player in them.
-	var purse := maxf(1.0, roundf(gold_of(lineup[index], cell) * (1.0 + gold_find / 100.0)))
+	# and is read by things that have no player in them -- a town's prices are quoted off it.
+	# Drop rate finds everything, so it is in this sum too, **added** to gold find the way two global
+	# percents add: 20 and 30 are half again as much gold, not 56% more.
+	var purse := maxf(1.0, roundf(gold_of(lineup[index], cell)
+			* (1.0 + (gold_find + drop_rate) / 100.0)))
 	# Two Tithes add (five times, not nine), the way two global modifiers do.
 	purse *= 1.0 + 2.0 * effects.count("tithe")
 	# Drawn only while Jackpot is learned, so a player without it rolls loot exactly as before.
@@ -767,9 +790,11 @@ func _kill() -> void:
 	# A third draw, on its own generator and its own curve. Beside the gear rather than instead
 	# of it: a body that left a sword can leave an orb too, which is what makes the two rates
 	# independent numbers rather than one number split.
+	# Drop rate adds to orb find here for the reason it adds to gold find above, and `chance_for` is
+	# handed the sum rather than taught about a second stat.
 	var orb := ""
 	if always_orb or index >= orbs_after:
-		orb = OrbTable.roll(lineup[index], orb_rng, always_orb, orb_find)
+		orb = OrbTable.roll(lineup[index], orb_rng, always_orb, orb_find + drop_rate)
 	if not orb.is_empty():
 		var count := 2 if "transmute" in effects and orb_rng.randf() < 0.25 else 1
 		for i in count:
@@ -811,15 +836,27 @@ func advance(delta: float) -> void:
 		delta -= phase_left
 		_advance_phase()
 	_swing_weapon(delta)
-	# The Sunscorched Cowl's Heatstroke: the one thing that wears a body down with nobody touching it.
-	if _clause("heatstroke") and phase == Phase.WAITING and not finished and delta > 0.0:
-		hp -= enemy_max_hp() * HEATSTROKE_SHARE * delta
-		enemy_hit.emit(maxf(hp, 0.0))
-		if hp <= 0.0:
-			_domino = false
-			_kill()
+	# The weapon has swung; now what is already in the body. The Sunscorched Cowl's Heatstroke takes
+	# its share of the body's health, and a mace's wound takes its share of the blow that opened it.
+	if _clause("heatstroke"):
+		_wear_down(enemy_max_hp() * HEATSTROKE_SHARE, delta)
+	_wear_down(_bleed, delta)
 	if not endless and time_left <= 0.0 and not finished:
 		_finish(false)
+
+
+## A body wearing down with nobody touching it, at `a_second` damage a second: the heat and the bleed
+## are the same thing off different numbers, so they go through one place. Only while it is standing
+## -- one walking in or already going down takes none of it, the way an automatic swing lands on
+## neither -- and a death this way was nobody's blow, so Dominoes cannot come of it.
+func _wear_down(a_second: float, delta: float) -> void:
+	if a_second <= 0.0 or finished or phase != Phase.WAITING or delta <= 0.0:
+		return
+	hp -= a_second * delta
+	enemy_hit.emit(maxf(hp, 0.0))
+	if hp <= 0.0:
+		_domino = false
+		_kill()
 
 
 ## The weapon swinging on its own, `attack_speed` times a second. Only earns while an enemy is
@@ -856,6 +893,7 @@ func _advance_phase() -> void:
 		return
 	_struck = false
 	_crit_landed = false
+	_bleed = 0.0
 	# Restless dead: the body gets back up where it fell, at half of what it was, and is killed and
 	# paid for again. The slot does not move, so the lineup and the pips stay the length they were.
 	if _rise:

@@ -311,7 +311,8 @@ func _build_ui() -> void:
 	buttons.add_child(_chart_button)
 	_skip_button = UITheme.button("Skip fight", "LightButton", "Dev: chart this tile without fighting for it")
 	_skip_button.pressed.connect(func() -> void:
-		print("Dev: charted %s, showing %d tile(s) behind it" % [map.selected_cell, view.chart(map.selected_cell)])
+		print("Dev: charted %s, showing %d tile(s) behind it" % [map.selected_cell,
+				view.chart(map.selected_cell, _sight())])
 		_update_buttons())
 	buttons.add_child(_skip_button)
 	_move_button =UITheme.button("Move here", "LightButton", "Walk to the selected tile")
@@ -693,7 +694,7 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 		# Nothing about the map moves for a run. The tile was already taken; the loot is the whole of it.
 		print("Farmed %s, %d slain" % [cell, kills])
 	elif won:
-		print("Charted %s, showing %d tile(s) behind it; walking there" % [cell, view.chart(cell)])
+		print("Charted %s, showing %d tile(s) behind it; walking there" % [cell, view.chart(cell, _sight())])
 	else:
 		print("Lost the fight for %s; it stays uncharted" % cell)
 	ledger.farming = false
@@ -702,6 +703,13 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 	_update_buttons()
 	# After banking, so a run's pouch counts; after the fight, so a pop-up never covers one.
 	_check_tips()
+
+
+## How far the player sees from a tile they have just taken: their own ring behind it, plus whatever a
+## torch adds. It is read here and nowhere else -- at the moment the tile is charted -- so a torch put
+## on afterwards uncovers nothing and one taken off hides nothing. What a tile showed is what it showed.
+func _sight() -> int:
+	return 1 + int(inventory.stats().get("sight", 0))
 
 
 ## Retry under a lost verdict. Out through the one door every fight leaves by, so what it earned is

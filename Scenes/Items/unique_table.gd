@@ -87,7 +87,7 @@ const UNIQUES := {
 	},
 	"hunters_lantern": {
 		"name": "Hunter's Lantern", "base": "Wooden Torch",
-		"mods": ["increased_crit_damage", "added_crit"],
+		"mods": ["added_crit_damage", "added_crit"],
 		"effect": "home", "home": "forest", "clause": "flush_out",
 		"effect_text": "Double damage in forest. On open land there the elite comes first.",
 		"envs": ["forest"],
@@ -169,7 +169,7 @@ const UNIQUES := {
 	},
 	"overflowing_chalice": {
 		"name": "Overflowing Chalice", "base": "Wooden Torch",
-		"mods": ["added_crit", "increased_crit_damage"],
+		"mods": ["added_crit", "added_crit_damage"],
 		"effect": "overcrit",
 		"effect_text": "Critical chance past the most you can have becomes critical damage.",
 		"envs": [],

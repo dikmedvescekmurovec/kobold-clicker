@@ -155,14 +155,17 @@ func slot_at(at: Vector2, open_too := false) -> ItemSlot:
 	return null
 
 
-## The piece worn where `item` would go, or null: nothing is on there, or `item` is itself what is on.
-## The first taken socket `Equipment.sockets_for` names, so a ring is held against the left finger.
+## The piece `item` would take off, or null: it would take nothing off, or `item` is itself what is
+## on. The first socket `Equipment.sockets_for` names that has anything to lose, so a ring is held
+## against the left finger -- and a shield against the greatsword whose hand it wants, which is worn
+## in another socket entirely.
 func worn_for(item: Item) -> Item:
 	if equipment == null or item in equipment.worn.values():
 		return null
 	for socket: Equipment.Socket in equipment.sockets_for(item):
-		if equipment.worn.has(socket):
-			return equipment.worn[socket]
+		var off := equipment.displaced_by(socket, item)
+		if not off.is_empty():
+			return off[0]
 	return null
 
 

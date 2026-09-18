@@ -79,10 +79,16 @@ const MODS := {
 	# What a body leaves, which is a stat now rather than a player-wide sentence: the Gold Ring shows
 	# it and anything allowed to carry it rolls this.
 	"added_drop_rate": {"kind": Kind.FLAT, "stat": "drop_rate", "range": [3, 10], "weight": 4},
-	# A unique's line and nothing else's (`UNIQUE_ONLY`): no piece lists gold find as an affix, so no
-	# pool ever holds it. It grows a point a level and is never multiplied -- see `CHANCE_STATS`.
+	# The jewellery's own finder, drawn as often as drop rate and worth two and a half times as much a
+	# roll. Drop rate is the broad one -- it lifts gear, uniques, orbs and gold alike -- and item
+	# rarity only lifts the weights a piece of gear rolls its rarity on, so the narrow one carries the
+	# bigger number.
+	"added_item_rarity": {"kind": Kind.FLAT, "stat": "item_rarity", "range": [10, 25], "weight": 4},
+	# The Gold Amulet's own stat, and the rarest roll in the table. Its band is written flat
+	# (`level_flat` 0) rather than growing a point a level with the stat: it was sized for The Tithe,
+	# which is a unique and a percentage of a purse that is already exponential in the walk.
 	"added_gold_find": {"kind": Kind.FLAT, "stat": "gold_find", "range": [20, 40], "weight": 1,
-		"level_flat": 1.0},
+		"level_flat": 0.0},
 	# The globals, and the jewellery is the only place they land. A percentage of the whole set is
 	# worth more than a percentage of one piece, so increased damage rolls the smaller of the two
 	# bands here -- the frontier is beaten with what the set adds up to, and test_combat's edge-fight
@@ -114,7 +120,12 @@ const DORMANT := ["added_fire_resist", "added_cold_resist", "added_lightning_res
 
 ## The modifiers no pool holds because only a unique's row may name them (`UniqueTable.UNIQUES`). Named
 ## for the reason the dormant ones are: a test has to tell this from a modifier nothing can reach.
-const UNIQUE_ONLY := ["added_gold_find"]
+##
+## Empty today. `added_gold_find` was the one, and it is in the Gold Amulet's pool now that the amulet
+## shows gold find as a base stat -- a FLAT modifier is let on by `can_roll`, which asks for a base
+## stat *or* an affix, and there is no third answer that would hold one back from a piece that has the
+## stat outright. The list stays for the next row that wants it.
+const UNIQUE_ONLY: Array[String] = []
 
 
 ## Every modifier this piece could carry: the player-wide ones, which fit anything, plus the ones

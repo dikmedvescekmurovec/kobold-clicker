@@ -5,7 +5,9 @@ extends RefCounted
 ## The same shape as EnemyRoster: const tables and static accessors, no nodes, so a test can roll
 ## twenty thousand drops in a loop. And the same philosophy -- the drop chance is not written per
 ## enemy. TIER_CHANCE and SIZE_CHANCE multiply into `chance_for`, so the whole curve is tuned from
-## two small tables rather than by editing thirty numbers.
+## two small tables rather than by editing thirty numbers. The one table that is not written out is
+## ITEMS, and it is built from KINDS for the same reason: sixty-nine pieces written by hand are
+## sixty-nine places for a number to go stale.
 ##
 ## A drop is not just a name any more: it rolls a rarity off the enemy that carried it and modifiers
 ## off ItemRarity's band, and every one is its own Item. Nothing reads any of it for gameplay yet --
@@ -14,11 +16,17 @@ extends RefCounted
 
 const ROOT := "res://Assets/Gear/"
 
-## Every item a monster can leave, how often it is the one that drops, and what it is worth. The
-## weights are relative, not percentages: the amulet is the trophy of the set, and the boot the thing
-## you end up with six of.
+## Every kind of gear the world holds, and the materials each kind is found in. Path of Exile's
+## shape: a slot is not one piece with a level on it but several *kinds* that play differently -- a
+## dagger is quick and weak where a greatsword is slow and heavy -- and each kind comes in four
+## materials, the better ones only on ground deep enough to roll them.
 ##
-## Three lists, and the difference between them is the whole rule.
+## `tiers` names the pieces, weakest first, and each name is the item: a base has a name of its own
+## rather than a number after a shared one. `weight` is the *kind's*, not a tier's, because which
+## kind drops is one draw and which of its materials is another (`_weighted`) -- so the weights below
+## are shares of a slot, and the slots' own shares of all drops are what they always were.
+##
+## Three stat lists, and the difference between them is the whole rule.
 ##
 ## `stats` is what the piece *is* -- the handful of numbers it shows, and the only stats a PERCENT
 ## modifier can scale, because "+14% increased Armour" needs armour to increase. `affixes` is what
@@ -30,72 +38,228 @@ const ROOT := "res://Assets/Gear/"
 ## mean anything on a ring. Only the jewellery has one, so "the jewellery carries the global offence"
 ## is a property of this table rather than a rule about slots written somewhere else.
 ##
-## Stats span pieces on purpose. Base `damage` lives on the weapon -- the sword is where a click's
-## damage comes from, or it stops being the interesting slot -- while health and armour roll nearly
+## `power` is a per-stat factor on top of all that, and it is applied *after* the level has done its
+## work (`power_of`, `Item.scaled_stats`). It is written here rather than into `stats` because
+## LEVEL_FLAT adds a whole point of damage a level to every weapon alike: a dagger written as
+## `damage: 0.6` would be within a tenth of a sword by level 10 and the kinds would level themselves
+## out. Three more keys are optional: `two_handed` closes the offhand while the piece is worn, and
+## `tier_levels` with `tier_stats` belong to the torch alone, which has two materials instead of four
+## and states each one's Sight outright rather than multiplying a number.
+##
+## Stats span pieces on purpose. Base `damage` lives on the weapons -- a click's damage comes from
+## what is held, or that stops being the interesting slot -- while health and armour roll nearly
 ## everywhere, because a stat that adds up across what the player wears is what makes swapping any
-## single piece worth doing. Two stay locked to one piece by what they are: `move_speed` is the
-## boot's and `block_chance` belongs to a thing you hold. The jewellery is the exception to the
-## weapon's monopoly, and carries its offence as modifiers rather than as base stats: a ring is worth
-## something to a fight without ever being the thing that swings.
+## single piece worth doing. Four stay locked by what a piece is: `move_speed` is the boots',
+## `block_chance` belongs to a thing you hold, `bleed` is what a mace leaves behind, and `sight` is
+## the whole reason to hold a torch. The jewellery is the exception to the weapons' monopoly, and
+## carries its offence as modifiers rather than as base stats: a ring is worth something to a fight
+## without ever being the thing that swings.
 ##
 ## The resistances are off every piece for now. Nothing can hurt the player, so a resistance defends
 ## against nothing -- but their labels, their level steps and the modifiers that roll them are all
-## still written down, so putting them back is one word per item.
+## still written down, so putting them back is one word per kind.
 ##
 ## None of it depends on rarity: an elite sword hits like a common one and simply carries more on
 ## top.
-const ITEMS := {
-	"Leather Helmet": {
-		"icon": "Leather Helmet.png", "weight": 3, "slot": "helmet",
+const KINDS := {
+	# --- Helmet: a third each, and the three ways of defending a head the whole table is split by --
+	# armour, dodge and the mage's shield and regen.
+	"helm": {
+		"slot": "helmet", "weight": 12,
 		"stats": {"armor": 3, "health": 5},
 		"affixes": ["energy_shield", "strength", "intelligence"],
+		"tiers": ["Leather Helmet", "Iron Helmet", "Steel Helm", "Golden Helm"],
 	},
-	"Leather Boot": {
-		"icon": "Leather Boot.png", "weight": 4, "slot": "boots",
+	"hood": {
+		"slot": "helmet", "weight": 12,
+		"stats": {"dodge_chance": 3, "health": 5},
+		"affixes": ["armor", "dexterity", "intelligence"],
+		"tiers": ["Hide Hood", "Leather Hood", "Studded Hood", "Shadow Hood"],
+	},
+	"hat": {
+		"slot": "helmet", "weight": 12,
+		"stats": {"energy_shield": 5, "health_regen": 0.5},
+		"affixes": ["health", "armor", "intelligence"],
+		"tiers": ["Apprentice Hat", "Wizard Hat", "Sage's Hat", "Archmage's Hat"],
+	},
+	# --- Boots: every one of them keeps Move Speed, because that is what a boot is for.
+	"boot": {
+		"slot": "boots", "weight": 16,
 		"stats": {"move_speed": 5, "dodge_chance": 2},
 		"affixes": ["armor", "health", "dexterity"],
+		"tiers": ["Leather Boot", "Studded Boot", "Ranger's Boot", "Shadow Boot"],
 	},
-	"Wooden Sword": {
-		"icon": "Wooden Sword.png", "weight": 3, "slot": "weapon",
+	"greaves": {
+		"slot": "boots", "weight": 16,
+		"stats": {"move_speed": 4, "armor": 3},
+		"affixes": ["health", "dodge_chance", "strength"],
+		"tiers": ["Bronze Greaves", "Iron Greaves", "Steel Greaves", "Golden Greaves"],
+	},
+	"slippers": {
+		"slot": "boots", "weight": 16,
+		"stats": {"move_speed": 5, "energy_shield": 4},
+		"affixes": ["health", "health_regen", "intelligence"],
+		"tiers": ["Linen Slippers", "Silk Slippers", "Sage's Slippers", "Archmage's Slippers"],
+	},
+	# --- Weapon: the same base damage on all four, and a factor apiece. On its own swings the dagger,
+	# the sword and the greatsword come out about even; the dagger is the idler's weapon and the
+	# greatsword the clicker's, since a click deals `damage` and pays for it with the offhand.
+	"sword": {
+		"slot": "weapon", "weight": 12,
 		"stats": {"damage": 1, "crit_chance": 5, "crit_damage": 50, "attack_speed": 1.0},
 		"affixes": ["leech", "life_on_hit", "strength"],
+		"tiers": ["Wooden Sword", "Iron Sword", "Steel Sword", "Golden Sword"],
 	},
-	"Wooden Shield": {
-		"icon": "Wooden Shield.png", "weight": 3, "slot": "offhand",
+	"dagger": {
+		"slot": "weapon", "weight": 9,
+		"stats": {"damage": 1, "crit_chance": 8, "crit_damage": 50, "attack_speed": 1.8},
+		"affixes": ["leech", "life_on_hit", "dexterity"],
+		"power": {"damage": 0.6},
+		"tiers": ["Bone Knife", "Iron Dagger", "Steel Stiletto", "Golden Kris"],
+	},
+	"mace": {
+		"slot": "weapon", "weight": 9,
+		"stats": {"damage": 1, "crit_damage": 50, "attack_speed": 0.9, "bleed": 20},
+		"affixes": ["leech", "life_on_hit", "strength"],
+		"power": {"damage": 0.9},
+		"tiers": ["Wooden Club", "Iron Mace", "Steel Morningstar", "Golden Sceptre"],
+	},
+	"greatsword": {
+		"slot": "weapon", "weight": 6, "two_handed": true,
+		"stats": {"damage": 1, "crit_chance": 5, "crit_damage": 75, "attack_speed": 0.5},
+		"affixes": ["leech", "life_on_hit", "strength"],
+		"power": {"damage": 2.2},
+		"tiers": ["Wooden Greatsword", "Iron Claymore", "Steel Zweihander", "Golden Greatsword"],
+	},
+	# --- Offhand: the shield is the commonest thing to find in the hand, and the torch the rarest,
+	# because Sight is worth more than any number on it.
+	"shield": {
+		"slot": "offhand", "weight": 30,
 		"stats": {"armor": 3, "block_chance": 5},
 		"affixes": ["health", "energy_shield", "strength"],
+		"tiers": ["Wooden Shield", "Iron Shield", "Steel Kite Shield", "Golden Aegis"],
 	},
-	"Wooden Torch": {
-		"icon": "Wooden Torch.png", "weight": 3, "slot": "offhand",
-		"stats": {"energy_shield": 4, "health_regen": 1.0, "crit_damage": 10},
-		"affixes": ["block_chance", "intelligence"],
+	"buckler": {
+		"slot": "offhand", "weight": 24,
+		"stats": {"dodge_chance": 3, "block_chance": 4},
+		"affixes": ["health", "armor", "dexterity"],
+		"tiers": ["Hide Buckler", "Iron Buckler", "Steel Targe", "Golden Buckler"],
 	},
-	"Wooden Armor": {
-		"icon": "Wooden Armor.png", "weight": 2, "slot": "body",
+	# Sight is the whole piece and it has only two values, so the torch has two materials rather than
+	# four and names its own unlock levels. Its affixes are all flat: with no base number but Sight,
+	# there is nothing on it for a percent modifier to scale.
+	"torch": {
+		"slot": "offhand", "weight": 18,
+		"tier_levels": [1, 10],
+		"tier_stats": [{"sight": 1}, {"sight": 2}],
+		"affixes": ["block_chance", "energy_shield", "health_regen", "crit_damage", "intelligence"],
+		"tiers": ["Wooden Torch", "Blazing Torch"],
+	},
+	# --- Body: the biggest numbers in the table, and the same three-way split as the head.
+	"plate": {
+		"slot": "body", "weight": 8,
 		"stats": {"armor": 5, "health": 10},
 		"affixes": ["energy_shield", "dodge_chance", "strength"],
+		"tiers": ["Wooden Armor", "Iron Armor", "Steel Plate", "Golden Plate"],
 	},
-	# The drop-rate piece, and the one place a stat of the player's own is a base stat: a ring is
-	# worn for what it finds. What offence it carries is all modifiers -- flat damage and crit among
-	# the affixes, the two increases in `globals` -- so a ring is worth something to a fight without
-	# ever being the thing that swings.
-	"Gold Ring": {
-		"icon": "Gold Ring.png", "weight": 2, "slot": "ring",
-		"stats": {"drop_rate": 5, "life_on_hit": 1},
+	"jerkin": {
+		"slot": "body", "weight": 8,
+		"stats": {"dodge_chance": 4, "health": 10},
+		"affixes": ["armor", "energy_shield", "dexterity"],
+		"tiers": ["Hide Jerkin", "Leather Jerkin", "Studded Jerkin", "Shadow Leathers"],
+	},
+	"robe": {
+		"slot": "body", "weight": 8,
+		"stats": {"energy_shield": 8, "health_regen": 1.0},
+		"affixes": ["health", "dodge_chance", "intelligence"],
+		"tiers": ["Linen Robe", "Silk Robe", "Sage's Robe", "Archmage's Robe"],
+	},
+	# --- Jewellery: one material apiece, the way Path of Exile's is. There is one drawing of a ring
+	# and one of an amulet, so the kinds are gem and metal recolours rather than a ladder, and all
+	# seven carry the global offence.
+	#
+	# The Gold Ring is the drop-rate piece, and the one place a stat of the player's own is a base
+	# stat: a ring is worn for what it finds. What offence it carries is all modifiers -- flat damage
+	# and crit among the affixes, the two increases in `globals` -- so a ring is worth something to a
+	# fight without ever being the thing that swings.
+	"gold_ring": {
+		"slot": "ring", "weight": 8,
+		"stats": {"drop_rate": 5},
 		"affixes": ["health", "health_regen", "damage", "crit_chance", "crit_damage", "strength",
-			"dexterity", "intelligence"],
+			"dexterity", "intelligence", "item_rarity"],
 		"globals": ["damage", "attack_speed"],
+		"tiers": ["Gold Ring"],
 	},
-	# The catch-all socket, and the rarest: the widest affix pool in the table, so an amulet is the
-	# one piece that can turn up carrying almost anything.
-	"Ruby Amulet": {
-		"icon": "Ruby Amulet.png", "weight": 1, "slot": "amulet",
+	"iron_band": {
+		"slot": "ring", "weight": 8,
+		"stats": {"health": 6, "armor": 2},
+		"affixes": ["health_regen", "damage", "crit_chance", "crit_damage", "strength", "dexterity",
+			"intelligence", "item_rarity"],
+		"globals": ["damage", "attack_speed"],
+		"tiers": ["Iron Band"],
+	},
+	"jade_ring": {
+		"slot": "ring", "weight": 8,
+		"stats": {"dodge_chance": 2, "health_regen": 0.5},
+		"affixes": ["health", "damage", "crit_chance", "crit_damage", "strength", "dexterity",
+			"intelligence", "item_rarity"],
+		"globals": ["damage", "attack_speed"],
+		"tiers": ["Jade Ring"],
+	},
+	# The catch-all socket, and the rarest: the widest affix pools in the table, so an amulet is the
+	# one piece that can turn up carrying almost anything. The Gold Amulet is the first ordinary piece
+	# to show Gold Find, and it carries the big number of the three finders because it is the narrow
+	# one -- drop rate lifts gear, uniques, orbs and gold alike, and a purse alone is worth less.
+	"ruby_amulet": {
+		"slot": "amulet", "weight": 3,
 		"stats": {"health": 8, "crit_damage": 10},
 		"affixes": ["energy_shield", "health_regen", "crit_chance", "damage", "drop_rate", "leech",
-			"strength", "dexterity", "intelligence"],
+			"strength", "dexterity", "intelligence", "item_rarity"],
 		"globals": ["damage", "attack_speed"],
+		"tiers": ["Ruby Amulet"],
+	},
+	"gold_amulet": {
+		"slot": "amulet", "weight": 3,
+		"stats": {"gold_find": 20},
+		"affixes": ["health", "energy_shield", "health_regen", "crit_chance", "crit_damage", "damage",
+			"drop_rate", "leech", "strength", "dexterity", "intelligence", "item_rarity"],
+		"globals": ["damage", "attack_speed"],
+		"tiers": ["Gold Amulet"],
+	},
+	"sapphire_amulet": {
+		"slot": "amulet", "weight": 3,
+		"stats": {"energy_shield": 8, "health_regen": 0.5},
+		"affixes": ["health", "crit_chance", "crit_damage", "damage", "drop_rate", "leech",
+			"strength", "dexterity", "intelligence", "item_rarity"],
+		"globals": ["damage", "attack_speed"],
+		"tiers": ["Sapphire Amulet"],
+	},
+	"emerald_amulet": {
+		"slot": "amulet", "weight": 3,
+		"stats": {"dodge_chance": 5},
+		"affixes": ["health", "energy_shield", "health_regen", "crit_chance", "crit_damage", "damage",
+			"drop_rate", "leech", "strength", "dexterity", "intelligence", "item_rarity"],
+		"globals": ["damage", "attack_speed"],
+		"tiers": ["Emerald Amulet"],
 	},
 }
+
+## The item level each material is found from, and what one is worth on top of the kind's own
+## numbers: a fifth more of every quantity for each step up the materials, so the best is worth half
+## again as much as the plainest. Both are dials. A kind may name levels of its own (`tier_levels`),
+## which only the torch does.
+const TIER_MIN_LEVEL := [1, 4, 7, 10]
+const TIER_POWER := 0.2
+
+## Every piece a monster can leave, keyed by name: the row every caller has always read -- `icon`,
+## `weight`, `slot`, `stats`, `affixes` and the jewellery's `globals` -- plus the `kind` it belongs to
+## and which `tier` of that kind it is, which is all `power_of` needs to know.
+##
+## Built from KINDS rather than written out, so a kind's numbers are stated once and the four names it
+## is found under cannot drift apart. In the order the kinds are written, which is the order the
+## panels list them in -- and within each slot the kind the game shipped with is written first, so
+## anything asking for "a plain piece for this socket" still picks up the wooden one.
+static var ITEMS := _build_items()
 
 ## Whether a body carries anything at all, by what it was. Drops are meant to be rare: a fight of
 ## nine commons and an elite comes to about a third of an item, so most fights give nothing and a
@@ -118,11 +282,13 @@ const SIZE_CHANCE := {
 ## How each stat is written, and which of them are percentages. One place, so a stat block and a
 ## modifier line always spell a stat the same way.
 const STAT_LABELS := {
-	# Offence, which lives on the weapon.
+	# Offence, which lives on what is held.
 	"damage": "Damage",
 	"crit_chance": "Crit Chance",
 	"crit_damage": "Crit Damage",
 	"attack_speed": "Attack Speed",
+	# What a blow leaves behind: a share of it that goes on hurting. The mace's, and nothing else's.
+	"bleed": "Bleed",
 	# Defence, which rolls nearly everywhere.
 	"armor": "Armour",
 	"energy_shield": "Energy Shield",
@@ -139,18 +305,21 @@ const STAT_LABELS := {
 	# Utility.
 	"move_speed": "Move Speed",
 	"drop_rate": "Drop Rate",
+	# How many tiles a charted one takes the fog off, which is the torch's whole reason to be held.
+	# Not a percentage: it is a number of tiles, and there are only ever one or two of them.
+	"sight": "Sight",
 	# The attributes, which fit any piece because they say nothing about what the piece is.
 	"strength": "Strength",
 	"dexterity": "Dexterity",
 	"intelligence": "Intelligence",
-	# What only the player carries: the Fortune tree's stats. No piece shows or rolls them -- they are
-	# here so a skill spells them the way a stat block would.
+	# The other two finders. The Fortune tree carries all three; the jewellery rolls item rarity and
+	# the Gold Amulet shows gold find, so orb find is the only one no piece has ever heard of.
 	"item_rarity": "Item Rarity",
 	"gold_find": "Gold Find",
 	"orb_find": "Orb Find",
 }
 const PERCENT_STATS := ["crit_chance", "crit_damage", "block_chance", "move_speed", "dodge_chance",
-	"fire_resist", "cold_resist", "lightning_resist", "leech", "drop_rate",
+	"fire_resist", "cold_resist", "lightning_resist", "leech", "drop_rate", "bleed",
 	"item_rarity", "gold_find", "orb_find"]
 ## The percentages that are a *probability*: how often something happens, rather than how much of it
 ## there is. They are the ones a level may not multiply -- see `scale`. Crit damage is not one of
@@ -162,7 +331,16 @@ const PERCENT_STATS := ["crit_chance", "crit_damage", "block_chance", "move_spee
 ##
 ## Gold find is here for drop rate's reason and is no more a probability than it is: it multiplies a
 ## purse that is already exponential in the walk, and an exponent on top of that is gold meaning nothing.
-const CHANCE_STATS := ["crit_chance", "block_chance", "dodge_chance", "drop_rate", "gold_find"]
+## Item rarity joins them both: it multiplies the weights a drop rolls its rarity on.
+##
+## Bleed is a share of a blow, and a share that compounds is a share past everything: 20% of a hit
+## would be 530% of it by level 30. The flat step grows it instead, a point a level.
+##
+## Sight is the odd one out and is here for the arithmetic rather than for the reasoning. It is a
+## number of tiles, its step is zero, and the material of the torch is the only thing that moves it --
+## so what this list does for it is keep a level from multiplying one tile into twenty-six.
+const CHANCE_STATS := ["crit_chance", "block_chance", "dodge_chance", "drop_rate", "gold_find",
+	"item_rarity", "bleed", "sight"]
 ## Per second: attacks in one case and health in the other. The two stats that are neither a plain
 ## number nor a percentage.
 const RATE_STATS := ["attack_speed", "health_regen"]
@@ -189,14 +367,18 @@ const LEVEL_GROWTH := 1.12
 ## added without saying what a level is worth to it.
 const LEVEL_FLAT := {
 	"damage": 1.0,
-	"crit_chance": 1.0, "crit_damage": 5.0, "attack_speed": 0.05,
+	"crit_chance": 1.0, "crit_damage": 5.0, "attack_speed": 0.05, "bleed": 1.0,
 	"armor": 2.0, "energy_shield": 2.0, "health": 3.0, "health_regen": 0.1,
 	"block_chance": 1.0, "dodge_chance": 1.0, "move_speed": 1.0, "drop_rate": 1.0,
 	"fire_resist": 1.0, "cold_resist": 1.0, "lightning_resist": 1.0,
 	"leech": 0.2, "life_on_hit": 1.0,
 	"strength": 1.0, "dexterity": 1.0, "intelligence": 1.0,
-	# Nothing rolls these at a level, so a level adds nothing to them.
-	"item_rarity": 0.0, "gold_find": 0.0, "orb_find": 0.0,
+	# The two finders a piece can carry now. They take the same point a level drop rate does, which is
+	# all a CHANCE_STAT ever takes.
+	"item_rarity": 1.0, "gold_find": 1.0,
+	# And the two a level is worth nothing to: a torch's Sight is one tile or two and the material is
+	# what says which, and nothing but a skill has ever rolled orb find.
+	"sight": 0.0, "orb_find": 0.0,
 }
 
 ## What a body's tier adds to the ceiling on what it drops, over the tile's own level. The elite at
@@ -220,8 +402,18 @@ static func items() -> PackedStringArray:
 	return all
 
 
+## Where this piece's picture lives. While a base has no drawing of its own yet it borrows one --
+## first from the plainest of its kind, then from the first kind written for its slot, which is one of
+## the eight the game shipped with. The same fallback `UniqueTable.icon` has, and for the same reason:
+## a base is playable the day the table names it, and the art follows when it is approved.
 static func icon_path(item: String) -> String:
-	return ROOT + ITEMS[item]["icon"]
+	var row: Dictionary = ITEMS[item]
+	var tiers: Array = KINDS[row["kind"]]["tiers"]
+	for name: String in [item, str(tiers[0]), _first_of_slot(str(row["slot"]))]:
+		var path: String = ROOT + str(ITEMS[name]["icon"])
+		if ResourceLoader.exists(path):
+			return path
+	return ROOT + str(row["icon"])
 
 
 static func icon(item: String) -> Texture2D:
@@ -245,6 +437,34 @@ static func has_stat(item: String, stat: String) -> bool:
 ## and one takes either a shield or a torch, so the mapping is not one-to-one and does not live here.
 static func slot_of(item: String) -> String:
 	return ITEMS[item]["slot"]
+
+
+## How much of `stat` this piece is worth for being the kind and the material it is: the kind's own
+## factor -- a dagger's 0.6 of a sword's damage -- times a fifth more for every material above the
+## plainest.
+##
+## Applied by `Item.scaled_stats` after `scale` and nowhere else, which is what lets the smith's
+## upgrade follow it for nothing. *After*, because LEVEL_FLAT adds the same point of damage a level to
+## every weapon alike: a dagger written weaker in the table would be a sword again by level 10.
+##
+## The material's share skips the chances and the rates -- a steel shield holds more armour than a
+## wooden one and blocks exactly as often, which is the ceiling `scale` already refuses to walk
+## through. The kind's own factor does not, because no kind names one for a chance.
+static func power_of(item: String, stat: String) -> float:
+	var row: Dictionary = ITEMS[item]
+	var kind: Dictionary = KINDS[row["kind"]]
+	var power: Dictionary = kind.get("power", {})
+	var factor := float(power.get(stat, 1.0))
+	if stat in CHANCE_STATS or stat in RATE_STATS:
+		return factor
+	return factor * (1.0 + TIER_POWER * int(row["tier"]))
+
+
+## Whether this piece takes both hands, and so leaves no offhand while it is worn. A property of the
+## kind rather than of the slot: every greatsword is two-handed and nothing else in the table is.
+static func two_handed(item: String) -> bool:
+	var kind: Dictionary = KINDS[ITEMS[item]["kind"]]
+	return bool(kind.get("two_handed", false))
 
 
 ## The stats this piece can roll a flat modifier for without having any of its own.
@@ -359,23 +579,79 @@ static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := f
 		tile_level := 1, drop_rate := 0.0, item_rarity := 0.0) -> Item:
 	if not guaranteed and rng.randf() >= chance_for(enemy_name, drop_rate):
 		return null
-	var type := _weighted(rng)
 	var tier := EnemyRoster.tier_of(enemy_name)
 	var rarity := ItemRarity.roll(tier, rng, item_rarity)
 	# The tile's level and the body's tier give a ceiling; the piece rolls its own level under it,
-	# so a deep tile is a better place to fight rather than a guaranteed prize.
+	# so a deep tile is a better place to fight rather than a guaranteed prize. Both are settled
+	# before the type, because what a piece is made of is gated by what the piece itself is worth.
 	var ceiling := maxi(1, tile_level + int(TIER_LEVEL[tier]))
-	return Item.rolled(type, rarity, rng, ItemRarity.roll_level(rarity, ceiling, rng))
+	var level := ItemRarity.roll_level(rarity, ceiling, rng)
+	return Item.rolled(_weighted(rng, level), rarity, rng, level)
 
 
-## An item picked by weight. Integer weights, so walking the table cannot drift.
-static func _weighted(rng: RandomNumberGenerator) -> String:
+## A piece picked by weight: which kind, and then which of its materials. Integer weights, so walking
+## the table cannot drift.
+##
+## `level` is the piece's own, not the tile's, so a poor roll on deep ground is still a wooden sword.
+static func _weighted(rng: RandomNumberGenerator, level := 1) -> String:
 	var total := 0
-	for item: String in ITEMS:
-		total += int(ITEMS[item]["weight"])
+	for kind: String in KINDS:
+		total += int(KINDS[kind]["weight"])
 	var pick := rng.randi_range(0, total - 1)
-	for item: String in ITEMS:
-		pick -= int(ITEMS[item]["weight"])
+	for kind: String in KINDS:
+		pick -= int(KINDS[kind]["weight"])
 		if pick < 0:
-			return item
+			return _tier_at(kind, level, rng)
+	return items()[0]
+
+
+## One of a kind's materials: an even draw between the best `level` has unlocked and the one under
+## it. Two of them rather than all of them, so deep ground stops dealing the plainest materials
+## without the best arriving alone -- and while only one is unlocked there is no draw at all, which
+## is what keeps the shallow game costing exactly the rolls it always did.
+static func _tier_at(kind: String, level: int, rng: RandomNumberGenerator) -> String:
+	var row: Dictionary = KINDS[kind]
+	var tiers: Array = row["tiers"]
+	var levels: Array = row.get("tier_levels", TIER_MIN_LEVEL)
+	var unlocked := 1
+	for tier in tiers.size():
+		if level >= int(levels[tier]):
+			unlocked = tier + 1
+	if unlocked == 1:
+		return str(tiers[0])
+	return str(tiers[unlocked - 1 - rng.randi_range(0, 1)])
+
+
+## Every kind's materials written out as the rows the rest of the game reads. A tier's own `stats`
+## are its kind's, unless the kind states them per material (`tier_stats`, the torch's alone).
+##
+## Read-only on the way out, the way the const table it replaced was: a piece already in the bag
+## carries its own numbers, and a caller that could write into these would be retuning gear the
+## player is holding.
+static func _build_items() -> Dictionary:
+	var out := {}
+	for kind: String in KINDS:
+		var row: Dictionary = KINDS[kind]
+		var tiers: Array = row["tiers"]
+		for tier in tiers.size():
+			var name := str(tiers[tier])
+			var item := {
+				"icon": name + ".png", "weight": int(row["weight"]), "slot": row["slot"],
+				"stats": row["tier_stats"][tier] if row.has("tier_stats") else row["stats"],
+				"affixes": row["affixes"], "kind": kind, "tier": tier,
+			}
+			if row.has("globals"):
+				item["globals"] = row["globals"]
+			item.make_read_only()
+			out[name] = item
+	out.make_read_only()
+	return out
+
+
+## The plainest piece of the first kind written for this slot -- the picture every base in the slot
+## can borrow, because each of the eight the game shipped with is the first of its own.
+static func _first_of_slot(slot: String) -> String:
+	for kind: String in KINDS:
+		if KINDS[kind]["slot"] == slot:
+			return str(KINDS[kind]["tiers"][0])
 	return items()[0]

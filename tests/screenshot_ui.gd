@@ -208,6 +208,17 @@ func _shoot_inventory() -> void:
 	pages.resize(pages.get_width() * 2, pages.get_height() * 2, Image.INTERPOLATE_NEAREST)
 	pages.save_png("user://ui_compare.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_compare.png"))
+	# A greatsword on, with the block shut so the doll is back: the weapon hand holds the piece and
+	# the offhand wears the same icon faded, which is the one state of the doll no other shot has.
+	var heavy := Item.rolled("Wooden Greatsword", ItemRarity.Rarity.RARE, rng, 12)
+	main.inventory.add(heavy)
+	main.inventory.equip(heavy, Equipment.Socket.WEAPON)
+	main.bag_page._select_item(-1)
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_two_handed.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_two_handed.png"))
 	main.queue_free()
 	await process_frame
 	for scratch in [SCRATCH_SAVE, SCRATCH_MAP]:
@@ -510,6 +521,18 @@ func _shoot_town() -> void:
 		await RenderingServer.frame_post_draw
 		root.get_texture().get_image().save_png("user://%s.png" % shot[0])
 		print("Saved ", ProjectSettings.globalize_path("user://%s.png" % shot[0]))
+	# What the log is worth, on the tip card beside the mark at the count's end.
+	var help: Control = main.collection_page.find_children("*", "TextureRect", true, false).filter(
+			func(mark: Control) -> bool: return not mark.tooltip_text.is_empty())[0]
+	var over := InputEventMouseMotion.new()
+	over.position = help.get_global_rect().get_center()
+	over.global_position = over.position
+	root.warp_mouse(over.position)
+	root.push_input(over)
+	await create_timer(TipCard.DELAY + 0.3).timeout
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_collection_help.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_collection_help.png"))
 	root.warp_mouse(Vector2.ZERO)
 
 	# The character page, behind a press on the corner's character panel.

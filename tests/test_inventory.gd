@@ -24,10 +24,12 @@ const SHAPE_ROLLS := 4000
 func _run() -> void:
 	_clear_save()
 	_check(_test_items() == true, "item tests ran to the end")
+	_check(_test_kinds() == true, "kind tests ran to the end")
 	_check(_test_slot_locks() == true, "slot lock tests ran to the end")
 	_check(_test_sockets() == true, "socket tests ran to the end")
 	_check(_test_totals() == true, "stat total tests ran to the end")
 	_check(_test_wearing() == true, "wearing tests ran to the end")
+	_check(_test_two_handed() == true, "two-handed tests ran to the end")
 	_check(_test_chances() == true, "drop-chance tests ran to the end")
 	_check(_test_rarity_tables() == true, "rarity table tests ran to the end")
 	_check(_test_rarity_rolls() == true, "rarity roll tests ran to the end")
@@ -147,7 +149,7 @@ func _test_sockets() -> bool:
 	_check(Equipment.fits(Equipment.Socket.RING_LEFT, ring), "and either of them")
 	_check(not Equipment.fits(Equipment.Socket.WEAPON, ring), "but not the weapon hand")
 	var boot := Item.rolled("Leather Boot", ItemRarity.Rarity.COMMON, rng)
-	_check(gear.equip(Equipment.Socket.HELMET, boot) == null
+	_check(gear.equip(Equipment.Socket.HELMET, boot).is_empty()
 			and gear.item_at(Equipment.Socket.HELMET) == null, "a boot will not go on the head")
 
 	# The shared offhand: a shield and a torch both fit it, and the second one in displaces the first.
@@ -156,7 +158,8 @@ func _test_sockets() -> bool:
 	_check(gear.sockets_for(shield) == [Equipment.Socket.OFFHAND], "a shield fits only the offhand")
 	_check(gear.sockets_for(torch) == [Equipment.Socket.OFFHAND], "and so does a torch")
 	gear.equip(Equipment.Socket.OFFHAND, shield)
-	_check(gear.equip(Equipment.Socket.OFFHAND, torch) == shield, "the torch puts the shield back")
+	var swapped := gear.equip(Equipment.Socket.OFFHAND, torch)
+	_check(swapped.size() == 1 and swapped[0] == shield, "the torch puts the shield back")
 	_check(gear.item_at(Equipment.Socket.OFFHAND) == torch, "and takes its place")
 	_check(gear.unequip(Equipment.Socket.OFFHAND) == torch, "and comes off again")
 	_check(gear.unequip(Equipment.Socket.OFFHAND) == null, "an empty socket gives nothing back")
@@ -274,27 +277,182 @@ func _test_wearing() -> bool:
 	return true
 
 
-## The stats that belong to one piece and must stay there. Offence on the weapon is the rule the
-## whole table is built on -- damage anywhere else and the sword stops being the interesting slot --
-## and the other two are locked by what the piece is: you walk in boots and you block with a thing
-## you hold. Pinned here so a later widening of the tables cannot quietly undo the design.
+## A piece that needs both hands. Putting one on costs the offhand and putting anything in the offhand
+## costs the whole of it, which makes it the one swap that is not one piece for one piece -- so the
+## bag has to have room for what comes off, and the comparison has to count all of it.
+func _test_two_handed() -> bool:
+	const GREAT := "Wooden Greatsword"
+	_check(LootTable.two_handed(GREAT), "a greatsword takes both hands")
+	_check(not LootTable.two_handed("Wooden Sword"), "and a sword leaves one free")
+
+	# On over a sword and a shield: it is told first, and then both come back into the bag.
+	var bag := Inventory.new()
+	var sword := _plain("Wooden Sword")
+	var shield := _plain("Wooden Shield")
+	var great := _plain(GREAT)
+	for piece: Item in [sword, shield, great]:
+		bag.add(piece)
+	bag.equip(sword, Equipment.Socket.WEAPON)
+	bag.equip(shield, Equipment.Socket.OFFHAND)
+	var coming := bag.equipment.displaced_by(Equipment.Socket.WEAPON, great)
+	_check(coming.size() == 2 and coming.has(sword) and coming.has(shield),
+			"a greatsword going on costs the sword and the shield")
+	_check(bag.equip(great, Equipment.Socket.WEAPON), "and it goes on")
+	_check(bag.equipment.item_at(Equipment.Socket.WEAPON) == great
+			and bag.equipment.item_at(Equipment.Socket.OFFHAND) == null,
+			"filling the weapon hand and emptying the other")
+	_check(bag.total() == 2 and bag.items.has(sword) and bag.items.has(shield),
+			"with both back in the bag")
+	_check(bag.equipment.two_handed_worn(), "and the offhand closed while it is worn")
+
+	# And back the other way: something in the offhand has nowhere to go but the weapon hand.
+	_check(bag.equip(shield, Equipment.Socket.OFFHAND), "a shield goes on over a greatsword")
+	_check(bag.equipment.item_at(Equipment.Socket.OFFHAND) == shield
+			and bag.equipment.item_at(Equipment.Socket.WEAPON) == null,
+			"and takes the greatsword off with it")
+	_check(bag.items.has(great) and bag.total() == 2, "which is back in the bag")
+
+	# What the set is worth is the weapon alone: there is no hand left for the offhand's numbers.
+	var gear := Equipment.new()
+	gear.equip(Equipment.Socket.OFFHAND, _plain("Wooden Shield"))
+	gear.equip(Equipment.Socket.WEAPON, _plain(GREAT))
+	_check(gear.worn.size() == 1, "a greatsword worn is one piece on the player, not two")
+	var totals := gear.totals()
+	for stat: String in LootTable.stats_of("Wooden Shield"):
+		_check(not totals.has(stat), "the shield's %s is off the set under a greatsword" % stat)
+
+	# Two coming off for one going on, so the bag has to have a square spare -- and refusing leaves
+	# everything exactly where it was, rather than destroying a piece to make room.
+	var tight := Inventory.new()
+	var blade := _plain("Wooden Sword")
+	var guard := _plain("Wooden Shield")
+	tight.equipment.equip(Equipment.Socket.WEAPON, blade)
+	tight.equipment.equip(Equipment.Socket.OFFHAND, guard)
+	var heavy := _plain(GREAT)
+	tight.add(heavy)
+	while not tight.is_full():
+		tight.add(_plain("Leather Boot"))
+	_check(not tight.can_equip(heavy, Equipment.Socket.WEAPON), "a full bag has nowhere to put the two")
+	_check(not tight.equip(heavy, Equipment.Socket.WEAPON), "so the swap is refused")
+	_check(tight.total() == Inventory.CAPACITY and tight.items.has(heavy),
+			"and the greatsword is still in the bag")
+	_check(tight.equipment.item_at(Equipment.Socket.WEAPON) == blade
+			and tight.equipment.item_at(Equipment.Socket.OFFHAND) == guard,
+			"with both hands as they were")
+	tight.remove(tight.items[tight.total() - 1])
+	_check(tight.equip(heavy, Equipment.Socket.WEAPON), "one square free is room enough")
+	_check(tight.total() == Inventory.CAPACITY and tight.items.has(blade) and tight.items.has(guard),
+			"and the bag comes back exactly full")
+
+	# A one-handed swap is still one for one, so a full bag is no obstacle to it at all.
+	var packed := Inventory.new()
+	var spare := _plain("Wooden Sword")
+	packed.add(spare)
+	while not packed.is_full():
+		packed.add(_plain("Leather Boot"))
+	packed.equipment.equip(Equipment.Socket.WEAPON, _plain("Wooden Sword"))
+	_check(packed.equip(spare, Equipment.Socket.WEAPON), "a one-handed swap needs no free square")
+	_check(packed.total() == Inventory.CAPACITY, "and leaves the bag as full as it was")
+
+	# A save holding both is a save that has drifted. The weapon is what the player chose.
+	var drifted := Equipment.from_dict({
+		"weapon": _plain(GREAT).to_dict(),
+		"offhand": _plain("Wooden Shield").to_dict(),
+	})
+	_check(drifted.item_at(Equipment.Socket.WEAPON) != null, "a saved greatsword comes back on")
+	_check(drifted.item_at(Equipment.Socket.OFFHAND) == null,
+			"and the offhand saved beside it is dropped")
+
+	# The comparison, checked against the only thing it can honestly mean: what the set is worth after
+	# the swap, less what it was worth before. Both directions, because neither is one for one.
+	_swap_reads_true([["Wooden Sword", Equipment.Socket.WEAPON],
+			["Wooden Shield", Equipment.Socket.OFFHAND]], GREAT, Equipment.Socket.WEAPON,
+			"a greatsword over a sword and a shield")
+	_swap_reads_true([[GREAT, Equipment.Socket.WEAPON]], "Wooden Shield", Equipment.Socket.OFFHAND,
+			"a shield over a greatsword")
+	return true
+
+
+## What `ItemDetails.deltas` says one swap is worth, against what `Equipment.totals` actually comes to
+## before and after making it. `worn` is [type, socket] pairs. Plain pieces on both sides, so the set's
+## GLOBAL percents -- which a delta knows nothing about -- have nothing to say either way.
+func _swap_reads_true(worn: Array, type: String, socket: Equipment.Socket, what: String) -> void:
+	var gear := Equipment.new()
+	for pair: Array in worn:
+		gear.equip(pair[1], _plain(pair[0]))
+	var judged := _plain(type)
+	var change := ItemDetails.deltas(judged, gear.displaced_by(socket, judged))
+	var before := gear.totals()
+	gear.equip(socket, judged)
+	var after := gear.totals()
+	for stat: String in change:
+		var moved: float = float(after.get(stat, 0.0)) - float(before.get(stat, 0.0))
+		_check(is_equal_approx(float(change[stat]), moved),
+				"%s: %s reads %s and the player moved %s" % [what, stat, change[stat], moved])
+	# And nothing the swap really moved is left off the page.
+	for stat: String in before.keys() + after.keys():
+		var moved: float = float(after.get(stat, 0.0)) - float(before.get(stat, 0.0))
+		if LootTable.delta_shows(stat, moved):
+			_check(change.has(stat), "%s: %s moved by %s and the page said nothing" % [what, stat, moved])
+
+
+## A piece of one kind at one level with nothing rolled on top: the table's own numbers, which is
+## what lets what a swap is worth be checked against what the set adds up to.
+func _plain(type: String, level := 1) -> Item:
+	var item := Item.new()
+	item.type = type
+	item.rarity = ItemRarity.Rarity.COMMON
+	item.level = level
+	item.stats = Item.scaled_stats(type, level)
+	return item
+
+
+## The stats that belong to one kind of piece and must stay there. Offence on the weapons is the rule
+## the whole table is built on -- damage anywhere else and what is held stops being the interesting
+## slot -- and the rest are locked by what the piece is: you walk in boots, you block with a thing you
+## hold, only a mace leaves a wound and only a torch lights the way. Said by kind rather than by name,
+## because a kind's four materials are one piece with four prices on it. Pinned here so a later
+## widening of the tables cannot quietly undo the design.
 func _test_slot_locks() -> bool:
+	# The kinds allowed the stat at all, base stat or affix.
 	var locked := {
-		# Base damage is still the sword's, but the jewellery carries damage as an affix now -- what
-		# is locked is where a click's damage *comes from*, not everything that can add to it.
-		"damage": ["Wooden Sword", "Gold Ring", "Ruby Amulet"],
-		"move_speed": ["Leather Boot"],
-		"block_chance": ["Wooden Shield", "Wooden Torch"],
+		# Base damage is still what is held, but the jewellery carries damage as an affix -- what is
+		# locked is where a click's damage *comes from*, not everything that can add to it.
+		"damage": ["sword", "dagger", "mace", "greatsword", "gold_ring", "iron_band", "jade_ring",
+			"ruby_amulet", "gold_amulet", "sapphire_amulet", "emerald_amulet"],
+		"move_speed": ["boot", "greaves", "slippers"],
+		"block_chance": ["shield", "buckler", "torch"],
+		"bleed": ["mace"],
+		"sight": ["torch"],
+	}
+	# And the kinds whose own numbers it is, which for four of them is narrower than the line above:
+	# a ring may roll flat damage and a torch may roll flat block, and neither shows any.
+	var shows := {
+		"damage": ["sword", "dagger", "mace", "greatsword"],
+		"move_speed": ["boot", "greaves", "slippers"],
+		"block_chance": ["shield", "buckler"],
+		"bleed": ["mace"],
+		"sight": ["torch"],
 	}
 	for stat: String in locked:
-		var found := PackedStringArray()
+		var carries := {}
+		var wears := {}
 		for item in LootTable.items():
+			var kind := str(LootTable.ITEMS[item]["kind"])
 			if LootTable.can_roll(item, stat):
-				found.append(item)
-		var want: Array = locked[stat]
-		_check(found.size() == want.size(), "%s is on %s, not %s" % [stat, found, want])
-		for item: String in want:
-			_check(item in found, "%s should be on %s" % [stat, item])
+				carries[kind] = true
+			if LootTable.has_stat(item, stat):
+				wears[kind] = true
+		for pair: Array in [[carries, locked[stat], "carry"], [wears, shows[stat], "show"]]:
+			var found: Array = (pair[0] as Dictionary).keys()
+			var want: Array = pair[1]
+			_check(found.size() == want.size(),
+					"the kinds that %s %s are %s, not %s" % [pair[2], stat, found, want])
+			for kind: String in want:
+				_check(kind in found, "%s should %s %s" % [kind, pair[2], stat])
+	# The torch is Sight and nothing else: what it used to show it merely carries now.
+	_check(LootTable.stats_of("Wooden Torch").keys() == ["sight"],
+			"a torch shows Sight alone (%s)" % [LootTable.stats_of("Wooden Torch").keys()])
 	return true
 
 
@@ -559,16 +717,43 @@ func _test_rolls() -> bool:
 		if item == null:
 			break
 		_check(item.type in LootTable.items(), "rolled a real item, not " + item.type)
-		mix[item.type] = int(mix.get(item.type, 0)) + 1
+		# A weight belongs to a kind, so what is measured against it is how often the kind came up.
+		# This tile is level 1, where only the plainest material of each is unlocked at all.
+		_check(int(LootTable.ITEMS[item.type]["tier"]) == 0,
+				"a level-1 drop is the plainest of its kind, not " + item.type)
+		mix[LootTable.ITEMS[item.type]["kind"]] = int(mix.get(LootTable.ITEMS[item.type]["kind"], 0)) + 1
 		rarities[item.rarity] = int(rarities.get(item.rarity, 0)) + 1
 
 	var total_weight := 0
-	for item: String in LootTable.ITEMS:
-		total_weight += int(LootTable.ITEMS[item]["weight"])
-	for item: String in LootTable.ITEMS:
-		var share := float(mix.get(item, 0)) / SHAPE_ROLLS
-		var want := float(LootTable.ITEMS[item]["weight"]) / total_weight
-		_check(absf(share - want) < 0.05, "%s came up %.2f of the time, not %.2f" % [item, share, want])
+	for kind: String in LootTable.KINDS:
+		total_weight += int(LootTable.KINDS[kind]["weight"])
+	for kind: String in LootTable.KINDS:
+		var share := float(mix.get(kind, 0)) / SHAPE_ROLLS
+		var want := float(LootTable.KINDS[kind]["weight"]) / total_weight
+		_check(absf(share - want) < _tolerance(want, SHAPE_ROLLS),
+				"%s came up %.3f of the time, not %.3f" % [kind, share, want])
+
+	# Deep ground deals better materials, and never one the piece's own level has not unlocked -- the
+	# level is the piece's, so a poor roll out at the frontier is still a wooden sword.
+	var tiers := {}
+	for i in SHAPE_ROLLS:
+		var item := LootTable.roll(enemy, rng, true, 30)
+		var row: Dictionary = LootTable.ITEMS[item.type]
+		var levels: Array = LootTable.KINDS[row["kind"]].get("tier_levels", LootTable.TIER_MIN_LEVEL)
+		_check(item.level >= int(levels[int(row["tier"])]),
+				"a level-%d %s is under the level %d its material needs"
+						% [item.level, item.type, levels[row["tier"]]])
+		tiers[int(row["tier"])] = true
+	_check(tiers.has(LootTable.TIER_MIN_LEVEL.size() - 1),
+			"deep ground deals the best materials (%s)" % [tiers.keys()])
+	_check(tiers.has(0), "and its shallower rolls still deal the plainest")
+
+	# The one material worth something beyond its numbers: a second tile of sight belongs to the deep
+	# game, so no Blazing Torch may fall where the ground cannot roll a level-10 piece at all.
+	var blazing := 0
+	for i in 1000:
+		blazing += 1 if LootTable.roll(enemy, rng, true, 9).type == "Blazing Torch" else 0
+	_check(blazing == 0, "no Blazing Torch off level-9 ground (%d of 1000)" % blazing)
 
 	# What common rabble is worth, every step of it, held to the table's own numbers rather than to
 	# a line written here that goes stale the moment the curve is retuned.
@@ -1580,13 +1765,16 @@ func _test_item_levels() -> bool:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = WORLD_SEED
 
-	# A level-1 piece is exactly the piece the table describes: nothing about the game as it was moved.
+	# A level-1 piece is the piece the table describes times whatever its kind and its material are
+	# worth, and nothing else: a level adds nothing at level 1, so what is left is the power alone.
 	for type in LootTable.items():
 		var plain := Item.rolled(type, ItemRarity.Rarity.COMMON, rng, 1)
 		_check(plain.level == 1, "%s rolled at level 1 is level 1" % type)
 		for stat: String in LootTable.stats_of(type):
-			_check(is_equal_approx(float(plain.base_stats()[stat]), float(LootTable.stats_of(type)[stat])),
-					"a level-1 %s still has %s %s" % [type, stat, LootTable.stats_of(type)[stat]])
+			var raw := float(LootTable.stats_of(type)[stat]) * LootTable.power_of(type, stat)
+			var want := snappedf(raw, 0.1) if stat in LootTable.RATE_STATS else float(roundi(raw))
+			_check(is_equal_approx(float(plain.base_stats()[stat]), want),
+					"a level-1 %s has %s %s, not %s" % [type, stat, plain.base_stats()[stat], want])
 
 	# And a deeper one follows the curve, on a stat that starts small and one that starts large.
 	for level in range(1, 21):
@@ -1611,7 +1799,10 @@ func _test_item_levels() -> bool:
 	# A probability may not be multiplied by a level. Every chance stat grows by its flat step alone,
 	# so a deep set of gear cannot add up past certainty and make every hit a crit.
 	for stat: String in LootTable.CHANCE_STATS:
-		_check(stat in LootTable.PERCENT_STATS, "%s is written as a percentage" % stat)
+		# Sight is the one in the list that is not a probability: it is a number of tiles, and it is
+		# there so that a level cannot multiply one of them into twenty-six.
+		_check(stat in LootTable.PERCENT_STATS or stat == "sight",
+				"%s is written as a percentage" % stat)
 		for level in [1, 10, 40]:
 			var want := 5.0 + float(LootTable.LEVEL_FLAT[stat]) * float(level - 1)
 			_check(is_equal_approx(LootTable.scale(stat, 5.0, level), want),
@@ -1674,6 +1865,106 @@ func _test_item_levels() -> bool:
 	if old != null:
 		_check(old.level == 1, "as a level-1 piece")
 		_check(old.base_stats() == LootTable.stats_of("Wooden Sword"), "carrying the table as written")
+
+	# And a piece saved with a stat its kind has since lost keeps it. A ring found today shows no Life
+	# on Hit; one already on a finger is frozen, and what the file holds is what it is worth.
+	var ringed := Item.from_dict({"type": "Gold Ring", "rarity": "common", "level": 1,
+			"stats": {"drop_rate": 5.0, "life_on_hit": 1.0}, "mods": []})
+	_check(ringed != null, "a Gold Ring from an older save loads")
+	if ringed != null:
+		_check(is_equal_approx(float(ringed.base_stats().get("life_on_hit", 0.0)), 1.0),
+				"with the Life on Hit it was found with")
+		_check(is_equal_approx(float(ringed.base_stats().get("drop_rate", 0.0)), 5.0), "and its drop rate")
+	_check(not LootTable.stats_of("Gold Ring").has("life_on_hit"), "though a ring found today has none")
+	return true
+
+
+## The kinds and their materials: how the drops are split between them, what a kind's power is worth
+## against another's, what a material is worth on top of it, and the promise that the eight pieces the
+## game shipped with are worth exactly what they always were.
+func _test_kinds() -> bool:
+	# What each slot was worth before there were kinds. Widening the table must not quietly change
+	# which socket the player is filling -- only which of that socket's pieces turns up.
+	var was := {"helmet": 3, "boots": 4, "weapon": 3, "offhand": 6, "body": 2, "ring": 2, "amulet": 1}
+	var weights := {}
+	var total := 0
+	var was_total := 0
+	for slot: String in was:
+		was_total += int(was[slot])
+	for kind: String in LootTable.KINDS:
+		var slot := str(LootTable.KINDS[kind]["slot"])
+		var weight := int(LootTable.KINDS[kind]["weight"])
+		_check(weight > 0, "%s can come up at all" % kind)
+		weights[slot] = int(weights.get(slot, 0)) + weight
+		total += weight
+	_check(weights.size() == was.size(), "there are still seven slots (%s)" % [weights.keys()])
+	for slot: String in was:
+		var share := float(weights.get(slot, 0)) / total
+		var want := float(was[slot]) / was_total
+		_check(is_equal_approx(share, want),
+				"the %s slot is %.4f of what drops, not the %.4f it always was" % [slot, share, want])
+
+	# A kind's power is what makes a dagger a dagger: one base damage, three weapons out of it.
+	var blades := {}
+	for type: String in ["Bone Knife", "Wooden Sword", "Wooden Greatsword"]:
+		blades[type] = float(Item.scaled_stats(type, 10)["damage"])
+	_check(blades["Bone Knife"] < blades["Wooden Sword"]
+			and blades["Wooden Sword"] < blades["Wooden Greatsword"],
+			"a dagger hits under a sword hits under a greatsword: %s" % [blades])
+	_check(LootTable.two_handed("Wooden Greatsword") and not LootTable.two_handed("Wooden Sword"),
+			"and only the greatsword takes both hands")
+
+	# A material is more of every quantity and no more of a chance or a rate: a steel shield holds
+	# more armour than a wooden one and blocks exactly as often.
+	for kind: String in LootTable.KINDS:
+		if LootTable.KINDS[kind].has("tier_stats"):
+			continue   # the torch, which writes each material's Sight out rather than multiplying it
+		var tiers: Array = LootTable.KINDS[kind]["tiers"]
+		for tier in range(1, tiers.size()):
+			var under := Item.scaled_stats(str(tiers[tier - 1]), 10)
+			var over := Item.scaled_stats(str(tiers[tier]), 10)
+			for stat: String in under:
+				var held: bool = stat in LootTable.CHANCE_STATS or stat in LootTable.RATE_STATS
+				if held:
+					_check(is_equal_approx(float(over[stat]), float(under[stat])),
+							"%s has the same %s as %s" % [tiers[tier], stat, tiers[tier - 1]])
+				else:
+					_check(float(over[stat]) > float(under[stat]),
+							"%s is worth more %s than %s" % [tiers[tier], stat, tiers[tier - 1]])
+
+	# The torch is the one kind a level says nothing to at all: it shows how far it lights the way,
+	# and only the material moves that.
+	for level in [1, 30]:
+		_check(Item.scaled_stats("Wooden Torch", level) == {"sight": 1.0},
+				"a level-%d Wooden Torch is 1 Sight (%s)"
+						% [level, Item.scaled_stats("Wooden Torch", level)])
+		_check(Item.scaled_stats("Blazing Torch", level) == {"sight": 2.0},
+				"a level-%d Blazing Torch is 2 Sight (%s)"
+						% [level, Item.scaled_stats("Blazing Torch", level)])
+
+	# The pieces the game shipped with are the plainest of their kind and carry no power of their own,
+	# so every one of them is worth exactly what it was before any of this. The torch is not among
+	# them: it gave up its energy shield, its regen and its crit damage for Sight.
+	for level in [1, 10, 30]:
+		for type: String in ["Leather Helmet", "Leather Boot", "Wooden Sword", "Wooden Shield",
+				"Wooden Armor", "Gold Ring", "Ruby Amulet"]:
+			var stats := Item.scaled_stats(type, level)
+			for stat: String in stats:
+				var raw := LootTable.scale(stat, float(LootTable.stats_of(type)[stat]), level)
+				var want := snappedf(raw, 0.1) if stat in LootTable.RATE_STATS else float(roundi(raw))
+				_check(is_equal_approx(float(stats[stat]), want),
+						"a level-%d %s has %s %s, not the %s the curve alone gives it"
+								% [level, type, stats[stat], stat, want])
+
+	# Item rarity is the jewellery's line and nobody else's, and gold find's band is written flat so
+	# that The Tithe reads the same at level 30 as at level 1.
+	for type in LootTable.items():
+		var jewel: bool = LootTable.slot_of(type) in ["ring", "amulet"]
+		_check(("added_item_rarity" in ModifierTable.pool_for(type)) == jewel,
+				"%s %s roll item rarity" % [type, "should" if jewel else "should not"])
+	_check(ModifierTable.band_for("added_gold_find", 30) == ModifierTable.band_for("added_gold_find", 1),
+			"gold find's band is the same at level 30 as at level 1 (%s)"
+					% [ModifierTable.band_for("added_gold_find", 30)])
 	return true
 
 
@@ -1743,7 +2034,9 @@ func _test_deltas() -> bool:
 	worse.level = 1
 	worse.stats = {"damage": 12.0, "crit_chance": 6.0, "health": 30.0}
 
-	var change := ItemDetails.deltas(better, worse)
+	# What the swap takes off is a list now, because a two-hander takes two pieces off for one going on.
+	var off: Array[Item] = [worse]
+	var change := ItemDetails.deltas(better, off)
 	_check(change.get("damage") == 8.0, "a stat both have is the difference: %s" % change.get("damage"))
 	_check(change.get("armor") == 5.0, "a stat only the new piece has is the whole of it")
 	_check(change.get("health") == -30.0, "and one only the old piece has is the whole of it, lost")
@@ -1761,7 +2054,8 @@ func _test_deltas() -> bool:
 	hair_worse.rarity = ItemRarity.Rarity.COMMON
 	hair_worse.level = 1
 	hair_worse.stats = {"damage": 12.0, "attack_speed": 1.0}
-	_check(ItemDetails.deltas(hair, hair_worse).is_empty(),
+	var hairs: Array[Item] = [hair_worse]
+	_check(ItemDetails.deltas(hair, hairs).is_empty(),
 			"a difference too small to print is left out")
 
 	# And the spelling, which lives beside stat_line for the reason stat_line gives.
@@ -1811,7 +2105,8 @@ func _test_comparing() -> bool:
 
 	# The comparison is the piece beside it and nothing else: the stat block says what the selected
 	# piece is, never what the swap would be worth in signed numbers.
-	var change := ItemDetails.deltas(strong, weak)
+	var replaced: Array[Item] = [weak]
+	var change := ItemDetails.deltas(strong, replaced)
 	_check(change.has("damage") and change["damage"] > 0.0, "the better sword hits harder")
 	var block := _texts(main.bag_page._detail)
 	_check(strong.display_name() in block, "the block names the piece that is open: %s" % block)
@@ -1889,6 +2184,29 @@ func _test_comparing() -> bool:
 	main.bag_page._select_item(-1)
 	_check(main.bag_page._worn_panel.visible and not main.bag_page._show_button.visible,
 			"Show brings the doll back")
+
+	# A greatsword closes the offhand, and the doll says so: that socket is drawn wearing the weapon's
+	# own icon faded rather than left looking like somewhere to fill, and a press on it opens the piece
+	# that is actually in that hand.
+	var heavy := _plain("Wooden Greatsword")
+	main.inventory.add(heavy)
+	main.inventory.equip(heavy, Equipment.Socket.WEAPON)
+	main.bag_page._select_item(-1)
+	await process_frame
+	var offhand: Control = null
+	for slot: Control in _socket_squares(main):
+		if slot.get_meta("socket") == Equipment.Socket.OFFHAND:
+			offhand = slot
+	_check(offhand != null and offhand.get_child_count() > 0,
+			"the offhand socket is drawn taken while a greatsword is worn")
+	if offhand != null:
+		var press := InputEventMouseButton.new()
+		press.button_index = MOUSE_BUTTON_LEFT
+		press.pressed = true
+		press.position = offhand.position + offhand.size / 2.0
+		main.bag_page._on_doll_input(press)
+		_check(main.bag_page._worn_selected == Equipment.Socket.WEAPON,
+				"and a press on it opens the greatsword")
 	main._on_left_page_closed()
 	main.queue_free()
 	_clear_save()
@@ -2668,6 +2986,16 @@ func _test_collection() -> bool:
 	_check(not main._flashes.has("opened_collection"), "and the pulse stops")
 	var squares: Array = main.collection_page.find_children("*", "ItemSlot", true, false)
 	_check(squares.size() == UniqueTable.UNIQUES.size(), "one square a unique (%d)" % squares.size())
+	# The foot, under the scroll: what the log adds and how full it is, in the body font.
+	var bonus: Label = main.collection_page.find_child(CollectionPage.BONUS_NAME, true, false)
+	var tally: Label = main.collection_page.find_child(CollectionPage.COUNT_NAME, true, false)
+	_check(bonus.text == "+%d%% Damage" % main.inventory.collection_bonus(), "the damage it adds is always written (%s)" % bonus.text)
+	_check(tally.text == "Found 1 of %d" % UniqueTable.UNIQUES.size(), "beside how much of it is found (%s)" % tally.text)
+	var scrolls: Array = main.collection_page.find_children("*", "ScrollContainer", true, false)
+	_check(not scrolls[0].is_ancestor_of(bonus) and bonus.theme_type_variation == "SmallLabel"
+			and tally.theme_type_variation == "SmallLabel", "both small, and outside what scrolls")
+	_check(is_equal_approx(main.collection_page._panel.get_combined_minimum_size().x,
+			main.bag_page._panel.get_combined_minimum_size().x), "and the foot's words do not widen the page past the bag's")
 	var shown := 0
 	for square: ItemSlot in squares:
 		var id: String = square.item.unique
