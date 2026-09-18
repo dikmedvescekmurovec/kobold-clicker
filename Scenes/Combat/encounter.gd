@@ -84,6 +84,12 @@ const CHEST := {"enemies": 1, "seconds": SECONDS, "elite_every": 1, "boss_last":
 const MIMIC := "Mimic"
 ## How many times the mimic rolls for loot. The first is guaranteed, so it always pays something.
 const MIMIC_ROLLS := 10
+## The ice wall round the land: one body, a long clock, and far more health than its ring would give
+## anything else -- it is the check on whether the player is ready for the land past it.
+const WALL := {"enemies": 1, "seconds": 60.0, "elite_every": 1, "boss_last": true}
+const WALL_NAME := "The Ice Wall"
+## What the wall's health is multiplied by on top of its boss body. The dial for how hard the wall is.
+const WALL_HP := 6.0
 const PROFILES := {
 	"plain": ORDINARY,
 	"road": ORDINARY,
@@ -369,6 +375,18 @@ static func for_tile(cell: Vector2i, env: String, variant := "", chest := false)
 	return fight
 
 
+## The ice wall's tile: the wall alone, fought on the ice whatever land lies under it.
+static func for_wall(cell: Vector2i) -> Encounter:
+	var fight := Encounter.new()
+	fight.env = "ice"
+	fight.cell = cell
+	fight._take_profile(WALL)
+	fight.lineup.append(WALL_NAME)
+	fight.health.append(hp_of(WALL_NAME, cell) * WALL_HP)
+	fight.hp = fight.health[0]
+	return fight
+
+
 ## A farm run on `cell`: the same enemies the tile's terrain fields, coming forever, with no clock
 ## and no count. It ends when the player says so.
 ##
@@ -425,7 +443,7 @@ func _clause(clause: String) -> bool:
 ## Setting `effects` by hand does everything but that reshaping, which is what most tests want.
 func wear(worn: Array) -> void:
 	effects = worn
-	if endless or lineup.is_empty() or lineup[0] == MIMIC:
+	if endless or lineup.is_empty() or lineup[0] == MIMIC or lineup[0] == WALL_NAME:
 		return
 	# Grazing: more bodies on the same clock, on the front so the fight still ends on its elite.
 	# Seeded from the cell like the lineup itself, so the tile fields the same herd every time.

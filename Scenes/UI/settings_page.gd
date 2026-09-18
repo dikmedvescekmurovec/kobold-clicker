@@ -16,11 +16,18 @@ signal reset_pressed
 signal cash_pressed
 ## The debug build's "Show all uniques" was ticked or unticked: the trophy may have come or gone.
 signal uniques_toggled
+## The panel changed width (the generator is wider than the settings): the corner buttons beside it move.
+signal laid_out
 
 const WIDTH := 140.0
 const ROW_GAP := 6
 const ANIM_NAMES := ["None", "Low", "Default"]
 const DETAILS_TIP := "Shows beside each modifier the lowest and highest it could have rolled at the item's level, like +14(8-20)% increased Damage."
+
+## The debug build's item generator works on these; the main scene sets them, as it sets a town
+## page's `view`. Without them there is no button for it.
+var inventory: Inventory
+var inventory_path := ""
 
 var _ui_scale: float
 var _panel: VBoxContainer
@@ -74,6 +81,8 @@ func open() -> void:
 		part.tooltip_text = DETAILS_TIP
 	_rows.add_child(details)
 	_rows.add_child(_foot(false))
+	# The generator may have left the panel wider than the settings are.
+	layout.call_deferred()
 
 
 ## One tick-box row, the bag's own, already showing `on`. `write` puts a change into `Settings`.
@@ -105,6 +114,10 @@ func _foot(asking: bool) -> VBoxContainer:
 			var cash := UITheme.button("Gold x10", "LightButton", "Dev: multiply the purse by ten")
 			cash.pressed.connect(cash_pressed.emit)
 			foot.add_child(cash)
+			if inventory != null:
+				var forge := UITheme.button("Item generator", "LightButton", "Dev: make a piece to order")
+				forge.pressed.connect(_open_generator)
+				foot.add_child(forge)
 		var reset := UITheme.button("Reset save", "LightDangerButton", "Delete the saves and start a new game")
 		reset.pressed.connect(_ask.bind(true))
 		foot.add_child(reset)
@@ -123,6 +136,13 @@ func _foot(asking: bool) -> VBoxContainer:
 	return foot
 
 
+## The generator in the settings' place, wider than they are; its back arrow is `open()`.
+func _open_generator() -> void:
+	UITheme.clear(_rows)
+	_rows.add_child(ItemGenerator.new(inventory, inventory_path, open))
+	layout.call_deferred()
+
+
 func _ask(asking: bool) -> void:
 	var old := _rows.get_child(-1)
 	_rows.remove_child(old)
@@ -134,3 +154,4 @@ func _ask(asking: bool) -> void:
 func layout() -> void:
 	_panel.size = Vector2(_panel.get_combined_minimum_size().x, get_viewport_rect().size.y / _ui_scale)
 	_panel.position = Vector2.ZERO
+	laid_out.emit()

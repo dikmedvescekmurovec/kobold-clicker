@@ -33,8 +33,8 @@ func _test_every_entry_names_a_known_environment() -> bool:
 	var known := _environments()
 	for name in EnemyRoster.names():
 		var envs := EnemyRoster.environments_of(name)
-		# The mimic is the exception: it lives in treasure chests, never in a lineup.
-		_check(not envs.is_empty() or name == Encounter.MIMIC, name + " lives somewhere")
+		# The mimic and the ice wall are the exceptions: they are fought alone, never in a lineup.
+		_check(not envs.is_empty() or name in [Encounter.MIMIC, Encounter.WALL_NAME], name + " lives somewhere")
 		for env in envs:
 			_check(env in known, name + " names a real environment, not " + env)
 	return true

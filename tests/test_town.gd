@@ -514,8 +514,13 @@ func _test_bounties() -> bool:
 	_check(not BountyBoard.count_kill(state, target, 1, 3), "a kill on shallower land does not count")
 	_check(BountyBoard.count_kill(state, target, 1, 4), "one on land of the town's level does")
 	_check(BountyBoard.count_kill(state, target, 1, 9), "and so does one deeper")
-	first[BountyBoard.HAVE] = 0
 	first[BountyBoard.LEVEL] = depth
+	# Giving work up puts it back on the board with nothing done, and frees the player for another.
+	_check(BountyBoard.abandon(first), "the accepted bounty can be given up")
+	_check(BountyBoard.active(state).is_empty() and _have(town, 0) == 0,
+			"which leaves no work out and loses its kills")
+	_check(not BountyBoard.abandon(first), "and cannot be given up twice")
+	_check(BountyBoard.accept(state, first), "it can be taken on again")
 	_check(BountyBoard.count_kill(state, target, 3), "three of them count now")
 	_check(_have(town, 0) == 3, "against the posting that wants them (%d)" % _have(town, 0))
 	_check(_have(town, 1) == 0, "and not against the one that does not")

@@ -244,10 +244,10 @@ BASE_KINDS = {
     "torch": ("Offhand", [("Wooden Torch", (_RPG + "Weapon & Tool/Torch", 0, 0, 32, 32, 1)), ("Blazing Torch", DRAWN)]),
 
     # The pack's three helmets are a ladder as they stand -- a cap, an open-faced helmet, a great
-    # helm -- and the gold one is that great helm drawn again with a circlet and a plume.
+    # helm -- and the gold one is the user's own 32 px pixellab piece, golden-helm.png.
     "helm": ("Helmet", [
         ("Leather Helmet", (_RPG + "Equipment/Leather Helmet", 0, 0, 32, 32, 1)), ("Iron Helmet", (_RPG + "Equipment/Iron Helmet", 0, 0, 32, 32, 1)),
-        ("Steel Helm", (_RPG + "Equipment/Helm", 0, 0, 32, 32, 1)), ("Golden Helm", DRAWN)]),
+        ("Steel Helm", (_RPG + "Equipment/Helm", 0, 0, 32, 32, 1)), ("Golden Helm", ("golden-helm", 0, 0, 32, 32, 1))]),
     "hood": ("Helmet", [
         ("Hide Hood", DRAWN), ("Leather Hood", DRAWN), ("Studded Hood", DRAWN), ("Shadow Hood", DRAWN)]),
     # The pack's one hat is the second rung, dyed the blue its name has always meant here; the

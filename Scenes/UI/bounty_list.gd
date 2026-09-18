@@ -10,13 +10,16 @@ extends Control
 ##
 ## Built like the other left-hand pages (`SkillsPage`): `open()` redraws it, `layout()` fits it to the
 ## window, `closed` is its X, and it carries `UITheme.theme()` because it hangs off a `CanvasLayer`.
-## It changes nothing and so saves nothing -- a bounty is handed in at the town that posted it.
+## The one thing it changes is giving the work up (Cancel), which it saves; a bounty is still handed
+## in only at the town that posted it.
 
 ## The page's X was pressed.
 signal closed
 ## A Show button was pressed: put the map on this cell. The page cannot do it itself -- the map, the
 ## camera and the pages that have to get out of the way are the main scene's.
 signal show_cell(cell: Vector2i)
+## Cancel gave the work up (and saved): a board open on the other edge has to be drawn again.
+signal abandoned
 
 ## How wide the page's rows run, in panel pixels. Wider than the town page's 140, because nothing here
 ## is standing beside a bag: a tile's name and the line it sits on are what set it.
@@ -40,14 +43,17 @@ const PORTRAIT_PAD := 2
 
 var inventory: Inventory
 var view: MapBuilder
+var _save_path: String
 var _ui_scale: float
 var _panel: VBoxContainer
 var _rows: VBoxContainer
 
 
-func _init(player_inventory: Inventory, map_view: MapBuilder, ui_scale: float) -> void:
+func _init(player_inventory: Inventory, map_view: MapBuilder, save_path: String,
+		ui_scale: float) -> void:
 	inventory = player_inventory
 	view = map_view
+	_save_path = save_path
 	_ui_scale = ui_scale
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	theme = UITheme.theme()
@@ -92,8 +98,10 @@ func open() -> void:
 			listed += 1
 			# A finished bounty is paid for where it was taken on, which is the one thing this page
 			# cannot do and so the one thing it has to say.
-			_rows.add_child(BountyList.row(bounty, view, WIDTH, _on_show_pressed,
-					"Finished. Claim it at %s." % town if BountyBoard.ready(bounty) else ""))
+			var card := BountyList.row(bounty, view, WIDTH, _on_show_pressed,
+					"Finished. Claim it at %s." % town if BountyBoard.ready(bounty) else "")
+			BountyList.actions_of(card).add_child(_cancel_button(bounty))
+			_rows.add_child(card)
 	if listed == 0:
 		_rows.add_child(wrapped("No work is out. Accept a bounty at a board.", WIDTH, Palette.SLATE))
 
@@ -282,6 +290,24 @@ func _town_name(spot: Vector2i) -> String:
 		return "Town"
 	var called := view.name_of(spot - view.origin)
 	return called if not called.is_empty() else "Town"
+
+
+## Cancel gives the work up, and asks first on the button itself: a second press is the answer, since
+## what it throws away is every kill counted so far.
+func _cancel_button(bounty: Dictionary) -> Button:
+	var button := UITheme.button("Cancel", "LightDangerButton", "Give this bounty up")
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.pressed.connect(func() -> void:
+		if button.text != "Sure?":
+			button.text = "Sure?"
+			button.tooltip_text = "Press again to give it up and lose its progress"
+			return
+		if BountyBoard.abandon(bounty):
+			print("Gave up the bounty on %s" % str(bounty.get(BountyBoard.ENEMY, "")))
+			inventory.save(_save_path)
+			abandoned.emit()
+		open.call_deferred())
+	return button
 
 
 func _on_show_pressed(cell: Vector2i) -> void:

@@ -216,6 +216,13 @@ func orb_held(orb: String) -> void:
 		layout()
 
 
+## Draws the open counter again, for a change made off this page (a bounty given up on the journal).
+func redraw() -> void:
+	if visible:
+		_fill()
+		layout()
+
+
 ## Full window height against the right edge, where the tile panel stands when no town is open.
 func layout() -> void:
 	var view_size := get_viewport_rect().size

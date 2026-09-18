@@ -19,12 +19,18 @@ signal arrived(cell: Vector2i)
 ## What the player knows about a cell.
 enum State { HIDDEN, UNCHARTED, CHARTED }
 
-## Cells the map covers to begin with: 20x11 around cell (0, 0), which the camera puts at the middle of the
-## screen. It grows from there as the player travels; `rect` is what the map covers now.
-const START_RECT := Rect2i(-10, -5, 20, 11)
-## The map grows once the player is this close to its edge, by this much on the side they are heading for.
-const EXPAND_MARGIN := 4
-const EXPAND_BY := Vector2i(10, 5)
+## The land is a hexagon: every cell within `land_radius` steps of cell (0, 0). It starts this wide.
+const START_LAND_RADIUS := 10
+## The ring just outside the land is the ice wall, and beating any one tile of it brings the whole ring
+## down: the land then reaches this many rings further, to the next wall.
+const WALL_STEP := 10
+## How far past the wall the map is generated: the frozen wasteland the player can see out there, and
+## real land under it for the wall to blend against and for the day the wall falls.
+const WASTE_DEPTH := 5
+## What a wall tile and a wasteland tile are called. Never saved: the land under them gets its own
+## name once the wall is down.
+const WALL_NAME := "The Ice Wall"
+const WASTE_NAME := "Frozen Wasteland"
 ## Cell the map is centered on, and the only one visible together with its neighbors at the start.
 const CENTER := Vector2i.ZERO
 ## About 1 in 10 environment tiles use the accent sprite (JSON meta accent_frequency: 1 in 8-12).
@@ -41,8 +47,11 @@ const CHEST_REGION := Rect2(2, 12, 28, 20)
 
 var map: HexMap
 var towns: TownWorld
-## What the map covers now, in cells. It starts as START_RECT and grows towards the player.
-var rect := START_RECT
+## What the map has generated, in cells: the land, the wall and WASTE_DEPTH of wasteland. It only
+## ever grows, when the wall falls.
+var rect := Rect2i()
+## How far the land reaches from cell (0, 0); ring `land_radius + 1` is the ice wall.
+var land_radius := START_LAND_RADIUS
 ## Seed the environments are generated from; kept, since the map is generated in pieces as it grows.
 var env_seed: int
 ## World spot at the center cell (0, 0).
@@ -65,6 +74,7 @@ var _routed_links: Dictionary[String, bool] = {}  # town links already routed, s
 var _states: Dictionary[Vector2i, State] = {}
 var _drawn_roads: Dictionary[Vector2i, int] = {}  # road mask each drawn cell shows, to spot the ones that change
 var _chest_sprites: Dictionary[Vector2i, Sprite2D] = {}
+var _ice: IceOverlay
 
 
 ## Generates the window and shows the starting tiles. `origin` is the world spot at the center cell (0, 0); its
@@ -88,9 +98,10 @@ static func create(map: HexMap, towns: TownWorld, origin: Vector2i, env_seed: in
 	# other, so the rest of the network gives way to it however the map later grows.
 	builder.env_seed = env_seed
 	RoadNetwork.route_to_cell(towns, builder.start_town, origin, map.tileset.legal_road_masks(), builder._roads)
-	builder._generate(START_RECT)
+	builder._cover()
 
 	map.clear_map()
+	builder._add_ice()
 	# Blends read the environment of every generated cell, not just the drawn ones, so a tile is drawn with the
 	# same overlays whether its neighbors are already charted or still hidden.
 	map.hidden_env = builder.env_at
@@ -124,6 +135,7 @@ func to_save() -> MapSave:
 	save.map_seed = env_seed
 	save.origin = origin
 	save.rect = rect
+	save.land_radius = land_radius
 	save.start_town = start_town
 	save.player_cell = player_cell
 	save.towns = towns.to_dict()
@@ -158,6 +170,9 @@ static func restore(map: HexMap, towns: TownWorld, save: MapSave) -> MapBuilder:
 		builder._states[cell] = save.states[cell]
 	for cell in builder._envs:
 		builder._tiles[cell] = builder._tile_name(cell)
+	builder.land_radius = save.land_radius if save.land_radius > 0 else migrated_radius(save.states)
+	# A save from before the wall may not reach past where the wall now stands.
+	builder._cover()
 	# A save written before names existed brings back land the player has seen and no names for it.
 	# They are filled in here rather than left to whatever asks first, so one load is all it takes
 	# and the map on disk is whole again: a tile the player has looked at has a name.
@@ -165,6 +180,7 @@ static func restore(map: HexMap, towns: TownWorld, save: MapSave) -> MapBuilder:
 		builder.name_of(cell)
 
 	map.clear_map()
+	builder._add_ice()
 	# Before anything is drawn, or the first cells get their blends worked out against land that
 	# reads as empty. Same reason create() sets it before its own first _show.
 	map.hidden_env = builder.env_at
@@ -187,8 +203,13 @@ func _draw_saved() -> void:
 	for cell in _states:
 		if not _tiles.has(cell):
 			continue
+		if is_wasteland(cell):
+			_ice.set_cell(cell, IceOverlay.Kind.WASTE)
+			continue
 		map.place_ground(cell, _tiles[cell])
 		_draw_road(cell)
+		if is_wall(cell):
+			_ice.set_cell(cell, IceOverlay.Kind.WALL)
 		if _states[cell] == State.UNCHARTED:
 			map.fog.add_cell(cell)
 		_draw_chest(cell)
@@ -203,6 +224,39 @@ static func start_cells() -> Array[Vector2i]:
 	var cells: Array[Vector2i] = [CENTER]
 	cells.append_array(HexGrid.neighbors(CENTER))
 	return cells
+
+
+## A save written before the wall has no radius: the wall goes on the first ring, counted the way the
+## walls fall, that lies beyond everything the player has already seen, so nothing they knew is iced over.
+static func migrated_radius(states: Dictionary) -> int:
+	var farthest := 0
+	for cell in states:
+		if states[cell] != State.HIDDEN:
+			farthest = maxi(farthest, HexGrid.distance(CENTER, cell))
+	var falls := ceili(maxi(farthest - START_LAND_RADIUS, 0) / float(WALL_STEP))
+	return START_LAND_RADIUS + WALL_STEP * falls
+
+
+## The ice over the land's edge. Made after `clear_map`, which frees whatever stands under `chests`.
+func _add_ice() -> void:
+	_ice = IceOverlay.new(map)
+	_ice.name = "Ice"
+	map.chests.add_child(_ice)
+
+
+## Whether `cell` is on the ice wall, the ring just outside the land.
+func is_wall(cell: Vector2i) -> bool:
+	return HexGrid.distance(CENTER, cell) == land_radius + 1
+
+
+## Whether `cell` lies past the wall, in the frozen wasteland: seen as snow, never walked on.
+func is_wasteland(cell: Vector2i) -> bool:
+	return HexGrid.distance(CENTER, cell) > land_radius + 1
+
+
+## Whether `cell` is land the player can have: inside the wall.
+func is_land(cell: Vector2i) -> bool:
+	return HexGrid.distance(CENTER, cell) <= land_radius
 
 
 ## The world spot a map cell shows. `_envs`, `_tiles`, `_states` and `_drawn_roads` are keyed by cell;
@@ -225,6 +279,10 @@ func env_at(cell: Vector2i) -> String:
 ## renamed by a later build widening a word list. Cells the map has never generated have no name --
 ## there is nothing there to call anything.
 func name_of(cell: Vector2i) -> String:
+	if is_wall(cell):
+		return WALL_NAME
+	if is_wasteland(cell):
+		return WASTE_NAME
 	if _names.has(cell):
 		return _names[cell]
 	if not _envs.has(cell):
@@ -245,6 +303,9 @@ func road_at(cell: Vector2i) -> int:
 ## Which battle backdrop a cell fights on: what the world put there, read in the order it matters.
 ## A town is what you see whether or not a road runs to it, so it is asked about first.
 func area_variant(cell: Vector2i) -> String:
+	# Whatever stands under the ice, the wall is fought in the open.
+	if is_wall(cell):
+		return "plain"
 	match towns.tier_at(_spot(cell)):
 		TownWorld.Tier.SMALL:
 			return "village"
@@ -259,7 +320,7 @@ func area_variant(cell: Vector2i) -> String:
 ## per-cell roll, until the tile is charted. Derived from the seed rather than saved, the way `_tile_name`
 ## is, and a won tile is charted, so nothing about an opened chest needs writing down.
 func has_chest(cell: Vector2i) -> bool:
-	if not _envs.has(cell) or charted(cell) or towns.has_town(_spot(cell)) 			or HexGrid.distance(CENTER, cell) < CHEST_MIN_DISTANCE:
+	if not _envs.has(cell) or not is_land(cell) or charted(cell) or towns.has_town(_spot(cell)) 			or HexGrid.distance(CENTER, cell) < CHEST_MIN_DISTANCE:
 		return false
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([env_seed, "chest", cell])
@@ -290,7 +351,7 @@ func nearest_chest(unseen_only := false) -> Vector2i:
 func envs_within(cell: Vector2i, steps: int) -> PackedStringArray:
 	var found := PackedStringArray()
 	for near in _envs:
-		if HexGrid.distance(cell, near) <= steps and not (_envs[near] in found):
+		if is_land(near) and HexGrid.distance(cell, near) <= steps and not (_envs[near] in found):
 			found.append(_envs[near])
 	return found
 
@@ -312,7 +373,7 @@ func nearest_env(envs: PackedStringArray, min_level := 0) -> Vector2i:
 	var best_steps := -1
 	var best_charted := false
 	for cell in _states:
-		if not seen(cell) or not (env_at(cell) in envs) or towns.has_town(_spot(cell)) \
+		if not seen(cell) or not is_land(cell) or not (env_at(cell) in envs) or towns.has_town(_spot(cell)) \
 				or level_of(cell) < min_level:
 			continue
 		var steps := HexGrid.distance(player_cell, cell)
@@ -403,7 +464,8 @@ func can_farm(cell: Vector2i) -> bool:
 ## The tier of the settlement on `cell`, or -1 where there is no town. The one place outside this file
 ## a cell is crossed to a world spot for the towns' sake, so nobody else has to know about `origin`.
 func town_tier(cell: Vector2i) -> int:
-	return towns.tier_at(_spot(cell))
+	# A town under the ice is not there yet as far as anyone can tell.
+	return towns.tier_at(_spot(cell)) if is_land(cell) else -1
 
 
 ## Whether the player can walk into the town on `cell`: a charted settlement they are already standing
@@ -457,26 +519,19 @@ func move_to(cell: Vector2i) -> Array[Vector2i]:
 
 func _on_player_arrived(cell: Vector2i) -> void:
 	player_cell = cell
-	expand_if_needed()
 	arrived.emit(cell)
 
 
-## Grows the map on whichever sides the player has come within EXPAND_MARGIN of, generating the new land (and
-## the roads and towns on it) without touching what is already there. Returns whether the map grew.
-func expand_if_needed() -> bool:
-	var grown := rect
-	for axis in 2:
-		# How much this axis grows by, as a vector: (EXPAND_BY.x, 0) for x, (0, EXPAND_BY.y) for y.
-		var step := Vector2i.ZERO
-		step[axis] = EXPAND_BY[axis]
-		if player_cell[axis] - rect.position[axis] < EXPAND_MARGIN:
-			grown = Rect2i(grown.position - step, grown.size + step)
-		if rect.end[axis] - 1 - player_cell[axis] < EXPAND_MARGIN:
-			grown.size += step
-	if grown == rect:
+## Makes sure the map reaches WASTE_DEPTH past the wall, generating the new land (and the roads and towns
+## on it) without touching what is already there, and redrawing the blends and roads of drawn tiles the new
+## land touches. Returns whether the map grew.
+func _cover() -> bool:
+	var reach := land_radius + 1 + WASTE_DEPTH
+	var area := Rect2i(-reach, -reach, 2 * reach + 1, 2 * reach + 1)
+	if rect.encloses(area):
 		return false
 	var was := rect
-	rect = grown
+	rect = rect.merge(area) if rect.has_area() else area
 	_generate(rect)
 	for cell in _states:
 		# Tiles on the old edge had nothing beyond them to blend with; now they do.
@@ -485,9 +540,29 @@ func expand_if_needed() -> bool:
 				map.refresh_blends(cell)
 				break
 		# A road laid to one of the new towns can join a road already drawn, which then becomes a junction.
-		if _drawn_roads.get(cell, 0) != road_at(cell):
+		if _drawn_roads.has(cell) and _drawn_roads[cell] != road_at(cell):
 			_draw_road(cell)
 	return true
+
+
+## Brings the whole ice wall down: the land reaches WALL_STEP rings further, the next wall stands at its
+## edge, and the wasteland the player has already seen inside that thaws into the land it always was,
+## uncharted under the fog.
+func _break_wall() -> void:
+	var old_wall := land_radius + 1
+	land_radius += WALL_STEP
+	_cover()
+	for cell in _states:
+		if HexGrid.distance(CENTER, cell) == old_wall:
+			_ice.remove_cell(cell)
+		elif _ice.kind_at(cell) == IceOverlay.Kind.WASTE and not is_wasteland(cell):
+			_ice.remove_cell(cell)
+			map.set_ground(cell, _tiles[cell])
+			_draw_road(cell)
+			map.fog.add_cell(cell)
+			if is_wall(cell):
+				_ice.set_cell(cell, IceOverlay.Kind.WALL)
+			_draw_chest(cell)
 
 
 ## Fills in everything the map needs for `area`: the environments of the cells it doesn't have yet, the tile
@@ -538,6 +613,8 @@ func _tile_name(cell: Vector2i) -> String:
 func chart(cell: Vector2i, sight := 1) -> int:
 	if not can_chart(cell):
 		return -1
+	if is_wall(cell):
+		_break_wall()
 	_show(cell, State.CHARTED)
 	var shown := _reveal_around(cell, maxi(sight, 1))
 	# Looking at the tile next door is the first half of going there, so the walk follows by itself.
@@ -555,9 +632,8 @@ func scour(center: Vector2i) -> int:
 ## Takes the fog off every tile within `radius` steps of `center` that the map has generated and the
 ## player has not seen yet, and says how many that was. Tiles already seen are left alone -- `_show`
 ## would put a charted one back under the veil -- and land the map has not generated is not there to
-## show. Nothing is left permanently dark by that last rule: `expand_if_needed` keeps every tile the
-## player has stood on at least EXPAND_MARGIN cells inside `rect`, and a chart is one step off such a
-## tile, so a few steps of sight cannot reach past the generated window.
+## show. Nothing is left permanently dark by that last rule: the map is generated WASTE_DEPTH rings past
+## the wall, and a chart is never further out than the wall, so a few steps of sight cannot reach past it.
 func _reveal_around(center: Vector2i, radius: int) -> int:
 	var shown := 0
 	for cell in FortuneTeller.scour_cells(center, radius):
@@ -567,19 +643,18 @@ func _reveal_around(center: Vector2i, radius: int) -> int:
 	return shown
 
 
-## Charts the whole window at once, for tests and screenshots.
+## Charts the whole land at once, for tests and screenshots, and shows the wall and the wasteland past it.
 func reveal_all() -> void:
 	for cell in _tiles:
-		_show(cell, State.CHARTED)
+		_show(cell, State.CHARTED if is_land(cell) else State.UNCHARTED)
 
 
 ## Map cells exactly START_TOWN_DISTANCE steps from the center cell (0, 0), where the guaranteed small town may go.
 static func start_town_cells() -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
-	for y in range(START_RECT.position.y, START_RECT.end.y):
-		for x in range(START_RECT.position.x, START_RECT.end.x):
-			if HexGrid.distance(CENTER, Vector2i(x, y)) == START_TOWN_DISTANCE:
-				cells.append(Vector2i(x, y))
+	for cell in FortuneTeller.scour_cells(CENTER, START_TOWN_DISTANCE):
+		if HexGrid.distance(CENTER, cell) == START_TOWN_DISTANCE:
+			cells.append(cell)
 	return cells
 
 
@@ -590,9 +665,16 @@ func _show(cell: Vector2i, to: State) -> void:
 	# Named the moment it is first drawn, uncharted or not: seeing a place is meeting it, and a
 	# tile the player has been looking at for an hour should not be nameless when they walk in.
 	name_of(cell)
+	if is_wasteland(cell):
+		# Snow and nothing under it: the land out there is not the player's to see until the wall falls.
+		_states[cell] = to
+		_ice.set_cell(cell, IceOverlay.Kind.WASTE)
+		return
 	if not seen(cell):
 		map.set_ground(cell, _tiles[cell])
 		_draw_road(cell)
+		if is_wall(cell):
+			_ice.set_cell(cell, IceOverlay.Kind.WALL)
 	_states[cell] = to
 	if to == State.UNCHARTED:
 		map.fog.add_cell(cell)

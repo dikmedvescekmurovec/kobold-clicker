@@ -6,6 +6,8 @@ const ENV_SEEDS := 200
 ## Never MapSave.SAVE_PATH: these tests write and delete, and that is the player's own map.
 const TEST_MAP_PATH := "user://test_generation_map.json"
 const SCRATCH_INVENTORY := "user://test_generation_inventory.json"
+## A window for the generator tests of their own, 20x11 around cell (0, 0): 220 cells.
+const GEN_RECT := Rect2i(-10, -5, 20, 11)
 
 
 func _run() -> void:
@@ -72,7 +74,7 @@ func _test_hex_grid() -> bool:
 
 
 func _test_environments() -> bool:
-	var cells := MapBuilder.START_RECT
+	var cells := GEN_RECT
 	var forbidden := 0
 	var small_regions := 0
 	var pairs := 0
@@ -120,9 +122,9 @@ func _test_environment_growth() -> bool:
 	var elapsed := 0
 	var seeds := 0
 	for env_seed in range(1, 21):
-		var envs := EnvironmentGenerator.generate(MapBuilder.START_RECT, env_seed)
+		var envs := EnvironmentGenerator.generate(GEN_RECT, env_seed)
 		var before := envs.duplicate()
-		var rect := MapBuilder.START_RECT
+		var rect := GEN_RECT
 		# Two steps east, then one north: the sides grow one after another, as the player wanders.
 		for growth: Rect2i in [rect.grow_individual(0, 0, 10, 0), rect.grow_individual(0, 0, 20, 0),
 				rect.grow_individual(0, 5, 20, 0)]:
@@ -146,7 +148,7 @@ func _test_environment_growth() -> bool:
 						illegal += 1
 		# The same growth, from the same map, has to come out the same.
 		var again := before.duplicate()
-		EnvironmentGenerator.extend(again, MapBuilder.START_RECT.grow_individual(0, 0, 10, 0), hash([env_seed, MapBuilder.START_RECT.grow_individual(0, 0, 10, 0)]))
+		EnvironmentGenerator.extend(again, GEN_RECT.grow_individual(0, 0, 10, 0), hash([env_seed, GEN_RECT.grow_individual(0, 0, 10, 0)]))
 		var repeats := true
 		for cell: Vector2i in again:
 			if envs[cell] != again[cell]:
@@ -154,7 +156,7 @@ func _test_environment_growth() -> bool:
 		_check(repeats, "seed %d grows the same way twice" % env_seed)
 
 	print("Environment growth over %d maps: 220 -> %d cells, %d ms total" % [
-			seeds, (MapBuilder.START_RECT.grow_individual(0, 5, 20, 0)).get_area(), elapsed])
+			seeds, (GEN_RECT.grow_individual(0, 5, 20, 0)).get_area(), elapsed])
 	_check(kept == 220 * seeds, "growing the map never changes the land already there (%d of %d kept)" % [kept, 220 * seeds])
 	_check(missing == 0, "every cell of the grown map has an environment (%d missing)" % missing)
 	_check(illegal == 0, "every neighbor pair is one the sprites allow (%d bad)" % illegal)
@@ -274,9 +276,9 @@ func _test_map_builder() -> bool:
 	_check(_test_blends_stay(map, view) == true, "blend stability tests ran to the end")
 	_check(_test_drawn_window(map, view, world, origin, env_seed, start_town, build_ms) == true,
 			"drawn window tests ran to the end")
-	_check(_test_start_town(map, world, origin, start_town) == true, "first town tests ran to the end")
-	_check(_test_growth(map, view) == true, "map growth tests ran to the end")
+	_check(_test_start_town(map, world, origin, start_town, view.rect) == true, "first town tests ran to the end")
 	_check(_test_area_variants(view, world) == true, "backdrop variant tests ran to the end")
+	_check(_test_wall(map, view) == true, "ice wall tests ran to the end")
 	_check(view.nearest_chest() == HexMap.NO_CELL, "a map charted end to end has no chest left")
 
 	map.queue_free()
@@ -376,7 +378,9 @@ func _test_area_variants(view: MapBuilder, world: TownWorld) -> bool:
 			var variant := view.area_variant(cell)
 			seen[variant] = seen.get(variant, 0) + 1
 			var tier := world.tier_at(view.origin + cell)
-			if tier in TIER_VARIANT:
+			if view.is_wall(cell):
+				_check(variant == "plain", "%s is ice, fought in the open" % cell)
+			elif tier in TIER_VARIANT:
 				_check(variant == TIER_VARIANT[tier], "%s holds a %s" % [cell, TIER_VARIANT[tier]])
 			elif view.road_at(cell) != 0:
 				_check(variant == "road", "%s carries a road" % cell)
@@ -587,7 +591,7 @@ func _test_blends_stay(map: HexMap, view: MapBuilder) -> bool:
 			blended_when_found += 1
 
 	view.reveal_all()
-	_check(map.fog.cells().is_empty(), "revealing the map takes the fog off every tile")
+	_check(map.fog.cells().all(view.is_wall), "revealing the map takes the fog off every tile but the wall's")
 	for cell: Vector2i in blends_when_found:
 		_check(map.blends_at(cell) == blends_when_found[cell],
 				"%s keeps its blends once its neighbors are charted (%s, was %s)" % [
@@ -603,9 +607,13 @@ func _test_drawn_window(map: HexMap, view: MapBuilder, world: TownWorld, origin:
 	var tileset := map.tileset
 	var start := 0
 	# The same land and roads, worked out here from scratch, in the order the builder lays them.
-	var envs := EnvironmentGenerator.generate(MapBuilder.START_RECT, hash([env_seed, MapBuilder.START_RECT]))
-	var roads := _expected_roads(tileset, world, origin, start_town)
-	_check(view.rect == MapBuilder.START_RECT, "the map is still the one it started with")
+	var envs := EnvironmentGenerator.generate(view.rect, hash([env_seed, view.rect]))
+	var roads := _expected_roads(tileset, world, origin, start_town, view.rect)
+	var reach := MapBuilder.START_LAND_RADIUS + 1 + MapBuilder.WASTE_DEPTH
+	_check(view.rect == Rect2i(-reach, -reach, 2 * reach + 1, 2 * reach + 1),
+			"the map reaches the wasteland's depth past the wall (%s)" % view.rect)
+	var drawn := 0
+	var thawed := 0
 
 	var towns_drawn := 0
 	var wrong_ground := 0
@@ -616,6 +624,12 @@ func _test_drawn_window(map: HexMap, view: MapBuilder, world: TownWorld, origin:
 	start = Time.get_ticks_msec()
 	for cell in envs:
 		var info := map.get_tile_info(cell)
+		# Past the wall is snow and nothing under it.
+		if view.is_wasteland(cell):
+			if info.get("group", "") != "":
+				thawed += 1
+			continue
+		drawn += 1
 		var is_town := world.tier_at(origin + cell) != -1
 		if is_town:
 			towns_drawn += 1
@@ -665,7 +679,8 @@ func _test_drawn_window(map: HexMap, view: MapBuilder, world: TownWorld, origin:
 	var info_ms := Time.get_ticks_msec() - start
 
 	print("Map build %d ms (%d blended cells), tile info with weights for all %d cells %d ms" % [build_ms, blended_cells, envs.size(), info_ms])
-	_check(map.ground_layer.get_used_cells().size() == envs.size(), "map fills its window")
+	_check(map.ground_layer.get_used_cells().size() == drawn, "the land and the wall are drawn, and nothing past it")
+	_check(thawed == 0, "no real tile shows past the wall (%d)" % thawed)
 	_check(wrong_ground == 0, "every cell shows its environment, or its environment's town (%d wrong)" % wrong_ground)
 	_check(towns_drawn > 0, "the window's towns are drawn")
 	_check(blended_cells > 0, "the map has blended cells")
@@ -676,8 +691,8 @@ func _test_drawn_window(map: HexMap, view: MapBuilder, world: TownWorld, origin:
 	return true
 
 
-func _test_start_town(map: HexMap, world: TownWorld, origin: Vector2i, start_town: Vector2i) -> bool:
-	var roads := _expected_roads(map.tileset, world, origin, start_town)
+func _test_start_town(map: HexMap, world: TownWorld, origin: Vector2i, start_town: Vector2i, rect: Rect2i) -> bool:
+	var roads := _expected_roads(map.tileset, world, origin, start_town, rect)
 	# The first town: exactly START_TOWN_DISTANCE out, nothing nearer, and a road to the center cell.
 	_check(HexGrid.distance(origin, start_town) == MapBuilder.START_TOWN_DISTANCE
 			and world.tier_at(start_town) == TownWorld.Tier.SMALL,
@@ -703,62 +718,73 @@ func _test_start_town(map: HexMap, world: TownWorld, origin: Vector2i, start_tow
 	return true
 
 
-## The map grows as the player nears its edge, and none of the land behind them changes.
-func _test_growth(map: HexMap, view: MapBuilder) -> bool:
+## The ice wall: ring 11 round a land of radius 10, snow past it, and beating one wall tile brings the
+## whole ring down and pushes the wall ten rings out. Run on a map revealed end to end.
+func _test_wall(map: HexMap, view: MapBuilder) -> bool:
+	var wall := Vector2i(MapBuilder.START_LAND_RADIUS + 1, 0)
+	var waste := Vector2i(MapBuilder.START_LAND_RADIUS + 3, 0)
+	_check(view.land_radius == MapBuilder.START_LAND_RADIUS and view.is_wall(wall)
+			and not view.is_wall(Vector2i(MapBuilder.START_LAND_RADIUS, 0)) and not view.is_wall(waste),
+			"the wall is ring %d and nothing else" % (MapBuilder.START_LAND_RADIUS + 1))
+	_check(view.name_of(wall) == MapBuilder.WALL_NAME and view.name_of(waste) == MapBuilder.WASTE_NAME,
+			"the ice is called what it is")
+	_check(view.seen(waste) and map.get_tile_info(waste).get("group", "") == "",
+			"the wasteland is seen, as snow with no land drawn under it")
+	_check(not view.can_chart(waste) and not view.can_farm(waste) and view.route_to(waste).is_empty(),
+			"and nobody goes there")
+	_check(not view.has_chest(waste) and view.town_tier(waste) == -1, "nothing is found out there")
+	_check(view.envs_within(MapBuilder.CENTER, 100).size() == view.envs_within(MapBuilder.CENTER,
+			MapBuilder.START_LAND_RADIUS).size(), "no bounty is posted for land past the wall")
+
 	var before: Dictionary[Vector2i, Array] = {}
 	for cell: Vector2i in map.ground_layer.get_used_cells():
-		var info := map.get_tile_info(cell)
-		before[cell] = [view.env_at(cell), info["name"], info["road"]]
+		if view.is_land(cell):
+			var info := map.get_tile_info(cell)
+			before[cell] = [view.env_at(cell), info["name"], info["road"]]
 	var was := view.rect
-	var toward_edge := Vector2i(was.end.x - MapBuilder.EXPAND_MARGIN, 0)
-	_check(view.charted(toward_edge) and not view.move_to(toward_edge).is_empty(),
-			"the player sets off for the eastern edge")
-	var grow_start := Time.get_ticks_msec()
+	_check(view.can_chart(wall), "a wall tile beside the land can be charted, which is fighting it")
+	var start := Time.get_ticks_msec()
+	_check(view.chart(wall) >= 0, "beating it charts it")
+	var fall_ms := Time.get_ticks_msec() - start
 	map.player.finish_walk()
-	var grow_ms := Time.get_ticks_msec() - grow_start
-	_check(view.rect.end.x == was.end.x + MapBuilder.EXPAND_BY.x, "the map has grown east")
-	_check(view.rect.position == was.position and view.rect.end.y == was.end.y, "and only east")
+	_check(view.land_radius == MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP, "the land reaches ten rings further")
+	_check(view.charted(wall) and view.player_cell == wall and not view.is_wall(wall),
+			"the tile is land now, and the player stands on it")
+	_check(view.is_wall(Vector2i(view.land_radius + 1, 0)), "the next wall stands at ring %d" % (view.land_radius + 1))
+	var reach := view.land_radius + 1 + MapBuilder.WASTE_DEPTH
+	_check(view.rect.encloses(Rect2i(-reach, -reach, 2 * reach + 1, 2 * reach + 1)) and view.rect.encloses(was),
+			"the map has grown past the new wall")
+	_check(view.name_of(wall) != MapBuilder.WALL_NAME, "the old wall has a name of its own")
+	_check(map.get_tile_info(waste).get("group", "") != "" and view.state(waste) == MapBuilder.State.UNCHARTED
+			and map.fog.has_cell(waste), "the wasteland already seen thaws into land under the fog")
 
 	var changed := 0
 	for cell: Vector2i in before:
 		var info := map.get_tile_info(cell)
 		if [view.env_at(cell), info["name"], info["road"]] != before[cell]:
 			changed += 1
-	_check(changed == 0, "the land the player has seen is untouched by the growth (%d changed)" % changed)
+	_check(changed == 0, "the land inside the old wall is untouched (%d changed)" % changed)
 
-	var ungenerated := 0
 	var illegal_border := 0
-	for y in range(view.rect.position.y, view.rect.end.y):
-		for x in range(view.rect.position.x, view.rect.end.x):
-			var cell := Vector2i(x, y)
-			var env := view.env_at(cell)
-			if env == "":
-				ungenerated += 1
-				continue
-			for next in HexGrid.neighbors(cell):
-				var other := view.env_at(next)
-				if other != "" and not EnvironmentGenerator.can_border(env, other):
-					illegal_border += 1
-	_check(ungenerated == 0, "every cell of the grown map has an environment (%d missing)" % ungenerated)
+	for cell: Vector2i in view.to_save().envs:
+		for next in HexGrid.neighbors(cell):
+			var other := view.env_at(next)
+			if other != "" and not EnvironmentGenerator.can_border(view.env_at(cell), other):
+				illegal_border += 1
 	_check(illegal_border == 0, "the new land borders the old legally (%d bad borders)" % illegal_border)
-
-	# The new land is drawn like any other once it is charted, roads and all.
-	var beyond_old := Vector2i(was.end.x, 0)
-	_check(view.state(beyond_old) == MapBuilder.State.HIDDEN, "the new land starts in the fog")
 	view.reveal_all()
-	_check(view.charted(beyond_old) and map.get_tile_info(beyond_old).get("group", "") != "",
-			"and is drawn once revealed")
-	print("Map grown from %s to %s (%d cells) in %d ms" % [was.size, view.rect.size, view.rect.get_area(), grow_ms])
+	print("The wall fell in %d ms; the map is now %s" % [fall_ms, view.rect])
 	return true
 
 
 ## The roads of the starting window, routed here rather than read off the builder, in the order it lays them:
 ## the first town's road to the center cell, then the links the window brings into reach.
-func _expected_roads(tileset: HexTileset, world: TownWorld, origin: Vector2i, start_town: Vector2i) -> Dictionary[Vector2i, int]:
+func _expected_roads(tileset: HexTileset, world: TownWorld, origin: Vector2i, start_town: Vector2i,
+		rect: Rect2i) -> Dictionary[Vector2i, int]:
 	var roads: Dictionary[Vector2i, int] = {}
 	var routed: Dictionary[String, bool] = {}
 	RoadNetwork.route_to_cell(world, start_town, origin, tileset.legal_road_masks(), roads)
-	RoadNetwork.extend(world, Rect2i(origin + MapBuilder.START_RECT.position, MapBuilder.START_RECT.size),
+	RoadNetwork.extend(world, Rect2i(origin + rect.position, rect.size),
 			tileset.legal_road_masks(), roads, routed)
 	return roads
 
@@ -778,7 +804,7 @@ func _test_roads() -> bool:
 	var elapsed := 0
 	var changed := 0
 	for origin: Vector2i in [Vector2i(40, 40), Vector2i(90, 120), Vector2i(160, 60)]:
-		var rect := Rect2i(origin + MapBuilder.START_RECT.position, MapBuilder.START_RECT.size)
+		var rect := Rect2i(origin + GEN_RECT.position, GEN_RECT.size)
 		var stats := {}
 		var roads: Dictionary[Vector2i, int] = {}
 		var routed: Dictionary[String, bool] = {}
@@ -924,7 +950,6 @@ func _test_map_saving() -> bool:
 			view.chart(ahead)
 			map.player.finish_walk()
 	_check(view.player_cell != MapBuilder.CENTER, "the player has walked off the middle of the map")
-	_check(view.rect != MapBuilder.START_RECT, "and far enough that the window has already grown once")
 
 	var before := _map_fingerprint(map, view)
 	_check(view.to_save().save(TEST_MAP_PATH), "the map writes itself to disk")
@@ -941,6 +966,13 @@ func _test_map_saving() -> bool:
 	root.add_child(other)
 	var restored := MapBuilder.restore(other, TownWorld.from_dict(save.towns), save)
 	_check(restored.rect == view.rect, "the restored map covers the same window")
+	_check(restored.land_radius == view.land_radius, "with the wall where it was")
+	# A save from before the wall: the wall goes past the farthest tile the player has seen.
+	_check(MapBuilder.migrated_radius({}) == MapBuilder.START_LAND_RADIUS
+			and MapBuilder.migrated_radius({Vector2i(10, 0): 2}) == MapBuilder.START_LAND_RADIUS
+			and MapBuilder.migrated_radius({Vector2i(14, 0): 1, Vector2i(30, 0): 0}) == 20
+			and MapBuilder.migrated_radius({Vector2i(21, 0): 1}) == 30,
+			"an old save's wall goes on the first ring past what was seen")
 	_check(restored.player_cell == view.player_cell, "with the player where they were left")
 	_check(restored.start_town == view.start_town, "and the same first town")
 	_check(_map_fingerprint(other, restored) == before, "and every cell of it comes back identical")
@@ -1034,15 +1066,15 @@ func _test_saved_settlements(restored: MapBuilder, view: MapBuilder) -> bool:
 	return true
 
 
-## A restored map is a working map: it still grows, and the growth still leaves what the player has
-## already seen alone.
+## A restored map is a working map: its wall still falls, and the growth still leaves what the player
+## has already seen alone.
 func _test_restored_growth(map: HexMap, view: MapBuilder, before: Dictionary) -> bool:
 	var was := view.rect
 	view.reveal_all()
-	var toward_edge := Vector2i(was.end.x - MapBuilder.EXPAND_MARGIN, 0)
-	_check(not view.move_to(toward_edge).is_empty(), "the restored map sends the player east")
+	var wall := Vector2i(view.land_radius + 1, 0)
+	_check(view.chart(wall) >= 0, "the restored map's wall can be beaten")
 	map.player.finish_walk()
-	_check(view.rect.end.x > was.end.x, "and grows when they get near the edge")
+	_check(view.rect.end.x > was.end.x, "and the map grows when it falls")
 
 	var changed := 0
 	for cell: Vector2i in before:

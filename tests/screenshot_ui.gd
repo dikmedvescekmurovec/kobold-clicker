@@ -558,6 +558,17 @@ func _shoot_town() -> void:
 		root.get_texture().get_image().save_png("user://%s.png" % shot)
 		print("Saved ", ProjectSettings.globalize_path("user://%s.png" % shot))
 		main.settings_page._ask(true)
+	# The dev generator in the settings' place, a golden helm some orbs in.
+	main.settings_page._open_generator()
+	var forge: ItemGenerator = main.settings_page._rows.get_child(-1)
+	forge.pick("helm", 3, 12)
+	for i in 3:
+		forge.spend("Orb of Alchemy")
+	for i in 3:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_item_generator.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_item_generator.png"))
 	main.queue_free()
 	await process_frame
 	for scratch in [SCRATCH_SAVE, SCRATCH_MAP]:

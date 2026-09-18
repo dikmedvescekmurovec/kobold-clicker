@@ -149,6 +149,17 @@ static func accept(state: TownState, bounty: Dictionary) -> bool:
 	return true
 
 
+## Gives the work up: the posting goes back on its board unaccepted and its kills are lost, so
+## another can be taken on. A fortuneteller's word on where it lives is kept -- it was paid for.
+## False when it was not out.
+static func abandon(bounty: Dictionary) -> bool:
+	if not is_active(bounty):
+		return false
+	bounty.erase(ACCEPTED)
+	bounty[HAVE] = 0
+	return true
+
+
 ## Whether the card may say where the monster lives.
 static func located(bounty: Dictionary) -> bool:
 	return bool(bounty.get(LOCATED, false))

@@ -17,6 +17,7 @@ func _run() -> void:
 	_check(_test_lineup() == true, "lineup tests ran to the end")
 	_check(_test_health() == true, "health tests ran to the end")
 	_check(_test_a_won_fight() == true, "won fight tests ran to the end")
+	_check(_test_the_ice_wall() == true, "ice wall tests ran to the end")
 	_check(_test_a_lost_fight() == true, "lost fight tests ran to the end")
 	_check(_test_hits_only_land_on_a_waiting_enemy() == true, "hit timing tests ran to the end")
 	_check(_test_what_a_hit_is_worth() == true, "damage tests ran to the end")
@@ -1147,6 +1148,30 @@ func _total_health(fight: Encounter) -> float:
 func _click_rate(fight: Encounter, seconds: float, per_hit: float, swings: float) -> float:
 	var left := maxf(0.0, _total_health(fight) - seconds * swings * per_hit)
 	return left / per_hit / seconds
+
+
+## The ice wall round the first land: one body on the ice, a wall nobody walks through bare-handed,
+## and one a player who has farmed the land inside it for rares can bring down. `WALL_HP` is the dial.
+func _test_the_ice_wall() -> bool:
+	var cell := Vector2i(MapBuilder.START_LAND_RADIUS + 1, 0)
+	var fight := Encounter.for_wall(cell)
+	_check(fight.lineup == PackedStringArray([Encounter.WALL_NAME]) and fight.env == "ice" and fight.enemies == 1,
+			"the wall stands alone, on the ice")
+	_check(EnemyRoster.tier_of(Encounter.WALL_NAME) == EnemyRoster.Tier.BOSS, "and is a boss")
+	for env in ["grass", "dirt", "desert", "forest", "ice", "mountains"]:
+		_check(not (Encounter.WALL_NAME in EnemyRoster.in_environment(env)), "the wall lives nowhere, not on %s" % env)
+	var spare := fight.seconds - (Encounter.WALK_IN + Encounter.DEATH)
+	var bare := _click_rate(fight, spare, Encounter.BARE_DAMAGE, 0.0)
+	var level_gear := _typical_farmed(Vector2i(MapBuilder.START_LAND_RADIUS, 0), ItemRarity.Rarity.RARE)
+	var armed := Encounter.for_wall(cell)
+	armed.arm(level_gear.totals())
+	var per_hit := armed.damage * (1.0 + armed.crit_chance / 100.0 * armed.crit_damage / 100.0)
+	var farmed := _click_rate(armed, spare, per_hit, armed.attack_speed)
+	print("The ice wall: %s health, %.1f clicks/s bare, %.1f in farmed rares"
+			% [BigNumber.format(fight.hp), bare, farmed])
+	_check(bare > 50.0, "nobody walks through the wall bare-handed (%.1f/s)" % bare)
+	_check(farmed > 3.0 and farmed < 8.0, "farmed rares from inside it bring it down, harder than any tile (%.1f/s)" % farmed)
+	return true
 
 
 ## A farm run: the same enemies, coming forever, with no clock and no count. The only two ways out

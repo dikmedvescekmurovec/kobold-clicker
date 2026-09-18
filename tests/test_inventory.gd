@@ -65,6 +65,7 @@ func _run() -> void:
 	_check(await _test_unique_stats() == true, "unique stat tests ran to the end")
 	_check(await _test_collection() == true, "collection log tests ran to the end")
 	_check(await _test_character_page() == true, "character page tests ran to the end")
+	_check(await _test_item_generator() == true, "item generator tests ran to the end")
 	_clear_save()
 	_report("inventory")
 
@@ -3039,6 +3040,33 @@ func _test_collection() -> bool:
 
 ## The character page: a press on the character panel's corner opens it, and it says what the player
 ## adds up to -- the attributes in their rings, every other stat that is something, none that is nothing.
+## The dev generator: the piece asked for, free orbs through OrbTable's own gate, and into the bag
+## as a piece the page no longer holds.
+func _test_item_generator() -> bool:
+	_clear_save()
+	var bag := Inventory.new()
+	var page := ItemGenerator.new(bag, TEST_PATH, func() -> void: pass)
+	page.theme = UITheme.theme()
+	root.add_child(page)
+	await process_frame
+	page.pick("helm", 3, 12)
+	_check(page.item.type == "Golden Helm" and page.item.level == 12, "the generator makes the tier and level it was asked for")
+	_check(page.item.rarity == ItemRarity.Rarity.COMMON and page.item.mods.is_empty(), "a fresh piece is a bare common")
+	_check(not page.spend("Orb of Alteration"), "an orb with nothing to do to the piece is refused")
+	_check(page.spend("Orb of Transmutation") and page.item.rarity == ItemRarity.Rarity.UNCOMMON,
+			"a free orb does what the bag's does")
+	var made := page.item
+	_check(page.add_to_bag() and bag.items == [made], "Add to bag puts the piece in the bag")
+	_check(page.item != made and page.item.type == made.type, "and the page takes up a fresh piece of the same type")
+	_check(Inventory.load_from(TEST_PATH).items.size() == 1, "and it is saved")
+	while not bag.is_full():
+		bag.add(Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, RandomNumberGenerator.new()))
+	_check(not page.add_to_bag() and bag.items.size() == Inventory.CAPACITY, "a full bag takes nothing and loses nothing")
+	page.queue_free()
+	await process_frame
+	return true
+
+
 func _test_character_page() -> bool:
 	_clear_save()
 	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()

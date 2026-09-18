@@ -7,6 +7,9 @@ extends Node2D
 @export var map_origin := Vector2i(128, 128)
 ## Whole-number pixel zoom, so sprite pixels stay square: 3 draws every sprite pixel as 3x3 on screen.
 @export var zoom := 3.0
+## How far the mouse wheel takes the map's zoom either way, in the same whole steps.
+const ZOOM_MIN := 1.0
+const ZOOM_MAX := 6.0
 ## The same for the UI panel. Pixellari only renders cleanly at its native 16 px, so the way to make
 ## the interface smaller is to draw its pixels smaller, not to shrink the font.
 @export var ui_scale := 2.0
@@ -390,9 +393,11 @@ func _build_pages(layer: CanvasLayer) -> void:
 	collection_page = CollectionPage.new(inventory, view, ui_scale)
 	skills_page = SkillsPage.new(inventory, inventory_path, ui_scale)
 	bag_page = BagPage.new(inventory, inventory_path, ui_scale)
-	bounty_page = BountyList.new(inventory, view, ui_scale)
+	bounty_page = BountyList.new(inventory, view, inventory_path, ui_scale)
 	bounty_page.show_cell.connect(_on_show_cell)
 	settings_page = SettingsPage.new(ui_scale)
+	settings_page.inventory = inventory
+	settings_page.inventory_path = inventory_path
 	settings_page.reset_pressed.connect(_on_reset_pressed)
 	settings_page.uniques_toggled.connect(_show_corner.bind(true))
 	# Dev only: an empty purse becomes 10, so the button always does something.
@@ -406,6 +411,8 @@ func _build_pages(layer: CanvasLayer) -> void:
 	town_page.tab_changed.connect(_on_town_tab_changed)
 	town_page.chest_bought.connect(func(_cell: Vector2i) -> void: _sync_chest())
 	town_page.scour_pressed.connect(_on_scour_pressed)
+	# A bounty given up on the journal frees the board standing open on the other edge.
+	bounty_page.abandoned.connect(town_page.redraw)
 	# What the counter has open goes straight to the bag: the comparison points at what wearing it
 	# would replace, and a purchase reaches the purse and the grid by the same redraw. Back the other
 	# way, the counter redraws around whatever the bag has open, so a piece sold to make room unlocks
@@ -416,6 +423,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 	town_page.craft_held = bag_page.craft_held
 	bag_page.held_changed.connect(town_page.orb_held)
 	bag_page.laid_out.connect(_place_corner)
+	settings_page.laid_out.connect(_place_corner)
 	for page: Control in [skills_page, bag_page, bounty_page, settings_page, collection_page,
 			character_page, town_page]:
 		page.hide()
@@ -543,7 +551,8 @@ func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
 	_panel.visible = _town_cell == HexMap.NO_CELL
 	_layout_ui()
 	var spot := map_origin + cell
-	var weights: Dictionary = info["environments"]
+	# The ice hides whatever land is under it, so it has no rows of its own.
+	var weights: Dictionary = info["environments"] if view.is_land(cell) else {}
 	var parts := PackedStringArray()
 	for env: String in weights:
 		parts.append("%s %.1f%%" % [env, weights[env] * 100])
@@ -564,6 +573,17 @@ func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
 ## Dragging moves the camera the other way, so the map follows the cursor.
 func _on_map_dragged(relative: Vector2) -> void:
 	camera.position = _clamp_to_map(camera.position - relative / camera.zoom.x)
+
+
+## The wheel: one whole step of zoom, about the point under the cursor so it stays put on screen.
+func _zoom_at(screen_point: Vector2, step: float) -> void:
+	var to := clampf(camera.zoom.x + step, ZOOM_MIN, ZOOM_MAX)
+	if to == camera.zoom.x:
+		return
+	var from_middle := screen_point - get_viewport().get_visible_rect().size / 2.0
+	var under := camera.position + from_middle / camera.zoom.x
+	camera.zoom = Vector2(to, to)
+	camera.position = _clamp_to_map(under - from_middle / to)
 
 
 ## Keeps the camera over the map, on the middle of the outermost tiles.
@@ -593,6 +613,10 @@ func _on_chart_pressed() -> void:
 	var variant := view.area_variant(cell)
 	print("Fighting for %s, %s (%s, %s %d)" % [view.name_of(cell), cell, env, variant,
 			CombatScene.layout_for(cell)])
+	if view.is_wall(cell):
+		print("The ice wall stands on %s" % cell)
+		_open_fight(Encounter.for_wall(cell), cell, false)
+		return
 	var chest := view.has_chest(cell)
 	if chest:
 		print("A treasure chest waits on %s" % cell)
@@ -1203,6 +1227,10 @@ func _input(event: InputEvent) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and _combat == null and map.visible 			and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		_zoom_at(event.position, 1.0 if event.button_index == MOUSE_BUTTON_WHEEL_UP else -1.0)
+		get_viewport().set_input_as_handled()
+		return
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	get_viewport().set_input_as_handled()

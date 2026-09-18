@@ -288,6 +288,19 @@ const ENEMIES := {
 		"bounds": Rect2i(26, 13, 99, 83),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
+	# The ice wall round the land (`MapBuilder.is_wall`), fought alone like the mimic and living nowhere.
+	# One still picture, so it stands for idle and walk and the rest are left out.
+	"The Ice Wall": {
+		"tier": Tier.BOSS,
+		"size": Size.HUGE,
+		"weight": 1,
+		"faces": Facing.LEFT,
+		"environments": [],
+		"dir": "The Wall",
+		"frame": Vector2i(96, 96),
+		"bounds": Rect2i(4, 3, 88, 90),
+		"sheets": {"idle": "pixellab-A-tall-wall-of-ice--Like-the-g-1789766464814.png", "walk": "pixellab-A-tall-wall-of-ice--Like-the-g-1789766464814.png", "attack": "", "hurt": "", "death": ""},
+	},
 	"Minotaur": {
 		"tier": Tier.BOSS,
 		"size": Size.LARGE,

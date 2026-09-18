@@ -21,8 +21,9 @@ extends RefCounted
 
 const SAVE_PATH := "user://map.json"
 ## 1 is the first shape there has been. 2 added the names of the tiles the player has seen; a
-## version 1 save simply has none, and its tiles are named again as they are asked about.
-const VERSION := 2
+## version 1 save simply has none, and its tiles are named again as they are asked about. 3 added
+## `land_radius`, the ice wall's place; an older save has none and MapBuilder puts the wall past it.
+const VERSION := 3
 
 ## MapBuilder.State by name, lowest value first. Written into every save as the legend its state
 ## rows index, so reordering the enum can never quietly reinterpret a file already on disk.
@@ -42,6 +43,8 @@ var world_seed: int
 var map_seed: int
 var origin: Vector2i
 var rect: Rect2i
+## How far the land reaches before the ice wall; 0 in a save written before there was one.
+var land_radius := 0
 var start_town: Vector2i
 var player_cell: Vector2i
 ## The whole town world, as TownWorld.to_dict wrote it.
@@ -99,6 +102,7 @@ func save(path := SAVE_PATH) -> bool:
 		"map_seed": map_seed,
 		"origin": [origin.x, origin.y],
 		"rect": [rect.position.x, rect.position.y, rect.size.x, rect.size.y],
+		"land_radius": land_radius,
 		"start_town": [start_town.x, start_town.y],
 		"player_cell": [player_cell.x, player_cell.y],
 		"towns": towns,
@@ -162,6 +166,7 @@ static func load_from(path := SAVE_PATH, problem: Array = [], expect_sheet := ""
 		problem.append("it has no window")
 		return null
 	save.rect = Rect2i(int(saved_rect[0]), int(saved_rect[1]), int(saved_rect[2]), int(saved_rect[3]))
+	save.land_radius = int(data.get("land_radius", 0))
 
 	var saved_towns: Variant = data.get("towns", {})
 	if typeof(saved_towns) != TYPE_DICTIONARY or TownWorld.from_dict(saved_towns) == null:

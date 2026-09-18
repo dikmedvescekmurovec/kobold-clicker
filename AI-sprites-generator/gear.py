@@ -320,48 +320,6 @@ def _buckler(tier):
     return c.icon(tier + " buckler")
 
 
-def _golden_helm():
-    """The top of the pack helmets' ladder, so it is the pack great helm -- flat crown, sides
-    swelling to the cheek, drawn down to a point under the chin, turned a little to the right so
-    the upright of its cross stands right of centre -- made in gold plate. Dark gold plates, a
-    bright riveted cross over a black eye slit, breaths punched in both cheeks; and on top of the
-    pack one a toothed crown with a stone in it and a full red plume falling behind."""
-    c = Canvas()
-    for spine, width, tone in (([(12.0, 7.0), (6.0, 4.6), (2.8, 9.0), (2.6, 16.0)], 4.6, 0.46),
-                               ([(13.0, 6.0), (7.4, 3.4), (4.0, 7.0), (4.2, 13.0)], 3.4, 0.62)):
-        plume = curve(spine, width)
-        c.paint(plume, "ruby", np.clip(volume(plume, tone - 0.14, 0.4, 1.2), 0.25, 0.62), seam=0.8)
-    for x, y in ((3.0, 10.0), (3.4, 13.4), (5.6, 5.6)):
-        c.shade(capsule((x, y), (x + 1.6, y + 1.2), 0.45), 0.7)
-    body = poly((8.8, 7.0), (24.2, 7.0), (26.8, 12.0), (27.8, 20.0), (25.2, 26.0), (20.8, 30.6), (14.0, 28.2),
-                (7.6, 24.2), (5.4, 18.0), (6.4, 11.4))
-    c.paint(body, "gold", np.clip(volume(body, 0.34, 0.4, 3.0) + facet(0.0, 0.016, (1.0, 0.0)), 0, 1))
-    upright = poly((17.0, 7.0), (21.8, 7.0), (22.6, 29.4), (20.8, 30.6), (18.2, 29.6))
-    across = poly((5.8, 13.4), (27.2, 12.6), (27.8, 17.4), (5.4, 18.4))
-    part(c, across, "gold", 0.72, 0.35, 0.7, seam=0.5)
-    part(c, upright, "gold", 0.8, 0.35, 0.7, seam=0.5)
-    for x0, x1 in ((8.2, 16.2), (22.8, 26.6)):
-        c.paint(poly((x0, 15.0), (x1, 14.7), (x1, 16.3), (x0, 16.6)), "wood", facet(0.0), seam=1.0)
-    for x in (9.4, 11.8, 14.2):
-        for y in (21.0, 23.2, 25.4):
-            if y < 25.0 or x > 10.0:
-                c.shade(ellipse(x, y + (x - 9.4) * 0.12, 0.62), 0.3)
-    for y in (21.0, 23.4):
-        c.shade(ellipse(25.0, y, 0.62), 0.3)
-    for x, y in ((7.0, 13.6), (12.0, 13.4), (24.8, 13.0), (7.0, 18.0), (12.0, 17.8), (25.4, 17.4), (19.4, 9.4),
-                 (19.8, 21.0), (20.2, 26.0)):
-        rivet(c, x, y, "gold", 0.6)
-    crown = [(7.8, 9.6), (8.0, 5.0), (10.0, 6.6), (11.6, 2.4), (13.6, 6.4), (16.4, 1.6), (19.0, 6.4), (21.2, 2.4),
-             (22.8, 6.6), (25.0, 5.0), (25.2, 9.6)]
-    part(c, poly(*crown), "gold", 0.74, 0.4, 0.7, seam=0.5)
-    c.shade(capsule((8.4, 9.0), (24.8, 9.0), 0.6), 0.6)
-    gem(c, 16.4, 7.0, 1.5, "sapphire")
-    for x in (11.6, 21.2):
-        gem(c, x, 7.4, 0.9, "ruby")
-    c.shade(capsule((24.6, 10.0), (26.6, 15.0), 0.7), 1.7)
-    return c.icon("Golden Helm")
-
-
 def _hood(tier):
     """A cowl seen from the front: a peak, a dark mouth with no face in it, a mantle over the
     shoulders. Plain hide with a raw hem; leather, seamed down the crown and stitched round the
@@ -975,7 +933,6 @@ ICONS = {
     "Gold Amulet": lambda: _amulet("gold"),
     "Sapphire Amulet": lambda: _amulet("sapphire"),
     "Emerald Amulet": lambda: _amulet("emerald"),
-    "Golden Helm": _golden_helm,
     "Blazing Torch": _blazing_torch,
     "Hide Hood": lambda: _hood("hide"),
     "Leather Hood": lambda: _hood("leather"),
