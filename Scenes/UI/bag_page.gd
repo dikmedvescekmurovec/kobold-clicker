@@ -294,6 +294,12 @@ func right_edge() -> float:
 	return last.position.x + last.size.x * _ui_scale
 
 
+## Where the sheet beside the bag begins, in window pixels, so what stands past it can stand level
+## with it; `fallback` while the sheet is away.
+func sheet_top(fallback: float) -> float:
+	return _worn_panel.position.y if _worn_panel.visible else fallback
+
+
 static func _scroll_box() -> ScrollContainer:
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED

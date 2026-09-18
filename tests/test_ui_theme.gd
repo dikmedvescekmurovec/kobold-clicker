@@ -15,6 +15,7 @@ func _run() -> void:
 	_check(_test_character_panel() == true, "character panel tests ran to the end")
 	_check(await _test_item_card() == true, "item card tests ran to the end")
 	_check(_test_cursors() == true, "cursor tests ran to the end")
+	_check(_test_tip_card() == true, "tip card tests ran to the end")
 	_report("UI theme")
 
 
@@ -248,10 +249,14 @@ func _test_item_card() -> bool:
 	_check(card.worn_for(sword) == null, "nothing to hold a piece against with no equipment")
 	card.equipment = Equipment.new()
 	_check(card.worn_for(sword) == null, "or with nothing on")
+	_check(card.bare_for(sword), "which Alt says in so many words, rather than doing nothing")
+	_check(card.bare_text(sword) == "Nothing is equipped in the weapon slot", "naming the socket it means")
 	var other := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng)
 	card.equipment.worn[Equipment.Socket.WEAPON] = other
 	_check(card.worn_for(sword) == other, "a worn sword is what a hovered sword is held against")
 	_check(card.worn_for(other) == null, "and the worn piece is not held against itself")
+	_check(not card.bare_for(sword) and not card.bare_for(other),
+			"and a taken socket, or the worn piece itself, is not called bare")
 	for node: Node in [box, open, card]:
 		node.queue_free()
 	return true
@@ -442,4 +447,26 @@ func _test_cursors() -> bool:
 	_check(Cursors._twitched == Input.get_current_cursor_shape(), "a press twitches the cursor under it")
 	Cursors.put_away()
 	_check(Cursors._twitched == -1, "and putting the cursors away forgets it")
+	return true
+
+
+## Whose words the tip card writes: Godot's own rule, since it stands in for Godot's tooltip.
+func _test_tip_card() -> bool:
+	var row := HBoxContainer.new()
+	row.tooltip_text = "the row"
+	var plain := Control.new()
+	plain.mouse_filter = Control.MOUSE_FILTER_PASS
+	var named := Button.new()
+	named.tooltip_text = "the button"
+	var silent := Button.new()
+	for child: Control in [plain, named, silent]:
+		row.add_child(child)
+	root.add_child(row)
+	_check(TipCard.text_of(named, Vector2.ZERO) == "the button", "a Control's own tooltip is what is written")
+	_check(TipCard.text_of(plain, Vector2.ZERO) == "the row", "one with none, that lets the mouse through, speaks for its parent")
+	_check(TipCard.text_of(silent, Vector2.ZERO) == "", "and one that stops the mouse says nothing")
+	_check(TipCard.text_of(null, Vector2.ZERO) == "", "as does bare map")
+	_check(float(ProjectSettings.get_setting("gui/timers/tooltip_delay_sec")) > 1000.0,
+			"Godot's own tooltip is out of reach, so nothing is said twice")
+	row.queue_free()
 	return true

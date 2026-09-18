@@ -21,6 +21,9 @@ static var sfx := true
 static var animations := Anim.DEFAULT
 ## Whether a modifier's line carries the band it rolled in: "+14(8-20)% increased Damage".
 static var item_details := false
+## Dev: the collection log draws every unique as found, and its trophy is there from the start. Read
+## through `show_all_uniques()`, which a release build answers no to whatever the file says.
+static var all_uniques := false
 ## Where the file is. Empty means nowhere: nothing is read and nothing written, which is what every
 ## test and screenshot script gets, because the main scene only sets it on the player's own save.
 static var path := ""
@@ -34,6 +37,7 @@ static func load_settings() -> void:
 	sfx = bool(file.get_value(SECTION, "sfx", sfx))
 	animations = clampi(int(file.get_value(SECTION, "animations", animations)), Anim.NONE, Anim.DEFAULT) as Anim
 	item_details = bool(file.get_value(SECTION, "item_details", item_details))
+	all_uniques = bool(file.get_value(SECTION, "all_uniques", all_uniques))
 
 
 static func save() -> void:
@@ -44,8 +48,13 @@ static func save() -> void:
 	file.set_value(SECTION, "sfx", sfx)
 	file.set_value(SECTION, "animations", int(animations))
 	file.set_value(SECTION, "item_details", item_details)
+	file.set_value(SECTION, "all_uniques", all_uniques)
 	if file.save(path) != OK:
 		push_warning("Settings: cannot write %s" % path)
+
+
+static func show_all_uniques() -> bool:
+	return all_uniques and OS.is_debug_build()
 
 
 ## Mutes or opens the two buses, making them first if this run has not yet. Made here rather than in

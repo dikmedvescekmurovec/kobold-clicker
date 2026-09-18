@@ -25,7 +25,7 @@ var _rows: VBoxContainer
 
 
 func _init() -> void:
-	theme_type_variation = "WoodPanel"
+	theme_type_variation = "TextPanel"
 	# It follows the cursor, so it must never be under it: a card that took the mouse would take the
 	# press meant for the square it is describing.
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -39,32 +39,32 @@ func _init() -> void:
 ## has open -- null when none is, which is the tray at rest and the case where there is nothing to
 ## refuse. `sell_for` is what a vendor beside the bag pays for one, and 0 everywhere else.
 ##
-## Bone for the name and cream for the sentence: the card stands on the pack's wood page, and the
-## darker half of the palette was picked to be read on the white one.
+## Ink for the name and slate for the sentence: the card stands on the item card's cream page, which
+## the darker half of the palette was picked to be read on.
 func fill(orb: String, held: int, against: Item, sell_for := 0.0) -> void:
 	for child: Node in _rows.get_children():
 		_rows.remove_child(child)
 		child.queue_free()
-	_rows.add_child(ItemDetails.line(orb, Palette.BONE, WIDTH))
-	_rows.add_child(ItemDetails.line(OrbTable.describe(orb), Palette.PANEL_CREAM, WIDTH, true))
+	_rows.add_child(ItemDetails.line(orb, Palette.INK, WIDTH))
+	_rows.add_child(ItemDetails.line(OrbTable.describe(orb), Palette.SLATE, WIDTH, true))
 	var status := ""
-	var tone := Palette.PANEL_CREAM
+	var tone := Palette.SLATE
 	if held <= 0:
 		# Said plainly rather than left to the faded icon. A ghost says "not here"; only a word says
 		# whether that is because it was spent or because it has never been found.
 		status = "Not found yet"
-		tone = Palette.STONE_LT
+		tone = Palette.SLOT_TAN_DK
 	elif against == null and sell_for > 0.0:
 		# What the square does now, rather than what is in it: with a vendor beside the bag and no piece
 		# open, pressing it is a sale and the price is the one thing the player needs before they press.
 		status = "Sell for %s" % BigNumber.format(sell_for)
-		tone = Palette.LEAF_LT
+		tone = Palette.LEAF
 	elif against == null:
 		# And how it is used from here, since nothing else on the page says a held orb can be picked up.
 		status = "You hold %d. Press it, then the piece to use it on" % held
 	elif OrbTable.can_apply(orb, against):
 		status = "Use on %s" % against.display_name()
-		tone = Palette.LEAF_LT
+		tone = Palette.LEAF
 	else:
 		status = OrbTable.why_not(orb, against)
 		tone = Palette.RUST

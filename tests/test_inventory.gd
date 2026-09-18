@@ -833,6 +833,8 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	main._on_bag_pressed()
 	_check(main.bag_page.visible and main._bag_button.visible, "the panel opens and the button stays")
 	_check(main._bag_button.position.x >= main.bag_page.right_edge(), "standing clear of the page, beside it")
+	_check(is_equal_approx(main._bag_button.position.y, main.bag_page.sheet_top(-1.0)),
+			"and level with the top of the sheet it stands beside")
 	_check(not main._character_button.visible, "while the page covers the character panel's corner")
 	main.inventory.tips.append("level_up")
 	main._show_corner(true)
@@ -2659,6 +2661,7 @@ func _test_collection() -> bool:
 	_check(main._collection_button.visible and main._flashes.has("opened_collection"), "it comes on, pulsing")
 	_check("first_unique" in main.inventory.tips and main._tip_panel != null, "with a word about what was found")
 	main._on_tip_closed()
+	main.inventory.fortunes[FortuneTeller.PEEKED] = ["rimeplate"]
 	main._on_collection_pressed()
 	await process_frame
 	_check(main.collection_page.visible and main._collection_button.visible, "the page opens, its button beside it")
@@ -2667,23 +2670,38 @@ func _test_collection() -> bool:
 	_check(squares.size() == UniqueTable.UNIQUES.size(), "one square a unique (%d)" % squares.size())
 	var shown := 0
 	for square: ItemSlot in squares:
-		var found: bool = square.item.unique == "metronome"
+		var id: String = square.item.unique
+		var found := id == "metronome"
+		var told := id == "rimeplate"
 		shown += int(found)
-		_check(square.hint.is_valid() != found, "%s: a hint only while missing" % square.item.unique)
+		_check(square.hint.is_valid() != found, "%s: a hint only while missing" % id)
+		_check((square.modulate == ItemSlot.SHADOW) == told, "%s: darkened only once a fortuneteller has shown it" % id)
 		var icon: TextureRect = square.get_child(0)
-		_check((icon.modulate == Color.BLACK) != found, "%s: blacked out only while missing" % square.item.unique)
+		_check((icon.modulate == Color.BLACK) == (not found and not told),
+				"%s: a black outline only while nobody has shown it" % id)
+		_check((square.get_node_or_null(ItemSlot.FRAME_NAME) == null) == (not found and not told),
+				"%s: and no ring to give its rarity away" % id)
 	_check(shown == 1, "the found one is drawn as itself")
 	# The hint says nothing of the piece or its ground until a fortuneteller has shown it, and both after.
 	for peeked: bool in [false, true]:
 		var rows := VBoxContainer.new()
-		CollectionPage.write_hint(rows, 150.0, "rimeplate", main.view, peeked,
-				CollectionPage.specimen("rimeplate"))
+		CollectionPage.write_hint(rows, 150.0, "rimeplate", main.view,
+				CollectionPage.specimen("rimeplate") if peeked else null)
 		var said := ""
 		for label: Node in rows.find_children("*", "Label", true, false):
 			said += (label as Label).text + " "
 		_check(said.contains("Rimeplate") == peeked and said.contains("Nearest:") == peeked,
 				"a hint says what and where only once it has been peeked (%s: %s)" % [peeked, said])
 		rows.free()
+	# The settings page's dev tick draws the lot as found. A static, so it is put back.
+	Settings.all_uniques = true
+	main.collection_page.open()
+	await process_frame
+	squares = main.collection_page.find_children("*", "ItemSlot", true, false)
+	_check(squares.size() == UniqueTable.UNIQUES.size() and squares.all(
+			func(square: ItemSlot) -> bool: return not square.hint.is_valid()),
+			"the dev setting shows every unique as found (%d)" % squares.size())
+	Settings.all_uniques = false
 	main._on_left_page_closed()
 	_check(not main.collection_page.visible and main._collection_button.visible, "the X puts it away")
 	main.queue_free()

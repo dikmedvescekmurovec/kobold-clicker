@@ -582,7 +582,7 @@ func _fill_fortune() -> void:
 			for line in FortuneTeller.road_lines(view.towns, _spot):
 				body.add_child(_sign(line))
 		FortuneTeller.RELIC:
-			CollectionPage.write_hint(body, BODY_WIDTH, _relic, view, true, CollectionPage.specimen(_relic))
+			CollectionPage.write_hint(body, BODY_WIDTH, _relic, view, CollectionPage.specimen(_relic))
 		FortuneTeller.APPRAISE:
 			body.add_child(ItemDetails.line(_bag_piece.display_name(), _bag_piece.text_color(), BODY_WIDTH))
 			body.add_child(UITheme.rule(BODY_WIDTH))

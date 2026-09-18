@@ -1,8 +1,8 @@
 class_name SkillsPage
 extends Control
 ## The skills page against the left edge: the free points over the two trees side by side, each with
-## a Reset that buys its points back for gold, and a card beside the page for the skill under the
-## cursor. Showing or hiding this node opens or closes the whole page.
+## a Reset that buys its points back for gold, and a card beside the skill under the cursor,
+## placed as `ItemCard` is. Showing or hiding this node opens or closes the whole page.
 
 ## The page's X was pressed.
 signal closed
@@ -119,11 +119,9 @@ func _hide_card() -> void:
 	_card.hide()
 
 
-## Beside the page, level with the skill, so the card never hides the tree it is read against.
+## Beside the skill, the way `ItemCard` stands beside a square.
 func _place_card(anchor: Rect2) -> void:
 	if not _card.visible:
 		return
 	var card := _card.get_combined_minimum_size() * _ui_scale
-	var page_right := _panel.position.x + _panel.size.x * _ui_scale
-	var spot := Vector2(page_right + BagPage.SLOT_GAP * _ui_scale, anchor.position.y)
-	_card.position = spot.clamp(Vector2.ZERO, (get_viewport_rect().size - card).max(Vector2.ZERO))
+	_card.position = ItemCard.beside(anchor, card, get_viewport_rect().size, ItemCard.GAP * _ui_scale)

@@ -245,6 +245,21 @@ func _shoot_skills() -> void:
 	var image := root.get_texture().get_image()
 	image.save_png("user://ui_skills.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_skills.png"))
+
+	# A plain tooltip on the tip card: the cursor left on a Reset for longer than `TipCard.DELAY`.
+	main.skills_page._hide_card()
+	var reset: Button = main.skills_page._respec_buttons["power"]
+	root.warp_mouse(reset.get_global_rect().get_center())
+	# The viewport only learns what is hovered from a motion event, and a warp sends none.
+	var motion := InputEventMouseMotion.new()
+	motion.position = reset.get_global_rect().get_center()
+	motion.global_position = motion.position
+	root.push_input(motion)
+	await create_timer(TipCard.DELAY + 0.3).timeout
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_tooltip.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_tooltip.png"))
+	root.warp_mouse(Vector2.ZERO)
 	main.queue_free()
 	await process_frame
 
@@ -473,18 +488,23 @@ func _shoot_town() -> void:
 	root.get_texture().get_image().save_png("user://ui_bounty_journal.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_bounty_journal.png"))
 
-	# The collection log behind the corner's trophy, with a few uniques found: the card beside a found
-	# one says what it is, and beside a blacked-out one only where it hides.
+	# The collection log behind the corner's trophy, with a few uniques found and two more shown by a
+	# fortuneteller: the card beside a found one says what it is, and beside a darkened one where it
+	# hides as well. The rest are outlines in black.
 	main._on_left_page_closed()
 	for id: String in ["metronome", "knucklebone_ring", "rimeplate"]:
 		main.inventory.note_unique(id)
+	var told := UniqueTable.ids().filter(func(id: String) -> bool:
+		return not main.inventory.uniques_found.has(id)).slice(0, 2)
+	main.inventory.fortunes[FortuneTeller.PEEKED] = told
 	main._on_collection_pressed()
 	for i in 2:
 		await process_frame
 	var squares: Array = main.collection_page.find_children("*", "ItemSlot", true, false)
 	# A home piece for the found one: its card is the longest a unique writes, three sentences.
-	for shot: Array in [["ui_collection", UniqueTable.ids().find("rimeplate")], ["ui_collection_missing", 1]]:
-		root.warp_mouse((squares[shot[1]] as ItemSlot).get_global_rect().get_center())
+	for shot: Array in [["ui_collection", "rimeplate"], ["ui_collection_missing", told[0]]]:
+		var at: Array = squares.filter(func(square: ItemSlot) -> bool: return square.item.unique == shot[1])
+		root.warp_mouse((at[0] as ItemSlot).get_global_rect().get_center())
 		for i in 3:
 			await process_frame
 		await RenderingServer.frame_post_draw

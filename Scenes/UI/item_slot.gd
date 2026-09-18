@@ -31,6 +31,8 @@ const SHINES := 2
 const GROUP := "item_slots"
 ## The child that is the rarity's frame (`ItemRarity.frame`); a common square has none.
 const FRAME_NAME := "Frame"
+## What a `shadow` square is multiplied by: dark enough to read as not held, light enough to tell what it is.
+const SHADOW := Color(0.35, 0.35, 0.35)
 
 ## What the square holds (null for an empty socket) and whether it is the one its page has open.
 var item: Item
@@ -90,19 +92,24 @@ static func make(item: Item, selected := false, translucent := false) -> ItemSlo
 	return slot
 
 
-## A piece the player has not found, for the collection log: its outline in black on a plain socket,
-## with no ring and no glint to give its rarity away, and `hint` for the card to say in its place.
-static func shadow(item: Item, says: Callable) -> ItemSlot:
+## A piece the player has not found, for the collection log, lying still, with `hint` for the card to
+## say in the piece's place. One a fortuneteller has shown them (`known`) is the whole square darkened
+## (`SHADOW`); any other is its outline in black on a plain socket, with no ring to give its rarity away.
+static func shadow(item: Item, says: Callable, known := false) -> ItemSlot:
 	var slot := make(item)
 	slot.hint = says
+	slot.tooltip_text = "Not found yet"
+	# No glint: that is what a piece in hand does.
+	for part: Node in slot.get_children():
+		(part as TextureRect).material = null
+	if known:
+		slot.modulate = SHADOW
+		return slot
 	var frame := slot.get_node_or_null(FRAME_NAME)
 	if frame != null:
 		slot.remove_child(frame)
 		frame.free()
-	slot.tooltip_text = "Not found yet"
-	var icon: TextureRect = slot.get_child(0)
-	icon.material = null
-	icon.modulate = Color.BLACK
+	(slot.get_child(0) as TextureRect).modulate = Color.BLACK
 	return slot
 
 

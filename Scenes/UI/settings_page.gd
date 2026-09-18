@@ -14,6 +14,8 @@ signal closed
 signal reset_pressed
 ## The debug build's Gold x10 was pressed.
 signal cash_pressed
+## The debug build's "Show all uniques" was ticked or unticked: the trophy may have come or gone.
+signal uniques_toggled
 
 const WIDTH := 140.0
 const ROW_GAP := 6
@@ -94,6 +96,12 @@ func _foot(asking: bool) -> VBoxContainer:
 	foot.size_flags_vertical = Control.SIZE_EXPAND | Control.SIZE_SHRINK_END
 	if not asking:
 		if OS.is_debug_build():
+			var uniques := _tick("Show all uniques", Settings.all_uniques, func(on: bool) -> void:
+				Settings.all_uniques = on
+				uniques_toggled.emit())
+			for part: Control in uniques.get_children():
+				part.tooltip_text = "Dev: the collection log draws every unique as found"
+			foot.add_child(uniques)
 			var cash := UITheme.button("Gold x10", "LightButton", "Dev: multiply the purse by ten")
 			cash.pressed.connect(cash_pressed.emit)
 			foot.add_child(cash)

@@ -17,6 +17,9 @@ extends PanelContainer
 const WIDTH := 150.0
 ## The air between the card and the square it describes, in panel pixels.
 const GAP := 4
+## What the second card says under Alt when nothing is worn where the hovered piece would go, the
+## socket named by `Equipment.LABELS`.
+const BARE := "Nothing is equipped in the %s slot"
 
 ## What the player has on, for the second card. The main scene sets it; without it there is no second card.
 var equipment: Equipment
@@ -92,6 +95,11 @@ func _process(_delta: float) -> void:
 			# push every row a line below its fellow on the first card.
 			(_worn_rows.get_child(1) as Label).text += " · worn"
 			_worn.show()
+		elif alt and bare_for(slot.item):
+			# Alt answered, so a bare socket does not read as a key that did nothing.
+			UITheme.clear(_worn_rows)
+			_worn_rows.add_child(ItemDetails.line(bare_text(slot.item), Palette.SLATE, WIDTH, true))
+			_worn.show()
 	show()
 	# Placed now and again deferred: the first pass measures labels that have not laid out yet.
 	_place(slot.get_global_rect())
@@ -158,8 +166,26 @@ func worn_for(item: Item) -> Item:
 	return null
 
 
-## To the right of the square, or to its left when the window's edge is in the way, and never off
-## the window.
+## Whether `item` would go on somewhere nothing is worn -- which `worn_for`'s null alone does not say,
+## since the worn piece itself gets one too.
+func bare_for(item: Item) -> bool:
+	return equipment != null and not (item in equipment.worn.values()) and worn_for(item) == null
+
+
+## `BARE` for the socket `item` would go in: "the ring slot", "the offhand slot".
+func bare_text(item: Item) -> String:
+	return BARE % str(Equipment.LABELS[equipment.sockets_for(item)[0]]).to_lower()
+
+
+## Where a card of `card` window pixels stands beside `anchor`: to its right, or to its left when the
+## window's edge is in the way, and never off the window. Every floating card is placed by this.
+static func beside(anchor: Rect2, card: Vector2, window: Vector2, gap: float) -> Vector2:
+	var x := anchor.end.x + gap
+	if x + card.x > window.x:
+		x = anchor.position.x - gap - card.x
+	return Vector2(x, anchor.position.y).clamp(Vector2.ZERO, (window - card).max(Vector2.ZERO))
+
+
 func _place(anchor: Rect2) -> void:
 	if not visible:
 		return
@@ -167,10 +193,7 @@ func _place(anchor: Rect2) -> void:
 	var card := get_combined_minimum_size() * _ui_scale
 	var window := get_viewport_rect().size
 	var gap := GAP * _ui_scale
-	var x := anchor.end.x + gap
-	if x + card.x > window.x:
-		x = anchor.position.x - gap - card.x
-	position = Vector2(x, anchor.position.y).clamp(Vector2.ZERO, (window - card).max(Vector2.ZERO))
+	position = beside(anchor, card, window, gap)
 	if not _worn.visible:
 		return
 	# On past the first card, away from the square; across the square from it where the window ends first.

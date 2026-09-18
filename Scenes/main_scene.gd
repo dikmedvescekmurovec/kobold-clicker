@@ -21,9 +21,6 @@ extends Node2D
 ## on the player's own save, so the tests and the screenshot scripts -- which all point
 ## `inventory_path` elsewhere -- still see what a town of each tier really has.
 @export var debug_all_services := true
-## Dev: the collection log draws every unique as found, and its trophy is there from the start
-## (`CollectionPage.show_all`). Held to debug builds and the player's own save the same way.
-@export var debug_all_uniques := true
 
 ## The marks the three corner buttons wear. A chest for what has been carried home, a star for what
 ## the player has become and a scroll for the work they have taken on: all three are places to go
@@ -147,8 +144,6 @@ func _ready() -> void:
 	# The inventory first, and by the same rule: it is what the player owns, and an empty bag saved over
 	# a file that could not be read is that file gone on the first kill.
 	TownServices.show_all = (debug_all_services and OS.is_debug_build()
-			and inventory_path == Inventory.SAVE_PATH)
-	CollectionPage.show_all = (debug_all_uniques and OS.is_debug_build()
 			and inventory_path == Inventory.SAVE_PATH)
 	# The player's own settings only beside the player's own save, for the same reason: a test or a
 	# screenshot sees the defaults and writes nothing.
@@ -398,6 +393,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 	bounty_page.show_cell.connect(_on_show_cell)
 	settings_page = SettingsPage.new(ui_scale)
 	settings_page.reset_pressed.connect(_on_reset_pressed)
+	settings_page.uniques_toggled.connect(_show_corner.bind(true))
 	# Dev only: an empty purse becomes 10, so the button always does something.
 	settings_page.cash_pressed.connect(func() -> void:
 		inventory.gold = maxf(inventory.gold, 1.0) * 10.0
@@ -431,6 +427,8 @@ func _build_pages(layer: CanvasLayer) -> void:
 	_character.get_parent().add_child(item_card)
 	# A held orb changes a piece without opening it, and the card is the only place the result is read.
 	bag_page.crafted.connect(item_card.unmute)
+	# Every `tooltip_text` there is, on the same cream card and the same layer.
+	_character.get_parent().add_child(TipCard.new(ui_scale))
 
 
 ## The weather for wherever the player now stands.
@@ -856,7 +854,11 @@ func _place_corner() -> void:
 		var panel: Control = page.get_child(0)
 		var edge: float = (bag_page.right_edge() if page == bag_page
 				else panel.position.x + panel.size.x * ui_scale)
-		at = Vector2(edge + CORNER_GAP * ui_scale, _character.position.y)
+		# The bag's sheet is centred down the window, and a column at the window's top beside it
+		# belonged to nothing: it starts where the sheet does.
+		var top: float = (bag_page.sheet_top(_character.position.y) if page == bag_page
+				else _character.position.y)
+		at = Vector2(edge + CORNER_GAP * ui_scale, top)
 	var step := (_bag_button.get_combined_minimum_size().y + CORNER_GAP) * ui_scale
 	for button: Button in [_bag_button, _skills_button, _bounty_button, _settings_button, _collection_button]:
 		if button.visible:
@@ -879,7 +881,7 @@ func _show_corner(shown: bool) -> void:
 	_settings_button.visible = shown
 	_character_button.visible = shown and _left_page() == null
 	# The log is a thing to be found, like what it lists: it is not there until the first unique is.
-	_collection_button.visible = shown and (CollectionPage.show_all
+	_collection_button.visible = shown and (Settings.show_all_uniques()
 			or not inventory.uniques_found.is_empty())
 	if _collection_button.visible:
 		_flash(_collection_button, "opened_collection")
