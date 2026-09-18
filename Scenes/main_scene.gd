@@ -427,6 +427,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 	# On the character's layer, over the pages and over a fight (layer 2), so a find in the loot
 	# popup or under the verdict gets its card too. It takes no mouse, so it costs no swings.
 	var item_card := ItemCard.new(ui_scale)
+	item_card.equipment = inventory.equipment
 	_character.get_parent().add_child(item_card)
 	# A held orb changes a piece without opening it, and the card is the only place the result is read.
 	bag_page.crafted.connect(item_card.unmute)

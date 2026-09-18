@@ -118,6 +118,8 @@ func _shoot_inventory() -> void:
 
 	# The card beside a hovered piece. The cursor is put over the first square in the bag, because the
 	# card asks the viewport where the mouse is and nothing else.
+	# A warp moves nothing while the window is not the one in front, so it is brought there first.
+	DisplayServer.window_move_to_foreground()
 	for slot: ItemSlot in root.get_tree().get_nodes_in_group(ItemSlot.GROUP):
 		if slot.is_visible_in_tree() and slot.has_meta("bag_index"):
 			root.warp_mouse(slot.get_global_rect().get_center())
@@ -127,6 +129,19 @@ func _shoot_inventory() -> void:
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_item_card.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_item_card.png"))
+	# And with Alt held: what is worn in that piece's place, on a second card past the first.
+	var alt := InputEventKey.new()
+	alt.keycode = KEY_ALT
+	alt.pressed = true
+	Input.parse_input_event(alt)
+	for i in 3:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_item_card_worn.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_item_card_worn.png"))
+	alt = alt.duplicate()
+	alt.pressed = false
+	Input.parse_input_event(alt)
 	root.warp_mouse(Vector2.ZERO)
 	await process_frame
 

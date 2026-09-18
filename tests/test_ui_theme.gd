@@ -244,6 +244,14 @@ func _test_item_card() -> bool:
 			"until the cursor has been somewhere else")
 	_check(card.theme_type_variation == "TextPanel" and card.mouse_filter == Control.MOUSE_FILTER_IGNORE,
 			"it is a cream panel that never takes a press")
+	# The second card, under Alt: what is worn where the hovered piece would go.
+	_check(card.worn_for(sword) == null, "nothing to hold a piece against with no equipment")
+	card.equipment = Equipment.new()
+	_check(card.worn_for(sword) == null, "or with nothing on")
+	var other := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng)
+	card.equipment.worn[Equipment.Socket.WEAPON] = other
+	_check(card.worn_for(sword) == other, "a worn sword is what a hovered sword is held against")
+	_check(card.worn_for(other) == null, "and the worn piece is not held against itself")
 	for node: Node in [box, open, card]:
 		node.queue_free()
 	return true

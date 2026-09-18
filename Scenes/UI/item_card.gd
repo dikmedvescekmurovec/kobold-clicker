@@ -18,9 +18,16 @@ const WIDTH := 150.0
 ## The air between the card and the square it describes, in panel pixels.
 const GAP := 4
 
+## What the player has on, for the second card. The main scene sets it; without it there is no second card.
+var equipment: Equipment
 var _ui_scale: float
 var _rows: VBoxContainer
 var _shown: ItemSlot
+## The second card, up while Alt is held: the piece the player is wearing where the hovered one would
+## go. A sibling rather than a child, because a PanelContainer would lay a child out inside itself.
+var _worn := PanelContainer.new()
+var _worn_rows: VBoxContainer
+var _alt := false
 ## The square last pressed and where, which `hovered` keeps quiet about until the cursor leaves it.
 ## The square's place rather than its piece: a redraw makes new squares, and a vendor's shelf makes
 ## new `Item`s too (`VendorStock.items`), so nothing pressed is still there to be compared with.
@@ -39,7 +46,23 @@ func _init(ui_scale: float) -> void:
 	_rows = UITheme.vbox(2, WIDTH)
 	_rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_rows)
+	_worn.theme = theme
+	_worn.theme_type_variation = "TextPanel"
+	_worn.scale = scale
+	_worn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_worn_rows = UITheme.vbox(2, WIDTH)
+	_worn_rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_worn.add_child(_worn_rows)
+	_worn.hide()
 	hide()
+
+
+func _ready() -> void:
+	add_sibling.call_deferred(_worn)
+
+
+func _exit_tree() -> void:
+	_worn.queue_free()
 
 
 func _process(_delta: float) -> void:
@@ -47,9 +70,12 @@ func _process(_delta: float) -> void:
 			Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
 	# A square freed by a redraw compares equal to null, which would read as "still nothing" and leave
 	# the card of a square that is gone standing: a vendor's shelf does exactly that on a press.
-	if is_instance_valid(_shown) and slot == _shown or (slot == null and not visible):
+	var alt := Input.is_key_pressed(KEY_ALT)
+	if alt == _alt and (is_instance_valid(_shown) and slot == _shown or (slot == null and not visible)):
 		return
+	_alt = alt
 	_shown = slot
+	_worn.hide()
 	if slot == null:
 		hide()
 		return
@@ -58,6 +84,14 @@ func _process(_delta: float) -> void:
 		slot.hint.call(_rows, WIDTH)
 	else:
 		ItemDetails.fill(_rows, slot.item, WIDTH)
+		var worn := worn_for(slot.item) if alt else null
+		if worn != null:
+			UITheme.clear(_worn_rows)
+			ItemDetails.fill(_worn_rows, worn, WIDTH)
+			# Said on the rarity line, the fill's second, rather than over the name: a heading would
+			# push every row a line below its fellow on the first card.
+			(_worn_rows.get_child(1) as Label).text += " · worn"
+			_worn.show()
 	show()
 	# Placed now and again deferred: the first pass measures labels that have not laid out yet.
 	_place(slot.get_global_rect())
@@ -113,6 +147,17 @@ func slot_at(at: Vector2, open_too := false) -> ItemSlot:
 	return null
 
 
+## The piece worn where `item` would go, or null: nothing is on there, or `item` is itself what is on.
+## The first taken socket `Equipment.sockets_for` names, so a ring is held against the left finger.
+func worn_for(item: Item) -> Item:
+	if equipment == null or item in equipment.worn.values():
+		return null
+	for socket: Equipment.Socket in equipment.sockets_for(item):
+		if equipment.worn.has(socket):
+			return equipment.worn[socket]
+	return null
+
+
 ## To the right of the square, or to its left when the window's edge is in the way, and never off
 ## the window.
 func _place(anchor: Rect2) -> void:
@@ -121,7 +166,20 @@ func _place(anchor: Rect2) -> void:
 	reset_size()
 	var card := get_combined_minimum_size() * _ui_scale
 	var window := get_viewport_rect().size
-	var x := anchor.end.x + GAP * _ui_scale
+	var gap := GAP * _ui_scale
+	var x := anchor.end.x + gap
 	if x + card.x > window.x:
-		x = anchor.position.x - GAP * _ui_scale - card.x
+		x = anchor.position.x - gap - card.x
 	position = Vector2(x, anchor.position.y).clamp(Vector2.ZERO, (window - card).max(Vector2.ZERO))
+	if not _worn.visible:
+		return
+	# On past the first card, away from the square; across the square from it where the window ends first.
+	_worn.reset_size()
+	var worn := _worn.get_combined_minimum_size() * _ui_scale
+	var right := position.x > anchor.position.x
+	var worn_x := position.x + card.x + gap if right else position.x - gap - worn.x
+	if worn_x < 0 or worn_x + worn.x > window.x:
+		worn_x = anchor.position.x - gap - worn.x if right else anchor.end.x + gap
+	# One top for both, the taller card's: whichever the window's foot pushes up takes the other with it.
+	position.y = clampf(anchor.position.y, 0.0, maxf(window.y - maxf(card.y, worn.y), 0.0))
+	_worn.position = Vector2(clampf(worn_x, 0.0, maxf(window.x - worn.x, 0.0)), position.y)
