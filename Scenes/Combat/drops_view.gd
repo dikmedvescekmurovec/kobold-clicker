@@ -33,7 +33,9 @@ signal discarded(item: Item)
 var discardable := false
 
 var _items: Array[Item] = []
+var _ground: PanelContainer
 var _grid: VBoxContainer
+var _orbs: HBoxContainer
 var _inspect: PanelContainer
 var _inspect_rows: VBoxContainer
 var _discard: Button
@@ -44,10 +46,23 @@ func _init() -> void:
 
 	# The squares. Everything stays at the theme's 16 px: Pixellari breaks up below that, so a
 	# quieter line is said with words rather than with a smaller font.
+	# On the bag's own light panel, so a find stands on the ground it will stand on once it is kept.
+	_ground = PanelContainer.new()
+	_ground.theme_type_variation = "TextPanel"
+	add_child(_ground)
+	var found := VBoxContainer.new()
+	found.add_theme_constant_override("separation", GAP)
+	_ground.add_child(found)
 	_grid = VBoxContainer.new()
 	_grid.add_theme_constant_override("separation", GAP)
 	_grid.gui_input.connect(_on_grid_input)
-	add_child(_grid)
+	found.add_child(_grid)
+	# The orbs the fight turned up, under the squares as the tray is under the bag. A record only:
+	# they take no mouse, because there is nothing here an orb can be pressed to do.
+	_orbs = HBoxContainer.new()
+	_orbs.add_theme_constant_override("separation", GAP)
+	_orbs.alignment = BoxContainer.ALIGNMENT_CENTER
+	found.add_child(_orbs)
 
 	# One drop, looked at properly. On the white panel, because that is the ground the rarity
 	# colours were picked to be read against.
@@ -79,11 +94,19 @@ func _init() -> void:
 
 ## Draws `items` as squares, in the order they fell, and closes whatever was open. Nothing is
 ## counted together: every drop rolled its own rarity and its own modifiers, so no two are one thing.
-func fill(items: Array[Item]) -> void:
+## `orbs` is kind -> count, drawn as a row under the squares; the verdict hands them over and the
+## mid-run popup does not.
+func fill(items: Array[Item], orbs := {}) -> void:
 	_items = items.duplicate()
 	inspect(-1)
-	for child: Node in _grid.get_children():
-		child.queue_free()
+	UITheme.clear(_grid)
+	UITheme.clear(_orbs)
+	for orb: String in orbs:
+		var held := OrbSlot.make(orb, int(orbs[orb]), true)
+		held.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_orbs.add_child(held)
+	_orbs.visible = not orbs.is_empty()
+	_grid.visible = not (_items.is_empty() and _orbs.visible)
 	if _items.is_empty():
 		var none := Label.new()
 		none.theme_type_variation = "PanelLabel"
@@ -118,6 +141,7 @@ func count() -> int:
 ## A square is a Panel that takes no mouse input at all -- the same rule the bag's grid keeps, and
 ## for the same reason -- so which one was hit is worked out from where the click landed.
 func _on_grid_input(event: InputEvent) -> void:
+	Cursors.over_squares(_grid, event)
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed):
 		return
 	for row: Node in _grid.get_children():
@@ -133,12 +157,12 @@ func _on_grid_input(event: InputEvent) -> void:
 func inspect(index: int) -> void:
 	if index < 0 or index >= _items.size():
 		_inspect.hide()
-		_grid.show()
+		_ground.show()
 	else:
 		ItemDetails.fill(_inspect_rows, _items[index], INSPECT_WIDTH)
 		_discard.visible = discardable
 		_discard.set_meta("drop_index", index)
-		_grid.hide()
+		_ground.hide()
 		_inspect.show()
 	resized_contents.emit()
 

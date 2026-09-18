@@ -52,8 +52,8 @@ func _ready() -> void:
 		view.node_unhovered.connect(_hide_card)
 		column.add_child(view)
 		_skill_views[tree] = view
-		var reset := UITheme.button("", "LightButton", "Take back every point in %s, for gold" % name_label.text)
-		reset.icon = Coins.icon()
+		var reset := UITheme.priced_button("Reset", 0.0, "LightButton",
+				"Take back every point in %s, for gold" % name_label.text)
 		reset.pressed.connect(_on_respec_pressed.bind(tree))
 		column.add_child(reset)
 		_respec_buttons[tree] = reset
@@ -76,7 +76,7 @@ func open() -> void:
 		var reset: Button = _respec_buttons[tree]
 		var spent := inventory.skills.spent(tree)
 		var cost := inventory.respec_cost(tree)
-		reset.text = "Reset %s" % BigNumber.format(cost) if spent > 0 else "Reset"
+		UITheme.set_price(reset, cost if spent > 0 else 0.0)
 		reset.disabled = spent <= 0 or inventory.gold < cost
 	# Whatever the cursor was over has just been redrawn.
 	_hide_card()

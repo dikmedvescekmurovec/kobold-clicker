@@ -159,7 +159,10 @@ const PERCENT_STATS := ["crit_chance", "crit_damage", "block_chance", "move_spee
 ## Drop rate is one of them at one remove: it multiplies a probability, so the exponent would walk
 ## through the same ceiling it walked through on crit chance -- a level-30 ring would be finding four
 ## times what a level-1 one does. The flat step still grows it, at a pace a chance can hold.
-const CHANCE_STATS := ["crit_chance", "block_chance", "dodge_chance", "drop_rate"]
+##
+## Gold find is here for drop rate's reason and is no more a probability than it is: it multiplies a
+## purse that is already exponential in the walk, and an exponent on top of that is gold meaning nothing.
+const CHANCE_STATS := ["crit_chance", "block_chance", "dodge_chance", "drop_rate", "gold_find"]
 ## Per second: attacks in one case and health in the other. The two stats that are neither a plain
 ## number nor a percentage.
 const RATE_STATS := ["attack_speed", "health_regen"]
@@ -286,32 +289,38 @@ static func scale(stat: String, value: float, level: int, flat := NAN) -> float:
 	return grown + step * steps
 
 
-## A stat written for a person: "Damage 5", "Crit Chance 5%", "Attack Speed 1.0/s".
+## A stat written for a person: "5 Damage", "5% Crit Chance", "1.0/s Attack Speed". The number leads
+## on every line an item writes -- a modifier's always did -- so `ItemDetails` can stand them all in
+## one column.
 static func stat_line(stat: String, value: float) -> String:
-	var label: String = STAT_LABELS.get(stat, stat)
+	return "%s %s" % [stat_value(stat, value), STAT_LABELS.get(stat, stat)]
+
+
+## The number alone, for a table that puts the name in a column of its own: "5", "5%", "1.0/s".
+static func stat_value(stat: String, value: float) -> String:
 	if stat in PERCENT_STATS:
-		return "%s %d%%" % [label, roundi(value)]
+		return "%d%%" % roundi(value)
 	if stat in RATE_STATS:
-		return "%s %.1f/s" % [label, value]
+		return "%.1f/s" % value
 	# A quantity, which grows with the walk: written through the one formatter, so a late stat is
 	# "1.23e6" rather than twenty digits across a panel (`BigNumber`).
-	return "%s %s" % [label, BigNumber.format(value)]
+	return BigNumber.format(value)
 
 
-## The same stat as a difference: "Damage +13", "Crit Chance -2%", "Attack Speed +0.3/s".
+## The same stat as a difference: "+13 Damage", "-2% Crit Chance", "+0.3/s Attack Speed".
 ##
 ## Here rather than at the panel that shows it, for the reason `stat_line` is: this file is the one
 ## place a stat is spelled, and a second spelling of "Attack Speed" is a second thing to keep in step.
-## The sign is always written, including on a gain -- "Damage 13" and "Damage +13" are two different
+## The sign is always written, including on a gain -- "13 Damage" and "+13 Damage" are two different
 ## claims, and only one of them is what a comparison means.
 static func stat_delta(stat: String, delta: float) -> String:
 	var label: String = STAT_LABELS.get(stat, stat)
 	if stat in PERCENT_STATS:
-		return "%s %+d%%" % [label, roundi(delta)]
+		return "%+d%% %s" % [roundi(delta), label]
 	if stat in RATE_STATS:
-		return "%s %+.1f/s" % [label, delta]
+		return "%+.1f/s %s" % [delta, label]
 	# `signed` is what keeps the sign on a gain, which is the whole of what a delta line means.
-	return "%s %s" % [label, BigNumber.format(delta, true)]
+	return "%s %s" % [BigNumber.format(delta, true), label]
 
 
 ## Whether a difference is worth saying at all. A delta that rounds to nothing on the line would read

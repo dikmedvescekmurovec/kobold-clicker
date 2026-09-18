@@ -10,6 +10,14 @@ signal closed
 ## The piece the bag has open changed, bag item or worn, and null when it went back to the grid.
 ## Whoever is standing beside the bag acts on what is open in it -- the blacksmith's counter does.
 signal selection_changed(item: Item)
+## A held orb went into a piece where it lies (`_armed`). The main scene lets the hover card speak
+## again on it: the press that crafted would otherwise have put the card away with the result unread.
+signal crafted
+## The page has measured itself again, and `right_edge` may have moved: the sheet beside the bag
+## comes, goes and changes face with what is open.
+signal laid_out
+## The orb in hand changed, "" for none. The town page greys its shelf by it, as the grid is greyed.
+signal held_changed(orb: String)
 
 ## Four squares to a row: the narrowest a level's heading fits with its Auto and Clear marks beside
 ## it. The gutter is the pack's own seven-to-one square-to-gutter proportion.
@@ -131,6 +139,18 @@ var _orb_tray: HBoxContainer
 var _orb_card: OrbCard
 ## What a spent orb rolls with. Unseeded: a test that wants a known answer seeds it.
 var _craft_rng := RandomNumberGenerator.new()
+## The orb pressed with no piece open, or "". The next square or worn socket pressed is crafted with
+## it where it lies, unopened, and it stays held while any are left. Opening a piece, a press on
+## bare panel, the same orb again, Escape or the bag going away puts it down. While it is held it is
+## the cursor, at the 32 px it is cut at -- which is the tray's 16 at `ui_scale` 2.
+var _armed := "":
+	set(orb):
+		if orb == _armed:
+			return
+		_armed = orb
+		var mark: Texture2D = null if orb == "" else OrbTable.icon(orb)
+		Cursors.hold(mark)
+		held_changed.emit(orb)
 
 
 func _init(player_inventory: Inventory, save_path: String, ui_scale: float) -> void:
@@ -206,6 +226,10 @@ func _ready() -> void:
 	_orb_card.hide()
 	add_child(_orb_card)
 
+	# However the bag goes away -- its X, another page, a fight -- an orb must not stay on the cursor.
+	visibility_changed.connect(func() -> void:
+		if not is_visible_in_tree():
+			_armed = "")
 	refresh()
 
 
@@ -214,6 +238,7 @@ func open() -> void:
 	_close_confirm()
 	_selected = -1
 	_worn_selected = -1
+	_armed = ""
 	refresh()
 
 
@@ -258,6 +283,15 @@ func layout() -> void:
 	_show_button.position = Vector2(_worn_panel.position.x,
 			(view_size.y - _show_button.size.y * _ui_scale) / 2.0)
 	_place_confirm()
+	laid_out.emit()
+
+
+## Where the page ends, in window pixels: past the sheet beside the bag, or past the caret that
+## brings it back, or at the bag itself where there is neither.
+func right_edge() -> float:
+	var last: Control = (_worn_panel if _worn_panel.visible
+			else _show_button if _show_button.visible else _panel)
+	return last.position.x + last.size.x * _ui_scale
 
 
 static func _scroll_box() -> ScrollContainer:
@@ -289,6 +323,7 @@ func refresh() -> void:
 		for i: int in by_level[level]:
 			var slot := ItemSlot.make(inventory.items[i], i == _selected)
 			slot.set_meta("bag_index", i)
+			_dim_for_orb(slot, inventory.items[i])
 			grid.add_child(slot)
 	_count.text = "%d / %d" % [inventory.total(), Inventory.CAPACITY]
 	_count.add_theme_color_override("font_color", Palette.RUST if inventory.is_full() else Palette.SLATE)
@@ -406,9 +441,26 @@ func _place_confirm() -> void:
 ## Escape on a question is its Cancel, and the press stops here: the page under it stays up. With no
 ## question up the key is left for the main scene, which closes the pages.
 func _unhandled_input(event: InputEvent) -> void:
-	if _confirm != null and is_visible_in_tree() and event.is_action_pressed("ui_cancel"):
+	if not is_visible_in_tree() or not event.is_action_pressed("ui_cancel"):
+		return
+	if _confirm != null:
 		get_viewport().set_input_as_handled()
 		_close_confirm()
+	elif _armed != "":
+		# A held orb is put down the same way, and the bag stays up.
+		get_viewport().set_input_as_handled()
+		_armed = ""
+		refresh()
+
+
+## A right click anywhere puts a held orb down, as Escape does. `_input` rather than `_unhandled_input`:
+## a press over a panel is handled by the panel and would never reach the other.
+func _input(event: InputEvent) -> void:
+	if _armed != "" and event is InputEventMouseButton and event.pressed \
+			and event.button_index == MOUSE_BUTTON_RIGHT:
+		get_viewport().set_input_as_handled()
+		_armed = ""
+		refresh()
 
 
 func _close_confirm() -> void:
@@ -459,6 +511,9 @@ func _on_autodiscard_toggled(on: bool, level: int) -> void:
 func _on_clear_level_pressed(level: int) -> void:
 	var gone := inventory.discard_level(level)
 	print("Discarded %d item(s) at level %d" % [gone.size(), level])
+	# The Rag and Bone Sack pays for what is thrown away, which is nothing unless it is worn.
+	for item: Item in gone:
+		inventory.gold += inventory.salvage(item)
 	inventory.save(_save_path)
 	_select_item(-1)
 
@@ -478,6 +533,7 @@ func _on_sell_level_pressed(level: int) -> void:
 ## A press that stays put clicks the square under it; one that travels drags the list. The squares
 ## ignore the mouse so a drag starting on one still reaches here.
 func _on_grid_input(event: InputEvent) -> void:
+	Cursors.over_squares(_scroll, event, _armed != "")
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
 			_drag_from = event.position
@@ -498,21 +554,27 @@ func _on_clicked(at: Vector2) -> void:
 		for slot: Control in section.get_children():
 			if Rect2((section as Control).position + slot.position, slot.size).has_point(at):
 				var index: int = slot.get_meta("bag_index", -1)
-				_select_item(-1 if index == _selected else index)
+				if _armed != "":
+					_craft(_armed, inventory.items[index])
+				else:
+					_select_item(-1 if index == _selected else index)
 				return
 	_select_item(-1)
 
 
+## Every change of selection puts a held orb down: with a piece open the tray crafts on that piece.
 func _select_item(index: int) -> void:
 	_socket_pick = 0
 	_selected = index
 	_worn_selected = -1
+	_armed = ""
 	refresh()
 	selection_changed.emit(_open_piece())
 
 
 ## -1 closes it.
 func _select_socket(socket: int) -> void:
+	_armed = ""
 	_worn_selected = socket
 	_selected = -1
 	refresh()
@@ -540,9 +602,8 @@ func _show_item(index: int) -> void:
 	# No confirmation either way: two clicks deep already, and asking twice teaches clicking through.
 	if _buys(TownServices.GEAR):
 		var price := TownPrices.sell_price(item)
-		var sell := UITheme.button("Sell %s" % BigNumber.format(price), "LightButton",
+		var sell := UITheme.priced_button("Sell", price, "LightButton",
 				"Sell this to the merchant for %s gold" % BigNumber.format(price))
-		sell.icon = Coins.icon()
 		sell.pressed.connect(_on_sell_pressed.bind(item))
 		sell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		actions.add_child(sell)
@@ -612,6 +673,7 @@ func _on_unequip_pressed(socket: Equipment.Socket) -> void:
 func _on_discard_pressed(item: Item) -> void:
 	if inventory.remove(item):
 		print("Discarded %s (%s, level %d)" % [item.type, item.rarity_name(), item.level])
+		inventory.gold += inventory.salvage(item)
 		inventory.save(_save_path)
 	_select_item(-1)
 
@@ -679,6 +741,7 @@ func _show_doll() -> void:
 		slot.position = _socket_spot(socket)
 		slot.size = Vector2(ItemSlot.SIDE, ItemSlot.SIDE)
 		slot.set_meta("socket", socket)
+		_dim_for_orb(slot, item)
 		_doll.add_child(slot)
 	# Hide, in the corner the figure leaves empty. Anchored and grown leftwards because a button's
 	# size is not known until the theme reaches it.
@@ -720,6 +783,7 @@ func _socket_mark(socket: Equipment.Socket) -> Texture2D:
 
 ## A click on a filled socket opens it; a second click on the open one closes it.
 func _on_doll_input(event: InputEvent) -> void:
+	Cursors.over_squares(_doll, event, _armed != "")
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed):
 		return
 	for slot: Control in _doll.get_children():
@@ -728,7 +792,10 @@ func _on_doll_input(event: InputEvent) -> void:
 		var socket: Equipment.Socket = slot.get_meta("socket")
 		if inventory.equipment.item_at(socket) == null:
 			continue
-		_select_socket(-1 if socket == _worn_selected else socket)
+		if _armed != "":
+			_craft(_armed, inventory.equipment.item_at(socket))
+		else:
+			_select_socket(-1 if socket == _worn_selected else socket)
 		return
 
 
@@ -814,7 +881,8 @@ func refresh_orbs() -> void:
 	UITheme.clear(_orb_tray)
 	var against := _open_piece()
 	for orb: String in OrbTable.orbs():
-		var slot := OrbSlot.make(orb, inventory.orb_count(orb), against == null or OrbTable.can_apply(orb, against))
+		var slot := OrbSlot.make(orb, inventory.orb_count(orb),
+				against == null or OrbTable.can_apply(orb, against), orb == _armed)
 		slot.pressed.connect(_on_orb_pressed)
 		slot.hovered.connect(_on_orb_hovered.bind(slot))
 		slot.unhovered.connect(_hide_orb_card)
@@ -832,16 +900,45 @@ func _on_orb_pressed(orb: String) -> void:
 	# With a vendor beside the bag and no piece open, the square is a sale; with a piece open it is a
 	# craft, exactly as it always was. So standing in a town never costs the player the crafting tray,
 	# and closing the piece they have open is the whole of how they switch between the two.
+	# Anywhere else a press with no piece open picks the orb up (`_armed`), and a second one puts it down.
 	if item == null:
 		if _buys(TownServices.ORBS):
 			_sell_orb(orb)
+		else:
+			_armed = "" if orb == _armed else orb
+			refresh()
 		return
+	_craft(orb, item)
+
+
+## The held orb on a piece that is not the bag's -- one off a vendor's shelf. `written` is called
+## between the change and the save, so whoever owns the piece writes it down in the same write the
+## orb is spent in.
+func craft_held(item: Item, written: Callable) -> void:
+	if _armed != "":
+		_craft(_armed, item, written)
+
+
+## Applied first and spent second: nothing is spent when the orb has nothing to do to the piece.
+func _craft(orb: String, item: Item, written := Callable()) -> void:
 	if not OrbTable.apply(orb, item, _craft_rng):
 		return
+	if written.is_valid():
+		written.call()
 	inventory.spend_orb(orb)
 	inventory.save(_save_path)
 	print("Spent %s on %s (%s, level %d)" % [orb, item.display_name(), item.rarity_name(), item.level])
+	if inventory.orb_count(_armed) <= 0:
+		_armed = ""
 	refresh()
+	if _open_piece() == null:
+		crafted.emit()
+
+
+## A square the held orb can do nothing to goes as grey as an orb with nothing to do (`OrbSlot.DIM`).
+func _dim_for_orb(slot: Control, item: Item) -> void:
+	if _armed != "" and item != null and not OrbTable.can_apply(_armed, item):
+		slot.modulate = OrbSlot.DIM
 
 
 ## One orb over the counter. Spent first and paid second, the way crafting applies first and spends

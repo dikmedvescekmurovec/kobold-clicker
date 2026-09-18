@@ -12,8 +12,9 @@ extends RefCounted
 ## type, so a common sword and an elite sword hit the same -- the elite one simply carries more on
 ## top. That is also why nothing here has to know what an item is.
 ##
-## UNIQUE is hand-crafted and ignores all of this. It has its slot, a colour and a zero in every row
-## of TIER_WEIGHTS, so it can never be rolled, and the tests hold that until the chunk that writes it.
+## UNIQUE is hand-crafted and ignores all of this. It has its name, its colours and its level floor,
+## and no place in TIER_WEIGHTS: `roll` never gives one, because `UniqueTable.roll` is what does,
+## beside the gear and on odds of its own.
 
 enum Rarity { COMMON, UNCOMMON, RARE, ELITE, UNIQUE }
 
@@ -28,21 +29,21 @@ const NAMES := {
 }
 
 ## What a dead enemy's tier is worth, as integer weights out of a thousand -- so a weight is its own
-## percentage with the point moved, and nobody has to divide to read the table. Rabble is a coin
-## toss between plain and uncommon with a rare piece now and then; a boss deals mostly in rare and
-## elite. The weight moves *up* the ramp as the tier rises, which is why the uncommon band rises off
-## a common and then falls away again -- a boss has better things to be carrying. The one thing the
-## curve is held to is that shape: `test_inventory._test_rarity_tables` fails if the plain step ever
-## stops falling, if either top step stops climbing, or if the average step stops rising.
+## percentage with the point moved, and nobody has to divide to read the table. Rabble carries plain
+## gear three times in four, a rare piece one drop in thirty and an elite one in two hundred; a boss
+## is the one body more likely than not to carry something with a modifier on it. The weight moves
+## *up* the ramp as the tier rises. The one thing the curve is held to is that shape:
+## `test_inventory._test_rarity_tables` fails if the plain step ever stops falling, if either top
+## step stops climbing, or if the average step stops rising.
 const TIER_WEIGHTS := {
 	EnemyRoster.Tier.COMMON: {
-		Rarity.COMMON: 450, Rarity.UNCOMMON: 450, Rarity.RARE: 85, Rarity.ELITE: 15, Rarity.UNIQUE: 0,
+		Rarity.COMMON: 750, Rarity.UNCOMMON: 210, Rarity.RARE: 35, Rarity.ELITE: 5,
 	},
 	EnemyRoster.Tier.ELITE: {
-		Rarity.COMMON: 300, Rarity.UNCOMMON: 400, Rarity.RARE: 220, Rarity.ELITE: 80, Rarity.UNIQUE: 0,
+		Rarity.COMMON: 500, Rarity.UNCOMMON: 350, Rarity.RARE: 120, Rarity.ELITE: 30,
 	},
 	EnemyRoster.Tier.BOSS: {
-		Rarity.COMMON: 100, Rarity.UNCOMMON: 250, Rarity.RARE: 400, Rarity.ELITE: 250, Rarity.UNIQUE: 0,
+		Rarity.COMMON: 250, Rarity.UNCOMMON: 400, Rarity.RARE: 250, Rarity.ELITE: 100,
 	},
 }
 
@@ -69,28 +70,31 @@ const MOD_COUNT := {
 	Rarity.UNIQUE: [0, 0],
 }
 
-## The border around an item's square, which sits on a dark socket.
+## The border around an item's square, which sits on a dark socket. Cold to hot -- grey, blue, lilac,
+## brick, gold -- so every step is a hue of its own and the order needs no convention to be read.
 const BORDER_COLORS := {
 	Rarity.COMMON: Palette.STONE_LT,
-	Rarity.UNCOMMON: Palette.LEAF_LT,
-	Rarity.RARE: Palette.ICE,
-	Rarity.ELITE: Palette.LILAC,
+	Rarity.UNCOMMON: Palette.ICE,
+	Rarity.RARE: Palette.LILAC,
+	Rarity.ELITE: Palette.BRICK,
 	Rarity.UNIQUE: Palette.GOLD,
 }
+## A set piece is a unique that wears green instead of gold: border, name and frame (`FRAMES % SET`).
+## Asked for through `Item.border_color` / `text_color` / `frame`, since a rarity cannot know it.
+const SET_BORDER := Palette.LEAF_LT
+const SET_TEXT := Palette.LEAF
+const SET := "set"
 
 ## The same step written as text on the bone panel, where the lighter half of the ramp disappears.
 const TEXT_COLORS := {
 	Rarity.COMMON: Palette.SLATE,
-	Rarity.UNCOMMON: Palette.LEAF,
-	Rarity.RARE: Palette.ICE_DK,
-	Rarity.ELITE: Palette.LILAC,
+	Rarity.UNCOMMON: Palette.ICE_DK,
+	Rarity.RARE: Palette.LILAC,
+	Rarity.ELITE: Palette.BRICK,
 	Rarity.UNIQUE: Palette.GOLD,
 }
 
-## The socket every item square is drawn on, and how thick a rarity's border is on it. Two panel
-## pixels are an exact four on screen at ui_scale 2, so the border never lands on half a pixel. One
-## was what this was, and one disappears: the ramp's colours are close in value to the tan socket
-## they sit on, and a single pixel of them reads as an edge rather than as a rarity.
+## The socket every item square is drawn on.
 ##
 ## The pack draws an inventory slot as one flat tan square on the cream panel, with nothing but a
 ## gutter between it and the next, which is why these are opaque colours rather than a dark film over
@@ -98,7 +102,9 @@ const TEXT_COLORS := {
 ## up: the panel behind it is cream, so anything lighter than the socket would disappear into it.
 const SOCKET := Palette.SLOT_TAN
 const SELECTED_SOCKET := Palette.SLOT_TAN_DK
-const BORDER := 2
+## The frame round a square, one a step above common, drawn by `tools/item_frames.py` at the square's
+## own 40 px with a clear middle: a bevel, then studs, then filigree, then a unique's gems and crest.
+const FRAMES := "res://Assets/UI/item_frame_%s.png"
 ## How solid a socket on the equipment doll is. Enough to read as a square to drop something into,
 ## little enough that the figure underneath still reads as a figure.
 const SOCKET_ALPHA := 0.55
@@ -110,14 +116,13 @@ static var _styles := {}
 
 ## How strongly increased item rarity lifts each step: a step's weight is multiplied by
 ## 1 + rarity% x this. Common is never lifted, so the odds move up the ramp rather than every step
-## growing alike, and the rarer a step the harder it is pushed. Unique is zero here and zero in every
-## weight row, and a zero multiplied by anything stays out of reach.
+## growing alike, and the rarer a step the harder it is pushed. Unique is in neither table, so no
+## bonus can reach it.
 const RARITY_STEP := {
 	Rarity.COMMON: 0,
 	Rarity.UNCOMMON: 1,
 	Rarity.RARE: 2,
 	Rarity.ELITE: 3,
-	Rarity.UNIQUE: 0,
 }
 ## What the weights are blown up by once a rarity bonus is in play, so the lift survives being kept in
 ## whole numbers: a 15 weight lifted 3% is 15.45, which would round straight back to 15.
@@ -134,7 +139,6 @@ static func roll(tier: EnemyRoster.Tier, rng: RandomNumberGenerator, rarity := 0
 		total += int(weights[step])
 	var pick := rng.randi_range(0, total - 1)
 	for step: Rarity in weights:
-		# A step weighted zero is stepped over for free, which is all that keeps uniques out.
 		pick -= int(weights[step])
 		if pick < 0:
 			return step
@@ -184,8 +188,14 @@ static func from_name(text: String) -> int:
 	return -1
 
 
-## The face of an item square: a dark socket, and a border for uncommon and better. A common square
-## has no border at all, which is what makes a coloured one mean something.
+## The frame an item square wears, or null for a common one -- which is what makes a frame mean
+## something.
+static func frame(rarity: Rarity) -> Texture2D:
+	return null if rarity == Rarity.COMMON else load(FRAMES % NAMES[rarity])
+
+
+## The face of an item square: the socket alone. What rings an uncommon or better piece is drawn art
+## laid over it (`frame`), so the box is the same for every rarity and `rarity` only keys the cache.
 static func slot_style(rarity: Rarity, selected := false, translucent := false) -> StyleBoxFlat:
 	var key := [rarity, selected, translucent]
 	if _styles.has(key):
@@ -200,8 +210,5 @@ static func slot_style(rarity: Rarity, selected := false, translucent := false) 
 	box.set_corner_radius_all(0)
 	# The default soft edge fringes into a smear once the panel is scaled up.
 	box.anti_aliasing = false
-	if rarity != Rarity.COMMON:
-		box.set_border_width_all(BORDER)
-		box.border_color = BORDER_COLORS[rarity]
 	_styles[key] = box
 	return box

@@ -33,13 +33,18 @@ const SAVE_PATH := "user://inventory.json"
 ## experience held towards the next one; a version 7 save comes back at level 1 with none. 9 adds the
 ## skills, which a version 8 save has none of -- it comes back with every level's point unspent. 10
 ## adds the towns the player has walked into, which a version 9 save simply has none of: an absent key
-## and no town visited read the same, the way version 4's `autodiscard` did.
-const VERSION := 10
+## and no town visited read the same, the way version 4's `autodiscard` did. 11 adds the uniques the
+## player has ever found, the collection log's list; a version 10 save has found none. 12 adds what
+## the fortuneteller has sold the player (`fortunes`); a version 11 save has bought nothing.
+const VERSION := 12
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
 ## a pressure to choose rather than a pressure to hoard nothing.
 const CAPACITY := 40
+
+## The Spiked Helm: how much of the set's armour is added to its damage.
+const SPIKES_SHARE := 0.01
 
 ## What is held, in the order it was picked up. The panel does not show it in this order -- `order()`
 ## does that -- and nothing outside here should: an index into this array is how a piece is named,
@@ -91,6 +96,16 @@ var skills := Skills.new()
 ## What the settlements the player has walked into hold. Here rather than beside the map because a
 ## town's shelf and the purse that empties it move together, and one save is one write.
 var towns := TownState.new()
+
+## Every unique the player has ever found, by `UniqueTable` id, in the order they were found. What the
+## collection log lights up -- and found is found: selling one, or losing it to a full bag, takes
+## nothing off this list.
+var uniques_found: Array[String] = []
+
+## What the fortuneteller has sold that belongs to the player rather than to a town: the chest the
+## star points at, the uniques she has shown, whether the scour is spent. A plain Dictionary whose
+## keys are `FortuneTeller`'s, read through its accessors -- this file never names that class.
+var fortunes := {}
 
 ## The levels the player has told the game to stop bringing. Levels rather than items, because a
 ## level is what a section of the bag is, and rarity is not consulted: a marked level is done with,
@@ -320,8 +335,50 @@ func add_xp(amount: int) -> int:
 
 ## What the player is worth in a fight: what they wear, with what they have learned folded in. The one
 ## question the fight asks, so the rule for how the two combine lives in one place.
+##
+## Three things a unique asks of it ride along. The Spiked Helm turns a hundredth of the set's armour
+## into flat damage, which has to go in with the skills' flat so the percents scale it like any other
+## point -- so the set is added up once to read its armour and once more with that in. And two counts
+## the fight has no way to see: the sockets with nothing in them and the pieces in the bag.
 func stats() -> Dictionary:
-	return equipment.totals(skills.flat(), skills.percent())
+	var flat := skills.flat()
+	if "spikes" in equipment.effects():
+		var armour := float(equipment.totals(flat, skills.percent()).get("armor", 0.0))
+		flat = flat.duplicate()
+		flat["damage"] = float(flat.get("damage", 0.0)) + armour * SPIKES_SHARE
+	var out := equipment.totals(flat, skills.percent())
+	out["bare_sockets"] = Equipment.NAMES.size() - equipment.worn.size()
+	out["bag_pieces"] = items.size()
+	# The collection log's share, on its own the way the skills' percent is: it multiplies what gear
+	# and skills made rather than adding to either.
+	if out.has("damage"):
+		out["damage"] = float(out["damage"]) * (1.0 + collection_bonus() / 100.0)
+	return out
+
+
+## What throwing `item` away pays: nothing, unless the Rag and Bone Sack is worn.
+func salvage(item: Item) -> float:
+	return TownPrices.salvage_price(item) if "salvage" in equipment.effects() else 0.0
+
+
+## What the collection log adds to the player's damage, in percent: `UniqueTable.COLLECTION_DAMAGE`
+## for every unique found, whether or not it is still owned.
+func collection_bonus() -> int:
+	return uniques_found.size() * UniqueTable.COLLECTION_DAMAGE
+
+
+## What changes how a fight plays rather than a number: the capstones learned and the uniques worn,
+## as one list of effect ids for `Encounter.effects`.
+func effects() -> Array:
+	return skills.effects() + equipment.effects()
+
+
+## Writes a unique into the collection log. Returns whether it was new.
+func note_unique(id: String) -> bool:
+	if not UniqueTable.UNIQUES.has(id) or uniques_found.has(id):
+		return false
+	uniques_found.append(id)
+	return true
 
 
 ## What resetting `tree` would cost now.
@@ -368,7 +425,9 @@ func save(path := SAVE_PATH) -> bool:
 		"items": saved,
 		"equipped": equipment.to_dict(),
 		"autodiscard": autodiscard,
-	}, "\t"))
+		"uniques_found": uniques_found,
+		"fortunes": fortunes,
+	},"\t"))
 
 
 ## The inventory in `path`, or an empty one when there isn't a usable file there. A missing file is a
@@ -458,6 +517,16 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 			var held: Variant = currency[orb]
 			if typeof(held) in [TYPE_INT, TYPE_FLOAT]:
 				inventory.add_orb(str(orb), maxi(0, int(held)))
+	# Version 10 knew nothing about uniques: an absent key is none found. An id this build no longer
+	# has is dropped by name, the way a retired orb is.
+	var found: Variant = data.get("uniques_found", [])
+	if typeof(found) == TYPE_ARRAY:
+		for id: Variant in found:
+			inventory.note_unique(str(id))
+	# Version 11 knew nothing about the fortuneteller: an absent key is nothing bought.
+	var told: Variant = data.get("fortunes", {})
+	if typeof(told) == TYPE_DICTIONARY:
+		inventory.fortunes = told
 	# A file written before the cap, or edited by hand, comes back obeying it. A bag allowed over the
 	# cap in one place is a bag every other rule in the game has to check for.
 	inventory.trim()

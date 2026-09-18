@@ -267,12 +267,14 @@ func has_chest(cell: Vector2i) -> bool:
 
 
 ## The closest chest to the player anywhere on the generated map, fog or not; NO_CELL when there is none.
+## `unseen_only` leaves out a chest whose tile the player can already see: it is drawn there, so a
+## fortuneteller pointing at it would be selling what is in plain sight.
 ## ponytail: scans every generated cell, so call it on arrival rather than per frame.
-func nearest_chest() -> Vector2i:
+func nearest_chest(unseen_only := false) -> Vector2i:
 	var best := HexMap.NO_CELL
 	var best_steps := -1
 	for cell in _envs:
-		if not has_chest(cell):
+		if not has_chest(cell) or (unseen_only and seen(cell)):
 			continue
 		var steps := HexGrid.distance(player_cell, cell)
 		if best_steps == -1 or steps < best_steps:
@@ -540,6 +542,19 @@ func chart(cell: Vector2i) -> int:
 			shown += 1
 	# Looking at the tile next door is the first half of going there, so the walk follows by itself.
 	move_to(cell)
+	return shown
+
+
+## The fortuneteller's scour: every tile round `center` that is still in the dark comes out of it as
+## uncharted land, to be looked at and walked towards but not yet stood on. Tiles already seen are
+## left alone -- `_show` would put a charted one back under the veil -- and land the map has not
+## generated is not there to show. Returns how many tiles showed, 0 when the spell would do nothing.
+func scour(center: Vector2i) -> int:
+	var shown := 0
+	for cell in FortuneTeller.scour_cells(center):
+		if _tiles.has(cell) and not seen(cell):
+			_show(cell, State.UNCHARTED)
+			shown += 1
 	return shown
 
 

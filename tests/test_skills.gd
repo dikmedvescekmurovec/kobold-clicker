@@ -224,7 +224,7 @@ func _test_rarity() -> bool:
 
 	for tier: EnemyRoster.Tier in ItemRarity.TIER_WEIGHTS:
 		var lifted := ItemRarity.weights_for(tier, 50.0)
-		_check(int(lifted[ItemRarity.Rarity.UNIQUE]) == 0, "a bonus never reaches uniques")
+		_check(not lifted.has(ItemRarity.Rarity.UNIQUE), "a bonus never reaches uniques")
 		var plain := ItemRarity.weights_for(tier, 0.0)
 		var total_plain := 0.0
 		var total_lifted := 0.0

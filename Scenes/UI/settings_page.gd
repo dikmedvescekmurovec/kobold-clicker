@@ -12,6 +12,8 @@ extends Control
 signal closed
 ## Delete was pressed under the question Reset asks.
 signal reset_pressed
+## The debug build's Gold x10 was pressed.
+signal cash_pressed
 
 const WIDTH := 140.0
 const ROW_GAP := 6
@@ -91,6 +93,10 @@ func _foot(asking: bool) -> VBoxContainer:
 	var foot := UITheme.vbox(ROW_GAP, WIDTH)
 	foot.size_flags_vertical = Control.SIZE_EXPAND | Control.SIZE_SHRINK_END
 	if not asking:
+		if OS.is_debug_build():
+			var cash := UITheme.button("Gold x10", "LightButton", "Dev: multiply the purse by ten")
+			cash.pressed.connect(cash_pressed.emit)
+			foot.add_child(cash)
 		var reset := UITheme.button("Reset save", "LightDangerButton", "Delete the saves and start a new game")
 		reset.pressed.connect(_ask.bind(true))
 		foot.add_child(reset)

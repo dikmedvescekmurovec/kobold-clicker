@@ -26,6 +26,7 @@ var _shown: ItemSlot
 ## new `Item`s too (`VendorStock.items`), so nothing pressed is still there to be compared with.
 var _muted := Rect2()
 var _pressed_at := Vector2.INF
+var _unmute := false
 
 
 func _init(ui_scale: float) -> void:
@@ -53,7 +54,10 @@ func _process(_delta: float) -> void:
 		hide()
 		return
 	UITheme.clear(_rows)
-	ItemDetails.fill(_rows, slot.item, WIDTH)
+	if slot.hint.is_valid():
+		slot.hint.call(_rows, WIDTH)
+	else:
+		ItemDetails.fill(_rows, slot.item, WIDTH)
 	show()
 	# Placed now and again deferred: the first pass measures labels that have not laid out yet.
 	_place(slot.get_global_rect())
@@ -71,11 +75,22 @@ func hovered(at: Vector2, pressed: bool) -> ItemSlot:
 		_muted = slot.get_global_rect() if slot != null else Rect2()
 		_pressed_at = at
 		return null
+	if _unmute:
+		_unmute = false
+		_muted = Rect2()
+		_pressed_at = Vector2.INF
 	if at == _pressed_at or _muted.has_point(at):
 		return null
 	_muted = Rect2()
 	_pressed_at = Vector2.INF
 	return slot
+
+
+## Lets the pressed place speak again without the cursor leaving it: a held orb has just changed the
+## piece under it (`BagPage.crafted`), and the new lines are the whole point of that press.
+## Taken up once the button is let go, because a socket on the doll crafts on the way down.
+func unmute() -> void:
+	_unmute = true
 
 
 ## The square under `at` (in viewport pixels), or null. A square scrolled out of its box is still

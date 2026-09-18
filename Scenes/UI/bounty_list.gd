@@ -110,24 +110,22 @@ func layout() -> void:
 ## An accepted posting carries its progress bar; `note` is one leaf-green line over the buttons.
 ##
 ## Info folds out the part a wanted poster has no room for: the level of land a kill has to fall on,
-## the land that monster lives on as the tile panel's own swatches, and the nearest piece of it the
-## player has seen. It starts open on the journal (a valid `on_show`), which is read for exactly that,
-## and shut on the board, where three postings have to share a 284 px column.
-##
-## The swatches and the line under them are the whole reason a board is worth reading: "Werewolf" says
-## nothing about where to go, and a player who has to guess which of six terrains to walk is being
-## sent on an errand rather than given one.
+## and -- once a fortuneteller has been paid for it (`BountyBoard.located`) -- the land that monster
+## lives on as the tile panel's own swatches and the nearest piece of it the player has seen. Until
+## then the fold says who to ask, and there is no Show. It starts open on the journal (a valid
+## `on_show`), which is read for exactly that, and shut on the board, where three postings have to
+## share a 284 px column.
 static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 		on_show: Callable, note := "") -> PanelContainer:
 	var card := PanelContainer.new()
-	card.add_theme_stylebox_override("panel", _flat(Color.TRANSPARENT, CARD_PAD))
+	card.add_theme_stylebox_override("panel", flat(Color.TRANSPARENT, CARD_PAD))
 	var inner := width - CARD_PAD * 2
 	var lines := UITheme.vbox(LINE_GAP, inner)
 	card.add_child(lines)
 	var enemy := str(bounty.get(BountyBoard.ENEMY, ""))
 	var known := EnemyRoster.ENEMIES.has(enemy)
 	var frame := PanelContainer.new()
-	frame.add_theme_stylebox_override("panel", _flat(Palette.SLOT_TAN, PORTRAIT_PAD))
+	frame.add_theme_stylebox_override("panel", flat(Palette.SLOT_TAN, PORTRAIT_PAD))
 	var face := TextureRect.new()
 	# Set before the texture and the size: a TextureRect's minimum is its own texture until
 	# `expand_mode` says otherwise, and the packs' frames run to 245 px.
@@ -165,13 +163,18 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 	lines.add_child(pay)
 
 	var details := UITheme.vbox(LINE_GAP, inner)
-	details.visible = on_show.is_valid()
+	# Open on the journal, and on the board once the land has been paid for: that is what was bought.
+	details.visible = on_show.is_valid() or (taken and BountyBoard.located(bounty))
 	lines.add_child(details)
 	var depth := int(bounty.get(BountyBoard.LEVEL, 0))
 	if depth > 1:
 		details.add_child(wrapped("On level %d land or deeper." % depth, inner, Palette.SLATE))
 	var near := HexMap.NO_CELL
-	if map_view != null and known:
+	# Where it lives is a fortuneteller's to sell (`BountyBoard.locate`); until she has been paid the
+	# card says who to ask and nothing about the land.
+	if not BountyBoard.located(bounty):
+		details.add_child(wrapped("A fortuneteller could say where it lives.", inner, Palette.SLATE))
+	elif map_view != null and known:
 		var envs := EnemyRoster.environments_of(enemy)
 		var swatches := HBoxContainer.new()
 		swatches.add_theme_constant_override("separation", 2)
@@ -224,7 +227,7 @@ static func _icon(texture: Texture2D, side: int) -> TextureRect:
 
 ## A card's frame and the portrait's socket: the pack's slot brown as a one-pixel line, the way
 ## `ItemSlot` draws its own square.
-static func _flat(fill: Color, pad: int) -> StyleBoxFlat:
+static func flat(fill: Color, pad: int) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = fill
 	style.border_color = Palette.SLOT_TAN_DK

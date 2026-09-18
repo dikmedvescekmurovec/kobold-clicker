@@ -8,12 +8,14 @@ extends RefCounted
 ## written down.
 ##
 ## A village has room for one vendor and the seed decides which, so two villages a day apart are not
-## the same errand; a town has both; a fortress has both and a smith. Every settlement has a board.
+## the same errand; a town has both; a fortress has both and a smith. Every settlement has a board
+## and a fortuneteller.
 
 const BOUNTIES := "bounties"
 const GEAR := "gear"
 const ORBS := "orbs"
 const SMITH := "smith"
+const FORTUNE := "fortune"
 
 ## What each counter is called, wherever it is named -- the tile panel's list and the town page's tabs
 ## both read it here, so a service is spelled one way.
@@ -22,11 +24,13 @@ const LABELS := {
 	GEAR: "Gear merchant",
 	ORBS: "Orb vendor",
 	SMITH: "Blacksmith",
+	FORTUNE: "Fortuneteller",
 }
 
 ## The order services are ever listed in, so a town reads the same way twice. The board first, because
-## it is the one thing every settlement has and so the one thing the player can count on finding.
-const ORDER := [BOUNTIES, GEAR, ORBS, SMITH]
+## it is the one thing every settlement has and so the one thing the player can count on finding. The
+## fortuneteller last: every settlement has her too, and she is where a visit ends rather than starts.
+const ORDER := [BOUNTIES, GEAR, ORBS, SMITH, FORTUNE]
 
 ## Dev: every settlement offers every counter, so each can be looked at from the start village. The
 ## main scene sets it (`debug_all_services`); nothing else may, and the tests never see it on.
@@ -39,7 +43,7 @@ static var show_all := false
 static func services_for(tier: int, spot: Vector2i, world_seed: int) -> PackedStringArray:
 	if show_all and tier != -1:
 		return PackedStringArray(ORDER)
-	var offered := {BOUNTIES: true}
+	var offered := {BOUNTIES: true, FORTUNE: true}
 	match tier:
 		TownWorld.Tier.SMALL:
 			offered[GEAR if absi(hash([world_seed, spot, "vendor"])) % 2 == 0 else ORBS] = true

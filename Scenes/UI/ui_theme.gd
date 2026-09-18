@@ -23,6 +23,12 @@ const SMALL_FONT_SIZE := 10
 ## The face pads its 7 px capitals out to a 14 px line; this much comes off the top and the bottom of
 ## every line, which leaves 11 and still clears the ascenders and the descenders.
 const SMALL_FONT_TRIM := Vector2i(2, 1)   # x: top, y: bottom
+## `table_row`: its padding (x: sides, y: top and bottom), the least air between a name and its value,
+## the wash on every other row, and what the value's Label is called.
+const TABLE_PAD := Vector2i(3, 2)
+const TABLE_GAP := 6
+const TABLE_STRIPE := Color(Palette.SLOT_TAN, 0.4)
+const TABLE_VALUE := "Value"
 
 ## Panel variations, based on PanelContainer so they can hold and pad their contents. "HeaderBar" is
 ## the green title bar: it is a panel like the others rather than part of the panel below it, so it
@@ -211,6 +217,97 @@ static func button(text: String, variation: String, tooltip: String) -> Button:
 	return made
 
 
+## The least air between a paying button's word and its figure, and the name of the node holding the
+## figure and the coin, which is how `price_of` and the tests find it.
+const PRICE_GAP := 6
+const PRICE_NAME := "Price"
+
+
+## A button that gold moves through: the word on the left, then the figure, then the coin against
+## the right edge -- [Buy      120 (c)]. Every such button in the game is made here, so they all
+## read the same way round. `figure` false leaves the number off (a bounty's Claim, whose reward is
+## on the card above it); a price of nothing is a plain button with no coin at all.
+static func priced_button(text: String, price: float, variation: String, tooltip: String,
+		figure := true) -> Button:
+	var made := button(text, variation, tooltip)
+	made.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	set_price(made, price, figure)
+	return made
+
+
+## Puts a new figure on a button `priced_button` made, or takes figure and coin off at nothing.
+static func set_price(made: Button, price: float, figure := true) -> void:
+	var old := made.get_node_or_null(PRICE_NAME)
+	if old != null:
+		made.remove_child(old)
+		old.queue_free()
+	made.custom_minimum_size.x = 0
+	if price <= 0.0:
+		return
+	var tail := HBoxContainer.new()
+	tail.name = PRICE_NAME
+	tail.alignment = BoxContainer.ALIGNMENT_END
+	tail.add_theme_constant_override("separation", 2)
+	tail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if figure:
+		var amount := label(BigNumber.format(price))
+		amount.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tail.add_child(amount)
+	var coin := TextureRect.new()
+	coin.texture = Coins.icon()
+	coin.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tail.add_child(coin)
+	made.add_child(tail)
+	tail.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_place_price(made, 0)
+	# The figure is a Label and not the button's own text, so it is told what the button's text is
+	# told: grey when the button is dead, and a pixel lower while the face is held down.
+	if not made.draw.is_connected(_tint_price):
+		made.draw.connect(_tint_price.bind(made))
+		made.button_down.connect(_place_price.bind(made, 1))
+		made.button_up.connect(_place_price.bind(made, 0))
+		made.ready.connect(_fit_price.bind(made))
+	_fit_price(made)
+
+
+## What a priced button says it costs, as written on it ("" with no figure). For the tests.
+static func price_of(made: Button) -> String:
+	var tail := made.get_node_or_null(PRICE_NAME)
+	if tail == null or not (tail.get_child(0) is Label):
+		return ""
+	return (tail.get_child(0) as Label).text
+
+
+## Wide enough for the word, the gap and the figure. A Button sizes itself to its own text only, and
+## a Label only knows its width once it has a theme, which is once it is in the tree.
+static func _fit_price(made: Button) -> void:
+	var tail: Control = made.get_node_or_null(PRICE_NAME)
+	if tail != null and made.is_inside_tree():
+		made.custom_minimum_size.x = (made.get_minimum_size().x + PRICE_GAP
+				+ tail.get_combined_minimum_size().x)
+
+
+static func _place_price(made: Button, sink: int) -> void:
+	var tail: Control = made.get_node_or_null(PRICE_NAME)
+	if tail == null:
+		return
+	tail.offset_left = BUTTON_MARGIN.x
+	tail.offset_right = -BUTTON_MARGIN.x
+	tail.offset_top = BUTTON_MARGIN.y + sink
+	tail.offset_bottom = -BUTTON_MARGIN.y + sink
+
+
+static func _tint_price(made: Button) -> void:
+	var tail := made.get_node_or_null(PRICE_NAME)
+	if tail == null:
+		return
+	var color := DISABLED_FONT_COLOR if made.disabled else FONT_COLOR
+	if tail.get_child(0) is Label:
+		(tail.get_child(0) as Label).add_theme_color_override("font_color", color)
+	tail.get_child(-1).modulate = Color(1, 1, 1, 0.5) if made.disabled else Color.WHITE
+
+
 ## A brown face with a mark and no words. It stands on the map with no themed ancestor, so it carries
 ## the theme itself.
 static func icon_button(texture: Texture2D, tooltip: String, ui_scale: float) -> Button:
@@ -253,6 +350,41 @@ static func vbox(separation: int, width := 0.0) -> VBoxContainer:
 	made.add_theme_constant_override("separation", separation)
 	made.custom_minimum_size = Vector2(width, 0)
 	return made
+
+
+## One row of a table, and the one way the game draws one: the name against the left edge, the value
+## against the right, and every other row (`striped`) washed with `TABLE_STRIPE` so the eye can follow
+## a name across to its number. Stack them in a `vbox(0)`, or the stripes come apart.
+##
+## `width` is for a table standing in something that sizes itself round its contents (a floating
+## card): the name then wraps in what the value leaves of it, measured here because a wrapping Label
+## has to be told its width before it can say its height. At 0 the name takes what the parent gives.
+## The value's Label is named `TABLE_VALUE`, for a caller with a tooltip to hang on it.
+static func table_row(text: String, value: String, striped: bool, width := 0.0,
+		text_color: Variant = null, value_color: Variant = null) -> PanelContainer:
+	var row := PanelContainer.new()
+	var box := StyleBoxFlat.new()
+	box.bg_color = TABLE_STRIPE if striped else Color.TRANSPARENT
+	box.set_content_margin_all(TABLE_PAD.y)
+	box.content_margin_left = TABLE_PAD.x
+	box.content_margin_right = TABLE_PAD.x
+	row.add_theme_stylebox_override("panel", box)
+	var cells := HBoxContainer.new()
+	cells.add_theme_constant_override("separation", TABLE_GAP)
+	row.add_child(cells)
+	var name_cell := label(text, text_color, true)
+	name_cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_cell.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	cells.add_child(name_cell)
+	var value_cell := label(value, value_color, true)
+	value_cell.name = TABLE_VALUE
+	value_cell.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	cells.add_child(value_cell)
+	if width > 0.0:
+		var taken := theme().get_font("font", "SmallLabel").get_string_size(value,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, SMALL_FONT_SIZE).x
+		name_cell.custom_minimum_size.x = maxf(width - 2 * TABLE_PAD.x - TABLE_GAP - ceilf(taken), 0.0)
+	return row
 
 
 ## A green title bar with an X at its right end over a cream body. Two panels stacked rather than the

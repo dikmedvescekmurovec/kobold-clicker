@@ -123,6 +123,9 @@ static func can_apply(orb: String, item: Item) -> bool:
 	# One answer for all six: a piece the hammer ruined is out of the game as far as crafting goes.
 	if item.broken:
 		return false
+	# A unique's modifiers are its row's and stay: only their values may move, which is Divine.
+	if item.rarity == ItemRarity.Rarity.UNIQUE and orb != "Orb of Divine":
+		return false
 	match orb:
 		"Orb of Transmutation":
 			return item.rarity == ItemRarity.Rarity.COMMON
@@ -150,6 +153,8 @@ static func why_not(orb: String, item: Item) -> String:
 	var piece := "%s %s" % [item.rarity_name(), item.display_name()]
 	if item.broken:
 		return "A broken piece cannot be changed"
+	if item.rarity == ItemRarity.Rarity.UNIQUE:
+		return "Only an Orb of Divine can change a unique"
 	match orb:
 		"Orb of Transmutation":
 			return "Only a common piece can be transmuted"

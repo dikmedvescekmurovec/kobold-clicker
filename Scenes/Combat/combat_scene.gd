@@ -18,6 +18,8 @@ extends CanvasLayer
 
 ## The fight is over. `won` says whether the tile was taken.
 signal finished(won: bool)
+## Retry under a lost verdict: leave as `finished(false)` would, and open the same tile's fight again.
+signal retry
 ## A find that is being kept. This, and not `Encounter.loot_dropped`, is what the rest of the game
 ## hears: the autodiscard rule is applied here and nowhere else, so the counter, the pouch and the
 ## bag can never come to different answers about what a run found.
@@ -162,6 +164,25 @@ const XP_FADE_SHARE := 0.3
 ## this many times larger again -- whole numbers only, for the reason `zoom` is.
 const XP_GEM_SCALE := 2
 const XP_GEM := preload("res://Assets/UI/xp_gem.png")
+## The verdict's kill mark: the pack's skull, which the Last Gasp also wears.
+const SKULL := preload("res://Assets/Gear/Unique/last_gasp.png")
+## What the nameplate says a tier in: the colour of the name -- the pips' and the health bar's own
+## green and gold -- and the mark either side of it, cut cream by tools/ui_kit.py.
+const TIER_COLOUR := {
+	EnemyRoster.Tier.COMMON: Palette.BONE,
+	EnemyRoster.Tier.ELITE: Palette.LEAF_LT,
+	EnemyRoster.Tier.BOSS: Palette.GOLD,
+}
+const TIER_MARK := {
+	EnemyRoster.Tier.ELITE: preload("res://Assets/UI/ui_icon_skull.png"),
+	EnemyRoster.Tier.BOSS: preload("res://Assets/UI/ui_icon_crown.png"),
+}
+## A boss's name is written at twice Pixellari's native size, the one other size it stays crisp at,
+## and pops in from BOSS_POP times that over BOSS_POP_TIME, white before it is gold.
+const NAME_FONT := 16
+const BOSS_FONT := 32
+const BOSS_POP := 1.5
+const BOSS_POP_TIME := 0.35
 ## The marks on the HUD's square buttons, drawn by tools/ui_kit.py to match the map's bag and skills.
 const SACK_ICON := preload("res://Assets/UI/ui_icon_sack.png")
 const FLAG_ICON := preload("res://Assets/UI/ui_icon_flag.png")
@@ -251,6 +272,11 @@ var _tally: VBoxContainer
 var _pips: KillPips
 var _enemy_panel: VBoxContainer
 var _enemy_label: Label
+var _enemy_marks: Array[TextureRect] = []
+var _enemy_title: Label
+## How much larger than it belongs the nameplate is drawn this frame: 1 but for a boss's entrance.
+var _plate_pop := 1.0
+var _plate_tween: Tween
 var _enemy_bar: HealthBar
 var _result: PanelContainer
 var _result_summary: VBoxContainer
@@ -292,7 +318,9 @@ var _auto_label: Label
 ## to be chosen between, so there is nothing to open and nothing to decide while the fight is on.
 ## The coin beside it goes with it, so the row is what is shown and hidden.
 var _gold_label: Label
-var _orb_label: Label
+var _kills_label: Label
+var _collect: Button
+var _lost_row: HBoxContainer
 var _gold_row: HBoxContainer
 ## What the fight earned in experience, the gem and the number, shown beside the purse.
 var _xp_label: Label
@@ -304,6 +332,8 @@ var _xp_row: HBoxContainer
 func begin(encounter: Encounter, for_cell: Vector2i, ui_scale: float, variant := "plain",
 		layout := 0) -> void:
 	fight = encounter
+	# No Control lies over the arena, so the cursor there is the default one: a press is a swing.
+	Input.set_default_cursor_shape(Cursors.SWORD)
 	cell = for_cell
 	area_variant = variant
 	area_layout = layout if layout > 0 else layout_for(for_cell)
@@ -515,9 +545,26 @@ func _build_hud() -> void:
 	_enemy_panel.scale = Vector2(_ui_scale, _ui_scale)
 	_enemy_panel.add_theme_constant_override("separation", 2)
 	hud.add_child(_enemy_panel)
+	# The name between two marks, the banner an elite or a boss walks in under; a common has none.
+	var name_row := HBoxContainer.new()
+	name_row.add_theme_constant_override("separation", 6)
+	name_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_enemy_panel.add_child(name_row)
 	_enemy_label = _hud_label("", Palette.BONE)
-	_enemy_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_enemy_panel.add_child(_enemy_label)
+	for side in 2:
+		var mark := TextureRect.new()
+		mark.stretch_mode = TextureRect.STRETCH_SCALE
+		mark.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_enemy_marks.append(mark)
+		name_row.add_child(mark)
+		if side == 0:
+			name_row.add_child(_enemy_label)
+	# A boss's second line, in the body font with the same outline.
+	_enemy_title = _hud_label("", Palette.BONE)
+	_enemy_title.theme_type_variation = "SmallLabel"
+	_enemy_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_enemy_panel.add_child(_enemy_title)
 	# The frame this wears is the enemy's tier, so it changes as the lineup walks in. It is wider for
 	# an elite and wider still for a boss, which the column simply grows to hold -- _place_corners
 	# centres it and has no opinion about how wide it is.
@@ -547,25 +594,19 @@ func _build_hud() -> void:
 	_result_detail = _label("")
 	_result_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_result_summary.add_child(_result_detail)
-	# What the fight left behind, under the verdict. Kept even when it was lost, so this is where
-	# that promise is visibly kept.
-	_result_drops = DropsView.new()
-	_result_drops.discardable = true
-	_result_drops.discarded.connect(_on_drop_discarded)
-	_result_drops.resized_contents.connect(_centre_result)
-	_result_summary.add_child(_result_drops)
-	# What the fight earned, over the footnote and under the finds: a purse off every body is the one
-	# part of the takings that is never nothing, so it reads as part of the verdict rather than as an
-	# aside. In the panel's own colour -- Palette.GOLD is the unique item step, and spending it here
-	# would put one colour on a currency and on an item's name in the same panel.
-	# The coin rather than the word, the same one the bag's footer wears. Centred by the row shrinking
-	# to its contents: HORIZONTAL_ALIGNMENT_CENTER centres text inside a label and says nothing about
-	# where the label itself sits in the column.
+	# What the fight earned, over the finds: gold, experience and bodies in one row, each a bare
+	# number behind its mark. In the panel's own colour -- Palette.GOLD is the unique item step, and
+	# spending it here would put one colour on a currency and on an item's name in the same panel.
+	# Centred by the row shrinking to its contents: HORIZONTAL_ALIGNMENT_CENTER centres text inside a
+	# label and says nothing about where the label itself sits in the column.
+	var sums := HBoxContainer.new()
+	sums.add_theme_constant_override("separation", 10)
+	sums.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_result_summary.add_child(sums)
 	_gold_row = HBoxContainer.new()
 	_gold_row.add_theme_constant_override("separation", 6)
-	_gold_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_gold_row.hide()
-	_result_summary.add_child(_gold_row)
+	sums.add_child(_gold_row)
 	var coin := TextureRect.new()
 	coin.texture = Coins.icon()
 	coin.custom_minimum_size = Vector2(Coins.SIZE, Coins.SIZE)
@@ -577,7 +618,7 @@ func _build_hud() -> void:
 	_xp_row = HBoxContainer.new()
 	_xp_row.add_theme_constant_override("separation", 6)
 	_xp_row.hide()
-	_gold_row.add_child(_xp_row)
+	sums.add_child(_xp_row)
 	var gem := TextureRect.new()
 	gem.texture = XP_GEM
 	gem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -586,12 +627,26 @@ func _build_hud() -> void:
 	_xp_row.add_child(gem)
 	_xp_label = _label("")
 	_xp_row.add_child(_xp_label)
-	# What the run turned up in currency, as a count. Which orbs is what the tray in the bag is for,
-	# and each was seen falling out of the body that carried it; a verdict wants the score.
-	_orb_label = _label("")
-	_orb_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_orb_label.hide()
-	_result_summary.add_child(_orb_label)
+	# The bodies, as a count behind a skull. The pack's 32 px skull at half size, the orb tray's 2:1;
+	# the mode goes on before the texture, or the minimum stays 32 (see OrbSlot).
+	var kills_row := HBoxContainer.new()
+	kills_row.add_theme_constant_override("separation", 6)
+	sums.add_child(kills_row)
+	var skull := TextureRect.new()
+	skull.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	skull.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	skull.texture = SKULL
+	skull.custom_minimum_size = Vector2(Coins.SIZE, Coins.SIZE)
+	kills_row.add_child(skull)
+	_kills_label = _label("")
+	kills_row.add_child(_kills_label)
+	# What the fight left behind, under the sums: the finds on the bag's light panel and the orbs in a
+	# row under them. Kept even when it was lost, so this is where that promise is visibly kept.
+	_result_drops = DropsView.new()
+	_result_drops.discardable = true
+	_result_drops.discarded.connect(_on_drop_discarded)
+	_result_drops.resized_contents.connect(_centre_result)
+	_result_summary.add_child(_result_drops)
 	# What the player's own rule threw away, as a number and nothing else. It is said here because a
 	# run that quietly found half as much as it did would be a run the player cannot read.
 	_auto_label = _label("")
@@ -602,10 +657,22 @@ func _build_hud() -> void:
 	_auto_label.modulate = Color(1.0, 1.0, 1.0, 0.6)
 	_auto_label.hide()
 	_result_summary.add_child(_auto_label)
+	# The way out, which `_on_finished` picks by how it went. A won tile and an ended run leave by the
+	# word Collect, which says what the press is for where an arrow only says leave; a lost one has
+	# nothing to collect, so it gets the arrow and, beside it, another go at the same tile.
+	_collect = UITheme.button("Collect", "WoodButton", "Take it all back to the map")
+	_collect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_collect.pressed.connect(_on_back_pressed)
+	_result_summary.add_child(_collect)
+	_lost_row = HBoxContainer.new()
+	_lost_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_result_summary.add_child(_lost_row)
 	var back := UITheme.back_button("Back to the map")
-	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	back.pressed.connect(_on_back_pressed)
-	_result_summary.add_child(back)
+	_lost_row.add_child(back)
+	var again := UITheme.button("Retry", "WoodButton", "Fight for this tile again")
+	again.pressed.connect(retry.emit)
+	_lost_row.add_child(again)
 
 	# The same list again, on its own panel, for the counter in the corner to open mid-run. A farm
 	# run has no verdict to wait for, so this is the only way to see what it has found.
@@ -962,6 +1029,42 @@ func _on_enemy_coming(_index: int, enemy_name: String, _hp: float) -> void:
 	_enemy_scale = _enemy.scale
 	_enemy.position = Vector2(view.x * OFFSCREEN_X, view.y * GROUND)
 	_enemy.play("walk")
+	_dress_nameplate()
+
+
+## Writes the nameplate for whoever is walking in: the name in its tier's colour between that tier's
+## marks, an elite's title in front of it, a boss's under it at twice the size -- and a boss's plate
+## pops in white. Here rather than in `_refresh` because none of it changes while the enemy stands.
+func _dress_nameplate() -> void:
+	var tier := Encounter.tier_in(fight, fight.index)
+	var boss := tier == EnemyRoster.Tier.BOSS
+	var title := fight.enemy_title()
+	_enemy_label.text = fight.enemy_name() if boss or title.is_empty() \
+			else "%s %s" % [title, fight.enemy_name()]
+	_enemy_label.add_theme_font_size_override("font_size", BOSS_FONT if boss else NAME_FONT)
+	_enemy_title.text = title
+	_enemy_title.visible = boss
+	for mark in _enemy_marks:
+		mark.texture = TIER_MARK.get(tier)
+		mark.visible = mark.texture != null
+		# A skull stays the bone it is cut in -- tinted green it sank into every meadow -- and only a
+		# crown is gilded.
+		mark.modulate = Palette.GOLD if boss else Color.WHITE
+		if mark.visible:
+			mark.custom_minimum_size = mark.texture.get_size() * (2 if boss else 1)
+	if _plate_tween != null and _plate_tween.is_valid():
+		_plate_tween.kill()
+	_plate_pop = 1.0
+	_tint_nameplate(TIER_COLOUR[tier])
+	if boss and Settings.animations == Settings.Anim.DEFAULT:
+		_plate_tween = create_tween().set_parallel()
+		_plate_tween.tween_property(self, "_plate_pop", 1.0, BOSS_POP_TIME).from(BOSS_POP) \
+				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		_plate_tween.tween_method(_tint_nameplate, Color.WHITE, TIER_COLOUR[tier], BOSS_POP_TIME)
+
+
+func _tint_nameplate(colour: Color) -> void:
+	_enemy_label.add_theme_color_override("font_color", colour)
 	_slide_enemy()
 
 
@@ -1000,7 +1103,6 @@ func _refresh() -> void:
 		_enemy_panel.hide()
 		return
 	_enemy_panel.show()
-	_enemy_label.text = fight.enemy_name() + ("  (elite)" if fight.on_elite() else "")
 	var share := fight.hp / maxf(fight.enemy_max_hp(), 1.0)
 	# Encounter.tier_in rather than on_elite(): the pips beside this bar colour themselves through the
 	# same call, so the frame over the enemy and the pip standing for it can never disagree.
@@ -1041,7 +1143,8 @@ func _on_enemy_died(index: int) -> void:
 ## `_drops`, does not move the counter, is never thrown into the arena and appears in neither list.
 ## Everything else goes on exactly as it did, and leaves by `loot_kept`.
 func _on_loot_dropped(index: int, item: Item) -> void:
-	if autodiscard.is_valid() and bool(autodiscard.call(item.level)):
+	# A rule about a level is a rule about ordinary gear: a unique is never thrown away unseen.
+	if item.unique.is_empty() and autodiscard.is_valid() and bool(autodiscard.call(item.level)):
 		_auto_discarded += 1
 		loot_discarded.emit(index, item)
 		return
@@ -1057,7 +1160,7 @@ func _on_loot_dropped(index: int, item: Item) -> void:
 	# bone panel, and a find is thrown against a snowfield or a noon desert, which is exactly what the
 	# square's border colour was picked for.
 	_show_find(item.icon(), Color.TRANSPARENT if item.rarity == ItemRarity.Rarity.COMMON
-			else ItemRarity.BORDER_COLORS[item.rarity])
+			else item.border_color())
 	# The best finds slow the fight, so the beam coming up is watched rather than glimpsed.
 	if item.rarity >= ItemRarity.Rarity.ELITE:
 		Juice.hit_stop(get_tree(), STOP_RARE, STOP_RARE_SPEED)
@@ -1085,7 +1188,7 @@ func _on_drop_discarded(item: Item) -> void:
 	_drops.erase(item)
 	_refresh_loot_button()
 	_loot_drops.fill(_drops)
-	_result_drops.fill(_drops)
+	_result_drops.fill(_drops, fight.orbs)
 	drop_discarded.emit(item)
 
 
@@ -1137,7 +1240,8 @@ func _place_corners(view: Vector2) -> void:
 	# whole of how the fight is going reads down one column. Centred rather than aligned to an edge
 	# because an elite's brackets and a boss's crown widen the panel, and growing it evenly either
 	# side keeps the channel where it was, which is what HealthBar's own TROUGH is for.
-	var plate := _enemy_panel.get_combined_minimum_size() * _ui_scale
+	_enemy_panel.scale = Vector2.ONE * _ui_scale * _plate_pop
+	var plate := _enemy_panel.get_combined_minimum_size() * _enemy_panel.scale
 	_enemy_panel.position = Vector2((view.x - plate.x) / 2.0, view.y - plate.y - HUD_MARGIN)
 	# The counter in the bottom right, out at the corner so the nameplate has the middle.
 	var loot := _loot_button.get_combined_minimum_size() * _ui_scale
@@ -1172,6 +1276,7 @@ func _on_terminate_pressed() -> void:
 
 
 func _on_finished(won: bool) -> void:
+	Input.set_default_cursor_shape(Cursors.ARROW)
 	_refresh()
 	_enemy_panel.hide()
 	if won:
@@ -1179,23 +1284,21 @@ func _on_finished(won: bool) -> void:
 	# A farm run is not won or lost, only ended, so it is told what it did rather than how it went.
 	if fight.endless:
 		_result_label.text = "Run ended"
-		_result_detail.text = "%d slain" % fight.kills()
 	else:
 		_result_label.text = "Success" if won else "Failed"
-		_result_detail.text = "The tile is yours" if won else "Out of time"
+	# Only a loss has anything to add: the word says a win, and a run has no second line.
+	_result_detail.text = "Out of time"
+	_result_detail.visible = not won and not fight.endless
+	_collect.visible = not _result_detail.visible
+	_lost_row.visible = _result_detail.visible
 	_loot_panel.hide()
 	if fight.gold > 0.0:
-		_gold_label.text = "+%s" % BigNumber.format(fight.gold)
+		_gold_label.text = BigNumber.format(fight.gold)
 		_gold_row.show()
 	if fight.xp > 0:
-		_xp_label.text = "+%s" % BigNumber.format(fight.xp)
+		_xp_label.text = BigNumber.format(fight.xp)
 		_xp_row.show()
-	var found_orbs := 0
-	for orb: String in fight.orbs:
-		found_orbs += int(fight.orbs[orb])
-	if found_orbs > 0:
-		_orb_label.text = "+1 orb" if found_orbs == 1 else "+%d orbs" % found_orbs
-		_orb_label.show()
+	_kills_label.text = str(fight.kills())
 	if _auto_discarded > 0:
 		_auto_label.text = ("1 find discarded automatically" if _auto_discarded == 1
 				else "%d finds discarded automatically" % _auto_discarded)
@@ -1204,7 +1307,7 @@ func _on_finished(won: bool) -> void:
 	# buttons on the screen for the one thing left to do.
 	if _terminate != null:
 		_terminate.hide()
-	_result_drops.fill(_drops)
+	_result_drops.fill(_drops, fight.orbs)
 	_result.show()
 	await _centre_result()
 

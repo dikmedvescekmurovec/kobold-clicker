@@ -32,3 +32,6 @@ const LILAC := Color("a77fcf")
 ## What a modifier line is written in. Amber on bone is weak, and keeping GOLD unspent leaves the
 ## unique step a colour of its own.
 const RUST := Color("d57a39")
+## The elite step, border and name alike, and strength's ring on the character page, beside ICE_DK
+## for intelligence and LEAF for dexterity.
+const BRICK := Color("c0443a")

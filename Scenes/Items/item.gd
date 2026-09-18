@@ -31,6 +31,10 @@ var stats: Dictionary = {}
 ## A smith's upgrade that went wrong. A broken piece is worn and sold as it always was -- for half --
 ## and nothing may change it again: no orb, no upgrade, no lock.
 var broken := false
+## Which unique this is -- a key of `UniqueTable.UNIQUES` -- or "" for every ordinary piece. `type` is
+## still its base piece, so its slot, its base stats and what a smith's upgrade does to them need no
+## second answer.
+var unique := ""
 
 
 ## A fresh drop: the piece, its rarity, its level, and however many modifiers that rarity carries.
@@ -43,6 +47,21 @@ static func rolled(item_type: String, item_rarity: ItemRarity.Rarity, rng: Rando
 	item.level = maxi(1, item_level)
 	item.stats = scaled_stats(item_type, item.level)
 	item.mods = ModifierTable.roll(item_type, ItemRarity.mod_count(item_rarity, rng), rng, item.level)
+	return item
+
+
+## A unique, fresh off a body: its base piece's numbers at `item_level`, and the modifiers its row
+## names -- always those, in that order -- each at a value rolled in the band any modifier rolls in.
+static func rolled_unique(id: String, rng: RandomNumberGenerator, item_level := 1) -> Item:
+	var row: Dictionary = UniqueTable.UNIQUES[id]
+	var item := Item.new()
+	item.unique = id
+	item.type = row["base"]
+	item.rarity = ItemRarity.Rarity.UNIQUE
+	item.level = maxi(1, item_level)
+	item.stats = scaled_stats(item.type, item.level)
+	for mod_id: String in row["mods"]:
+		item.mods.append({"id": mod_id, "value": ModifierTable.reroll_value(mod_id, rng, item.level)})
 	return item
 
 
@@ -61,10 +80,15 @@ static func scaled_stats(item_type: String, item_level: int) -> Dictionary:
 	return out
 
 
-## What the panel calls it. A method rather than reading `type`, because a unique will want a name of
-## its own and this is where that seam belongs.
+## What the panel calls it. A method rather than reading `type`, because a unique has a name of its
+## own and this is where that seam belongs.
 func display_name() -> String:
-	return type
+	return type if unique.is_empty() else str(UniqueTable.UNIQUES[unique]["name"])
+
+
+## The sentence saying what a unique changes about a fight, or "" for a piece that changes nothing.
+func effect_text() -> String:
+	return "" if unique.is_empty() else UniqueTable.effect_text(unique)
 
 
 ## What the piece is worth before anything it rolled -- as it was rolled, not as the table reads
@@ -128,14 +152,33 @@ func rarity_name() -> String:
 
 
 func text_color() -> Color:
-	return ItemRarity.TEXT_COLORS[rarity]
+	return ItemRarity.SET_TEXT if is_set() else ItemRarity.TEXT_COLORS[rarity]
+
+
+func border_color() -> Color:
+	return ItemRarity.SET_BORDER if is_set() else ItemRarity.BORDER_COLORS[rarity]
+
+
+## The frame its square wears: its rarity's, or the set's green one. Null for a common piece.
+func frame() -> Texture2D:
+	return load(ItemRarity.FRAMES % ItemRarity.SET) if is_set() else ItemRarity.frame(rarity)
+
+
+## Whether this is one piece of a set -- a unique in every way but the green it wears.
+func is_set() -> bool:
+	return not set_text().is_empty()
+
+
+## What its set does, as the card says it under the piece's own rule. "" for a piece of no set.
+func set_text() -> String:
+	return "" if unique.is_empty() else UniqueTable.set_text(unique)
 
 
 func icon() -> Texture2D:
-	return LootTable.icon(type)
+	return LootTable.icon(type) if unique.is_empty() else UniqueTable.icon(unique)
 
 
-## "Damage 5", "Crit Chance 5%" -- what the item is worth before anything on top.
+## "5 Damage", "5% Crit Chance" -- what the item is worth before anything on top.
 func stat_lines() -> PackedStringArray:
 	var lines := PackedStringArray()
 	var stats := base_stats()
@@ -144,9 +187,9 @@ func stat_lines() -> PackedStringArray:
 	return lines
 
 
-## "+14% increased Damage", "+6% item find" -- in the order they rolled, with the smith's lock said
-## on the line it belongs to. Said here rather than by whoever is drawing, so a locked modifier reads
-## the same in the bag, in the comparison, on a vendor's shelf and over a fresh drop.
+## "+14% increased Damage", "+6% item find" -- in the order they rolled. The smith's lock is not a
+## word on the line: `locked_line` says which one it is, and whoever draws them writes that one in
+## the ink a base stat wears, as fixed as they are.
 ##
 ## `detailed` puts the band the value rolled in at this piece's level beside it, "+14(8-20)% increased Damage":
 ## what a Divine could make of it. A smith's upgrade lifts the level and not the roll, so a value can
@@ -154,23 +197,41 @@ func stat_lines() -> PackedStringArray:
 func mod_lines(detailed := false) -> PackedStringArray:
 	var lines := PackedStringArray()
 	for mod in mods:
-		var line := ModifierTable.line(mod)
-		if line.is_empty():
-			continue
-		if detailed:
-			# Every modifier's line opens with its number, so the band goes hard against it and ahead
-			# of its unit: "+4(1-4)s". The number may be `BigNumber`'s "1.23e6".
-			var number := RegEx.create_from_string("^\\+[0-9.e]+").search(line)
-			if number != null:
-				line = "%s(%d-%d)%s" % ([number.get_string()] + ModifierTable.band_for(str(mod["id"]), level)
-						+ [line.substr(number.get_end())])
-		lines.append((line + " (locked)") if bool(mod.get("locked", false)) else line)
+		var line := _mod_line(mod, detailed)
+		if not line.is_empty():
+			lines.append(line)
 	return lines
+
+
+## The one of `mod_lines` the smith has pinned, spelled as it is there; "" with no lock. No piece
+## carries two modifiers that write the same sentence, so the text is enough to find it by.
+func locked_line(detailed := false) -> String:
+	return _mod_line(locked_mod(), detailed)
+
+
+func _mod_line(mod: Dictionary, detailed: bool) -> String:
+	var line := ModifierTable.line(mod)
+	if detailed and not line.is_empty():
+		# Every modifier's line opens with its number, so the band goes hard against it and ahead
+		# of its unit: "+4(1-4)s". The number may be `BigNumber`'s "1.23e6".
+		var number := RegEx.create_from_string("^\\+[0-9.e]+").search(line)
+		if number != null:
+			line = "%s(%d-%d)%s" % ([number.get_string()] + ModifierTable.band_for(str(mod["id"]), level)
+					+ [line.substr(number.get_end())])
+	return line
 
 
 ## The save's shape. The rarity goes in by name: an enum value is only a position, and slipping a new
 ## step in between two others would quietly reinterpret every save on disk.
 func to_dict() -> Dictionary:
+	var out := _to_dict()
+	# Written only where it is true, the way a lock is, so an ordinary piece's save does not change.
+	if not unique.is_empty():
+		out["unique"] = unique
+	return out
+
+
+func _to_dict() -> Dictionary:
 	return {
 		"type": type,
 		"rarity": rarity_name(),
@@ -196,7 +257,16 @@ static func from_dict(data: Variant) -> Item:
 	var step := ItemRarity.from_name(str(saved.get("rarity", "")))
 	if step < 0:
 		return null
+	# A unique this build no longer has goes the way a retired piece does: by name, and whole. One whose
+	# base has been moved keeps the base its row names now.
+	var unique_id := str(saved.get("unique", ""))
+	if not unique_id.is_empty():
+		if not UniqueTable.UNIQUES.has(unique_id):
+			return null
+		item_type = UniqueTable.UNIQUES[unique_id]["base"]
+		step = ItemRarity.Rarity.UNIQUE
 	var item := Item.new()
+	item.unique = unique_id
 	item.type = item_type
 	item.rarity = step
 	item.level = maxi(1, int(saved.get("level", 1)))

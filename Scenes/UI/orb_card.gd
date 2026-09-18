@@ -60,7 +60,8 @@ func fill(orb: String, held: int, against: Item, sell_for := 0.0) -> void:
 		status = "Sell for %s" % BigNumber.format(sell_for)
 		tone = Palette.LEAF_LT
 	elif against == null:
-		status = "You hold %d" % held
+		# And how it is used from here, since nothing else on the page says a held orb can be picked up.
+		status = "You hold %d. Press it, then the piece to use it on" % held
 	elif OrbTable.can_apply(orb, against):
 		status = "Use on %s" % against.display_name()
 		tone = Palette.LEAF_LT

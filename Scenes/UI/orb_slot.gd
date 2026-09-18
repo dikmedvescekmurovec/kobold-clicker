@@ -49,15 +49,18 @@ var _live := false
 
 ## Draws this orb held `count` times. `usable` is whether it can do anything to whatever the bag has
 ## open -- with nothing open every held orb is usable, which is the tray at rest.
-func setup(which: String, count: int, usable: bool) -> void:
+## `armed` is the orb the bag is holding over the grid: its socket stays as dark as an open square's.
+func setup(which: String, count: int, usable: bool, armed := false) -> void:
 	orb = which
 	_live = count > 0 and usable
+	Cursors.wear(self, Cursors.HAND if _live else Cursors.ARROW)
 	custom_minimum_size = Vector2(SIDE, SIDE)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	# The socket an item square uses, so the tray reads as part of the same bag rather than as a
 	# second interface pinned under it. No rarity ring: an orb has no rarity, and borrowing common's
 	# borderless style is exactly right rather than a shortcut.
-	add_theme_stylebox_override("panel", ItemRarity.slot_style(ItemRarity.Rarity.COMMON))
+	var rest := ItemRarity.slot_style(ItemRarity.Rarity.COMMON, armed)
+	add_theme_stylebox_override("panel", rest)
 
 	_icon = TextureRect.new()
 	# The source is 32 and this draws 16, so the texture is stepped down here rather than cut small:
@@ -111,7 +114,7 @@ func setup(which: String, count: int, usable: bool) -> void:
 					ItemRarity.slot_style(ItemRarity.Rarity.COMMON, true))
 		hovered.emit(orb))
 	mouse_exited.connect(func() -> void:
-		add_theme_stylebox_override("panel", ItemRarity.slot_style(ItemRarity.Rarity.COMMON))
+		add_theme_stylebox_override("panel", rest)
 		unhovered.emit())
 
 
@@ -125,7 +128,7 @@ func _gui_input(event: InputEvent) -> void:
 		accept_event()
 
 
-static func make(which: String, count: int, usable: bool) -> OrbSlot:
+static func make(which: String, count: int, usable: bool, armed := false) -> OrbSlot:
 	var slot := OrbSlot.new()
-	slot.setup(which, count, usable)
+	slot.setup(which, count, usable, armed)
 	return slot

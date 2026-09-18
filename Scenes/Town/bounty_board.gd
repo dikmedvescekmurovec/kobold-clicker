@@ -35,6 +35,9 @@ const ACCEPTED := "accepted"
 ## The level of the town that posted it. A kill counts only on land of that level or deeper, so a
 ## deep town's work cannot be done on the doorstep slimes. Absent (an older save) asks nothing.
 const LEVEL := "level"
+## Whether a fortuneteller has been paid to say where this monster lives, which is what puts the
+## land and the nearest tile of it on the card. Absent is not.
+const LOCATED := "located"
 
 ## How many of each tier a board posts. Two of the rabble and one elite: the pair are something to
 ## work through while walking, the elite is the one worth going out of the way for.
@@ -143,6 +146,20 @@ static func accept(state: TownState, bounty: Dictionary) -> bool:
 	if bool(bounty.get(DONE, false)) or not active(state).is_empty():
 		return false
 	bounty[ACCEPTED] = true
+	return true
+
+
+## Whether the card may say where the monster lives.
+static func located(bounty: Dictionary) -> bool:
+	return bool(bounty.get(LOCATED, false))
+
+
+## A fortuneteller has said where it lives. False when there was nothing to tell: only work that is
+## out can be asked about, and only once.
+static func locate(bounty: Dictionary) -> bool:
+	if not is_active(bounty) or located(bounty):
+		return false
+	bounty[LOCATED] = true
 	return true
 
 

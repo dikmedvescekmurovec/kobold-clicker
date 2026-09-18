@@ -22,6 +22,11 @@ func _run() -> void:
 	_check(_test_what_a_hit_is_worth() == true, "damage tests ran to the end")
 	_check(_test_the_weapon_swings_itself() == true, "attack speed tests ran to the end")
 	_check(_test_capstone_effects() == true, "capstone effect tests ran to the end")
+	_check(_test_unique_drops() == true, "unique drop tests ran to the end")
+	_check(_test_unique_effects() == true, "unique effect tests ran to the end")
+	_check(_test_more_unique_effects() == true, "second batch unique effect tests ran to the end")
+	_check(_test_home_clauses() == true, "home clause tests ran to the end")
+	_check(_test_uniques_keep_the_edge() == true, "unique ceiling tests ran to the end")
 	_check(_test_backdrops() == true, "backdrop tests ran to the end")
 	_check(_test_backdrop_layouts() == true, "backdrop layout tests ran to the end")
 	_check(_test_a_farm_run_never_ends() == true, "farm run tests ran to the end")
@@ -287,6 +292,13 @@ func _test_backdrop_layouts() -> bool:
 func _test_lineup() -> bool:
 	for env in _environments():
 		var fight := Encounter.for_tile(Vector2i(3, 4), env)
+		# The nameplate's title: nothing for a common, a word for the elite, and the same word twice.
+		_check(fight.enemy_title().is_empty(), "%s: a common has no title" % env)
+		fight.index = fight.enemies - 1
+		_check(Encounter.ELITE_TITLES.has(fight.enemy_title()), "%s: the elite has a title" % env)
+		_check(fight.enemy_title() == fight.enemy_title(), "and it is the same one every time")
+		_check(Encounter.TITLE_GROUND.has(env), "%s has ground a boss can hold" % env)
+		fight.index = 0
 		_check(fight.enemies == Encounter.ENEMIES and fight.seconds == Encounter.SECONDS,
 				"%s fights open land's own fight: %d in %.0fs" % [env, fight.enemies, fight.seconds])
 		_check(fight.lineup.size() == fight.enemies, "%s fields %d enemies" % [env, fight.enemies])
@@ -910,6 +922,15 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 	_check(not main.map.visible and main.map.process_mode == Node.PROCESS_MODE_DISABLED,
 			"the map stops while the fight is on")
 	main._combat.fight.give_up()
+	_check(main._combat._lost_row.visible and not main._combat._collect.visible,
+			"a lost fight offers the arrow and Retry, and nothing to collect")
+	# Retry is a loss left and the same tile's fight opened again, in one press.
+	var first: CombatScene = main._combat
+	first.retry.emit()
+	_check(main._combat != null and main._combat != first and main._combat.cell == target,
+			"Retry opens the same tile's fight afresh")
+	_check(not main.view.charted(target) and not main.map.visible, "with nothing charted by the loss")
+	main._combat.fight.give_up()
 	main._combat._on_back_pressed()
 	await process_frame
 	_check(main._combat == null, "the fight is torn down")
@@ -922,6 +943,8 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 	var fight: Encounter = main._combat.fight
 	_play(fight, 10000)
 	_check(fight.victory, "the rematch is won")
+	_check(main._combat._collect.visible and not main._combat._lost_row.visible,
+			"and a won tile leaves by Collect")
 	main._combat._on_back_pressed()
 	await process_frame
 	_check(main.view.charted(target), "a won tile is charted")
@@ -1206,6 +1229,519 @@ func _test_a_settlement_is_a_set_piece() -> bool:
 	_check(_click_rate(first, room, Encounter.BARE_DAMAGE, 0.0) < 8.0,
 			"a village in the first ring is beatable with nothing on (%.1f/s)"
 			% _click_rate(first, room, Encounter.BARE_DAMAGE, 0.0))
+	return true
+
+
+## Every unique a fight hands over, gathered off `loot_dropped` as [index, id] pairs.
+func _uniques_of(fight: Encounter) -> Array:
+	var found := []
+	fight.loot_dropped.connect(func(index: int, item: Item) -> void:
+		if not item.unique.is_empty():
+			found.append([index, item.unique]))
+	return found
+
+
+## Where uniques come from: nothing before the wait is over, the first boss whatever the wait says,
+## and the rabble far less often than what leads it.
+func _test_unique_drops() -> bool:
+	var cell := Vector2i(6, 0)
+	# A drop rate this size caps every chance at certain, so the tally is about the gate and not luck.
+	var sure := {"damage": 1.0e9, "drop_rate": 1.0e12}
+
+	var untold := Encounter.farm(cell, "grass")
+	untold.arm(sure)
+	var none := _uniques_of(untold)
+	untold.start()
+	_play(untold, 60)
+	_check(none.is_empty(), "a fight nobody tells drops no uniques (%s)" % [none])
+
+	var run := Encounter.farm(cell, "grass")
+	run.arm(sure)
+	run.uniques_after = 30
+	var found := _uniques_of(run)
+	run.start()
+	_play(run, 60)
+	_check(not found.is_empty() and int(found[0][0]) == 30,
+			"the first unique falls on the kill the wait ends at (%s)" % [found.slice(0, 2)])
+	for pair: Array in found:
+		_check(str(pair[1]) in UniqueTable.pool_for("grass"), "%s is found on grass" % pair[1])
+
+	# The promised one: a settlement's boss, with the wait nowhere near over.
+	var town := Encounter.for_tile(cell, "grass", "village")
+	town.arm({"damage": 1.0e9})
+	town.uniques_after = 1000
+	town.guarantee_unique = true
+	var promised := _uniques_of(town)
+	town.start()
+	_play(town, 100)
+	_check(town.victory and promised.size() == 1 and int(promised[0][0]) == town.enemies - 1,
+			"the first boss hands over exactly one unique (%s)" % [promised])
+	_check(not town.guarantee_unique, "and the promise is spent")
+
+	var later := Encounter.for_tile(cell, "grass", "village")
+	later.arm({"damage": 1.0e9})
+	later.uniques_after = 1000
+	later.unique_rng.seed = WORLD_SEED
+	var unpromised := _uniques_of(later)
+	later.start()
+	_play(later, 100)
+	_check(unpromised.is_empty(), "a boss promises nothing once one has been found")
+
+	for enemy: String in EnemyRoster.ENEMIES:
+		var chance := UniqueTable.chance_for(enemy)
+		match EnemyRoster.tier_of(enemy):
+			EnemyRoster.Tier.COMMON:
+				_check(chance > 0.0 and chance < 0.002, "%s almost never carries one (%f)" % [enemy, chance])
+			EnemyRoster.Tier.ELITE:
+				_check(chance >= 0.005 and chance < 0.05, "%s sometimes carries one (%f)" % [enemy, chance])
+			EnemyRoster.Tier.BOSS:
+				_check(chance >= 0.05 and chance <= 0.25, "%s often carries one (%f)" % [enemy, chance])
+	return true
+
+
+## A fight on `env` with `effects` worn, its first enemy standing and given `hp` to soak blows with.
+func _standing(effects: Array, stats: Dictionary, hp := 1.0e9, env := "grass") -> Encounter:
+	var fight := Encounter.for_tile(Vector2i(12, 0), env)
+	fight.effects = effects
+	fight.arm(stats)
+	fight.start()
+	fight.advance(Encounter.WALK_IN)
+	fight.health[0] = hp
+	fight.hp = hp
+	return fight
+
+
+## What each unique changes about a fight, held to the sentence on its card.
+func _test_unique_effects() -> bool:
+	var blows: Array = []
+	var listen := func(fight: Encounter) -> void:
+		fight.hit_landed.connect(func(amount: float, _c: bool, _a: bool) -> void: blows.append(amount))
+
+	# Metronome: the hand does nothing, the weapon does three times as much.
+	var metro := _standing(["metronome"], {"damage": 9.0, "attack_speed": 1.0})
+	_check(not metro.hit() and metro.hp == 1.0e9, "a click lands nothing beside a Metronome")
+	metro.advance(1.0)
+	_check(metro.hp == 1.0e9 - 30.0, "and its own swing deals triple (%s)" % (1.0e9 - metro.hp))
+
+	# Headsman: a quarter on its own, and Execute's tenth on top.
+	var axe := _standing(["headsman"], {"damage": 69.0}, 100.0)
+	axe.hit()
+	_check(axe.phase == Encounter.Phase.WAITING and axe.hp == 30.0, "30% left is past the Headsman")
+	var axe_kill := _standing(["headsman"], {"damage": 75.0}, 100.0)
+	axe_kill.hit()
+	_check(axe_kill.phase == Encounter.Phase.DYING, "under 25% the Headsman finishes it")
+	var both := _standing(["headsman", "execute"], {"damage": 69.0}, 100.0)
+	both.hit()
+	_check(both.phase == Encounter.Phase.DYING, "with Execute the line is 35%")
+	var over := _standing(["headsman", "execute"], {"damage": 59.0}, 100.0)
+	over.hit()
+	_check(over.phase == Encounter.Phase.WAITING, "and 40% left is still past it")
+
+	# Knucklebone: two points a click, fifty at most a ring, gone after a pause.
+	var ring := _standing(["knucklebone"], {"damage": 99.0})
+	listen.call(ring)
+	for i in 40:
+		ring.hit()
+		ring.advance(0.1)
+	_check(blows[0] == 100.0 and blows[1] == 102.0, "a streak adds 2 points a click (%s)" % [blows.slice(0, 3)])
+	_check(blows[-1] == 150.0, "and stops at half again (%s)" % blows[-1])
+	ring.advance(Encounter.KNUCKLE_WINDOW + 0.1)
+	ring.hit()
+	_check(blows[-1] == 100.0, "a pause loses the streak (%s)" % blows[-1])
+	blows.clear()
+	var rings := _standing(["knucklebone", "knucklebone"], {"damage": 99.0})
+	listen.call(rings)
+	for i in 40:
+		rings.hit()
+	_check(blows[-1] == 200.0, "two rings add, to double and no further (%s)" % blows[-1])
+	# A click through a walk-in lands nothing and still keeps the streak.
+	var walking := Encounter.for_tile(Vector2i(12, 0), "grass")
+	walking.effects = ["knucklebone"]
+	walking.start()
+	_check(not walking.hit() and walking._click_streak == 1, "a click that lands nothing still counts")
+
+	# Home ground: double there, nothing anywhere else.
+	blows.clear()
+	var home := _standing(["home:grass"], {"damage": 9.0})
+	listen.call(home)
+	home.hit()
+	var away := _standing(["home:grass"], {"damage": 9.0}, 1.0e9, "desert")
+	listen.call(away)
+	away.hit()
+	_check(blows == [20.0, 10.0], "a home piece doubles a blow at home alone (%s)" % [blows])
+
+	# Hourglass: a second a kill, never past the start, never for a boss, never on a run.
+	var glass := Encounter.for_tile(Vector2i(12, 0), "grass")
+	glass.effects = ["hourglass"]
+	glass.arm({"damage": 1.0e9})
+	glass.start()
+	glass.advance(Encounter.WALK_IN)
+	glass.hit()
+	_check(glass.time_left == glass.seconds, "the clock is never pushed past its start (%s)" % glass.time_left)
+	glass.advance(5.0)
+	var before := glass.time_left
+	glass.hit()
+	_check(is_equal_approx(glass.time_left, before + 1.0), "a kill puts a second back")
+	var boss := Encounter.for_tile(Vector2i(12, 0), "grass", "village")
+	boss.effects = ["hourglass"]
+	boss.arm({"damage": 1.0e9})
+	boss.index = boss.enemies - 1
+	boss.hp = 1.0
+	boss.phase = Encounter.Phase.WAITING
+	boss.time_left = 10.0
+	boss.hit()
+	_check(boss.time_left == 10.0, "a boss gives no time back")
+	var endless := Encounter.farm(Vector2i(12, 0), "grass")
+	endless.effects = ["hourglass"]
+	endless.arm({"damage": 1.0e9})
+	endless.time_left = 10.0
+	endless.start()
+	_play(endless, 20)
+	_check(endless.time_left == 10.0, "a run has no clock for the Hourglass to touch")
+
+	# The Tithe: no ordinary gear however sure the drop, and the purse three times over -- five for two.
+	var purses := []
+	for worn: Array in [[], ["tithe"], ["tithe", "tithe"]]:
+		var fight := Encounter.for_tile(Vector2i(12, 0), "grass")
+		fight.effects = worn
+		fight.always_drop = true
+		fight.arm({"damage": 1.0e9})
+		var gear := [0]
+		fight.loot_dropped.connect(func(_i: int, _item: Item) -> void: gear[0] += 1)
+		fight.start()
+		_play(fight, 100)
+		purses.append(fight.gold)
+		_check((gear[0] == 0) == (not worn.is_empty()), "a Tithe means no ordinary gear (%d with %s)" % [gear[0], worn])
+	_check(purses[1] == purses[0] * 3.0 and purses[2] == purses[0] * 5.0,
+			"and three times the gold, five for two (%s)" % [purses])
+	return true
+
+
+## The frontier stays a frontier. The best a clicker can wear -- the Glass Edge, a Berserker's Band, a
+## Knucklebone Ring, the Gambler's Die, the Packmule's Harness and the ground's own home piece, every
+## line at the top of its band, over a farmed set of rares -- is worth a handful of hex steps and no
+## more: monsters grow by `HP_GROWTH` a step for ever, and a set that multiplies a blow a fixed number
+## of times is caught up.
+func _test_uniques_keep_the_edge() -> bool:
+	var edge := Vector2i(20, 0)
+	var level := MapBuilder.level_of(edge)
+	var gear := _farmed(level, ItemRarity.Rarity.RARE)
+	# The most a clicker can stack: every piece whose rule is more damage on a click, on its home
+	# ground, with a full bag for the Harness to count.
+	var worn := {
+		Equipment.Socket.WEAPON: "glass_edge", Equipment.Socket.BOOTS: "meadowstriders",
+		Equipment.Socket.RING_LEFT: "berserkers_band", Equipment.Socket.RING_RIGHT: "knucklebone_ring",
+		Equipment.Socket.AMULET: "gamblers_die", Equipment.Socket.BODY: "packmule",
+	}
+	var rng := RandomNumberGenerator.new()
+	for socket: Equipment.Socket in worn:
+		var piece := Item.rolled_unique(worn[socket], rng, level)
+		for mod in piece.mods:
+			mod["value"] = int(ModifierTable.band_for(str(mod["id"]), level)[1])
+		_check(gear.equip(socket, piece) != null, "%s takes a farmed piece's place" % worn[socket])
+	var stats := gear.totals()
+	stats["bag_pieces"] = Inventory.CAPACITY
+	var fight := Encounter.for_tile(edge, "grass")
+	fight.wear(gear.effects())
+	fight.arm(stats)
+	_check("berserk" in fight.effects and "home:grass" in fight.effects and "grazing:grass" in fight.effects,
+			"the set's effects reach the fight (%s)" % [fight.effects])
+	# What a click is worth with the set on, a full Knucklebone streak included, asked of the fight's own
+	# sum so this cannot drift from it -- times the half again the Gambler's Die averages.
+	fight._click_streak = Encounter.KNUCKLE_MOST
+	var click := fight.damage * (1.0 + fight.crit_chance / 100.0 * fight.crit_damage / 100.0) \
+			* (1.0 + fight._unique_more(false)) * (Encounter.GAMBLE[0] + Encounter.GAMBLE[1]) / 2.0
+	# The rate the same farmed set wants at the edge with no unique on it: what "a fight" means here.
+	var ordinary := Encounter.for_tile(edge, "grass")
+	var plain := _rate_for(edge, _farmed(level, ItemRarity.Rarity.RARE),
+			ordinary.seconds - ordinary.enemies * (Encounter.WALK_IN + Encounter.DEATH))
+	# The map has no edge, so the set cannot be held to one tile. What it can be held to is what it
+	# buys: walk outward until the fight wants that many clicks again, and count the steps. The set
+	# pays its own prices on the way: the Glass Edge's faster clock, Grazing's two more bodies, and a
+	# weapon that never swings beside the Berserker's Band.
+	var bought := 0
+	var rate := 0.0
+	while bought < 40:
+		var there := Encounter.for_tile(edge + Vector2i(bought, 0), "grass")
+		there.wear(fight.effects)
+		var spare := there.seconds / Encounter.GLASS_CLOCK - there.enemies * (Encounter.WALK_IN + Encounter.DEATH)
+		rate = _total_health(there) / click / spare
+		if rate >= plain:
+			break
+		bought += 1
+	print("The best unique clicker set buys %d hex steps of frontier (%.2f clicks/s there, %.2f plain)"
+			% [bought, rate, plain])
+	_check(bought > 0, "the set is worth wearing")
+	_check(bought <= 14, "and buys a stretch of frontier, not the map (%d steps)" % bought)
+	return true
+
+
+## The second batch of uniques, each held to the sentence on its card.
+func _test_more_unique_effects() -> bool:
+	var blows: Array = []
+	var listen := func(fight: Encounter) -> void:
+		fight.hit_landed.connect(func(amount: float, _c: bool, _a: bool) -> void: blows.append(amount))
+	var cell := Vector2i(12, 0)
+
+	# One sum, not a product: a Metronome's swing at home is four times a blow, not six.
+	var sum := _standing(["metronome", "home:grass"], {"damage": 9.0, "attack_speed": 1.0})
+	sum.advance(1.0)
+	_check(sum.hp == 1.0e9 - 40.0, "what uniques add to a blow is added up (%s)" % (1.0e9 - sum.hp))
+
+	# Berserker's Band: the hand triples, the weapon stops.
+	var bear := _standing(["berserk"], {"damage": 9.0, "attack_speed": 2.0})
+	bear.advance(2.0)
+	_check(bear.hp == 1.0e9, "the weapon never swings beside a Berserker's Band")
+	bear.hit()
+	_check(bear.hp == 1.0e9 - 30.0, "and a click deals triple (%s)" % (1.0e9 - bear.hp))
+
+	# Glass Edge: double, paid for in clock -- and neither half on a run, which has none.
+	var glass := _standing(["glass_edge"], {"damage": 9.0})
+	var clock := glass.time_left
+	glass.advance(3.0)
+	_check(is_equal_approx(glass.time_left, clock - 4.0), "the Glass Edge spends the clock a third faster")
+	glass.hit()
+	_check(glass.hp == 1.0e9 - 20.0, "for double damage")
+	var run := Encounter.farm(cell, "grass")
+	run.effects = ["glass_edge", "last_gasp"]
+	run.arm({"damage": 9.0})
+	run.time_left = 1.0
+	run.start()
+	run.advance(Encounter.WALK_IN)
+	run.health[0] = 1.0e9
+	run.hp = 1.0e9
+	run.hit()
+	_check(run.hp == 1.0e9 - 10.0, "a run has no clock, so neither clock piece is worth anything on one")
+
+	# Gambler's Die: anywhere from almost nothing to three times, a half more on the whole.
+	var die := _standing(["gamble"], {"damage": 999.0})
+	die.gamble_rng.seed = WORLD_SEED
+	listen.call(die)
+	for i in 2000:
+		die.hit()
+	var total := 0.0
+	for amount: float in blows:
+		total += amount
+		_check(amount >= 10.0 and amount <= 3000.0, "a gambled blow stays inside its sentence (%s)" % amount)
+	_check(total / 2000.0 > 1350.0 and total / 2000.0 < 1650.0, "and averages half again (%.0f)" % (total / 2000.0))
+	blows.clear()
+
+	# Ascetic's Cord and the Packmule's Harness read a count the inventory hands over.
+	var bare := _standing(["ascetic"], {"damage": 9.0, "bare_sockets": 4})
+	bare.hit()
+	_check(bare.hp == 1.0e9 - 16.0, "15%% a bare socket (%s)" % (1.0e9 - bare.hp))
+	var mule := _standing(["packmule"], {"damage": 9.0, "bag_pieces": 40})
+	mule.hit()
+	_check(mule.hp == 1.0e9 - 14.0, "1%% a piece in the bag (%s)" % (1.0e9 - mule.hp))
+
+	# Last Gasp: the last five seconds and not a moment before.
+	var gasp := _standing(["last_gasp"], {"damage": 9.0})
+	listen.call(gasp)
+	gasp.time_left = 5.5
+	gasp.hit()
+	gasp.time_left = 5.0
+	gasp.hit()
+	_check(blows == [10.0, 30.0], "Last Gasp triples under five seconds (%s)" % [blows])
+	blows.clear()
+
+	# Duelist's Buckler: the first blow on each enemy crits, with no crit chance at all.
+	var duel := _standing(["opening_strike"], {"damage": 9.0, "crit_damage": 100.0}, 25.0)
+	listen.call(duel)
+	duel.hit()
+	duel.hit()
+	duel.advance(Encounter.DEATH)
+	duel.advance(Encounter.WALK_IN)
+	duel.hit()
+	_check(blows == [20.0, 10.0, 20.0], "the first blow on every enemy is a crit (%s)" % [blows])
+	blows.clear()
+
+	# Overflowing Chalice: what the cap throws away comes back as crit damage.
+	var chalice := Encounter.for_tile(cell, "grass")
+	chalice.effects = ["overcrit"]
+	chalice.arm({"crit_chance": Encounter.CRIT_CAP + 30.0, "crit_damage": 50.0})
+	_check(chalice.crit_chance == Encounter.CRIT_CAP and chalice.crit_damage == 50.0 + 30.0 * Encounter.OVERCRIT,
+			"crit chance past the cap becomes crit damage (%s)" % chalice.crit_damage)
+	var plain := Encounter.for_tile(cell, "grass")
+	plain.arm({"crit_chance": Encounter.CRIT_CAP + 30.0, "crit_damage": 50.0})
+	_check(plain.crit_damage == 50.0, "and is simply lost without it")
+
+	# Dominoes: a body felled by its first blow costs the next a fifth, before Cleave's change.
+	var fall := _standing(["domino", "cleave"], {"damage": 104.0}, 100.0)
+	fall.hit()
+	fall.advance(Encounter.DEATH)
+	_check(fall.hp == roundf(fall.health[1] * 0.8) - 5.0, "a fifth, then the overkill (%s of %s)" % [fall.hp, fall.health[1]])
+	var slow := _standing(["domino"], {"damage": 59.0}, 100.0)
+	slow.hit()
+	slow.hit()
+	slow.advance(Encounter.DEATH)
+	_check(slow.hp == slow.health[1], "two blows topple nothing")
+
+	# Snowball: 2% a kill, and no further than double.
+	var snow := _standing(["momentum"], {"damage": 9.0})
+	listen.call(snow)
+	snow._rose = 10
+	snow.hit()
+	snow._rose = 500
+	snow.hit()
+	_check(blows == [12.0, 20.0], "momentum builds and stops at double (%s)" % [blows])
+	blows.clear()
+
+	# Bulwark: block is a second swing, and the second swing is never a third.
+	var wall := _standing(["riposte"], {"damage": 0.0, "block_chance": 100.0})
+	wall.crit_rng.seed = WORLD_SEED
+	listen.call(wall)
+	for i in 400:
+		wall.hit()
+	_check(wall.block_chance == Encounter.RIPOSTE_CAP, "block is read, and capped for this")
+	_check(blows.size() > 640 and blows.size() <= 800, "three clicks in four swing again, once (%d)" % blows.size())
+	blows.clear()
+
+	# Heartwood Plate: a second a hundred health, ten at most, none on a run.
+	for case: Array in [[450.0, 4.0], [50000.0, Encounter.HEARTWOOD_MOST]]:
+		var oak := Encounter.for_tile(cell, "grass")
+		oak.effects = ["heartwood"]
+		oak.arm({"health": case[0]})
+		_check(oak.seconds == Encounter.SECONDS + float(case[1]) and oak.time_left == oak.seconds,
+				"%s health is %s seconds" % case)
+	var oak_run := Encounter.farm(cell, "grass")
+	oak_run.effects = ["heartwood"]
+	oak_run.arm({"health": 450.0})
+	_check(oak_run.seconds == Encounter.SECONDS, "and a run has no clock to add to")
+
+	# Magpie's Band: some purses are gear instead -- unless a Tithe says there is no gear.
+	for worn: Array in [["magpie"], ["magpie", "tithe"]]:
+		var nest := Encounter.farm(cell, "grass")
+		nest.effects = worn
+		nest.arm({"damage": 1.0e9})
+		nest.loot_rng.seed = WORLD_SEED
+		# Purses, finds and bodies, counted as they fall: `kills` lags a body still going down.
+		var seen := [0, 0, 0]
+		nest.gold_dropped.connect(func(_i: int, _g: float) -> void: seen[0] += 1)
+		nest.loot_dropped.connect(func(_i: int, _item: Item) -> void: seen[1] += 1)
+		nest.enemy_died.connect(func(_i: int) -> void: seen[2] += 1)
+		nest.start()
+		_play(nest, 400)
+		var traded: int = seen[2] - seen[0]
+		if "tithe" in worn:
+			_check(traded == 0 and seen[1] == 0, "the Tithe keeps every purse a purse")
+		else:
+			_check(traded >= 5 and traded <= 45 and seen[1] >= traded,
+					"about one purse in twenty is gear (%d of %d)" % [traded, seen[2]])
+
+	# Lucky Wound: a body that took a crit leaves the better of two rolls.
+	var worth := {}
+	for kind: String in ["plain", "lucky", "no crit"]:
+		var wound := Encounter.farm(cell, "grass")
+		wound.effects = [] if kind == "plain" else ["lucky_wound"]
+		wound.always_drop = true
+		wound.arm({"damage": 1.0e9, "crit_chance": 0.0 if kind == "no crit" else 100.0})
+		wound.loot_rng.seed = WORLD_SEED
+		var tally := [0]
+		wound.loot_dropped.connect(func(_i: int, item: Item) -> void: tally[0] += int(item.rarity) * 100 + item.level)
+		wound.start()
+		_play(wound, 300)
+		worth[kind] = tally[0]
+	_check(worth["lucky"] > worth["plain"], "two rolls and the better kept (%s)" % [worth])
+	_check(worth["no crit"] == worth["plain"], "and only where a crit landed")
+	return true
+
+
+## The home pieces' second rules: each makes a differently shaped fight, on its own ground.
+func _test_home_clauses() -> bool:
+	var cell := Vector2i(12, 0)
+	# Grazing: two more on the front, the same clock, and the fight still ends on its elite.
+	var herd := Encounter.for_tile(cell, "grass")
+	herd.wear(["home:grass", "grazing:grass"])
+	_check(herd.enemies == Encounter.ENEMIES + 2 and herd.lineup.size() == herd.enemies
+			and herd.health.size() == herd.enemies, "two more enemies graze (%d)" % herd.enemies)
+	_check(herd.seconds == Encounter.SECONDS and herd.hp == herd.health[0], "on the same clock")
+	for i in herd.enemies:
+		_check(herd.tier_for(i) == EnemyRoster.tier_of(herd.lineup[i]), "slot %d of a grazing fight agrees" % i)
+	_check(herd.tier_for(herd.enemies - 1) == EnemyRoster.Tier.ELITE, "and it still ends on its elite")
+	var again := Encounter.for_tile(cell, "grass")
+	again.wear(["grazing:grass"])
+	_check(again.lineup == herd.lineup, "the same tile grazes the same herd")
+	var elsewhere := Encounter.for_tile(cell, "desert")
+	elsewhere.wear(["grazing:grass"])
+	_check(elsewhere.enemies == Encounter.ENEMIES, "only on grass")
+	var chest := Encounter.for_tile(cell, "grass", "", true)
+	chest.wear(["grazing:grass"])
+	_check(chest.lineup.size() == 1, "and a mimic waits alone")
+
+	# Flush out: the elite first on open land; a settlement keeps its order.
+	var flushed := Encounter.for_tile(cell, "forest")
+	var was := flushed.lineup.duplicate()
+	flushed.wear(["flush_out:forest"])
+	_check(flushed.lineup[0] == was[-1] and flushed.lineup[-1] == was[0] and flushed.hp == flushed.health[0],
+			"the elite comes first")
+	for i in flushed.enemies:
+		_check(flushed.tier_for(i) == EnemyRoster.tier_of(flushed.lineup[i]), "slot %d of a flushed fight agrees" % i)
+	var both := Encounter.for_tile(cell, "forest")
+	both.wear(["flush_out:forest", "grazing:forest"])
+	for i in both.enemies:
+		_check(both.tier_for(i) == EnemyRoster.tier_of(both.lineup[i]), "slot %d of a pilgrim's fight agrees" % i)
+	_check(EnemyRoster.tier_of(both.lineup[0]) == EnemyRoster.Tier.ELITE and both.enemies == Encounter.ENEMIES + 2,
+			"grazing and flush out together: twelve, elite first")
+	var village := Encounter.for_tile(cell, "forest", "village")
+	var order := village.lineup.duplicate()
+	village.wear(["flush_out:forest"])
+	_check(village.lineup == order, "a settlement is a set piece and keeps its order")
+
+	# Heatstroke: the one thing that kills with nobody swinging.
+	var sun := Encounter.farm(cell, "desert")
+	sun.effects = ["heatstroke:desert"]
+	sun.start()
+	sun.advance(Encounter.WALK_IN)
+	sun.advance(10.0)
+	_check(is_equal_approx(sun.hp, sun.enemy_max_hp() * 0.8), "2%% a second it stands (%s of %s)" % [sun.hp, sun.enemy_max_hp()])
+	for i in 120:
+		sun.advance(1.0)
+	_check(sun.kills() >= 2 and sun.gold > 0.0, "the heat kills, and the body pays (%d)" % sun.kills())
+
+	# Frozen clock: a walk-in costs nothing.
+	var rime := Encounter.for_tile(cell, "ice")
+	rime.effects = ["frozen_clock:ice"]
+	rime.start()
+	rime.advance(Encounter.WALK_IN)
+	_check(rime.time_left == rime.seconds and rime.phase == Encounter.Phase.WAITING, "the clock stands still for a walk-in")
+	rime.advance(1.0)
+	_check(is_equal_approx(rime.time_left, rime.seconds - 1.0), "and runs once the enemy stands")
+
+	# Giantsbane: triple on big bodies, with Giant Slayer or without, and never both.
+	for worn: Array in [["giantsbane:mountains"], ["giantsbane:mountains", "giant_slayer"]]:
+		var peak := Encounter.for_tile(cell, "mountains")
+		peak.effects = worn
+		peak.arm({"damage": 0.0})
+		peak.start()
+		peak.advance(Encounter.WALK_IN)
+		var before := peak.hp
+		peak.hit()
+		_check(peak.hp == before - 1.0, "a common takes one")
+		peak.index = peak.enemies - 1
+		peak.hp = peak.health[peak.index]
+		before = peak.hp
+		peak.hit()
+		_check(peak.hp == before - 3.0, "the elite takes three, %s" % [worn])
+
+	# Restless dead: some commons get back up in the slot they fell in, and pay again.
+	var grave := Encounter.for_tile(cell, "dirt")
+	var seeded := 0
+	var risen := 0
+	var deaths := [0]
+	while risen == 0 and seeded < 20:
+		grave = Encounter.for_tile(cell, "dirt")
+		grave.effects = ["restless:dirt"]
+		grave.arm({"damage": 1.0e9})
+		grave.loot_rng.seed = WORLD_SEED + seeded
+		deaths[0] = 0
+		grave.enemy_died.connect(func(_i: int) -> void: deaths[0] += 1)
+		grave.start()
+		_play(grave, 200)
+		risen = grave.kills() - grave.enemies
+		seeded += 1
+	_check(grave.victory and risen > 0, "somebody rose (%d)" % risen)
+	_check(deaths[0] == grave.kills() and grave.lineup.size() == grave.enemies,
+			"every rising is a second death in the same slot (%d deaths, %d slots)" % [deaths[0], grave.enemies])
 	return true
 
 

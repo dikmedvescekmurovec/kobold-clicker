@@ -7,11 +7,11 @@ extends Panel
 ## Written apart from either of them because the moment it is written twice the two drift, which is
 ## exactly what the user asked to avoid.
 ##
-## The socket and the border are drawn with a StyleBoxFlat rather than cut from art, the same call
+## The socket is drawn with a StyleBoxFlat rather than cut from art, the same call
 ## combat_scene._bar makes for its health bars. That is not a stand-in for the pack's slot: the pack
 ## draws an inventory slot as one flat tan square with a gutter around it and nothing else, so a
-## rectangle in its colours is the art. The rarity border is ours -- the pack has no notion of one --
-## and a StyleBoxFlat draws it in the same call, where a sprite would need a second layer over it.
+## rectangle in its colours is the art. The rarity frame is ours -- the pack has no notion of one --
+## drawn by `tools/item_frames.py` and laid over the icon as the square's last child.
 ##
 ## It takes no mouse input at all. The grid it sits in is inside a ScrollContainer that has to see
 ## every press to tell a drag from a click, and a square that swallowed the press would break every
@@ -24,13 +24,20 @@ const ICON := 32
 ## How solid an empty socket's mark is drawn. Faint enough to read as nothing being there.
 const EMPTY_MARK_ALPHA := 0.35
 const SHINE := preload("res://Scenes/UI/shine.gdshader")
+## How many times a square glints after it is drawn, before it lies still.
+const SHINES := 2
 ## Every square holding a piece is in this group, which is how `ItemCard` finds the one under the
 ## cursor without any square having to take the mouse.
 const GROUP := "item_slots"
+## The child that is the rarity's frame (`ItemRarity.frame`); a common square has none.
+const FRAME_NAME := "Frame"
 
 ## What the square holds (null for an empty socket) and whether it is the one its page has open.
 var item: Item
 var selected := false
+## What `ItemCard` writes beside this square instead of the piece itself, as `hint.call(rows, width)`.
+## Only a `shadow` carries one.
+var hint := Callable()
 
 
 func setup(held: Item, open := false, translucent := false) -> void:
@@ -50,17 +57,52 @@ func setup(held: Item, open := false, translucent := false) -> void:
 	icon.position = Vector2(SIDE - ICON, SIDE - ICON) / 2.0
 	# Rare and better glint now and then, so the good pieces catch the eye across the bag.
 	if item.rarity >= ItemRarity.Rarity.RARE:
-		var shine := ShaderMaterial.new()
-		shine.shader = SHINE
-		shine.set_shader_parameter("side", float(ICON))
-		icon.material = shine
+		_shine(icon, ICON, 3.0)
 	add_child(icon)
+	# The frame goes over the icon, not under it: its corners reach in past the icon's margin.
+	var ring := item.frame()
+	if ring != null:
+		var frame := TextureRect.new()
+		frame.name = FRAME_NAME
+		frame.texture = ring
+		frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# A unique's frame glints as well as its icon, and faster.
+		if item.rarity == ItemRarity.Rarity.UNIQUE and Settings.animations != Settings.Anim.NONE:
+			_shine(frame, SIDE, 2.0)
+		add_child(frame)
+
+
+## The glint on `target`: `SHINES` sweeps, one a `period`, and then it lies still. The tween is bound
+## to the square, so it waits for the square to be in the tree and dies with it.
+func _shine(target: TextureRect, side: int, period: float) -> void:
+	var glint := ShaderMaterial.new()
+	glint.shader = SHINE
+	glint.set_shader_parameter("side", float(side))
+	target.material = glint
+	create_tween().set_loops(SHINES).tween_method(
+		func(at: float) -> void: glint.set_shader_parameter("progress", at), 0.0, 1.0, period)
 
 
 ## The square for `item`, ready to be put in a grid or a row.
 static func make(item: Item, selected := false, translucent := false) -> ItemSlot:
 	var slot := ItemSlot.new()
 	slot.setup(item, selected, translucent)
+	return slot
+
+
+## A piece the player has not found, for the collection log: its outline in black on a plain socket,
+## with no ring and no glint to give its rarity away, and `hint` for the card to say in its place.
+static func shadow(item: Item, says: Callable) -> ItemSlot:
+	var slot := make(item)
+	slot.hint = says
+	var frame := slot.get_node_or_null(FRAME_NAME)
+	if frame != null:
+		slot.remove_child(frame)
+		frame.free()
+	slot.tooltip_text = "Not found yet"
+	var icon: TextureRect = slot.get_child(0)
+	icon.material = null
+	icon.modulate = Color.BLACK
 	return slot
 
 

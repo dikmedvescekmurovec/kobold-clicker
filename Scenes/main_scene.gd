@@ -21,6 +21,9 @@ extends Node2D
 ## on the player's own save, so the tests and the screenshot scripts -- which all point
 ## `inventory_path` elsewhere -- still see what a town of each tier really has.
 @export var debug_all_services := true
+## Dev: the collection log draws every unique as found, and its trophy is there from the start
+## (`CollectionPage.show_all`). Held to debug builds and the player's own save the same way.
+@export var debug_all_uniques := true
 
 ## The marks the three corner buttons wear. A chest for what has been carried home, a star for what
 ## the player has become and a scroll for the work they have taken on: all three are places to go
@@ -31,6 +34,7 @@ const STAR_ICON := "res://Assets/UI/ui_icon_star.png"
 const SCROLL_ICON := "res://Assets/UI/ui_icon_scroll.png"
 ## And a fourth that is about the game rather than the player: the settings, behind a cog.
 const COG_ICON := "res://Assets/UI/ui_icon_cog.png"
+const TROPHY_ICON := "res://Assets/UI/ui_icon_trophy.png"
 ## The air between one and the next, in panel pixels.
 const CORNER_GAP := 4.0
 ## The panel that stands in for the map when its save cannot be read: how wide it is allowed to be
@@ -80,10 +84,17 @@ var skills_page: SkillsPage
 var bounty_page: BountyList
 ## Sound, animations, what an item says, and Reset. A left-hand page like the rest, always on offer.
 var settings_page: SettingsPage
+var collection_page: CollectionPage
+## What the player adds up to, opened by a press anywhere on the character panel.
+var character_page: CharacterPage
+## See-through, over the character panel, which takes no mouse itself because it stands over fights
+## too. This one comes and goes with the corner buttons, so a fight never finds it there.
+var _character_button: Button
 var _bag_button: Button
 var _skills_button: Button
 var _bounty_button: Button
 var _settings_button: Button
+var _collection_button: Button
 ## The player in the top-left corner, over the map and over a fight alike.
 var _character: CharacterPanel
 
@@ -104,8 +115,9 @@ const TIPS := [
 	["level_up", "Power Grows Within", "Battle has hardened you. A skill point awaits, so open the skills page with the star in the top-left corner and choose your path."],
 	["first_farm", "The Endless Hunt", "The enemies here will never stop coming, but there is no clock to beat. Fight as long as you like and gather their spoils. When you have had your fill, raise the flag in the top-right corner to head home with everything you found."],
 	["first_chart", "Claim the Land", "Foes stand between you and this land, and the clock at the top of the screen is ticking. Strike them all down before it runs out and the tile is yours. Fall short and nothing is lost, so catch your breath and try again."],
-	["first_town", "Gates Stand Open", "People live here, and they will deal with a wanderer. Press Enter town on the panel at the right to step inside, where traders buy what you have gathered and sell what they have found. A board by the gate posts work for anyone willing to hunt."],
-	["first_bounty", "Names on the Board", "The board names creatures the town wants gone. Press Accept on a notice and every such creature you strike down counts towards it, one notice at a time. Each shows the land that creature lives on, and the scroll in the top-left corner keeps it wherever you go."],
+	["first_town", "Gates Stand Open", "People live here, and they will deal with a wanderer. Press Enter town on the panel at the right to step inside, where traders buy what you have gathered and sell what they have found. A board by the gate posts work for anyone willing to hunt, and a fortuneteller sells what she sees."],
+	["first_unique", "A Legend Found", "This is no ordinary find. A unique piece bends the rules of a fight, so read what it does before you wear it. The trophy in the top-left corner keeps count of every one you have found. A fortuneteller can say what the rest are and where they hide."],
+	["first_bounty", "Names on the Board", "The board names creatures the town wants gone. Press Accept on a notice and every such creature you strike down counts towards it, one notice at a time. The scroll in the top-left corner keeps it wherever you go, and the fortuneteller in town can say where that creature lives."],
 ]
 const FLASH_BRIGHT := Color(1.6, 1.6, 1.6)
 const FLASH_SECONDS := 0.5
@@ -120,8 +132,12 @@ var _tip_panel: VBoxContainer
 var _flashes := {}
 ## The weather and the day over the map.
 var _ambient: Ambient
-## The glimmer pointing at the nearest chest; its target is worked out on arrival.
+## The glimmer pointing at the chest a fortuneteller was paid to find (`_sync_chest`).
 var _chest_pointer: ChestPointer
+## The fortuneteller's scour while its land is being chosen: what the click will cost (0 when nobody
+## is choosing) and the panel saying what to do.
+var _scour_price := 0.0
+var _scour_panel: VBoxContainer
 
 
 func _ready() -> void:
@@ -131,6 +147,8 @@ func _ready() -> void:
 	# The inventory first, and by the same rule: it is what the player owns, and an empty bag saved over
 	# a file that could not be read is that file gone on the first kill.
 	TownServices.show_all = (debug_all_services and OS.is_debug_build()
+			and inventory_path == Inventory.SAVE_PATH)
+	CollectionPage.show_all = (debug_all_uniques and OS.is_debug_build()
 			and inventory_path == Inventory.SAVE_PATH)
 	# The player's own settings only beside the player's own save, for the same reason: a test or a
 	# screenshot sees the defaults and writes nothing.
@@ -165,6 +183,7 @@ func _ready() -> void:
 			view.start_town - map_origin])
 	map.tile_clicked.connect(_on_tile_clicked)
 	map.dragged.connect(_on_map_dragged)
+	map.cell_aimed.connect(_on_cell_aimed)
 	view.arrived.connect(_on_player_arrived)
 	_build_ui()
 	camera.zoom = Vector2(zoom, zoom)
@@ -174,10 +193,23 @@ func _ready() -> void:
 	map.add_child(_ambient)
 	_ambient.setup(camera)
 	_update_weather()
-	_chest_pointer.target = view.nearest_chest()
+	_sync_chest()
 	# The world is decided the moment it is generated, so it is written down then: a first run
 	# killed before the player moves would otherwise come back as somewhere else entirely.
 	_save_map()
+
+
+## Points the star at the chest a fortuneteller was paid to find, for as long as it stands: a chest
+## goes when its tile is charted, and the star and what was written down go with it. Nothing points
+## at a chest for nothing any more.
+func _sync_chest() -> void:
+	var spot := FortuneTeller.chest(inventory.fortunes)
+	var cell := spot - view.origin if spot != TownWorld.NO_SPOT else HexMap.NO_CELL
+	if cell != HexMap.NO_CELL and not view.has_chest(cell):
+		inventory.fortunes.erase(FortuneTeller.CHEST)
+		inventory.save(inventory_path)
+		cell = HexMap.NO_CELL
+	_chest_pointer.target = cell
 
 
 ## Writes the map as it stands. A refused save is never written over -- that is the whole point of
@@ -238,6 +270,8 @@ func _process(_delta: float) -> void:
 ## tile is selected, and _layout_ui keeps it flush against the right edge, running the full height
 ## of the window, whenever that window resizes.
 func _build_ui() -> void:
+	# Before the first button exists: it hands each one the pointing hand as it joins the tree.
+	Cursors.install(get_tree(), int(ui_scale))
 	var layer := CanvasLayer.new()
 	layer.name = "UI"
 	add_child(layer)
@@ -275,6 +309,7 @@ func _build_ui() -> void:
 	rows.add_child(buttons)
 	_chart_button = UITheme.button("Chart", "LightButton", "Fight for this tile and what lies behind it")
 	_chart_button.pressed.connect(_on_chart_pressed)
+	Cursors.wear(_chart_button, Cursors.SWORD)
 	buttons.add_child(_chart_button)
 	_skip_button = UITheme.button("Skip fight", "LightButton", "Dev: chart this tile without fighting for it")
 	_skip_button.pressed.connect(func() -> void:
@@ -283,11 +318,13 @@ func _build_ui() -> void:
 	buttons.add_child(_skip_button)
 	_move_button =UITheme.button("Move here", "LightButton", "Walk to the selected tile")
 	_move_button.pressed.connect(_on_move_pressed)
+	Cursors.wear(_move_button, Cursors.BOOT)
 	buttons.add_child(_move_button)
 	# And a third thing to do with a tile you have already taken: stand on it and fight until you
 	# have had enough. Nothing is won by it but what the bodies were carrying.
 	_farm_button = UITheme.button("Farm", "LightButton", "Fight here for as long as you like, for the loot")
 	_farm_button.pressed.connect(_on_farm_pressed)
+	Cursors.wear(_farm_button, Cursors.SWORD)
 	buttons.add_child(_farm_button)
 	# And a fourth, on the tiles people live on: go inside and trade. It takes standing on the tile
 	# rather than looking at it, because visiting a town is being there.
@@ -340,29 +377,56 @@ func _build_pages(layer: CanvasLayer) -> void:
 	_settings_button = UITheme.icon_button(load(COG_ICON), "Settings", ui_scale)
 	_settings_button.pressed.connect(_on_settings_pressed)
 	layer.add_child(_settings_button)
+	_collection_button = UITheme.icon_button(load(TROPHY_ICON), "The uniques you have found", ui_scale)
+	_collection_button.pressed.connect(_on_collection_pressed)
+	layer.add_child(_collection_button)
+	_character_button = Button.new()
+	_character_button.focus_mode = Control.FOCUS_NONE
+	for state: String in ["normal", "hover", "pressed", "disabled"]:
+		_character_button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	_character_button.tooltip_text = "Your character"
+	_character_button.pressed.connect(_on_character_pressed)
+	layer.add_child(_character_button)
+	character_page = CharacterPage.new(inventory, ui_scale)
+	collection_page = CollectionPage.new(inventory, view, ui_scale)
 	skills_page = SkillsPage.new(inventory, inventory_path, ui_scale)
 	bag_page = BagPage.new(inventory, inventory_path, ui_scale)
 	bounty_page = BountyList.new(inventory, view, ui_scale)
 	bounty_page.show_cell.connect(_on_show_cell)
 	settings_page = SettingsPage.new(ui_scale)
 	settings_page.reset_pressed.connect(_on_reset_pressed)
+	# Dev only: an empty purse becomes 10, so the button always does something.
+	settings_page.cash_pressed.connect(func() -> void:
+		inventory.gold = maxf(inventory.gold, 1.0) * 10.0
+		inventory.save(inventory_path))
 	# The town page stands on the other edge, but it is closed by the same X rule and hidden by the
 	# same fight, so it is built and wired here with the two that share the left one.
 	town_page = TownPage.new(inventory, inventory_path, ui_scale)
 	town_page.view = view
 	town_page.tab_changed.connect(_on_town_tab_changed)
+	town_page.chest_bought.connect(func(_cell: Vector2i) -> void: _sync_chest())
+	town_page.scour_pressed.connect(_on_scour_pressed)
 	# What the counter has open goes straight to the bag: the comparison points at what wearing it
 	# would replace, and a purchase reaches the purse and the grid by the same redraw. Back the other
 	# way, the counter redraws around whatever the bag has open, so a piece sold to make room unlocks
 	# the Buy that was greyed out for a full bag.
 	town_page.offer_changed.connect(bag_page.offer)
 	bag_page.selection_changed.connect(town_page.bag_changed)
-	for page: Control in [skills_page, bag_page, bounty_page, settings_page, town_page]:
+	# An orb in the bag's hand works on a shelf piece too; the bag still does the spending and saving.
+	town_page.craft_held = bag_page.craft_held
+	bag_page.held_changed.connect(town_page.orb_held)
+	bag_page.laid_out.connect(_place_corner)
+	for page: Control in [skills_page, bag_page, bounty_page, settings_page, collection_page,
+			character_page, town_page]:
 		page.hide()
 		page.closed.connect(_on_left_page_closed)
 		layer.add_child(page)
-	# After the pages, so it is drawn over them: tree order is draw order on a CanvasLayer.
-	layer.add_child(ItemCard.new(ui_scale))
+	# On the character's layer, over the pages and over a fight (layer 2), so a find in the loot
+	# popup or under the verdict gets its card too. It takes no mouse, so it costs no swings.
+	var item_card := ItemCard.new(ui_scale)
+	_character.get_parent().add_child(item_card)
+	# A held orb changes a piece without opening it, and the card is the only place the result is read.
+	bag_page.crafted.connect(item_card.unmute)
 
 
 ## The weather for wherever the player now stands.
@@ -459,15 +523,12 @@ func _layout_ui() -> void:
 	skills_page.layout()
 	bounty_page.layout()
 	settings_page.layout()
+	collection_page.layout()
+	character_page.layout()
 	town_page.layout()
-	# The square buttons in a row under the character panel: what you carry, then what you are, then
-	# what you have promised to do.
-	var corner := Vector2(8, _character.position.y + (_character.size.y + 4) * ui_scale)
-	var step := (_bag_button.get_combined_minimum_size().x + CORNER_GAP) * ui_scale
-	_bag_button.position = corner
-	_skills_button.position = corner + Vector2(step, 0.0)
-	_bounty_button.position = corner + Vector2(step * 2.0, 0.0)
-	_settings_button.position = corner + Vector2(step * 3.0, 0.0)
+	_character_button.position = _character.position
+	_character_button.size = _character.size * ui_scale
+	_place_corner()
 	if _combat != null:
 		_combat.xp_target = _character.xp_point()
 
@@ -553,11 +614,15 @@ func _on_farm_pressed() -> void:
 func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# What the player is wearing, read once as the fight opens. Changing gear mid-fight is not a
 	# thing that can happen -- the bag goes away while one is on -- so there is nothing to keep live.
+	# What is worn and learned first: `arm` reads some of it, and two home pieces reshape the lineup.
+	fight.wear(inventory.effects())
 	fight.arm(inventory.stats())
 	# Until the player has seen their first drop, the first elite they meet is promised one.
 	fight.guarantee_elite = not inventory.first_elite_taken
-	fight.effects = inventory.skills.effects()
 	fight.orbs_after = maxi(0, OrbTable.FIRST_ORB_KILLS - inventory.kills)
+	fight.uniques_after = maxi(0, UniqueTable.FIRST_UNIQUE_KILLS - inventory.kills)
+	# Until the player has found their first unique, the first boss they bring down is promised one.
+	fight.guarantee_unique = inventory.uniques_found.is_empty()
 	ledger = FightLedger.new(inventory, inventory_path, farming)
 	ledger.tile_level = view.level_of(cell)
 	# Straight off the fight rather than through the scene: what a body was is the fight's business,
@@ -565,6 +630,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	fight.enemy_died.connect(_on_enemy_died)
 	_combat = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 	_combat.finished.connect(_on_combat_finished.bind(cell))
+	_combat.retry.connect(_on_combat_retry.bind(cell))
 	# Not `Encounter.loot_dropped`: the fight applies the player's autodiscard rule, and everything
 	# downstream believes the fight. A second listener applying the rule a second way is how the
 	# counter, the pouch and the bag would come to disagree about what a run found.
@@ -636,6 +702,14 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 	_check_tips()
 
 
+## Retry under a lost verdict. Out through the one door every fight leaves by, so what it earned is
+## banked and its kills counted, and back in through Chart, so the second go is opened like the first.
+func _on_combat_retry(cell: Vector2i) -> void:
+	_on_combat_finished(false, cell)
+	map.select_cell(cell)
+	_on_chart_pressed()
+
+
 ## The player walks to the tile; both buttons stay disabled until they get there.
 func _on_move_pressed() -> void:
 	var cell := map.selected_cell
@@ -649,7 +723,7 @@ func _on_move_pressed() -> void:
 func _on_player_arrived(cell: Vector2i) -> void:
 	print("Arrived at %s" % cell)
 	_update_weather()
-	_chest_pointer.target = view.nearest_chest()
+	_sync_chest()
 	_save_map()
 	_update_buttons()
 	if _chart_target != HexMap.NO_CELL:
@@ -717,13 +791,23 @@ func _on_xp_absorbed(amount: int) -> void:
 func _on_loot_autodiscarded(index: int, item: Item) -> void:
 	print("Autodiscarded %s (%s, level %d)" % [item.type, item.rarity_name(), item.level])
 	ledger.autodiscarded(_dropped_by_elite(index))
+	_pay_salvage(item)
 
 
 ## A find the player threw away by hand, from the fight's own panel.
 func _on_drop_discarded(item: Item) -> void:
 	if ledger.discard(item):
 		bag_page.refresh()
+	_pay_salvage(item)
 	_refresh_bag_room()
+
+
+## The Rag and Bone Sack, for a find thrown away in a fight. Through the ledger like any gold, so a
+## run pouches it and a tile fight banks it; the bag pays for its own discards (`BagPage`).
+func _pay_salvage(item: Item) -> void:
+	var paid := inventory.salvage(item)
+	if paid > 0.0:
+		ledger.add_gold(paid)
 
 
 ## Tells the fight how much room is left, which is what puts the full-bag warning up.
@@ -754,9 +838,34 @@ func _bank_run() -> void:
 		bag_page.refresh()
 
 
+## The square buttons in a column, the ones there are closed up: what you carry, then what you are,
+## then what you have promised to do. Under the character panel on the map; beside whichever page is
+## up -- which has that panel's corner -- so one press goes from page to page without an X between.
+func _place_corner() -> void:
+	# The bag measures itself as it is built (`laid_out`), before the pages after it exist.
+	if not is_instance_valid(character_page) or not character_page.is_inside_tree():
+		return
+	var at := Vector2(8, _character.position.y + (_character.size.y + 4) * ui_scale)
+	var page := _left_page()
+	if page != null:
+		# Every page's own panel is its first child, against the left edge; the bag runs on past its.
+		var panel: Control = page.get_child(0)
+		var edge: float = (bag_page.right_edge() if page == bag_page
+				else panel.position.x + panel.size.x * ui_scale)
+		at = Vector2(edge + CORNER_GAP * ui_scale, _character.position.y)
+	var step := (_bag_button.get_combined_minimum_size().y + CORNER_GAP) * ui_scale
+	for button: Button in [_bag_button, _skills_button, _bounty_button, _settings_button, _collection_button]:
+		if button.visible:
+			button.position = at
+			at.y += step
+
+
 ## Every corner button at once. They come and go together because what takes them away is never
-## about one of them -- a page standing on their edge, or a fight that must see every click.
+## about one of them: a fight that must see every click, or a town, whose three panels leave the
+## window no room. A page does not -- they stand beside it (`_place_corner`) -- but it does cover the
+## character panel, and the see-through button over that goes with it.
 func _show_corner(shown: bool) -> void:
+	shown = shown and not town_page.visible
 	_bag_button.visible = shown and ("first_item" in inventory.tips or "first_orb" in inventory.tips)
 	_skills_button.visible = shown and "level_up" in inventory.tips
 	# The journal has nothing in it until the player has stood at a board, which is also when their
@@ -764,10 +873,17 @@ func _show_corner(shown: bool) -> void:
 	_bounty_button.visible = shown and BountyBoard.any_seen(inventory.towns)
 	# Nothing earns the settings: they are there from the first step.
 	_settings_button.visible = shown
+	_character_button.visible = shown and _left_page() == null
+	# The log is a thing to be found, like what it lists: it is not there until the first unique is.
+	_collection_button.visible = shown and (CollectionPage.show_all
+			or not inventory.uniques_found.is_empty())
+	if _collection_button.visible:
+		_flash(_collection_button, "opened_collection")
 	if _bag_button.visible:
 		_flash(_bag_button, "opened_bag")
 	if _skills_button.visible:
 		_flash(_skills_button, "opened_skills")
+	_place_corner()
 
 
 ## Whether the thing a tip is about has happened yet.
@@ -787,6 +903,8 @@ func _tip_due(id: String) -> bool:
 			return view != null and view.can_visit(view.player_cell)
 		"first_bounty":
 			return BountyBoard.any_seen(inventory.towns)
+		"first_unique":
+			return not inventory.uniques_found.is_empty()
 	return false
 
 
@@ -801,9 +919,8 @@ func _check_tips() -> void:
 	# Not mid-fight: a run writes nothing until it ends, and `bank_kills` saves the seen tip then.
 	if added and _combat == null:
 		inventory.save(inventory_path)
-	# A page standing on that corner takes it away exactly as a fight does, and a tip can come due
-	# while one is open: walking into a town, or arriving somewhere with the bag up.
-	_show_corner(_combat == null and not _left_page_up())
+	# A tip can come due with a page up or a town open, and `_show_corner` knows about both.
+	_show_corner(_combat == null)
 	if _tip_panel == null:
 		_show_next_tip()
 
@@ -863,24 +980,33 @@ func _stop_flash(id: String) -> void:
 
 ## Every page that stands against the left edge. They share it, so opening one closes the rest and
 ## there is one place that knows which those are.
+func _left_pages() -> Array[Control]:
+	return [bag_page, skills_page, bounty_page, settings_page, collection_page, character_page]
+
+
 func _close_left_pages() -> void:
-	bag_page.hide()
-	skills_page.hide()
-	bounty_page.hide()
-	settings_page.hide()
+	for page in _left_pages():
+		page.hide()
 
 
-## Whether one of them is up, which is the other thing that takes the corner buttons away.
+## The one that is up, or null.
+func _left_page() -> Control:
+	for page in _left_pages():
+		if page.visible:
+			return page
+	return null
+
+
 func _left_page_up() -> bool:
-	return bag_page.visible or skills_page.visible or bounty_page.visible or settings_page.visible
+	return _left_page() != null
 
 
-## A page takes the corner's place while it is open, so that corner never holds both.
+## The corner buttons move over to stand beside it (`_show_corner` places them).
 func _open_left_page(page: Control) -> void:
 	_close_left_pages()
 	_layout_ui()
 	page.show()
-	_show_corner(false)
+	_show_corner(true)
 	# The page covers the left edge, and it stands on a layer above the character panel.
 	_character.hide()
 
@@ -892,6 +1018,16 @@ func _on_left_page_closed() -> void:
 	_close_town()
 	_show_corner(true)
 	_character.show()
+
+
+## A corner button or the character panel pressed: its page, redrawn because what it shows moves
+## while it is shut -- or, pressed beside its own open page, that page put away as its X would.
+func _toggle_left_page(page: Control) -> void:
+	if page.visible:
+		_on_left_page_closed()
+		return
+	page.open()
+	_open_left_page(page)
 
 
 ## Leaves the town: the page goes, the bag stops being a shop, and the tile panel takes its edge back.
@@ -909,26 +1045,29 @@ func _close_town() -> void:
 
 func _on_skills_pressed() -> void:
 	_stop_flash("opened_skills")
-	# Levels and gold both move while the page is shut, and both change what it says.
-	skills_page.open()
-	_open_left_page(skills_page)
+	_toggle_left_page(skills_page)
 
 
 func _on_bag_pressed() -> void:
 	_stop_flash("opened_bag")
-	bag_page.open()
-	_open_left_page(bag_page)
+	_toggle_left_page(bag_page)
 
 
 func _on_bounty_pressed() -> void:
-	# Kills land while the page is shut, and so do new boards.
-	bounty_page.open()
-	_open_left_page(bounty_page)
+	_toggle_left_page(bounty_page)
+
+
+func _on_collection_pressed() -> void:
+	_stop_flash("opened_collection")
+	_toggle_left_page(collection_page)
+
+
+func _on_character_pressed() -> void:
+	_toggle_left_page(character_page)
 
 
 func _on_settings_pressed() -> void:
-	settings_page.open()
-	_open_left_page(settings_page)
+	_toggle_left_page(settings_page)
 
 
 ## A bounty said where its monster lives and the player asked to be shown: every page gets out of the
@@ -965,6 +1104,47 @@ func _on_town_pressed() -> void:
 	_check_tips()
 
 
+## The fortuneteller's scour, asked for and not yet paid: the town and the tile panel get out of the
+## way and the map is aimed at, a patch of outlines under the cursor. The click is what pays
+## (`_on_cell_aimed`); the panel's X and Escape put the spell away for nothing.
+func _on_scour_pressed(price: float) -> void:
+	_on_left_page_closed()
+	_on_close_pressed()
+	_scour_price = price
+	map.aim_radius = FortuneTeller.SCOUR_RADIUS
+	_scour_panel = UITheme.titled_panel("Scour", "Keep the spell for later", _end_scour)
+	_scour_panel.scale = Vector2(ui_scale, ui_scale)
+	_ui_layer.add_child(_scour_panel)
+	UITheme.body_of(_scour_panel).add_child(UITheme.label("Choose the land to uncover.", null, true))
+	_scour_panel.position = Vector2(
+			(get_viewport().get_visible_rect().size.x - _scour_panel.get_combined_minimum_size().x * ui_scale) / 2.0, 0.0)
+
+
+## Land chosen. A patch with nothing in it left to show -- all seen already, or past the edge of what
+## the map has made -- is refused and the aim stays up, so the one spell is never spent on nothing.
+func _on_cell_aimed(cell: Vector2i) -> void:
+	if _scour_price <= 0.0 or inventory.gold < _scour_price:
+		return
+	var shown := view.scour(cell)
+	if shown == 0:
+		return
+	inventory.gold -= _scour_price
+	inventory.fortunes[FortuneTeller.SCOURED] = true
+	inventory.save(inventory_path)
+	_save_map()
+	print("Scoured %d tiles round %s for %s gold" % [shown, cell, BigNumber.format(_scour_price)])
+	_end_scour()
+
+
+## The aim put away, paid for or not.
+func _end_scour() -> void:
+	_scour_price = 0.0
+	map.aim_radius = -1
+	if _scour_panel != null:
+		_scour_panel.queue_free()
+		_scour_panel = null
+
+
 ## Another counter opened: the bag buys what that counter buys and nothing else.
 func _on_town_tab_changed(_service: String) -> void:
 	_stand_at_counter()
@@ -981,6 +1161,7 @@ func _stand_at_counter() -> void:
 ## Quitting with a run still on. The pouch goes in rather than evaporating -- a run that is left
 ## by closing the window found what it found -- and the map goes down as it stands.
 func _exit_tree() -> void:
+	Cursors.put_away()
 	# A refused save built nothing, so there is nothing to bank and nothing that may be written.
 	if _resetting or _save_blocked:
 		return
@@ -1003,12 +1184,18 @@ func _on_reset_pressed() -> void:
 ## Escape is every X at once: the tip if one is up, otherwise the pages, the town and the tile panel
 ## together. A fight answers for itself (`CombatScene._unhandled_input`) and gets the key first, being
 ## further down the tree -- except under a tip, where it is not processing and the tip is what closes.
+func _input(event: InputEvent) -> void:
+	Cursors.twitch(get_tree(), event)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	get_viewport().set_input_as_handled()
 	if _tip_panel != null:
 		_on_tip_closed()
+	elif _scour_panel != null:
+		_end_scour()
 	elif _combat == null:
 		if _left_page_up() or town_page.visible:
 			_on_left_page_closed()

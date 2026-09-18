@@ -25,6 +25,12 @@ func setup(map: HexMap) -> void:
 func _draw() -> void:
 	if _map == null:
 		return
+	# Land being chosen: the whole patch a click would take, and no selection to draw beside it.
+	if _map.aim_radius >= 0:
+		if _map.hovered_cell != HexMap.NO_CELL:
+			for cell in FortuneTeller.scour_cells(_map.hovered_cell, _map.aim_radius):
+				_draw_bands(cell, _hover_bands)
+		return
 	if _map.hovered_cell != HexMap.NO_CELL and _map.hovered_cell != _map.selected_cell:
 		_draw_bands(_map.hovered_cell, _hover_bands)
 	if _map.selected_cell != HexMap.NO_CELL:

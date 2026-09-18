@@ -155,6 +155,9 @@ func _prices() -> void:
 		piece.rarity = ItemRarity.Rarity.ELITE
 		piece.level = level
 		return _gold(TownPrices.lock_price(piece))))
+	for reading: String in FortuneTeller.READINGS:
+		_row("fortune, %s" % reading, _each(func(level: int) -> String:
+				return _gold(TownPrices.fortune_price(reading, _cell(level)))))
 	_row("bounty, %d common" % BountyBoard.NEED_COMMON, _each(func(level: int) -> String:
 			return _gold(_bounty(level, EnemyRoster.Tier.COMMON))))
 	_row("bounty, %d elite" % BountyBoard.NEED_ELITE, _each(func(level: int) -> String:
@@ -199,6 +202,9 @@ func _verdicts() -> void:
 	_row("fights for a lock", _each(func(level: int) -> String:
 		piece.level = level
 		return "%.0f" % (TownPrices.lock_price(piece) / _fight_gold(level))))
+	for reading: String in FortuneTeller.READINGS:
+		_row("fights for her %s" % reading, _each(func(level: int) -> String:
+				return "%.1f" % (TownPrices.fortune_price(reading, _cell(level)) / _fight_gold(level))))
 	_row("common bounty, in fights", _each(func(level: int) -> String:
 			return "%.1f" % (_bounty(level, EnemyRoster.Tier.COMMON) / _fight_gold(level))))
 	_row("  the same kills paid", _each(func(level: int) -> String:

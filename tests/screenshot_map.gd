@@ -35,6 +35,15 @@ func _run() -> void:
 			await RenderingServer.frame_post_draw
 			root.get_texture().get_image().save_png("user://start_view.png")
 			print("Saved ", ProjectSettings.globalize_path("user://start_view.png"))
+			# The badge a fortuneteller's Treasure buys, pointing off screen at the nearest unseen chest.
+			main._chest_pointer._view = view
+			main._chest_pointer.target = view.nearest_chest(true)
+			for i in 20:
+				await process_frame
+			await RenderingServer.frame_post_draw
+			root.get_texture().get_image().save_png("user://chest_pointer.png")
+			print("Saved ", ProjectSettings.globalize_path("user://chest_pointer.png"))
+			main._chest_pointer.target = HexMap.NO_CELL
 		# The rest of the shots show the whole map, so zoom out to fit it.
 		view.reveal_all()
 		camera.zoom = Vector2.ONE

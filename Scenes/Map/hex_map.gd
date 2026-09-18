@@ -8,6 +8,8 @@ signal tile_hovered(cell: Vector2i, info: Dictionary)
 signal tile_clicked(cell: Vector2i, info: Dictionary)
 ## Mouse movement, in screen pixels, while dragging the map. Whoever owns the camera moves it.
 signal dragged(relative: Vector2)
+## A cell was clicked while the map was being aimed at (`aim_radius`), drawn or not.
+signal cell_aimed(cell: Vector2i)
 
 const NO_CELL := Vector2i(-99999, -99999)
 ## A press that travels further than this many pixels drags the map instead of selecting a tile.
@@ -16,6 +18,13 @@ const DRAG_THRESHOLD := 6.0
 var tileset: HexTileset
 var hovered_cell := NO_CELL
 var selected_cell := NO_CELL
+## -1 but while somebody is choosing land rather than a tile (the fortuneteller's scour): then the
+## hover follows the cursor over the dark as well, every cell within this many steps of it is
+## outlined, and a click says `cell_aimed` instead of selecting. Dragging still moves the map.
+var aim_radius := -1:
+	set(value):
+		aim_radius = value
+		highlight.queue_redraw()
 
 ## Environment of cells that aren't drawn yet, as a Callable taking a cell and returning an environment name
 ## ("" when there is none). Whoever generates the map sets it, so a tile can blend with land around it that the
@@ -78,6 +87,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _dragging:
 				dragged.emit(event.relative)
 				get_viewport().set_input_as_handled()
+		_point()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
 			_pressing = true
@@ -86,11 +96,22 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			# A click selects a tile; a press that travelled was a drag, and only moved the map.
 			var cell := cell_at(world_position(event.position))
-			if _pressing and not _dragging and has_tile(cell):
+			if _pressing and not _dragging and aim_radius >= 0:
+				cell_aimed.emit(cell)
+				get_viewport().set_input_as_handled()
+			elif _pressing and not _dragging and has_tile(cell):
 				select_cell(cell)
 				get_viewport().set_input_as_handled()
 			_pressing = false
 			_dragging = false
+			_point()
+
+
+## The cursor over bare map, which no Control answers for: the closed hand while the map is pulled
+## about, the pointing one over a tile a press would select.
+func _point() -> void:
+	Input.set_default_cursor_shape(Cursors.GRAB if _dragging
+			else Cursors.HAND if hovered_cell != NO_CELL else Cursors.ARROW)
 
 
 ## Puts a ground tile down without touching the overlays. For a bulk load, where the caller
@@ -232,7 +253,7 @@ func deselect() -> void:
 
 
 func _set_hovered(cell: Vector2i) -> void:
-	if not has_tile(cell):
+	if not has_tile(cell) and aim_radius < 0:
 		cell = NO_CELL
 	if cell == hovered_cell:
 		return

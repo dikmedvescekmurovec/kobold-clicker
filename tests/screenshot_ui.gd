@@ -425,6 +425,28 @@ func _shoot_town() -> void:
 	root.get_texture().get_image().save_png("user://ui_town_broken.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_town_broken.png"))
 
+	# The fortuneteller: what she can be asked with its prices, then three of her answers in the list's
+	# place -- the roads, a whole piece read (the rare amulet), and a relic shown. The bounty that is out
+	# is located on the way, so the journal below has the land on its card.
+	main.inventory.gold = 1.0e9
+	main.town_page._on_tab_pressed(TownServices.FORTUNE)
+	main.bag_page._select_item(6)
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_town_fortune.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_town_fortune.png"))
+	for shot: Array in [[FortuneTeller.ROADS, "ui_town_roads"], [FortuneTeller.APPRAISE, "ui_town_appraise"],
+			[FortuneTeller.RELIC, "ui_town_relic"]]:
+		main.town_page._on_reading_pressed(shot[0])
+		for i in 2:
+			await process_frame
+		await RenderingServer.frame_post_draw
+		root.get_texture().get_image().save_png("user://%s.png" % shot[1])
+		print("Saved ", ProjectSettings.globalize_path("user://%s.png" % shot[1]))
+		main.town_page._on_reading_closed()
+	BountyBoard.locate(BountyBoard.active(main.inventory.towns))
+
 	# And out of the town again, where the same postings are read off the journal in the corner: the
 	# town that posted them over the top, the swatches and the nearest tile under each, and the line
 	# that says a finished one is paid for back where it was taken on.
@@ -435,6 +457,34 @@ func _shoot_town() -> void:
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_bounty_journal.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_bounty_journal.png"))
+
+	# The collection log behind the corner's trophy, with a few uniques found: the card beside a found
+	# one says what it is, and beside a blacked-out one only where it hides.
+	main._on_left_page_closed()
+	for id: String in ["metronome", "knucklebone_ring", "rimeplate"]:
+		main.inventory.note_unique(id)
+	main._on_collection_pressed()
+	for i in 2:
+		await process_frame
+	var squares: Array = main.collection_page.find_children("*", "ItemSlot", true, false)
+	# A home piece for the found one: its card is the longest a unique writes, three sentences.
+	for shot: Array in [["ui_collection", UniqueTable.ids().find("rimeplate")], ["ui_collection_missing", 1]]:
+		root.warp_mouse((squares[shot[1]] as ItemSlot).get_global_rect().get_center())
+		for i in 3:
+			await process_frame
+		await RenderingServer.frame_post_draw
+		root.get_texture().get_image().save_png("user://%s.png" % shot[0])
+		print("Saved ", ProjectSettings.globalize_path("user://%s.png" % shot[0]))
+	root.warp_mouse(Vector2.ZERO)
+
+	# The character page, behind a press on the corner's character panel.
+	main._on_left_page_closed()
+	main._on_character_pressed()
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_character.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_character.png"))
 
 	# The settings, behind the corner's cog, and then the question its Reset asks.
 	main._on_left_page_closed()

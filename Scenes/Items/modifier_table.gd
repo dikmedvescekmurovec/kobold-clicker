@@ -79,6 +79,10 @@ const MODS := {
 	# What a body leaves, which is a stat now rather than a player-wide sentence: the Gold Ring shows
 	# it and anything allowed to carry it rolls this.
 	"added_drop_rate": {"kind": Kind.FLAT, "stat": "drop_rate", "range": [3, 10], "weight": 4},
+	# A unique's line and nothing else's (`UNIQUE_ONLY`): no piece lists gold find as an affix, so no
+	# pool ever holds it. It grows a point a level and is never multiplied -- see `CHANCE_STATS`.
+	"added_gold_find": {"kind": Kind.FLAT, "stat": "gold_find", "range": [20, 40], "weight": 1,
+		"level_flat": 1.0},
 	# The globals, and the jewellery is the only place they land. A percentage of the whole set is
 	# worth more than a percentage of one piece, so increased damage rolls the smaller of the two
 	# bands here -- the frontier is beaten with what the set adds up to, and test_combat's edge-fight
@@ -107,6 +111,10 @@ const MODS := {
 ## Written down here because "unreachable" is exactly what a test would otherwise fail on, and a
 ## silently unreachable modifier and a deliberately dormant one have to be told apart by name.
 const DORMANT := ["added_fire_resist", "added_cold_resist", "added_lightning_resist"]
+
+## The modifiers no pool holds because only a unique's row may name them (`UniqueTable.UNIQUES`). Named
+## for the reason the dormant ones are: a test has to tell this from a modifier nothing can reach.
+const UNIQUE_ONLY := ["added_gold_find"]
 
 
 ## Every modifier this piece could carry: the player-wide ones, which fit anything, plus the ones
@@ -233,20 +241,40 @@ static func line(mod: Dictionary) -> String:
 	var id: String = mod.get("id", "")
 	if not MODS.has(id):
 		return ""
+	return _written(id, _amount(id, int(mod.get("value", 0))))
+
+
+## A modifier written with the band it rolls in at `level` in the number's place: "+8-20% increased
+## Damage". What the fortuneteller reads off a piece; the same sentence `line` writes, so the two
+## cannot come to spell a modifier differently.
+static func band_line(id: String, level: int) -> String:
+	if not MODS.has(id):
+		return ""
+	var band := band_for(id, level)
+	var low := _amount(id, int(band[0]))
+	var high := _amount(id, int(band[1]))
+	return _written(id, low if low == high else "%s-%s" % [low, high])
+
+
+## A modifier's number as it is written. A flat one is the one number here that grows with the
+## level, so it is written the way every other growing quantity is (`BigNumber`) rather than spelled
+## out to twenty digits.
+static func _amount(id: String, value: int) -> String:
+	return BigNumber.format(value) if MODS[id]["kind"] == Kind.FLAT else str(value)
+
+
+static func _written(id: String, amount: String) -> String:
 	var entry: Dictionary = MODS[id]
-	var value := int(mod.get("value", 0))
 	match entry["kind"]:
 		Kind.PLAYER:
-			return entry["line"] % value
+			return str(entry["line"]).replace("%d", "%s") % amount
 		Kind.PERCENT, Kind.GLOBAL:
 			# The same sentence for both, and honestly so: with one weapon between them, a sword's
 			# increased damage and a ring's are the same claim about the same number.
-			return "+%d%% increased %s" % [value, LootTable.STAT_LABELS[entry["stat"]]]
+			return "+%s%% increased %s" % [amount, LootTable.STAT_LABELS[entry["stat"]]]
 		_:
 			# A flat roll on a stat that is itself a percentage adds percentage points, and has to
 			# say so: "+10% Fire Resistance", never "+10 Fire Resistance".
 			var stat: String = entry["stat"]
 			var unit := "%" if stat in LootTable.PERCENT_STATS else ""
-			# The one number here that grows with the level, so it is written the way every other
-			# growing quantity is (`BigNumber`) rather than spelled out to twenty digits.
-			return "+%s%s %s" % [BigNumber.format(value), unit, LootTable.STAT_LABELS[stat]]
+			return "+%s%s %s" % [amount, unit, LootTable.STAT_LABELS[stat]]

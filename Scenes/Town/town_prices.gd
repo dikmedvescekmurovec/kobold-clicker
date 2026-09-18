@@ -47,6 +47,20 @@ const ORB_BODIES := 4.0
 const REROLL_BODIES := 30.0
 const REROLL_GROWTH := 2.0
 
+## What the fortuneteller asks for each reading, in bodies at the town's level (`FortuneTeller`'s own
+## reading names; a test holds the two lists together). A fight is about ten bodies. Where a bounty's
+## monster lives is half a fight against the five and a half the bounty pays; a chest is two, against
+## the boss's drop it points at; one unique shown is five; and the scour, which is bought once in a
+## playthrough, is a hundred.
+const FORTUNE_BODIES := {
+	"roads": 10.0,
+	"treasure": 20.0,
+	"quarry": 5.0,
+	"relic": 50.0,
+	"appraise": 5.0,
+	"scour": 1000.0,
+}
+
 ## What each rarity step multiplies a piece's price by, indexed by `ItemRarity.Rarity`'s own order:
 ## common, uncommon, rare, elite, unique. A list rather than a Dictionary keyed by the enum, because a
 ## `const` naming another class's enum is where Godot's cycle checker bites (see `Scenes/Items/CLAUDE.md`).
@@ -89,6 +103,13 @@ static func sell_price(item: Item) -> float:
 ## The same `SELL_SHARE` the orbs are quoted at, and the whole of why there is no loop to stand in at
 ## one counter -- buying back what was just sold costs five times what it fetched. Read off
 ## `sell_price` rather than written out again, so the two can never be tuned apart.
+## What the Rag and Bone Sack pays for a piece thrown away: `SALVAGE_SHARE` of what a trader would
+## give, so a counter is still worth the walk. Here because every figure in gold is made here.
+const SALVAGE_SHARE := 0.25
+static func salvage_price(item: Item) -> float:
+	return maxf(1.0, roundf(sell_price(item) * SALVAGE_SHARE))
+
+
 static func buy_price(item: Item) -> float:
 	var paid := sell_price(item)
 	return 0.0 if paid <= 0.0 else maxf(1.0, roundf(paid / SELL_SHARE))
@@ -113,6 +134,14 @@ static func lock_price(item: Item) -> float:
 static func reroll_price(town_cell: Vector2i, rerolls: int) -> float:
 	return maxf(1.0, roundf(gold_at_level(MapBuilder.level_of(town_cell)) * REROLL_BODIES
 			* pow(REROLL_GROWTH, maxi(rerolls, 0))))
+
+
+## What the fortuneteller in the town on `town_cell` asks for `reading`. Pegged to the town, as an
+## orb is: knowledge has no level of its own. 0 for a reading this build does not have.
+static func fortune_price(reading: String, town_cell: Vector2i) -> float:
+	if not FORTUNE_BODIES.has(reading):
+		return 0.0
+	return maxf(1.0, roundf(gold_at_level(MapBuilder.level_of(town_cell)) * float(FORTUNE_BODIES[reading])))
 
 
 ## What a whole handful is worth, for the button that sells a level at once.

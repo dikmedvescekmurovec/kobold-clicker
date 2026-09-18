@@ -160,6 +160,32 @@ func totals(skill_flat := {}, skill_percent := {}) -> Dictionary:
 	return out
 
 
+## What the worn uniques change about a fight, as `UniqueTable.effect_of` ids for `Encounter.effects`.
+## One entry a piece, so two of one ring are two entries and the fight can count them.
+##
+## The home pieces are where it is more than a list. One of them alone is at home on its own ground.
+## **Two or more are a Pilgrim's set**: every one of them works on every other's ground, so each
+## ground is named once and each piece's second rule is named for all of them. What stacks is the
+## shape of the fight and never the damage -- `Encounter` counts "home:<env>" once.
+func effects() -> Array:
+	var out := []
+	var homes := []
+	var grounds := []
+	for item in items():
+		if item.unique.is_empty():
+			continue
+		if UniqueTable.clause_of(item.unique).is_empty():
+			out.append(UniqueTable.effect_of(item.unique))
+		else:
+			homes.append(item.unique)
+			grounds.append(str(UniqueTable.UNIQUES[item.unique]["home"]))
+	for ground: String in grounds:
+		out.append("home:" + ground)
+		for id: String in homes:
+			out.append(UniqueTable.clause_of(id, ground))
+	return out
+
+
 ## The save's shape: socket name -> the piece in it. Sockets with nothing in them are left out
 ## entirely, so an empty set writes `{}` rather than eight nulls.
 func to_dict() -> Dictionary:

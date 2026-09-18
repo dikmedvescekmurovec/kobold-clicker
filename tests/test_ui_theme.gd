@@ -14,6 +14,7 @@ func _run() -> void:
 	_check(_test_health_bar() == true, "health bar tests ran to the end")
 	_check(_test_character_panel() == true, "character panel tests ran to the end")
 	_check(await _test_item_card() == true, "item card tests ran to the end")
+	_check(_test_cursors() == true, "cursor tests ran to the end")
 	_report("UI theme")
 
 
@@ -400,4 +401,37 @@ func _test_character_panel() -> bool:
 	_check(panel.size.y > frame.y * CharacterPanel.PIXEL, "the name line stands over the frame")
 	_check(panel.mouse_filter == Control.MOUSE_FILTER_IGNORE, "the panel never takes the mouse")
 	panel.queue_free()
+	return true
+
+
+## Every live button that joins the tree points; one that chose a cursor keeps it, a dead one keeps
+## the arrow, and a tile for every shape is there to be drawn.
+func _test_cursors() -> bool:
+	Cursors.install(self, 2)
+	for shape: int in Cursors.SHAPES:
+		_check(ResourceLoader.exists(Cursors.TILE % Cursors.SHAPES[shape][0]), "shape %d has its tile" % shape)
+	var plain := Button.new()
+	var smith := Button.new()
+	Cursors.wear(smith, Cursors.HAMMER)
+	var dead := Button.new()
+	dead.disabled = true
+	for button: Button in [plain, smith, dead]:
+		root.add_child(button)
+	_check(plain.mouse_default_cursor_shape == Control.CURSOR_POINTING_HAND, "a button gets the hand")
+	_check(smith.mouse_default_cursor_shape == Control.CURSOR_BUSY, "a chosen cursor is kept")
+	_check(dead.mouse_default_cursor_shape == Control.CURSOR_ARROW, "a dead button keeps the arrow")
+	for button: Button in [plain, smith, dead]:
+		button.queue_free()
+	# A press tilts the picture about the tile's bottom right corner; the hotspot keeps its place.
+	var pair: Array = Cursors._drawn[Cursors.HAND]
+	var pad: Vector2 = (pair[2].get_size() - pair[0].get_size()) / 2.0
+	_check(pair[3] == pair[1] + pad, "the tilted hand clicks where the straight one does")
+	_check(pair[2].get_image().get_used_rect().size != pair[0].get_image().get_used_rect().size, "and it is turned")
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	Cursors.twitch(self, press)
+	_check(Cursors._twitched == Input.get_current_cursor_shape(), "a press twitches the cursor under it")
+	Cursors.put_away()
+	_check(Cursors._twitched == -1, "and putting the cursors away forgets it")
 	return true

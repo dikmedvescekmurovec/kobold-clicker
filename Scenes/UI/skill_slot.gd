@@ -45,6 +45,8 @@ func setup(which: String, rank: int, open: bool) -> void:
 	custom_minimum_size = Vector2(SIDE, SIDE)
 	size = custom_minimum_size
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	if open and not _maxed:
+		Cursors.wear(self, Cursors.HAND)
 
 	_icon = TextureRect.new()
 	# Mode before texture and size, for the reason OrbSlot gives: a TextureRect's size is clamped to

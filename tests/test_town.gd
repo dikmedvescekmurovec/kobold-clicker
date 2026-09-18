@@ -27,11 +27,14 @@ func _run() -> void:
 	_check(_test_smith() == true, "blacksmith tests ran to the end")
 	_check(_test_bounties() == true, "bounty board tests ran to the end")
 	_check(_test_bounty_kills() == true, "bounty kill tests ran to the end")
+	_check(_test_fortune() == true, "fortuneteller tests ran to the end")
 	await _test_selling()
 	await _test_buying()
+	await _test_orb_on_a_shelf()
 	await _test_smithing()
 	await _test_board()
 	await _test_entering()
+	await _test_fortune_page()
 	for scratch in [TEST_PATH, TEST_MAP_PATH]:
 		if FileAccess.file_exists(scratch):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch))
@@ -49,7 +52,8 @@ func _test_services() -> bool:
 			var spot := Vector2i(x, y)
 			var village := TownServices.services_for(TownWorld.Tier.SMALL, spot, WORLD_SEED)
 			_check(TownServices.BOUNTIES in village, "%s has a board" % spot)
-			_check(village.size() == 2, "%s has a board and one vendor (%s)" % [spot, village])
+			_check(village.size() == 3 and TownServices.FORTUNE in village,
+					"%s has a board, one vendor and a fortuneteller (%s)" % [spot, village])
 			var vendor := TownServices.GEAR if TownServices.GEAR in village else TownServices.ORBS
 			_check(vendor in village, "%s names its one vendor" % spot)
 			vendors[vendor] += 1
@@ -60,10 +64,12 @@ func _test_services() -> bool:
 			"both vendors turn up across the world (%s)" % [vendors])
 
 	var town := TownServices.services_for(TownWorld.Tier.MEDIUM, Vector2i(3, 4), WORLD_SEED)
-	_check(town.size() == 3 and TownServices.GEAR in town and TownServices.ORBS in town
-			and not (TownServices.SMITH in town), "a town has both vendors and no smith (%s)" % town)
+	_check(town.size() == 4 and TownServices.GEAR in town and TownServices.ORBS in town
+			and TownServices.FORTUNE in town and not (TownServices.SMITH in town),
+			"a town has both vendors, a fortuneteller and no smith (%s)" % town)
 	var fortress := TownServices.services_for(TownWorld.Tier.FORTRESS, Vector2i(3, 4), WORLD_SEED)
-	_check(fortress.size() == 4 and TownServices.SMITH in fortress, "a fortress has all four (%s)" % fortress)
+	_check(fortress.size() == 5 and TownServices.SMITH in fortress and TownServices.FORTUNE in fortress,
+			"a fortress has all five (%s)" % fortress)
 	# Listed in one order, so a town reads the same way twice and the page's tabs never shuffle.
 	var order := PackedStringArray()
 	for service: String in TownServices.ORDER:
@@ -709,6 +715,56 @@ func _test_selling() -> void:
 	await process_frame
 
 
+## An orb in the bag's hand, spent on a piece still on the shelf: the two pages wired as the main
+## scene wires them. The piece is changed where it stands, written into the town's drawer, and priced
+## as what it has become; nothing is opened and nothing is bought.
+func _test_orb_on_a_shelf() -> void:
+	var inventory := Inventory.new()
+	var bag := BagPage.new(inventory, TEST_PATH, 1.0)
+	var page := TownPage.new(inventory, TEST_PATH, 1.0)
+	root.add_child(bag)
+	root.add_child(page)
+	page.craft_held = bag.craft_held
+	bag.held_changed.connect(page.orb_held)
+	await process_frame
+	page._stock_rng.seed = WORLD_SEED
+	page.open("Testholm", PackedStringArray([TownServices.GEAR]), TOWN_CELL, Vector2i(140, 128),
+			TownWorld.Tier.MEDIUM)
+	bag.shop(PackedStringArray([TownServices.GEAR]), TOWN_CELL)
+	var drawer := inventory.towns.visit(Vector2i(140, 128))
+	# A common piece put on the shelf by hand, so transmutation has something to do whatever was rolled.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	VendorStock.put(drawer, 0, Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 3))
+	var before := TownPrices.buy_price(VendorStock.items(drawer)[0])
+	inventory.add_orb("Orb of Transmutation", 2)
+
+	bag._on_orb_pressed("Orb of Transmutation")
+	_check(page._held == "Orb of Transmutation", "the counter hears which orb is in hand")
+	page._on_shelf_input(_press(), 0)
+	var after: Item = VendorStock.items(drawer)[0]
+	_check(after.rarity == ItemRarity.Rarity.UNCOMMON, "the shelf piece came up uncommon where it stood")
+	_check(inventory.orb_count("Orb of Transmutation") == 1, "for one orb")
+	_check(page._offer == null and inventory.items.is_empty(), "and was neither opened nor bought")
+	_check(TownPrices.buy_price(after) > before, "the vendor asks more for what it has become")
+	var saved: Item = VendorStock.items(Inventory.load_from(TEST_PATH).towns.visit(Vector2i(140, 128)))[0]
+	_check(saved.rarity == ItemRarity.Rarity.UNCOMMON, "and the save holds the shelf as it now stands")
+	# It has nothing more to do to that piece: a second press costs nothing and still opens nothing.
+	page._on_shelf_input(_press(), 0)
+	_check(inventory.orb_count("Orb of Transmutation") == 1 and page._offer == null,
+			"a refused shelf piece spends nothing")
+	# Put down, a press opens the piece again; and the bag going away puts it down.
+	bag._on_orb_pressed("Orb of Transmutation")
+	page._on_shelf_input(_press(), 0)
+	_check(page._offer != null, "with no orb in hand a press opens the piece as before")
+	bag._on_orb_pressed("Orb of Transmutation")
+	bag.hide()
+	_check(bag._armed == "" and page._held == "", "hiding the bag puts the orb down")
+	bag.queue_free()
+	page.queue_free()
+	await process_frame
+
+
 ## The other half of a counter: the shelf on the town page. What it costs, what it refuses, and what
 ## a purchase moves.
 func _test_buying() -> void:
@@ -753,7 +809,7 @@ func _test_buying() -> void:
 	_check(price > TownPrices.sell_price(offered),
 			"a vendor asks more than it pays (%d over %d)" % [price, TownPrices.sell_price(offered)])
 	var buy := _deep_button(page._rows, "Buy")
-	_check(buy != null and buy.text == "Buy %d" % price, "the button carries the price (%s)"
+	_check(buy != null and buy.text == "Buy" and UITheme.price_of(buy) == "%d" % price, "the button carries the price (%s)"
 			% [buy.text if buy != null else "no button"])
 
 	# The lines scroll and the buttons under them do not, the way the bag's stat block works: an elite
@@ -857,9 +913,9 @@ func _test_smithing() -> void:
 	var price := TownPrices.upgrade_price(piece)
 	var upgrade := _button(page._rows, "Upgrade")
 	var lock := _button(page._rows, "Lock")
-	_check(upgrade != null and upgrade.text == "Upgrade %d" % price,
+	_check(upgrade != null and upgrade.text == "Upgrade" and UITheme.price_of(upgrade) == "%d" % price,
 			"the hammer carries its price (%s)" % [upgrade.text if upgrade != null else "no button"])
-	_check(lock != null and lock.text == "Lock %d" % TownPrices.lock_price(piece),
+	_check(lock != null and lock.text == "Lock" and UITheme.price_of(lock) == "%d" % TownPrices.lock_price(piece),
 			"and so does the lock (%s)" % [lock.text if lock != null else "no button"])
 	_check(upgrade != null and upgrade.disabled and lock != null and lock.disabled,
 			"an empty purse kills both")
@@ -1142,8 +1198,34 @@ func _test_entering() -> void:
 	main._on_bounty_pressed()
 	await process_frame
 	_check(main.bounty_page.visible, "and it opens the bounty page")
+	# Where it lives is a fortuneteller's to sell: until she is paid the journal has no Show, and once
+	# she is, the board opens on the card with the land on it and the journal can point at it.
+	_check(_deep_button(main.bounty_page, "Show") == null, "which does not say where it lives for nothing")
+	main._on_left_page_closed()
+	main.inventory.gold = 1.0e9
+	main.map.select_cell(town)
+	main._on_town_pressed()
+	main.town_page._on_tab_pressed(TownServices.FORTUNE)
+	await process_frame
+	var quarry := _deep_button(main.town_page._rows, "Quarry")
+	_check(quarry != null and not quarry.disabled, "the fortuneteller will say where a bounty's monster lives")
+	if quarry != null:
+		quarry.pressed.emit()
+	await process_frame
+	_check(BountyBoard.located(BountyBoard.active(main.inventory.towns)), "which is written on the posting")
+	_check(BountyBoard.located(BountyBoard.active(Inventory.load_from(TEST_PATH).towns)), "and saved")
+	_check(main.inventory.gold < 1.0e9, "and paid for")
+	_check(main.town_page.open_tab() == TownServices.BOUNTIES, "and read off the card on the board")
+	main.town_page._on_tab_pressed(TownServices.FORTUNE)
+	await process_frame
+	quarry = _deep_button(main.town_page._rows, "Quarry")
+	_check(quarry != null and quarry.disabled, "and is not sold twice")
+	main.town_page.closed.emit()
+	await process_frame
+	main._on_bounty_pressed()
+	await process_frame
 	var shown := _deep_button(main.bounty_page, "Show")
-	_check(shown != null, "which says where to find what is wanted")
+	_check(shown != null, "after which the journal says where to find what is wanted")
 	if shown != null:
 		shown.pressed.emit()
 		await process_frame
@@ -1152,6 +1234,233 @@ func _test_entering() -> void:
 	_check(main._panel.visible, "with the tile panel on it, which is where the walking is done from")
 	main.queue_free()
 	await process_frame
+
+
+## The fortuneteller's rules, with no interface: the winds, the walk, the nearest towns, the peek,
+## the odds, the prices and the patch a scour takes.
+func _test_fortune() -> bool:
+	# Spots on an even row, so the plane and the grid agree about due east and west.
+	var from := Vector2i(10, 10)
+	var winds := {
+		Vector2i(14, 10): "east", Vector2i(6, 10): "west", Vector2i(10, 4): "north",
+		Vector2i(10, 16): "south", Vector2i(14, 6): "north east", Vector2i(6, 6): "north west",
+		Vector2i(14, 14): "south east", Vector2i(6, 14): "south west",
+	}
+	for to: Vector2i in winds:
+		_check(FortuneTeller.bearing(from, to) == winds[to],
+				"%s lies to the %s (%s)" % [to, winds[to], FortuneTeller.bearing(from, to)])
+	var walks := {1: "1 hour", 7: "7 hours", 8: "1 day", 12: "2 days", 55: "1 week", 56: "1 week",
+			200: "4 weeks"}
+	for steps: int in walks:
+		_check(FortuneTeller.walk_time(steps) == walks[steps],
+				"%d tiles is %s on foot (%s)" % [steps, walks[steps], FortuneTeller.walk_time(steps)])
+
+	var world := TownWorld.generate(WORLD_SEED)
+	var here: Vector2i = world.towns()[0]
+	var nearest := FortuneTeller.nearest_towns(world, here)
+	_check(nearest.size() == 3, "the world has a nearest town of every tier (%s)" % [nearest])
+	for tier: int in nearest:
+		var spot: Vector2i = nearest[tier]
+		_check(spot != here and world.tier_at(spot) == tier, "the nearest %d is one, and not this town" % tier)
+		for other in world.towns():
+			if other != here and world.tier_at(other) == tier:
+				_check(HexGrid.distance(here, other) >= HexGrid.distance(here, spot),
+						"and none of its tier is nearer")
+	var lines := FortuneTeller.road_lines(world, here)
+	_check(lines.size() == 3 and lines[2].contains("fortress") and lines[2].contains("on foot"),
+			"the roads are three sentences (%s)" % [lines])
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var found := [UniqueTable.ids()[0]]
+	var shown := []
+	for i in UniqueTable.ids().size() - 1:
+		var id := FortuneTeller.peek(found, shown, rng)
+		_check(not id.is_empty() and not (id in found) and not (id in shown),
+				"a peek is a unique neither found nor shown (%s)" % id)
+		shown.append(id)
+	_check(FortuneTeller.peek(found, shown, rng).is_empty(), "and there is none left when all are known")
+
+	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 5)
+	var odds := FortuneTeller.odds(sword)
+	var pool := ModifierTable.pool_for("Wooden Sword")
+	var share := 0.0
+	for row in odds:
+		share += float(row["share"])
+		_check(str(row["id"]) in pool, "%s is something a sword can roll" % row["id"])
+		_check(not str(row["line"]).is_empty(), "and is written out")
+	_check(odds.size() == pool.size() and absf(share - 100.0) < 0.001,
+			"the odds are the whole pool and add up to a hundred (%f)" % share)
+	_check(odds[0]["weight"] >= odds[-1]["weight"], "commonest first")
+	_check(ModifierTable.band_line("increased_damage", 1) == "+8-20% increased Damage",
+			"a band is written the way its modifier is (%s)" % ModifierTable.band_line("increased_damage", 1))
+	_check(ModifierTable.line({"id": "fight_clock", "value": 3}) == "+3s on the fight clock",
+			"and a rolled line still reads as it did")
+	var relic := Item.rolled_unique(UniqueTable.ids()[0], rng)
+	_check(FortuneTeller.odds(relic).is_empty() and FortuneTeller.why_not_appraise(relic) == FortuneTeller.WRITTEN,
+			"a unique's lines are its own, so there is nothing to read")
+	_check(not FortuneTeller.why_not_appraise(null).is_empty(), "and nothing to read with no piece open")
+
+	for reading: String in FortuneTeller.READINGS:
+		_check(TownPrices.FORTUNE_BODIES.has(reading) and FortuneTeller.LABELS.has(reading),
+				"%s has a price and a name" % reading)
+		_check(TownPrices.fortune_price(reading, TOWN_CELL) > TownPrices.fortune_price(reading, Vector2i(1, 0)),
+				"%s is dearer in a deeper town" % reading)
+	_check(TownPrices.fortune_price("retired_reading", TOWN_CELL) == 0.0, "a reading this build lacks costs nothing")
+
+	var patch := FortuneTeller.scour_cells(Vector2i(3, 3))
+	_check(patch.size() == 19 and Vector2i(3, 3) in patch, "a scour takes nineteen tiles round the one chosen")
+
+	# What she sold the player is saved with the player, and comes back as it was written.
+	var inventory := Inventory.new()
+	inventory.fortunes[FortuneTeller.CHEST] = [12, 34]
+	inventory.fortunes[FortuneTeller.PEEKED] = ["rimeplate"]
+	inventory.fortunes[FortuneTeller.SCOURED] = true
+	inventory.save(TEST_PATH)
+	var back := Inventory.load_from(TEST_PATH)
+	_check(FortuneTeller.chest(back.fortunes) == Vector2i(12, 34) and FortuneTeller.scoured(back.fortunes)
+			and FortuneTeller.peeked(back.fortunes) == ["rimeplate"], "what she sold survives the save (%s)" % [back.fortunes])
+	_check(FortuneTeller.chest({}) == TownWorld.NO_SPOT and not FortuneTeller.scoured({}),
+			"and a save that bought nothing has nothing")
+
+	# Only work that is out can be asked about, and only once.
+	var state := TownState.new()
+	var posting := {BountyBoard.ENEMY: "Slime", BountyBoard.NEED: 3, BountyBoard.HAVE: 0}
+	state.visit(Vector2i(1, 1))[BountyBoard.BOUNTIES] = [posting]
+	_check(not BountyBoard.locate(posting), "a posting not taken on cannot be located")
+	BountyBoard.accept(state, posting)
+	_check(BountyBoard.locate(posting) and BountyBoard.located(posting), "an accepted one can")
+	_check(not BountyBoard.locate(posting), "once")
+	var kept := TownState.from_dict(state.to_dict())
+	_check(BountyBoard.located(BountyBoard.active(kept)), "and it is saved with the town")
+	return true
+
+
+## Her table in a town, through the main scene: the roads, the star, a relic, a piece read, and the
+## one scour -- each paid for, written down and not sold twice where it should not be.
+func _test_fortune_page() -> void:
+	for scratch in [TEST_PATH, TEST_MAP_PATH]:
+		if FileAccess.file_exists(scratch):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch))
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	main.inventory_path = TEST_PATH
+	main.map_path = TEST_MAP_PATH
+	root.add_child(main)
+	for i in 3:
+		await process_frame
+	_check(main._chest_pointer.target == HexMap.NO_CELL, "no star points at a chest for nothing")
+
+	# Into the start village without charting the map, so there is still dark to scour and chests in it.
+	var town: Vector2i = main.view.start_town - main.view.origin
+	main.view._show(town, MapBuilder.State.CHARTED)
+	main.view.player_cell = town
+	main.map.set_player_cell(town)
+	main.map.select_cell(town)
+	main.inventory.gold = 1.0e12
+	main._on_town_pressed()
+	main.town_page._on_tab_pressed(TownServices.FORTUNE)
+	await process_frame
+	for reading: String in FortuneTeller.READINGS:
+		_check(_deep_button(main.town_page._rows, FortuneTeller.LABELS[reading]) != null,
+				"she offers %s" % reading)
+	_check(_deep_button(main.town_page._rows, "Quarry").disabled, "no bounty is out, so there is none to find")
+	_check(_deep_button(main.town_page._rows, "Appraise").disabled, "and no piece is open to read")
+
+	# The roads: three sentences, and free in this town from then on.
+	var purse: float = main.inventory.gold
+	_deep_button(main.town_page._rows, "Roads").pressed.emit()
+	await process_frame
+	_check(main.inventory.gold < purse, "the roads are paid for")
+	_check(_said(main.town_page._rows).contains("fortress"), "and told (%s)" % _said(main.town_page._rows))
+	main.town_page._on_reading_closed()
+	await process_frame
+	purse = main.inventory.gold
+	_deep_button(main.town_page._rows, "Roads").pressed.emit()
+	await process_frame
+	_check(main.inventory.gold == purse, "and told again for nothing")
+	main.town_page._on_reading_closed()
+
+	# The star.
+	var chest: Vector2i = main.view.nearest_chest(true)
+	_check(chest != HexMap.NO_CELL and not main.view.seen(chest),
+			"there is a chest out there on this seed that the player has not seen")
+	_deep_button(main.town_page._rows, "Treasure").pressed.emit()
+	await process_frame
+	_check(main._chest_pointer.target == chest, "the star is put over the nearest chest")
+	_check(FortuneTeller.chest(Inventory.load_from(TEST_PATH).fortunes) == main.view.origin + chest, "and saved")
+	_check(_deep_button(main.town_page._rows, "Treasure").disabled, "and not sold again while it is out")
+	main.view._states[chest] = MapBuilder.State.CHARTED
+	main._sync_chest()
+	_check(main._chest_pointer.target == HexMap.NO_CELL and FortuneTeller.chest(main.inventory.fortunes)
+			== TownWorld.NO_SPOT, "an opened chest takes its star with it")
+
+	# A relic: shown on her page, and on the log's card from then on.
+	_deep_button(main.town_page._rows, "Relic").pressed.emit()
+	await process_frame
+	var peeked := FortuneTeller.peeked(main.inventory.fortunes)
+	_check(peeked.size() == 1, "one relic is shown")
+	var named: String = UniqueTable.UNIQUES[peeked[0]]["name"]
+	_check(_said(main.town_page._rows).contains(named), "by name (%s)" % named)
+	main.town_page._on_reading_closed()
+
+	# A piece read: the bag's open piece, as the smith's is.
+	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, RandomNumberGenerator.new())
+	main.inventory.items.append(sword)
+	main.town_page.bag_changed(sword)
+	await process_frame
+	_deep_button(main.town_page._rows, "Appraise").pressed.emit()
+	await process_frame
+	_check(_said(main.town_page._rows).contains("increased Damage"), "a sword's odds are read out")
+	main.town_page.bag_changed(null)
+	await process_frame
+	_check(_deep_button(main.town_page._rows, "Appraise") != null, "and put away with the piece")
+
+	# The scour: the town closes, the map is aimed at, Escape costs nothing, a click pays once.
+	_deep_button(main.town_page._rows, "Scour").pressed.emit()
+	await process_frame
+	_check(not main.town_page.visible and main.map.aim_radius == FortuneTeller.SCOUR_RADIUS,
+			"the scour closes the town and aims at the map")
+	purse = main.inventory.gold
+	main._end_scour()
+	_check(main.map.aim_radius == -1 and main.inventory.gold == purse
+			and not FortuneTeller.scoured(main.inventory.fortunes), "put away, it costs nothing")
+	main._on_scour_pressed(TownPrices.fortune_price(FortuneTeller.SCOUR, town))
+	main._on_cell_aimed(Vector2i(9000, 9000))
+	_check(main.map.aim_radius != -1 and main.inventory.gold == purse, "land the map has not made is refused")
+	var dark := HexMap.NO_CELL
+	for cell: Vector2i in main.view._tiles:
+		if not main.view.seen(cell) and HexGrid.distance(cell, town) > 4:
+			dark = cell
+			break
+	var charted_before: bool = main.view.charted(town)
+	main._on_cell_aimed(dark)
+	await process_frame
+	_check(main.view.seen(dark) and not main.view.charted(dark), "the chosen land comes out of the dark, uncharted")
+	_check(main.inventory.gold < purse and FortuneTeller.scoured(main.inventory.fortunes), "paid for and spent")
+	_check(main.map.aim_radius == -1, "and the aim is put away")
+	_check(main.view.charted(town) == charted_before, "charted land is left as it was")
+	var reloaded := MapSave.load_from(TEST_MAP_PATH, [], MapSave.fingerprint(main.map.tileset))
+	_check(reloaded != null and reloaded.states.get(dark, -1) == MapBuilder.State.UNCHARTED,
+			"the map is written down with it")
+	main.map.select_cell(town)
+	main._on_town_pressed()
+	main.town_page._on_tab_pressed(TownServices.FORTUNE)
+	await process_frame
+	_check(_deep_button(main.town_page._rows, "Scour").disabled, "and the spell is never sold again")
+	main.queue_free()
+	await process_frame
+
+
+## Every Label's text under `parent`, run together, for a test that asks what a page says.
+func _said(parent: Node) -> String:
+	var text := ""
+	for child: Node in parent.get_children():
+		if child is Label and not child.is_queued_for_deletion():
+			text += (child as Label).text + " "
+		text += _said(child)
+	return text
 
 
 ## The first Button under `parent` whose label starts with `text`, or null. The blocks are built fresh

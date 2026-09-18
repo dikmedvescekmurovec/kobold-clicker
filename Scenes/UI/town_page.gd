@@ -13,7 +13,8 @@ extends Control
 ## The smith is the same arrangement with no shelf at all: he works on whatever the bag has open, and
 ## his tab is the two prices for it and the reasons he will not. The board is the third shape again:
 ## three postings that say who to kill, what it pays and where that monster lives, with a Claim on a
-## finished one -- and no Accept on any of them, because reading the board is taking the work on.
+## finished one. The fortuneteller is the fourth: a list of what she can be asked, each with its
+## price, and what she said in its place once one has been paid for (`FortuneTeller`).
 ##
 ## Built like `SkillsPage`: it takes the inventory and the save path, `open()` redraws it, `layout()`
 ## fits it to the window, `closed` is its X, and it carries `UITheme.theme()` itself because it hangs
@@ -28,6 +29,11 @@ signal tab_changed(service: String)
 ## it redraws around this: the comparison is pointed at the piece being considered, and a purchase
 ## reaches the purse, the grid and the tray the same way.
 signal offer_changed(item: Item)
+## The fortuneteller was paid to put the star over the chest on `cell`. The star is the main scene's.
+signal chest_bought(cell: Vector2i)
+## The scour was asked for, at `price`. Nothing has been charged: choosing the land happens on the
+## map, which is the main scene's, and so does the paying once land has been chosen.
+signal scour_pressed(price: float)
 
 ## How wide the page's contents run before they wrap, in panel pixels. It shares a 1152 px window
 ## with the bag and the comparison beside it, so this is a width budget rather than a matter of taste
@@ -58,6 +64,7 @@ const TAB_ICONS := {
 	TownServices.GEAR: "res://Assets/UI/ui_icon_sword.png",
 	TownServices.ORBS: "res://Assets/UI/ui_icon_gem.png",
 	TownServices.SMITH: "res://Assets/UI/ui_icon_anvil.png",
+	TownServices.FORTUNE: "res://Assets/UI/ui_icon_help.png",
 }
 ## How far a tab that is not the open one is faded, so the open one is read off the row at a glance.
 const TAB_REST := Color(1, 1, 1, 0.55)
@@ -65,7 +72,18 @@ const TAB_REST := Color(1, 1, 1, 0.55)
 ## The counters this build has actually built, and so the only ones that get a tab: a service not
 ## named here is listed in the tile panel and given none, which is how a town would advertise a
 ## counter this build has not built yet without offering a tab that does nothing.
-const COUNTERS := [TownServices.BOUNTIES, TownServices.GEAR, TownServices.ORBS, TownServices.SMITH]
+const COUNTERS := [TownServices.BOUNTIES, TownServices.GEAR, TownServices.ORBS, TownServices.SMITH,
+		TownServices.FORTUNE]
+
+## What each of the fortuneteller's buttons says when hovered.
+const FORTUNE_TIPS := {
+	FortuneTeller.ROADS: "Where the nearest village, town and fortress lie",
+	FortuneTeller.TREASURE: "A star that points at the nearest chest until it is opened",
+	FortuneTeller.QUARRY: "Where the monster of your bounty lives",
+	FortuneTeller.RELIC: "One unique you have not found, and where it is carried",
+	FortuneTeller.APPRAISE: "What the piece open in your bag can roll, and how often",
+	FortuneTeller.SCOUR: "Uncover a patch of the map you choose. Once, ever",
+}
 
 var inventory: Inventory
 ## The map the town stands on, set from outside the way the fight's is. The board needs it and only
@@ -94,9 +112,22 @@ var _offer_at := -1
 ## What the bag has open, which is the piece the smith works on -- never one off a shelf and never
 ## one being worn. It arrives through `bag_changed`.
 var _bag_piece: Item
+## The orb the bag has in hand ("" for none, `orb_held`), and the bag's own `craft_held`, set from
+## outside: a press on a shelf piece spends that orb on it instead of opening it. The orb, the purse
+## and the save stay the bag's.
+var _held := ""
+var craft_held: Callable
 ## What the last blow of the hammer did, when it is worth saying out loud. A break is the one thing
 ## that happens on this page the player did not ask for, so it is said rather than left to be noticed.
 var _smith_note := ""
+## Which of the fortuneteller's readings is written on the page in the list's place ("" for the
+## list), and the unique she showed when it is the relic.
+var _said := ""
+var _relic := ""
+## The town's world spot, which the roads are measured from, and the nearest unseen chest as the town was
+## walked into -- the player does not move while the page is up, and finding it scans the whole map.
+var _spot := Vector2i.ZERO
+var _near_chest := HexMap.NO_CELL
 ## What a shelf is rolled with. Unseeded, the way the bag's crafting rng is: a test that wants a
 ## known shelf seeds it.
 var _stock_rng := RandomNumberGenerator.new()
@@ -131,7 +162,10 @@ func _ready() -> void:
 func open(town_name: String, services: PackedStringArray, cell: Vector2i, spot: Vector2i,
 		tier: int) -> void:
 	_cell = cell
+	_spot = spot
 	_tier = tier
+	_said = ""
+	_near_chest = view.nearest_chest(true) if view != null else HexMap.NO_CELL
 	_title.text = town_name if not town_name.is_empty() else "Town"
 	_drawer = inventory.towns.visit(spot)
 	# The shelves are filled once and the board whenever all its work has been handed in. Both are
@@ -167,8 +201,19 @@ func bag_changed(open_piece: Item) -> void:
 	_bag_piece = open_piece
 	# What the hammer did belongs to the piece it did it to, and that piece is no longer the one up.
 	_smith_note = ""
+	# And so does what she read off it.
+	if _said == FortuneTeller.APPRAISE:
+		_said = ""
 	_fill()
 	layout()
+
+
+## The bag picked an orb up or put it down: the shelf is greyed by it.
+func orb_held(orb: String) -> void:
+	_held = orb if craft_held.is_valid() else ""
+	if visible:
+		_fill()
+		layout()
 
 
 ## Full window height against the right edge, where the tile panel stands when no town is open.
@@ -209,6 +254,9 @@ func _fill() -> void:
 	if _open_tab == TownServices.SMITH:
 		_fill_smith()
 		return
+	if _open_tab == TownServices.FORTUNE:
+		_fill_fortune()
+		return
 	if _offer != null:
 		_fill_offer()
 		return
@@ -221,10 +269,9 @@ func _fill() -> void:
 	# New stock now, for gold: pinned at the page's foot, under the scroll, where every counter keeps its buttons -- this shelf only, and dearer every time for good: the town remembers.
 	var price := TownPrices.reroll_price(_cell, VendorStock.rerolls(_drawer, _shelf_key()))
 	var short := _why_not(price, false)
-	var reroll := UITheme.button("Restock %s" % BigNumber.format(price), "LightButton",
+	var reroll := UITheme.priced_button("Restock", price, "LightButton",
 			short if not short.is_empty()
 			else "Clear this shelf for new stock. Each time costs twice the last")
-	reroll.icon = Coins.icon()
 	reroll.disabled = not short.is_empty()
 	reroll.pressed.connect(_on_reroll_pressed)
 	_rows.add_child(reroll)
@@ -263,7 +310,11 @@ func _shelf() -> GridContainer:
 		# A bag square takes no mouse input, so the cell around it is what is pressed. There is no
 		# scroll under this grid to protect a drag from, which is the whole reason that rule exists.
 		var cell := _price_cell(ItemSlot.make(item), TownPrices.buy_price(item))
+		# Grey, as the bag's grid greys, where the orb in the player's hand has nothing to do.
+		if _held != "" and not OrbTable.can_apply(_held, item):
+			cell.get_child(0).modulate = OrbSlot.DIM
 		cell.mouse_filter = Control.MOUSE_FILTER_STOP
+		Cursors.wear(cell, Cursors.HAND)
 		cell.gui_input.connect(_on_shelf_input.bind(at))
 		grid.add_child(cell)
 	return grid
@@ -343,10 +394,9 @@ func _fill_offer() -> void:
 
 	var price := TownPrices.buy_price(_offer)
 	var refused := _why_not(price, true)
-	var buy := UITheme.button("Buy %s" % BigNumber.format(price), "LightButton",
+	var buy := UITheme.priced_button("Buy", price, "LightButton",
 			refused if not refused.is_empty()
 			else "Buy this and put it in your bag for %s gold" % BigNumber.format(price))
-	buy.icon = Coins.icon()
 	buy.disabled = not refused.is_empty()
 	buy.pressed.connect(_on_buy_item)
 	buy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -391,9 +441,9 @@ func _fill_board() -> void:
 		# was taken on, so the button is here and nowhere else. The figure is on the card above it and
 		# in the tooltip: beside Info there is no room for a reward that grows with the walk.
 		elif BountyBoard.ready(bounty):
-			action = UITheme.button("Claim", "LightButton", "Hand this in for %s gold"
-					% BigNumber.format(float(bounty.get(BountyBoard.GOLD, 0))))
-			action.icon = Coins.icon()
+			action = UITheme.priced_button("Claim", float(bounty.get(BountyBoard.GOLD, 0)), "LightButton",
+					"Hand this in for %s gold" % BigNumber.format(float(bounty.get(BountyBoard.GOLD, 0))),
+					false)
 			action.pressed.connect(_on_claim_pressed.bind(bounty))
 		if action != null:
 			action.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -501,12 +551,144 @@ func _fill_smith() -> void:
 ## reason in its tooltip when it is dead.
 func _smith_button(text: String, price: float, refused: String, tooltip: String,
 		action: Callable) -> Button:
-	var button := UITheme.button("%s %s" % [text, BigNumber.format(price)], "LightButton",
+	var button := _priced_button(text, price, refused, tooltip, action)
+	if refused.is_empty():
+		Cursors.wear(button, Cursors.HAMMER)
+	return button
+
+
+## `UITheme.priced_button` wired up: dead with the reason in its tooltip when `refused` says one.
+func _priced_button(text: String, price: float, refused: String, tooltip: String,
+		action: Callable) -> Button:
+	var button := UITheme.priced_button(text, price, "LightButton",
 			refused if not refused.is_empty() else tooltip)
-	button.icon = Coins.icon()
 	button.disabled = not refused.is_empty()
 	button.pressed.connect(action)
 	return button
+
+
+## The fortuneteller's table: what she can be asked, each with its price -- or, once one has been
+## paid for, what she said, with the arrow back to the list under it the way an open shelf piece has.
+## The star and the bounty's land are not said here: one is on the map and the other on the card.
+func _fill_fortune() -> void:
+	var body := _scrolled(ROW_GAP)
+	if _said.is_empty():
+		for reading: String in FortuneTeller.READINGS:
+			body.add_child(_priced_button(FortuneTeller.LABELS[reading], _fortune_price(reading),
+					_fortune_why_not(reading), FORTUNE_TIPS[reading], _on_reading_pressed.bind(reading)))
+		return
+	match _said:
+		FortuneTeller.ROADS:
+			for line in FortuneTeller.road_lines(view.towns, _spot):
+				body.add_child(_sign(line))
+		FortuneTeller.RELIC:
+			CollectionPage.write_hint(body, BODY_WIDTH, _relic, view, true, CollectionPage.specimen(_relic))
+		FortuneTeller.APPRAISE:
+			body.add_child(ItemDetails.line(_bag_piece.display_name(), _bag_piece.text_color(), BODY_WIDTH))
+			body.add_child(UITheme.rule(BODY_WIDTH))
+			# Its own box: the scroll's row gap would pull the table's stripes apart.
+			var table := UITheme.vbox(0)
+			body.add_child(table)
+			for row in FortuneTeller.odds(_bag_piece):
+				table.add_child(_odds_row(row, table.get_child_count() % 2 == 1))
+	var back := UITheme.back_button("Back to what she can be asked")
+	back.pressed.connect(_on_reading_closed)
+	_rows.add_child(back)
+
+
+## One modifier she read off a piece: the line with its band on the left, how often it comes up on the right.
+func _odds_row(row: Dictionary, striped: bool) -> PanelContainer:
+	var line := UITheme.table_row(str(row["line"]), "%.1f%%" % float(row["share"]), striped,
+			BODY_WIDTH, null, Palette.SLATE)
+	var share: Label = line.find_child(UITheme.TABLE_VALUE, true, false)
+	share.tooltip_text = "Weight %d" % int(row["weight"])
+	share.mouse_filter = Control.MOUSE_FILTER_STOP
+	return line
+
+
+## What a reading costs here. The roads, once told in this town, are told again for nothing: they
+## are read off the world, and the world has not moved.
+func _fortune_price(reading: String) -> float:
+	if reading == FortuneTeller.ROADS and bool(_drawer.get(FortuneTeller.ROADS_TOLD, false)):
+		return 0.0
+	return TownPrices.fortune_price(reading, _cell)
+
+
+## Why she will not give this reading, or "" when she will.
+func _fortune_why_not(reading: String) -> String:
+	if view == null:
+		return "She sees nothing here."
+	match reading:
+		FortuneTeller.TREASURE:
+			var told := FortuneTeller.chest(inventory.fortunes)
+			if told != TownWorld.NO_SPOT and view.has_chest(told - view.origin):
+				return "The star is already out."
+			if _near_chest == HexMap.NO_CELL:
+				return "She sees no hidden chest."
+		FortuneTeller.QUARRY:
+			var bounty := BountyBoard.active(inventory.towns)
+			if bounty.is_empty():
+				return "No bounty is out."
+			if BountyBoard.located(bounty):
+				return "Already told."
+		FortuneTeller.RELIC:
+			if FortuneTeller.hidden(inventory.uniques_found,
+					FortuneTeller.peeked(inventory.fortunes)).is_empty():
+				return "Every relic is known."
+		FortuneTeller.APPRAISE:
+			var why := FortuneTeller.why_not_appraise(_bag_piece)
+			if not why.is_empty():
+				return why
+		FortuneTeller.SCOUR:
+			if FortuneTeller.scoured(inventory.fortunes):
+				return "That spell is spent."
+	return _why_not(_fortune_price(reading), false)
+
+
+## One reading asked for. Paid for and written down together, the way a purchase is -- all but the
+## scour, which is paid for on the map once land has been chosen (`scour_pressed`).
+func _on_reading_pressed(reading: String) -> void:
+	if not _fortune_why_not(reading).is_empty():
+		return
+	var price := _fortune_price(reading)
+	if reading == FortuneTeller.SCOUR:
+		scour_pressed.emit(price)
+		return
+	inventory.gold -= price
+	match reading:
+		FortuneTeller.ROADS:
+			_drawer[FortuneTeller.ROADS_TOLD] = true
+			_said = reading
+		FortuneTeller.TREASURE:
+			var spot := view.origin + _near_chest
+			inventory.fortunes[FortuneTeller.CHEST] = [spot.x, spot.y]
+			chest_bought.emit(_near_chest)
+		FortuneTeller.QUARRY:
+			BountyBoard.locate(BountyBoard.active(inventory.towns))
+		FortuneTeller.RELIC:
+			var shown := FortuneTeller.peeked(inventory.fortunes)
+			_relic = FortuneTeller.peek(inventory.uniques_found, shown, _stock_rng)
+			shown.append(_relic)
+			inventory.fortunes[FortuneTeller.PEEKED] = shown
+			_said = reading
+		FortuneTeller.APPRAISE:
+			_said = reading
+	print("The fortuneteller read %s for %s gold" % [reading, BigNumber.format(price)])
+	inventory.save(_save_path)
+	# The land is said on the bounty's own card, so that is where the player is taken to read it.
+	if reading == FortuneTeller.QUARRY:
+		_on_tab_pressed(TownServices.BOUNTIES)
+		return
+	_fill()
+	layout()
+	# Nothing is open, but the bag still has to hear: the purse it draws has just moved.
+	offer_changed.emit(null)
+
+
+func _on_reading_closed() -> void:
+	_said = ""
+	_fill()
+	layout()
 
 
 ## The smith's own refusal, or one of the two the page owns: a piece that is worn rather than carried
@@ -587,6 +769,13 @@ func _on_shelf_input(event: InputEvent, at: int) -> void:
 	var shelf := VendorStock.items(_drawer)
 	if at < 0 or at >= shelf.size() or shelf[at] == null:
 		return
+	# With an orb in hand the press spends it on the piece where it stands, the player's gamble on a
+	# piece that is not theirs yet: the price under it is read off the rarity and moves with it.
+	if _held != "":
+		craft_held.call(shelf[at], VendorStock.put.bind(_drawer, at, shelf[at]))
+		_fill()
+		layout()
+		return
 	_offer = shelf[at]
 	_offer_at = at
 	_fill()
@@ -642,6 +831,7 @@ func _on_buy_orb(orb: String, at: int) -> void:
 func _on_tab_pressed(service: String) -> void:
 	_open_tab = service
 	_smith_note = ""
+	_said = ""
 	_close_offer(true)
 	tab_changed.emit(service)
 

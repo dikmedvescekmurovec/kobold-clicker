@@ -15,7 +15,7 @@ extends RefCounted
 ## Empties `rows` and writes `item` into it. `width` is what a line may use before it wraps.
 ##
 ## What a smith has left on a piece reads here and so reads everywhere a piece is shown: "Broken"
-## under its rarity, and the word on the locked modifier's own line, which `Item.mod_lines` puts there.
+## under its rarity, and the locked modifier (`Item.locked_line`) in ink among the rust.
 ##
 ## `against` is the piece this one would replace, when there is one: it adds a last block saying what
 ## wearing this would gain or lose, which is the question the bag is actually being read to answer.
@@ -30,24 +30,49 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Item = 
 	# changed again. In the colour a loss is written in, so it is not read as a line it rolled.
 	if item.broken:
 		rows.add_child(line("Broken", Palette.RUST, width, true))
-	rows.add_child(UITheme.rule())
-	# What the swap is worth goes first, straight under the name, and what the piece is follows it.
-	# It is the answer the block is opened for, and an elite carrying six modifiers is taller than
-	# the panel -- last, it would be the one thing the player had to scroll to find.
+	# What a unique is worn for, straight under what it is: the one line on the block that is a rule
+	# rather than a number. In the pack's wood brown and not the unique's own gold, which carries a
+	# name at 16 px and is too pale on cream for a sentence at 10.
+	if not item.effect_text().is_empty():
+		rows.add_child(line(item.effect_text(), Palette.SLOT_TAN_DK, width, true))
+	# What its set does, in the set's own green -- which is also the colour of its name and its frame.
+	if item.is_set():
+		rows.add_child(line(item.set_text(), ItemRarity.SET_TEXT, width, true))
+	# Three blocks of [text, colour], each under a rule of its own and
+	# drawn as a table (name left, number right): what the swap is worth, what the
+	# piece is, what it rolled. The swap goes first, straight under the name: it is the answer the
+	# block is opened for, and an elite carrying six modifiers is taller than the panel -- last, it
+	# would be the one thing the player had to scroll to find.
+	var blocks: Array[Array] = [[], [], []]
 	if against != null:
 		var change := deltas(item, against)
-		if not change.is_empty():
-			for stat: String in change:
-				# Leaf for a gain and rust for a loss. Every stat the game has is better the larger it
-				# is, so the sign carries the whole meaning and no table is needed to say which way is
-				# up; one that ever inverted would need one here, and there is none.
-				rows.add_child(line(LootTable.stat_delta(stat, change[stat]),
-						Palette.LEAF if change[stat] > 0.0 else Palette.RUST, width, true))
-			rows.add_child(UITheme.rule())
+		for stat: String in change:
+			# Leaf for a gain and rust for a loss. Every stat the game has is better the larger it
+			# is, so the sign carries the whole meaning and no table is needed to say which way is
+			# up; one that ever inverted would need one here, and there is none.
+			blocks[0].append([LootTable.stat_delta(stat, change[stat]),
+					Palette.LEAF if change[stat] > 0.0 else Palette.RUST])
 	for text in item.stat_lines():
-		rows.add_child(line(text, Palette.INK, width, true))
+		blocks[1].append([text, Palette.INK])
+	# The locked one in a base stat's ink: it is as fixed as they are, and under the rule that parts
+	# the two it cannot be taken for one of them.
+	var pinned := item.locked_line(Settings.item_details)
 	for text in item.mod_lines(Settings.item_details):
-		rows.add_child(line(text, Palette.RUST, width, true))
+		blocks[2].append([text, Palette.INK if text == pinned else Palette.RUST])
+	for block in blocks:
+		if block.is_empty():
+			continue
+		rows.add_child(UITheme.rule())
+		# A box of its own with no gap, so the stripes of `UITheme.table_row` lie against each other.
+		var table := UITheme.vbox(0)
+		rows.add_child(table)
+		for entry: Array in block:
+			# Every line an item writes opens with its number (`LootTable.stat_line`, `stat_delta`,
+			# `ModifierTable.line`): the first word is the row's value and the rest is its name.
+			var text: String = entry[0]
+			var number := text.get_slice(" ", 0)
+			table.add_child(UITheme.table_row(text.substr(number.length() + 1), number,
+					table.get_child_count() % 2 == 1, width, entry[1], entry[1]))
 
 
 ## What wearing `item` instead of `against` would change: stat -> the signed difference.

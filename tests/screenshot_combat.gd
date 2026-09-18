@@ -170,6 +170,8 @@ func _shoot_fight() -> void:
 		while boss_fight.phase != Encounter.Phase.WAITING:
 			boss_fight.advance(0.05)
 		boss_fight.hp = int(boss_fight.enemy_max_hp() * 0.7)
+		# A boss's nameplate pops in white; the shot is of where it settles.
+		await create_timer(CombatScene.BOSS_POP_TIME + 0.1).timeout
 		# The same shot says both things a settlement changed: the gold nameplate, and the longer bar
 		# over it -- fifteen pips with a gold one at the far end, on a minute's clock cut to match.
 		await _save(boss, "combat_boss_bar.png")

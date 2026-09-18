@@ -147,6 +147,9 @@ func bank_kills(kills: int) -> void:
 
 
 func _put_in_bag(item: Item) -> void:
+	# The collection log hears of a unique where the bag does, so it follows the bank-or-pouch rule
+	# for free: at once for a tile fight, at `bank` for a run.
+	_inventory.note_unique(item.unique)
 	for gone: Item in _inventory.add(item):
 		print("The bag was full: destroyed %s (%s, level %d)" % [gone.type, gone.rarity_name(), gone.level])
 

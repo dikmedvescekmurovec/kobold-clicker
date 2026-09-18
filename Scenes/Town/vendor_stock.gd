@@ -125,6 +125,14 @@ static func take(drawer: Dictionary, key: String, index: int) -> void:
 	(saved as Array)[index] = ""
 
 
+## Writes a shelf piece back where it stood, after the player has spent an orb of their own on it.
+## `items` hands out fresh `Item`s every time, so a change to one is lost unless it is put back.
+static func put(drawer: Dictionary, index: int, item: Item) -> void:
+	var shelf := _shelf(drawer, ITEMS)
+	if index >= 0 and index < shelf.size():
+		shelf[index] = item.to_dict()
+
+
 ## A saved shelf, or nothing at all when the file does not hold one of the right size -- a town never
 ## visited, or a save edited by hand. Nothing here guesses at a half-written shelf: the vendor is out
 ## of stock until a reroll, which is the one state that needs no repair.

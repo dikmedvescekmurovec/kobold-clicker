@@ -1,0 +1,142 @@
+class_name CollectionPage
+extends Control
+## The collection log, as a page against the left edge: every unique the game has, one square each in
+## `UniqueTable`'s order. One the player has found is drawn as the piece it is; one they have not is
+## its outline in black, and the card beside it says nothing but that -- until a fortuneteller has
+## shown it (`FortuneTeller.peek`), after which the card says what it is and where it is found.
+##
+## Built like the other left-hand pages (`BountyList`): `open()` redraws it, `layout()` fits it to the
+## window, `closed` is its X, and it carries `UITheme.theme()` because it hangs off a `CanvasLayer`.
+## It changes nothing and so saves nothing -- `FightLedger` is what writes a find into the log.
+##
+## Every square is an `ItemSlot`, so the one `ItemCard` the main scene built describes these too: a
+## found one through `ItemDetails` as anywhere else, a missing one through the `hint` it carries.
+
+## The page's X was pressed.
+signal closed
+
+const HELP_ICON := "res://Assets/UI/ui_icon_help.png"
+
+## Dev: every square is drawn as found. The count and the damage bonus stay the save's own. Only the
+## main scene sets it (`debug_all_uniques`), as it does `TownServices.show_all`.
+static var show_all := false
+
+var inventory: Inventory
+var view: MapBuilder
+var _ui_scale: float
+var _panel: VBoxContainer
+var _rows: VBoxContainer
+
+
+func _init(player_inventory: Inventory, map_view: MapBuilder, ui_scale: float) -> void:
+	inventory = player_inventory
+	view = map_view
+	_ui_scale = ui_scale
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	theme = UITheme.theme()
+
+
+func _ready() -> void:
+	_panel = UITheme.titled_panel("Collection", "Close the collection", closed.emit)
+	_panel.scale = Vector2(_ui_scale, _ui_scale)
+	add_child(_panel)
+	# Scrolled, like the journal: the uniques run to more rows than a 648 px window holds.
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	UITheme.body_of(_panel).add_child(scroll)
+	_rows = UITheme.vbox(BountyList.ROW_GAP, BagPage.WIDTH)
+	scroll.add_child(_rows)
+	open()
+
+
+## Redraws the page: the count, then the grid.
+func open() -> void:
+	UITheme.clear(_rows)
+	var heading := HBoxContainer.new()
+	var count := UITheme.label("Found %d of %d" % [inventory.uniques_found.size(),
+			UniqueTable.UNIQUES.size()])
+	count.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(count)
+	# What the log is worth, behind a question mark rather than as a line on the page.
+	var help := TextureRect.new()
+	help.texture = load(HELP_ICON)
+	help.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	help.mouse_filter = Control.MOUSE_FILTER_STOP
+	Cursors.wear(help, Cursors.HELP)
+	help.tooltip_text = "Each unique found adds %d%% increased Damage, worn or not.\nNow: +%d%%." % [
+			UniqueTable.COLLECTION_DAMAGE, inventory.collection_bonus()]
+	heading.add_child(help)
+	_rows.add_child(heading)
+	_rows.add_child(UITheme.rule(BagPage.WIDTH))
+	var grid := GridContainer.new()
+	grid.columns = BagPage.GRID_COLS
+	grid.add_theme_constant_override("h_separation", BagPage.SLOT_GAP)
+	grid.add_theme_constant_override("v_separation", BagPage.SLOT_GAP)
+	_rows.add_child(grid)
+	for id: String in UniqueTable.ids():
+		grid.add_child(CollectionPage.square(id, show_all or inventory.uniques_found.has(id), view,
+				id in FortuneTeller.peeked(inventory.fortunes)))
+
+
+## One unique's square. A specimen rather than the player's own: the log says what the thing *is*, at
+## level 1 and the bottom of every band, and the one in the bag says what theirs rolled.
+static func square(id: String, found: bool, map_view: MapBuilder, peeked := false) -> ItemSlot:
+	var piece := CollectionPage.specimen(id)
+	if found:
+		return ItemSlot.make(piece)
+	return ItemSlot.shadow(piece, CollectionPage.write_hint.bind(id, map_view, peeked, piece))
+
+
+## The log's own copy of a unique: level 1, every modifier at the bottom of its band.
+static func specimen(id: String) -> Item:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(id)
+	var piece := Item.rolled_unique(id, rng)
+	for mod in piece.mods:
+		mod["value"] = int(ModifierTable.band_for(str(mod["id"]), 1)[0])
+	return piece
+
+
+## What the card says beside a unique not found yet. Unpeeked, that and who to ask. Once a
+## fortuneteller has shown it (`peeked`): the piece itself (`specimen`, the log's own), then where to
+## look -- the ground it is found on as the tile panel's own swatches, and the nearest piece of that
+## ground the player has seen (`MapBuilder.nearest_env`, which never names land under the fog). The
+## fortuneteller's own page writes the same card, so a relic reads the same at her table and in the log.
+static func write_hint(rows: VBoxContainer, width: float, id: String, map_view: MapBuilder,
+		peeked := false, specimen: Item = null) -> void:
+	if not peeked:
+		rows.add_child(ItemDetails.line("Not found yet", Palette.SLATE, width))
+		rows.add_child(ItemDetails.line("A fortuneteller could say more.", Palette.SLATE, width, true))
+		return
+	# `fill` empties the rows it is given, so the piece goes in first and "not found" under it.
+	if specimen != null:
+		ItemDetails.fill(rows, specimen, width)
+		rows.add_child(UITheme.rule())
+	rows.add_child(ItemDetails.line("Not found yet", Palette.SLATE, width, true))
+	var envs: Array = UniqueTable.UNIQUES[id]["envs"]
+	if envs.is_empty():
+		rows.add_child(ItemDetails.line("Carried by monsters everywhere.", Palette.INK, width, true))
+	else:
+		rows.add_child(ItemDetails.line("Carried by the monsters of:", Palette.INK, width, true))
+		if map_view != null:
+			var swatches := HBoxContainer.new()
+			swatches.add_theme_constant_override("separation", 2)
+			for env: String in envs:
+				swatches.add_child(map_view.map.tileset.env_icon(env))
+			rows.add_child(swatches)
+		else:
+			rows.add_child(ItemDetails.line(", ".join(PackedStringArray(envs)), Palette.INK, width, true))
+		if map_view != null:
+			var near := map_view.nearest_env(PackedStringArray(envs), 0)
+			rows.add_child(ItemDetails.line("Nearest: %s" % (map_view.name_of(near)
+					if near != HexMap.NO_CELL else "none you have seen yet."), Palette.SLATE, width, true))
+	rows.add_child(ItemDetails.line("Bosses carry one far more often than the rabble.",
+			Palette.SLATE, width, true))
+
+
+## Full window height against the left edge, where the other pages stand.
+func layout() -> void:
+	_panel.size = Vector2(_panel.get_combined_minimum_size().x, get_viewport_rect().size.y / _ui_scale)
+	_panel.position = Vector2.ZERO

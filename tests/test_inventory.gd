@@ -58,6 +58,11 @@ func _run() -> void:
 	_check(await _test_crafting_from_the_bag() == true, "crafting tests ran to the end")
 	_check(await _test_tips() == true, "tip tests ran to the end")
 	_check(_test_fight_ledger() == true, "fight ledger tests ran to the end")
+	_check(_test_unique_table() == true, "unique table tests ran to the end")
+	_check(_test_unique_items() == true, "unique item tests ran to the end")
+	_check(await _test_unique_stats() == true, "unique stat tests ran to the end")
+	_check(await _test_collection() == true, "collection log tests ran to the end")
+	_check(await _test_character_page() == true, "character page tests ran to the end")
 	_clear_save()
 	_report("inventory")
 
@@ -358,12 +363,13 @@ func _test_rarity_tables() -> bool:
 		var row: Dictionary = ItemRarity.TIER_WEIGHTS[tier]
 		var total := 0
 		for step: ItemRarity.Rarity in steps:
+			if step == ItemRarity.Rarity.UNIQUE:
+				continue
 			_check(row.has(step), "tier %d has a weight for rarity %d" % [tier, step])
 			total += int(row[step])
 		_check(total > 0, "tier %d can roll something" % tier)
-		# Uniques are hand-crafted and belong to a later chunk. This is what fails loudly and
-		# usefully on the day they are switched on.
-		_check(int(row[ItemRarity.Rarity.UNIQUE]) == 0, "tier %d cannot roll a unique" % tier)
+		# Uniques are `UniqueTable.roll`'s, beside the gear: a weight here would be a second way in.
+		_check(not row.has(ItemRarity.Rarity.UNIQUE), "tier %d cannot roll a unique" % tier)
 
 	# Better enemies carry better things: as the tier rises the weight moves up the ramp. Said as
 	# the average step rather than band by band, because the middle of a ramp does not have to
@@ -474,10 +480,9 @@ func _test_modifier_tables() -> bool:
 					carried = carried or LootTable.can_roll(item, stat)
 		# Unless it is one of the ones held back on purpose, which have to be named rather than
 		# inferred: a modifier nothing can roll is dead weight, and a dormant one is a system waiting.
-		_check(carried or id in ModifierTable.DORMANT,
-				"%s names %s, which no item can roll" % [id, stat])
-		_check(not (carried and id in ModifierTable.DORMANT),
-				"%s is listed as dormant and can be rolled" % id)
+		var held_back: bool = id in ModifierTable.DORMANT or id in ModifierTable.UNIQUE_ONLY
+		_check(carried or held_back, "%s names %s, which no item can roll" % [id, stat])
+		_check(not (carried and held_back), "%s is listed as held back and can be rolled" % id)
 		_check(not ModifierTable.line({"id": id, "value": int(band[1])}).is_empty(), id + " writes a line")
 	_check(ModifierTable.line({"id": "nonsense", "value": 1}).is_empty(), "an unknown modifier writes nothing")
 
@@ -826,7 +831,22 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	_check(_bag_squares(main).is_empty(), "and the bag is empty")
 
 	main._on_bag_pressed()
-	_check(main.bag_page.visible and not main._bag_button.visible, "the panel takes the button's place")
+	_check(main.bag_page.visible and main._bag_button.visible, "the panel opens and the button stays")
+	_check(main._bag_button.position.x >= main.bag_page.right_edge(), "standing clear of the page, beside it")
+	_check(not main._character_button.visible, "while the page covers the character panel's corner")
+	main.inventory.tips.append("level_up")
+	main._show_corner(true)
+	_check(is_equal_approx(main._skills_button.position.x, main._bag_button.position.x)
+			and main._skills_button.position.y > main._bag_button.position.y, "the buttons are a column")
+	main._on_skills_pressed()
+	_check(main.skills_page.visible and not main.bag_page.visible, "and one press goes from page to page")
+	_check(main._bag_button.position.x >= main.skills_page.get_child(0).size.x * main.ui_scale,
+			"the column standing beside that one now")
+	main._on_skills_pressed()
+	_check(not main.skills_page.visible and main._character_button.visible, "a page's own button puts it away")
+	main.inventory.tips.erase("level_up")
+	main.inventory.tips.erase("opened_skills")
+	main._on_bag_pressed()
 	_check(is_zero_approx(main.bag_page._panel.position.x), "and sits against the left edge")
 	_check(not main.bag_page._detail.visible, "with no stat block until a square is clicked")
 	main._on_left_page_closed()
@@ -911,16 +931,28 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	_check(main.inventory.gold == fight.gold,
 			"and the purse has it already: %d of %d" % [main.inventory.gold, fight.gold])
 	_check(Inventory.load_from(TEST_PATH).gold == fight.gold, "so does the file on disk")
-	_check(combat._gold_row.visible and combat._gold_label.text == "+%d" % fight.gold,
+	_check(combat._gold_row.visible and combat._gold_label.text == "%d" % fight.gold,
 			"and the verdict says so: %s" % combat._gold_label.text)
+	_check(combat._kills_label.text == str(fight.kills()),
+			"beside the bodies: %s" % combat._kills_label.text)
 	_check(combat._result_drops.count() == combat._drops.size(),
 			"the fight's panel shows everything that fell: %d of %d" % [
 					combat._result_drops.count(), combat._drops.size()])
 	_check(combat._loot_button.text == str(combat._drops.size()),
 			"and so does the counter in the corner")
 
-	# A drop on that panel opens what it actually is, and goes back again.
+	# The hover card has to stand over the fight, or a find under the verdict has none to show.
 	await process_frame
+	await process_frame
+	var cards: Array[Node] = main._character.get_parent().get_children().filter(
+			func(node: Node) -> bool: return node is ItemCard)
+	_check(cards.size() == 1 and (cards[0].get_parent() as CanvasLayer).layer > combat.layer,
+			"the item card is drawn over the fight")
+	_check(cards.size() == 1 and (cards[0] as ItemCard).slot_at(
+			combat._result_drops._grid.get_child(0).get_child(0).get_global_rect().get_center()) != null,
+			"and finds the first drop under the cursor")
+
+	# A drop on that panel opens what it actually is, and goes back again.
 	var dropped: Item = combat._drops[0]
 	combat._result_drops.inspect(0)
 	await process_frame
@@ -1731,10 +1763,11 @@ func _test_deltas() -> bool:
 			"a difference too small to print is left out")
 
 	# And the spelling, which lives beside stat_line for the reason stat_line gives.
-	_check(LootTable.stat_delta("damage", 8.0) == "Damage +8", "a gain is written with its sign")
-	_check(LootTable.stat_delta("health", -30.0) == "Health -30", "and a loss with its own")
-	_check(LootTable.stat_delta("crit_chance", 3.0) == "Crit Chance +3%", "a percentage keeps its sign")
-	_check(LootTable.stat_delta("attack_speed", 0.3) == "Attack Speed +0.3/s", "and so does a rate")
+	_check(LootTable.stat_delta("damage", 8.0) == "+8 Damage", "a gain is written with its sign")
+	_check(LootTable.stat_delta("health", -30.0) == "-30 Health", "and a loss with its own")
+	_check(LootTable.stat_delta("crit_chance", 3.0) == "+3% Crit Chance", "a percentage keeps its sign")
+	_check(LootTable.stat_delta("attack_speed", 0.3) == "+0.3/s Attack Speed", "and so does a rate")
+	_check(LootTable.stat_line("damage", 5.0) == "5 Damage", "a base stat leads with its number too")
 	return true
 
 
@@ -2034,12 +2067,22 @@ func _test_locks_and_breaks() -> bool:
 	var pinned_piece := Item.rolled("Wooden Sword", ItemRarity.Rarity.ELITE, rng, 5)
 	_check(Blacksmith.lock(pinned_piece, rng), "an elite takes a lock")
 
-	# The line says so wherever a piece is written out, because Item writes it rather than a panel.
-	var marked := 0
-	for text in pinned_piece.mod_lines():
-		if "(locked)" in text:
-			marked += 1
-	_check(marked == 1, "exactly one line says it is locked (%s)" % [pinned_piece.mod_lines()])
+	# Item says which line is the locked one, and the block writes that one in a base stat's ink
+	# among the rust -- with no word for it on the line.
+	_check(pinned_piece.mod_lines().count(pinned_piece.locked_line()) == 1,
+			"exactly one line is the locked one (%s)" % [pinned_piece.mod_lines()])
+	_check(not "locked" in " ".join(pinned_piece.mod_lines()), "and no line spells it out")
+	var written := VBoxContainer.new()
+	ItemDetails.fill(written, pinned_piece, 150.0)
+	var inked := 0
+	for number: Label in written.find_children(UITheme.TABLE_VALUE, "Label", true, false):
+		# A table row is its name and then its number; turned round it is the line Item wrote.
+		var text := "%s %s" % [number.text, (number.get_parent().get_child(0) as Label).text]
+		if text in pinned_piece.mod_lines() and number.get_theme_color("font_color") == Palette.INK:
+			_check(text == pinned_piece.locked_line(), "only the locked modifier is in ink: %s" % text)
+			inked += 1
+	_check(inked == 1, "the block writes the locked modifier in ink")
+	written.free()
 
 	# A broken piece is out of the game as far as the orbs are concerned, and each of the six says so.
 	var ruined := Item.rolled("Leather Boot", ItemRarity.Rarity.RARE, rng, 4)
@@ -2277,6 +2320,49 @@ func _test_crafting_from_the_bag() -> bool:
 	_check(back.items.size() == 1, "the sword came back")
 	_check(back.items[0].to_dict() == before, "the crafted sword round-trips exactly")
 
+	# The other way round: the orb first, with nothing open, and then the piece where it lies.
+	var plain := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 4)
+	main.inventory.add(plain)
+	main.bag_page._select_item(-1)
+	main.bag_page._on_orb_pressed("Orb of Transmutation")
+	await process_frame
+	_check(main.bag_page._armed == "Orb of Transmutation", "an orb pressed with nothing open is held")
+	_check(main.inventory.orb_count("Orb of Transmutation") == 1, "and not spent by being picked up")
+	var squares := _bag_squares(main)
+	var plain_square: Control = squares.filter(func(s: ItemSlot) -> bool: return s.item == plain)[0]
+	var sword_square: Control = squares.filter(func(s: ItemSlot) -> bool: return s.item == sword)[0]
+	_check(sword_square.modulate == OrbSlot.DIM and plain_square.modulate == Color.WHITE,
+			"the square it can do nothing to is grey and the other is not")
+	# A press on the grey one costs nothing and opens nothing; the orb is still held.
+	main.bag_page._on_clicked(_square_spot(sword_square))
+	_check(main.inventory.orb_count("Orb of Transmutation") == 1 and main.bag_page._selected == -1
+			and main.bag_page._armed != "", "a refused piece spends nothing and stays shut")
+	var told: Array = []
+	main.bag_page.crafted.connect(func() -> void: told.append(true))
+	plain_square = _bag_squares(main).filter(func(s: ItemSlot) -> bool: return s.item == plain)[0]
+	main.bag_page._on_clicked(_square_spot(plain_square))
+	await process_frame
+	_check(plain.rarity == ItemRarity.Rarity.UNCOMMON, "the piece pressed next came up uncommon")
+	_check(main.inventory.orb_count("Orb of Transmutation") == 0, "the orb was spent")
+	_check(main.bag_page._selected == -1 and not main.bag_page._detail.visible, "without the piece being opened")
+	_check(told.size() == 1, "and the hover card was told to speak again")
+	_check(main.bag_page._armed == "", "the last of an orb puts it down")
+	# Opening a piece puts a held orb down too: from there the tray crafts on what is open.
+	main.inventory.add_orb("Orb of Divine", 2)
+	main.bag_page._on_orb_pressed("Orb of Divine")
+	main.bag_page._on_orb_pressed("Orb of Divine")
+	_check(main.bag_page._armed == "", "the same orb again puts it down")
+	main.bag_page._on_orb_pressed("Orb of Divine")
+	var right := InputEventMouseButton.new()
+	right.button_index = MOUSE_BUTTON_RIGHT
+	right.pressed = true
+	main.bag_page._input(right)
+	_check(main.bag_page._armed == "" and main.inventory.orb_count("Orb of Divine") == 2,
+			"a right click puts it down too, unspent")
+	main.bag_page._on_orb_pressed("Orb of Divine")
+	main.bag_page._select_item(0)
+	_check(main.bag_page._armed == "", "and so does opening a piece")
+
 	main.queue_free()
 	await process_frame
 	_clear_save()
@@ -2326,6 +2412,314 @@ func _test_tips() -> bool:
 	_check(not main._flashes.has("opened_bag") and main._bag_button.modulate == Color.WHITE,
 			"pressing the bag stops its pulse")
 	_check(main._flashes.has("opened_skills"), "while the star keeps pulsing")
+	main.queue_free()
+	_clear_save()
+	return true
+
+
+## The uniques' table: every row is a piece the game can actually make, find and draw.
+func _test_unique_table() -> bool:
+	var envs := PackedStringArray()
+	for env: String in SheetMeta.env_adjacency():
+		envs.append(env)
+	for id: String in UniqueTable.UNIQUES:
+		var row: Dictionary = UniqueTable.UNIQUES[id]
+		_check(LootTable.ITEMS.has(row["base"]), "%s is a real piece (%s)" % [id, row["base"]])
+		_check(not str(row["name"]).is_empty() and not str(row["effect_text"]).is_empty(),
+				"%s has a name and says what it does" % id)
+		_check(not UniqueTable.effect_of(id).is_empty(), "%s changes something" % id)
+		_check(UniqueTable.icon(id) != null and UniqueTable.icon(id).get_size() == Vector2(32, 32),
+				"%s has a 32 px picture" % id)
+		var mods: Array = row["mods"]
+		_check(mods.size() >= 1 and mods.size() <= UniqueTable.MOST_MODS,
+				"%s carries a few modifiers, not an elite's (%d)" % [id, mods.size()])
+		for mod_id: String in mods:
+			_check(ModifierTable.MODS.has(mod_id), "%s names %s, which exists" % [id, mod_id])
+			var entry: Dictionary = ModifierTable.MODS.get(mod_id, {})
+			if entry.get("kind") == ModifierTable.Kind.PERCENT:
+				_check(LootTable.has_stat(row["base"], entry["stat"]),
+						"%s's %s has a %s to scale" % [id, mod_id, entry["stat"]])
+		# A PERCENT and a GLOBAL on one stat write the same sentence, which on a hand-written piece
+		# reads as a mistake: every line a unique shows has to be a different line.
+		var increased := []
+		for mod_id: String in mods:
+			var entry: Dictionary = ModifierTable.MODS.get(mod_id, {})
+			if entry.get("kind") in [ModifierTable.Kind.PERCENT, ModifierTable.Kind.GLOBAL]:
+				_check(not entry["stat"] in increased, "%s says 'increased %s' once" % [id, entry["stat"]])
+				increased.append(entry["stat"])
+		for env: String in row["envs"]:
+			_check(env in envs, "%s is found on %s, which is real ground" % [id, env])
+		if row["effect"] == "home":
+			_check(row["envs"] == [row["home"]], "%s is found on the ground it is for" % id)
+	for env in envs:
+		_check(UniqueTable.pool_for(env).size() >= 2, "%s has uniques to hunt (%s)" % [env, UniqueTable.pool_for(env)])
+	for mod_id: String in ModifierTable.UNIQUE_ONLY:
+		var used := false
+		for id: String in UniqueTable.UNIQUES:
+			used = used or mod_id in UniqueTable.UNIQUES[id]["mods"]
+		_check(used, "%s is held back for a unique that carries it" % mod_id)
+	return true
+
+
+## One unique: rolled, worn, saved, crafted and thrown away like the piece it is -- and unlike one.
+func _test_unique_items() -> bool:
+	_clear_save()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var axe := Item.rolled_unique("headsman", rng, 7)
+	_check(axe.rarity == ItemRarity.Rarity.UNIQUE and axe.type == "Wooden Sword" and axe.level == 7,
+			"a Headsman is a level-7 unique sword")
+	_check(axe.display_name() == "Headsman" and not axe.effect_text().is_empty(), "with a name and a rule of its own")
+	_check(axe.base_stats() == Item.scaled_stats("Wooden Sword", 7), "and a sword's numbers at its level")
+	var ids := []
+	for mod in axe.mods:
+		ids.append(mod["id"])
+		var band := ModifierTable.band_for(str(mod["id"]), 7)
+		_check(int(mod["value"]) >= int(band[0]) and int(mod["value"]) <= int(band[1]),
+				"%s rolled inside its band" % mod["id"])
+	_check(ids == UniqueTable.UNIQUES["headsman"]["mods"], "it carries its row's modifiers, in order (%s)" % [ids])
+	_check(Item.rolled_unique("headsman", rng, 7).mods.map(func(m: Dictionary) -> String: return m["id"]) == ids,
+			"and so does every other Headsman")
+
+	var back := Item.from_dict(JSON.parse_string(JSON.stringify(axe.to_dict())))
+	_check(back != null and back.unique == "headsman" and back.rarity == ItemRarity.Rarity.UNIQUE
+			and back.level == 7 and back.mods == axe.mods, "it survives the save")
+	# Stat by stat: the save sorts its keys, and two dictionaries in a different order are not `==`.
+	for stat: String in axe.effective_stats():
+		_check(is_equal_approx(float(back.effective_stats().get(stat, -1.0)), float(axe.effective_stats()[stat])),
+				"its %s survives too" % stat)
+	var retired := axe.to_dict()
+	retired["unique"] = "a unique nobody wrote"
+	_check(Item.from_dict(retired) == null, "one this build no longer has is dropped by name")
+	_check(not _piece(ItemRarity.Rarity.RARE, 3).to_dict().has("unique"), "an ordinary piece's save says nothing of it")
+
+	for orb: String in OrbTable.ORBS:
+		_check(OrbTable.can_apply(orb, axe) == (orb == "Orb of Divine"), "%s on a unique" % orb)
+	_check(not OrbTable.why_not("Orb of Chaos", axe).is_empty(), "and the refusal is said")
+	OrbTable.apply("Orb of Divine", axe, rng)
+	_check(axe.mods.map(func(m: Dictionary) -> String: return m["id"]) == ids, "Divine moves the values and nothing else")
+
+	var ring := Item.rolled_unique("the_tithe", rng, 5)
+	_check(ring.effective_stats().get("gold_find", 0.0) > 0.0, "The Tithe's gold find is a stat it is worth")
+	var bag := Inventory.new()
+	for id: String in ["knucklebone_ring", "knucklebone_ring", "meadowstriders"]:
+		var piece := Item.rolled_unique(id, rng, 3)
+		bag.items.append(piece)
+		_check(bag.equip(piece, bag.equipment.sockets_for(piece)[0]), "%s goes on" % id)
+	var effects := bag.effects()
+	_check(effects.count("knucklebone") == 2 and "home:grass" in effects, "what is worn reaches the fight (%s)" % [effects])
+	_check(Inventory.new().effects().is_empty(), "and bare hands change nothing")
+
+	# Found is found, and the log is saved with everything else.
+	_check(bag.note_unique("headsman") and not bag.note_unique("headsman"), "a unique is logged once")
+	_check(not bag.note_unique("a unique nobody wrote") and not bag.note_unique(""), "and only a real one")
+	bag.save(TEST_PATH)
+	var loaded := Inventory.load_from(TEST_PATH)
+	_check(loaded.uniques_found == ["headsman"], "the log survives the save (%s)" % [loaded.uniques_found])
+	_check(loaded.equipment.effects().count("knucklebone") == 2, "and so does what is worn")
+
+	# Every unique in the log is worth a percent of damage, worn or not.
+	var worn: float = bag.equipment.totals(bag.skills.flat(), bag.skills.percent())["damage"]
+	_check(bag.collection_bonus() == UniqueTable.COLLECTION_DAMAGE and worn > 0.0
+			and is_equal_approx(float(bag.stats()["damage"]), worn * 1.01), "one found is 1% more damage")
+	bag.note_unique("rimeplate")
+	_check(is_equal_approx(float(bag.stats()["damage"]), worn * 1.02), "and two are 2%")
+
+	# The ledger is what writes the log: at once for a tile fight, at the bank for a run.
+	var tile_bag := Inventory.new()
+	FightLedger.new(tile_bag, TEST_PATH).add_loot(Item.rolled_unique("rimeplate", rng, 2), false)
+	_check(tile_bag.uniques_found == ["rimeplate"], "a tile fight logs a unique as it lands")
+	var run_bag := Inventory.new()
+	var run := FightLedger.new(run_bag, TEST_PATH, true)
+	run.add_loot(Item.rolled_unique("stonebreaker", rng, 2), false)
+	_check(run_bag.uniques_found.is_empty(), "a run holds it in the pouch")
+	run.bank()
+	_check(run_bag.uniques_found == ["stonebreaker"], "and logs it at the bank")
+
+	# The last thing a full bag gives up.
+	var full := Inventory.new()
+	full.items.append(Item.rolled_unique("stonebreaker", rng, 1))
+	for i in Inventory.CAPACITY:
+		full.items.append(_piece(ItemRarity.Rarity.ELITE, 9))
+	_check(full.items[full.worst_first()[-1]].unique == "stonebreaker", "a unique is the last thing to go")
+	_clear_save()
+	return true
+
+
+## The uniques that are about the player rather than the fight: the Spiked Helm's armour, the two counts
+## `stats` hands the fight, the Rag and Bone Sack, and what a Pilgrim's set of home pieces tells it.
+func _test_unique_stats() -> bool:
+	_clear_save()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var wear := func(bag: Inventory, piece: Item) -> void:
+		bag.items.append(piece)
+		_check(bag.equip(piece, bag.equipment.sockets_for(piece)[0]), "%s goes on" % piece.display_name())
+
+	# Spikes: a hundredth of the armour, in with the flat damage so a global percent scales it.
+	var bag := Inventory.new()
+	wear.call(bag, _piece(ItemRarity.Rarity.COMMON, 5))
+	var ring := Item.new()
+	ring.type = "Gold Ring"
+	ring.stats = Item.scaled_stats(ring.type, 1)
+	ring.mods = [{"id": "global_increased_damage", "value": 50}]
+	wear.call(bag, ring)
+	var without: float = bag.stats()["damage"]
+	var helm := Item.rolled_unique("spiked_helm", rng, 5)
+	helm.stats["armor"] = 1000.0
+	helm.mods.clear()
+	wear.call(bag, helm)
+	var armour: float = bag.equipment.totals()["armor"]
+	_check(is_equal_approx(bag.stats()["damage"], without + armour * Inventory.SPIKES_SHARE * 1.5),
+			"a hundredth of the armour, scaled like any flat damage (%s from %s)" % [bag.stats()["damage"], without])
+
+	# The two counts the fight cannot see for itself.
+	_check(bag.stats()["bare_sockets"] == Equipment.NAMES.size() - 3, "three sockets filled, the rest bare")
+	bag.items.append(_piece(ItemRarity.Rarity.COMMON, 1))
+	bag.items.append(_piece(ItemRarity.Rarity.COMMON, 1))
+	_check(bag.stats()["bag_pieces"] == 2, "and two pieces in the bag")
+
+	# The Rag and Bone Sack: a quarter of what a trader gives, and only while it is worn.
+	var junk := _piece(ItemRarity.Rarity.RARE, 8)
+	_check(bag.salvage(junk) == 0.0, "nothing is paid for rubbish without the sack")
+	wear.call(bag, Item.rolled_unique("rag_and_bone_sack", rng, 5))
+	var paid := bag.salvage(junk)
+	_check(paid == maxf(1.0, roundf(TownPrices.sell_price(junk) * 0.25)) and paid < TownPrices.sell_price(junk),
+			"a quarter of the trader's price (%s of %s)" % [paid, TownPrices.sell_price(junk)])
+	# A run pouches it like any gold; the bag pays for its own discards at once.
+	var run := FightLedger.new(bag, TEST_PATH, true)
+	run.add_gold(paid)
+	_check(bag.gold == 0.0, "a run holds its salvage in the pouch")
+	run.bank()
+	_check(bag.gold == paid, "and banks it")
+	var page := BagPage.new(bag, TEST_PATH, 2.0)
+	root.add_child(page)
+	await process_frame
+	bag.items.append(junk)
+	page._on_discard_pressed(junk)
+	_check(bag.gold == paid * 2.0 and not bag.items.has(junk), "the bag's Discard pays too")
+	var level_one := bag.count_at(1)
+	page._on_clear_level_pressed(1)
+	_check(level_one == 2 and bag.gold > paid * 2.0 and bag.count_at(1) == 0, "and so does a level's bin")
+	page.queue_free()
+
+	# One home piece is at home on its own ground. Two or more are a Pilgrim's set: every piece's rule
+	# on every piece's ground, and each ground named once so the damage never stacks.
+	var pilgrim := Inventory.new()
+	wear.call(pilgrim, Item.rolled_unique("meadowstriders", rng, 1))
+	_check(pilgrim.effects() == ["home:grass", "grazing:grass"], "one piece, one ground (%s)" % [pilgrim.effects()])
+	wear.call(pilgrim, Item.rolled_unique("rimeplate", rng, 1))
+	var two := pilgrim.effects()
+	for id: String in ["home:grass", "home:ice", "grazing:grass", "grazing:ice", "frozen_clock:grass", "frozen_clock:ice"]:
+		_check(two.count(id) == 1, "two pieces share their grounds: %s (%s)" % [id, two])
+	_check(two.size() == 6, "and nothing else")
+	# No two home pieces share a socket, so the whole set can be worn and everywhere is home.
+	for id: String in ["hunters_lantern", "sunscorched_cowl", "stonebreaker", "gravediggers_charm"]:
+		wear.call(pilgrim, Item.rolled_unique(id, rng, 1))
+	var six := pilgrim.effects()
+	for env: String in ["grass", "forest", "desert", "ice", "mountains", "dirt"]:
+		_check(six.count("home:" + env) == 1, "all six: %s is home, once" % env)
+		for clause: String in ["grazing", "flush_out", "heatstroke", "frozen_clock", "giantsbane", "restless"]:
+			_check(("%s:%s" % [clause, env]) in six, "all six: %s on %s" % [clause, env])
+	var slots := {}
+	for id: String in UniqueTable.UNIQUES:
+		if UniqueTable.UNIQUES[id]["effect"] == "home":
+			var slot := LootTable.slot_of(UniqueTable.UNIQUES[id]["base"])
+			_check(not slots.has(slot), "%s and %s do not fight over the %s socket" % [id, slots.get(slot, ""), slot])
+			slots[slot] = id
+	# Every home row says so on its card, and no other row does.
+	for id: String in UniqueTable.UNIQUES:
+		_check((UniqueTable.set_text(id) == UniqueTable.PILGRIM_TEXT) == (UniqueTable.UNIQUES[id]["effect"] == "home"),
+				"%s's card mentions the Pilgrim's set only if it is a home piece" % id)
+	# A set piece is a unique in green, frame and all; any other unique stays gold.
+	var home := Item.rolled_unique("rimeplate", rng, 1)
+	_check(home.rarity == ItemRarity.Rarity.UNIQUE and home.is_set(), "a home piece is a unique and a set piece")
+	_check(home.border_color() == ItemRarity.SET_BORDER and home.text_color() == ItemRarity.SET_TEXT
+			and home.frame() != null, "and wears the set's green, with a frame of its own")
+	_check(Item.rolled_unique("snowball", rng, 1).border_color() == Palette.GOLD, "a plain unique stays gold")
+	_clear_save()
+	return true
+
+
+## The collection log: a button that is not there until there is something to log, and a page of
+## squares that says what a found one is and only where a missing one hides.
+func _test_collection() -> bool:
+	_clear_save()
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	main.inventory_path = TEST_PATH
+	main.map_path = TEST_MAP_PATH
+	root.add_child(main)
+	await process_frame
+	main._check_tips()
+	_check(not main._collection_button.visible, "no collection button before the first unique")
+	main.inventory.note_unique("metronome")
+	main._check_tips()
+	_check(main._collection_button.visible and main._flashes.has("opened_collection"), "it comes on, pulsing")
+	_check("first_unique" in main.inventory.tips and main._tip_panel != null, "with a word about what was found")
+	main._on_tip_closed()
+	main._on_collection_pressed()
+	await process_frame
+	_check(main.collection_page.visible and main._collection_button.visible, "the page opens, its button beside it")
+	_check(not main._flashes.has("opened_collection"), "and the pulse stops")
+	var squares: Array = main.collection_page.find_children("*", "ItemSlot", true, false)
+	_check(squares.size() == UniqueTable.UNIQUES.size(), "one square a unique (%d)" % squares.size())
+	var shown := 0
+	for square: ItemSlot in squares:
+		var found: bool = square.item.unique == "metronome"
+		shown += int(found)
+		_check(square.hint.is_valid() != found, "%s: a hint only while missing" % square.item.unique)
+		var icon: TextureRect = square.get_child(0)
+		_check((icon.modulate == Color.BLACK) != found, "%s: blacked out only while missing" % square.item.unique)
+	_check(shown == 1, "the found one is drawn as itself")
+	# The hint says nothing of the piece or its ground until a fortuneteller has shown it, and both after.
+	for peeked: bool in [false, true]:
+		var rows := VBoxContainer.new()
+		CollectionPage.write_hint(rows, 150.0, "rimeplate", main.view, peeked,
+				CollectionPage.specimen("rimeplate"))
+		var said := ""
+		for label: Node in rows.find_children("*", "Label", true, false):
+			said += (label as Label).text + " "
+		_check(said.contains("Rimeplate") == peeked and said.contains("Nearest:") == peeked,
+				"a hint says what and where only once it has been peeked (%s: %s)" % [peeked, said])
+		rows.free()
+	main._on_left_page_closed()
+	_check(not main.collection_page.visible and main._collection_button.visible, "the X puts it away")
+	main.queue_free()
+	_clear_save()
+	return true
+
+
+## The character page: a press on the character panel's corner opens it, and it says what the player
+## adds up to -- the attributes in their rings, every other stat that is something, none that is nothing.
+func _test_character_page() -> bool:
+	_clear_save()
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	main.inventory_path = TEST_PATH
+	main.map_path = TEST_MAP_PATH
+	root.add_child(main)
+	await process_frame
+	var blade := Item.new()
+	blade.type = "Wooden Sword"
+	blade.stats = {"damage": 5.0, "strength": 12.0}
+	main.inventory.equipment.equip(Equipment.Socket.WEAPON, blade)
+	_check(main._character_button.visible, "the corner can be pressed on the map")
+	_check(main._character_button.size.x > 0.0, "and it has the panel's size (%s)" % main._character_button.size)
+	main._character_button.pressed.emit()
+	await process_frame
+	_check(main.character_page.visible and not main._character_button.visible, "the page takes the corner")
+	var strength: Label = main.character_page.find_child("strength", true, false)
+	_check(strength != null and strength.text == "12", "strength is on its disc")
+	var said := ""
+	for label: Node in main.character_page.find_children("*", "Label", true, false):
+		said += (label as Label).text + "|"
+	_check(said.contains("Damage|5|"), "a stat that is something is a row, name then number (%s)" % said)
+	_check(not said.contains("Armour"), "and one that is nothing is not")
+	main._on_left_page_closed()
+	_check(not main.character_page.visible and main._character_button.visible, "the X puts it away")
 	main.queue_free()
 	_clear_save()
 	return true

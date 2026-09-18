@@ -251,11 +251,82 @@ var always_orb := false
 ## this player. The main scene sets it; zero, the default, means orbs drop from the first body.
 var orbs_after := 0
 
-## The capstone skills the player has learned, by effect id (`Skills.effects()`): the things a skill
-## changes about a fight rather than a number. A fight nobody tells has none.
+## What changes how this fight plays rather than a number, by effect id (`Inventory.effects()`): the
+## capstone skills the player has learned and the uniques they are wearing. A worn unique is one entry
+## a piece, so two of one ring are two entries. A fight nobody tells has none.
 var effects: Array = []
+
+## The unique roll, on a generator of its own for the reason `orb_rng` is: a rate tuned apart from the
+## gear's should not shift it by drawing from the same stream.
+var unique_rng := RandomNumberGenerator.new()
+## Kills this fight has to make before a unique can fall: what is left of
+## `UniqueTable.FIRST_UNIQUE_KILLS` for this player. The main scene sets it, as it sets `orbs_after`.
+## Until it does, none can: a fight nobody tells anything is the fight it always was, so every test
+## that counts what a body leaves counts what it always counted.
+const NO_UNIQUES := -1
+var uniques_after := NO_UNIQUES
+## Whether the first boss to fall here is promised a unique, which the wait above does not hold back.
+## The main scene turns it on while the player has never found one; the first to fall turns it off.
+var guarantee_unique := false
+
+## The Knucklebone Ring's streak: clicks made within `KNUCKLE_WINDOW` of the one before, and how long
+## ago the last one was. A click counts whether or not it lands, or every walk-in would break it.
+const KNUCKLE_WINDOW := 1.0
+const KNUCKLE_STEP := 0.02
+const KNUCKLE_MOST := 25
+var _click_streak := 0
+var _since_click := 0.0
+## What a blow has to leave an enemy under, as a share of its health, for each effect that finishes
+## it. They add: the Assassin capstone and the Headsman together kill under 35%.
+const EXECUTE_SHARE := {"execute": 0.1, "headsman": 0.25}
 ## What the last killing blow did past the body's health, which Cleave carries into the next one.
 var _overkill := 0.0
+
+## The Gambler's Die, on a generator of its own so a test can pin what it rolls.
+var gamble_rng := RandomNumberGenerator.new()
+## What the rest of the uniques are tuned by. One place, so a card's sentence and the fight agree.
+const BERSERK_MORE := 2.0        ## a click, per Berserker's Band
+const METRONOME_MORE := 2.0      ## the weapon's own swing
+const GLASS_MORE := 1.0
+const GLASS_CLOCK := 4.0 / 3.0   ## how fast the Glass Edge spends the clock
+const HOME_MORE := 1.0
+const GAMBLE := [0.01, 3.0]
+const ASCETIC_MORE := 0.15       ## per bare socket
+const LAST_GASP_MORE := 2.0
+const LAST_GASP_SECONDS := 5.0
+const OVERCRIT := 2.0            ## crit damage a point of crit chance past the cap becomes
+const DOMINO_SHARE := 0.2
+const MOMENTUM_MORE := 0.02      ## per kill
+const MOMENTUM_MOST := 1.0
+const PACKMULE_MORE := 0.01      ## per piece in the bag
+const RIPOSTE_CAP := 75.0
+const HEARTWOOD_HEALTH := 100.0  ## health a second on the clock
+const HEARTWOOD_MOST := 10.0
+const MAGPIE_CHANCE := 0.05
+const HEATSTROKE_SHARE := 0.02   ## of its health a second
+const GRAZING_MORE := 2          ## enemies
+const GIANTSBANE := 3.0
+const RESTLESS_CHANCE := 0.1
+## What `arm` read that only a unique asks about: block chance for Riposte, and the two counts the
+## fight cannot see for itself (`Inventory.stats()` puts them in).
+var block_chance := 0.0
+var _bare_sockets := 0
+var _bag_pieces := 0
+## About the enemy that is out: whether it has taken a blow, whether one of them was a crit, whether
+## it has already risen once. Cleared as the next one comes on.
+var _struck := false
+var _crit_landed := false
+var _has_risen := false
+## Whether the body going down now was felled by its first blow (Dominoes) and whether it gets back
+## up (Restless dead), and how many have: a risen body is fought in the slot it died in, so the
+## lineup and the pips never change length, and `kills` adds these on.
+var _domino := false
+var _rise := false
+var _rose := 0
+## How many enemies Grazing put on the front of the lineup, and whether Flush out brought the elite
+## to the head of it. `tier_for` reads both, so it goes on agreeing with what `wear` built.
+var _lead := 0
+var _elite_first := false
 
 
 ## The profile for an area variant, falling back to the ordinary fight: a variant this build has no
@@ -317,9 +388,54 @@ func _take_profile(profile: Dictionary) -> void:
 func tier_for(position: int) -> EnemyRoster.Tier:
 	if boss_last and position == enemies - 1:
 		return EnemyRoster.Tier.BOSS
-	if position % elite_every == elite_every - 1:
+	# Flush out swapped the head of the lineup with its first elite slot.
+	var first_elite := _lead + elite_every - 1
+	if _elite_first and (position == 0 or position == first_elite):
+		return EnemyRoster.Tier.ELITE if position == 0 else EnemyRoster.Tier.COMMON
+	# Grazing's extra bodies stand in front of the rhythm, not in it.
+	if position < _lead:
+		return EnemyRoster.Tier.COMMON
+	if (position - _lead) % elite_every == elite_every - 1:
 		return EnemyRoster.Tier.ELITE
 	return EnemyRoster.Tier.COMMON
+
+
+## Whether one of the home pieces' second rules holds on this ground: `clause` is its bare id, and what
+## arrives in `effects` is "<clause>:<env>" (`UniqueTable.clause_of`, and `Equipment.effects` for a
+## Pilgrim's set).
+func _clause(clause: String) -> bool:
+	return ("%s:%s" % [clause, env]) in effects
+
+
+## What the player is wearing and has learned, told to the fight before it starts -- before `arm`,
+## which reads some of it, and before `start`, because two of the home pieces reshape the lineup.
+## Setting `effects` by hand does everything but that reshaping, which is what most tests want.
+func wear(worn: Array) -> void:
+	effects = worn
+	if endless or lineup.is_empty() or lineup[0] == MIMIC:
+		return
+	# Grazing: more bodies on the same clock, on the front so the fight still ends on its elite.
+	# Seeded from the cell like the lineup itself, so the tile fields the same herd every time.
+	if _clause("grazing") and _lead == 0:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash(["grazing", cell])
+		for i in GRAZING_MORE:
+			var picked := EnemyRoster.pick(env, EnemyRoster.Tier.COMMON, rng)
+			lineup.insert(0, picked)
+			health.insert(0, hp_of(picked, cell))
+		_lead = GRAZING_MORE
+		enemies += GRAZING_MORE
+	# Flush out: open land only. A settlement is a set piece and keeps its order and its boss.
+	var first_elite := _lead + elite_every - 1
+	if _clause("flush_out") and not boss_last and not _elite_first and first_elite < lineup.size():
+		var name := lineup[0]
+		var worth := health[0]
+		lineup[0] = lineup[first_elite]
+		health[0] = health[first_elite]
+		lineup[first_elite] = name
+		health[first_elite] = worth
+		_elite_first = true
+	hp = health[0]
 
 
 ## The tier of whatever stands at `at` in this fight. Asked of the roster where that enemy has been
@@ -414,6 +530,33 @@ func enemy_name() -> String:
 	return "" if index >= lineup.size() else lineup[index]
 
 
+## What the nameplate calls the ground a boss holds, by environment.
+const TITLE_GROUND := {
+	"desert": "Dunes", "dirt": "Barrens", "forest": "Deepwood",
+	"grass": "Meadows", "ice": "Frost", "mountains": "Peaks",
+}
+const BOSS_TITLES: Array[String] = ["Scourge", "Terror", "Warden", "Bane", "Tyrant"]
+const ELITE_TITLES: Array[String] = [
+	"Savage", "Ancient", "Grim", "Rabid", "Hulking", "Vicious", "Dread", "Feral",
+]
+
+
+## What the enemy out now is called beyond its name: a word in front of an elite's ("Savage"), a line
+## under a boss's ("Scourge of the Dunes"), nothing for a common. Seeded from the cell and the slot, so
+## a tile's elite is always the same one -- and for show only: a bounty counts `enemy_name()`.
+func enemy_title() -> String:
+	if index >= lineup.size():
+		return ""
+	var pick := hash(["title", cell, index])
+	match EnemyRoster.tier_of(lineup[index]):
+		EnemyRoster.Tier.ELITE:
+			return ELITE_TITLES[pick % ELITE_TITLES.size()]
+		EnemyRoster.Tier.BOSS:
+			return "%s of the %s" % [BOSS_TITLES[pick % BOSS_TITLES.size()],
+					TITLE_GROUND.get(env, "Wilds")]
+	return ""
+
+
 ## The health the current enemy started with, for drawing a bar against `hp`.
 func enemy_max_hp() -> float:
 	return 0.0 if index >= lineup.size() else health[index]
@@ -434,13 +577,19 @@ func remaining() -> int:
 
 ## How many have been put down. Endlessly this is the whole of the score.
 func kills() -> int:
-	return index
+	return index + _rose
 
 
 ## A click. Takes a point off the enemy in front of the player, and kills it at zero. Ignored while
 ## one is running in or dying, and once the fight is over. Returns whether it landed.
 func hit() -> bool:
-	return _strike(false)
+	# The Metronome's price: the player's own hand does nothing. The click still counts towards a
+	# Knucklebone streak, which is the one thing clicking is good for beside it.
+	var landed := false if "metronome" in effects else _strike(false)
+	if "knucklebone" in effects:
+		_click_streak = mini(_click_streak + 1, KNUCKLE_MOST)
+		_since_click = 0.0
+	return landed
 
 
 ## What the player's gear is worth, from `Equipment.totals()`. Called before the fight starts; a
@@ -450,8 +599,20 @@ func arm(stats: Dictionary) -> void:
 	# Clamped, because a chance is not a quantity: eight pieces each adding crit chance can total
 	# more than certainty, and a save written before LootTable.CHANCE_STATS holds pieces that do it on
 	# their own. Past the cap every hit crit, which is a crit meaning nothing.
-	crit_chance = clampf(float(stats.get("crit_chance", 0.0)), 0.0, CRIT_CAP)
+	var raw_crit := float(stats.get("crit_chance", 0.0))
+	crit_chance = clampf(raw_crit, 0.0, CRIT_CAP)
 	crit_damage = float(stats.get("crit_damage", 0.0))
+	# The Overflowing Chalice: what the clamp above throws away is kept as crit damage.
+	if "overcrit" in effects:
+		crit_damage += maxf(0.0, raw_crit - CRIT_CAP) * OVERCRIT
+	block_chance = clampf(float(stats.get("block_chance", 0.0)), 0.0, RIPOSTE_CAP)
+	_bare_sockets = maxi(0, int(stats.get("bare_sockets", 0)))
+	_bag_pieces = maxi(0, int(stats.get("bag_pieces", 0)))
+	# Heartwood Plate: health buys clock, and stops buying it at HEARTWOOD_MOST -- health grows with
+	# every level, and a clock that grew with it would be no clock. A run has none to add to.
+	if "heartwood" in effects and not endless:
+		seconds += minf(floorf(float(stats.get("health", 0.0)) / HEARTWOOD_HEALTH), HEARTWOOD_MOST)
+		time_left = seconds
 	attack_speed = maxf(0.0, float(stats.get("attack_speed", 0.0)))
 	drop_rate = maxf(0.0, float(stats.get("drop_rate", 0.0)))
 	item_rarity = maxf(0.0, float(stats.get("item_rarity", 0.0)))
@@ -462,67 +623,167 @@ func arm(stats: Dictionary) -> void:
 ## One blow, from a click or from the weapon swinging itself. Takes `damage` off the enemy in front
 ## of the player, crits at `crit_chance`, and kills it at zero. Ignored while one is running in or
 ## dying, and once the fight is over. Returns whether it landed.
-func _strike(automatic: bool) -> bool:
+func _strike(automatic: bool, riposte := false) -> bool:
 	if finished or phase != Phase.WAITING:
 		return false
 	var crit := crit_chance > 0.0 and crit_rng.randf() * 100.0 < crit_chance
+	var first := not _struck
+	_struck = true
+	# The Duelist's Buckler: the first blow an enemy takes is a crit, whoever swung it.
+	if first and "opening_strike" in effects:
+		crit = true
+	_crit_landed = _crit_landed or crit
 	# Crit damage is what a crit adds, not what it multiplies to: 50 means half again, the way Path
 	# of Exile's crit multiplier reads once you take its base 100 off.
 	var dealt := maxf(1.0, roundf(damage * (1.0 + crit_damage / 100.0))) if crit else damage
 	var big := EnemyRoster.tier_of(lineup[index]) != EnemyRoster.Tier.COMMON
-	if big and "giant_slayer" in effects:
+	# Stonebreaker's Giantsbane is Giant Slayer made bigger on its own ground, not a second one on top.
+	if big and _clause("giantsbane"):
+		dealt *= GIANTSBANE
+	elif big and "giant_slayer" in effects:
 		dealt *= 2
+	# Everything the uniques add to a blow, summed and applied once -- see `_unique_more`.
+	dealt = maxf(1.0, roundf(dealt * (1.0 + _unique_more(automatic))))
+	# The Gambler's Die is not more damage but a different blow every time, so it stands outside that.
+	if "gamble" in effects:
+		dealt = maxf(1.0, roundf(dealt * gamble_rng.randf_range(GAMBLE[0], GAMBLE[1])))
 	hp -= dealt
 	# Execute takes what is left once it is a sliver, so the last hits of a big body are not wasted.
-	if hp > 0 and "execute" in effects and hp < enemy_max_hp() * 0.1:
+	var finish := 0.0
+	for effect: String in EXECUTE_SHARE:
+		if effect in effects:
+			finish += float(EXECUTE_SHARE[effect])
+	if hp > 0 and hp < enemy_max_hp() * finish:
 		hp = 0.0
 	hit_landed.emit(dealt, crit, automatic)
 	enemy_hit.emit(hp)
 	if hp <= 0:
-		phase = Phase.DYING
-		phase_left = DEATH
-		_swing = 0.0
-		_overkill = -hp if "cleave" in effects else 0.0
-		enemy_died.emit(index)
-		# The only path to a death, which is why drops survive a loss for free: nothing is rolled
-		# when the clock runs out.
-		# The tile's level is the ceiling on what can fall here, not what falls -- the drop rolls its
-		# own level under it, so fighting deeper improves the odds rather than the prize.
-		# A mimic rolls MIMIC_ROLLS times, the first of them certain.
-		var rolls := MIMIC_ROLLS if lineup[index] == MIMIC else 1
-		for roll in rolls:
-			var dropped := LootTable.roll(lineup[index], loot_rng,
-					always_drop or (roll == 0 and (lineup[index] == MIMIC
-					or (guarantee_elite and on_elite()) or (big and "trophy" in effects))),
-					MapBuilder.level_of(cell),
-					drop_rate, item_rarity)
-			if dropped != null:
-				loot_dropped.emit(index, dropped)
-		# Every body carries one, which is the whole difference between gold and gear: nine kills in
-		# ten leave nothing, and all ten leave this.
-		# Gold find lifts the purse here rather than inside `gold_of`, which is what the body is worth
-		# and is read by things that have no player in them.
-		var purse := maxf(1.0, roundf(gold_of(lineup[index], cell) * (1.0 + gold_find / 100.0)))
-		# Drawn only while Jackpot is learned, so a player without it rolls loot exactly as before.
-		if "jackpot" in effects and loot_rng.randf() < 0.1:
-			purse *= 5
+		# Dominoes: felled by the first blow it took, so it chains through Cleave's carried damage.
+		_domino = first and "domino" in effects
+		_kill()
+	# Bulwark: the chance to block is the chance to swing again at once. Never off its own extra blow.
+	elif not riposte and "riposte" in effects and crit_rng.randf() * 100.0 < block_chance:
+		_strike(automatic, true)
+	return true
+
+
+## What the worn uniques add to a blow, as a share: 2.0 is three times the damage. **One sum**, the
+## way `Equipment.totals` adds its global percents, and for the same reason: twenty-odd uniques that
+## each multiplied would let a stack of them outrun the map, and every one would beat any crafted
+## piece in its socket. Added, a full stack is worth a stretch of frontier and no more.
+func _unique_more(automatic: bool) -> float:
+	var more := 0.0
+	if automatic:
+		more += METRONOME_MORE * effects.count("metronome")
+	else:
+		more += BERSERK_MORE * effects.count("berserk")
+		# The streak is the hand's: the weapon's own swings are not what it rewards.
+		more += KNUCKLE_STEP * _click_streak * effects.count("knucklebone")
+	if ("home:" + env) in effects:
+		more += HOME_MORE
+	if not endless:
+		# Both are paid for in clock, and a run has none: there they are worth nothing.
+		if "glass_edge" in effects:
+			more += GLASS_MORE
+		if "last_gasp" in effects and time_left <= LAST_GASP_SECONDS:
+			more += LAST_GASP_MORE
+	if "ascetic" in effects:
+		more += ASCETIC_MORE * _bare_sockets
+	if "momentum" in effects:
+		more += minf(MOMENTUM_MORE * kills(), MOMENTUM_MOST)
+	if "packmule" in effects:
+		more += PACKMULE_MORE * _bag_pieces
+	return more
+
+
+## The enemy that is out goes down, and everything it was carrying is handed over. Apart from
+## `_strike` because a blow is not the only thing that kills: Heatstroke does it with none.
+func _kill() -> void:
+	var big := EnemyRoster.tier_of(lineup[index]) != EnemyRoster.Tier.COMMON
+	phase = Phase.DYING
+	phase_left = DEATH
+	_swing = 0.0
+	_overkill = -hp if "cleave" in effects else 0.0
+	# Restless dead: an ordinary body, once, one time in ten. Drawn only while worn.
+	_rise = not big and not _has_risen and _clause("restless") and loot_rng.randf() < RESTLESS_CHANCE
+	enemy_died.emit(index)
+	# The only path to a death, which is why drops survive a loss for free: nothing is rolled
+	# when the clock runs out.
+	# The tile's level is the ceiling on what can fall here, not what falls -- the drop rolls its
+	# own level under it, so fighting deeper improves the odds rather than the prize.
+	# A mimic rolls MIMIC_ROLLS times, the first of them certain.
+	var rolls := MIMIC_ROLLS if lineup[index] == MIMIC else 1
+	# The Tithe: no ordinary gear at all, from anything.
+	if "tithe" in effects:
+		rolls = 0
+	for roll in rolls:
+		var certain: bool = always_drop or (roll == 0 and (lineup[index] == MIMIC
+				or (guarantee_elite and on_elite()) or (big and "trophy" in effects)))
+		var dropped := LootTable.roll(lineup[index], loot_rng, certain, MapBuilder.level_of(cell),
+				drop_rate, item_rarity)
+		# Lucky Wound: a body that took a crit rolls again and leaves the better of the two.
+		if _crit_landed and "lucky_wound" in effects:
+			dropped = _better(dropped, LootTable.roll(lineup[index], loot_rng, certain,
+					MapBuilder.level_of(cell), drop_rate, item_rarity))
+		if dropped != null:
+			loot_dropped.emit(index, dropped)
+	# Every body carries one, which is the whole difference between gold and gear: nine kills in
+	# ten leave nothing, and all ten leave this.
+	# Gold find lifts the purse here rather than inside `gold_of`, which is what the body is worth
+	# and is read by things that have no player in them.
+	var purse := maxf(1.0, roundf(gold_of(lineup[index], cell) * (1.0 + gold_find / 100.0)))
+	# Two Tithes add (five times, not nine), the way two global modifiers do.
+	purse *= 1.0 + 2.0 * effects.count("tithe")
+	# Drawn only while Jackpot is learned, so a player without it rolls loot exactly as before.
+	if "jackpot" in effects and loot_rng.randf() < 0.1:
+		purse *= 5
+	# The Magpie's Band: now and then the purse is a piece of gear instead. The Tithe wins where
+	# both are worn -- no ordinary gear means none -- and the purse stays a purse.
+	if "magpie" in effects and not "tithe" in effects and loot_rng.randf() < MAGPIE_CHANCE:
+		purse = 0.0
+		loot_dropped.emit(index, LootTable.roll(lineup[index], loot_rng, true,
+				MapBuilder.level_of(cell), drop_rate, item_rarity))
+	if purse > 0.0:
 		gold += purse
 		gold_dropped.emit(index, purse)
-		var worth := xp_of(lineup[index], cell)
-		xp += worth
-		xp_dropped.emit(index, worth)
-		# A third draw, on its own generator and its own curve. Beside the gear rather than instead
-		# of it: a body that left a sword can leave an orb too, which is what makes the two rates
-		# independent numbers rather than one number split.
-		var orb := ""
-		if always_orb or index >= orbs_after:
-			orb = OrbTable.roll(lineup[index], orb_rng, always_orb, orb_find)
-		if not orb.is_empty():
-			var count := 2 if "transmute" in effects and orb_rng.randf() < 0.25 else 1
-			for i in count:
-				orbs[orb] = int(orbs.get(orb, 0)) + 1
-				orb_dropped.emit(index, orb)
-	return true
+	var worth := xp_of(lineup[index], cell)
+	xp += worth
+	xp_dropped.emit(index, worth)
+	# A unique, beside the gear and not from its table: any body can carry one, off the pool of the
+	# ground it stood on. Through `loot_dropped` like any find, so the pouch, the bag and the
+	# verdict need no second path.
+	var boss := EnemyRoster.tier_of(lineup[index]) == EnemyRoster.Tier.BOSS
+	var promised := guarantee_unique and boss
+	if promised or (uniques_after != NO_UNIQUES and index >= uniques_after):
+		var found := UniqueTable.roll(lineup[index], env, unique_rng, MapBuilder.level_of(cell),
+				drop_rate, promised)
+		if found != null:
+			guarantee_unique = false
+			loot_dropped.emit(index, found)
+	# The Hourglass: a second back for anything but a boss, and never past what the fight began
+	# with, so the clock can be held but not banked. A run has no clock to give to.
+	if "hourglass" in effects and not endless and not boss:
+		time_left = minf(seconds, time_left + 1.0)
+	# A third draw, on its own generator and its own curve. Beside the gear rather than instead
+	# of it: a body that left a sword can leave an orb too, which is what makes the two rates
+	# independent numbers rather than one number split.
+	var orb := ""
+	if always_orb or index >= orbs_after:
+		orb = OrbTable.roll(lineup[index], orb_rng, always_orb, orb_find)
+	if not orb.is_empty():
+		var count := 2 if "transmute" in effects and orb_rng.randf() < 0.25 else 1
+		for i in count:
+			orbs[orb] = int(orbs.get(orb, 0)) + 1
+			orb_dropped.emit(index, orb)
+
+
+## The better of two finds, either of which may be nothing: the higher rarity, then the higher level.
+static func _better(a: Item, b: Item) -> Item:
+	if a == null or b == null:
+		return b if a == null else a
+	if a.rarity != b.rarity:
+		return a if a.rarity > b.rarity else b
+	return a if a.level >= b.level else b
 
 
 ## Runs the clock, and the walking-in and dying that the clock runs through. Called every frame by
@@ -531,7 +792,17 @@ func advance(delta: float) -> void:
 	if finished:
 		return
 	if not endless:
-		time_left = maxf(time_left - delta, 0.0)
+		var spent := delta
+		# Rimeplate's Frozen clock: a walk-in costs nothing.
+		if _clause("frozen_clock") and phase == Phase.WALKING_IN:
+			spent -= minf(delta, phase_left)
+		# The Glass Edge's price.
+		if "glass_edge" in effects:
+			spent *= GLASS_CLOCK
+		time_left = maxf(time_left - spent, 0.0)
+	_since_click += delta
+	if _since_click > KNUCKLE_WINDOW:
+		_click_streak = 0
 	while not finished and phase != Phase.WAITING and delta > 0.0:
 		# A phase that ends part-way through the frame hands the rest of the frame to the next one.
 		if delta < phase_left:
@@ -540,6 +811,13 @@ func advance(delta: float) -> void:
 		delta -= phase_left
 		_advance_phase()
 	_swing_weapon(delta)
+	# The Sunscorched Cowl's Heatstroke: the one thing that wears a body down with nobody touching it.
+	if _clause("heatstroke") and phase == Phase.WAITING and not finished and delta > 0.0:
+		hp -= enemy_max_hp() * HEATSTROKE_SHARE * delta
+		enemy_hit.emit(maxf(hp, 0.0))
+		if hp <= 0.0:
+			_domino = false
+			_kill()
 	if not endless and time_left <= 0.0 and not finished:
 		_finish(false)
 
@@ -548,7 +826,8 @@ func advance(delta: float) -> void:
 ## standing there to be hit, so nothing accrues through a walk-in or a death and a fast weapon
 ## cannot arrive at the next body with a fistful of banked swings.
 func _swing_weapon(delta: float) -> void:
-	if attack_speed <= 0.0 or finished or phase != Phase.WAITING:
+	# The Berserker's Band: the weapon never swings on its own.
+	if attack_speed <= 0.0 or finished or phase != Phase.WAITING or "berserk" in effects:
 		return
 	_swing += delta * attack_speed
 	while _swing >= 1.0 and phase == Phase.WAITING and not finished:
@@ -575,6 +854,22 @@ func _advance_phase() -> void:
 		phase = Phase.WAITING
 		enemy_spawned.emit(index, lineup[index], hp)
 		return
+	_struck = false
+	_crit_landed = false
+	# Restless dead: the body gets back up where it fell, at half of what it was, and is killed and
+	# paid for again. The slot does not move, so the lineup and the pips stay the length they were.
+	if _rise:
+		_rise = false
+		_has_risen = true
+		_rose += 1
+		hp = maxf(1.0, roundf(health[index] * 0.5) - _overkill)
+		_overkill = 0.0
+		_domino = false
+		phase = Phase.WALKING_IN
+		phase_left = WALK_IN
+		enemy_coming.emit(index, lineup[index], hp)
+		return
+	_has_risen = false
 	index += 1
 	if index >= lineup.size():
 		if not endless:
@@ -582,7 +877,12 @@ func _advance_phase() -> void:
 			return
 		# The next one is decided the moment the last one falls, so a run never runs dry.
 		_append_enemy(roster_rng)
-	hp = maxf(1.0, health[index] - _overkill)
+	# Dominoes first, then whatever Cleave carried: a fifth of the body, and then the blow's change.
+	var fresh := health[index]
+	if _domino:
+		fresh = roundf(fresh * (1.0 - DOMINO_SHARE))
+		_domino = false
+	hp = maxf(1.0, fresh - _overkill)
 	_overkill = 0.0
 	phase = Phase.WALKING_IN
 	phase_left = WALK_IN
