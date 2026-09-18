@@ -106,6 +106,67 @@ GEAR = {
 # rect and a test holds every icon to it.
 GEAR_SIDE = 32
 
+# The unique items' icons, keyed by `UniqueTable`'s ids and written to Assets/Gear/Unique. Nine come
+# straight off the RPG pack, which draws more gear than the eight base pieces use. The pack draws no
+# ring and no amulet, and Icons.png draws one of each, so the four unique jewels are those two
+# recoloured -- and recoloured by *part*, not whole: turning the whole ring's hue makes a band no
+# metal is. Each recolour names the band of hues it moves (the ring's gold is 0.05-0.17, its stone
+# 0.55-0.72; the amulet's stone and setting are 0.95-0.12), what it adds to the hue, and what it
+# multiplies the saturation and the lightness by.
+#
+# id -> (the GEAR 6-tuple, [(hue_low, hue_high, hue_add, sat_mul, light_mul), ...][, (grey_hue, grey_sat)])
+_RING = ("2D Pixel UI/PNG/Icons", 82, 130, 12, 12, 2)
+_AMULET = ("2D Pixel UI/PNG/Icons", 3, 146, 10, 12, 2)
+_RPG = "Pixel Art Icon Pack - RPG/"
+UNIQUE_GEAR = {
+    "metronome": ((_RPG + "Weapon & Tool/Silver Sword", 0, 0, 32, 32, 1), []),
+    "headsman": ((_RPG + "Weapon & Tool/Axe", 0, 0, 32, 32, 1), []),
+    # A band of bone: the gold drained and lifted, the stone left as it is.
+    "knucklebone_ring": (_RING, [(0.0, 0.2, 0.0, 0.25, 1.35)]),
+    # Gold with a ruby in it, where the plain ring carries a sapphire.
+    "the_tithe": (_RING, [(0.5, 0.75, 0.38, 1.0, 1.0)]),
+    # Glass and pale sand.
+    "hourglass_amulet": (_AMULET, [(0.9, 1.0, 0.5, 0.8, 1.1), (0.0, 0.15, 0.5, 0.8, 1.1)]),
+    "meadowstriders": ((_RPG + "Equipment/Iron Boot", 0, 0, 32, 32, 1), []),
+    "hunters_lantern": ((_RPG + "Misc/Lantern", 0, 0, 32, 32, 1), []),
+    "sunscorched_cowl": ((_RPG + "Equipment/Helm", 0, 0, 32, 32, 1), []),
+    "rimeplate": ((_RPG + "Equipment/Iron Armor", 0, 0, 32, 32, 1), []),
+    "stonebreaker": ((_RPG + "Weapon & Tool/Hammer", 0, 0, 32, 32, 1), []),
+    # Grave-violet.
+    "gravediggers_charm": (_AMULET, [(0.9, 1.0, 0.78, 0.9, 0.85), (0.0, 0.15, 0.78, 0.9, 0.85)]),
+    # --- the second batch ---
+    # Blood-red iron, the sapphire left in it.
+    "berserkers_band": (_RING, [(0.0, 0.2, -0.09, 1.2, 0.9)]),
+    # The pack's plain iron sword with its greys turned to pale blue glass: a third element is
+    # (hue, saturation) for the pixels `_shift` otherwise leaves alone.
+    "glass_edge": ((_RPG + "Weapon & Tool/Iron Sword", 0, 0, 32, 32, 1), [], (0.55, 0.5)),
+    # No pack draws a die: a green stone, the gambler's colour.
+    "gamblers_die": (_AMULET, [(0.9, 1.0, 0.33, 0.9, 1.0), (0.0, 0.15, 0.33, 0.9, 1.0)]),
+    "ascetics_cord": ((_RPG + "Material/Rope", 0, 0, 32, 32, 1), []),
+    "last_gasp": ((_RPG + "Monster Part/Skull", 0, 0, 32, 32, 1), []),
+    "duelists_buckler": ((_RPG + "Weapon & Tool/Iron Shield", 0, 0, 32, 32, 1), []),
+    # The nearest thing to a chalice running over.
+    "overflowing_chalice": ((_RPG + "Food/Beer", 0, 0, 32, 32, 1), []),
+    # Off Icons.png like the ring and the amulet, measured and doubled: row 7's blue boots, row 6's
+    # steel cuirass and row 8's steel shield.
+    "dominoes": (("2D Pixel UI/PNG/Icons", 50, 113, 12, 14, 2), []),
+    "snowball": (("2D Pixel UI/PNG/Icons", 82, 98, 12, 12, 2), []),
+    "packmule": ((_RPG + "Equipment/Bag", 0, 0, 32, 32, 1), []),
+    "bulwark": (("2D Pixel UI/PNG/Icons", 19, 130, 10, 12, 2), []),
+    # The base piece's own wood, stained to the red of the heart of the tree.
+    "heartwood_plate": ((_RPG + "Equipment/Wooden Armor", 0, 0, 32, 32, 1), [(0.0, 0.2, -0.06, 1.35, 0.8)]),
+    "spiked_helm": ((_RPG + "Equipment/Iron Helmet", 0, 0, 32, 32, 1), []),
+    # Black and white, as the bird is: the gold drained and darkened.
+    "magpies_band": (_RING, [(0.0, 0.2, 0.0, 0.15, 0.5)]),
+    "lucky_wound": ((_RPG + "Misc/Candle", 0, 0, 32, 32, 1), []),
+    # The pack calls this strapped pack its leather armour; it is drawn as a sack.
+    "rag_and_bone_sack": ((_RPG + "Equipment/Leather Armor", 0, 0, 32, 32, 1), []),
+}
+UNIQUE_OUT = "Assets/Gear/Unique"
+# Whether the icons are written into the game or only onto the preview. Off until the preview has been
+# looked at: `UniqueTable.icon` falls back to the base piece's picture while a file is missing.
+UNIQUE_EXPORT = True
+
 # The six orbs, off "OreAndGem" -- a 10x5 grid of 50 gems on an exact 32 px pitch, so an entry is
 # only ever a cell of it. The picks are made for distinctness across the tray as much as for the
 # colours Path of Exile trained the idea into: the six stand side by side in one row, so no two of
@@ -149,6 +210,10 @@ PARTS = {
 ICONS = {
     "ui_icon_chest": ("2D Pixel UI/PNG/Icons", 34, 3, 12, 11, 1),
     "ui_icon_star": ("2D Pixel UI/PNG/Icons", 18, 18, 13, 12, 1),
+    # The collection log: the pack's own trophy, row 3, column 1.
+    "ui_icon_trophy": ("2D Pixel UI/PNG/Icons", 18, 50, 13, 13, 1),
+    # Either side of an elite's name on the fight's nameplate: the pack's skull, row 1, column 1.
+    "ui_icon_skull": ("2D Pixel UI/PNG/Icons", 3, 2, 11, 11, 1),
 }
 # Both icons are centred on one square, so both buttons come out the same size whatever they wear.
 ICON_SIDE = 14
@@ -305,6 +370,20 @@ ICONS_DRAWN = {
         ...o2o.....
         ....oo.....
     """,
+    # Help, on the collection log: a question mark the close button's size (9x10), worn by no button --
+    # it stands on the panel and says its piece in a tooltip.
+    "ui_icon_help": """
+        ..ooooo..
+        .o44433o.
+        o43ooo32o
+        ooo.o332o
+        ...o332o.
+        ...o32o..
+        ...oooo..
+        ...o42o..
+        ...o21o..
+        ...oooo..
+    """,
     # Swap, on the bag's comparison: two arrows chasing each other round -- the other ring finger.
     "ui_icon_swap": """
         ....ooooo.....
@@ -361,6 +440,18 @@ ICONS_DRAWN = {
         .o3ooo2ooo1o.
         ..oo.o2o.oo..
         .....ooo.....
+    """,
+    # Either side of a boss's name on the fight's nameplate: a three-pointed crown on its band.
+    "ui_icon_crown": """
+        .o....o....o.
+        o4o..o4o..o3o
+        o4oo.o4o.oo3o
+        o44oo444oo32o
+        o44444433322o
+        o44433333222o
+        ooooooooooooo
+        o33332222211o
+        ooooooooooooo
     """,
 }
 
@@ -691,6 +782,67 @@ def gear():
         square.alpha_composite(art, ((GEAR_SIDE - art.width) // 2, (GEAR_SIDE - art.height) // 2))
         out[name] = square
     return out
+
+
+def _squared(name, art):
+    """`art` centred on a GEAR_SIDE square, the way gear() centres its own."""
+    if art.width > GEAR_SIDE or art.height > GEAR_SIDE:
+        raise SystemExit("%s is %dx%d, too big for a %d square"
+                         % (name, art.width, art.height, GEAR_SIDE))
+    square = Image.new("RGBA", (GEAR_SIDE, GEAR_SIDE), (0, 0, 0, 0))
+    square.alpha_composite(art, ((GEAR_SIDE - art.width) // 2, (GEAR_SIDE - art.height) // 2))
+    return square
+
+
+def _shift(art, bands, grey=None):
+    """`art` with every pixel whose hue falls in a band moved: see UNIQUE_GEAR. Greys are left alone --
+    the outline and the amulet's cord have no hue worth the name."""
+    out = art.copy()
+    px = out.load()
+    for y in range(out.height):
+        for x in range(out.width):
+            r, g, b, a = px[x, y]
+            hue, light, sat = colorsys.rgb_to_hls(r / 255, g / 255, b / 255)
+            if a == 0:
+                continue
+            if sat < 0.2:
+                # Steel has no hue to move, so it is given one: only where `grey` asks, and never the
+                # white outline or the black line, which a hue would do nothing to anyway.
+                if grey and 0.15 < light < 0.95:
+                    px[x, y] = tuple(round(c * 255) for c in colorsys.hls_to_rgb(grey[0], light, grey[1])) + (a,)
+                continue
+            for low, high, add, sat_mul, light_mul in bands:
+                if low <= hue <= high:
+                    moved = colorsys.hls_to_rgb((hue + add) % 1.0, min(light * light_mul, 1.0),
+                                                min(sat * sat_mul, 1.0))
+                    px[x, y] = tuple(round(c * 255) for c in moved) + (a,)
+                    break
+    return out
+
+
+def unique_gear():
+    """The unique items' icons, each on its own GEAR_SIDE square."""
+    return {name: _squared(name, _shift(_cut(entry[0]), *entry[1:])) for name, entry in UNIQUE_GEAR.items()}
+
+
+def unique_preview(cut):
+    """Every unique icon on the bag's tan socket inside the gold ring a unique wears, and under it the
+    same square blacked out, which is how the collection log draws one not yet found."""
+    socket, gold = (0x8A, 0x6F, 0x4E, 0xFF), (0xE8, 0xB8, 0x3C, 0xFF)
+    side, pad, cols = GEAR_SIDE + 8, 6, 9
+    rows = (len(cut) + cols - 1) // cols
+    band = 2 * side + 3 * pad
+    out = Image.new("RGBA", (pad + cols * (side + pad), rows * band), (0xE8, 0xDC, 0xC0, 0xFF))
+    for i, name in enumerate(cut):
+        x, y = pad + (i % cols) * (side + pad), (i // cols) * band
+        out.paste(Image.new("RGBA", (side, side), gold), (x, y + pad))
+        out.paste(Image.new("RGBA", (side - 4, side - 4), socket), (x + 2, y + pad + 2))
+        out.alpha_composite(cut[name], (x + 4, y + pad + 4))
+        out.paste(Image.new("RGBA", (side, side), socket), (x, y + side + 2 * pad))
+        dark = Image.new("RGBA", cut[name].size, (0, 0, 0, 0xFF))
+        dark.putalpha(cut[name].getchannel("A"))
+        out.alpha_composite(dark, (x + 4, y + side + 2 * pad + 4))
+    return out.resize((out.width * 3, out.height * 3), Image.NEAREST)
 
 
 def orbs():
@@ -1103,6 +1255,13 @@ def main():
         image.save(os.path.join(GEAR_OUT, name + ".png"))
     for name, image in parts().items():
         image.save(os.path.join(OUT, name + ".png"))
+
+    unique = unique_gear()
+    unique_preview(unique).save(os.path.join(QA, "ui_kit_uniques.png"))
+    if UNIQUE_EXPORT:
+        os.makedirs(UNIQUE_OUT, exist_ok=True)
+        for name, image in unique.items():
+            image.save(os.path.join(UNIQUE_OUT, name + ".png"))
 
     # Loose as well, and for the same reason the parts are: a mark is drawn at its own size and the
     # face behind it is what stretches.
