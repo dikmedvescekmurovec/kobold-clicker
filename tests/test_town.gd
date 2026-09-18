@@ -1389,6 +1389,7 @@ func _test_fortune_page() -> void:
 	_deep_button(main.town_page._rows, "Treasure").pressed.emit()
 	await process_frame
 	_check(main._chest_pointer.target == chest, "the star is put over the nearest chest")
+	_check(not main._chest_pointer.visible, "but it waits for the town page to close")
 	_check(FortuneTeller.chest(Inventory.load_from(TEST_PATH).fortunes) == main.view.origin + chest, "and saved")
 	_check(_deep_button(main.town_page._rows, "Treasure").disabled, "and not sold again while it is out")
 	main.view._states[chest] = MapBuilder.State.CHARTED

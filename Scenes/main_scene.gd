@@ -277,6 +277,9 @@ func _build_ui() -> void:
 	add_child(layer)
 	_ui_layer = layer
 	_chest_pointer = ChestPointer.new(map, view, ui_scale)
+	_chest_pointer.covered = func() -> bool:
+		return (_panel.visible or town_page.visible or _left_page_up() or _tip_panel != null
+				or _scour_panel != null)
 	layer.add_child(_chest_pointer)
 
 	_panel = UITheme.titled_panel("Tile", "Close and deselect the tile", _on_close_pressed)
