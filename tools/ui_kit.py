@@ -170,13 +170,12 @@ UNIQUE_GEAR = {
 UNIQUE_OUT = "Assets/Gear/Unique"
 # The ten of those that are doubled Icons.png art -- four rings, three amulets, the boots, the
 # cuirass and the shield -- drawn instead by AI-sprites-generator/gear.py (its UNIQUES, by the same
-# ids), the way the base jewels were and for the same reason. They are on their own flag because
-# they are on their own approval: off, a run writes the doubled ones as before and shows the drawn
-# ones beside them on tools/qa/ui_kit_uniques_drawn.png; on, the drawn ones are what is written and
-# those ten entries of UNIQUE_GEAR can go.
+# ids), the way the base jewels were and for the same reason. They were approved on their own flag,
+# which is on: the drawn ones are what is written, and their ten entries in UNIQUE_GEAR are kept only
+# so tools/qa/ui_kit_uniques_drawn.png can still show what each one replaced.
 UNIQUE_DRAWN = ["knucklebone_ring", "the_tithe", "berserkers_band", "magpies_band", "hourglass_amulet",
                 "gravediggers_charm", "gamblers_die", "dominoes", "snowball", "bulwark"]
-UNIQUE_DRAWN_EXPORT = False
+UNIQUE_DRAWN_EXPORT = True
 # Whether the icons are written into the game or only onto the preview. Off until the preview has been
 # looked at: `UniqueTable.icon` falls back to the base piece's picture while a file is missing.
 UNIQUE_EXPORT = True
@@ -1075,8 +1074,8 @@ def unique_gear():
     for name, entry in UNIQUE_GEAR.items():
         art = _cut(entry[0])
         # The seventeen off the RPG pack take the bases' finish, so the collection log and the bag
-        # are one look. The ten doubled off Icons.png carry a dark line of their own and are left
-        # as they are until the drawn ones that replace them are approved: see UNIQUE_DRAWN.
+        # are one look. The ten doubled off Icons.png carry a dark line of their own, and the drawn
+        # ones below are written over them: see UNIQUE_DRAWN.
         out[name] = _squared(name, _shift(art if _doubled(art) else _outlined(art), *entry[1:]))
     if UNIQUE_DRAWN_EXPORT:
         out.update(unique_drawn())
