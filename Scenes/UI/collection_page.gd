@@ -15,13 +15,17 @@ extends Control
 ## The page's X was pressed.
 signal closed
 
-const HELP_ICON := "res://Assets/UI/ui_icon_help.png"
+const HELP_ICON := "res://Assets/UI/ui_icon_info.png"
+## The foot's two labels, for the tests.
+const BONUS_NAME := "Bonus"
+const COUNT_NAME := "Count"
 
 var inventory: Inventory
 var view: MapBuilder
 var _ui_scale: float
 var _panel: VBoxContainer
 var _rows: VBoxContainer
+var _foot: HBoxContainer
 
 
 func _init(player_inventory: Inventory, map_view: MapBuilder, ui_scale: float) -> void:
@@ -44,28 +48,39 @@ func _ready() -> void:
 	UITheme.body_of(_panel).add_child(scroll)
 	_rows = UITheme.vbox(BountyList.ROW_GAP, BagPage.WIDTH)
 	scroll.add_child(_rows)
+	# Under the scroll and not in it: what the log is worth and how full it is are true of the whole
+	# page, and stay in sight wherever the grid has been dragged to.
+	UITheme.body_of(_panel).add_child(UITheme.rule(BagPage.WIDTH))
+	_foot = HBoxContainer.new()
+	_foot.add_theme_constant_override("separation", 4)
+	UITheme.body_of(_panel).add_child(_foot)
 	open()
 
 
-## Redraws the page: the count, then the grid.
+## Redraws the page: the grid, and the foot under it -- what the log adds on the left, how much of
+## it is found on the right and the info mark after it, both figures in the body font.
 func open() -> void:
 	UITheme.clear(_rows)
-	var heading := HBoxContainer.new()
-	var count := UITheme.label("Found %d of %d" % [inventory.uniques_found.size(),
-			UniqueTable.UNIQUES.size()])
-	count.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	heading.add_child(count)
-	# What the log is worth, behind a question mark rather than as a line on the page.
+	UITheme.clear(_foot)
 	var help := TextureRect.new()
 	help.texture = load(HELP_ICON)
 	help.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
 	help.mouse_filter = Control.MOUSE_FILTER_STOP
 	Cursors.wear(help, Cursors.HELP)
-	help.tooltip_text = "Each unique found adds %d%% increased Damage, worn or not.\nNow: +%d%%." % [
-			UniqueTable.COLLECTION_DAMAGE, inventory.collection_bonus()]
-	heading.add_child(help)
-	_rows.add_child(heading)
-	_rows.add_child(UITheme.rule(BagPage.WIDTH))
+	# The mark is only there to be read, so its card is up at once.
+	help.set_meta(TipCard.NOW, true)
+	help.tooltip_text = ("Each unique found adds %d%% increased Damage, worn or not."
+			% UniqueTable.COLLECTION_DAMAGE)
+	var bonus := UITheme.label("+%d%% Damage" % inventory.collection_bonus(), Palette.SLATE, true)
+	bonus.name = BONUS_NAME
+	bonus.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_foot.add_child(bonus)
+	var count := UITheme.label("Found %d of %d" % [inventory.uniques_found.size(),
+			UniqueTable.UNIQUES.size()], Palette.SLATE, true)
+	count.name = COUNT_NAME
+	_foot.add_child(count)
+	# Last in the row, so its card stands past the panel and not over the two figures it explains.
+	_foot.add_child(help)
 	var grid := GridContainer.new()
 	grid.columns = BagPage.GRID_COLS
 	grid.add_theme_constant_override("h_separation", BagPage.SLOT_GAP)

@@ -11,6 +11,9 @@ extends PanelContainer
 
 ## How long the cursor has to stay over one Control before its card comes up, in seconds.
 const DELAY := 0.5
+## A meta on a Control whose tooltip is the whole of what it is for -- an info mark -- and so does
+## not wait: `set_meta(TipCard.NOW, true)`.
+const NOW := "tip_now"
 
 var _ui_scale: float
 var _line: Label
@@ -45,7 +48,7 @@ func _process(delta: float) -> void:
 		_held = 0.0
 		hide()
 	_held += delta
-	if visible or _held < DELAY:
+	if visible or (_held < DELAY and not over.has_meta(NOW)):
 		return
 	# As wide as its words up to the cards' width, and wrapped from there.
 	_line.autowrap_mode = TextServer.AUTOWRAP_OFF
