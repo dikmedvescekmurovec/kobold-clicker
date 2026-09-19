@@ -88,7 +88,8 @@ func _test_items() -> bool:
 		_check(icon != null, item + " has an icon")
 		if icon != null:
 			_check(icon.get_size() == Vector2(32, 32), "%s is %s, not 32x32" % [item, icon.get_size()])
-		_check(int(LootTable.ITEMS[item]["weight"]) > 0, item + " can come up at all")
+		_check(int(LootTable.ITEMS[item]["weight"]) > 0 or item == LootTable.FIRST_DROP,
+				item + " can come up at all")
 		var stats := LootTable.stats_of(item)
 		_check(not stats.is_empty(), item + " is worth something")
 		for stat: String in stats:
@@ -419,7 +420,7 @@ func _test_slot_locks() -> bool:
 	var locked := {
 		# Base damage is still what is held, but the jewellery carries damage as an affix -- what is
 		# locked is where a click's damage *comes from*, not everything that can add to it.
-		"damage": ["sword", "dagger", "mace", "greatsword", "gold_ring", "iron_band", "jade_ring",
+		"damage": ["sword", "dagger", "mace", "greatsword", "broken_sword", "gold_ring", "iron_band", "jade_ring",
 			"ruby_amulet", "gold_amulet", "sapphire_amulet", "emerald_amulet"],
 		"move_speed": ["boot", "greaves", "slippers"],
 		"block_chance": ["shield", "buckler", "torch"],
@@ -429,7 +430,7 @@ func _test_slot_locks() -> bool:
 	# And the kinds whose own numbers it is, which for four of them is narrower than the line above:
 	# a ring may roll flat damage and a torch may roll flat block, and neither shows any.
 	var shows := {
-		"damage": ["sword", "dagger", "mace", "greatsword"],
+		"damage": ["sword", "dagger", "mace", "greatsword", "broken_sword"],
 		"move_speed": ["boot", "greaves", "slippers"],
 		"block_chance": ["shield", "buckler"],
 		"bleed": ["mace"],
@@ -756,6 +757,38 @@ func _test_rolls() -> bool:
 		blazing += 1 if LootTable.roll(enemy, rng, true, 9).type == "Blazing Torch" else 0
 	_check(blazing == 0, "no Blazing Torch off level-9 ground (%d of 1000)" % blazing)
 
+	# The run's first find: a fight told to drop a sword drops one, once, and then goes back to the table.
+	for attempt in 20:
+		var first := Encounter.for_tile(Vector2i(2, 2), "grass")
+		first.loot_rng.seed = attempt
+		first.always_drop = true
+		first.first_sword = true
+		var found: Array[Item] = []
+		first.loot_dropped.connect(func(_index: int, item: Item) -> void: found.append(item))
+		_play(first)
+		_check(found.size() > 1 and found[0].type == LootTable.FIRST_DROP,
+				"the first drop is a Broken Sword, not %s" % (found[0].type if found else "nothing"))
+		if found:
+			_check(found[0].stats == {"damage": 1.0} and found[0].level == 1
+					and found[0].rarity == ItemRarity.Rarity.COMMON,
+					"and it is a common level 1 with 1 Damage and nothing else (%s)" % [found[0].stats])
+			var some_orb_fits := false
+			for orb: String in OrbTable.ORBS:
+				some_orb_fits = some_orb_fits or OrbTable.can_apply(orb, found[0])
+			_check(some_orb_fits, "and an orb still works on it")
+		_check(not first.first_sword, "and the promise is spent")
+	var kinds := {}
+	for attempt in 20:
+		var fight := Encounter.for_tile(Vector2i(2, 2), "grass")
+		fight.loot_rng.seed = attempt
+		fight.always_drop = true
+		fight.first_sword = true
+		fight.loot_dropped.connect(func(index: int, item: Item) -> void:
+			if index > 0:
+				kinds[LootTable.ITEMS[item.type]["kind"]] = true)
+		_play(fight)
+	_check(kinds.size() > 1, "and the drops after it go back to the table")
+
 	# What common rabble is worth, every step of it, held to the table's own numbers rather than to
 	# a line written here that goes stale the moment the curve is retuned.
 	for step: ItemRarity.Rarity in ItemRarity.TIER_WEIGHTS[EnemyRoster.Tier.COMMON]:
@@ -857,7 +890,6 @@ func _test_saving() -> bool:
 	inventory.add(Item.rolled("Wooden Shield", ItemRarity.Rarity.ELITE, rng))
 	inventory.add(Item.rolled("Wooden Armor", ItemRarity.Rarity.UNCOMMON, rng))
 	inventory.add(Item.rolled("Leather Boot", ItemRarity.Rarity.COMMON, rng))
-	inventory.first_elite_taken = true
 	inventory.gold = 1234
 	_check(inventory.save(TEST_PATH), "the inventory saved")
 
@@ -867,8 +899,12 @@ func _test_saving() -> bool:
 	for i in mini(loaded.total(), inventory.total()):
 		_check(_fingerprint(loaded.items[i]) == _fingerprint(inventory.items[i]),
 				"item %d came back as it went in: %s" % [i, _fingerprint(loaded.items[i])])
-	_check(loaded.first_elite_taken, "and so did the promised elite")
+	_check(not loaded.first_sword_taken, "and the promised sword, still owed")
 	_check(loaded.gold == 1234, "and the purse, at %d" % loaded.gold)
+	# The ledger spends the sword on any drop, as it banks.
+	var ledger := FightLedger.new(loaded, TEST_PATH)
+	ledger.add_loot(Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng))
+	_check(Inventory.load_from(TEST_PATH).first_sword_taken, "a drop spends the promised sword")
 
 	# An item written by hand, to pin the file's shape rather than only its round trip.
 	var one := Item.from_dict({"type": "Wooden Sword", "rarity": "rare",
@@ -919,7 +955,7 @@ func _test_saving() -> bool:
 	var migrated := Inventory.load_from(TEST_PATH)
 	_check(migrated.total() == 2, "an old save's items came across, %d of them" % migrated.total())
 	_check(migrated.count("Leather Boot") == 2, "as what they were")
-	_check(migrated.first_elite_taken, "and it is still remembered")
+	_check(migrated.first_sword_taken, "and a save from before the Broken Sword never gets one")
 	for item in migrated.items:
 		_check(item.rarity == ItemRarity.Rarity.COMMON and item.mods.is_empty(),
 				"an item from before rarities is a plain common")
@@ -1163,7 +1199,7 @@ func _test_the_map_keeps_what_dropped() -> bool:
 			"everything the fight dropped was kept: %d of %d" % [
 					main.inventory.total(), main.ledger.drops.size()])
 	_check(main.inventory.total() > 0, "the promised elite paid out")
-	_check(main.inventory.first_elite_taken, "and is not promised again")
+	_check(main.inventory.first_sword_taken, "and is not promised again")
 	_check(main.bag_page._gold.text == BigNumber.format(main.inventory.gold),
 			"the bag's footer says what is in the purse: %s" % main.bag_page._gold.text)
 	_check(main._bag_button.visible, "the button is back with the map")
@@ -1298,7 +1334,7 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	for i in mini(saved.total(), main.inventory.total()):
 		_check(_fingerprint(saved.items[i]) == _fingerprint(main.inventory.items[i]),
 				"and the same item %d, modifiers and all" % i)
-	_check(saved.first_elite_taken, "the promise is remembered across a restart")
+	_check(saved.first_sword_taken, "the promise is remembered across a restart")
 
 	# A second fight is on its own merits. Winning the first sent the player walking onto the tile,
 	# and nothing can be fought for while they are on their way, so let them arrive first.
@@ -1895,7 +1931,7 @@ func _test_kinds() -> bool:
 	for kind: String in LootTable.KINDS:
 		var slot := str(LootTable.KINDS[kind]["slot"])
 		var weight := int(LootTable.KINDS[kind]["weight"])
-		_check(weight > 0, "%s can come up at all" % kind)
+		_check(weight > 0 or kind == "broken_sword", "%s can come up at all" % kind)
 		weights[slot] = int(weights.get(slot, 0)) + weight
 		total += weight
 	_check(weights.size() == was.size(), "there are still seven slots (%s)" % [weights.keys()])
@@ -2848,11 +2884,11 @@ func _test_unique_items() -> bool:
 
 	# The ledger is what writes the log: at once for a tile fight, at the bank for a run.
 	var tile_bag := Inventory.new()
-	FightLedger.new(tile_bag, TEST_PATH).add_loot(Item.rolled_unique("rimeplate", rng, 2), false)
+	FightLedger.new(tile_bag, TEST_PATH).add_loot(Item.rolled_unique("rimeplate", rng, 2))
 	_check(tile_bag.uniques_found == ["rimeplate"], "a tile fight logs a unique as it lands")
 	var run_bag := Inventory.new()
 	var run := FightLedger.new(run_bag, TEST_PATH, true)
-	run.add_loot(Item.rolled_unique("stonebreaker", rng, 2), false)
+	run.add_loot(Item.rolled_unique("stonebreaker", rng, 2))
 	_check(run_bag.uniques_found.is_empty(), "a run holds it in the pouch")
 	run.bank()
 	_check(run_bag.uniques_found == ["stonebreaker"], "and logs it at the bank")
@@ -3109,20 +3145,20 @@ func _test_fight_ledger() -> bool:
 
 	var bag := Inventory.new()
 	var tile := FightLedger.new(bag, TEST_PATH)
-	tile.add_loot(sword, true)
+	tile.add_loot(sword)
 	tile.add_gold(7)
 	tile.add_orb(orb)
 	tile.add_xp(1)
 	var on_disk := Inventory.load_from(TEST_PATH)
 	_check(bag.items.has(sword) and bag.gold == 7 and bag.orb_count(orb) == 1 and bag.xp + bag.level > 1,
 			"a tile fight banks every gain as it lands")
-	_check(on_disk.total() == 1 and on_disk.gold == 7 and on_disk.first_elite_taken, "and writes it down")
+	_check(on_disk.total() == 1 and on_disk.gold == 7 and on_disk.first_sword_taken, "and writes it down")
 	_check(tile.pending_xp() == 0 and not tile.bank(), "so it has nothing pending and nothing to bank")
 	_check(tile.discard(sword) and bag.total() == 0, "a find thrown away comes back out of the bag")
 
 	bag = Inventory.new()
 	var run := FightLedger.new(bag, TEST_PATH, true)
-	run.add_loot(sword, false)
+	run.add_loot(sword)
 	run.add_gold(7)
 	run.add_orb(orb)
 	run.add_xp(1)

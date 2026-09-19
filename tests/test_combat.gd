@@ -953,9 +953,9 @@ func _test_a_won_fight() -> bool:
 	return true
 
 
-## The click rate at `edge` in a farmed set of rares with `points` spent down the Power tree's damage
-## path first -- the root, the middle, the flat damage chain -- and then the rest.
-func _power_rate(edge: Vector2i, spare: float, points: int) -> float:
+## `points` spent down the Power tree's damage path first -- the root, the middle, the flat damage
+## chain -- and then the rest.
+func _power_skills(points: int) -> Skills:
 	const ORDER := ["sharpened_edge", "keen_eye", "battle_rhythm", "might", "titan", "quick_hands",
 		"flurry", "whirlwind", "deadly_strikes", "assassin"]
 	var skills := Skills.new()
@@ -965,6 +965,12 @@ func _power_rate(edge: Vector2i, spare: float, points: int) -> float:
 		for id: String in ORDER:
 			if skills.rank_up(id, points + 1):
 				break
+	return skills
+
+
+## The click rate at `edge` in a farmed set of rares with `points` spent that way.
+func _power_rate(edge: Vector2i, spare: float, points: int) -> float:
+	var skills := _power_skills(points)
 	var fight := Encounter.for_tile(edge, "grass")
 	fight.arm(_typical_farmed(edge, ItemRarity.Rarity.RARE).totals(skills.flat(), skills.percent()))
 	var per_hit := fight.damage * (1.0 + fight.crit_chance / 100.0 * fight.crit_damage / 100.0)
@@ -1150,8 +1156,10 @@ func _click_rate(fight: Encounter, seconds: float, per_hit: float, swings: float
 	return left / per_hit / seconds
 
 
-## The ice wall round the first land: one body on the ice, a wall nobody walks through bare-handed,
-## and one a player who has farmed the land inside it for rares can bring down. `WALL_HP` is the dial.
+## The ice wall round the first land: one body on the ice, a wall nobody walks through bare-handed or
+## on farmed rares alone, and one the same rares bring down with the whole Power tree behind them --
+## Giant Slayer included, the wall being a boss. `WALL_HP` is the dial; `tests/balance_wall.gd` plays
+## a fresh player out to it and says what a figure costs in kills.
 func _test_the_ice_wall() -> bool:
 	var cell := Vector2i(MapBuilder.START_LAND_RADIUS + 1, 0)
 	var fight := Encounter.for_wall(cell)
@@ -1167,10 +1175,17 @@ func _test_the_ice_wall() -> bool:
 	armed.arm(level_gear.totals())
 	var per_hit := armed.damage * (1.0 + armed.crit_chance / 100.0 * armed.crit_damage / 100.0)
 	var farmed := _click_rate(armed, spare, per_hit, armed.attack_speed)
-	print("The ice wall: %s health, %.1f clicks/s bare, %.1f in farmed rares"
-			% [BigNumber.format(fight.hp), bare, farmed])
+	var skills := _power_skills(SkillTree.capacity("power"))
+	var skilled := Encounter.for_wall(cell)
+	skilled.arm(level_gear.totals(skills.flat(), skills.percent()))
+	# Giant Slayer and Execute, the two capstones that change what a blow is worth to a boss.
+	var slain := skilled.damage * 2.0 * (1.0 + skilled.crit_chance / 100.0 * skilled.crit_damage / 100.0) / 0.9
+	var whole := _click_rate(skilled, spare, slain, skilled.attack_speed)
+	print("The ice wall: %s health, %.1f clicks/s bare, %.1f in farmed rares, %.1f with the whole Power tree"
+			% [BigNumber.format(fight.hp), bare, farmed, whole])
 	_check(bare > 50.0, "nobody walks through the wall bare-handed (%.1f/s)" % bare)
-	_check(farmed > 3.0 and farmed < 8.0, "farmed rares from inside it bring it down, harder than any tile (%.1f/s)" % farmed)
+	_check(farmed > 8.0, "nor on farmed rares alone (%.1f/s)" % farmed)
+	_check(whole > 1.0 and whole < 8.0, "farmed rares and the whole Power tree bring it down (%.1f/s)" % whole)
 	return true
 
 
@@ -1463,8 +1478,8 @@ func _uniques_of(fight: Encounter) -> Array:
 	return found
 
 
-## Where uniques come from: nothing before the wait is over, the first boss whatever the wait says,
-## and the rabble far less often than what leads it.
+## Where uniques come from: nothing before the wait is over, chance alone after it, and the rabble
+## far less often than what leads it.
 func _test_unique_drops() -> bool:
 	var cell := Vector2i(6, 0)
 	# A drop rate this size caps every chance at certain, so the tally is about the gate and not luck.
@@ -1488,26 +1503,14 @@ func _test_unique_drops() -> bool:
 	for pair: Array in found:
 		_check(str(pair[1]) in UniqueTable.pool_for("grass"), "%s is found on grass" % pair[1])
 
-	# The promised one: a settlement's boss, with the wait nowhere near over.
-	var town := Encounter.for_tile(cell, "grass", "village")
-	town.arm({"damage": 1.0e9})
-	town.uniques_after = 1000
-	town.guarantee_unique = true
-	var promised := _uniques_of(town)
-	town.start()
-	_play(town, 100)
-	_check(town.victory and promised.size() == 1 and int(promised[0][0]) == town.enemies - 1,
-			"the first boss hands over exactly one unique (%s)" % [promised])
-	_check(not town.guarantee_unique, "and the promise is spent")
-
-	var later := Encounter.for_tile(cell, "grass", "village")
-	later.arm({"damage": 1.0e9})
-	later.uniques_after = 1000
-	later.unique_rng.seed = WORLD_SEED
-	var unpromised := _uniques_of(later)
-	later.start()
-	_play(later, 100)
-	_check(unpromised.is_empty(), "a boss promises nothing once one has been found")
+	# Not even a boss, at a drop rate that makes every chance certain, jumps the wait.
+	var early := Encounter.for_tile(cell, "grass", "village")
+	early.arm(sure)
+	early.uniques_after = 1000
+	var too_soon := _uniques_of(early)
+	early.start()
+	_play(early, 100)
+	_check(early.victory and too_soon.is_empty(), "no unique before the wait is over (%s)" % [too_soon])
 
 	for enemy: String in EnemyRoster.ENEMIES:
 		var chance := UniqueTable.chance_for(enemy)

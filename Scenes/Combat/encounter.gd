@@ -88,8 +88,9 @@ const MIMIC_ROLLS := 10
 ## anything else -- it is the check on whether the player is ready for the land past it.
 const WALL := {"enemies": 1, "seconds": 60.0, "elite_every": 1, "boss_last": true}
 const WALL_NAME := "The Ice Wall"
-## What the wall's health is multiplied by on top of its boss body. The dial for how hard the wall is.
-const WALL_HP := 6.0
+## What the wall's health is multiplied by on top of its boss body. The dial for how hard the wall is,
+## and a steep one: `tests/balance_wall.gd` plays it out, and past 50 every 10 more doubles the farming.
+const WALL_HP := 50.0
 const PROFILES := {
 	"plain": ORDINARY,
 	"road": ORDINARY,
@@ -251,9 +252,12 @@ var crit_rng := RandomNumberGenerator.new()
 
 ## The terrain the fight is on. It picked the enemies, and it picks the backdrop they are drawn on.
 var env := ""
-## Whether the elite that ends this fight is promised a drop. The main scene turns it on while the
-## player has yet to see their first, so the first real fight hands something over.
+## Whether an elite is promised a drop. The main scene turns it on only while the Broken Sword has not
+## dropped, so what the promise hands over is always that sword.
 var guarantee_elite := false
+## Whether the next piece of gear to fall is `LootTable.FIRST_DROP`, always common and level 1. The main scene turns it on until the player's
+## first drop (`Inventory.first_sword_taken`), and the first drop here spends it.
+var first_sword := false
 
 ## Whether every body drops something. Nothing in the game turns this on: it is for the tests and the
 ## screenshot scripts, which want a pouch with several things in it and would otherwise have to grind
@@ -284,9 +288,6 @@ var unique_rng := RandomNumberGenerator.new()
 ## that counts what a body leaves counts what it always counted.
 const NO_UNIQUES := -1
 var uniques_after := NO_UNIQUES
-## Whether the first boss to fall here is promised a unique, which the wait above does not hold back.
-## The main scene turns it on while the player has never found one; the first to fall turns it off.
-var guarantee_unique := false
 
 ## The Knucklebone Ring's streak: clicks made within `KNUCKLE_WINDOW` of the one before, and how long
 ## ago the last one was. A click counts whether or not it lands, or every walk-in would break it.
@@ -763,6 +764,9 @@ func _kill() -> void:
 		if _crit_landed and "lucky_wound" in effects:
 			dropped = _better(dropped, LootTable.roll(lineup[index], loot_rng, certain,
 					MapBuilder.level_of(cell), drop_rate, item_rarity))
+		if dropped != null and first_sword:
+			first_sword = false
+			dropped = Item.rolled(LootTable.FIRST_DROP, ItemRarity.Rarity.COMMON, loot_rng)
 		if dropped != null:
 			loot_dropped.emit(index, dropped)
 	# Every body carries one, which is the whole difference between gold and gear: nine kills in
@@ -793,13 +797,12 @@ func _kill() -> void:
 	# A unique, beside the gear and not from its table: any body can carry one, off the pool of the
 	# ground it stood on. Through `loot_dropped` like any find, so the pouch, the bag and the
 	# verdict need no second path.
+	# None before the player's 100th kill, and pure chance after it.
 	var boss := EnemyRoster.tier_of(lineup[index]) == EnemyRoster.Tier.BOSS
-	var promised := guarantee_unique and boss
-	if promised or (uniques_after != NO_UNIQUES and index >= uniques_after):
+	if uniques_after != NO_UNIQUES and index >= uniques_after:
 		var found := UniqueTable.roll(lineup[index], env, unique_rng, MapBuilder.level_of(cell),
-				drop_rate, promised)
+				drop_rate)
 		if found != null:
-			guarantee_unique = false
 			loot_dropped.emit(index, found)
 	# The Hourglass: a second back for anything but a boss, and never past what the fight began
 	# with, so the clock can be held but not banked. A run has no clock to give to.

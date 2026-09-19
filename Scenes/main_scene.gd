@@ -644,12 +644,11 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# What is worn and learned first: `arm` reads some of it, and two home pieces reshape the lineup.
 	fight.wear(inventory.effects())
 	fight.arm(inventory.stats())
-	# Until the player has seen their first drop, the first elite they meet is promised one.
-	fight.guarantee_elite = not inventory.first_elite_taken
+	# Until the Broken Sword has dropped, the first piece of gear is it, and an elite is promised it.
+	fight.first_sword = not inventory.first_sword_taken
+	fight.guarantee_elite = fight.first_sword
 	fight.orbs_after = maxi(0, OrbTable.FIRST_ORB_KILLS - inventory.kills)
 	fight.uniques_after = maxi(0, UniqueTable.FIRST_UNIQUE_KILLS - inventory.kills)
-	# Until the player has found their first unique, the first boss they bring down is promised one.
-	fight.guarantee_unique = inventory.uniques_found.is_empty()
 	ledger = FightLedger.new(inventory, inventory_path, farming)
 	ledger.tile_level = view.level_of(cell)
 	# Straight off the fight rather than through the scene: what a body was is the fight's business,
@@ -796,10 +795,10 @@ func _place_panel() -> void:
 
 ## A kill left something behind. Whether it goes straight into the bag or waits in the run's pouch is
 ## the ledger's rule (`FightLedger`); what is left to do here is show it.
-func _on_loot_dropped(index: int, item: Item) -> void:
+func _on_loot_dropped(_index: int, item: Item) -> void:
 	print("Dropped %s (%s, level %d, %d modifier(s))"
 			% [item.type, item.rarity_name(), item.level, item.mods.size()])
-	ledger.add_loot(item, _dropped_by_elite(index))
+	ledger.add_loot(item)
 	if not ledger.farming:
 		bag_page.refresh()
 	_refresh_bag_room()
@@ -822,9 +821,9 @@ func _on_xp_absorbed(amount: int) -> void:
 		_celebrate_level(_character.level)
 
 
-func _on_loot_autodiscarded(index: int, item: Item) -> void:
+func _on_loot_autodiscarded(_index: int, item: Item) -> void:
 	print("Autodiscarded %s (%s, level %d)" % [item.type, item.rarity_name(), item.level])
-	ledger.autodiscarded(_dropped_by_elite(index))
+	ledger.autodiscarded()
 	_pay_salvage(item)
 
 
@@ -855,14 +854,6 @@ func _refresh_bag_room() -> void:
 func _on_enemy_died(index: int) -> void:
 	if _combat != null and index < _combat.fight.lineup.size():
 		ledger.add_kill(_combat.fight.lineup[index])
-
-
-## Whether the enemy in slot `index` of the fight going on is an elite. Asked of the roster rather
-## than of the position: a farm run's elites come round forever and there is no last one.
-func _dropped_by_elite(index: int) -> bool:
-	if _combat == null or index >= _combat.fight.lineup.size():
-		return false
-	return EnemyRoster.tier_of(_combat.fight.lineup[index]) == EnemyRoster.Tier.ELITE
 
 
 ## Empties a farm run's pouch into the bag. Called on the way out of a run and on the way out of the

@@ -131,6 +131,13 @@ const KINDS := {
 		"power": {"damage": 2.2},
 		"tiers": ["Wooden Greatsword", "Iron Claymore", "Steel Zweihander", "Golden Greatsword"],
 	},
+	# The player's first find and nothing else's (FIRST_DROP): weight 0, so no roll ever deals one.
+	"broken_sword": {
+		"slot": "weapon", "weight": 0,
+		"stats": {"damage": 1},
+		"affixes": ["leech", "life_on_hit", "strength"],
+		"tiers": ["Broken Sword"],
+	},
 	# --- Offhand: the shield is the commonest thing to find in the hand, and the torch the rarest,
 	# because Sight is worth more than any number on it.
 	"shield": {
@@ -250,6 +257,9 @@ const KINDS := {
 ## which only the torch does.
 const TIER_MIN_LEVEL := [1, 4, 7, 10]
 const TIER_POWER := 0.2
+## The player's first piece of gear, whatever the roll said it was: `Encounter.first_sword` swaps it
+## in at level 1, keeping the rarity, so it is always 1 Damage and the modifiers that rarity carries.
+const FIRST_DROP := "Broken Sword"
 
 ## Every piece a monster can leave, keyed by name: the row every caller has always read -- `icon`,
 ## `weight`, `slot`, `stats`, `affixes` and the jewellery's `globals` -- plus the `kind` it belongs to

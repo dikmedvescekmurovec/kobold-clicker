@@ -26,9 +26,8 @@ var tile_level := -1
 
 var _inventory: Inventory
 var _path: String
-## Whether an elite has handed something over, which retires the promise of a first elite drop. Kept
-## here rather than read off a position: a run's elites come round forever.
-var _elite_dropped := false
+## Whether anything at all has dropped, which spends the Broken Sword and the elite's promise of it.
+var _gear_dropped := false
 var _banked := false
 
 
@@ -38,9 +37,9 @@ func _init(inventory: Inventory, save_path: String, is_farming := false) -> void
 	farming = is_farming
 
 
-func add_loot(item: Item, by_elite: bool) -> void:
+func add_loot(item: Item) -> void:
 	drops.append(item)
-	_elite_dropped = _elite_dropped or by_elite
+	_gear_dropped = true
 	if farming:
 		return
 	_put_in_bag(item)
@@ -84,11 +83,11 @@ func add_kill(enemy: String) -> void:
 
 
 ## A find the player's own rule threw away on sight. It is in neither the pouch nor the bag; all that
-## is left of it is that an elite did hand something over.
-func autodiscarded(by_elite: bool) -> void:
-	if not by_elite:
+## is left of it is that something dropped, which spends the Broken Sword.
+func autodiscarded() -> void:
+	if _gear_dropped:
 		return
-	_elite_dropped = true
+	_gear_dropped = true
 	if not farming:
 		_save()
 
@@ -160,6 +159,6 @@ func _add_xp(amount: int) -> void:
 
 
 func _save() -> void:
-	if _elite_dropped:
-		_inventory.first_elite_taken = true
+	if _gear_dropped:
+		_inventory.first_sword_taken = true
 	_inventory.save(_path)

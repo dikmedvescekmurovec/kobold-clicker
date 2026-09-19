@@ -35,8 +35,10 @@ const SAVE_PATH := "user://inventory.json"
 ## adds the towns the player has walked into, which a version 9 save simply has none of: an absent key
 ## and no town visited read the same, the way version 4's `autodiscard` did. 11 adds the uniques the
 ## player has ever found, the collection log's list; a version 10 save has found none. 12 adds what
-## the fortuneteller has sold the player (`fortunes`); a version 11 save has bought nothing.
-const VERSION := 12
+## the fortuneteller has sold the player (`fortunes`); a version 11 save has bought nothing. 13 adds
+## `first_sword_taken`; a version 12 save is already under way, so it reads as taken. The same version
+## drops `first_elite_taken`, which the sword's flag now does the work of; an older save's is ignored.
+const VERSION := 13
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -56,9 +58,9 @@ var items: Array[Item] = []
 ## player has, and the main scene never has to remember there are two files' worth of state.
 var equipment := Equipment.new()
 
-## Whether the one promised elite drop has been handed over. It lives in the save, so it is once for
-## the player rather than once per launch.
-var first_elite_taken := false
+## Whether the Broken Sword, the player's first piece of gear, has dropped. Until it has, the first
+## elite is promised a drop. It lives in the save, so it is once for the player.
+var first_sword_taken := false
 
 ## The first-time pop-ups already shown, and the buttons already pressed once, by id. The main scene
 ## decides what they mean; this only keeps them, so each is once for the player rather than per launch.
@@ -422,7 +424,7 @@ func save(path := SAVE_PATH) -> bool:
 	# Indented, so the save can be read and edited by a person.
 	return SafeFile.write(path, JSON.stringify({
 		"version": VERSION,
-		"first_elite_taken": first_elite_taken,
+		"first_sword_taken": first_sword_taken,
 		"tips": tips,
 		"gold": gold,
 		"kills": kills,
@@ -459,7 +461,7 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 		problem.append("it is not a save file")
 		return inventory
 	var data: Dictionary = reader.data
-	inventory.first_elite_taken = bool(data.get("first_elite_taken", false))
+	inventory.first_sword_taken = bool(data.get("first_sword_taken", true))
 	var seen: Variant = data.get("tips", [])
 	if typeof(seen) == TYPE_ARRAY:
 		for tip: Variant in seen:

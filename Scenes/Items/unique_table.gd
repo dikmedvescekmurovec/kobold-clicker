@@ -18,8 +18,7 @@ extends RefCounted
 
 const ROOT := "res://Assets/Gear/Unique/"
 
-## Lifetime kills before any unique can fall. The first boss is promised one regardless -- see
-## `Encounter.guarantee_unique`.
+## Lifetime kills before any unique can fall. After that it is chance alone: nothing is promised.
 const FIRST_UNIQUE_KILLS := 100
 
 ## How often a body is carrying one, by what it was, before its size and the player's drop rate: any
@@ -308,8 +307,8 @@ static func chance_for(enemy_name: String, drop_rate := 0.0) -> float:
 ## alone, as `LootTable.roll` draws its own, and the level is rolled under the same ceiling any drop's
 ## is -- with UNIQUE's high floor, so one is never found worthless.
 static func roll(enemy_name: String, env: String, rng: RandomNumberGenerator, tile_level := 1,
-		drop_rate := 0.0, guaranteed := false) -> Item:
-	if not guaranteed and rng.randf() >= chance_for(enemy_name, drop_rate):
+		drop_rate := 0.0) -> Item:
+	if rng.randf() >= chance_for(enemy_name, drop_rate):
 		return null
 	var pool := pool_for(env)
 	if pool.is_empty():
