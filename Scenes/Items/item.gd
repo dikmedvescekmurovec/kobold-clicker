@@ -35,6 +35,9 @@ var broken := false
 ## still its base piece, so its slot, its base stats and what a smith's upgrade does to them need no
 ## second answer.
 var unique := ""
+## The level an heirloom had when the world was last left behind, 0 for every piece that never was one.
+## The smith walks it back up to here without a chance of breaking it (`Blacksmith.break_chance`).
+var safe_level := 0
 
 
 ## A fresh drop: the piece, its rarity, its level, and however many modifiers that rarity carries.
@@ -84,6 +87,18 @@ static func scaled_stats(item_type: String, item_level: int) -> Dictionary:
 		raw *= LootTable.power_of(item_type, stat)
 		out[stat] = snappedf(raw, 0.1) if stat in LootTable.RATE_STATS else float(roundi(raw))
 	return out
+
+
+## An heirloom carried out of a world that has ended: level 1 again, with the base stats a fresh roll
+## there would carry and every modifier put where it stood in its band, at level 1's band. What it
+## was is remembered as `safe_level`, and the best it has ever been rather than the last, so a short
+## run never costs a piece what a long one earned. Rarity, locks, `broken` and `unique` do not move.
+func transcend() -> void:
+	safe_level = maxi(safe_level, level)
+	for mod in mods:
+		mod["value"] = ModifierTable.rescaled(str(mod["id"]), int(mod["value"]), level, 1)
+	level = 1
+	stats = scaled_stats(type, 1)
 
 
 ## What the panel calls it. A method rather than reading `type`, because a unique has a name of its
@@ -234,6 +249,8 @@ func to_dict() -> Dictionary:
 	# Written only where it is true, the way a lock is, so an ordinary piece's save does not change.
 	if not unique.is_empty():
 		out["unique"] = unique
+	if safe_level > 0:
+		out["safe_level"] = safe_level
 	return out
 
 
@@ -278,6 +295,7 @@ static func from_dict(data: Variant) -> Item:
 	item.level = maxi(1, int(saved.get("level", 1)))
 	# Absent is whole, which is what every save written before there was a smith to break one means.
 	item.broken = bool(saved.get("broken", false))
+	item.safe_level = maxi(0, int(saved.get("safe_level", 0)))
 	# A save written before pieces carried their own numbers has none to read, and what such a
 	# piece was worth when it was written is exactly the table unscaled -- so that is what it keeps.
 	var saved_stats: Variant = saved.get("stats", null)

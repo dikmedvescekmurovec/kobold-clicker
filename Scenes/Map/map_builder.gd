@@ -249,6 +249,12 @@ func is_wall(cell: Vector2i) -> bool:
 	return HexGrid.distance(CENTER, cell) == land_radius + 1
 
 
+## How many walls have come down in this world. What heirloom picks are paid against
+## (`Inventory.credit_walls`), and what the fortuneteller waits for before she offers the way out.
+func walls_fallen() -> int:
+	return maxi(0, (land_radius - START_LAND_RADIUS) / WALL_STEP)
+
+
 ## Whether `cell` lies past the wall, in the frozen wasteland: seen as snow, never walked on.
 func is_wasteland(cell: Vector2i) -> bool:
 	return HexGrid.distance(CENTER, cell) > land_radius + 1

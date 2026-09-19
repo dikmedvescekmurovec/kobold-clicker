@@ -52,6 +52,11 @@ const REROLL_GROWTH := 2.0
 ## monster lives is half a fight against the five and a half the bounty pays; a chest is two, against
 ## the boss's drop it points at; one unique shown is five; and the scour, which is bought once in a
 ## playthrough, is a hundred.
+##
+## **Transcending is the one that is not at the town's level:** it is bodies on the ground just
+## behind the first wall (`transcend_steps`), the same in every town and every world -- dear to whoever has
+## only just brought that wall down, and a purse the second ring's monsters fill for anyone who stays
+## to farm them. Two hundred fights' worth there; see `DESIGN.md` for the table it was set against.
 const FORTUNE_BODIES := {
 	"roads": 10.0,
 	"treasure": 20.0,
@@ -59,6 +64,7 @@ const FORTUNE_BODIES := {
 	"relic": 50.0,
 	"appraise": 5.0,
 	"scour": 1000.0,
+	"transcend": 2000.0,
 }
 
 ## What each rarity step multiplies a piece's price by, indexed by `ItemRarity.Rarity`'s own order:
@@ -141,7 +147,16 @@ static func reroll_price(town_cell: Vector2i, rerolls: int) -> float:
 static func fortune_price(reading: String, town_cell: Vector2i) -> float:
 	if not FORTUNE_BODIES.has(reading):
 		return 0.0
+	if reading == "transcend":
+		return maxf(1.0, roundf(Encounter.gold_at_steps(transcend_steps()) * float(FORTUNE_BODIES[reading])))
 	return maxf(1.0, roundf(gold_at_level(MapBuilder.level_of(town_cell)) * float(FORTUNE_BODIES[reading])))
+
+
+## How far from the middle of the map the ground is that transcending is priced on: one step past
+## the ring the first wall stood on. A function, because a `const` naming another class's const is
+## where the cycle checker bites.
+static func transcend_steps() -> int:
+	return MapBuilder.START_LAND_RADIUS + 2
 
 
 ## What a whole handful is worth, for the button that sells a level at once.

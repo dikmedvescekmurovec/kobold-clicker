@@ -66,6 +66,7 @@ func _run() -> void:
 	_check(await _test_collection() == true, "collection log tests ran to the end")
 	_check(await _test_character_page() == true, "character page tests ran to the end")
 	_check(await _test_item_generator() == true, "item generator tests ran to the end")
+	_check(await _test_heirlooms() == true, "heirloom tests ran to the end")
 	_clear_save()
 	_report("inventory")
 
@@ -1609,6 +1610,239 @@ func _texts(node: Node) -> PackedStringArray:
 ## in. A square's own position is its grid's, so its section has to be added back on.
 func _square_spot(slot: Control) -> Vector2:
 	return (slot.get_parent() as Control).position + slot.position + slot.size / 2.0
+
+
+## The heirlooms: the second stash and doll, how a piece gets there, what the two dolls add up to,
+## which uniques count which side, what is left when the world is, and the page they are kept on.
+func _test_heirlooms() -> bool:
+	_clear_save()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var wear := func(side: Inventory, piece: Item) -> void:
+		side.items.append(piece)
+		_check(side.equip(piece, side.equipment.sockets_for(piece)[0]), "%s goes on" % piece.display_name())
+	var ring_of := func(percent: int) -> Item:
+		var ring := Item.new()
+		ring.type = "Gold Ring"
+		ring.stats = Item.scaled_stats(ring.type, 1)
+		ring.mods = [{"id": "global_increased_damage", "value": percent}]
+		return ring
+
+	# A modifier carried to another level keeps its place in the band.
+	for id: String in ["increased_damage", "added_damage", "global_increased_damage"]:
+		var deep := ModifierTable.band_for(id, 20)
+		var shallow := ModifierTable.band_for(id, 1)
+		_check(ModifierTable.rescaled(id, deep[0], 20, 1) == shallow[0]
+				and ModifierTable.rescaled(id, deep[1], 20, 1) == shallow[1],
+				"%s: the ends of one band are the ends of the other" % id)
+		_check(ModifierTable.rescaled(id, deep[0] - 5, 20, 1) == shallow[0]
+				and ModifierTable.rescaled(id, deep[1] * 2, 20, 1) == shallow[1],
+				"%s: a value outside its band is held to it" % id)
+		var middle := ModifierTable.rescaled(id, (int(deep[0]) + int(deep[1])) / 2, 20, 1)
+		_check(middle >= shallow[0] and middle <= shallow[1], "%s: the middle stays inside (%d)" % [id, middle])
+
+	# What the end of a world does to one piece.
+	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.ELITE, rng, 12)
+	var ids := sword.mods.map(func(mod: Dictionary) -> String: return mod["id"])
+	sword.mods[0]["locked"] = true
+	sword.transcend()
+	_check(sword.level == 1 and sword.safe_level == 12 and sword.stats == Item.scaled_stats("Wooden Sword", 1),
+			"level 1, the base stats of a level 1, and 12 remembered")
+	_check(sword.mods.map(func(mod: Dictionary) -> String: return mod["id"]) == ids
+			and sword.rarity == ItemRarity.Rarity.ELITE and not sword.locked_mod().is_empty(),
+			"the same lines, the same rarity, the same lock")
+	for mod in sword.mods:
+		var band := ModifierTable.band_for(mod["id"], 1)
+		_check(mod["value"] >= band[0] and mod["value"] <= band[1],
+				"%s is back in level 1's band (%d)" % [mod["id"], mod["value"]])
+	sword.level = 4
+	sword.transcend()
+	_check(sword.safe_level == 12, "a short run takes nothing off what it remembers")
+	_check(Item.from_dict(sword.to_dict()).safe_level == 12 and not _piece(ItemRarity.Rarity.COMMON, 1).to_dict().has("safe_level"),
+			"it is saved with the piece, and only where there is one")
+
+	# Picks: a wall pays once.
+	var bag := Inventory.new()
+	_check(not bag.credit_walls(0) and bag.heirloom_picks == 0, "no wall, no pick")
+	_check(bag.credit_walls(2) and bag.heirloom_picks == 2, "two walls down is two picks, as an old save finds")
+	_check(not bag.credit_walls(2) and bag.heirloom_picks == 2, "asked again, nothing more")
+	_check(bag.credit_walls(3) and bag.heirloom_picks == 3, "and the next wall pays one")
+
+	# Making one: from the bag, or straight off the doll with the bag full, and never a broken piece.
+	var from_bag := _piece(ItemRarity.Rarity.RARE, 7)
+	var worn := _piece(ItemRarity.Rarity.RARE, 9)
+	var ruined := _piece(ItemRarity.Rarity.RARE, 3)
+	ruined.broken = true
+	wear.call(bag, worn)
+	bag.items.append(from_bag)
+	bag.items.append(ruined)
+	_check(not bag.can_make_heirloom(ruined), "a broken piece is refused")
+	_check(not bag.can_make_heirloom(_piece(ItemRarity.Rarity.RARE, 1)), "and so is a piece the player does not hold")
+	_check(bag.make_heirloom(from_bag) and not bag.items.has(from_bag) and bag.stash().items.has(from_bag),
+			"a bag piece leaves the bag for the stash")
+	while not bag.is_full():
+		bag.items.append(_piece(ItemRarity.Rarity.COMMON, 1))
+	_check(bag.make_heirloom(worn) and bag.equipment.worn.is_empty() and bag.stash().items.has(worn)
+			and bag.total() == Inventory.CAPACITY, "a worn piece comes off the doll past a full bag, which is left alone")
+	_check(bag.heirloom_picks == 1 and worn.level == 9, "two picks spent, and nothing about the piece has moved")
+	bag.heirloom_picks = 0
+	_check(not bag.make_heirloom(bag.items[0]), "no pick, no heirloom")
+
+	# The save, and a file from before there were heirlooms.
+	_check(bag.stash().equip(worn, Equipment.Socket.WEAPON), "an heirloom goes on the heirlooms' doll")
+	bag.heirloom_picks = 4
+	_check(bag.save(TEST_PATH), "it saves")
+	var back := Inventory.load_from(TEST_PATH)
+	_check(back.stash().total() == 1 and back.stash().items[0].level == 7
+			and back.stash().items[0].rarity == ItemRarity.Rarity.RARE, "the stash comes back")
+	_check(back.stash().equipment.items().size() == 1 and back.stash().equipment.items()[0].level == 9,
+			"and so does the heirlooms' doll")
+	_check(back.heirloom_picks == 4 and back.walls_credited == 3, "with the picks and the walls paid for")
+	var old := FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	old.store_string(JSON.stringify({"version": 13, "items": [], "gold": 5}))
+	old.close()
+	var before := Inventory.load_from(TEST_PATH)
+	_check(before.stash().total() == 0 and before.heirloom_picks == 0 and before.walls_credited == 0,
+			"a version 13 save has none, and no wall paid for")
+
+	# Two dolls. Flats add; each doll's global percents are a multiplier of their own.
+	var both := Inventory.new()
+	wear.call(both, _piece(ItemRarity.Rarity.COMMON, 5))
+	var one_sword: float = both.stats()["damage"]
+	wear.call(both.stash(), _piece(ItemRarity.Rarity.COMMON, 5))
+	_check(is_equal_approx(both.stats()["damage"], one_sword * 2.0), "a sword on each doll is both swords")
+	wear.call(both, ring_of.call(20))
+	wear.call(both.stash(), ring_of.call(20))
+	_check(is_equal_approx(both.stats()["damage"], one_sword * 2.0 * 1.2 * 1.2),
+			"20%% on each doll is x1.44 (%s)" % both.stats()["damage"])
+	var one_doll := Inventory.new()
+	wear.call(one_doll, _piece(ItemRarity.Rarity.COMMON, 5))
+	wear.call(one_doll, ring_of.call(20))
+	wear.call(one_doll, ring_of.call(20))
+	_check(is_equal_approx(one_doll.stats()["damage"], one_sword * 1.4), "where two on one doll are x1.4")
+	_check(is_equal_approx(both.equipment.totals()["damage"], one_sword * 1.2),
+			"and a doll asked alone still answers for itself alone")
+
+	# A count is its own side's.
+	var counted := Inventory.new()
+	wear.call(counted, _piece(ItemRarity.Rarity.COMMON, 1))
+	wear.call(counted.stash(), Item.rolled_unique("ascetics_cord", rng, 1))
+	_check(counted.stats()["bare_sockets"] == Equipment.NAMES.size() - 1,
+			"the cord on the heirlooms' doll counts that doll's bare places (%d)" % counted.stats()["bare_sockets"])
+	wear.call(counted, Item.rolled_unique("ascetics_cord", rng, 1))
+	_check(counted.stats()["bare_sockets"] == (Equipment.NAMES.size() - 1) + (Equipment.NAMES.size() - 2),
+			"and one on each counts both")
+	wear.call(counted.stash(), Item.rolled_unique("packmule", rng, 1))
+	counted.items.append(_piece(ItemRarity.Rarity.COMMON, 1))
+	counted.items.append(_piece(ItemRarity.Rarity.COMMON, 1))
+	counted.stash().items.append(_piece(ItemRarity.Rarity.COMMON, 1))
+	_check(counted.stats()["bag_pieces"] == 1, "the harness on the heirlooms' doll counts the stash and not the bag")
+
+	# A stat is the player's: the helm on one doll is paid for armour on the other.
+	var spiked := Inventory.new()
+	wear.call(spiked, _piece(ItemRarity.Rarity.COMMON, 5))
+	var bare_damage: float = spiked.stats()["damage"]
+	var helm := Item.rolled_unique("spiked_helm", rng, 5)
+	helm.stats["armor"] = 0.0
+	helm.mods.clear()
+	wear.call(spiked.stash(), helm)
+	var plate := Item.new()
+	plate.type = "Wooden Armor"
+	plate.stats = {"armor": 1000.0}
+	wear.call(spiked, plate)
+	_check(is_equal_approx(spiked.stats()["damage"], bare_damage + 1000.0 * Inventory.SPIKES_SHARE),
+			"the helm among the heirlooms reads the ordinary doll's armour (%s)" % spiked.stats()["damage"])
+
+	# A set is made inside one doll, and the sack pays from either.
+	var split := Inventory.new()
+	wear.call(split, Item.rolled_unique("meadowstriders", rng, 1))
+	wear.call(split.stash(), Item.rolled_unique("rimeplate", rng, 1))
+	_check(split.effects().size() == 4 and not ("grazing:ice" in split.effects()),
+			"a home piece on each doll is two lone pieces (%s)" % [split.effects()])
+	var junk := _piece(ItemRarity.Rarity.RARE, 8)
+	_check(split.salvage(junk) == 0.0, "no sack, no salvage")
+	wear.call(split.stash(), Item.rolled_unique("rag_and_bone_sack", rng, 1))
+	_check(split.salvage(junk) > 0.0, "the sack among the heirlooms pays for what the bag throws away")
+
+	# What is left when the world is.
+	var leaving := Inventory.new()
+	leaving.gold = 5000.0
+	leaving.level = 20
+	leaving.kills = 900
+	leaving.tips = ["first_item"]
+	leaving.note_unique("spiked_helm")
+	leaving.add_orb(OrbTable.orbs()[0], 3)
+	leaving.heirloom_picks = 2
+	leaving.walls_credited = 2
+	leaving.items.append(_piece(ItemRarity.Rarity.ELITE, 20))
+	var held := _piece(ItemRarity.Rarity.RARE, 15)
+	var on_doll := _piece(ItemRarity.Rarity.RARE, 18)
+	leaving.stash().items.append(held)
+	wear.call(leaving.stash(), on_doll)
+	var next := leaving.transcended()
+	_check(next.gold == 0.0 and next.level == 1 and next.total() == 0 and next.total_orbs() == 0
+			and next.equipment.worn.is_empty() and next.walls_credited == 0, "the world's things stay in it")
+	_check(next.kills == 900 and next.tips == ["first_item"] and next.uniques_found == ["spiked_helm"]
+			and next.first_sword_taken and next.heirloom_picks == 2, "what the player knows goes along")
+	_check(next.stash().total() == 1 and next.stash().items[0].level == 1 and next.stash().items[0].safe_level == 15,
+			"the stash goes along, at level 1")
+	var still_on: Item = next.stash().equipment.items()[0]
+	_check(still_on.level == 1 and still_on.safe_level == 18, "and the heirlooms' doll stays dressed")
+	_check(held.level == 15 and on_doll.level == 18, "the inventory that was left is untouched, should the write fail")
+
+	# The page: no marks on a heading, no Sell, a Discard that always asks, and Make heirloom in the bag.
+	var owner := Inventory.new()
+	owner.heirloom_picks = 1
+	owner.tips.append(BagPage.SKIP_CONFIRM + "discard_heirloom")
+	var treasure := _piece(ItemRarity.Rarity.RARE, 6)
+	owner.items.append(treasure)
+	var bag_page := BagPage.new(owner, TEST_PATH, 2.0)
+	root.add_child(bag_page)
+	await process_frame
+	bag_page._select_item(0)
+	var make := _deep_button(bag_page, "Make heirloom")
+	_check(make != null and not make.disabled, "an open bag piece can be made an heirloom while a pick is left")
+	make.pressed.emit()
+	_check(owner.items.has(treasure) and bag_page._confirm != null, "which asks first")
+	_deep_button(bag_page._confirm, "Keep").pressed.emit()
+	_check(owner.stash().items.has(treasure) and owner.heirloom_picks == 0, "and Keep does it")
+	_check(Inventory.load_from(TEST_PATH).stash().total() == 1, "and saves it")
+	bag_page.queue_free()
+	var page := BagPage.new(owner, TEST_PATH, 2.0, true)
+	root.add_child(page)
+	await process_frame
+	_check(_by_tooltip(page, "Auto") == null and _by_tooltip(page, "Throw away the") == null,
+			"an heirloom's level has no Auto and no bin")
+	page.shop(PackedStringArray([TownServices.GEAR]), Vector2i(3, 0))
+	page._select_item(0)
+	_check(_deep_button(page, "Sell") == null and _deep_button(page, "Discard") != null,
+			"no counter buys one: Discard stays Discard")
+	_check(_deep_button(page, "Make heirloom") == null, "and an heirloom is not made one twice")
+	_deep_button(page, "Discard").pressed.emit()
+	_check(owner.stash().items.has(treasure) and page._confirm != null,
+			"throwing one away asks, even with the question ticked away")
+	_deep_button(page._confirm, "Discard").pressed.emit()
+	_check(owner.stash().total() == 0 and owner.heirloom_picks == 0, "gone, and the pick does not come back")
+	page.queue_free()
+	await process_frame
+	return true
+
+
+## The first live Button anywhere under `parent` whose face starts with `text`, or null. Pages are
+## built fresh on every refresh, so a test finds its button rather than holding one.
+func _deep_button(parent: Node, text: String) -> Button:
+	for button: Button in parent.find_children("", "Button", true, false):
+		if button.text.begins_with(text) and not button.is_queued_for_deletion():
+			return button
+	return null
+
+
+## The same, by what its tooltip starts with: a level's marks have no words on them.
+func _by_tooltip(parent: Node, text: String) -> Button:
+	for button: Button in parent.find_children("", "Button", true, false):
+		if button.tooltip_text.begins_with(text) and not button.is_queued_for_deletion():
+			return button
+	return null
 
 
 ## An item built to order, for the tests that care about where a piece sorts rather than what it

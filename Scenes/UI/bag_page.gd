@@ -85,7 +85,15 @@ const DOLL_SOCKETS := {
 	Equipment.Socket.RING_RIGHT: Vector2(38, 58),
 }
 
+## Whose grid and whose doll this page is: the player's inventory, or -- on the heirlooms' page --
+## the stash inside it (`Inventory.stash`), which is an inventory too and so needs no second page.
 var inventory: Inventory
+## The player's inventory whichever page this is: the purse, the orbs, the tips, the picks, and the
+## one thing that is ever saved. The same object as `inventory` on the ordinary bag.
+var _purse: Inventory
+## Whether this is the heirlooms' page. An heirloom is not sold, not thrown away by the level and not
+## filtered as it arrives; thrown away one at a time it is, and that always asks first.
+var _heirlooms := false
 var _save_path: String
 var _ui_scale: float
 
@@ -153,8 +161,10 @@ var _armed := "":
 		held_changed.emit(orb)
 
 
-func _init(player_inventory: Inventory, save_path: String, ui_scale: float) -> void:
-	inventory = player_inventory
+func _init(player_inventory: Inventory, save_path: String, ui_scale: float, heirlooms := false) -> void:
+	_purse = player_inventory
+	_heirlooms = heirlooms
+	inventory = player_inventory.stash() if heirlooms else player_inventory
 	_save_path = save_path
 	_ui_scale = ui_scale
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -162,7 +172,8 @@ func _init(player_inventory: Inventory, save_path: String, ui_scale: float) -> v
 
 
 func _ready() -> void:
-	_panel = UITheme.titled_panel("Items", "Close the item panel", closed.emit)
+	_panel = UITheme.titled_panel("Heirlooms" if _heirlooms else "Items",
+			"Close the heirlooms" if _heirlooms else "Close the item panel", closed.emit)
 	_panel.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_panel)
 	var rows := UITheme.body_of(_panel)
@@ -264,11 +275,14 @@ func offer(item: Item) -> void:
 
 ## Whether the town the bag is standing in buys this. False everywhere outside one.
 func _buys(service: String) -> bool:
+	# No counter buys an heirloom, so beside one Discard stays Discard and a level has no coins.
+	if _heirlooms and service == TownServices.GEAR:
+		return false
 	return service in _services
 
 
 func refresh_gold() -> void:
-	_gold.text = BigNumber.format(inventory.gold)
+	_gold.text = BigNumber.format(_purse.gold)
 
 
 ## The bag stretched to the window's height, and the sheet centred against its right edge.
@@ -331,7 +345,8 @@ func refresh() -> void:
 			slot.set_meta("bag_index", i)
 			_dim_for_orb(slot, inventory.items[i])
 			grid.add_child(slot)
-	_count.text = "%d / %d" % [inventory.total(), Inventory.CAPACITY]
+	_count.text = (str(inventory.total()) if _heirlooms
+			else "%d / %d" % [inventory.total(), Inventory.CAPACITY])
 	_count.add_theme_color_override("font_color", Palette.RUST if inventory.is_full() else Palette.SLATE)
 	refresh_gold()
 	refresh_orbs()
@@ -356,6 +371,9 @@ func _section_heading(level: int) -> HBoxContainer:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(title)
+	# An heirloom never arrives by dropping and is never thrown away by the handful: no marks.
+	if _heirlooms:
+		return row
 
 	var auto := UITheme.button("", "BrownIconButton",
 			"Auto is on: what is found at level %d is thrown away. Press to stop" % level if ruled
@@ -396,10 +414,11 @@ func _section_heading(level: int) -> HBoxContainer:
 
 ## Asks before `deed` is done, over everything else on the page, unless the player has ticked this
 ## question's "Don't show this again" -- which is kept per question (`id`) in `inventory.tips`, the
-## save's list of what the player has already been told, and only a Yes writes it.
+## save's list of what the player has already been told, and only a Yes writes it. `can_skip` false is
+## a question that is asked every time and offers no tick: an heirloom is runs of work.
 func _ask(id: String, title: String, question: String, verb: String, variation: String,
-		deed: Callable) -> void:
-	if SKIP_CONFIRM + id in inventory.tips:
+		deed: Callable, can_skip := true) -> void:
+	if can_skip and SKIP_CONFIRM + id in _purse.tips:
 		deed.call()
 		return
 	_close_confirm()
@@ -426,9 +445,11 @@ func _ask(id: String, title: String, question: String, verb: String, variation: 
 	buttons.get_child(0).pressed.connect(_close_confirm)
 	buttons.get_child(1).pressed.connect(func() -> void:
 		if (skip.get_node(TICK_NAME) as Button).button_pressed:
-			inventory.tips.append(SKIP_CONFIRM + id)   # written by the deed's own save
+			_purse.tips.append(SKIP_CONFIRM + id)   # written by the deed's own save
 		_close_confirm()
 		deed.call())
+	# Built either way, so the Yes above has a tick to read; only shown where it may be ticked.
+	skip.visible = can_skip
 	body.add_child(skip)
 	# Twice: a wrapped label only knows how tall it is once it has been laid out once.
 	_place_confirm()
@@ -510,7 +531,7 @@ static func check_box(text: String) -> HBoxContainer:
 ## Touches nothing already held: that is Clear's job.
 func _on_autodiscard_toggled(on: bool, level: int) -> void:
 	inventory.set_autodiscard(level, on)
-	inventory.save(_save_path)
+	_purse.save(_save_path)
 	_select_item(-1)
 
 
@@ -519,8 +540,8 @@ func _on_clear_level_pressed(level: int) -> void:
 	print("Discarded %d item(s) at level %d" % [gone.size(), level])
 	# The Rag and Bone Sack pays for what is thrown away, which is nothing unless it is worn.
 	for item: Item in gone:
-		inventory.gold += inventory.salvage(item)
-	inventory.save(_save_path)
+		_purse.gold += _purse.salvage(item)
+	_purse.save(_save_path)
 	_select_item(-1)
 
 
@@ -529,10 +550,10 @@ func _on_clear_level_pressed(level: int) -> void:
 func _on_sell_level_pressed(level: int) -> void:
 	var gone := inventory.discard_level(level)
 	var paid := TownPrices.sell_total(gone)
-	inventory.gold += paid
+	_purse.gold += paid
 	print("Sold %d item(s) at level %d for %s gold"
 			% [gone.size(), level, BigNumber.format(paid)])
-	inventory.save(_save_path)
+	_purse.save(_save_path)
 	_select_item(-1)
 
 
@@ -624,9 +645,17 @@ func _show_item(index: int) -> void:
 		actions.add_child(sell)
 	else:
 		var discard := UITheme.button("Discard", "LightDangerButton", "Throw this away for good")
-		discard.pressed.connect(_on_discard_pressed.bind(item))
+		# An heirloom is asked about every time, with no tick to stop the asking.
+		if _heirlooms:
+			discard.pressed.connect(_ask.bind("discard_heirloom", "Throw away",
+					"Throw away %s for good? The choice that made it an heirloom does not come back."
+					% item.display_name(), "Discard", "LightDangerButton",
+					_on_discard_pressed.bind(item), false))
+		else:
+			discard.pressed.connect(_on_discard_pressed.bind(item))
 		discard.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		actions.add_child(discard)
+	_heirloom_row(item)
 
 
 ## A worn piece's block. No Discard: the cap is the bag's alone, so nothing pushes the player to
@@ -636,6 +665,31 @@ func _show_worn(socket: Equipment.Socket) -> void:
 	var unequip := _unequip_button(_on_unequip_pressed.bind(socket))
 	unequip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_action_row(_select_socket.bind(-1)).add_child(unequip)
+	_heirloom_row(inventory.equipment.item_at(socket))
+
+
+## Under an open piece's buttons while a wall has left the player a choice to spend: the button that
+## makes this piece an heirloom, bag piece or worn. A row of its own, because the row above is full.
+## Not at a counter, where the page is for trading, and not on the heirlooms' own page.
+func _heirloom_row(item: Item) -> void:
+	if _heirlooms or not _services.is_empty() or _purse.heirloom_picks <= 0:
+		return
+	var left := _purse.heirloom_picks
+	var make := UITheme.button("Make heirloom", "LightButton", Blacksmith.BROKEN if item.broken
+			else "Keep this when the world is left behind. %d choice%s left"
+			% [left, "" if left == 1 else "s"])
+	make.disabled = not _purse.can_make_heirloom(item)
+	make.pressed.connect(_ask.bind("heirloom", "Heirloom",
+			"Make %s an heirloom? It leaves your bag for the heirlooms, for good." % item.display_name(),
+			"Keep", "LightButton", _on_heirloom_pressed.bind(item), false))
+	_detail.add_child(make)
+
+
+func _on_heirloom_pressed(item: Item) -> void:
+	if _purse.make_heirloom(item):
+		print("Made %s (%s, level %d) an heirloom" % [item.display_name(), item.rarity_name(), item.level])
+		_purse.save(_save_path)
+	_select_item(-1)
 
 
 ## The lines go inside the scroll and the buttons outside it, so Equip is never scrolled away.
@@ -675,21 +729,21 @@ func _unequip_button(action: Callable) -> Button:
 
 func _on_equip_pressed(item: Item, socket: Equipment.Socket) -> void:
 	if inventory.equip(item, socket):
-		inventory.save(_save_path)
+		_purse.save(_save_path)
 	_select_item(-1)
 
 
 func _on_unequip_pressed(socket: Equipment.Socket) -> void:
 	if inventory.unequip(socket):
-		inventory.save(_save_path)
+		_purse.save(_save_path)
 	_select_socket(-1)
 
 
 func _on_discard_pressed(item: Item) -> void:
 	if inventory.remove(item):
 		print("Discarded %s (%s, level %d)" % [item.type, item.rarity_name(), item.level])
-		inventory.gold += inventory.salvage(item)
-		inventory.save(_save_path)
+		_purse.gold += _purse.salvage(item)
+		_purse.save(_save_path)
 	_select_item(-1)
 
 
@@ -698,10 +752,10 @@ func _on_discard_pressed(item: Item) -> void:
 func _on_sell_pressed(item: Item) -> void:
 	var price := TownPrices.sell_price(item)
 	if inventory.remove(item):
-		inventory.gold += price
+		_purse.gold += price
 		print("Sold %s (%s, level %d) for %s gold"
 				% [item.type, item.rarity_name(), item.level, BigNumber.format(price)])
-		inventory.save(_save_path)
+		_purse.save(_save_path)
 	_select_item(-1)
 
 
@@ -894,7 +948,7 @@ func _on_fold_pressed() -> void:
 ## Keeps the judged piece open, found again by identity: the piece coming back moves every index.
 func _on_compare_unequip_pressed(item: Item, socket: Equipment.Socket) -> void:
 	if inventory.unequip(socket):
-		inventory.save(_save_path)
+		_purse.save(_save_path)
 	_select_item(inventory.items.find(item))
 
 
@@ -910,12 +964,12 @@ func _open_piece() -> Item:
 ## Every orb held, lit; with a piece open, only the ones that can do something to it stay lit.
 func refresh_orbs() -> void:
 	# No tray until the first orb; once seen it stays, even with every orb spent.
-	_orb_tray.visible = inventory.total_orbs() > 0 or "first_orb" in inventory.tips
+	_orb_tray.visible = _purse.total_orbs() > 0 or "first_orb" in _purse.tips
 	_orb_rule.visible = _orb_tray.visible
 	UITheme.clear(_orb_tray)
 	var against := _open_piece()
 	for orb: String in OrbTable.orbs():
-		var slot := OrbSlot.make(orb, inventory.orb_count(orb),
+		var slot := OrbSlot.make(orb, _purse.orb_count(orb),
 				against == null or OrbTable.can_apply(orb, against), orb == _armed)
 		slot.pressed.connect(_on_orb_pressed)
 		slot.hovered.connect(_on_orb_hovered.bind(slot))
@@ -929,7 +983,7 @@ func refresh_orbs() -> void:
 ## survives: crafting adds nothing to the bag and takes nothing out.
 func _on_orb_pressed(orb: String) -> void:
 	var item := _open_piece()
-	if inventory.orb_count(orb) <= 0:
+	if _purse.orb_count(orb) <= 0:
 		return
 	# With a vendor beside the bag and no piece open, the square is a sale; with a piece open it is a
 	# craft, exactly as it always was. So standing in a town never costs the player the crafting tray,
@@ -959,10 +1013,10 @@ func _craft(orb: String, item: Item, written := Callable()) -> void:
 		return
 	if written.is_valid():
 		written.call()
-	inventory.spend_orb(orb)
-	inventory.save(_save_path)
+	_purse.spend_orb(orb)
+	_purse.save(_save_path)
 	print("Spent %s on %s (%s, level %d)" % [orb, item.display_name(), item.rarity_name(), item.level])
-	if inventory.orb_count(_armed) <= 0:
+	if _purse.orb_count(_armed) <= 0:
 		_armed = ""
 	refresh()
 	if _open_piece() == null:
@@ -980,11 +1034,11 @@ func _dim_for_orb(slot: Control, item: Item) -> void:
 ## player does not have.
 func _sell_orb(orb: String) -> void:
 	var price := TownPrices.orb_sell_price(orb, _town_cell)
-	if not inventory.spend_orb(orb):
+	if not _purse.spend_orb(orb):
 		return
-	inventory.gold += price
+	_purse.gold += price
 	print("Sold %s for %s gold" % [orb, BigNumber.format(price)])
-	inventory.save(_save_path)
+	_purse.save(_save_path)
 	refresh()
 
 
@@ -996,7 +1050,7 @@ func _orb_price(orb: String) -> float:
 
 ## Placed now and again deferred: the first pass measures labels that have not laid out yet.
 func _on_orb_hovered(orb: String, slot: OrbSlot) -> void:
-	_orb_card.fill(orb, inventory.orb_count(orb), _open_piece(), _orb_price(orb))
+	_orb_card.fill(orb, _purse.orb_count(orb), _open_piece(), _orb_price(orb))
 	_orb_card.show()
 	_place_orb_card(slot.get_global_rect())
 	_place_orb_card.call_deferred(slot.get_global_rect())

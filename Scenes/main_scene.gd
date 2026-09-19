@@ -35,6 +35,8 @@ const SCROLL_ICON := "res://Assets/UI/ui_icon_scroll.png"
 ## And a fourth that is about the game rather than the player: the settings, behind a cog.
 const COG_ICON := "res://Assets/UI/ui_icon_cog.png"
 const TROPHY_ICON := "res://Assets/UI/ui_icon_trophy.png"
+## The heirlooms'. A stand-in from the pack until they have a mark of their own.
+const CROWN_ICON := "res://Assets/UI/ui_icon_crown.png"
 ## The air between one and the next, in panel pixels.
 const CORNER_GAP := 4.0
 ## The panel that stands in for the map when its save cannot be read: how wide it is allowed to be
@@ -78,6 +80,9 @@ var _panel: VBoxContainer
 ## The left-hand pages and the corner buttons that open them. They share the edge, so only one page is
 ## ever up: opening any of them closes the rest.
 var bag_page: BagPage
+## The heirlooms: a second bag page over `inventory.stash()`, with its own grid and its own doll. The
+## one left-hand page that can also stand at a town's counter, in the bag's place (`_counter_page`).
+var heirloom_page: BagPage
 var skills_page: SkillsPage
 ## The bounties taken on, everywhere: a left-hand page like the other two, so progress and the walk to
 ## the monster are readable away from the town that posted the work.
@@ -95,6 +100,12 @@ var _skills_button: Button
 var _bounty_button: Button
 var _settings_button: Button
 var _collection_button: Button
+## There once a wall has left a choice to spend or an heirloom is held, and the one corner button a
+## town leaves standing: pressed there it swaps the bag and the heirlooms at the counter.
+var _heirloom_button: Button
+## The card beside the square under the cursor. Kept so its Alt comparison can follow the doll of
+## whichever bag page is up.
+var _item_card: ItemCard
 ## The player in the top-left corner, over the map and over a fight alike.
 var _character: CharacterPanel
 
@@ -117,6 +128,7 @@ const TIPS := [
 	["first_chart", "Claim the Land", "Foes stand between you and this land, and the clock at the top of the screen is ticking. Strike them all down before it runs out and the tile is yours. Fall short and nothing is lost, so catch your breath and try again."],
 	["first_town", "Gates Stand Open", "People live here, and they will deal with a wanderer. Press Enter town on the panel at the right to step inside, where traders buy what you have gathered and sell what they have found. A board by the gate posts work for anyone willing to hunt, and a fortuneteller sells what she sees."],
 	["first_unique", "A Legend Found", "This is no ordinary find. A unique piece bends the rules of a fight, so read what it does before you wear it. The trophy in the top-left corner keeps count of every one you have found. A fortuneteller can say what the rest are and where they hide."],
+	["first_heirloom", "Something to Keep", "The wall is down, and it has left you a choice. Open a piece in your bag or on your character and press Make heirloom. Heirlooms wait behind the crown in the top-left corner and are worn as well as everything else. They alone go with you if you ever leave this world."],
 	["first_bounty", "Names on the Board", "The board names creatures the town wants gone. Press Accept on a notice and every such creature you strike down counts towards it, one notice at a time. The scroll in the top-left corner keeps it wherever you go, and the fortuneteller in town can say where that creature lives."],
 ]
 const FLASH_BRIGHT := Color(1.6, 1.6, 1.6)
@@ -183,7 +195,12 @@ func _ready() -> void:
 	map.dragged.connect(_on_map_dragged)
 	map.cell_aimed.connect(_on_cell_aimed)
 	view.arrived.connect(_on_player_arrived)
+	# Before the interface, which is what decides whether the crown stands in the corner.
+	_credit_walls()
 	_build_ui()
+	# A save from before there were heirlooms has just been paid for its walls: say what that means.
+	if inventory.heirloom_picks > 0:
+		_check_tips()
 	camera.zoom = Vector2(zoom, zoom)
 	camera.position = map.ground_layer.map_to_local(view.player_cell)
 	# A child of the map, so it hides and stops with it while a fight is on.
@@ -316,6 +333,8 @@ func _build_ui() -> void:
 	_skip_button.pressed.connect(func() -> void:
 		print("Dev: charted %s, showing %d tile(s) behind it" % [map.selected_cell,
 				view.chart(map.selected_cell, _sight())])
+		_credit_walls()
+		_check_tips()
 		_update_buttons())
 	buttons.add_child(_skip_button)
 	_move_button =UITheme.button("Move here", "LightButton", "Walk to the selected tile")
@@ -382,6 +401,9 @@ func _build_pages(layer: CanvasLayer) -> void:
 	_collection_button = UITheme.icon_button(load(TROPHY_ICON), "The uniques you have found", ui_scale)
 	_collection_button.pressed.connect(_on_collection_pressed)
 	layer.add_child(_collection_button)
+	_heirloom_button = UITheme.icon_button(load(CROWN_ICON), "What you would take to another world", ui_scale)
+	_heirloom_button.pressed.connect(_on_heirlooms_pressed)
+	layer.add_child(_heirloom_button)
 	_character_button = Button.new()
 	_character_button.focus_mode = Control.FOCUS_NONE
 	for state: String in ["normal", "hover", "pressed", "disabled"]:
@@ -393,6 +415,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 	collection_page = CollectionPage.new(inventory, view, ui_scale)
 	skills_page = SkillsPage.new(inventory, inventory_path, ui_scale)
 	bag_page = BagPage.new(inventory, inventory_path, ui_scale)
+	heirloom_page = BagPage.new(inventory, inventory_path, ui_scale, true)
 	bounty_page = BountyList.new(inventory, view, inventory_path, ui_scale)
 	bounty_page.show_cell.connect(_on_show_cell)
 	settings_page = SettingsPage.new(ui_scale)
@@ -411,31 +434,38 @@ func _build_pages(layer: CanvasLayer) -> void:
 	town_page.tab_changed.connect(_on_town_tab_changed)
 	town_page.chest_bought.connect(func(_cell: Vector2i) -> void: _sync_chest())
 	town_page.scour_pressed.connect(_on_scour_pressed)
+	town_page.transcend_pressed.connect(_on_transcend_pressed)
 	# A bounty given up on the journal frees the board standing open on the other edge.
 	bounty_page.abandoned.connect(town_page.redraw)
 	# What the counter has open goes straight to the bag: the comparison points at what wearing it
 	# would replace, and a purchase reaches the purse and the grid by the same redraw. Back the other
 	# way, the counter redraws around whatever the bag has open, so a piece sold to make room unlocks
 	# the Buy that was greyed out for a full bag.
-	town_page.offer_changed.connect(bag_page.offer)
-	bag_page.selection_changed.connect(town_page.bag_changed)
 	# An orb in the bag's hand works on a shelf piece too; the bag still does the spending and saving.
-	town_page.craft_held = bag_page.craft_held
-	bag_page.held_changed.connect(town_page.orb_held)
-	bag_page.laid_out.connect(_place_corner)
+	# Both bag pages are wired alike, and only the one that is up ever speaks: a hidden page has nothing
+	# open and no orb in hand, and standing it at the counter (`shop`) forgets any offer it overheard.
+	# `craft_held` goes through `_counter_page`, which is whichever of them that is.
+	town_page.craft_held = func(item: Item, written: Callable) -> void:
+		_counter_page().craft_held(item, written)
+	for page: BagPage in [bag_page, heirloom_page]:
+		town_page.offer_changed.connect(page.offer)
+		page.selection_changed.connect(town_page.bag_changed)
+		page.held_changed.connect(town_page.orb_held)
+		page.laid_out.connect(_place_corner)
 	settings_page.laid_out.connect(_place_corner)
-	for page: Control in [skills_page, bag_page, bounty_page, settings_page, collection_page,
-			character_page, town_page]:
+	for page: Control in [skills_page, bag_page, heirloom_page, bounty_page, settings_page,
+			collection_page, character_page, town_page]:
 		page.hide()
 		page.closed.connect(_on_left_page_closed)
 		layer.add_child(page)
 	# On the character's layer, over the pages and over a fight (layer 2), so a find in the loot
 	# popup or under the verdict gets its card too. It takes no mouse, so it costs no swings.
-	var item_card := ItemCard.new(ui_scale)
-	item_card.equipment = inventory.equipment
-	_character.get_parent().add_child(item_card)
+	_item_card = ItemCard.new(ui_scale)
+	_item_card.equipment = inventory.equipment
+	_character.get_parent().add_child(_item_card)
 	# A held orb changes a piece without opening it, and the card is the only place the result is read.
-	bag_page.crafted.connect(item_card.unmute)
+	bag_page.crafted.connect(_item_card.unmute)
+	heirloom_page.crafted.connect(_item_card.unmute)
 	# Every `tooltip_text` there is, on the same cream card and the same layer.
 	_character.get_parent().add_child(TipCard.new(ui_scale))
 
@@ -531,6 +561,7 @@ func _show_services(cell: Vector2i) -> void:
 func _layout_ui() -> void:
 	_place_panel()
 	bag_page.layout()
+	heirloom_page.layout()
 	skills_page.layout()
 	bounty_page.layout()
 	settings_page.layout()
@@ -718,6 +749,7 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 		print("Farmed %s, %d slain" % [cell, kills])
 	elif won:
 		print("Charted %s, showing %d tile(s) behind it; walking there" % [cell, view.chart(cell, _sight())])
+		_credit_walls()
 	else:
 		print("Lost the fight for %s; it stays uncharted" % cell)
 	ledger.farming = false
@@ -726,6 +758,15 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 	_update_buttons()
 	# After banking, so a run's pouch counts; after the fight, so a pop-up never covers one.
 	_check_tips()
+
+
+## Every wall down in this world that has not yet paid its heirloom pick pays it, and the save says
+## so. Asked wherever a wall can have fallen -- a tile charted -- and once at start-up, which is what
+## pays a save from before there were heirlooms for the walls it already has down.
+func _credit_walls() -> void:
+	if inventory.credit_walls(view.walls_fallen()):
+		print("A wall is down: %d heirloom pick(s) to spend" % inventory.heirloom_picks)
+		inventory.save(inventory_path)
 
 
 ## How far the player sees from a tile they have just taken: their own ring behind it, plus whatever a
@@ -875,15 +916,17 @@ func _place_corner() -> void:
 	if page != null:
 		# Every page's own panel is its first child, against the left edge; the bag runs on past its.
 		var panel: Control = page.get_child(0)
-		var edge: float = (bag_page.right_edge() if page == bag_page
+		var bag := page as BagPage
+		var edge: float = (bag.right_edge() if bag != null
 				else panel.position.x + panel.size.x * ui_scale)
 		# The bag's sheet is centred down the window, and a column at the window's top beside it
 		# belonged to nothing: it starts where the sheet does.
-		var top: float = (bag_page.sheet_top(_character.position.y) if page == bag_page
+		var top: float = (bag.sheet_top(_character.position.y) if bag != null
 				else _character.position.y)
 		at = Vector2(edge + CORNER_GAP * ui_scale, top)
 	var step := (_bag_button.get_combined_minimum_size().y + CORNER_GAP) * ui_scale
-	for button: Button in [_bag_button, _skills_button, _bounty_button, _settings_button, _collection_button]:
+	for button: Button in [_bag_button, _heirloom_button, _skills_button, _bounty_button,
+			_settings_button, _collection_button]:
 		if button.visible:
 			button.position = at
 			at.y += step
@@ -894,6 +937,12 @@ func _place_corner() -> void:
 ## window no room. A page does not -- they stand beside it (`_place_corner`) -- but it does cover the
 ## character panel, and the see-through button over that goes with it.
 func _show_corner(shown: bool) -> void:
+	# The one button a town leaves standing, because it is the only way to hold an heirloom up to a
+	# smith, a fortuneteller or a held orb: there it swaps the bag and the heirlooms at the counter.
+	_heirloom_button.visible = shown and (inventory.heirloom_picks > 0
+			or inventory.stash().total() > 0 or not inventory.stash().equipment.worn.is_empty())
+	if _heirloom_button.visible:
+		_flash(_heirloom_button, "opened_heirlooms")
 	shown = shown and not town_page.visible
 	_bag_button.visible = shown and ("first_item" in inventory.tips or "first_orb" in inventory.tips)
 	_skills_button.visible = shown and "level_up" in inventory.tips
@@ -934,6 +983,8 @@ func _tip_due(id: String) -> bool:
 			return BountyBoard.any_seen(inventory.towns)
 		"first_unique":
 			return not inventory.uniques_found.is_empty()
+		"first_heirloom":
+			return inventory.heirloom_picks > 0
 	return false
 
 
@@ -1010,7 +1061,8 @@ func _stop_flash(id: String) -> void:
 ## Every page that stands against the left edge. They share it, so opening one closes the rest and
 ## there is one place that knows which those are.
 func _left_pages() -> Array[Control]:
-	return [bag_page, skills_page, bounty_page, settings_page, collection_page, character_page]
+	return [bag_page, heirloom_page, skills_page, bounty_page, settings_page, collection_page,
+			character_page]
 
 
 func _close_left_pages() -> void:
@@ -1035,6 +1087,9 @@ func _open_left_page(page: Control) -> void:
 	_close_left_pages()
 	_layout_ui()
 	page.show()
+	# Alt on a square compares against the doll of the page it is on.
+	_item_card.equipment = (inventory.stash().equipment if page == heirloom_page
+			else inventory.equipment)
 	_show_corner(true)
 	# The page covers the left edge, and it stands on a layer above the character panel.
 	_character.hide()
@@ -1067,6 +1122,7 @@ func _close_town() -> void:
 	town_page.hide()
 	_town_cell = HexMap.NO_CELL
 	bag_page.shop(PackedStringArray())
+	heirloom_page.shop(PackedStringArray())
 	if map.selected_cell != HexMap.NO_CELL:
 		_panel.show()
 	_update_buttons()
@@ -1080,6 +1136,25 @@ func _on_skills_pressed() -> void:
 func _on_bag_pressed() -> void:
 	_stop_flash("opened_bag")
 	_toggle_left_page(bag_page)
+
+
+## The crown. On the map it is a page like the rest. In a town it swaps which of the two bag pages
+## stands at the counter, and never closes the town: the X does that.
+func _on_heirlooms_pressed() -> void:
+	_stop_flash("opened_heirlooms")
+	if not town_page.visible:
+		_toggle_left_page(heirloom_page)
+		return
+	_open_left_page(bag_page if heirloom_page.visible else heirloom_page)
+	_stand_at_counter()
+	# What the other page had open is no longer what is held up to the counter.
+	town_page.bag_changed(null)
+	_layout_ui()
+
+
+## Whichever bag page is standing beside the town: the bag, unless the crown has swapped it out.
+func _counter_page() -> BagPage:
+	return heirloom_page if heirloom_page.visible else bag_page
 
 
 func _on_bounty_pressed() -> void:
@@ -1125,8 +1200,9 @@ func _on_town_pressed() -> void:
 	town_page.open(view.name_of(cell), services, cell, spot, tier)
 	_panel.hide()
 	town_page.show()
-	_stand_at_counter()
+	# The bag first and the counter second: which page is up is what `_stand_at_counter` asks.
 	_open_left_page(bag_page)
+	_stand_at_counter()
 	_layout_ui()
 	# Drawing the board is reading it, and a town always opens on its board (`TownServices.ORDER`), so
 	# this is where the tip about the bounties comes due.
@@ -1184,7 +1260,7 @@ func _on_town_tab_changed(_service: String) -> void:
 ## player walked into, not of the tile they last looked at.
 func _stand_at_counter() -> void:
 	var tab := town_page.open_tab()
-	bag_page.shop(PackedStringArray() if tab.is_empty() else PackedStringArray([tab]), _town_cell)
+	_counter_page().shop(PackedStringArray() if tab.is_empty() else PackedStringArray([tab]), _town_cell)
 
 
 ## Quitting with a run still on. The pouch goes in rather than evaporating -- a run that is left
@@ -1208,6 +1284,27 @@ func _on_reset_pressed() -> void:
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	get_tree().reload_current_scene()
+
+
+## The fortuneteller's way out, asked for and answered yes. The world is left behind the way Reset
+## leaves it -- the map deleted, the scene loaded again into a new one -- but the inventory is not
+## deleted: it is written over with what `Inventory.transcended` keeps, the heirlooms first among it.
+## The price is checked and never taken, because the purse is one of the things that stays behind.
+func _on_transcend_pressed() -> void:
+	if inventory.gold < TownPrices.fortune_price(FortuneTeller.TRANSCEND, _town_cell):
+		return
+	print("Transcended with %d heirloom(s)" % (inventory.stash().total()
+			+ inventory.stash().equipment.worn.size()))
+	# Written before anything is deleted: a crash between the two leaves the new inventory on the old
+	# map, which plays, and never the old inventory on no map at all.
+	if not inventory.transcended().save(inventory_path):
+		return
+	_resetting = true
+	if FileAccess.file_exists(map_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(map_path))
+	# A test stands this scene under the root rather than as the current one, and has nothing to reload.
+	if get_tree().current_scene == self:
+		get_tree().reload_current_scene()
 
 
 ## Escape is every X at once: the tip if one is up, otherwise the pages, the town and the tile panel

@@ -213,6 +213,18 @@ static func reroll_value(id: String, rng: RandomNumberGenerator, level := 1) -> 
 	return rng.randi_range(int(band[0]), int(band[1]))
 
 
+## A rolled value carried to another level: as far up `to_level`'s band as it stood in `from_level`'s.
+## What an heirloom's modifiers go through when the world ends (`Item.transcend`). A value outside
+## its band -- a smith's upgrade lifts the level and leaves the roll under it -- is held to the band's
+## ends, and a band of one number counts as its top.
+static func rescaled(id: String, value: int, from_level: int, to_level: int) -> int:
+	var from := band_for(id, from_level)
+	var to := band_for(id, to_level)
+	var span := float(int(from[1]) - int(from[0]))
+	var place := 1.0 if span <= 0.0 else clampf((value - int(from[0])) / span, 0.0, 1.0)
+	return roundi(lerpf(float(to[0]), float(to[1]), place))
+
+
 ## One more modifier for a piece that already carries some: drawn from what it could take, less what
 ## it has. Empty when there is nothing left to give it, which today's tables cannot produce and a
 ## test holds them to.

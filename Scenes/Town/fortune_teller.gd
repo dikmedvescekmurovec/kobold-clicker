@@ -22,8 +22,12 @@ const QUARRY := "quarry"
 const RELIC := "relic"
 const APPRAISE := "appraise"
 const SCOUR := "scour"
-## The order her buttons stand in: the cheap and the often-asked first, the one spell last.
-const READINGS := [ROADS, TREASURE, QUARRY, RELIC, APPRAISE, SCOUR]
+## Not a reading at all but the way out of the world: everything is left behind but the heirlooms
+## (`Inventory.transcended`). She offers it only once a wall has fallen, and it is priced against the
+## ground behind the first wall rather than the town's (`TownPrices.fortune_price`).
+const TRANSCEND := "transcend"
+## The order her buttons stand in: the cheap and the often-asked first, the one spell and the way out last.
+const READINGS := [ROADS, TREASURE, QUARRY, RELIC, APPRAISE, SCOUR, TRANSCEND]
 
 ## What each reading's button says.
 const LABELS := {
@@ -33,6 +37,7 @@ const LABELS := {
 	RELIC: "Relic",
 	APPRAISE: "Appraise",
 	SCOUR: "Scour",
+	TRANSCEND: "Transcend",
 }
 
 ## The town drawer's key, before a reading's name: each is sold once a settlement. The roads, paid for,

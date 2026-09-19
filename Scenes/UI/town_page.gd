@@ -34,6 +34,9 @@ signal chest_bought(cell: Vector2i)
 ## The scour was asked for, at `price`. Nothing has been charged: choosing the land happens on the
 ## map, which is the main scene's, and so does the paying once land has been chosen.
 signal scour_pressed(price: float)
+## The way out of the world was asked for, and the question under it answered yes. Nothing has been
+## charged and nothing need be: the purse is one of the things left behind. The main scene does it.
+signal transcend_pressed
 
 ## How wide the page's contents run before they wrap, in panel pixels. It shares a 1152 px window
 ## with the bag and the comparison beside it, so this is a width budget rather than a matter of taste
@@ -83,7 +86,13 @@ const FORTUNE_TIPS := {
 	FortuneTeller.RELIC: "One unique you have not found, and where it is carried",
 	FortuneTeller.APPRAISE: "What the piece open in your bag can roll, and how often",
 	FortuneTeller.SCOUR: "Uncover a patch of the map you choose. Once, ever",
+	FortuneTeller.TRANSCEND: "Leave this world for a new one. Only your heirlooms go with you",
 }
+## What she says before the way out is taken, in the list's place, over the button that takes it.
+const TRANSCEND_LINES := [
+	"The ice will take this world back, and you will wake in another.",
+	"Your heirlooms go with you, and what you know. Your bag, your gold, your levels and this land do not.",
+]
 
 var inventory: Inventory
 ## The map the town stands on, set from outside the way the fight's is. The board needs it and only
@@ -545,8 +554,10 @@ func _fill_smith() -> void:
 			% [_bag_piece.level + 1, BigNumber.format(up_price)], _on_upgrade_pressed))
 	# What the press would buy and what it risks, and only while it can be pressed.
 	if up_why.is_empty():
-		_rows.add_child(_sign("Level %d of %d. %d%% to break."
-				% [_bag_piece.level + 1, cap, roundi(Blacksmith.BREAK_CHANCE * 100.0)], Palette.SLATE))
+		var risk := Blacksmith.break_chance(_bag_piece)
+		_rows.add_child(_sign("Level %d of %d. %s" % [_bag_piece.level + 1, cap,
+				"%d%% to break." % roundi(risk * 100.0) if risk > 0.0
+				else "Cannot break until level %d." % _bag_piece.safe_level], Palette.SLATE))
 	var lock_price := TownPrices.lock_price(_bag_piece)
 	var lock_why := _smith_why_not(Blacksmith.why_not_lock(_bag_piece), lock_price)
 	_rows.add_child(_smith_button("Lock", lock_price, lock_why,
@@ -566,9 +577,9 @@ func _smith_button(text: String, price: float, refused: String, tooltip: String,
 
 ## `UITheme.priced_button` wired up: dead with the reason in its tooltip when `refused` says one.
 func _priced_button(text: String, price: float, refused: String, tooltip: String,
-		action: Callable) -> Button:
+		action: Callable, figure := true) -> Button:
 	var button := UITheme.priced_button(text, price, "LightButton",
-			refused if not refused.is_empty() else tooltip)
+			refused if not refused.is_empty() else tooltip, figure)
 	button.disabled = not refused.is_empty()
 	button.pressed.connect(action)
 	return button
@@ -581,8 +592,14 @@ func _fill_fortune() -> void:
 	var body := _scrolled(ROW_GAP)
 	if _said.is_empty():
 		for reading: String in FortuneTeller.READINGS:
+			# The way out is not on her list until a wall has fallen: there is nothing yet to take along.
+			if reading == FortuneTeller.TRANSCEND and (view == null or view.walls_fallen() == 0):
+				continue
+			# The way out wears the coin and no figure, as Claim does: six figures beside the longest
+			# word on her list widen the page into the panel beside it. She says the price when asked.
 			body.add_child(_priced_button(FortuneTeller.LABELS[reading], _fortune_price(reading),
-					_fortune_why_not(reading), FORTUNE_TIPS[reading], _on_reading_pressed.bind(reading)))
+					_fortune_why_not(reading), FORTUNE_TIPS[reading], _on_reading_pressed.bind(reading),
+					reading != FortuneTeller.TRANSCEND))
 		return
 	match _said:
 		FortuneTeller.ROADS:
@@ -598,9 +615,29 @@ func _fill_fortune() -> void:
 			body.add_child(table)
 			for row in FortuneTeller.odds(_bag_piece):
 				table.add_child(_odds_row(row, table.get_child_count() % 2 == 1))
+		FortuneTeller.TRANSCEND:
+			for line: String in TRANSCEND_LINES:
+				body.add_child(_sign(line))
+			body.add_child(_sign("She asks %s gold." % BigNumber.format(_fortune_price(_said)), Palette.SLATE))
 	var back := UITheme.back_button("Back to what she can be asked")
 	back.pressed.connect(_on_reading_closed)
-	_rows.add_child(back)
+	if _said != FortuneTeller.TRANSCEND:
+		_rows.add_child(back)
+		return
+	# The question's two answers in one row at the foot, the way an open shelf piece has Back and Buy.
+	var answers := HBoxContainer.new()
+	answers.add_child(back)
+	# The coin and no figure, as Claim has it: the price was on the button that brought the player
+	# here, and six figures beside the arrow would widen the page into the panel beside it.
+	var price := _fortune_price(_said)
+	var refused := _why_not(price, false)
+	var leave := UITheme.priced_button("Transcend", price, "LightButton", refused if not refused.is_empty()
+			else "Leave this world for %s gold" % BigNumber.format(price), false)
+	leave.disabled = not refused.is_empty()
+	leave.pressed.connect(transcend_pressed.emit)
+	leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	answers.add_child(leave)
+	_rows.add_child(answers)
 
 
 ## One modifier she read off a piece: the line with its band on the left, how often it comes up on the right.
@@ -652,6 +689,10 @@ func _fortune_why_not(reading: String) -> String:
 		FortuneTeller.SCOUR:
 			if FortuneTeller.scoured(inventory.fortunes):
 				return "That spell is spent."
+		FortuneTeller.TRANSCEND:
+			# Asking is free and is where the price is said; the button under her answer is what a
+			# short purse greys.
+			return ""
 	return _why_not(_fortune_price(reading), false)
 
 
@@ -663,6 +704,12 @@ func _on_reading_pressed(reading: String) -> void:
 	var price := _fortune_price(reading)
 	if reading == FortuneTeller.SCOUR:
 		scour_pressed.emit(price)
+		return
+	# Asked for, not done: she says what it costs the player first, and the button under that is the deed.
+	if reading == FortuneTeller.TRANSCEND:
+		_said = reading
+		_fill()
+		layout()
 		return
 	inventory.gold -= price
 	_drawer[FortuneTeller.ASKED + reading] = true
@@ -706,7 +753,7 @@ func _on_reading_closed() -> void:
 func _smith_why_not(rule: String, price: float) -> String:
 	if not rule.is_empty():
 		return rule
-	if not inventory.items.has(_bag_piece):
+	if not inventory.items.has(_bag_piece) and not inventory.stash().items.has(_bag_piece):
 		return "Bag pieces only."
 	return _why_not(price, false)
 

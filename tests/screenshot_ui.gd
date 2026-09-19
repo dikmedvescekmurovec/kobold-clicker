@@ -488,6 +488,58 @@ func _shoot_town() -> void:
 		main.town_page._on_reading_closed()
 	BountyBoard.locate(BountyBoard.active(main.inventory.towns))
 
+	# A wall down: the way out joins her list, and asked for it is a question before it is a deed.
+	main.view.land_radius += MapBuilder.WALL_STEP
+	main._credit_walls()
+	main.inventory.heirloom_picks = 3
+	main.town_page.redraw()
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_town_way_out.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_town_way_out.png"))
+	main.town_page._on_reading_pressed(FortuneTeller.TRANSCEND)
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_town_transcend.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_town_transcend.png"))
+	main.town_page._on_reading_closed()
+
+	# Two heirlooms out of a world that has ended, one of them worn on the heirlooms' own doll, and the
+	# other held up to the smith from the heirlooms' page, which the crown swaps in at the counter: the
+	# three panels and the one corner button a town leaves standing have to share the window.
+	var carried: Array[Item] = [main.inventory.items[1], main.inventory.items[2]]
+	for piece in carried:
+		main.inventory.make_heirloom(piece)
+		piece.transcend()
+	main.inventory.stash().equip(carried[1], main.inventory.stash().equipment.sockets_for(carried[1])[0])
+	main.town_page._on_tab_pressed(TownServices.SMITH)
+	main._on_heirlooms_pressed()
+	main.heirloom_page._select_item(0)
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_town_heirloom_smith.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_town_heirloom_smith.png"))
+
+	# Out of town: the heirlooms' page behind the crown, with its own doll, and the bag's button that
+	# makes one while a wall has left a choice to spend, with the question it asks.
+	main._on_left_page_closed()
+	main._on_heirlooms_pressed()
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_heirlooms.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_heirlooms.png"))
+	main._on_bag_pressed()
+	main.bag_page._select_item(3)
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_make_heirloom.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_make_heirloom.png"))
+
 	# And out of the town again, where the same postings are read off the journal in the corner: the
 	# town that posted them over the top, the swatches and the nearest tile under each, and the line
 	# that says a finished one is paid for back where it was taken on.

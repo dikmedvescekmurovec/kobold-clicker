@@ -429,6 +429,23 @@ func _test_smith() -> bool:
 	whole.broken = true
 	_check(absf(TownPrices.sell_price(whole) * 2.0 - was_worth) <= 1.0,
 			"a broken piece fetches half (%d of %d)" % [TownPrices.sell_price(whole), was_worth])
+
+	# An heirloom out of a world that has ended is walked back up to the level it had for nothing but
+	# gold: the doomed stream, which breaks anything else on its first blow, never touches it.
+	var heirloom := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 6)
+	heirloom.transcend()
+	_check(heirloom.level == 1 and heirloom.safe_level == 6, "an heirloom comes back at level 1, remembering 6")
+	_check(Blacksmith.break_chance(heirloom) == 0.0, "and under that the hammer cannot break it")
+	for level in range(2, 7):
+		doomed.seed = doomed.seed
+		_check(Blacksmith.upgrade(heirloom, 99, doomed) and heirloom.level == level,
+				"level %d lands whatever the draw" % level)
+	_check(not heirloom.broken and heirloom.stats == Item.scaled_stats("Wooden Sword", 6),
+			"whole, and worth what a fresh level 6 is")
+	_check(Blacksmith.break_chance(heirloom) == Blacksmith.BREAK_CHANCE, "past it the hammer is the hammer")
+	doomed = _stream_that(true)
+	_check(not Blacksmith.upgrade(heirloom, 99, doomed) and heirloom.broken and heirloom.level == 6,
+			"and the blow past it can break it")
 	return true
 
 
@@ -1316,6 +1333,14 @@ func _test_fortune() -> bool:
 	for reading: String in FortuneTeller.READINGS:
 		_check(TownPrices.FORTUNE_BODIES.has(reading) and FortuneTeller.LABELS.has(reading),
 				"%s has a price and a name" % reading)
+		# The way out is priced on the ground behind the first wall, wherever it is asked for.
+		if reading == FortuneTeller.TRANSCEND:
+			_check(TownPrices.fortune_price(reading, TOWN_CELL) == TownPrices.fortune_price(reading, Vector2i(1, 0)),
+					"transcending costs the same in every town")
+			_check(TownPrices.fortune_price(reading, TOWN_CELL) == roundf(TownPrices.FORTUNE_BODIES[reading]
+					* Encounter.gold_at_steps(MapBuilder.START_LAND_RADIUS + 2)),
+					"and is bodies on the second ring of the land behind the first wall")
+			continue
 		_check(TownPrices.fortune_price(reading, TOWN_CELL) > TownPrices.fortune_price(reading, Vector2i(1, 0)),
 				"%s is dearer in a deeper town" % reading)
 	_check(TownPrices.fortune_price("retired_reading", TOWN_CELL) == 0.0, "a reading this build lacks costs nothing")
@@ -1375,8 +1400,9 @@ func _test_fortune_page() -> void:
 	main.town_page._on_tab_pressed(TownServices.FORTUNE)
 	await process_frame
 	for reading: String in FortuneTeller.READINGS:
-		_check(_deep_button(main.town_page._rows, FortuneTeller.LABELS[reading]) != null,
-				"she offers %s" % reading)
+		# The way out is not on her list while every wall still stands.
+		_check((_deep_button(main.town_page._rows, FortuneTeller.LABELS[reading]) != null)
+				== (reading != FortuneTeller.TRANSCEND), "she offers %s, or not yet" % reading)
 	_check(_deep_button(main.town_page._rows, "Quarry").disabled, "no bounty is out, so there is none to find")
 	_check(_deep_button(main.town_page._rows, "Appraise").disabled, "and no piece is open to read")
 
@@ -1471,6 +1497,50 @@ func _test_fortune_page() -> void:
 	main.town_page._on_tab_pressed(TownServices.FORTUNE)
 	await process_frame
 	_check(_deep_button(main.town_page._rows, "Scour").disabled, "and the spell is never sold again")
+
+	# The way out: on her list once a wall is down, a question first, and then everything but the
+	# heirlooms and what the player knows is gone, and the map with it.
+	main.view.land_radius += MapBuilder.WALL_STEP
+	main._credit_walls()
+	_check(main.inventory.heirloom_picks == 1, "a wall down is a pick to spend")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var kept := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 5)
+	main.inventory.add(kept)
+	main.inventory.add(Item.rolled("Leather Boot", ItemRarity.Rarity.COMMON, rng, 5))
+	_check(main.inventory.make_heirloom(kept), "and the sword is made one")
+	main.inventory.kills = 321
+	main.town_page.redraw()
+	await process_frame
+	var way_out := _deep_button(main.town_page._rows, "Transcend")
+	_check(way_out != null and not way_out.disabled, "she offers the way out once a wall has fallen")
+	_check(UITheme.price_of(way_out).is_empty(), "with a coin and no figure, which would widen the page")
+	way_out.pressed.emit()
+	await process_frame
+	_check(FileAccess.file_exists(TEST_MAP_PATH) and main.inventory.gold > 0.0,
+			"the first press only asks")
+	_check("heirlooms" in _said(main.town_page._rows) and BigNumber.format(
+			TownPrices.fortune_price(FortuneTeller.TRANSCEND, town)) in _said(main.town_page._rows),
+			"and says what goes along, and what it costs")
+	var full_purse: float = main.inventory.gold
+	main.inventory.gold = 1.0
+	main.town_page.redraw()
+	await process_frame
+	_check(_deep_button(main.town_page._rows, "Transcend").disabled, "a short purse greys the deed, not the asking")
+	main.inventory.gold = full_purse
+	main.town_page.redraw()
+	await process_frame
+	_deep_button(main.town_page._rows, "Transcend").pressed.emit()
+	await process_frame
+	_check(not FileAccess.file_exists(TEST_MAP_PATH), "the second leaves the world: the map is gone")
+	var after := Inventory.load_from(TEST_PATH)
+	_check(after.gold == 0.0 and after.total() == 0 and after.level == 1, "the purse, the bag and the levels stay behind")
+	_check(after.stash().total() == 1 and after.stash().items[0].level == 1
+			and after.stash().items[0].safe_level == 5, "the heirloom goes along, at level 1 and remembering 5")
+	_check(after.kills == 321 and after.first_sword_taken and "first_town" in after.tips,
+			"and so does what the player knows, so no helping hand is dealt twice")
+	_check(after.walls_credited == 0, "the new world's walls have paid nothing yet")
+	# The scene would have been loaded again; here it is only told it may not write the old world back.
 	main.queue_free()
 	await process_frame
 

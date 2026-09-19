@@ -49,13 +49,22 @@ static func why_not_upgrade(item: Item, cap: int) -> String:
 	return "Level %d is the most here." % maxi(cap, 1)
 
 
+## How likely the next blow is to ruin this piece. Nothing while an heirloom is being walked back up
+## to the level it had in the world it came out of (`Item.safe_level`): that road was paid for once.
+## Past it, and for every piece that never was an heirloom, the hammer is the hammer.
+static func break_chance(item: Item) -> float:
+	return 0.0 if item.level < item.safe_level else BREAK_CHANCE
+
+
 ## One blow. True when the piece came out a level higher, false when it broke -- and **the caller
 ## pays either way**, which is the whole of what `BREAK_CHANCE` means. Ask `can_upgrade` before
 ## charging: a refusal comes back false as well, and nothing here can tell the two apart afterwards.
 static func upgrade(item: Item, cap: int, rng: RandomNumberGenerator) -> bool:
 	if not can_upgrade(item, cap):
 		return false
-	if rng.randf() < BREAK_CHANCE:
+	# No roll at all where nothing can break, so a seeded rng is spent only on a real risk.
+	var risk := break_chance(item)
+	if risk > 0.0 and rng.randf() < risk:
 		item.broken = true
 		return false
 	item.level += 1

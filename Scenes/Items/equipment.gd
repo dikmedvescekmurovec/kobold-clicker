@@ -168,20 +168,28 @@ func items() -> Array[Item]:
 ## `skill_percent` is applied last and **on its own**: it multiplies the gear's globals rather than
 ## adding to them, so a skill and a ring each doing 10% make 21%, not 20%. With neither given this is
 ## the set alone, which is every caller that is asking about gear and not about the player.
-func totals(skill_flat := {}, skill_percent := {}) -> Dictionary:
+##
+## `also` is a second doll worn at the same time -- the heirlooms'. **Flats add and percents
+## multiply:** its pieces go into the same sum, and its globals are a multiplier of their own over
+## that sum rather than more of this doll's, so +20% on each doll is x1.44 and not x1.4.
+func totals(skill_flat := {}, skill_percent := {}, also: Equipment = null) -> Dictionary:
 	var out := {}
-	var global := {}
-	for item in items():
-		var stats := item.effective_stats()
-		for stat: String in stats:
-			out[stat] = float(out.get(stat, 0.0)) + float(stats[stat])
-		var percents := item.global_percents()
-		for stat: String in percents:
-			global[stat] = float(global.get(stat, 0.0)) + float(percents[stat])
+	var globals: Array[Dictionary] = []
+	for doll: Equipment in [self] if also == null else [self, also]:
+		var global := {}
+		for item in doll.items():
+			var stats := item.effective_stats()
+			for stat: String in stats:
+				out[stat] = float(out.get(stat, 0.0)) + float(stats[stat])
+			var percents := item.global_percents()
+			for stat: String in percents:
+				global[stat] = float(global.get(stat, 0.0)) + float(percents[stat])
+		globals.append(global)
 	for stat: String in skill_flat:
 		out[stat] = float(out.get(stat, 0.0)) + float(skill_flat[stat])
-	for stat: String in global:
-		out[stat] = float(out.get(stat, 0.0)) * (1.0 + float(global[stat]) / 100.0)
+	for global in globals:
+		for stat: String in global:
+			out[stat] = float(out.get(stat, 0.0)) * (1.0 + float(global[stat]) / 100.0)
 	for stat: String in skill_percent:
 		out[stat] = float(out.get(stat, 0.0)) * (1.0 + float(skill_percent[stat]) / 100.0)
 	return out

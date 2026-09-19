@@ -38,7 +38,10 @@ const SAVE_PATH := "user://inventory.json"
 ## the fortuneteller has sold the player (`fortunes`); a version 11 save has bought nothing. 13 adds
 ## `first_sword_taken`; a version 12 save is already under way, so it reads as taken. The same version
 ## drops `first_elite_taken`, which the sword's flag now does the work of; an older save's is ignored.
-const VERSION := 13
+## 14 adds the heirlooms -- a second stash and a second doll under `heirlooms` -- with
+## `heirloom_picks` and `walls_credited`; a version 13 save has none, and the main scene's first
+## `credit_walls` pays it a pick for every wall it had already brought down.
+const VERSION := 14
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -114,6 +117,17 @@ var fortunes := {}
 ## elite included. A rule only ever filters what *arrives* -- what is already held is cleared by
 ## `discard_level`, which is a separate button for a separate act.
 var autodiscard: Array[int] = []
+
+## The heirlooms: a second inventory of which only `items` and `equipment` are ever used -- its own
+## stash and its own doll, worn as well as the ordinary one -- and the one thing that goes with the
+## player when the world is left behind (`transcended`). Read through `stash()`, which makes it: an
+## Inventory that made one of these as it was made would never finish being made.
+## ponytail: it shares CAPACITY, 40 heirlooms; a pick is a wall broken, and nobody breaks forty.
+var heirlooms: Inventory
+## Heirlooms the player may still make: one for every wall broken, in any world, less those made.
+var heirloom_picks := 0
+## How many of this world's fallen walls have paid their pick (`credit_walls`).
+var walls_credited := 0
 
 
 ## Puts `item` in the bag and returns whatever had to be destroyed to make room -- empty almost
@@ -351,15 +365,23 @@ func add_xp(amount: int) -> int:
 ## into flat damage, which has to go in with the skills' flat so the percents scale it like any other
 ## point -- so the set is added up once to read its armour and once more with that in. And two counts
 ## the fight has no way to see: the sockets with nothing in them and the pieces in the bag.
+##
+## The heirlooms' doll is worn as well (`Equipment.totals`' `also`). **A stat is the player's, so
+## whatever reads one reads all sixteen pieces** -- the helm's armour is. **A count is its own
+## side's:** the Ascetic's Cord counts the bare places on the doll it hangs from, and the Packmule's
+## Harness the loose pieces beside the doll it is strapped to, so one on each doll counts both and
+## one on the heirlooms' says nothing of the ordinary bag.
 func stats() -> Dictionary:
 	var flat := skills.flat()
-	if "spikes" in equipment.effects():
-		var armour := float(equipment.totals(flat, skills.percent()).get("armor", 0.0))
+	var other := stash().equipment
+	if "spikes" in effects():
+		var armour := float(equipment.totals(flat, skills.percent(), other).get("armor", 0.0))
 		flat = flat.duplicate()
 		flat["damage"] = float(flat.get("damage", 0.0)) + armour * SPIKES_SHARE
-	var out := equipment.totals(flat, skills.percent())
-	out["bare_sockets"] = Equipment.NAMES.size() - equipment.worn.size()
-	out["bag_pieces"] = items.size()
+	var out := equipment.totals(flat, skills.percent(), other)
+	out["bare_sockets"] = _side_count("ascetic",
+			func(side: Inventory) -> int: return Equipment.NAMES.size() - side.equipment.worn.size())
+	out["bag_pieces"] = _side_count("packmule", func(side: Inventory) -> int: return side.items.size())
 	# The collection log's share, on its own the way the skills' percent is: it multiplies what gear
 	# and skills made rather than adding to either.
 	if out.has("damage"):
@@ -367,9 +389,23 @@ func stats() -> Dictionary:
 	return out
 
 
-## What throwing `item` away pays: nothing, unless the Rag and Bone Sack is worn.
+## What a unique that counts something is told: `count` of every side -- this inventory, the
+## heirlooms -- whose own doll wears `effect`, added up. With it on neither doll this is the ordinary
+## side's count, which is what the figure has always been and nothing reads.
+func _side_count(effect: String, count: Callable) -> int:
+	var total := 0
+	var asked := false
+	for side: Inventory in [self, stash()]:
+		if effect in side.equipment.effects():
+			total += int(count.call(side))
+			asked = true
+	return total if asked else int(count.call(self))
+
+
+## What throwing `item` away pays: nothing, unless the Rag and Bone Sack is worn -- on either doll,
+## and for an heirloom thrown away as much as for a find.
 func salvage(item: Item) -> float:
-	return TownPrices.salvage_price(item) if "salvage" in equipment.effects() else 0.0
+	return TownPrices.salvage_price(item) if "salvage" in effects() else 0.0
 
 
 ## What the collection log adds to the player's damage, in percent: `UniqueTable.COLLECTION_DAMAGE`
@@ -379,9 +415,76 @@ func collection_bonus() -> int:
 
 
 ## What changes how a fight plays rather than a number: the capstones learned and the uniques worn,
-## as one list of effect ids for `Encounter.effects`.
+## as one list of effect ids for `Encounter.effects`. Each doll answers for itself, which is what
+## keeps a Pilgrim's set inside one doll: a home piece on each is two lone pieces.
 func effects() -> Array:
-	return skills.effects() + equipment.effects()
+	return skills.effects() + equipment.effects() + stash().equipment.effects()
+
+
+## The heirlooms, made the first time they are asked for.
+func stash() -> Inventory:
+	if heirlooms == null:
+		heirlooms = Inventory.new()
+	return heirlooms
+
+
+## `fallen` is how many walls are down in this world. Every one not yet paid for pays a pick, so a
+## wall falling and a save from before there were heirlooms are the same sum. True when it paid.
+func credit_walls(fallen: int) -> bool:
+	if fallen <= walls_credited:
+		return false
+	heirloom_picks += fallen - walls_credited
+	walls_credited = fallen
+	return true
+
+
+## Where `item` is worn on the ordinary doll, or -1.
+func _socket_of(item: Item) -> int:
+	for socket: Equipment.Socket in equipment.worn:
+		if equipment.worn[socket] == item:
+			return socket
+	return -1
+
+
+## Whether `item` can be made an heirloom now: a pick to spend, a piece the player holds or wears,
+## and not a broken one, which no run could ever mend.
+func can_make_heirloom(item: Item) -> bool:
+	return (item != null and heirloom_picks > 0 and not item.broken
+			and (items.has(item) or _socket_of(item) >= 0))
+
+
+## One pick spent: the piece leaves the bag, or comes straight off the doll without passing through
+## the bag -- so a full bag is no obstacle -- and lies in the heirlooms' stash. It is not put on for
+## the player, and it never comes back.
+func make_heirloom(item: Item) -> bool:
+	if not can_make_heirloom(item):
+		return false
+	if not remove(item):
+		equipment.unequip(_socket_of(item))
+	stash().items.append(item)
+	heirloom_picks -= 1
+	return true
+
+
+## What is left of the player when the world is left behind: the heirlooms, each gone through
+## `Item.transcend`, the picks not yet spent, and what the player *knows* -- the collection log, the
+## tips already read, and the kills, which with `first_sword_taken` is what keeps a second world from
+## handing out the first one's helping hands again. Everything else is a fresh start.
+func transcended() -> Inventory:
+	var next := Inventory.new()
+	next.tips = tips.duplicate()
+	next.uniques_found = uniques_found.duplicate()
+	next.kills = kills
+	next.first_sword_taken = true
+	next.heirloom_picks = heirloom_picks
+	# Copies, through the save's own shape: this inventory is untouched, so a caller whose write
+	# fails is still holding the heirlooms as they were.
+	for item in stash().items:
+		next.stash().items.append(Item.from_dict(item.to_dict()))
+	next.stash().equipment = Equipment.from_dict(stash().equipment.to_dict())
+	for item: Item in next.stash().items + next.stash().equipment.items():
+		item.transcend()
+	return next
 
 
 ## Writes a unique into the collection log. Returns whether it was new.
@@ -421,6 +524,9 @@ func save(path := SAVE_PATH) -> bool:
 	var saved := []
 	for item in items:
 		saved.append(item.to_dict())
+	var kept := []
+	for item in stash().items:
+		kept.append(item.to_dict())
 	# Indented, so the save can be read and edited by a person.
 	return SafeFile.write(path, JSON.stringify({
 		"version": VERSION,
@@ -438,6 +544,9 @@ func save(path := SAVE_PATH) -> bool:
 		"autodiscard": autodiscard,
 		"uniques_found": uniques_found,
 		"fortunes": fortunes,
+		"heirlooms": {"items": kept, "equipped": stash().equipment.to_dict()},
+		"heirloom_picks": heirloom_picks,
+		"walls_credited": walls_credited,
 	},"\t"))
 
 
@@ -538,6 +647,19 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var told: Variant = data.get("fortunes", {})
 	if typeof(told) == TYPE_DICTIONARY:
 		inventory.fortunes = told
+	# Version 13 knew nothing about heirlooms: absent keys are none kept, no pick owed and no wall
+	# paid for -- which is what lets `credit_walls` pay an old save for the walls it has down.
+	var heir: Variant = data.get("heirlooms", {})
+	if typeof(heir) == TYPE_DICTIONARY:
+		var kept: Variant = heir.get("items", [])
+		if typeof(kept) == TYPE_ARRAY:
+			for entry: Variant in kept:
+				var item := Item.from_dict(entry)
+				if item != null:
+					inventory.stash().items.append(item)
+		inventory.stash().equipment = Equipment.from_dict(heir.get("equipped", {}))
+	inventory.heirloom_picks = maxi(0, int(data.get("heirloom_picks", 0)))
+	inventory.walls_credited = maxi(0, int(data.get("walls_credited", 0)))
 	# A file written before the cap, or edited by hand, comes back obeying it. A bag allowed over the
 	# cap in one place is a bag every other rule in the game has to check for.
 	inventory.trim()
