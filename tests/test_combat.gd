@@ -1186,6 +1186,12 @@ func _test_the_ice_wall() -> bool:
 	_check(bare > 50.0, "nobody walks through the wall bare-handed (%.1f/s)" % bare)
 	_check(farmed > 8.0, "nor on farmed rares alone (%.1f/s)" % farmed)
 	_check(whole > 1.0 and whole < 8.0, "farmed rares and the whole Power tree bring it down (%.1f/s)" % whole)
+	# Every wall fallen makes the next WALL_GROWTH times the wall its ring alone would make it.
+	var second := Encounter.for_wall(Vector2i(cell.x + MapBuilder.WALL_STEP, 0))
+	var by_ring := Encounter.hp_of(Encounter.WALL_NAME, second.cell) / Encounter.hp_of(Encounter.WALL_NAME, cell)
+	_check(is_equal_approx(second.hp / fight.hp / by_ring, Encounter.WALL_GROWTH),
+			"the second wall is %.0f times the first on top of its ring (%s health)"
+			% [Encounter.WALL_GROWTH, BigNumber.format(second.hp)])
 	return true
 
 

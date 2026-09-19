@@ -91,6 +91,10 @@ const WALL_NAME := "The Ice Wall"
 ## What the wall's health is multiplied by on top of its boss body. The dial for how hard the wall is,
 ## and a steep one: `tests/balance_wall.gd` plays it out, and past 50 every 10 more doubles the farming.
 const WALL_HP := 50.0
+## What every wall already fallen multiplies that by: the wall on ring 21 is ten times the dial, the
+## one on 31 a hundred. The first is a day's farming; the second is meant to be out of reach of
+## farming altogether -- at 1 it was twenty hours' worth, or two with the right uniques on.
+const WALL_GROWTH := 10.0
 const PROFILES := {
 	"plain": ORDINARY,
 	"road": ORDINARY,
@@ -383,7 +387,9 @@ static func for_wall(cell: Vector2i) -> Encounter:
 	fight.cell = cell
 	fight._take_profile(WALL)
 	fight.lineup.append(WALL_NAME)
-	fight.health.append(hp_of(WALL_NAME, cell) * WALL_HP)
+	var fallen := maxi(0, (HexGrid.distance(MapBuilder.CENTER, cell) - MapBuilder.START_LAND_RADIUS - 1)
+			/ MapBuilder.WALL_STEP)
+	fight.health.append(roundf(hp_of(WALL_NAME, cell) * WALL_HP * pow(WALL_GROWTH, fallen)))
 	fight.hp = fight.health[0]
 	return fight
 

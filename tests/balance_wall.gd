@@ -24,6 +24,8 @@ const WALL_RING := MapBuilder.START_LAND_RADIUS + 1
 const SWEEP: Array[float] = [6.0, 25.0, 50.0, 60.0, 70.0]
 const SWEEP_RATE := 5.0
 const SWEEP_RUNS := 7
+## Kills at which the player walking on to the second wall is looked at.
+const NEXT_STOPS: Array[int] = [5000, 20000, 60000]
 
 
 func _run() -> void:
@@ -36,7 +38,24 @@ func _run() -> void:
 	for rate in RATES:
 		_print_played(rate)
 	_print_sweep()
+	_print_next_wall()
 	quit()
+
+
+## The same player kept going to the wall after: where they are, and what that wall wants of them,
+## at a few stops along the way. Nothing past the first wall is theirs until it falls.
+func _print_next_wall() -> void:
+	var ring := WALL_RING + MapBuilder.WALL_STEP
+	var wall := _wall(Encounter.WALL_HP, ring)
+	print("
+The wall after, on ring %d: %s health. One player at %.0f clicks a second, all the way out"
+			% [ring, BigNumber.format(wall.hp), SWEEP_RATE])
+	print("    kills  minutes  level  ring held  gear level  rares  elites  clicks/s that wall wants")
+	for stop: int in NEXT_STOPS:
+		var run := _play_out(SWEEP_RATE, 0, Encounter.WALL_HP, ring, stop)
+		print("  %7d  %7.0f  %5d  %9d  %10.1f  %5d  %6d  %s" % [run["kills"], run["minutes"], run["level"],
+				run["ring"], run["gear_level"], run["rares"], run["elites"],
+				"through" if run["won"] else "%.1f" % run["needs"]])
 
 
 func _print_sweep() -> void:
@@ -59,8 +78,8 @@ Other walls at %.0f clicks a second, medians of %d runs" % [SWEEP_RATE, SWEEP_RU
 
 
 ## The wall with another `WALL_HP`.
-func _wall(wall_hp: float) -> Encounter:
-	var fight := Encounter.for_wall(Vector2i(WALL_RING, 0))
+func _wall(wall_hp: float, ring := WALL_RING) -> Encounter:
+	var fight := Encounter.for_wall(Vector2i(ring, 0))
 	fight.health[0] = roundf(fight.health[0] / Encounter.WALL_HP * wall_hp)
 	fight.hp = fight.health[0]
 	return fight
@@ -111,18 +130,20 @@ func _print_played(rate: float) -> void:
 
 ## One player from nothing to the far side of the wall: charts a line of tiles outward, farming the
 ## deepest one it holds whenever the next is out of reach.
-func _play_out(rate: float, take: int, wall_hp := Encounter.WALL_HP) -> Dictionary:
+func _play_out(rate: float, take: int, wall_hp := Encounter.WALL_HP, last_wall := WALL_RING,
+		give_up := GIVE_UP) -> Dictionary:
 	var inv := Inventory.new()
 	var st := {"kills": 0, "farmed": 0, "seconds": 0.0, "fights": 0, "first_elite": false,
 			"farm_by_ring": PackedInt32Array(), "take": take, "won": false}
-	st["farm_by_ring"].resize(WALL_RING)
+	st["farm_by_ring"].resize(last_wall)
 	var ring := 0
-	while st["kills"] < GIVE_UP:
+	while st["kills"] < give_up:
 		var cell := Vector2i(ring + 1, 0)
-		var next := _wall(wall_hp) if ring + 1 == WALL_RING else Encounter.for_tile(cell, "grass")
+		var walled := (ring + 1 - WALL_RING) % MapBuilder.WALL_STEP == 0 and ring + 1 >= WALL_RING
+		var next := _wall(wall_hp, ring + 1) if walled else Encounter.for_tile(cell, "grass")
 		if _needs(next, inv) <= rate and _fight(next, inv, rate, st):
 			ring += 1
-			if ring == WALL_RING:
+			if ring == last_wall:
 				st["won"] = true
 				break
 			continue
@@ -136,6 +157,8 @@ func _play_out(rate: float, take: int, wall_hp := Encounter.WALL_HP) -> Dictiona
 	for item: Item in worn:
 		levels += item.level
 	st["minutes"] = st["seconds"] / 60.0
+	st["ring"] = ring
+	st["needs"] = _needs(_wall(wall_hp, last_wall), inv)
 	st["level"] = inv.level
 	st["gear_level"] = levels / maxi(worn.size(), 1)
 	st["rares"] = worn.filter(func(item: Item) -> bool: return item.rarity == ItemRarity.Rarity.RARE).size()
