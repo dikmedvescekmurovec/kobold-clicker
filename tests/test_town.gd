@@ -337,7 +337,8 @@ func _test_smith() -> bool:
 	var safe := _stream_that(false)
 	var doomed := _stream_that(true)
 
-	# An upgrade is exactly a fresh roll's base stats at the new level, and nothing else moves.
+	# An upgrade is exactly a fresh roll at the new level: the base stats, and the modifiers' numbers
+	# rerolled in their bands at that level. Only the lines themselves stay.
 	var piece := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 3)
 	var mods_before := piece.mods.duplicate(true)
 	_check(Blacksmith.can_upgrade(piece, cap), "a piece under the cap can be upgraded")
@@ -346,8 +347,22 @@ func _test_smith() -> bool:
 	_check(piece.level == 4, "the piece is a level higher (%d)" % piece.level)
 	_check(piece.stats == Item.scaled_stats("Wooden Sword", 4),
 			"with exactly the base stats a fresh roll at that level would carry")
-	_check(piece.mods == mods_before, "and the modifiers it already had, at the values they rolled")
+	var ids_before := mods_before.map(func(mod: Dictionary) -> String: return str(mod["id"]))
+	var ids_after := piece.mods.map(func(mod: Dictionary) -> String: return str(mod["id"]))
+	_check(ids_after == ids_before, "carrying the modifiers it already had")
+	for mod: Dictionary in piece.mods:
+		var band := ModifierTable.band_for(str(mod["id"]), piece.mod_level())
+		_check(int(mod["value"]) >= int(band[0]) and int(mod["value"]) <= int(band[1]),
+				"%s rerolled inside its band at the new level (%d in %d-%d)"
+				% [mod["id"], int(mod["value"]), int(band[0]), int(band[1])])
 	_check(not piece.broken, "nothing broke")
+
+	# A locked line is what the lock is bought for: the hammer leaves its number where it was.
+	var pinned_piece := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 3)
+	_check(Blacksmith.lock(pinned_piece, rng), "a line is pinned before the blow")
+	var held := pinned_piece.locked_mod().duplicate(true)
+	_check(Blacksmith.upgrade(pinned_piece, cap, safe), "the hammer lands on it")
+	_check(pinned_piece.locked_mod() == held, "and the locked line keeps the value it was locked at")
 
 	# The cap is the ground's, so the smith cannot walk a piece past the frontier.
 	var topped := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, cap)
@@ -1327,6 +1342,14 @@ func _test_fortune() -> bool:
 			"a unique's lines are its own, so there is nothing to read")
 	_check(not FortuneTeller.why_not_appraise(null).is_empty(), "and nothing to read with no piece open")
 
+	# Her list is in two halves and every spell is in exactly one of them -- the lists are written out
+	# separately, so this is what holds them together.
+	var halves := (FortuneTeller.COMMON + FortuneTeller.GREAT + [FortuneTeller.TRANSCEND]).duplicate()
+	halves.sort()
+	var every := FortuneTeller.READINGS.duplicate()
+	every.sort()
+	_check(halves == every, "every spell is a reading or a great spell and never both (%s)" % [halves])
+
 	for reading: String in FortuneTeller.READINGS:
 		_check(TownPrices.FORTUNE_BODIES.has(reading) and FortuneTeller.LABELS.has(reading),
 				"%s has a price and a name" % reading)
@@ -1340,6 +1363,11 @@ func _test_fortune() -> bool:
 			continue
 		_check(TownPrices.fortune_price(reading, TOWN_CELL) > TownPrices.fortune_price(reading, Vector2i(1, 0)),
 				"%s is dearer in a deeper town" % reading)
+		# And dearer again every time it has been asked for, whichever half it is in: what stops a
+		# reading being asked for ever is the price, and `fortune_price` is the one place that knows.
+		_check(TownPrices.fortune_price(reading, TOWN_CELL, 3) == roundf(TownPrices.fortune_price(reading,
+				TOWN_CELL) * pow(TownPrices.FORTUNE_GROWTH, 3)),
+				"%s doubles with every casting" % reading)
 	_check(TownPrices.fortune_price("retired_reading", TOWN_CELL) == 0.0, "a reading this build lacks costs nothing")
 
 	var patch := FortuneTeller.scour_cells(Vector2i(3, 3))
@@ -1349,13 +1377,23 @@ func _test_fortune() -> bool:
 	var inventory := Inventory.new()
 	inventory.fortunes[FortuneTeller.CHEST] = [12, 34]
 	inventory.fortunes[FortuneTeller.PEEKED] = ["rimeplate"]
-	inventory.fortunes[FortuneTeller.SCOURED] = true
+	FortuneTeller.note_cast(inventory.fortunes, FortuneTeller.RELIC)
+	FortuneTeller.note_cast(inventory.fortunes, FortuneTeller.RELIC)
 	inventory.save(TEST_PATH)
 	var back := Inventory.load_from(TEST_PATH)
-	_check(FortuneTeller.chest(back.fortunes) == Vector2i(12, 34) and FortuneTeller.scoured(back.fortunes)
+	_check(FortuneTeller.chest(back.fortunes) == Vector2i(12, 34)
+			and FortuneTeller.cast(back.fortunes, FortuneTeller.RELIC) == 2
 			and FortuneTeller.peeked(back.fortunes) == ["rimeplate"], "what she sold survives the save (%s)" % [back.fortunes])
-	_check(FortuneTeller.chest({}) == TownWorld.NO_SPOT and not FortuneTeller.scoured({}),
+	_check(FortuneTeller.chest({}) == TownWorld.NO_SPOT and FortuneTeller.cast({}, FortuneTeller.RELIC) == 0,
 			"and a save that bought nothing has nothing")
+
+	# A great spell is one a settlement, which is the drawer's key and not the player's count.
+	var drawer := {}
+	_check(not FortuneTeller.asked(drawer, FortuneTeller.SCOUR), "a town that has cast nothing is asked nothing")
+	drawer[FortuneTeller.ASKED + FortuneTeller.SCOUR] = true
+	_check(FortuneTeller.asked(drawer, FortuneTeller.SCOUR)
+			and not FortuneTeller.asked(drawer, FortuneTeller.HOMECOMING),
+			"and one spent here says nothing about the next")
 
 	# Only work that is out can be asked about, and only once.
 	var state := TownState.new()
@@ -1371,7 +1409,8 @@ func _test_fortune() -> bool:
 
 
 ## Her table in a town, through the main scene: the roads, the star, a relic, a piece read, and the
-## one scour -- each paid for, written down and not sold twice where it should not be.
+## two great spells -- each paid for, written down, the readings dearer every time and the great
+## spells refused in the town that has cast one.
 func _test_fortune_page() -> void:
 	for scratch in [TEST_PATH, TEST_MAP_PATH]:
 		if FileAccess.file_exists(scratch):
@@ -1397,7 +1436,7 @@ func _test_fortune_page() -> void:
 	main.town_page._on_tab_pressed(TownServices.FORTUNE)
 	await process_frame
 	for reading: String in FortuneTeller.READINGS:
-		# Six squares on her grid; the way out is not on it while every wall still stands.
+		# Her squares on the two grids; the way out is on neither while every wall still stands.
 		if reading == FortuneTeller.TRANSCEND:
 			_check(_deep_button(main.town_page._rows, FortuneTeller.LABELS[reading]) == null,
 					"the way out is not offered yet")
@@ -1434,6 +1473,11 @@ func _test_fortune_page() -> void:
 	main._sync_chest()
 	_check(main._chest_pointer.target == HexMap.NO_CELL and FortuneTeller.chest(main.inventory.fortunes)
 			== TownWorld.NO_SPOT, "an opened chest takes its star with it")
+	main.town_page.redraw()
+	await process_frame
+	_check(not _dead(main, FortuneTeller.TREASURE), "and the star can be bought again")
+	_check(_price(main, FortuneTeller.TREASURE) == TownPrices.fortune_price(FortuneTeller.TREASURE, town)
+			* TownPrices.FORTUNE_GROWTH, "for double what the first one cost")
 
 	# A relic: shown on her page, and on the log's card from then on.
 	_ask(main, FortuneTeller.RELIC)
@@ -1444,9 +1488,10 @@ func _test_fortune_page() -> void:
 	_check(_said(main.town_page._rows).contains(named), "by name (%s)" % named)
 	main.town_page._on_reading_closed()
 	await process_frame
-	# Each reading is sold once a settlement: the star is gone, but not the fact it was bought here.
-	_check(_dead(main, FortuneTeller.RELIC), "one relic a settlement")
-	_check(_dead(main, FortuneTeller.TREASURE), "and one star, even with the last one gone")
+	# A reading is sold as often as it is paid for, and every telling doubles the next one's price.
+	_check(not _dead(main, FortuneTeller.RELIC), "a second relic can be asked for")
+	_check(_price(main, FortuneTeller.RELIC) == TownPrices.fortune_price(FortuneTeller.RELIC, town)
+			* TownPrices.FORTUNE_GROWTH, "at double the price")
 
 	# A piece read: the bag's open piece, as the smith's is.
 	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, RandomNumberGenerator.new())
@@ -1461,7 +1506,9 @@ func _test_fortune_page() -> void:
 	_check(_dead(main, FortuneTeller.APPRAISE), "and her reading is put away with the piece")
 	main.town_page.bag_changed(sword)
 	await process_frame
-	_check(_dead(main, FortuneTeller.APPRAISE), "and one piece read a settlement")
+	_check(not _dead(main, FortuneTeller.APPRAISE)
+			and _price(main, FortuneTeller.APPRAISE) == TownPrices.fortune_price(FortuneTeller.APPRAISE, town)
+			* TownPrices.FORTUNE_GROWTH, "and the same piece is read again, dearer")
 	main.town_page.bag_changed(null)
 	await process_frame
 
@@ -1471,10 +1518,11 @@ func _test_fortune_page() -> void:
 	_check(not main.town_page.visible and main.map.aim_radius == FortuneTeller.SCOUR_RADIUS,
 			"the scour closes the town and aims at the map")
 	purse = main.inventory.gold
-	main._end_scour()
+	main._end_aim()
 	_check(main.map.aim_radius == -1 and main.inventory.gold == purse
-			and not FortuneTeller.scoured(main.inventory.fortunes), "put away, it costs nothing")
-	main._on_scour_pressed(TownPrices.fortune_price(FortuneTeller.SCOUR, town))
+			and not _spent(main, main.view.start_town, FortuneTeller.SCOUR), "put away, it costs nothing")
+	main._on_spell_aimed(FortuneTeller.SCOUR, TownPrices.fortune_price(FortuneTeller.SCOUR, town),
+			main.view.start_town)
 	main._on_cell_aimed(Vector2i(9000, 9000))
 	_check(main.map.aim_radius != -1 and main.inventory.gold == purse, "land the map has not made is refused")
 	var dark := HexMap.NO_CELL
@@ -1486,7 +1534,8 @@ func _test_fortune_page() -> void:
 	main._on_cell_aimed(dark)
 	await process_frame
 	_check(main.view.seen(dark) and not main.view.charted(dark), "the chosen land comes out of the dark, uncharted")
-	_check(main.inventory.gold < purse and FortuneTeller.scoured(main.inventory.fortunes), "paid for and spent")
+	_check(main.inventory.gold < purse and _spent(main, main.view.start_town, FortuneTeller.SCOUR),
+			"paid for and spent in the town that sold it")
 	_check(main.map.aim_radius == -1, "and the aim is put away")
 	_check(main.view.charted(town) == charted_before, "charted land is left as it was")
 	var reloaded := MapSave.load_from(TEST_MAP_PATH, [], MapSave.fingerprint(main.map.tileset))
@@ -1496,19 +1545,50 @@ func _test_fortune_page() -> void:
 	main._on_town_pressed()
 	main.town_page._on_tab_pressed(TownServices.FORTUNE)
 	await process_frame
-	_check(_dead(main, FortuneTeller.SCOUR), "and the spell is never sold again")
+	_check(_dead(main, FortuneTeller.SCOUR), "and this town will not cast it twice")
 
-	# The way out: on her list once a wall is down, a question first, and then everything but the
-	# heirlooms and what the player knows is gone, and the map with it.
+	# Homecoming: one tile aimed at, and it has to be a settlement the player has charted.
+	var other := HexMap.NO_CELL
+	for cell: Vector2i in main.view._tiles:
+		if cell != town and main.view.town_tier(cell) != -1 and main.view.is_land(cell):
+			other = cell
+			break
+	_check(other != HexMap.NO_CELL, "this seed has a second settlement")
+	_check(_dead(main, FortuneTeller.HOMECOMING), "with none of them charted there is nowhere to go")
+	main.view._show(other, MapBuilder.State.CHARTED)
+	main.town_page.redraw()
+	await process_frame
+	_ask(main, FortuneTeller.HOMECOMING)
+	await process_frame
+	_check(not main.town_page.visible and main.map.aim_radius == 0,
+			"the road home closes the town and aims at one tile")
+	purse = main.inventory.gold
+	main._on_cell_aimed(dark)
+	_check(main.view.player_cell == town and main.inventory.gold == purse,
+			"land that is no charted settlement is refused")
+	main._on_cell_aimed(other)
+	await process_frame
+	_check(main.view.player_cell == other and main.map.player.cell == other, "the chosen town is walked to in no time")
+	_check(main.inventory.gold < purse and _spent(main, main.view.start_town, FortuneTeller.HOMECOMING),
+			"paid for and spent where it was bought")
+	_check(main.map.aim_radius == -1, "and the aim is put away")
+	main.map.select_cell(other)
+	main._on_town_pressed()
+	main.town_page._on_tab_pressed(TownServices.FORTUNE)
+	await process_frame
+	_check(not _dead(main, FortuneTeller.SCOUR), "and a great spell one town has cast is offered by the next")
+
+	# The way out: on her list once a wall is down, a question first, then the black screen where one
+	# piece is kept and the wall's orb is spent, and then everything but the heirlooms and what the
+	# player knows is gone, and the map with it.
 	main.view.land_radius += MapBuilder.WALL_STEP
 	main._credit_walls()
-	_check(main.inventory.heirloom_picks == 1, "a wall down is a pick to spend")
+	_check(main.inventory.super_orbs == 1, "a wall down is a super orb to spend")
 	var rng := RandomNumberGenerator.new()
 	rng.seed = WORLD_SEED
 	var kept := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 5)
 	main.inventory.add(kept)
 	main.inventory.add(Item.rolled("Leather Boot", ItemRarity.Rarity.COMMON, rng, 5))
-	_check(main.inventory.make_heirloom(kept), "and the sword is made one")
 	main.inventory.kills = 321
 	main.town_page.redraw()
 	await process_frame
@@ -1519,9 +1599,9 @@ func _test_fortune_page() -> void:
 	await process_frame
 	_check(FileAccess.file_exists(TEST_MAP_PATH) and main.inventory.gold > 0.0,
 			"the first press only asks")
-	_check("heirlooms" in _said(main.town_page._rows) and BigNumber.format(
-			TownPrices.fortune_price(FortuneTeller.TRANSCEND, town)) in _said(main.town_page._rows),
-			"and says what goes along, and what it costs")
+	_check("lost" in _said(main.town_page._rows) and not "heirloom" in _said(main.town_page._rows)
+			and BigNumber.format(TownPrices.fortune_price(FortuneTeller.TRANSCEND, town))
+			in _said(main.town_page._rows), "and warns of what is lost and what it costs, not of what is won")
 	var full_purse: float = main.inventory.gold
 	main.inventory.gold = 1.0
 	main.town_page.redraw()
@@ -1530,13 +1610,39 @@ func _test_fortune_page() -> void:
 	main.inventory.gold = full_purse
 	main.town_page.redraw()
 	await process_frame
+	var written := FileAccess.get_file_as_string(TEST_PATH)
 	_deep_button(main.town_page._rows, "Transcend").pressed.emit()
 	await process_frame
-	_check(not FileAccess.file_exists(TEST_MAP_PATH), "the second leaves the world: the map is gone")
+	var black: TranscendPage = main._transcend_page
+	_check(black != null and not main.town_page.visible and FileAccess.file_exists(TEST_MAP_PATH),
+			"the second goes to the black screen, and the world is still there behind it")
+	black._show_choice()
+	_check(not _deep_button(black, "Create an heirloom").disabled and _deep_button(black, "Upgrade an heirloom").disabled,
+			"an heirloom can be made, and with none held there is nothing to upgrade")
+	_deep_button(black, "Create an heirloom").pressed.emit()
+	black._create_page._select_item(main.inventory.items.find(kept))
+	black._create_page._on_make_pressed()
+	_deep_button(black._create_page._confirm, "Keep").pressed.emit()
+	await process_frame
+	_check(main.inventory.stash().items.has(kept) and black._choice.visible
+			and _deep_button(black, "Create an heirloom").disabled, "one piece is kept, and only one")
+	_deep_button(black, "Upgrade an heirloom").pressed.emit()
+	black._upgrade_page._select_item(0)
+	black._upgrade_page._on_super_orb_pressed(SuperOrbTable.ASCENSION)
+	_deep_button(black._upgrade_page._confirm, "Use").pressed.emit()
+	_check(kept.plus == 1 and main.inventory.super_orbs == 0, "and the wall's orb goes into it")
+	_check(FileAccess.get_file_as_string(TEST_PATH) == written and FileAccess.file_exists(TEST_MAP_PATH),
+			"none of which has been written: a game closed here never left")
+	black._show_choice()
+	await process_frame
+	_deep_button(black, "Enter the new world").pressed.emit()
+	await process_frame
+	_check(not FileAccess.file_exists(TEST_MAP_PATH), "the way on leaves the world: the map is gone")
 	var after := Inventory.load_from(TEST_PATH)
 	_check(after.gold == 0.0 and after.total() == 0 and after.level == 1, "the purse, the bag and the levels stay behind")
 	_check(after.stash().total() == 1 and after.stash().items[0].level == 1
-			and after.stash().items[0].safe_level == 5, "the heirloom goes along, at level 1 and remembering 5")
+			and after.stash().items[0].safe_level == 5 and after.stash().items[0].plus == 1,
+			"the heirloom goes along, +1, at level 1 and remembering 5")
 	_check(after.kills == 321 and after.first_sword_taken and "first_town" in after.tips,
 			"and so does what the player knows, so no helping hand is dealt twice")
 	_check(after.walls_credited == 0, "the new world's walls have paid nothing yet")
@@ -1574,6 +1680,16 @@ func _spell(main: Node, reading: String) -> Control:
 func _dead(main: Node, reading: String) -> bool:
 	var square := _spell(main, reading)
 	return square != null and square.modulate == OrbSlot.DIM
+
+
+## What one of her squares says it costs, read off the price under it.
+func _price(main: Node, reading: String) -> float:
+	return main.town_page._fortune_price(reading)
+
+
+## Whether the town on `spot` has cast `reading` and so will not cast it again.
+func _spent(main: Node, spot: Vector2i, reading: String) -> bool:
+	return FortuneTeller.asked(main.inventory.towns.visit(spot), reading)
 
 
 ## A left click on one of her squares, which is how a reading is asked for.

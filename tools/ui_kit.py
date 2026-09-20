@@ -307,6 +307,14 @@ ORBS = {
     "Orb of Chaos": ("OreAndGem/OreGemSpritesheet", 6 * 32, 2 * 32, 32, 32, 1),
     "Orb of Exalted": ("OreAndGem/OreGemSpritesheet", 5 * 32, 1 * 32, 32, 32, 1),
     "Orb of Divine": ("OreAndGem/OreGemSpritesheet", 8 * 32, 2 * 32, 32, 32, 1),
+    # The six super orbs (`SuperOrbTable`), spent only at a transcension: the sheet's crystals, where
+    # the ordinary six are its stones, so the two trays never read as one family.
+    "Orb of Replacement": ("OreAndGem/OreGemSpritesheet", 2 * 32, 1 * 32, 32, 32, 1),
+    "Orb of Ascension": ("OreAndGem/OreGemSpritesheet", 4 * 32, 0 * 32, 32, 32, 1),
+    "Orb of Perfection": ("OreAndGem/OreGemSpritesheet", 7 * 32, 0 * 32, 32, 32, 1),
+    "Orb of Expansion": ("OreAndGem/OreGemSpritesheet", 6 * 32, 0 * 32, 32, 32, 1),
+    "Orb of Mending": ("OreAndGem/OreGemSpritesheet", 3 * 32, 1 * 32, 32, 32, 1),
+    "Orb of Binding": ("OreAndGem/OreGemSpritesheet", 0 * 32, 1 * 32, 32, 32, 1),
 }
 # What OrbSlot draws an orb at: half the source, which is the whole reason the centring below is
 # fussier than the gear's. Written here because the preview has to show that size to be worth looking
@@ -635,7 +643,7 @@ SKILLS = {
 }
 SKILL_LOCKS = {"power_locked": "RedLocked", "fortune_locked": "YellowLocked"}
 
-# The fortuneteller's six readings, off the same pack in the one colourway neither skill tree uses:
+# The fortuneteller's seven spells, off the same pack in the one colourway neither skill tree uses:
 # purple is hers alone, so a spell on her grid is never mistaken for a skill. Placeholder art -- the
 # pack draws no fortuneteller, and these stand in until something is drawn for her.
 #
@@ -648,6 +656,8 @@ FORTUNE = {
     "relic": "Purple1",
     "appraise": "Purple15",
     "scour": "Purple8",
+    # An arch to walk back through, which is the nearest thing in the pack to a road home.
+    "homecoming": "Purple11",
 }
 # The sketch's shape, row by row: which node stands in which of three columns, and its parents. Written
 # here only so the preview can draw a tree; SkillTree in the game is where it is actually decided.

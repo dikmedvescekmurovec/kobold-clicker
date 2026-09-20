@@ -38,6 +38,16 @@ var unique := ""
 ## The level an heirloom had when the world was last left behind, 0 for every piece that never was one.
 ## The smith walks it back up to here without a chance of breaking it (`Blacksmith.break_chance`).
 var safe_level := 0
+## How many Orbs of Ascension have gone into it (`SuperOrbTable`), written after its name as "+2".
+## Its modifiers roll, reroll and rescale as if the piece were `PLUS_LEVELS` levels higher for each
+## (`mod_level`); its base stats do not move.
+var plus := 0
+## An Orb of Expansion has gone into it: one modifier more than its rarity allows, once per piece.
+var extra_slot := false
+
+## What one `plus` is worth to a piece's modifiers, in item levels. A percent band grows 12% a level,
+## so three levels is about +40% a plus. A dial, unplayed.
+const PLUS_LEVELS := 3
 
 
 ## A fresh drop: the piece, its rarity, its level, and however many modifiers that rarity carries.
@@ -95,16 +105,39 @@ static func scaled_stats(item_type: String, item_level: int) -> Dictionary:
 ## run never costs a piece what a long one earned. Rarity, locks, `broken` and `unique` do not move.
 func transcend() -> void:
 	safe_level = maxi(safe_level, level)
-	for mod in mods:
-		mod["value"] = ModifierTable.rescaled(str(mod["id"]), int(mod["value"]), level, 1)
+	var was := mod_level()
 	level = 1
+	for mod in mods:
+		mod["value"] = ModifierTable.rescaled(str(mod["id"]), int(mod["value"]), was, mod_level())
+	refresh_perfect()
 	stats = scaled_stats(type, 1)
+
+
+## The level its modifiers' bands are read at: its own, and `PLUS_LEVELS` more for every plus.
+## Everything that rolls, rerolls or writes a band for a piece already made asks this, never `level`.
+func mod_level() -> int:
+	return level + plus * PLUS_LEVELS
+
+
+## Puts every perfected modifier (`"perfect": true`, an Orb of Perfection's) at the top of its band
+## as the band now stands. Called by whatever moves `mod_level`: the smith's upgrade, an Orb of
+## Ascension, the end of a world. A Divine steps over one instead, so it never leaves the top.
+func refresh_perfect() -> void:
+	for mod in mods:
+		if bool(mod.get("perfect", false)):
+			mod["value"] = int(ModifierTable.band_for(str(mod["id"]), mod_level())[1])
+
+
+## Whether an orb must leave this modifier as it is: the smith's lock, or an Orb of Binding's.
+static func held_fast(mod: Dictionary) -> bool:
+	return bool(mod.get("locked", false)) or bool(mod.get("bound", false))
 
 
 ## What the panel calls it. A method rather than reading `type`, because a unique has a name of its
 ## own and this is where that seam belongs.
 func display_name() -> String:
-	return type if unique.is_empty() else str(UniqueTable.UNIQUES[unique]["name"])
+	var named := type if unique.is_empty() else str(UniqueTable.UNIQUES[unique]["name"])
+	return named if plus <= 0 else "%s +%d" % [named, plus]
 
 
 ## The sentence saying what a unique changes about a fight, or "" for a piece that changes nothing.
@@ -230,6 +263,25 @@ func locked_line(detailed := false) -> String:
 	return _mod_line(locked_mod(), detailed)
 
 
+## Every one of `mod_lines` that no orb can move -- the smith's lock and an Orb of Binding's -- for
+## whoever writes them in a base stat's ink.
+func fast_lines(detailed := false) -> PackedStringArray:
+	var lines := PackedStringArray()
+	for mod in mods:
+		if held_fast(mod):
+			lines.append(_mod_line(mod, detailed))
+	return lines
+
+
+## And the perfected ones, which are written in a colour of their own.
+func perfect_lines(detailed := false) -> PackedStringArray:
+	var lines := PackedStringArray()
+	for mod in mods:
+		if bool(mod.get("perfect", false)):
+			lines.append(_mod_line(mod, detailed))
+	return lines
+
+
 func _mod_line(mod: Dictionary, detailed: bool) -> String:
 	var line := ModifierTable.line(mod)
 	if detailed and not line.is_empty():
@@ -237,7 +289,7 @@ func _mod_line(mod: Dictionary, detailed: bool) -> String:
 		# of its unit: "+4(1-4)s". The number may be `BigNumber`'s "1.23e6".
 		var number := RegEx.create_from_string("^\\+[0-9.e]+").search(line)
 		if number != null:
-			line = "%s(%d-%d)%s" % ([number.get_string()] + ModifierTable.band_for(str(mod["id"]), level)
+			line = "%s(%d-%d)%s" % ([number.get_string()] + ModifierTable.band_for(str(mod["id"]), mod_level())
 					+ [line.substr(number.get_end())])
 	return line
 
@@ -251,6 +303,10 @@ func to_dict() -> Dictionary:
 		out["unique"] = unique
 	if safe_level > 0:
 		out["safe_level"] = safe_level
+	if plus > 0:
+		out["plus"] = plus
+	if extra_slot:
+		out["extra_slot"] = true
 	return out
 
 
@@ -296,6 +352,8 @@ static func from_dict(data: Variant) -> Item:
 	# Absent is whole, which is what every save written before there was a smith to break one means.
 	item.broken = bool(saved.get("broken", false))
 	item.safe_level = maxi(0, int(saved.get("safe_level", 0)))
+	item.plus = maxi(0, int(saved.get("plus", 0)))
+	item.extra_slot = bool(saved.get("extra_slot", false))
 	# A save written before pieces carried their own numbers has none to read, and what such a
 	# piece was worth when it was written is exactly the table unscaled -- so that is what it keeps.
 	var saved_stats: Variant = saved.get("stats", null)
@@ -318,7 +376,8 @@ static func from_dict(data: Variant) -> Item:
 			var mod := {"id": id, "value": int(entry.get("value", 0))}
 			# Written only where it is true, so a rolled modifier and a saved one are the same
 			# dictionary and nothing has to strip a false out of the comparison.
-			if bool(entry.get("locked", false)):
-				mod["locked"] = true
+			for flag: String in ["locked", "bound", "perfect"]:
+				if bool(entry.get(flag, false)):
+					mod[flag] = true
 			item.mods.append(mod)
 	return item

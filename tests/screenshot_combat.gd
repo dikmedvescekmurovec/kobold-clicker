@@ -5,7 +5,9 @@ extends "res://tests/harness.gd"
 ##
 ## Saves the opening of a fight, the middle of one, the elite at the end, and the two verdicts, plus
 ## a farm run with its counter, a find in the air, its full-bag warning and its way out, the popup the
-## counter opens and one find opened inside it. Also
+## counter opens and one find opened inside it, the banner a unique new to the collection log raises
+## (`combat_unique.png`, and `combat_unique_held.png` with the X the five seconds leave on one nobody
+## clicked through). Also
 ## saves a contact sheet of every enemy's idle frame at the size the fight draws it, which is what
 ## catches a frame or crop measured wrong in EnemyRoster, and one shot per environment on its own
 ## backdrop (combat_area_<env>_<variant>.png).
@@ -25,9 +27,39 @@ const ENVIRONMENT := "grass"
 func _run() -> void:
 	await _shoot_fight()
 	await _shoot_farm()
+	await _shoot_camp()
 	await _shoot_backdrops()
 	await _shoot_roster()
 	quit()
+
+
+## The camp screen: the same ground as a farm run, at night, with nobody on it. Shot a few hours in,
+## which is the state a player actually comes back to.
+func _shoot_camp() -> void:
+	for child in root.get_children():
+		child.queue_free()
+	await process_frame
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = MAP_SEED
+	main.inventory_path = "user://screenshot_combat_inventory.json"
+	main.map_path = "user://screenshot_combat_map.json"
+	root.add_child(main)
+	for i in 3:
+		await process_frame
+	main.map.hide()
+
+	var fight := Encounter.farm(CELL, ENVIRONMENT)
+	fight.roster_rng.seed = WORLD_SEED
+	fight.arm({"damage": 12.0, "attack_speed": 1.4})
+	var camp := Camp.make(CELL, TileNames.generate(CELL, ENVIRONMENT, MAP_SEED), fight,
+			Time.get_unix_time_from_system() - 3.0 * 3600.0)
+	var scene := CampScene.new()
+	main.add_child(scene)
+	scene.begin(camp, ENVIRONMENT, "plain", main.ui_scale)
+	await _save(scene, "combat_camp.png")
+	scene.queue_free()
+	await process_frame
 
 
 ## One shot per environment, each on a different variant, so all six places and all five variants
@@ -118,6 +150,26 @@ func _shoot_fight() -> void:
 	while fight.phase != Encounter.Phase.WAITING:
 		fight.advance(0.05)
 	await _save(combat, "combat_start.png")
+
+	# The banner a unique new to the collection log raises, under the fight's own column: `_combat` is
+	# set by hand because this fight was built here and not through `_open_fight`. Shot once the flash
+	# and the spring have settled, so what the shot says is where it stands and how it reads, and then
+	# again with the X the five seconds leave on one nobody clicked through.
+	main._combat = combat
+	var prize_rng := RandomNumberGenerator.new()
+	prize_rng.seed = WORLD_SEED
+	# This script's own save file outlives the run, and the banner is only raised by a unique the log
+	# has never held -- so it is taken back out of the log first, or the second run shoots nothing.
+	main.inventory.uniques_found.erase("stonebreaker")
+	main._on_loot_dropped(0, Item.rolled_unique("stonebreaker", prize_rng, 8))
+	await create_timer(0.7).timeout
+	await _save(combat, "combat_unique.png")
+	main._on_banner_held(main._unique_banner)
+	await _save(combat, "combat_unique_held.png")
+	main._close_unique_banner()
+	main._combat = null
+	# Let it finish fading, or it hangs over the next shot.
+	await create_timer(0.5).timeout
 
 	# Part way through the first enemy, with a frame between the blows so the numbers floating off
 	# them are caught spread out rather than stacked on one spot.

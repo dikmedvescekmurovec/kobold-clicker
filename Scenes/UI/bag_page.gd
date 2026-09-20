@@ -18,6 +18,8 @@ signal crafted
 signal laid_out
 ## The orb in hand changed, "" for none. The town page greys its shelf by it, as the grid is greyed.
 signal held_changed(orb: String)
+## A piece was made an heirloom, which only a transcension's page can do (`TranscendPage`).
+signal heirloom_made(item: Item)
 
 ## Four squares to a row: the narrowest a level's heading fits with its Auto and Clear marks beside
 ## it. The gutter is the pack's own seven-to-one square-to-gutter proportion.
@@ -71,6 +73,8 @@ const WORN_WIDTH := WIDTH
 const SHOP_WORN_WIDTH := 146.0
 ## The air between the bag panel and the sheet.
 const WORN_GAP := 6.0
+## How much of the window's height the bag takes on a transcension's black screen.
+const TRANSCEND_HEIGHT := 0.7
 ## Each socket's centre in the doll sprite's own pixels, before DOLL_SCALE. Measured off the sprite:
 ## head y 0-16 on x 14-27, chest y 17-33, feet y 34-45, shield hand x 0-8, sword hand x 37-40. The
 ## jewellery sits in a row below the figure.
@@ -94,6 +98,13 @@ var _purse: Inventory
 ## Whether this is the heirlooms' page. An heirloom is not sold, not thrown away by the level and not
 ## filtered as it arrives; thrown away one at a time it is, and that always asks first.
 var _heirlooms := false
+## Whether this page stands on the black screen of a transcension (`TranscendPage`) rather than
+## against the left edge: centred, written to no file -- the whole transcension is one write, made
+## when it is over -- and there for one thing. Over the bag that is choosing the piece to keep, so a
+## piece opens to no Equip and no Discard and **Make heirloom** stands at the foot in the tray's
+## place; over the heirlooms it is the super orbs (`SuperOrbTable`), which are the tray.
+var _transcending := false
+var _make_button: Button
 var _save_path: String
 var _ui_scale: float
 
@@ -161,9 +172,11 @@ var _armed := "":
 		held_changed.emit(orb)
 
 
-func _init(player_inventory: Inventory, save_path: String, ui_scale: float, heirlooms := false) -> void:
+func _init(player_inventory: Inventory, save_path: String, ui_scale: float, heirlooms := false,
+		transcending := false) -> void:
 	_purse = player_inventory
 	_heirlooms = heirlooms
+	_transcending = transcending
 	inventory = player_inventory.stash() if heirlooms else player_inventory
 	_save_path = save_path
 	_ui_scale = ui_scale
@@ -173,7 +186,8 @@ func _init(player_inventory: Inventory, save_path: String, ui_scale: float, heir
 
 func _ready() -> void:
 	_panel = UITheme.titled_panel("Heirlooms" if _heirlooms else "Items",
-			"Close the heirlooms" if _heirlooms else "Close the item panel", closed.emit)
+			"Back" if _transcending else "Close the heirlooms" if _heirlooms
+			else "Close the item panel", closed.emit)
 	_panel.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_panel)
 	var rows := UITheme.body_of(_panel)
@@ -219,6 +233,10 @@ func _ready() -> void:
 	_orb_tray.alignment = BoxContainer.ALIGNMENT_CENTER
 	_orb_tray.custom_minimum_size = Vector2(WIDTH, 0)
 	rows.add_child(_orb_tray)
+	if _transcending and not _heirlooms:
+		_make_button = UITheme.button("Make heirloom", "LightButton", "")
+		_make_button.pressed.connect(_on_make_pressed)
+		rows.add_child(_make_button)
 
 	_worn_body = UITheme.vbox(SLOT_GAP)
 	_worn_panel = PanelContainer.new()
@@ -285,13 +303,20 @@ func refresh_gold() -> void:
 	_gold.text = BigNumber.format(_purse.gold)
 
 
-## The bag stretched to the window's height, and the sheet centred against its right edge.
+## The bag stretched to the window's height, and the sheet centred against its right edge. At a
+## transcension the two stand in the middle of the window instead, the bag `TRANSCEND_HEIGHT` of it.
 func layout() -> void:
 	var view_size := get_viewport_rect().size
 	_panel.size = Vector2(_panel.get_combined_minimum_size().x, view_size.y / _ui_scale)
 	_panel.position = Vector2.ZERO
 	_worn_panel.size = _worn_panel.get_combined_minimum_size()
-	_worn_panel.position = Vector2((_panel.size.x + WORN_GAP) * _ui_scale,
+	if _transcending:
+		_panel.size.y = floorf(_panel.size.y * TRANSCEND_HEIGHT)
+		var beside: Control = (_worn_panel if _worn_panel.visible
+				else _show_button if _show_button.visible else null)
+		var width := _panel.size.x + (0.0 if beside == null else WORN_GAP + beside.size.x)
+		_panel.position = ((view_size - Vector2(width, _panel.size.y) * _ui_scale) / 2.0).floor()
+	_worn_panel.position = Vector2(_panel.position.x + (_panel.size.x + WORN_GAP) * _ui_scale,
 			(view_size.y - _worn_panel.size.y * _ui_scale) / 2.0)
 	_show_button.size = _show_button.get_combined_minimum_size()
 	_show_button.position = Vector2(_worn_panel.position.x,
@@ -306,6 +331,12 @@ func right_edge() -> float:
 	var last: Control = (_worn_panel if _worn_panel.visible
 			else _show_button if _show_button.visible else _panel)
 	return last.position.x + last.size.x * _ui_scale
+
+
+## The bag panel's top-left corner in window pixels: the origin but on a transcension's screen, where
+## `TranscendPage` stands its way back beside it.
+func panel_corner() -> Vector2:
+	return _panel.position
 
 
 ## Where the sheet beside the bag begins, in window pixels, so what stands past it can stand level
@@ -345,11 +376,13 @@ func refresh() -> void:
 			slot.set_meta("bag_index", i)
 			_dim_for_orb(slot, inventory.items[i])
 			grid.add_child(slot)
-	_count.text = (str(inventory.total()) if _heirlooms
+	_count.text = ("%d to spend" % _purse.super_orbs if _heirlooms and _transcending
+			else str(inventory.total()) if _heirlooms
 			else "%d / %d" % [inventory.total(), Inventory.CAPACITY])
 	_count.add_theme_color_override("font_color", Palette.RUST if inventory.is_full() else Palette.SLATE)
 	refresh_gold()
 	refresh_orbs()
+	_refresh_make()
 	_refresh_worn()
 	if _selected >= 0 and _selected < inventory.total():
 		_show_item(_selected)
@@ -371,8 +404,9 @@ func _section_heading(level: int) -> HBoxContainer:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(title)
-	# An heirloom never arrives by dropping and is never thrown away by the handful: no marks.
-	if _heirlooms:
+	# An heirloom never arrives by dropping and is never thrown away by the handful: no marks. Nor on
+	# the way out of a world, where the bag is only being chosen from.
+	if _heirlooms or _transcending:
 		return row
 
 	var auto := UITheme.button("", "BrownIconButton",
@@ -531,7 +565,7 @@ static func check_box(text: String) -> HBoxContainer:
 ## Touches nothing already held: that is Clear's job.
 func _on_autodiscard_toggled(on: bool, level: int) -> void:
 	inventory.set_autodiscard(level, on)
-	_purse.save(_save_path)
+	_save()
 	_select_item(-1)
 
 
@@ -541,7 +575,7 @@ func _on_clear_level_pressed(level: int) -> void:
 	# The Rag and Bone Sack pays for what is thrown away, which is nothing unless it is worn.
 	for item: Item in gone:
 		_purse.gold += _purse.salvage(item)
-	_purse.save(_save_path)
+	_save()
 	_select_item(-1)
 
 
@@ -553,7 +587,7 @@ func _on_sell_level_pressed(level: int) -> void:
 	_purse.gold += paid
 	print("Sold %d item(s) at level %d for %s gold"
 			% [gone.size(), level, BigNumber.format(paid)])
-	_purse.save(_save_path)
+	_save()
 	_select_item(-1)
 
 
@@ -615,6 +649,9 @@ func _show_item(index: int) -> void:
 	var open_sockets := inventory.equipment.sockets_for(item)
 	_fill_detail(item)
 	var actions := _action_row(_select_item.bind(-1))
+	# Choosing what to keep: the world is ending, and there is nothing else to do with a piece.
+	if _transcending and not _heirlooms:
+		return
 	if not open_sockets.is_empty():
 		var socket: Equipment.Socket = open_sockets[_socket_pick % open_sockets.size()]
 		# Everything the press would take off, named: a two-hander hands back the offhand as well, and
@@ -655,41 +692,51 @@ func _show_item(index: int) -> void:
 			discard.pressed.connect(_on_discard_pressed.bind(item))
 		discard.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		actions.add_child(discard)
-	_heirloom_row(item)
 
 
 ## A worn piece's block. No Discard: the cap is the bag's alone, so nothing pushes the player to
 ## destroy what they wear.
 func _show_worn(socket: Equipment.Socket) -> void:
 	_fill_detail(inventory.equipment.item_at(socket))
+	var actions := _action_row(_select_socket.bind(-1))
+	if _transcending and not _heirlooms:
+		return
 	var unequip := _unequip_button(_on_unequip_pressed.bind(socket))
 	unequip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_action_row(_select_socket.bind(-1)).add_child(unequip)
-	_heirloom_row(inventory.equipment.item_at(socket))
+	actions.add_child(unequip)
 
 
-## Under an open piece's buttons while a wall has left the player a choice to spend: the button that
-## makes this piece an heirloom, bag piece or worn. A row of its own, because the row above is full.
-## Not at a counter, where the page is for trading, and not on the heirlooms' own page.
-func _heirloom_row(item: Item) -> void:
-	if _heirlooms or not _services.is_empty() or _purse.heirloom_picks <= 0:
+## Make heirloom, at the foot of a transcension's bag: live while the piece that is open, bag piece
+## or worn, can be made one.
+func _refresh_make() -> void:
+	if _make_button == null:
 		return
-	var left := _purse.heirloom_picks
-	var make := UITheme.button("Make heirloom", "LightButton", Blacksmith.BROKEN if item.broken
-			else "Keep this when the world is left behind. %d choice%s left"
-			% [left, "" if left == 1 else "s"])
-	make.disabled = not _purse.can_make_heirloom(item)
-	make.pressed.connect(_ask.bind("heirloom", "Heirloom",
-			"Make %s an heirloom? It leaves your bag for the heirlooms, for good." % item.display_name(),
-			"Keep", "LightButton", _on_heirloom_pressed.bind(item), false))
-	_detail.add_child(make)
+	var item := _open_piece()
+	_make_button.disabled = not _purse.can_make_heirloom(item)
+	_make_button.tooltip_text = ("Open the piece you would keep" if item == null
+			else Blacksmith.BROKEN if item.broken else "Keep this when the world is left behind")
+
+
+func _on_make_pressed() -> void:
+	var item := _open_piece()
+	if item != null:
+		_ask("heirloom", "Heirloom", "Make %s an heirloom? It is the one piece of this world you keep."
+				% item.display_name(), "Keep", "LightButton", _on_heirloom_pressed.bind(item), false)
 
 
 func _on_heirloom_pressed(item: Item) -> void:
-	if _purse.make_heirloom(item):
-		print("Made %s (%s, level %d) an heirloom" % [item.display_name(), item.rarity_name(), item.level])
-		_purse.save(_save_path)
+	if not _purse.make_heirloom(item):
+		return
+	print("Made %s (%s, level %d) an heirloom" % [item.display_name(), item.rarity_name(), item.level])
 	_select_item(-1)
+	heirloom_made.emit(item)
+
+
+## What the page changed, written down -- but for a transcension's pages, which have no file: all
+## that is done on the black screen is one write, and `main_scene` makes it when the screen is left.
+func _save() -> void:
+	if not _save_path.is_empty():
+		_purse.save(_save_path)
 
 
 ## The lines go inside the scroll and the buttons outside it, so Equip is never scrolled away.
@@ -729,13 +776,13 @@ func _unequip_button(action: Callable) -> Button:
 
 func _on_equip_pressed(item: Item, socket: Equipment.Socket) -> void:
 	if inventory.equip(item, socket):
-		_purse.save(_save_path)
+		_save()
 	_select_item(-1)
 
 
 func _on_unequip_pressed(socket: Equipment.Socket) -> void:
 	if inventory.unequip(socket):
-		_purse.save(_save_path)
+		_save()
 	_select_socket(-1)
 
 
@@ -743,7 +790,7 @@ func _on_discard_pressed(item: Item) -> void:
 	if inventory.remove(item):
 		print("Discarded %s (%s, level %d)" % [item.type, item.rarity_name(), item.level])
 		_purse.gold += _purse.salvage(item)
-		_purse.save(_save_path)
+		_save()
 	_select_item(-1)
 
 
@@ -755,7 +802,7 @@ func _on_sell_pressed(item: Item) -> void:
 		_purse.gold += price
 		print("Sold %s (%s, level %d) for %s gold"
 				% [item.type, item.rarity_name(), item.level, BigNumber.format(price)])
-		_purse.save(_save_path)
+		_save()
 	_select_item(-1)
 
 
@@ -768,6 +815,10 @@ func _refresh_worn() -> void:
 	var judged := _offered
 	if judged == null and _selected >= 0 and _selected < inventory.total():
 		judged = inventory.items[_selected]
+	# On a transcension's screen the sheet is always the doll: a worn piece is as good a choice as a
+	# carried one, and nothing there is being weighed against what is worn.
+	if _transcending:
+		judged = null
 	# In a town the page on the far edge needs the room, and the doll is the one thing on this side
 	# that can go without taking a decision with it: the comparison is what says whether to sell, and
 	# nothing is worn while the bag is being emptied over a counter.
@@ -948,7 +999,7 @@ func _on_fold_pressed() -> void:
 ## Keeps the judged piece open, found again by identity: the piece coming back moves every index.
 func _on_compare_unequip_pressed(item: Item, socket: Equipment.Socket) -> void:
 	if inventory.unequip(socket):
-		_purse.save(_save_path)
+		_save()
 	_select_item(inventory.items.find(item))
 
 
@@ -963,11 +1014,25 @@ func _open_piece() -> Item:
 
 ## Every orb held, lit; with a piece open, only the ones that can do something to it stay lit.
 func refresh_orbs() -> void:
+	UITheme.clear(_orb_tray)
+	var against := _open_piece()
+	if _transcending:
+		# Over the bag there is no tray at all, and over the heirlooms it is the super orbs: one count
+		# for the six of them (said in the corner, `_count`), so no square wears a number.
+		_orb_tray.visible = _heirlooms
+		_orb_rule.visible = _heirlooms
+		for orb: String in SuperOrbTable.orbs() if _heirlooms else []:
+			var slot := OrbSlot.make(orb, mini(_purse.super_orbs, 1),
+					against != null and SuperOrbTable.can_apply(orb, against))
+			slot.pressed.connect(_on_super_orb_pressed)
+			slot.hovered.connect(_on_orb_hovered.bind(slot))
+			slot.unhovered.connect(_hide_orb_card)
+			_orb_tray.add_child(slot)
+		_hide_orb_card()
+		return
 	# No tray until the first orb; once seen it stays, even with every orb spent.
 	_orb_tray.visible = _purse.total_orbs() > 0 or "first_orb" in _purse.tips
 	_orb_rule.visible = _orb_tray.visible
-	UITheme.clear(_orb_tray)
-	var against := _open_piece()
 	for orb: String in OrbTable.orbs():
 		var slot := OrbSlot.make(orb, _purse.orb_count(orb),
 				against == null or OrbTable.can_apply(orb, against), orb == _armed)
@@ -999,6 +1064,45 @@ func _on_orb_pressed(orb: String) -> void:
 	_craft(orb, item)
 
 
+## A super orb pressed with a piece open. An aimed one asks which modifier, and that answer is the
+## only question it asks; the rest ask whether, every time: a wall was broken for each.
+func _on_super_orb_pressed(orb: String) -> void:
+	var item := _open_piece()
+	if _purse.super_orbs <= 0 or not SuperOrbTable.can_apply(orb, item):
+		return
+	if not SuperOrbTable.aimed(orb):
+		_ask("super_orb", orb, "Use it on %s? It cannot be taken back." % item.display_name(),
+				"Use", "LightButton", _super_craft.bind(orb, item, -1), false)
+		return
+	_close_confirm()
+	_confirm = Control.new()
+	add_child(_confirm)
+	var panel := UITheme.titled_panel(orb, "Cancel", _close_confirm)
+	panel.scale = Vector2(_ui_scale, _ui_scale)
+	_confirm.add_child(panel)
+	var body := UITheme.body_of(panel)
+	body.add_child(UITheme.label("Which modifier?", null, true))
+	for i in item.mods.size():
+		var line := UITheme.button(ModifierTable.line(item.mods[i]), "LightButton", "")
+		line.custom_minimum_size.x = CONFIRM_WIDTH
+		line.disabled = not SuperOrbTable.can_aim(orb, item, i)
+		line.pressed.connect(func() -> void:
+			_close_confirm()
+			_super_craft(orb, item, i))
+		body.add_child(line)
+	_place_confirm()
+	_place_confirm.call_deferred()
+
+
+## Applied first and spent second, as every orb is. Not saved: see `_save`.
+func _super_craft(orb: String, item: Item, index: int) -> void:
+	if _purse.super_orbs <= 0 or not SuperOrbTable.apply(orb, item, _craft_rng, index):
+		return
+	_purse.super_orbs -= 1
+	print("Spent %s on %s (%s, level %d)" % [orb, item.display_name(), item.rarity_name(), item.level])
+	refresh()
+
+
 ## The held orb on a piece that is not the bag's -- one off a vendor's shelf. `written` is called
 ## between the change and the save, so whoever owns the piece writes it down in the same write the
 ## orb is spent in.
@@ -1014,7 +1118,7 @@ func _craft(orb: String, item: Item, written := Callable()) -> void:
 	if written.is_valid():
 		written.call()
 	_purse.spend_orb(orb)
-	_purse.save(_save_path)
+	_save()
 	print("Spent %s on %s (%s, level %d)" % [orb, item.display_name(), item.rarity_name(), item.level])
 	if _purse.orb_count(_armed) <= 0:
 		_armed = ""
@@ -1038,7 +1142,7 @@ func _sell_orb(orb: String) -> void:
 		return
 	_purse.gold += price
 	print("Sold %s for %s gold" % [orb, BigNumber.format(price)])
-	_purse.save(_save_path)
+	_save()
 	refresh()
 
 
@@ -1050,7 +1154,8 @@ func _orb_price(orb: String) -> float:
 
 ## Placed now and again deferred: the first pass measures labels that have not laid out yet.
 func _on_orb_hovered(orb: String, slot: OrbSlot) -> void:
-	_orb_card.fill(orb, _purse.orb_count(orb), _open_piece(), _orb_price(orb))
+	_orb_card.fill(orb, _purse.super_orbs if SuperOrbTable.has(orb) else _purse.orb_count(orb),
+			_open_piece(), _orb_price(orb))
 	_orb_card.show()
 	_place_orb_card(slot.get_global_rect())
 	_place_orb_card.call_deferred(slot.get_global_rect())

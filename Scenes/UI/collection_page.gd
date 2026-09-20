@@ -2,15 +2,22 @@ class_name CollectionPage
 extends Control
 ## The collection log, as a page against the left edge: every unique the game has, one square each in
 ## `UniqueTable`'s order. One the player has found is drawn as the piece it is; one a fortuneteller
-## has shown them (`FortuneTeller.peek`) is the same piece darkened, and the card beside it says what
-## it is and where it is found; any other is its outline in black, and its card says nothing but that.
+## has shown them (`FortuneTeller.peek`) is the same piece darkened; any other is its outline in black,
+## and its card says nothing but that.
+##
+## **Where a piece is carried is written on a found square as well as a shown one** (`write_hint`): a
+## second copy is worth hunting and a set is worth finishing, and the log is the one place that answers
+## either. Only a square nobody has shown them says nothing. The cost is that a found square now carries
+## a `hint`, and `ItemCard` skips its Alt comparison on any square that does -- which is right, because
+## the square is a `specimen`, never the piece in the player's bag.
 ##
 ## Built like the other left-hand pages (`BountyList`): `open()` redraws it, `layout()` fits it to the
 ## window, `closed` is its X, and it carries `UITheme.theme()` because it hangs off a `CanvasLayer`.
 ## It changes nothing and so saves nothing -- `FightLedger` is what writes a find into the log.
 ##
-## Every square is an `ItemSlot`, so the one `ItemCard` the main scene built describes these too: a
-## found one through `ItemDetails` as anywhere else, a missing one through the `hint` it carries.
+## Every square is an `ItemSlot`, so the one `ItemCard` the main scene built describes these too --
+## every one of them through the `hint` it carries, except the one nobody has shown them, whose hint is
+## the two grey lines saying so.
 
 ## The page's X was pressed.
 signal closed
@@ -98,9 +105,13 @@ func open() -> void:
 static func square(id: String, found: bool, map_view: MapBuilder, peeked := false) -> ItemSlot:
 	var piece := CollectionPage.specimen(id)
 	if found:
-		return ItemSlot.make(piece)
-	return ItemSlot.shadow(piece, CollectionPage.write_hint.bind(id, map_view, piece if peeked else null),
-			peeked)
+		# The piece as it is, and the card still says where it is carried: a second copy is worth hunting
+		# and a set is worth finishing long after the first one is in the bag.
+		var slot := ItemSlot.make(piece)
+		slot.hint = CollectionPage.write_hint.bind(id, map_view, piece, true)
+		return slot
+	return ItemSlot.shadow(piece, CollectionPage.write_hint.bind(id, map_view,
+			piece if peeked else null, false), peeked)
 
 
 ## The log's own copy of a unique: level 1, every modifier at the bottom of its band.
@@ -113,21 +124,23 @@ static func specimen(id: String) -> Item:
 	return piece
 
 
-## What the card says beside a unique not found yet. With no `specimen` -- one no fortuneteller has
-## shown -- that and who to ask. With one: the piece itself (the log's own), then where to look -- the ground it is found on as the
-## tile panel's own swatches, and the nearest piece of that ground the player has seen
-## (`MapBuilder.nearest_env`, which never names land under the fog). The fortuneteller's own page
-## writes the same card, so a relic reads the same at her table and in the log.
+## What the card says beside a unique in the log. With no `specimen` -- one nobody has shown them --
+## only that and who to ask. With one: the piece itself (the log's own), whether it is `found`, then
+## where to look -- the ground it is carried on as the tile panel's own swatches, and the nearest piece
+## of that ground the player has seen (`MapBuilder.nearest_env`, which never names land under the fog).
+## The fortuneteller's own page writes the same card and leaves `found` alone, so a relic reads the same
+## at her table and in the log.
 static func write_hint(rows: VBoxContainer, width: float, id: String, map_view: MapBuilder,
-		specimen: Item = null) -> void:
+		specimen: Item = null, found := false) -> void:
 	if specimen == null:
 		rows.add_child(ItemDetails.line("Not found yet", Palette.SLATE, width))
 		rows.add_child(ItemDetails.line("A fortuneteller could say more.", Palette.SLATE, width, true))
 		return
-	# `fill` empties the rows it is given, so the piece goes in first and "not found" under it.
+	# `fill` empties the rows it is given, so the piece goes in first and whether it is held under it.
 	ItemDetails.fill(rows, specimen, width)
 	rows.add_child(UITheme.rule())
-	rows.add_child(ItemDetails.line("Not found yet", Palette.SLATE, width, true))
+	rows.add_child(ItemDetails.line("Found" if found else "Not found yet",
+			Palette.LEAF if found else Palette.SLATE, width, true))
 	var envs: Array = UniqueTable.UNIQUES[id]["envs"]
 	if envs.is_empty():
 		rows.add_child(ItemDetails.line("Carried by monsters everywhere.", Palette.INK, width, true))

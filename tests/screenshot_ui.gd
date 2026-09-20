@@ -495,7 +495,7 @@ func _shoot_town() -> void:
 	# A wall down: the way out joins her list, and asked for it is a question before it is a deed.
 	main.view.land_radius += MapBuilder.WALL_STEP
 	main._credit_walls()
-	main.inventory.heirloom_picks = 3
+	main.inventory.super_orbs = 3
 	main.town_page.redraw()
 	for i in 2:
 		await process_frame
@@ -527,8 +527,7 @@ func _shoot_town() -> void:
 	root.get_texture().get_image().save_png("user://ui_town_heirloom_smith.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_town_heirloom_smith.png"))
 
-	# Out of town: the heirlooms' page behind the crown, with its own doll, and the bag's button that
-	# makes one while a wall has left a choice to spend, with the question it asks.
+	# Out of town: the heirlooms' page behind the crown, with its own doll.
 	main._on_left_page_closed()
 	main._on_heirlooms_pressed()
 	for i in 2:
@@ -536,13 +535,38 @@ func _shoot_town() -> void:
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_heirlooms.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_heirlooms.png"))
-	main._on_bag_pressed()
-	main.bag_page._select_item(3)
-	for i in 2:
-		await process_frame
-	await RenderingServer.frame_post_draw
-	root.get_texture().get_image().save_png("user://ui_make_heirloom.png")
-	print("Saved ", ProjectSettings.globalize_path("user://ui_make_heirloom.png"))
+	main._on_left_page_closed()
+
+	# The black screen between two worlds: the choice, a piece of the bag open to be kept, an heirloom
+	# open over the super orbs, and the question an aimed one asks. Stood over the scene rather than
+	# gone to through the fortuneteller, so the rest of this script still has a world to shoot; with no
+	# animations, so it is black at once.
+	var animations := Settings.animations
+	Settings.animations = Settings.Anim.NONE
+	var black := TranscendPage.new(main.inventory, main.ui_scale)
+	main._ui_layer.add_child(black)
+	main._character.hide()
+	var black_shots: Array[Array] = [
+		[func() -> void: pass, "ui_transcend_choice"],
+		[func() -> void:
+			black._open(black._create_page)
+			black._create_page._select_item(1), "ui_transcend_create"],
+		[func() -> void:
+			black._open(black._upgrade_page)
+			black._upgrade_page._select_item(0), "ui_transcend_upgrade"],
+		[func() -> void: black._upgrade_page._on_super_orb_pressed(SuperOrbTable.PERFECTION),
+			"ui_transcend_aim"],
+	]
+	for shot in black_shots:
+		(shot[0] as Callable).call()
+		for i in 3:
+			await process_frame
+		await RenderingServer.frame_post_draw
+		root.get_texture().get_image().save_png("user://%s.png" % shot[1])
+		print("Saved ", ProjectSettings.globalize_path("user://%s.png" % shot[1]))
+	black.queue_free()
+	main._character.show()
+	Settings.animations = animations
 
 	# And out of the town again, where the same postings are read off the journal in the corner: the
 	# town that posted them over the top, the swatches and the nearest tile under each, and the line

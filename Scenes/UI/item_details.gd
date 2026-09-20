@@ -63,9 +63,12 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 		blocks[1].append([text, Palette.INK])
 	# The locked one in a base stat's ink: it is as fixed as they are, and under the rule that parts
 	# the two it cannot be taken for one of them.
-	var pinned := item.locked_line(Settings.item_details)
+	# A perfected one in the wood brown a unique's rule wears: the one line as good as it can be.
+	var pinned := item.fast_lines(Settings.item_details)
+	var perfect := item.perfect_lines(Settings.item_details)
 	for text in item.mod_lines(Settings.item_details):
-		blocks[2].append([text, Palette.INK if text == pinned else Palette.RUST])
+		blocks[2].append([text, Palette.INK if text in pinned
+				else Palette.SLOT_TAN_DK if text in perfect else Palette.RUST])
 	for block in blocks:
 		if block.is_empty():
 			continue

@@ -531,6 +531,28 @@ func move_to(cell: Vector2i) -> Array[Vector2i]:
 	return route
 
 
+## The settlements a homecoming could put the player down on: charted, and not the one they stand on.
+## One scan of everything they have seen, so ask it on a press and never per frame.
+func homes() -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for cell: Vector2i in _states:
+		if cell != player_cell and charted(cell) and town_tier(cell) != -1:
+			cells.append(cell)
+	return cells
+
+
+## The fortuneteller's homecoming: the player is put down on a settlement they have already charted,
+## with no walk and no route -- the one way anybody moves without crossing the ground between. Whether
+## it happened, so the spell is never charged for a cell it could not take. `_on_player_arrived` is
+## what the end of a walk calls, so everything that follows an arrival follows this too.
+func jump_to(cell: Vector2i) -> bool:
+	if walking or not charted(cell) or cell == player_cell or town_tier(cell) == -1:
+		return false
+	map.player.set_cell(cell)
+	_on_player_arrived(cell)
+	return true
+
+
 func _on_player_arrived(cell: Vector2i) -> void:
 	player_cell = cell
 	arrived.emit(cell)

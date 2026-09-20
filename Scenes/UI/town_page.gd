@@ -31,9 +31,11 @@ signal tab_changed(service: String)
 signal offer_changed(item: Item)
 ## The fortuneteller was paid to put the star over the chest on `cell`. The star is the main scene's.
 signal chest_bought(cell: Vector2i)
-## The scour was asked for, at `price`. Nothing has been charged: choosing the land happens on the
-## map, which is the main scene's, and so does the paying once land has been chosen.
-signal scour_pressed(price: float)
+## A spell that is aimed at the map was asked for, at `price`, in the town on `spot`. Nothing has been
+## charged and nothing is written down: choosing the land happens on the map, which is the main
+## scene's, and so does the paying -- and the marking of that town's drawer -- once land has been
+## chosen. The scour and the road home are both bought this way.
+signal spell_aimed(reading: String, price: float, spot: Vector2i)
 ## The way out of the world was asked for, and the question under it answered yes. Nothing has been
 ## charged and nothing need be: the purse is one of the things left behind. The main scene does it.
 signal transcend_pressed
@@ -87,6 +89,7 @@ const FORTUNE_ICONS := {
 	FortuneTeller.RELIC: "res://Assets/Fortune/relic.png",
 	FortuneTeller.APPRAISE: "res://Assets/Fortune/appraise.png",
 	FortuneTeller.SCOUR: "res://Assets/Fortune/scour.png",
+	FortuneTeller.HOMECOMING: "res://Assets/Fortune/homecoming.png",
 }
 ## A spell's mark, at the 16 px it is drawn at doubled -- a whole-number step, as a skill's is.
 const SPELL_SIDE := 32
@@ -105,13 +108,22 @@ const FORTUNE_TIPS := {
 	FortuneTeller.QUARRY: "Where the monster of your bounty lives",
 	FortuneTeller.RELIC: "One unique you have not found, and where it is carried",
 	FortuneTeller.APPRAISE: "What the piece open in your bag can roll, and how often",
-	FortuneTeller.SCOUR: "Uncover a patch of the map you choose. Once, ever",
-	FortuneTeller.TRANSCEND: "Leave this world for a new one. Only your heirlooms go with you",
+	FortuneTeller.SCOUR: "Uncover a patch of the map you choose",
+	FortuneTeller.HOMECOMING: "Stand again in a town you have already walked to",
+	FortuneTeller.TRANSCEND: "Leave this world for a new one",
 }
+## What stands over each half of her list. A reading is asked again and again at a climbing price; a
+## great spell is one a settlement. Two words each: the rule itself is in every square's tooltip, and
+## a sentence on the page is what this page never writes.
+const FORTUNE_HEADINGS := {
+	"common": "Readings",
+	"great": "Great spells",
+}
+
 ## What she says before the way out is taken, in the list's place, over the button that takes it.
 const TRANSCEND_LINES := [
 	"The ice will take this world back, and you will wake in another.",
-	"Your heirlooms go with you, and what you know. Your bag, your gold, your levels and this land do not.",
+	"All you have made here is lost: your bag, your gold, your levels, this land. What waits on the other side is worth far more.",
 ]
 
 var inventory: Inventory
@@ -579,7 +591,7 @@ func _fill_smith() -> void:
 	var up_price := TownPrices.upgrade_price(_bag_piece)
 	var up_why := _smith_why_not(Blacksmith.why_not_upgrade(_bag_piece, cap), up_price)
 	_rows.add_child(_smith_button("Upgrade", up_price, up_why,
-			"Take this to level %d for %s gold"
+			"Take this to level %d for %s gold. Its modifiers are rolled again at that level, except any he has locked"
 			% [_bag_piece.level + 1, BigNumber.format(up_price)], _on_upgrade_pressed))
 	# What the press would buy and what it risks, and only while it can be pressed.
 	if up_why.is_empty():
@@ -620,17 +632,13 @@ func _priced_button(text: String, price: float, refused: String, tooltip: String
 func _fill_fortune() -> void:
 	var body := _scrolled(ROW_GAP)
 	if _said.is_empty():
-		# Her six on the shelf's own grid, each with its price under it: what she sells is bought the
-		# way everything else in a town is, and six words in a column read as a menu rather than a shop.
-		var grid := GridContainer.new()
-		grid.columns = STOCK_COLS
-		grid.add_theme_constant_override("h_separation", STOCK_GAP)
-		grid.add_theme_constant_override("v_separation", STOCK_GAP)
-		for reading: String in FortuneTeller.READINGS:
-			if reading == FortuneTeller.TRANSCEND:
-				continue
-			grid.add_child(_price_cell(_spell_square(reading), _fortune_price(reading)))
-		body.add_child(grid)
+		# Her spells on the shelf's own grid, each with its price under it: what she sells is bought
+		# the way everything else in a town is, and words in a column read as a menu rather than a shop.
+		# Two grids, because her list is in two halves and which half a spell is in is its whole rule:
+		# a reading is asked again for double, a great spell is one a settlement. The heading says
+		# which is which; why a square is dead is still only ever in its tooltip.
+		body.add_child(_spell_grid(FORTUNE_HEADINGS["common"], FortuneTeller.COMMON))
+		body.add_child(_spell_grid(FORTUNE_HEADINGS["great"], FortuneTeller.GREAT))
 		# The way out is not on her grid until a wall has fallen: there is nothing yet to take along.
 		# It keeps its word and the full width under the six -- it is not a spell, and a square beside
 		# them would read as one. The coin and no figure, as Claim has it: six figures beside that word
@@ -682,6 +690,22 @@ func _fill_fortune() -> void:
 	_rows.add_child(answers)
 
 
+## One half of her list: a heading, a rule under it and that half's squares on the shelf's own grid.
+func _spell_grid(heading: String, readings: Array) -> VBoxContainer:
+	var box := UITheme.vbox(ROW_GAP, BODY_WIDTH)
+	# A bare heading, the way a vendor's "Buy" is: a rule under each of the two would cost the page
+	# the row its second grid's prices need.
+	box.add_child(UITheme.label(heading))
+	var grid := GridContainer.new()
+	grid.columns = STOCK_COLS
+	grid.add_theme_constant_override("h_separation", STOCK_GAP)
+	grid.add_theme_constant_override("v_separation", STOCK_GAP)
+	for reading: String in readings:
+		grid.add_child(_price_cell(_spell_square(reading), _fortune_price(reading)))
+	box.add_child(grid)
+	return box
+
+
 ## One reading on her grid: its name over its mark, lit by a halo while the cursor is on it, and what
 ## she will not read greyed and dead with the reason in its tooltip -- the shelf's rule, where a piece
 ## the purse cannot cover greys where it stands. `_price_cell` puts the price under what this returns.
@@ -709,7 +733,13 @@ func _spell_square(reading: String) -> Control:
 	square.custom_minimum_size = Vector2(SPELL_SIDE, SPELL_SIDE)
 	square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	square.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
-	square.tooltip_text = refused if not refused.is_empty() else FORTUNE_TIPS[reading]
+	# What a reading is, and -- once it has been asked for -- how often, which is the whole of why the
+	# price under it is not the one the player remembers paying.
+	var tip: String = FORTUNE_TIPS[reading]
+	var times := FortuneTeller.cast(inventory.fortunes, reading)
+	if times > 0:
+		tip += ". Asked %d time%s" % [times, "" if times == 1 else "s"]
+	square.tooltip_text = refused if not refused.is_empty() else tip
 	var icon := TextureRect.new()
 	# Mode before texture and size, for the reason `_price_cell`'s coin gives: a TextureRect's minimum
 	# is its own texture until `expand_mode` says otherwise.
@@ -754,21 +784,23 @@ func _odds_row(row: Dictionary, striped: bool) -> PanelContainer:
 	return line
 
 
-## What a reading costs here. The roads, once told in this town, are told again for nothing: they
-## are read off the world, and the world has not moved.
+## What a spell costs here: the town's level, doubled once for every time this world has heard the
+## reading already. The roads, once told in this town, are told again for nothing -- they are read off
+## the world, and the world has not moved -- and a free telling is not a casting, so it never moves
+## the count either.
 func _fortune_price(reading: String) -> float:
 	if reading == FortuneTeller.ROADS and FortuneTeller.asked(_drawer, reading):
 		return 0.0
-	return TownPrices.fortune_price(reading, _cell)
+	return TownPrices.fortune_price(reading, _cell, FortuneTeller.cast(inventory.fortunes, reading))
 
 
-## Why she will not give this reading, or "" when she will. Each is sold once a settlement; the roads,
-## already paid for, are the one told again.
+## Why she will not give this spell, or "" when she will. A great spell is sold once a settlement; a
+## reading is sold as often as it is paid for.
 func _fortune_why_not(reading: String) -> String:
 	if view == null:
 		return "She sees nothing here."
-	if reading != FortuneTeller.ROADS and FortuneTeller.asked(_drawer, reading):
-		return "She has read that here already."
+	if reading in FortuneTeller.GREAT and FortuneTeller.asked(_drawer, reading):
+		return "That spell is spent here."
 	match reading:
 		FortuneTeller.TREASURE:
 			var told := FortuneTeller.chest(inventory.fortunes)
@@ -790,9 +822,9 @@ func _fortune_why_not(reading: String) -> String:
 			var why := FortuneTeller.why_not_appraise(_bag_piece)
 			if not why.is_empty():
 				return why
-		FortuneTeller.SCOUR:
-			if FortuneTeller.scoured(inventory.fortunes):
-				return "That spell is spent."
+		FortuneTeller.HOMECOMING:
+			if view.homes().is_empty():
+				return "You have found nowhere else to stand."
 		FortuneTeller.TRANSCEND:
 			# Asking is free and is where the price is said; the button under her answer is what a
 			# short purse greys.
@@ -800,14 +832,14 @@ func _fortune_why_not(reading: String) -> String:
 	return _why_not(_fortune_price(reading), false)
 
 
-## One reading asked for. Paid for and written down together, the way a purchase is -- all but the
-## scour, which is paid for on the map once land has been chosen (`scour_pressed`).
+## One spell asked for. Paid for and written down together, the way a purchase is -- all but the two
+## that are aimed at the map, which are paid for once land has been chosen (`spell_aimed`).
 func _on_reading_pressed(reading: String) -> void:
 	if not _fortune_why_not(reading).is_empty():
 		return
 	var price := _fortune_price(reading)
-	if reading == FortuneTeller.SCOUR:
-		scour_pressed.emit(price)
+	if reading in FortuneTeller.GREAT:
+		spell_aimed.emit(reading, price, _spot)
 		return
 	# Asked for, not done: she says what it costs the player first, and the button under that is the deed.
 	if reading == FortuneTeller.TRANSCEND:
@@ -816,9 +848,15 @@ func _on_reading_pressed(reading: String) -> void:
 		layout()
 		return
 	inventory.gold -= price
-	_drawer[FortuneTeller.ASKED + reading] = true
+	# A reading's count is what doubles its price, and only a paid telling moves it: the roads told
+	# again for nothing in a town that has already bought them are the same sentence, not a casting.
+	if price > 0.0:
+		FortuneTeller.note_cast(inventory.fortunes, reading)
 	match reading:
 		FortuneTeller.ROADS:
+			# The one drawer key a reading still writes, and it means the opposite of a great spell's:
+			# this town has paid for the roads, so it tells them again for nothing from now on.
+			_drawer[FortuneTeller.ASKED + reading] = true
 			_said = reading
 		FortuneTeller.TREASURE:
 			var spot := view.origin + _near_chest

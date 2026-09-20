@@ -1226,6 +1226,12 @@ func _refresh_loot_button() -> void:
 	_loot_button.disabled = _drops.is_empty()
 
 
+## The bottom of the top-centre column -- place, pips and clock -- in screen pixels. For anything the
+## main scene stands over a fight and has to keep off the HUD, which is what `_place_corners` placed.
+func hud_bottom() -> float:
+	return _tally.position.y + _tally.get_combined_minimum_size().y * _ui_scale
+
+
 ## Puts the HUD's corners where they belong. Done every frame rather than anchored, because every
 ## one of them is scaled by `_ui_scale` and an anchor knows nothing about that.
 func _place_corners(view: Vector2) -> void:

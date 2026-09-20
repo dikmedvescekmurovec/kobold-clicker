@@ -68,6 +68,7 @@ func _run() -> void:
 	_check(await _test_character_page() == true, "character page tests ran to the end")
 	_check(await _test_item_generator() == true, "item generator tests ran to the end")
 	_check(await _test_heirlooms() == true, "heirloom tests ran to the end")
+	_check(_test_super_orbs() == true, "super orb tests ran to the end")
 	_clear_save()
 	_report("inventory")
 
@@ -1062,6 +1063,17 @@ func _test_saving() -> bool:
 	file.close()
 	_check(Inventory.load_from(TEST_PATH).gold == 0, "and so does one that is not a number")
 
+	# The play clock goes the way the purse does: it round-trips, and a save from before it has none.
+	var played := Inventory.new()
+	played.play_seconds = 125.5
+	_check(played.save(TEST_PATH), "an inventory with time on the clock saves")
+	_check(is_equal_approx(Inventory.load_from(TEST_PATH).play_seconds, 125.5), "and its clock comes back")
+	_check(played.transcended().play_seconds == played.play_seconds, "a transcension carries the clock over")
+	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	file.store_string('{"version": 15, "items": []}')
+	file.close()
+	_check(Inventory.load_from(TEST_PATH).play_seconds == 0.0, "a save from before the clock has played no time")
+
 	# A bag from before the cap, or one edited by hand. It comes back obeying the cap, because a bag
 	# allowed over it in one place is a bag every other rule in the game has to check for.
 	var bloated := Inventory.new()
@@ -1709,12 +1721,12 @@ func _test_heirlooms() -> bool:
 	_check(Item.from_dict(sword.to_dict()).safe_level == 12 and not _piece(ItemRarity.Rarity.COMMON, 1).to_dict().has("safe_level"),
 			"it is saved with the piece, and only where there is one")
 
-	# Picks: a wall pays once.
+	# Super orbs: a wall pays once.
 	var bag := Inventory.new()
-	_check(not bag.credit_walls(0) and bag.heirloom_picks == 0, "no wall, no pick")
-	_check(bag.credit_walls(2) and bag.heirloom_picks == 2, "two walls down is two picks, as an old save finds")
-	_check(not bag.credit_walls(2) and bag.heirloom_picks == 2, "asked again, nothing more")
-	_check(bag.credit_walls(3) and bag.heirloom_picks == 3, "and the next wall pays one")
+	_check(not bag.credit_walls(0) and bag.super_orbs == 0, "no wall, no orb")
+	_check(bag.credit_walls(2) and bag.super_orbs == 2, "two walls down is two orbs, as an old save finds")
+	_check(not bag.credit_walls(2) and bag.super_orbs == 2, "asked again, nothing more")
+	_check(bag.credit_walls(3) and bag.super_orbs == 3, "and the next wall pays one")
 
 	# Making one: from the bag, or straight off the doll with the bag full, and never a broken piece.
 	var from_bag := _piece(ItemRarity.Rarity.RARE, 7)
@@ -1732,25 +1744,23 @@ func _test_heirlooms() -> bool:
 		bag.items.append(_piece(ItemRarity.Rarity.COMMON, 1))
 	_check(bag.make_heirloom(worn) and bag.equipment.worn.is_empty() and bag.stash().items.has(worn)
 			and bag.total() == Inventory.CAPACITY, "a worn piece comes off the doll past a full bag, which is left alone")
-	_check(bag.heirloom_picks == 1 and worn.level == 9, "two picks spent, and nothing about the piece has moved")
-	bag.heirloom_picks = 0
-	_check(not bag.make_heirloom(bag.items[0]), "no pick, no heirloom")
+	_check(bag.super_orbs == 3 and worn.level == 9, "no orb is spent on it, and nothing about the piece has moved")
 
 	# The save, and a file from before there were heirlooms.
 	_check(bag.stash().equip(worn, Equipment.Socket.WEAPON), "an heirloom goes on the heirlooms' doll")
-	bag.heirloom_picks = 4
+	bag.super_orbs = 4
 	_check(bag.save(TEST_PATH), "it saves")
 	var back := Inventory.load_from(TEST_PATH)
 	_check(back.stash().total() == 1 and back.stash().items[0].level == 7
 			and back.stash().items[0].rarity == ItemRarity.Rarity.RARE, "the stash comes back")
 	_check(back.stash().equipment.items().size() == 1 and back.stash().equipment.items()[0].level == 9,
 			"and so does the heirlooms' doll")
-	_check(back.heirloom_picks == 4 and back.walls_credited == 3, "with the picks and the walls paid for")
+	_check(back.super_orbs == 4 and back.walls_credited == 3, "with the orbs and the walls paid for")
 	var old := FileAccess.open(TEST_PATH, FileAccess.WRITE)
 	old.store_string(JSON.stringify({"version": 13, "items": [], "gold": 5}))
 	old.close()
 	var before := Inventory.load_from(TEST_PATH)
-	_check(before.stash().total() == 0 and before.heirloom_picks == 0 and before.walls_credited == 0,
+	_check(before.stash().total() == 0 and before.super_orbs == 0 and before.walls_credited == 0,
 			"a version 13 save has none, and no wall paid for")
 
 	# Two dolls. Flats add; each doll's global percents are a multiplier of their own.
@@ -1820,7 +1830,7 @@ func _test_heirlooms() -> bool:
 	leaving.tips = ["first_item"]
 	leaving.note_unique("spiked_helm")
 	leaving.add_orb(OrbTable.orbs()[0], 3)
-	leaving.heirloom_picks = 2
+	leaving.super_orbs = 2
 	leaving.walls_credited = 2
 	leaving.items.append(_piece(ItemRarity.Rarity.ELITE, 20))
 	var held := _piece(ItemRarity.Rarity.RARE, 15)
@@ -1831,31 +1841,69 @@ func _test_heirlooms() -> bool:
 	_check(next.gold == 0.0 and next.level == 1 and next.total() == 0 and next.total_orbs() == 0
 			and next.equipment.worn.is_empty() and next.walls_credited == 0, "the world's things stay in it")
 	_check(next.kills == 900 and next.tips == ["first_item"] and next.uniques_found == ["spiked_helm"]
-			and next.first_sword_taken and next.heirloom_picks == 2, "what the player knows goes along")
+			and next.first_sword_taken and next.super_orbs == 2, "what the player knows goes along")
 	_check(next.stash().total() == 1 and next.stash().items[0].level == 1 and next.stash().items[0].safe_level == 15,
 			"the stash goes along, at level 1")
 	var still_on: Item = next.stash().equipment.items()[0]
 	_check(still_on.level == 1 and still_on.safe_level == 18, "and the heirlooms' doll stays dressed")
 	_check(held.level == 15 and on_doll.level == 18, "the inventory that was left is untouched, should the write fail")
 
-	# The page: no marks on a heading, no Sell, a Discard that always asks, and Make heirloom in the bag.
+	# A version 14 save's unspent picks are orbs now.
+	leaving.save(TEST_PATH)
+	var old_save: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(TEST_PATH))
+	old_save["heirloom_picks"] = old_save["super_orbs"]
+	old_save.erase("super_orbs")
+	old_save["version"] = 14
+	SafeFile.write(TEST_PATH, JSON.stringify(old_save))
+	_check(Inventory.load_from(TEST_PATH).super_orbs == 2, "a version 14 save's picks are read as orbs")
+	_clear_save()
+
+	# The pages. The ordinary bag makes no heirloom; a transcension's does, at its foot, and writes
+	# nothing: the whole transcension is one write, and the main scene's.
 	var owner := Inventory.new()
-	owner.heirloom_picks = 1
+	owner.super_orbs = 1
 	owner.tips.append(BagPage.SKIP_CONFIRM + "discard_heirloom")
-	var treasure := _piece(ItemRarity.Rarity.RARE, 6)
+	var treasure := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 6)
 	owner.items.append(treasure)
 	var bag_page := BagPage.new(owner, TEST_PATH, 2.0)
 	root.add_child(bag_page)
 	await process_frame
 	bag_page._select_item(0)
-	var make := _deep_button(bag_page, "Make heirloom")
-	_check(make != null and not make.disabled, "an open bag piece can be made an heirloom while a pick is left")
-	make.pressed.emit()
-	_check(owner.items.has(treasure) and bag_page._confirm != null, "which asks first")
-	_deep_button(bag_page._confirm, "Keep").pressed.emit()
-	_check(owner.stash().items.has(treasure) and owner.heirloom_picks == 0, "and Keep does it")
-	_check(Inventory.load_from(TEST_PATH).stash().total() == 1, "and saves it")
+	_check(_deep_button(bag_page, "Make heirloom") == null, "the bag itself makes no heirloom")
 	bag_page.queue_free()
+	var made: Array = []
+	var choosing := BagPage.new(owner, "", 2.0, false, true)
+	choosing.heirloom_made.connect(func(item: Item) -> void: made.append(item))
+	root.add_child(choosing)
+	await process_frame
+	_check(_deep_button(choosing, "Make heirloom").disabled, "with nothing open its Make heirloom is dead")
+	choosing._select_item(0)
+	var make := _deep_button(choosing, "Make heirloom")
+	_check(not make.disabled and _deep_button(choosing, "Equip") == null and _deep_button(choosing, "Discard") == null,
+			"an open piece can be made one, and there is nothing else to do with it")
+	make.pressed.emit()
+	_check(owner.items.has(treasure) and choosing._confirm != null, "which asks first")
+	_deep_button(choosing._confirm, "Keep").pressed.emit()
+	_check(owner.stash().items.has(treasure) and made == [treasure] and owner.super_orbs == 1,
+			"and Keep does it, for no orb")
+	_check(not FileAccess.file_exists(TEST_PATH), "and writes nothing")
+	choosing.queue_free()
+
+	# Over the heirlooms the tray is the super orbs: an aimed one asks which line, the rest whether.
+	var upgrading := BagPage.new(owner, "", 2.0, true, true)
+	root.add_child(upgrading)
+	await process_frame
+	_check(upgrading._orb_tray.get_child_count() == SuperOrbTable.orbs().size(), "six super orbs in the tray")
+	upgrading._select_item(0)
+	upgrading._on_super_orb_pressed(SuperOrbTable.PERFECTION)
+	_check(upgrading._confirm != null and _deep_button(upgrading._confirm,
+			ModifierTable.line(treasure.mods[0])) != null, "Perfection asks which modifier")
+	_deep_button(upgrading._confirm, ModifierTable.line(treasure.mods[0])).pressed.emit()
+	_check(bool(treasure.mods[0].get("perfect", false)) and owner.super_orbs == 0, "and spends the orb on it")
+	upgrading._on_super_orb_pressed(SuperOrbTable.ASCENSION)
+	_check(upgrading._confirm == null and treasure.plus == 0, "with none left nothing happens")
+	_check(not FileAccess.file_exists(TEST_PATH), "and none of it is written")
+	upgrading.queue_free()
 	var page := BagPage.new(owner, TEST_PATH, 2.0, true)
 	root.add_child(page)
 	await process_frame
@@ -1865,15 +1913,114 @@ func _test_heirlooms() -> bool:
 	page._select_item(0)
 	_check(_deep_button(page, "Sell") == null and _deep_button(page, "Discard") != null,
 			"no counter buys one: Discard stays Discard")
-	_check(_deep_button(page, "Make heirloom") == null, "and an heirloom is not made one twice")
 	_deep_button(page, "Discard").pressed.emit()
 	_check(owner.stash().items.has(treasure) and page._confirm != null,
 			"throwing one away asks, even with the question ticked away")
 	_deep_button(page._confirm, "Discard").pressed.emit()
-	_check(owner.stash().total() == 0 and owner.heirloom_picks == 0, "gone, and the pick does not come back")
+	_check(owner.stash().total() == 0, "gone")
 	page.queue_free()
 	await process_frame
 	return true
+
+
+## What each super orb does to a piece, and what it leaves there for the ordinary orbs and the smith.
+func _test_super_orbs() -> bool:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.ELITE, rng, 10)
+	for orb: String in SuperOrbTable.orbs():
+		_check(ResourceLoader.exists(OrbTable.ROOT + orb + ".png"), "%s has an icon" % orb)
+		_check(not OrbTable.ORBS.has(orb), "%s is no ordinary orb: it never drops and is never sold" % orb)
+		_check(not SuperOrbTable.can_apply(orb, null), "%s does nothing to nothing" % orb)
+
+	# Ascension: +1, every modifier kept at its place in a band three levels up, again and again.
+	var before := sword.mods.duplicate(true)
+	_check(SuperOrbTable.apply(SuperOrbTable.ASCENSION, sword, rng) and sword.plus == 1
+			and sword.mod_level() == 10 + Item.PLUS_LEVELS and sword.level == 10, "+1 lifts the modifiers' level, not the piece's")
+	for i in sword.mods.size():
+		var id: String = sword.mods[i]["id"]
+		_check(sword.mods[i]["value"] == ModifierTable.rescaled(id, before[i]["value"], 10, sword.mod_level()),
+				"%s moved with its band" % id)
+	_check(sword.display_name() == "Wooden Sword +1", "and it is written after the name")
+	_check(SuperOrbTable.apply(SuperOrbTable.ASCENSION, sword, rng) and sword.plus == 2, "and it can be done again")
+	_check(Item.from_dict(sword.to_dict()).plus == 2 and not _piece(ItemRarity.Rarity.RARE, 1).to_dict().has("plus"),
+			"saved with the piece, and only where there is one")
+
+	# Perfection: the top of the band, through a Divine, the smith and the end of a world.
+	_check(not SuperOrbTable.apply(SuperOrbTable.PERFECTION, sword, rng), "an aimed orb needs a line to aim at")
+	_check(SuperOrbTable.apply(SuperOrbTable.PERFECTION, sword, rng, 0), "Perfection takes a modifier")
+	var perfect_id: String = sword.mods[0]["id"]
+	var top := func() -> int: return int(ModifierTable.band_for(perfect_id, sword.mod_level())[1])
+	_check(sword.mods[0]["value"] == top.call(), "which goes to the top of its band")
+	_check(not SuperOrbTable.can_aim(SuperOrbTable.PERFECTION, sword, 0), "and is not perfected twice")
+	for i in 10:
+		OrbTable.apply("Orb of Divine", sword, rng)
+	_check(sword.mods[0]["value"] == top.call(), "a Divine leaves it there")
+	_check(Blacksmith.upgrade(sword, 99, _never_breaks()) and sword.mods[0]["value"] == top.call(),
+			"the smith's upgrade carries it to the new top")
+	SuperOrbTable.apply(SuperOrbTable.ASCENSION, sword, rng)
+	_check(sword.mods[0]["value"] == top.call(), "so does another +1")
+	sword.transcend()
+	_check(sword.plus == 3 and sword.mod_level() == 1 + 3 * Item.PLUS_LEVELS
+			and sword.mods[0]["value"] == top.call(), "and the end of a world keeps the plus and the top")
+	_check(sword.perfect_lines() == PackedStringArray([ModifierTable.line(sword.mods[0])]),
+			"its line is known to whoever writes it")
+
+	# Binding: a second lock beside the smith's, once, and no orb moves either.
+	sword.mods[1]["locked"] = true
+	_check(not SuperOrbTable.can_aim(SuperOrbTable.BINDING, sword, 1), "a locked line is not bound as well")
+	_check(SuperOrbTable.apply(SuperOrbTable.BINDING, sword, rng, 2), "Binding locks another")
+	_check(not SuperOrbTable.can_apply(SuperOrbTable.BINDING, sword), "once per piece")
+	_check(not SuperOrbTable.can_aim(SuperOrbTable.REPLACEMENT, sword, 2), "and Replacement leaves it alone")
+	var fast := [sword.mods[1].duplicate(), sword.mods[2].duplicate()]
+	for i in 20:
+		OrbTable.apply("Orb of Chaos", sword, rng)
+		OrbTable.apply("Orb of Divine", sword, rng)
+		_check(sword.mods.has(fast[0]) and sword.mods.has(fast[1]), "both locks survive a Chaos and a Divine")
+	_check(sword.fast_lines().size() == 2, "and both are written in ink")
+
+	# Expansion: one past the rarity's most, once, and a reroll keeps the room.
+	var most := int(ItemRarity.MOD_COUNT[ItemRarity.Rarity.ELITE][1])
+	while sword.mods.size() < most:
+		OrbTable.apply("Orb of Exalted", sword, rng)
+	_check(not OrbTable.can_apply("Orb of Exalted", sword), "a full elite takes no more")
+	_check(SuperOrbTable.apply(SuperOrbTable.EXPANSION, sword, rng) and sword.mods.size() == most + 1,
+			"until it is expanded")
+	_check(not SuperOrbTable.can_apply(SuperOrbTable.EXPANSION, sword), "once per piece")
+	_check(Item.from_dict(sword.to_dict()).extra_slot, "saved with the piece")
+	_check(not SuperOrbTable.can_apply(SuperOrbTable.EXPANSION, _piece(ItemRarity.Rarity.COMMON, 1)),
+			"a common stays bare")
+
+	# Replacement: another line in that place, never the same one.
+	var plain := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 5)
+	var ids := plain.mods.map(func(mod: Dictionary) -> String: return mod["id"])
+	_check(SuperOrbTable.apply(SuperOrbTable.REPLACEMENT, plain, rng, 0) and not plain.mods[0]["id"] in ids
+			and plain.mods.size() == ids.size(), "Replacement puts a new line where the old one was")
+
+	# Mending: the one cure, and the one orb a broken piece takes.
+	_check(not SuperOrbTable.can_apply(SuperOrbTable.MENDING, plain), "a whole piece needs no mending")
+	plain.broken = true
+	_check(not SuperOrbTable.can_apply(SuperOrbTable.ASCENSION, plain), "a broken piece takes no other orb")
+	_check(SuperOrbTable.apply(SuperOrbTable.MENDING, plain, rng) and not plain.broken, "Mending makes it whole")
+
+	# A unique's lines are its own: values may move, the lines may not.
+	var unique := Item.rolled_unique(UniqueTable.UNIQUES.keys()[0], rng, 5)
+	for orb: String in [SuperOrbTable.REPLACEMENT, SuperOrbTable.EXPANSION, SuperOrbTable.BINDING]:
+		_check(not SuperOrbTable.can_apply(orb, unique), "%s is refused by a unique" % orb)
+	_check(unique.mods.is_empty() or SuperOrbTable.can_apply(SuperOrbTable.ASCENSION, unique), "+1 is not")
+	return true
+
+
+## A generator whose first draw is as high as a draw gets, so the smith's hammer never breaks a piece.
+func _never_breaks() -> RandomNumberGenerator:
+	var rng := RandomNumberGenerator.new()
+	for seed_value in 1000:
+		rng.seed = seed_value
+		var state := rng.state
+		if rng.randf() > Blacksmith.BREAK_CHANCE:
+			rng.state = state
+			return rng
+	return rng
 
 
 ## The first live Button anywhere under `parent` whose face starts with `text`, or null. Pages are
@@ -3280,8 +3427,9 @@ func _test_unique_stats() -> bool:
 	return true
 
 
-## The collection log: a button that is not there until there is something to log, and a page of
-## squares that says what a found one is and only where a missing one hides.
+## The collection log: a button that is not there until there is something to log, a page of squares
+## that says what a found one is, where it is carried and only where a missing one hides -- and the
+## banner a unique new to the log raises when it drops, with the two ways it goes away again.
 func _test_collection() -> bool:
 	_clear_save()
 	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
@@ -3321,7 +3469,9 @@ func _test_collection() -> bool:
 		var found := id == "metronome"
 		var told := id == "rimeplate"
 		shown += int(found)
-		_check(square.hint.is_valid() != found, "%s: a hint only while missing" % id)
+		# Every square writes its card through the hint now: a found one so it still says where the
+		# piece is carried, a missing one so it says nothing else.
+		_check(square.hint.is_valid(), "%s: the card is written by the hint" % id)
 		_check((square.modulate == ItemSlot.SHADOW) == told, "%s: darkened only once a fortuneteller has shown it" % id)
 		var icon: TextureRect = square.get_child(0)
 		_check((icon.modulate == Color.BLACK) == (not found and not told),
@@ -3329,28 +3479,74 @@ func _test_collection() -> bool:
 		_check((square.get_node_or_null(ItemSlot.FRAME_NAME) == null) == (not found and not told),
 				"%s: and no ring to give its rarity away" % id)
 	_check(shown == 1, "the found one is drawn as itself")
-	# The hint says nothing of the piece or its ground until a fortuneteller has shown it, and both after.
-	for peeked: bool in [false, true]:
+	# The hint says nothing of the piece or its ground until a fortuneteller has shown it, and both
+	# after -- and where it is carried stays on the card once the piece is found, which is the one
+	# place a second copy or the rest of a set can be looked up.
+	for state: Array in [[false, false], [true, false], [true, true]]:
+		var peeked: bool = state[0]
+		var found: bool = state[1]
 		var rows := VBoxContainer.new()
 		CollectionPage.write_hint(rows, 150.0, "rimeplate", main.view,
-				CollectionPage.specimen("rimeplate") if peeked else null)
+				CollectionPage.specimen("rimeplate") if peeked else null, found)
 		var said := ""
 		for label: Node in rows.find_children("*", "Label", true, false):
 			said += (label as Label).text + " "
 		_check(said.contains("Rimeplate") == peeked and said.contains("Nearest:") == peeked,
 				"a hint says what and where only once it has been peeked (%s: %s)" % [peeked, said])
+		if peeked:
+			_check(said.contains("Found") == found and said.contains("Not found yet") == (not found),
+					"and whether it is held (found %s: %s)" % [found, said])
 		rows.free()
+	# The found square's own card is the same block, so the log reads alike either way.
+	var held_rows := VBoxContainer.new()
+	for square: ItemSlot in squares:
+		if square.item.unique == "metronome":
+			square.hint.call(held_rows, 150.0)
+	var held := ""
+	for label: Node in held_rows.find_children("*", "Label", true, false):
+		held += (label as Label).text + " "
+	_check(held.contains("Found") and not held.contains("Not found yet") and held.contains("Nearest:"),
+			"a found square still says where the piece is carried (%s)" % held)
+	held_rows.free()
 	# The settings page's dev tick draws the lot as found. A static, so it is put back.
 	Settings.all_uniques = true
 	main.collection_page.open()
 	await process_frame
 	squares = main.collection_page.find_children("*", "ItemSlot", true, false)
 	_check(squares.size() == UniqueTable.UNIQUES.size() and squares.all(
-			func(square: ItemSlot) -> bool: return not square.hint.is_valid()),
+			func(square: ItemSlot) -> bool: return square.modulate == Color.WHITE and square.get_node_or_null(ItemSlot.FRAME_NAME) != null),
 			"the dev setting shows every unique as found (%d)" % squares.size())
 	Settings.all_uniques = false
 	main._on_left_page_closed()
 	_check(not main.collection_page.visible and main._collection_button.visible, "the X puts it away")
+	# The banner: raised by a unique the log has never held, and by nothing else.
+	var drop_rng := RandomNumberGenerator.new()
+	drop_rng.seed = 7
+	main._on_loot_dropped(0, Item.rolled_unique("stonebreaker", drop_rng, 5))
+	await process_frame
+	_check(main._unique_banner != null, "a unique new to the log raises its banner")
+	_check(not main._banner_closable and main._banner_head.get_child_count() == 1,
+			"with no way to put it down for the first five seconds")
+	# A click inside those five seconds says the player is fighting, so it goes at the end of them.
+	main._banner_clicked = true
+	main._on_banner_held(main._unique_banner)
+	_check(main._unique_banner == null, "a player who was clicking has it taken away at the end of them")
+	main._on_loot_dropped(0, Item.rolled_unique("stonebreaker", drop_rng, 5))
+	_check(main._unique_banner == null, "a second copy of one already logged raises nothing")
+	main._on_loot_dropped(0, LootTable.roll("Baby Dragon", drop_rng, true, 5))
+	_check(main._unique_banner == null, "and an ordinary find raises nothing")
+	# Nobody clicked: it grows an X instead of going, and stays until it is pressed or a swing lands.
+	main._on_loot_dropped(0, Item.rolled_unique("headsman", drop_rng, 5))
+	await process_frame
+	main._on_banner_held(main._unique_banner)
+	_check(main._unique_banner != null and main._banner_closable
+			and main._banner_head.get_child_count() == 2,
+			"a player who sat still gets an X, and it stays")
+	var swing := InputEventMouseButton.new()
+	swing.button_index = MOUSE_BUTTON_LEFT
+	swing.pressed = true
+	main._input(swing)
+	_check(main._unique_banner == null, "and the next swing puts it down")
 	main.queue_free()
 	_clear_save()
 	return true

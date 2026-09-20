@@ -26,6 +26,11 @@ const SWEEP_RATE := 5.0
 const SWEEP_RUNS := 7
 ## Kills at which the player walking on to the second wall is looked at.
 const NEXT_STOPS: Array[int] = [5000, 20000, 60000]
+## Walls to try to breach in a row for the "time to breach each wall" table, and the kill count that
+## table gives up at -- far past GIVE_UP, because the question there is how long a wall takes rather
+## than whether a first wall is reachable.
+const WALLS := 4
+const WALLS_GIVE_UP := 400000
 
 
 func _run() -> void:
@@ -39,6 +44,7 @@ func _run() -> void:
 		_print_played(rate)
 	_print_sweep()
 	_print_next_wall()
+	_print_wall_times()
 	quit()
 
 
@@ -56,6 +62,38 @@ The wall after, on ring %d: %s health. One player at %.0f clicks a second, all t
 		print("  %7d  %7.0f  %5d  %9d  %10.1f  %5d  %6d  %s" % [run["kills"], run["minutes"], run["level"],
 				run["ring"], run["gear_level"], run["rares"], run["elites"],
 				"through" if run["won"] else "%.1f" % run["needs"]])
+
+
+## How much longer each wall takes to breach than the one before it: one player who never stops, from
+## nothing through as many walls as `WALLS` asks for. The aim is a wall that is a little harder to farm
+## through than the last, so the ratio column is the answer -- 1.5 would be "50% harder every time".
+func _print_wall_times() -> void:
+	var last := WALL_RING + (WALLS - 1) * MapBuilder.WALL_STEP
+	print("
+Time to breach each wall, one player at %.0f clicks a second, giving up at %s kills"
+			% [SWEEP_RATE, BigNumber.format(WALLS_GIVE_UP)])
+	print("  wall  ring       health    kills  minutes    hours  minutes since the last  x the last")
+	var run := _play_out(SWEEP_RATE, 0, Encounter.WALL_HP, last, WALLS_GIVE_UP)
+	var times: PackedFloat64Array = run["walls"]
+	var kills: PackedInt32Array = run["wall_kills"]
+	var last_gap := 0.0
+	for i in times.size():
+		var ring := WALL_RING + i * MapBuilder.WALL_STEP
+		var gap := times[i] - (times[i - 1] if i > 0 else 0.0)
+		print("  %4d  %4d  %11s  %7d  %7.0f  %7.1f  %22.0f  %10s"
+				% [i + 1, ring, BigNumber.format(_wall(Encounter.WALL_HP, ring).hp), kills[i], times[i],
+					times[i] / 60.0, gap, "--" if i == 0 else "%.2f" % (gap / last_gap)])
+		last_gap = gap
+	if times.size() < WALLS:
+		var stuck := _wall(Encounter.WALL_HP, WALL_RING + times.size() * MapBuilder.WALL_STEP)
+		print("  wall %d never fell: %s kills and %.0f h in, held ring %d, and it still wants %.1f clicks a second"
+				% [times.size() + 1, BigNumber.format(run["kills"]), run["minutes"] / 60.0, run["ring"],
+					_needs(stuck, _played(run))])
+
+
+## The inventory a played-out run ended with, for asking one more question of it.
+func _played(run: Dictionary) -> Inventory:
+	return run["inventory"]
 
 
 func _print_sweep() -> void:
@@ -134,7 +172,8 @@ func _play_out(rate: float, take: int, wall_hp := Encounter.WALL_HP, last_wall :
 		give_up := GIVE_UP) -> Dictionary:
 	var inv := Inventory.new()
 	var st := {"kills": 0, "farmed": 0, "seconds": 0.0, "fights": 0, "first_elite": false,
-			"farm_by_ring": PackedInt32Array(), "take": take, "won": false}
+			"farm_by_ring": PackedInt32Array(), "take": take, "won": false,
+			"walls": PackedFloat64Array(), "wall_kills": PackedInt32Array()}
 	st["farm_by_ring"].resize(last_wall)
 	var ring := 0
 	while st["kills"] < give_up:
@@ -143,6 +182,9 @@ func _play_out(rate: float, take: int, wall_hp := Encounter.WALL_HP, last_wall :
 		var next := _wall(wall_hp, ring + 1) if walled else Encounter.for_tile(cell, "grass")
 		if _needs(next, inv) <= rate and _fight(next, inv, rate, st):
 			ring += 1
+			if walled:
+				st["walls"].append(st["seconds"] / 60.0)
+				st["wall_kills"].append(st["kills"])
 			if ring == last_wall:
 				st["won"] = true
 				break
@@ -156,6 +198,7 @@ func _play_out(rate: float, take: int, wall_hp := Encounter.WALL_HP, last_wall :
 	var levels := 0.0
 	for item: Item in worn:
 		levels += item.level
+	st["inventory"] = inv
 	st["minutes"] = st["seconds"] / 60.0
 	st["ring"] = ring
 	st["needs"] = _needs(_wall(wall_hp, last_wall), inv)

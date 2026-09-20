@@ -46,14 +46,23 @@ func fill(orb: String, held: int, against: Item, sell_for := 0.0) -> void:
 		_rows.remove_child(child)
 		child.queue_free()
 	_rows.add_child(ItemDetails.line(orb, Palette.INK, WIDTH))
-	_rows.add_child(ItemDetails.line(OrbTable.describe(orb), Palette.SLATE, WIDTH, true))
+	# A super orb (`SuperOrbTable`) is the same card over another table; `held` is the one count the
+	# six of them share, and it is never armed, so with nothing open it says to open something.
+	var is_super := SuperOrbTable.has(orb)
+	_rows.add_child(ItemDetails.line(SuperOrbTable.describe(orb) if is_super else OrbTable.describe(orb),
+			Palette.SLATE, WIDTH, true))
 	var status := ""
 	var tone := Palette.SLATE
 	if held <= 0:
 		# Said plainly rather than left to the faded icon. A ghost says "not here"; only a word says
 		# whether that is because it was spent or because it has never been found.
-		status = "Not found yet"
+		status = "None left to spend" if is_super else "Not found yet"
 		tone = Palette.SLOT_TAN_DK
+	elif is_super:
+		var fits := SuperOrbTable.can_apply(orb, against)
+		status = ("Open an heirloom, then press this" if against == null
+				else "Use on %s" % against.display_name() if fits else SuperOrbTable.why_not(orb, against))
+		tone = Palette.SLATE if against == null else Palette.LEAF if fits else Palette.RUST
 	elif against == null and sell_for > 0.0:
 		# What the square does now, rather than what is in it: with a vendor beside the bag and no piece
 		# open, pressing it is a sale and the price is the one thing the player needs before they press.

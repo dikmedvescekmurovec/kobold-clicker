@@ -18,7 +18,7 @@ const DRAG_THRESHOLD := 6.0
 var tileset: HexTileset
 var hovered_cell := NO_CELL
 var selected_cell := NO_CELL
-## -1 but while somebody is choosing land rather than a tile (the fortuneteller's scour): then the
+## -1 but while somebody is choosing land rather than a tile (the fortuneteller's aimed spells): then the
 ## hover follows the cursor over the dark as well, every cell within this many steps of it is
 ## outlined, and a click says `cell_aimed` instead of selecting. Dragging still moves the map.
 var aim_radius := -1:

@@ -822,9 +822,10 @@ func _test_health() -> bool:
 	_check(Encounter.base_hp(far) > Encounter.base_hp(near), "and a tougher one at the edge")
 
 	# Health is exponential in the walk, not a flat sum: every step multiplies by HP_GROWTH, so the
-	# frontier pulls away from whatever the player is carrying. Checked step by step out to the edge,
-	# with the slack that rounding to whole points of health allows.
-	for steps in range(1, 21):
+	# frontier pulls away from whatever the player is carrying. Checked step by step out to the wall,
+	# with the slack that rounding to whole points of health allows. Only to the wall: past one the
+	# curve has a second term, pinned below.
+	for steps in range(1, MapBuilder.START_LAND_RADIUS + 2):
 		var here := Vector2i(steps, 0)
 		var back := Vector2i(steps - 1, 0)
 		_check(HexGrid.distance(MapBuilder.CENTER, here) == steps, "cell %d is %d steps out" % [steps, steps])
@@ -833,6 +834,32 @@ func _test_health() -> bool:
 		var want := Encounter.BASE_HP * pow(Encounter.HP_GROWTH, steps)
 		_check(absf(Encounter.base_hp(here) - want) <= 0.5,
 				"step %d is %d, not the curve's %.1f" % [steps, Encounter.base_hp(here), want])
+
+	# The other term: every wall behind a cell multiplies its bodies by WALL_GROWTH, so the land a
+	# fallen wall opens is a frontier again rather than a walkover to whoever just broke through. A
+	# wall's own ring counts none of itself -- it is the edge of the land inside it -- so the step
+	# lands on the first ring past a wall and the wall itself stays what its dial says.
+	var wall_ring := MapBuilder.START_LAND_RADIUS + 1
+	for steps: int in [1, MapBuilder.START_LAND_RADIUS, wall_ring]:
+		_check(Encounter.walls_inside(Vector2i(steps, 0)) == 0,
+				"no wall stands inside step %d" % steps)
+	for walls: int in [1, 2, 3]:
+		var first := wall_ring + (walls - 1) * MapBuilder.WALL_STEP + 1
+		for steps in range(first, wall_ring + walls * MapBuilder.WALL_STEP + 1):
+			_check(Encounter.walls_inside(Vector2i(steps, 0)) == walls,
+					"%d wall(s) stand inside step %d" % [walls, steps])
+	for walls in range(0, 4):
+		var steps := wall_ring + walls * MapBuilder.WALL_STEP + 1
+		var want := Encounter.BASE_HP * pow(Encounter.HP_GROWTH, steps) * pow(Encounter.WALL_GROWTH, walls + 1)
+		_check(absf(Encounter.base_hp(Vector2i(steps, 0)) / want - 1.0) < 0.01,
+				"step %d is %s, not the curve's %s past %d wall(s)"
+				% [steps, BigNumber.format(Encounter.base_hp(Vector2i(steps, 0))),
+					BigNumber.format(want), walls + 1])
+	# Rounding to whole points of health is why this is a ratio with slack rather than an equality: the
+	# first ring past a wall is one step and one whole wall harder than the wall's own ring.
+	var across := Encounter.base_hp(Vector2i(wall_ring + 1, 0)) / Encounter.base_hp(Vector2i(wall_ring, 0))
+	_check(absf(across / (Encounter.HP_GROWTH * Encounter.WALL_GROWTH) - 1.0) < 0.01,
+			"crossing the wall is one step and one wall at once (x%.2f)" % across)
 
 	for enemy in EnemyRoster.names():
 		_check(Encounter.hp_of(enemy, near) >= 1, "%s is worth at least one click" % enemy)
@@ -895,28 +922,23 @@ func _test_a_won_fight() -> bool:
 			Encounter.BARE_DAMAGE, 0.0)
 	_check(bare < 8.0, "the first ring is beatable with nothing on (%.1f/s)" % bare)
 
-	# The far edge is meant to be hard but possible, and since the clock came down to SECONDS it is
-	# no longer possible in the plain gear a tile hands over. That is the design, not a regression:
-	# the frontier is past what unmodified pieces carry, and reaching it means farming for better
-	# rolls. Farming cannot raise the level a tile drops at -- that ceiling is the tile's own -- so
-	# what a long run actually buys is modifiers, which is what `_farmed` builds. Both halves are
-	# pinned here, because either one alone would let the map drift out of reach or into a walkover.
-	var edge := Vector2i(20, 0)
+	# The land now comes in bands walled off from one another, so two rings are pinned here: the last
+	# ring inside the ice wall, as far as a player gets before breaking through, and the first ring the
+	# wall opens when it falls. Inside the wall the land is not the check -- the wall is (`WALL_HP`, and
+	# `_test_the_ice_wall`) -- so a tile there must fall to the plain gear a tile hands over. Past the
+	# wall every body carries `WALL_GROWTH` on top of the walk, and that is the half pinned below:
+	# without it, breaking through handed the player a whole band of bodies that died to one click.
+	var edge := Vector2i(MapBuilder.START_LAND_RADIUS, 0)
 	var level := MapBuilder.level_of(edge)
 	var plain := _rate_for(edge, _commons(level), spare)
-	_check(plain >= 8.0, "the far edge is past a plain set of commons (%.1f/s)" % plain)
+	_check(plain < 8.0, "the land inside the wall falls to a plain set of commons (%.1f/s)" % plain)
 
-	# The other half of what "plain" means now that a slot has materials: the same set in the best one
-	# the edge's own level unlocks, the second of four. The design's line is the one above -- a
-	# plain set is past what a person can click -- and the best material comes in just under it, at
-	# 7.7/s against the wooden set's 9.2. It is pinned here rather than smoothed over: LootTable's
-	# TIER_POWER would have to come down from 0.20 to 0.10 for a top-material sword set to want eight
-	# clicks again, and that is a dial in another file and a decision of its own.
+	# And the better material a slot has is worth finding: the same set in the best one the edge's own
+	# level unlocks, the second of four, must want fewer clicks. Farming cannot raise the level a tile
+	# drops at -- that ceiling is the tile's own -- so what a long run buys is materials and modifiers.
 	var best := _rate_for(edge, _best_commons(level), spare)
 	_check(best < plain, "the best material at the edge is worth finding (%.1f/s against %.1f)"
 			% [best, plain])
-	_check(best > 7.0, "and the far edge is still past a plain set whatever it is made of (%.1f/s)"
-			% best)
 	# What each kind of weapon wants in that same plain set, reported rather than pinned: the mace's
 	# bleed counted as the free damage it is, and the greatsword without the offhand it costs.
 	for kind: String in ["sword", "dagger", "mace", "greatsword"]:
@@ -927,28 +949,42 @@ func _test_a_won_fight() -> bool:
 				% [kind, blow, held.attack_speed, held.bleed,
 					_click_rate(held, spare, blow, held.attack_speed + held.bleed / 100.0)])
 
-	var far := Encounter.for_tile(edge, "grass")
+	# The frontier proper: the first ring past a fallen wall, in the farmed set of rares the land inside
+	# the wall handed over. It is meant to be hard but possible -- a fight the player who broke the wall
+	# can win with nothing to spare, rather than either a brick or the walkover it was before the land
+	# stepped with the wall. Both ends are pinned, because either one alone would let the map drift.
+	var beyond := Vector2i(MapBuilder.START_LAND_RADIUS + 2, 0)
+	_check(Encounter.walls_inside(beyond) == 1, "one wall stands inside the ring past it")
+	var far := Encounter.for_tile(beyond, "grass")
 	far.arm(_typical_farmed(edge, ItemRarity.Rarity.RARE).totals())
 	var per_hit := far.damage * (1.0 + far.crit_chance / 100.0 * far.crit_damage / 100.0)
 	var rate := _click_rate(far, spare, per_hit, far.attack_speed)
-	print("Edge fight in a farmed set of rares: %d health, %.2f a hit, %.1f swings/s free, %.1f clicks/s"
-			% [_total_health(far), per_hit, far.attack_speed, rate])
-	_check(rate < 8.0, "the far edge is beatable in farmed gear at a human click rate (%.1f/s)" % rate)
+	var inside := _click_rate(Encounter.for_tile(edge, "grass"), spare, per_hit, far.attack_speed)
+	print("Past the wall in a farmed set of rares: %d health, %.2f a hit, %.1f swings/s free, %.1f clicks/s (%.1f inside the wall)"
+			% [_total_health(far), per_hit, far.attack_speed, rate, inside])
+	# Past a farmed set of rares on its own, the way the wall itself is (`_test_the_ice_wall` pins the
+	# same thing): the gear the land inside the wall handed over is not what carries the player across.
+	_check(rate > 8.0, "the land past the wall is past a farmed set of rares alone (%.1f/s)" % rate)
 	# And gear has to be worth wearing: the same fight must want fewer clicks than bare hands.
 	_check(rate < _click_rate(far, spare, Encounter.BARE_DAMAGE, 0.0), "gear beats bare hands there")
-	_check(rate > 1.0, "and is not a walkover in farmed gear either (%.1f/s)" % rate)
+	# Which is the whole point of the step: the same gear on the same curve one ring inside the wall is
+	# a tile nobody has to click at all, and before the land stepped that was the whole band past it.
+	_check(inside < rate, "and the land inside the wall is the easier half of it (%.1f/s)" % inside)
 
-	# Skills on top of that set. A player at the edge's own level has a point a level past the first to
-	# spend, and all of it in Power is the most skills can do there: it has to help, and it must not
-	# make the edge a fight nobody clicks in. A whole tree is 23 points -- a player at level 24 is
+	# Skills on top of that set. A player at the frontier's own level has a point a level past the first
+	# to spend, and all of it in Power is the most skills can do there: it has to help, and it must not
+	# make the frontier a fight nobody clicks in. A whole tree is 23 points -- a player at level 24 is
 	# nowhere near a level-6 tile's gear, so the whole tree is only held to helping.
-	var budget := Skills.earned(level)
-	var early := _power_rate(edge, spare, budget)
-	var whole := _power_rate(edge, spare, SkillTree.capacity("power"))
-	print("Edge fight with Power skills too: %.2f clicks/s on %d points, %.2f on the whole tree"
+	var budget := Skills.earned(MapBuilder.level_of(beyond))
+	var early := _power_rate(beyond, spare, budget)
+	var whole := _power_rate(beyond, spare, SkillTree.capacity("power"))
+	print("Frontier fight with Power skills too: %.2f clicks/s on %d points, %.2f on the whole tree"
 			% [early, budget, whole])
-	_check(early < rate, "a level's worth of Power makes the edge easier (%.2f/s)" % early)
-	_check(early > 0.5, "and still wants clicking (%.2f/s)" % early)
+	_check(early < rate, "a level's worth of Power makes the frontier easier (%.2f/s)" % early)
+	# What carries the player across is the Power tree the wall already asked of them, and with it the
+	# ring past the wall is hard but possible: under a human click rate and nowhere near a walkover.
+	_check(whole < 8.0, "the whole Power tree brings the frontier down (%.2f/s)" % whole)
+	_check(whole > 1.0, "and is not a walkover with it either (%.2f/s)" % whole)
 	_check(whole <= early, "the whole tree helps at least as much (%.2f/s)" % whole)
 	return true
 
@@ -1186,10 +1222,18 @@ func _test_the_ice_wall() -> bool:
 	_check(bare > 50.0, "nobody walks through the wall bare-handed (%.1f/s)" % bare)
 	_check(farmed > 8.0, "nor on farmed rares alone (%.1f/s)" % farmed)
 	_check(whole > 1.0 and whole < 8.0, "farmed rares and the whole Power tree bring it down (%.1f/s)" % whole)
-	# Every wall fallen makes the next WALL_GROWTH times the wall its ring alone would make it.
+	# A wall is a fixed check on the land inside it and nothing more: WALL_HP over its own body, with
+	# no term of its own for the walls already down. That term lives in `base_hp` now, where it makes
+	# the land past a fallen wall a frontier again, and a wall's ring counts none of itself -- so the
+	# second wall comes out WALL_GROWTH times the first without `for_wall` doing anything about it.
 	var second := Encounter.for_wall(Vector2i(cell.x + MapBuilder.WALL_STEP, 0))
-	var by_ring := Encounter.hp_of(Encounter.WALL_NAME, second.cell) / Encounter.hp_of(Encounter.WALL_NAME, cell)
-	_check(is_equal_approx(second.hp / fight.hp / by_ring, Encounter.WALL_GROWTH),
+	_check(Encounter.walls_inside(cell) == 0 and Encounter.walls_inside(second.cell) == 1,
+			"a wall's own ring counts none of itself")
+	for wall: Encounter in [fight, second]:
+		_check(is_equal_approx(wall.hp, roundf(Encounter.hp_of(Encounter.WALL_NAME, wall.cell) * Encounter.WALL_HP)),
+				"the wall on ring %d is WALL_HP over its own body" % HexGrid.distance(MapBuilder.CENTER, wall.cell))
+	var by_ring := pow(Encounter.HP_GROWTH, MapBuilder.WALL_STEP)
+	_check(absf(second.hp / fight.hp / by_ring / Encounter.WALL_GROWTH - 1.0) < 0.01,
 			"the second wall is %.0f times the first on top of its ring (%s health)"
 			% [Encounter.WALL_GROWTH, BigNumber.format(second.hp)])
 	return true
@@ -1662,8 +1706,12 @@ func _test_unique_effects() -> bool:
 ## line at the top of its band, over a farmed set of rares -- is worth a handful of hex steps and no
 ## more: monsters grow by `HP_GROWTH` a step for ever, and a set that multiplies a blow a fixed number
 ## of times is caught up.
+##
+## The steps are counted inside one band of land, from the first ring past a fallen wall out to the
+## next wall, because a wall is no longer a step on that curve -- it is a cliff, and the last check
+## here is that the set cannot walk over one.
 func _test_uniques_keep_the_edge() -> bool:
-	var edge := Vector2i(20, 0)
+	var edge := Vector2i(MapBuilder.START_LAND_RADIUS + 2, 0)
 	var level := MapBuilder.level_of(edge)
 	var gear := _typical_farmed(edge, ItemRarity.Rarity.RARE)
 	# The most a clicker can stack: every piece whose rule is more damage on a click, on its home
@@ -1698,13 +1746,14 @@ func _test_uniques_keep_the_edge() -> bool:
 	var ordinary := Encounter.for_tile(edge, "grass")
 	var plain := _rate_for(edge, _typical_farmed(edge, ItemRarity.Rarity.RARE),
 			ordinary.seconds - ordinary.enemies * (Encounter.WALK_IN + Encounter.DEATH))
-	# The map has no edge, so the set cannot be held to one tile. What it can be held to is what it
-	# buys: walk outward until the fight wants that many clicks again, and count the steps. The set
-	# pays its own prices on the way: the Glass Edge's faster clock, Grazing's two more bodies, and a
-	# weapon that never swings beside the Berserker's Band.
+	# A band of land has no edge but its wall, so the set cannot be held to one tile. What it can be
+	# held to is what it buys: walk outward until the fight wants that many clicks again, and count the
+	# steps. The set pays its own prices on the way: the Glass Edge's faster clock, Grazing's two more
+	# bodies, and a weapon that never swings beside the Berserker's Band.
+	var band := MapBuilder.WALL_STEP - 1
 	var bought := 0
 	var rate := 0.0
-	while bought < 40:
+	while bought < band:
 		var there := Encounter.for_tile(edge + Vector2i(bought, 0), "grass")
 		there.wear(fight.effects)
 		var spare := there.seconds / Encounter.GLASS_CLOCK - there.enemies * (Encounter.WALK_IN + Encounter.DEATH)
@@ -1712,10 +1761,15 @@ func _test_uniques_keep_the_edge() -> bool:
 		if rate >= plain:
 			break
 		bought += 1
-	print("The best unique clicker set buys %d hex steps of frontier (%.2f clicks/s there, %.2f plain)"
-			% [bought, rate, plain])
+	print("The best unique clicker set buys %d hex steps of frontier (%.2f clicks/s there, %.2f plain), of %d to the wall"
+			% [bought, rate, plain, band])
 	_check(bought > 0, "the set is worth wearing")
-	_check(bought <= 14, "and buys a stretch of frontier, not the map (%d steps)" % bought)
+	_check(bought <= band, "and buys a stretch of frontier, not the map (%d steps)" % bought)
+	# And a wall is a cliff, not a stretch: one wall costs WALL_GROWTH, more than the whole band the
+	# set just walked, so no pile of uniques carries the player through the ring it stands on.
+	_check(Encounter.WALL_GROWTH > pow(Encounter.HP_GROWTH, band),
+			"a wall is worth more than a band's walk (x%.0f against x%.1f)"
+			% [Encounter.WALL_GROWTH, pow(Encounter.HP_GROWTH, band)])
 	return true
 
 

@@ -3,17 +3,18 @@ extends RefCounted
 ## The fortuneteller: what she can be asked, and what she answers.
 ##
 ## Every settlement has her, and she is the one counter that sells nothing to carry: what she sells is
-## knowledge the game used to give away or never gave at all. Six readings -- where the nearest
+## knowledge the game used to give away or never gave at all. Five **readings** -- where the nearest
 ## settlements lie, where a chest is, where the accepted bounty's monster lives, what one unique not
-## yet found is and where it drops, what a piece could still roll, and, once in a playthrough, a
-## patch of the map lifted out of the dark.
+## yet found is and where it drops, and what a piece could still roll -- each asked as often as the
+## player will pay for it, the price doubling every time; and two **great spells**, one a settlement:
+## a patch of the map lifted out of the dark, and the road home walked in no time at all.
 ##
-## Static and node-free like `Blacksmith`, so the tests need no interface. What a reading costs is
-## `TownPrices.fortune_price`'s business. What was bought is written where it belongs: the roads in
-## that town's drawer, the bounty's location on the posting, and the three that belong to the player
-## rather than to a town -- the chest, the peeked uniques, the spent scour -- in `inventory.fortunes`,
-## a plain Dictionary this file holds the keys of, because `Inventory` must not name a class that
-## names `Item`'s tables back at it.
+## Static and node-free like `Blacksmith`, so the tests need no interface. What a spell costs is
+## `TownPrices.fortune_price`'s business. What was bought is written where it belongs: what a town has
+## sold in that town's drawer (`ASKED`), the bounty's location on the posting, and what belongs to the
+## player rather than to a town -- the chest, the peeked uniques, and how often each reading has been
+## asked -- in `inventory.fortunes`, a plain Dictionary this file holds the keys of, because
+## `Inventory` must not name a class that names `Item`'s tables back at it.
 
 ## The readings, which are also the keys of `TownPrices.FORTUNE_BODIES`.
 const ROADS := "roads"
@@ -22,12 +23,25 @@ const QUARRY := "quarry"
 const RELIC := "relic"
 const APPRAISE := "appraise"
 const SCOUR := "scour"
+const HOMECOMING := "homecoming"
 ## Not a reading at all but the way out of the world: everything is left behind but the heirlooms
 ## (`Inventory.transcended`). She offers it only once a wall has fallen, and it is priced against the
 ## ground behind the first wall rather than the town's (`TownPrices.fortune_price`).
 const TRANSCEND := "transcend"
-## The order her buttons stand in: the cheap and the often-asked first, the one spell and the way out last.
-const READINGS := [ROADS, TREASURE, QUARRY, RELIC, APPRAISE, SCOUR, TRANSCEND]
+## The order her buttons stand in: the readings first, then the great spells, then the way out.
+const READINGS := [ROADS, TREASURE, QUARRY, RELIC, APPRAISE, SCOUR, HOMECOMING, TRANSCEND]
+
+## Her list is in two halves, and which half a spell is in is the whole of its rule.
+##
+## A **reading** is asked as often as the player likes, anywhere: the price starts at the town's own
+## level and doubles with every casting in this world (`TownPrices.FORTUNE_GROWTH`, the count in
+## `inventory.fortunes` under `CAST`). A **great spell** is one a settlement, the way every reading
+## used to be: it is written in that town's drawer under `ASKED` and refused there from then on.
+##
+## Written out rather than derived from `READINGS`, which is the grid's order; `test_town` holds the
+## three lists together.
+const COMMON := [ROADS, TREASURE, QUARRY, RELIC, APPRAISE]
+const GREAT := [SCOUR, HOMECOMING]
 
 ## What each reading's button says.
 const LABELS := {
@@ -37,16 +51,21 @@ const LABELS := {
 	RELIC: "Relic",
 	APPRAISE: "Appraise",
 	SCOUR: "Scour",
+	# "Homecoming" is two letters wider than a shelf square, and a name on her grid is clipped rather
+	# than allowed to widen the page.
+	HOMECOMING: "Return",
 	TRANSCEND: "Transcend",
 }
 
-## The town drawer's key, before a reading's name: each is sold once a settlement. The roads, paid for,
-## are told again for nothing; every other reading is refused there from then on.
+## The town drawer's key, before a spell's name: a `GREAT` spell is sold once a settlement and refused
+## there from then on. The roads write it too, and it means the other thing there: paid for once, they
+## are told again for nothing.
 const ASKED := "fortune_"
 ## `inventory.fortunes`' keys.
 const CHEST := "chest"
 const PEEKED := "peeked"
-const SCOURED := "scoured"
+## reading -> how many times it has been asked in this world, which is what doubles a reading's price.
+const CAST := "cast"
 
 ## One tile is an hour on foot, and a day's walking is eight of them.
 const HOURS_PER_DAY := 8
@@ -152,7 +171,7 @@ static func odds(item: Item) -> Array[Dictionary]:
 		total += float(ModifierTable.MODS[id]["weight"])
 	for id in ModifierTable.pool_for(item.type):
 		var weight := int(ModifierTable.MODS[id]["weight"])
-		rows.append({"id": id, "line": ModifierTable.band_line(id, item.level), "weight": weight,
+		rows.append({"id": id, "line": ModifierTable.band_line(id, item.mod_level()), "weight": weight,
 				"share": 100.0 * weight / total})
 	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["weight"] > b["weight"])
 	return rows
@@ -183,10 +202,21 @@ static func peeked(fortunes: Dictionary) -> Array:
 	return saved if typeof(saved) == TYPE_ARRAY else []
 
 
-## Whether `reading` has been paid for in the town whose drawer this is.
+## Whether `reading` has been paid for in the town whose drawer this is: a great spell spent here, or
+## the roads already told here and so told again for nothing.
 static func asked(drawer: Dictionary, reading: String) -> bool:
 	return bool(drawer.get(ASKED + reading, false))
 
 
-static func scoured(fortunes: Dictionary) -> bool:
-	return bool(fortunes.get(SCOURED, false))
+## How many times `reading` has been asked in this world. Read through `int()`, because JSON hands
+## whole numbers back as floats.
+static func cast(fortunes: Dictionary, reading: String) -> int:
+	var counts: Variant = fortunes.get(CAST, {})
+	return int((counts as Dictionary).get(reading, 0)) if typeof(counts) == TYPE_DICTIONARY else 0
+
+
+## One more casting of `reading`, which is what makes the next one dearer.
+static func note_cast(fortunes: Dictionary, reading: String) -> void:
+	if typeof(fortunes.get(CAST, null)) != TYPE_DICTIONARY:
+		fortunes[CAST] = {}
+	fortunes[CAST][reading] = cast(fortunes, reading) + 1

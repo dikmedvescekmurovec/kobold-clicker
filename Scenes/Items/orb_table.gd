@@ -185,7 +185,7 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator) -> bool:
 		"Orb of Transmutation":
 			_reroll_at(item, ItemRarity.Rarity.UNCOMMON, rng)
 		"Orb of Exalted":
-			var extra := ModifierTable.add_one(item.type, item.mods, rng, item.level)
+			var extra := ModifierTable.add_one(item.type, item.mods, rng, item.mod_level())
 			if extra.is_empty():
 				return false
 			item.mods.append(extra)
@@ -196,15 +196,24 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator) -> bool:
 		"Orb of Chaos":
 			_reroll_at(item, item.rarity, rng)
 		"Orb of Divine":
-			# The ids stay and only the numbers move: that is the whole difference between this and
-			# Chaos, and the reason a piece with the right modifiers and poor rolls is worth keeping.
-			for mod in item.mods:
-				# A locked modifier is locked at the roll it was locked at. Paying the smith and then
-				# rerolling the number would be paying to keep a line and losing it anyway.
-				if bool(mod.get("locked", false)):
-					continue
-				mod["value"] = ModifierTable.reroll_value(str(mod["id"]), rng, item.level)
+			reroll_values(item, rng)
 	return true
+
+
+## Rolls every modifier's number again in its band at the piece's `mod_level`, leaving the ids alone:
+## that is the whole difference between a Divine and a Chaos, and the reason a piece with the right
+## modifiers and poor rolls is worth keeping. **The smith's upgrade calls this too** (`Blacksmith`),
+## which is why it is a function rather than a branch: a band read at two levels in two files is two
+## places to drift apart.
+##
+## A locked or bound modifier is locked at the roll it was locked at -- paying the smith and then
+## rerolling the number would be paying to keep a line and losing it anyway -- and a perfected one
+## sits at the top of its band and stays there (`Item.refresh_perfect` moves it up with the level).
+static func reroll_values(item: Item, rng: RandomNumberGenerator) -> void:
+	for mod in item.mods:
+		if Item.held_fast(mod) or bool(mod.get("perfect", false)):
+			continue
+		mod["value"] = ModifierTable.reroll_value(str(mod["id"]), rng, item.mod_level())
 
 
 ## Sets the piece to a rarity and gives it that rarity's own fresh handful of modifiers. Four of the
@@ -217,14 +226,15 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator) -> bool:
 ## what keeps the lock from being rolled a second time.
 static func _reroll_at(item: Item, rarity: ItemRarity.Rarity, rng: RandomNumberGenerator) -> void:
 	item.rarity = rarity
-	var count := ItemRarity.mod_count(rarity, rng)
-	var kept := item.locked_mod()
-	if kept.is_empty():
-		item.mods = ModifierTable.roll(item.type, count, rng, item.level)
+	var count := ItemRarity.mod_count(rarity, rng) + int(item.extra_slot)
+	# The smith's lock and an Orb of Binding's: two at most, and both are of the handful.
+	var mods: Array[Dictionary] = []
+	mods.assign(item.mods.filter(Item.held_fast))
+	if mods.is_empty():
+		item.mods = ModifierTable.roll(item.type, count, rng, item.mod_level())
 		return
-	var mods: Array[Dictionary] = [kept]
-	for i in count - 1:
-		var extra := ModifierTable.add_one(item.type, mods, rng, item.level)
+	for i in count - mods.size():
+		var extra := ModifierTable.add_one(item.type, mods, rng, item.mod_level())
 		if extra.is_empty():
 			break
 		mods.append(extra)
@@ -234,7 +244,7 @@ static func _reroll_at(item: Item, rarity: ItemRarity.Rarity, rng: RandomNumberG
 ## The most modifiers this piece's rarity allows. A common's is zero, which is what makes a common
 ## with a modifier a contradiction rather than a rare event.
 static func _room(item: Item) -> int:
-	return int(ItemRarity.MOD_COUNT[item.rarity][1])
+	return int(ItemRarity.MOD_COUNT[item.rarity][1]) + int(item.extra_slot)
 
 
 ## How often this enemy leaves an orb: its tier times its body, and never more than certain. Rolled

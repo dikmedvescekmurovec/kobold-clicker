@@ -97,9 +97,19 @@ const WALL_NAME := "The Ice Wall"
 ## What the wall's health is multiplied by on top of its boss body. The dial for how hard the wall is,
 ## and a steep one with cliffs: `tests/balance_wall.gd` plays it out -- 33 is about 850 kills, 34 already 1600.
 const WALL_HP := 33.0
-## What every wall already fallen multiplies that by: the wall on ring 21 is ten times the dial, the
-## one on 31 a hundred. The first is a day's farming; the second is meant to be out of reach of
-## farming altogether -- at 1 it was twenty hours' worth, or two with the right uniques on.
+## What every wall already fallen multiplies the health of everything behind it by -- the whole land it
+## opened as well as the next wall, through `base_hp`. So the land past the first wall is ten times the
+## land inside it and the wall on ring 21 is ten times the one on 11, the one on 31 a hundred.
+##
+## The land needs the step as much as the wall does: felling a wall means about forty times the damage
+## a second that the land inside it asks for (a wall is `WALL_HP` over a boss body, some 930 commons,
+## in a minute), and a band of ten rings only grows by `HP_GROWTH ^ 10`, about five. Without the step
+## everything behind a fallen wall died to one click for ever. With it, a wall is crossed with roughly
+## four times the power the new band's first ring wants, the band's own curve eats that, and the next
+## wall is again the same forty-times check -- every band the same shape as the first.
+##
+## The first wall is a day's farming; the second is meant to be out of reach of farming altogether --
+## at 1 it was twenty hours' worth, or two with the right uniques on.
 const WALL_GROWTH := 10.0
 const PROFILES := {
 	"plain": ORDINARY,
@@ -393,9 +403,9 @@ static func for_wall(cell: Vector2i) -> Encounter:
 	fight.cell = cell
 	fight._take_profile(WALL)
 	fight.lineup.append(WALL_NAME)
-	var fallen := maxi(0, (HexGrid.distance(MapBuilder.CENTER, cell) - MapBuilder.START_LAND_RADIUS - 1)
-			/ MapBuilder.WALL_STEP)
-	fight.health.append(roundf(hp_of(WALL_NAME, cell) * WALL_HP * pow(WALL_GROWTH, fallen)))
+	# `WALL_GROWTH` is not applied here: `hp_of` already carries a step for every wall inside this one,
+	# and a wall's own ring counts none of itself, so the wall on ring 21 comes out ten times this one.
+	fight.health.append(roundf(hp_of(WALL_NAME, cell) * WALL_HP))
 	fight.hp = fight.health[0]
 	return fight
 
@@ -526,8 +536,21 @@ static func hp_of(enemy_name: String, cell: Vector2i) -> float:
 ## The health of an ordinary common body on this tile, before the enemy's own multiplier. A whole
 ## number, but a double rather than an int: the map has no edge and this is exponential in the walk,
 ## so an int64 overflowed a few hundred hexes out.
+##
+## Two terms: the smooth walk out from the middle, and a step for every wall already behind the cell.
+## The step is what makes the land a wall opens a frontier again -- see `WALL_GROWTH`.
 static func base_hp(cell: Vector2i) -> float:
-	return maxf(1.0, roundf(BASE_HP * pow(HP_GROWTH, HexGrid.distance(MapBuilder.CENTER, cell))))
+	return maxf(1.0, roundf(BASE_HP * pow(HP_GROWTH, HexGrid.distance(MapBuilder.CENTER, cell))
+			* pow(WALL_GROWTH, walls_inside(cell))))
+
+
+## How many walls stand between the middle of the map and `cell`. A wall's own ring counts none of
+## itself -- it is the edge of the land inside it -- and every ring past it counts that wall and the
+## ones before. So it is the wall rings' own arithmetic, ceiling rather than floor, which agrees with
+## the floor exactly on a wall ring (11 -> 0, 21 -> 1, 31 -> 2) and steps up on the first ring past one.
+static func walls_inside(cell: Vector2i) -> int:
+	return maxi(0, ceili(float(HexGrid.distance(MapBuilder.CENTER, cell)
+			- MapBuilder.START_LAND_RADIUS - 1) / float(MapBuilder.WALL_STEP)))
 
 
 ## What an ordinary common body on this tile is carrying, before its own multiplier. Grows with the

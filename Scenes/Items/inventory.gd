@@ -40,8 +40,13 @@ const SAVE_PATH := "user://inventory.json"
 ## drops `first_elite_taken`, which the sword's flag now does the work of; an older save's is ignored.
 ## 14 adds the heirlooms -- a second stash and a second doll under `heirlooms` -- with
 ## `heirloom_picks` and `walls_credited`; a version 13 save has none, and the main scene's first
-## `credit_walls` pays it a pick for every wall it had already brought down.
-const VERSION := 14
+## `credit_walls` pays it a pick for every wall it had already brought down. 15 makes the picks
+## `super_orbs` -- a wall pays an orb now, and an heirloom is made at transcension, one a world -- and
+## a version 14 save's unspent picks are read as that many orbs. 16 adds `play_seconds`, the time
+## the game has been open on this save; a version 15 save has none counted and starts from nothing.
+## 17 adds `camp`, the tile the hero is resting on and what that rest earns an hour; a version 16
+## save is simply not camped anywhere.
+const VERSION := 17
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -79,6 +84,11 @@ var gold := 0.0
 ## Every enemy the player has ever killed. It is what holds orbs back until `OrbTable.FIRST_ORB_KILLS`.
 var kills := 0
 
+## How long the game has been open on this save, in seconds. The main scene adds each frame's delta;
+## it is written whenever anything else is, so a quit loses the seconds since the last save. Carried
+## through a transcension, like the kills: it is the player's time, not the world's.
+var play_seconds := 0.0
+
 ## What currency the player is holding: orb name -> how many. Counts rather than objects, because an
 ## orb has nothing to tell apart -- two Orbs of Chaos are the same orb, which is exactly what gear
 ## stopped being when it started rolling modifiers.
@@ -112,6 +122,12 @@ var uniques_found: Array[String] = []
 ## keys are `FortuneTeller`'s, read through its accessors -- this file never names that class.
 var fortunes := {}
 
+## The camp the hero is holding, if any: where it stands, when it was made and what it earns a
+## second, as `Camp.make` built it. A plain dictionary read through `Camp`'s statics, the way
+## `fortunes` is read through `FortuneTeller`'s -- what is in it is the camp's business, not the
+## bag's, and naming `Camp` here is what the cycle checker would bite.
+var camp := {}
+
 ## The levels the player has told the game to stop bringing. Levels rather than items, because a
 ## level is what a section of the bag is, and rarity is not consulted: a marked level is done with,
 ## elite included. A rule only ever filters what *arrives* -- what is already held is cleared by
@@ -124,9 +140,10 @@ var autodiscard: Array[int] = []
 ## Inventory that made one of these as it was made would never finish being made.
 ## ponytail: it shares CAPACITY, 40 heirlooms; a pick is a wall broken, and nobody breaks forty.
 var heirlooms: Inventory
-## Heirlooms the player may still make: one for every wall broken, in any world, less those made.
-var heirloom_picks := 0
-## How many of this world's fallen walls have paid their pick (`credit_walls`).
+## Super orbs the player may still spend at a transcension (`SuperOrbTable`): one for every wall
+## broken, in any world, less those spent. One count for all six, spent on whichever is pressed.
+var super_orbs := 0
+## How many of this world's fallen walls have paid their orb (`credit_walls`).
 var walls_credited := 0
 
 
@@ -428,12 +445,12 @@ func stash() -> Inventory:
 	return heirlooms
 
 
-## `fallen` is how many walls are down in this world. Every one not yet paid for pays a pick, so a
-## wall falling and a save from before there were heirlooms are the same sum. True when it paid.
+## `fallen` is how many walls are down in this world. Every one not yet paid for pays a super orb, so
+## a wall falling and a save from before there were heirlooms are the same sum. True when it paid.
 func credit_walls(fallen: int) -> bool:
 	if fallen <= walls_credited:
 		return false
-	heirloom_picks += fallen - walls_credited
+	super_orbs += fallen - walls_credited
 	walls_credited = fallen
 	return true
 
@@ -446,28 +463,27 @@ func _socket_of(item: Item) -> int:
 	return -1
 
 
-## Whether `item` can be made an heirloom now: a pick to spend, a piece the player holds or wears,
-## and not a broken one, which no run could ever mend.
+## Whether `item` can be made an heirloom: a piece the player holds or wears, and not a broken one.
+## **How many may be made is not this file's business:** one a transcension, which is
+## `TranscendPage`'s to count, because that is the only place one is made.
 func can_make_heirloom(item: Item) -> bool:
-	return (item != null and heirloom_picks > 0 and not item.broken
-			and (items.has(item) or _socket_of(item) >= 0))
+	return item != null and not item.broken and (items.has(item) or _socket_of(item) >= 0)
 
 
-## One pick spent: the piece leaves the bag, or comes straight off the doll without passing through
-## the bag -- so a full bag is no obstacle -- and lies in the heirlooms' stash. It is not put on for
-## the player, and it never comes back.
+## The piece leaves the bag, or comes straight off the doll without passing through the bag -- so a
+## full bag is no obstacle -- and lies in the heirlooms' stash. It is not put on for the player, and
+## it never comes back.
 func make_heirloom(item: Item) -> bool:
 	if not can_make_heirloom(item):
 		return false
 	if not remove(item):
 		equipment.unequip(_socket_of(item))
 	stash().items.append(item)
-	heirloom_picks -= 1
 	return true
 
 
 ## What is left of the player when the world is left behind: the heirlooms, each gone through
-## `Item.transcend`, the picks not yet spent, and what the player *knows* -- the collection log, the
+## `Item.transcend`, the super orbs not yet spent, and what the player *knows* -- the collection log, the
 ## tips already read, and the kills, which with `first_sword_taken` is what keeps a second world from
 ## handing out the first one's helping hands again. Everything else is a fresh start.
 func transcended() -> Inventory:
@@ -475,8 +491,9 @@ func transcended() -> Inventory:
 	next.tips = tips.duplicate()
 	next.uniques_found = uniques_found.duplicate()
 	next.kills = kills
+	next.play_seconds = play_seconds
 	next.first_sword_taken = true
-	next.heirloom_picks = heirloom_picks
+	next.super_orbs = super_orbs
 	# Copies, through the save's own shape: this inventory is untouched, so a caller whose write
 	# fails is still holding the heirlooms as they were.
 	for item in stash().items:
@@ -534,6 +551,7 @@ func save(path := SAVE_PATH) -> bool:
 		"tips": tips,
 		"gold": gold,
 		"kills": kills,
+		"play_seconds": play_seconds,
 		"level": level,
 		"xp": xp,
 		"skills": skills.to_dict(),
@@ -544,8 +562,9 @@ func save(path := SAVE_PATH) -> bool:
 		"autodiscard": autodiscard,
 		"uniques_found": uniques_found,
 		"fortunes": fortunes,
+		"camp": camp,
 		"heirlooms": {"items": kept, "equipped": stash().equipment.to_dict()},
-		"heirloom_picks": heirloom_picks,
+		"super_orbs": super_orbs,
 		"walls_credited": walls_credited,
 	},"\t"))
 
@@ -613,6 +632,10 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var killed: Variant = data.get("kills", 0)
 	if typeof(killed) in [TYPE_INT, TYPE_FLOAT]:
 		inventory.kills = maxi(0, int(killed))
+	# Version 15 knew nothing about the clock: an absent key is a save that has played no time yet.
+	var played: Variant = data.get("play_seconds", 0.0)
+	if typeof(played) in [TYPE_INT, TYPE_FLOAT]:
+		inventory.play_seconds = maxf(0.0, float(played))
 	# Version 7 knew nothing about levels: an absent key reads as a fresh level 1. A level below 1 or
 	# experience below nothing in a hand-edited file is clamped rather than guessed at, and experience
 	# already worth a level is paid out, so the file comes back obeying the curve.
@@ -647,6 +670,10 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var told: Variant = data.get("fortunes", {})
 	if typeof(told) == TYPE_DICTIONARY:
 		inventory.fortunes = told
+	# Version 16 knew nothing about camping: an absent key is a hero who is not resting anywhere.
+	var resting: Variant = data.get("camp", {})
+	if typeof(resting) == TYPE_DICTIONARY:
+		inventory.camp = resting
 	# Version 13 knew nothing about heirlooms: absent keys are none kept, no pick owed and no wall
 	# paid for -- which is what lets `credit_walls` pay an old save for the walls it has down.
 	var heir: Variant = data.get("heirlooms", {})
@@ -658,7 +685,8 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 				if item != null:
 					inventory.stash().items.append(item)
 		inventory.stash().equipment = Equipment.from_dict(heir.get("equipped", {}))
-	inventory.heirloom_picks = maxi(0, int(data.get("heirloom_picks", 0)))
+	# Version 14 called them picks and spent them on making heirlooms; what is left of them are orbs.
+	inventory.super_orbs = maxi(0, int(data.get("super_orbs", data.get("heirloom_picks", 0))))
 	inventory.walls_credited = maxi(0, int(data.get("walls_credited", 0)))
 	# A file written before the cap, or edited by hand, comes back obeying it. A bag allowed over the
 	# cap in one place is a bag every other rule in the game has to check for.

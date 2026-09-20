@@ -44,6 +44,12 @@ const CORNER_GAP := 4.0
 const REFUSAL_WIDTH := 300.0
 const REFUSAL_MARGIN := 32.0
 
+## What the panel over an aimed spell says to do with the map behind it, by the spell's own name.
+const AIM_LINES := {
+	FortuneTeller.SCOUR: "Choose the land to uncover.",
+	FortuneTeller.HOMECOMING: "Choose the settlement to stand in.",
+}
+
 var towns: TownWorld
 var view: MapBuilder
 ## Everything the player has picked up, loaded from `inventory_path` and written back as it grows.
@@ -55,6 +61,14 @@ const LEVEL_UP_FLASH := Color(1.0, 0.95, 0.75, 0.35)
 const LEVEL_UP_TIME := 1.6
 const LEVEL_UP_FONT := 48
 
+## The banner a unique new to the collection log raises. It is up for `BANNER_HOLD` whatever the
+## player does, then goes by the rule in `_on_banner_held`; `BANNER_GAP` is the air it keeps under the
+## fight's own top-centre column, in screen pixels.
+const BANNER_HOLD := 5.0
+const BANNER_WIDTH := ItemCard.WIDTH * 1.5
+const BANNER_FADE := 0.4
+const BANNER_GAP := 12.0
+
 @onready var map: HexMap = $HexMap
 @onready var camera: Camera2D = $Camera2D
 
@@ -63,6 +77,9 @@ var _chart_button: Button
 var _skip_button: Button
 var _move_button: Button
 var _farm_button: Button
+## Rest on the selected tile: the same ground as Farm, held by the weapon alone while the player is
+## away. Greyed rather than hidden where nothing would swing (`_cannot_camp`).
+var _camp_button: Button
 var _town_button: Button
 ## What a town on the selected tile offers, listed under the land it stands on.
 var _service_rows: VBoxContainer
@@ -108,6 +125,13 @@ var _heirloom_button: Button
 var _item_card: ItemCard
 ## The player in the top-left corner, over the map and over a fight alike.
 var _character: CharacterPanel
+## The banner over a unique the log has never held, while it is up; null otherwise. `_banner_head` is
+## the row its heading sits in, which is where the X goes if one is ever needed.
+var _unique_banner: Control
+var _banner_head: HBoxContainer
+## Whether a left press has landed since it went up, and whether it may now be put down by one.
+var _banner_clicked := false
+var _banner_closable := false
 
 ## What the fight going on now has earned, and whether it is banked yet. Never null: between fights
 ## it is the last fight's, or an empty one, so `ledger.farming` can always be asked.
@@ -128,7 +152,7 @@ const TIPS := [
 	["first_chart", "Claim the Land", "Foes stand between you and this land, and the clock at the top of the screen is ticking. Strike them all down before it runs out and the tile is yours. Fall short and nothing is lost, so catch your breath and try again."],
 	["first_town", "Gates Stand Open", "People live here, and they will deal with a wanderer. Press Enter town on the panel at the right to step inside, where traders buy what you have gathered and sell what they have found. A board by the gate posts work for anyone willing to hunt, and a fortuneteller sells what she sees."],
 	["first_unique", "A Legend Found", "This is no ordinary find. A unique piece bends the rules of a fight, so read what it does before you wear it. The trophy in the top-left corner keeps count of every one you have found. A fortuneteller can say what the rest are and where they hide."],
-	["first_heirloom", "Something to Keep", "The wall is down, and it has left you a choice. Open a piece in your bag or on your character and press Make heirloom. Heirlooms wait behind the crown in the top-left corner and are worn as well as everything else. They alone go with you if you ever leave this world."],
+	["first_heirloom", "A Way Out", "The wall is down, and something of it has stayed with you. A fortuneteller can now show you the way out of this world. It costs everything you have here, and it is worth it."],
 	["first_bounty", "Names on the Board", "The board names creatures the town wants gone. Press Accept on a notice and every such creature you strike down counts towards it, one notice at a time. The scroll in the top-left corner keeps it wherever you go, and the fortuneteller in town can say where that creature lives."],
 ]
 const FLASH_BRIGHT := Color(1.6, 1.6, 1.6)
@@ -137,19 +161,27 @@ const FLASH_SECONDS := 0.5
 var _ui_layer: CanvasLayer
 ## Set by the settings page's Reset, which wipes both saves: it keeps `_exit_tree` from writing them back.
 var _resetting := false
+## The black screen between two worlds, while the player is on it; null otherwise.
+var _transcend_page: TranscendPage
 ## Tips earned but not shown yet, and the one that is up.
 var _tip_queue: Array = []
 var _tip_panel: VBoxContainer
 ## Pulses on corner buttons that have not been pressed yet: the pressed-once id -> its tween.
 var _flashes := {}
+## The camp the player is resting at, while its screen is up; null otherwise. Like a fight, it
+## stands over the hidden map on layer 2 and takes the corner buttons away.
+var _camp: CampScene
 ## The weather and the day over the map.
 var _ambient: Ambient
 ## The glimmer pointing at the chest a fortuneteller was paid to find (`_sync_chest`).
 var _chest_pointer: ChestPointer
-## The fortuneteller's scour while its land is being chosen: what the click will cost (0 when nobody
-## is choosing) and the panel saying what to do.
-var _scour_price := 0.0
-var _scour_panel: VBoxContainer
+## The fortuneteller's aimed spell while its land is being chosen: which one it is ("" when nobody is
+## choosing), what the click will cost, the town whose drawer it is spent out of, and the panel saying
+## what to do.
+var _aiming := ""
+var _aim_price := 0.0
+var _aim_town := TownWorld.NO_SPOT
+var _aim_panel: VBoxContainer
 
 
 func _ready() -> void:
@@ -200,7 +232,7 @@ func _ready() -> void:
 	_credit_walls()
 	_build_ui()
 	# A save from before there were heirlooms has just been paid for its walls: say what that means.
-	if inventory.heirloom_picks > 0:
+	if inventory.super_orbs > 0:
 		_check_tips()
 	camera.zoom = Vector2(zoom, zoom)
 	camera.position = map.ground_layer.map_to_local(view.player_cell)
@@ -213,6 +245,10 @@ func _ready() -> void:
 	# The world is decided the moment it is generated, so it is written down then: a first run
 	# killed before the player moves would otherwise come back as somewhere else entirely.
 	_save_map()
+	# Last, over everything the rest of start-up put up: a camp is somewhere the player *is*, so a
+	# game closed at one comes back to it, and the hours it was shut for are the hours it paid for.
+	if not inventory.camp.is_empty():
+		_open_camp()
 
 
 ## Points the star at the chest a fortuneteller was paid to find, for as long as it stands: a chest
@@ -278,8 +314,9 @@ func _center_panel(panel: Control) -> void:
 
 
 ## The camera keeps up with the walking player, so they never walk off screen. Standing still, it only moves
-## where the player drags it.
-func _process(_delta: float) -> void:
+## where the player drags it. The play clock is wound on here: every frame the game is open counts.
+func _process(delta: float) -> void:
+	inventory.play_seconds += delta
 	if view != null and view.walking:
 		camera.position = _clamp_to_map(map.player.position)
 
@@ -298,7 +335,7 @@ func _build_ui() -> void:
 	_chest_pointer = ChestPointer.new(map, view, ui_scale)
 	_chest_pointer.covered = func() -> bool:
 		return (_panel.visible or town_page.visible or _left_page_up() or _tip_panel != null
-				or _scour_panel != null)
+				or _aim_panel != null)
 	layer.add_child(_chest_pointer)
 
 	_panel = UITheme.titled_panel("Tile", "Close and deselect the tile", _on_close_pressed)
@@ -351,6 +388,12 @@ func _build_ui() -> void:
 	_farm_button.pressed.connect(_on_farm_pressed)
 	Cursors.wear(_farm_button, Cursors.SWORD)
 	buttons.add_child(_farm_button)
+	# And the same tile left to hold itself: the hours the game is shut are the hours the hero
+	# spends here, and what they drive off pays in coin and experience alone.
+	_camp_button = UITheme.button("Set up camp", "LightButton", CAMP_TIP)
+	_camp_button.pressed.connect(_on_camp_pressed)
+	Cursors.wear(_camp_button, Cursors.BOOT)
+	buttons.add_child(_camp_button)
 	# And a fourth, on the tiles people live on: go inside and trade. It takes standing on the tile
 	# rather than looking at it, because visiting a town is being there.
 	_town_button = UITheme.button("Enter town", "LightButton", "Go inside and see what is traded here")
@@ -438,7 +481,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 	town_page.view = view
 	town_page.tab_changed.connect(_on_town_tab_changed)
 	town_page.chest_bought.connect(func(_cell: Vector2i) -> void: _sync_chest())
-	town_page.scour_pressed.connect(_on_scour_pressed)
+	town_page.spell_aimed.connect(_on_spell_aimed)
 	town_page.transcend_pressed.connect(_on_transcend_pressed)
 	# A bounty given up on the journal frees the board standing open on the other edge.
 	bounty_page.abandoned.connect(town_page.redraw)
@@ -514,6 +557,148 @@ func _celebrate_level(level: int) -> void:
 	tween.tween_property(label, "modulate:a", 0.0, 0.4).set_delay(LEVEL_UP_TIME - 0.4)
 	tween.chain().tween_callback(flash.queue_free)
 	tween.tween_callback(label.queue_free)
+
+
+## Whether this find fills a slot in the collection log: a unique, never logged, and not one this same
+## fight has already turned up. The bag cannot answer alone -- a run pouches its finds, so nothing has
+## reached `uniques_found` yet and a second copy would raise a second banner.
+func _is_new_unique(item: Item) -> bool:
+	if item.unique.is_empty() or inventory.uniques_found.has(item.unique):
+		return false
+	return not ledger.drops.any(func(drop: Item) -> bool: return drop.unique == item.unique)
+
+
+## A unique the log has never held, announced under the fight's own column: the piece as a square and
+## the whole of what it does, on the cards' cream, on the character's layer so it stands over the fight.
+##
+## It writes the name, the rarity line and the piece's own rule, and **none of its numbers**: the
+## tables are what a bag is for, and a banner read mid-fight has to be read in a glance. The square is
+## an `ItemSlot`, so the gold frame and its glint come for nothing. What that costs is one line -- the
+## square has to leave `ItemSlot.GROUP` at once, or the one `ItemCard` finds it under the cursor and
+## stands its own card over this one.
+func _announce_unique(item: Item) -> void:
+	_close_unique_banner()
+	var layer := _character.get_parent()
+	if Settings.animations == Settings.Anim.DEFAULT:
+		# Added before the panel, so it washes the fight behind it and not the words.
+		var flash := ColorRect.new()
+		flash.color = LEVEL_UP_FLASH
+		flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+		layer.add_child(flash)
+		var wash := create_tween()
+		wash.tween_property(flash, "modulate:a", 0.0, 0.5)
+		wash.tween_callback(flash.queue_free)
+	var panel := PanelContainer.new()
+	panel.theme = UITheme.theme()
+	panel.theme_type_variation = "TextPanel"
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.scale = Vector2(ui_scale, ui_scale)
+	var body := UITheme.vbox(4)
+	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(body)
+	_banner_head = HBoxContainer.new()
+	_banner_head.add_theme_constant_override("separation", 6)
+	_banner_head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	body.add_child(_banner_head)
+	# The unique's own name colour, which is the half of the ramp picked to be read on cream.
+	var heading := UITheme.label("Unique Found", item.text_color())
+	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_banner_head.add_child(heading)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	body.add_child(row)
+	var slot := ItemSlot.make(item)
+	slot.remove_from_group(ItemSlot.GROUP)
+	slot.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	row.add_child(slot)
+	# What the piece *is* and the rule it bends, and none of its numbers: a banner is read in a glance
+	# in the middle of a fight, and the stat and modifier tables are what made it a wall of text. They
+	# are two presses away in the bag, and the rule is the thing that cannot be guessed from the icon.
+	var rows := UITheme.vbox(2, BANNER_WIDTH)
+	rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(rows)
+	rows.add_child(ItemDetails.line(item.display_name(), item.text_color(), BANNER_WIDTH))
+	rows.add_child(ItemDetails.line("%s · level %d" % [item.rarity_name(), item.level],
+			item.text_color(), BANNER_WIDTH, true))
+	rows.add_child(ItemDetails.line(item.effect_text(), Palette.SLOT_TAN_DK, BANNER_WIDTH, true))
+	if item.is_set():
+		rows.add_child(ItemDetails.line(item.set_text(), ItemRarity.SET_TEXT, BANNER_WIDTH, true))
+	layer.add_child(panel)
+	_unique_banner = panel
+	_banner_clicked = false
+	_banner_closable = false
+	# Placed now, again once the labels have laid out -- with the sparks thrown from where it actually
+	# landed -- and again whenever it settles at another size, which is what the X at five seconds does.
+	panel.resized.connect(_place_unique_banner)
+	_place_unique_banner()
+	_place_unique_banner.call_deferred(Settings.animations == Settings.Anim.DEFAULT)
+	if Settings.animations != Settings.Anim.NONE:
+		panel.scale = Vector2(ui_scale, ui_scale) * 1.4
+		var spring := create_tween()
+		spring.tween_property(panel, "scale", Vector2(ui_scale, ui_scale), 0.25).set_trans(
+				Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	# A beat of slow motion, as an elite find already gets: this is the rarer thing of the two.
+	Juice.hit_stop(get_tree(), 0.12, 0.25)
+	get_tree().create_timer(BANNER_HOLD).timeout.connect(_on_banner_held.bind(panel))
+
+
+## Centred under the fight's top column, which is the one thing it must not cover. Run again whenever
+## the panel settles at another size (`resized`), so nothing here depends on the labels having laid
+## out. `spark` throws the puff of gold, and is only ever passed by the deferred first placement, so
+## it cannot be thrown twice.
+func _place_unique_banner(spark := false) -> void:
+	if _unique_banner == null:
+		return
+	var view_size := get_viewport_rect().size
+	var top: float = (_combat.hud_bottom() if _combat != null else CombatScene.HUD_MARGIN) + BANNER_GAP
+	_unique_banner.size = _unique_banner.get_combined_minimum_size()
+	var side := _unique_banner.size * ui_scale
+	# It springs in about its middle, so that is where the pivot goes -- and a Control is scaled about
+	# its pivot, which draws its corner `pivot * (scale - 1)` back from wherever `position` puts it.
+	# `corner` is where it actually lands; `position` is what has to be set to land it there.
+	_unique_banner.pivot_offset = _unique_banner.size / 2.0
+	var corner := Vector2((view_size.x - side.x) / 2.0, top)
+	_unique_banner.position = corner + _unique_banner.pivot_offset * (ui_scale - 1.0)
+	if spark:
+		Juice.burst(_unique_banner.get_parent(), corner + side / 2.0,
+				Palette.GOLD, 28, 220.0, 3.0, 0.7)
+
+
+## The five seconds are up. Someone who was swinging through them has read it or does not care, so it
+## goes; someone who stopped to read gets an X, and from then on the next swing puts it down as well.
+func _on_banner_held(panel: Control) -> void:
+	if _unique_banner != panel:
+		return
+	if _banner_clicked:
+		_close_unique_banner()
+		return
+	_banner_closable = true
+	var shut := UITheme.button("", "CloseButton", "Close")
+	shut.custom_minimum_size = Vector2(UITheme.icon_size("CloseButton"))
+	shut.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	shut.pressed.connect(_close_unique_banner)
+	# The X widens the heading; `resized` is what centres the panel again on its new size.
+	_banner_head.add_child(shut)
+
+
+## Puts it down, from the timer, the X, a swing past the five seconds, a second unique, or the fight
+## ending -- so it is never left standing over a verdict.
+func _close_unique_banner() -> void:
+	if _unique_banner == null:
+		return
+	var panel := _unique_banner
+	_unique_banner = null
+	_banner_head = null
+	_banner_clicked = false
+	_banner_closable = false
+	if Settings.animations == Settings.Anim.NONE:
+		panel.queue_free()
+		return
+	var tween := create_tween()
+	tween.tween_property(panel, "modulate:a", 0.0, BANNER_FADE)
+	tween.tween_callback(panel.queue_free)
 
 
 ## One row per environment on the tile: a swatch of that terrain, then its share of the tile.
@@ -671,6 +856,92 @@ func _on_farm_pressed() -> void:
 	_open_fight(Encounter.farm(cell, env, variant), cell, true)
 
 
+## What the Set up camp button says while it can be pressed.
+const CAMP_TIP := "Rest here, and let the hero hold the tile while you are away"
+
+
+## Why the hero cannot hold a camp, or "" where they can. A camp is fought by the weapon alone --
+## nobody is there to click -- so a weapon that does not swing itself would rest all night for
+## nothing. That is worth saying on the button rather than finding out in the morning. The two
+## conditions are `Camp.hunts`', asked of what is worn rather than of a fight nobody has built yet.
+func _cannot_camp() -> String:
+	if float(inventory.stats().get("attack_speed", 0.0)) <= 0.0:
+		return "Your weapon does not swing on its own, and a camp is held by the weapon alone."
+	if "berserk" in inventory.effects():
+		return "The Berserker's Band never lets the weapon swing on its own, so nothing would hold this camp."
+	return ""
+
+
+## Camping the selected tile: the farm run nobody clicks. What it pays an hour is worked out here,
+## once, from the gear the hero stands up in -- and then it is arithmetic (`Camp`), so the hours the
+## game is shut pay exactly what the hours it is open would have.
+func _on_camp_pressed() -> void:
+	var cell := map.selected_cell
+	if not view.can_farm(cell) or not _cannot_camp().is_empty():
+		return
+	var env: String = map.get_tile_info(cell).get("env", "")
+	# Armed exactly as `_open_fight` arms one, and for the same reason: a camp is that fight. What it
+	# is never given is the things a camp does not pay -- no first sword, no orbs, no uniques.
+	var fight := Encounter.farm(cell, env, view.area_variant(cell))
+	fight.wear(inventory.effects())
+	fight.arm(inventory.stats())
+	inventory.camp = Camp.make(cell, view.name_of(cell), fight, Time.get_unix_time_from_system())
+	inventory.save(inventory_path)
+	print("Camped on %s, %s: %s gold, %d experience and %d bodies an hour"
+			% [view.name_of(cell), cell, BigNumber.format(float(inventory.camp[Camp.GOLD]) * 3600.0),
+				int(float(inventory.camp[Camp.XP]) * 3600.0),
+				int(float(inventory.camp[Camp.KILLS]) * 3600.0)])
+	_open_camp()
+
+
+## Puts the camp on the screen, the way `_open_fight` puts a fight there: the map away behind it,
+## every page and corner button gone, nothing in the top-left to take a press. It is opened both by
+## the button and by start-up, so coming back to a camp and making one look the same.
+func _open_camp() -> void:
+	var cell := Camp.cell_of(inventory.camp)
+	_camp = CampScene.new()
+	_camp.broke_camp.connect(_break_camp)
+	add_child(_camp)
+	_camp.begin(inventory.camp, str(map.get_tile_info(cell).get("env", "")),
+			view.area_variant(cell), ui_scale)
+	map.hide()
+	map.process_mode = Node.PROCESS_MODE_DISABLED
+	_close_town()
+	_panel.hide()
+	_close_left_pages()
+	_show_corner(false)
+	_character.show()
+
+
+## Breaking camp: what the rest earned goes in, the camp is struck, and the map comes back exactly
+## as it was left. The purse and the experience are read from `Camp.earned` -- the same sum the
+## screen has been showing all along -- so what was watched and what is paid cannot differ.
+func _break_camp() -> void:
+	var earned := Camp.earned(inventory.camp, Time.get_unix_time_from_system())
+	inventory.camp = {}
+	inventory.gold += float(earned[Camp.GOLD])
+	var levels := inventory.add_xp(int(earned[Camp.XP]))
+	inventory.save(inventory_path)
+	print("Broke camp after %s: %s gold, %d experience, %d driven off"
+			% [Camp.spell_time(float(earned["seconds"])), BigNumber.format(float(earned[Camp.GOLD])),
+				int(earned[Camp.XP]), int(earned[Camp.KILLS])])
+	_camp.queue_free()
+	_camp = null
+	Input.set_default_cursor_shape(Cursors.ARROW)
+	map.process_mode = Node.PROCESS_MODE_INHERIT
+	map.show()
+	_show_corner(true)
+	# It was placed against the fight's HUD, which has just gone, and the verdict stands where it does.
+	_close_unique_banner()
+	_sync_character()
+	bag_page.refresh_gold()
+	if levels > 0:
+		_celebrate_level(inventory.level)
+	if map.selected_cell != HexMap.NO_CELL:
+		_panel.show()
+	_update_buttons()
+
+
 ## Puts a fight on the screen, whichever kind it is. Both kinds are opened exactly alike -- armed
 ## from what is worn, drawn on the tile's own backdrop, with the map and every Control out of the
 ## way -- so the one that comes later cannot quietly differ from the one that came first.
@@ -770,7 +1041,7 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 ## pays a save from before there were heirlooms for the walls it already has down.
 func _credit_walls() -> void:
 	if inventory.credit_walls(view.walls_fallen()):
-		print("A wall is down: %d heirloom pick(s) to spend" % inventory.heirloom_picks)
+		print("A wall is down: %d super orb(s) to spend at a transcension" % inventory.super_orbs)
 		inventory.save(inventory_path)
 
 
@@ -825,6 +1096,13 @@ func _update_buttons() -> void:
 	_skip_button.visible = _chart_button.visible and OS.is_debug_build()
 	_move_button.visible = view.can_move_to(cell)
 	_farm_button.visible = view.can_farm(cell)
+	# Camping takes exactly what farming takes -- a tile already won -- because it is that fight
+	# with nobody clicking. Where nothing would swing it is greyed with the reason rather than
+	# taken away: "why can I not camp" is a worse question than the answer.
+	_camp_button.visible = _farm_button.visible
+	var why := _cannot_camp()
+	_camp_button.disabled = not why.is_empty()
+	_camp_button.tooltip_text = why if not why.is_empty() else CAMP_TIP
 	_town_button.visible = view.can_visit(cell)
 	_place_panel()
 
@@ -844,7 +1122,12 @@ func _place_panel() -> void:
 func _on_loot_dropped(_index: int, item: Item) -> void:
 	print("Dropped %s (%s, level %d, %d modifier(s))"
 			% [item.type, item.rarity_name(), item.level, item.mods.size()])
+	# Asked before the ledger has it: a tile fight banks at once, and the log would already say it was
+	# found by the time the banner went up.
+	var first := _is_new_unique(item)
 	ledger.add_loot(item)
+	if first:
+		_announce_unique(item)
 	if not ledger.farming:
 		bag_page.refresh()
 	_refresh_bag_room()
@@ -944,8 +1227,8 @@ func _place_corner() -> void:
 func _show_corner(shown: bool) -> void:
 	# The one button a town leaves standing, because it is the only way to hold an heirloom up to a
 	# smith, a fortuneteller or a held orb: there it swaps the bag and the heirlooms at the counter.
-	_heirloom_button.visible = shown and (inventory.heirloom_picks > 0
-			or inventory.stash().total() > 0 or not inventory.stash().equipment.worn.is_empty())
+	_heirloom_button.visible = shown and (inventory.stash().total() > 0
+			or not inventory.stash().equipment.worn.is_empty())
 	if _heirloom_button.visible:
 		_flash(_heirloom_button, "opened_heirlooms")
 	shown = shown and not town_page.visible
@@ -989,7 +1272,7 @@ func _tip_due(id: String) -> bool:
 		"first_unique":
 			return not inventory.uniques_found.is_empty()
 		"first_heirloom":
-			return inventory.heirloom_picks > 0
+			return inventory.super_orbs > 0
 	return false
 
 
@@ -1005,7 +1288,7 @@ func _check_tips() -> void:
 	if added and _combat == null:
 		inventory.save(inventory_path)
 	# A tip can come due with a page up or a town open, and `_show_corner` knows about both.
-	_show_corner(_combat == null)
+	_show_corner(_combat == null and _camp == null)
 	if _tip_panel == null:
 		_show_next_tip()
 
@@ -1214,45 +1497,58 @@ func _on_town_pressed() -> void:
 	_check_tips()
 
 
-## The fortuneteller's scour, asked for and not yet paid: the town and the tile panel get out of the
-## way and the map is aimed at, a patch of outlines under the cursor. The click is what pays
-## (`_on_cell_aimed`); the panel's X and Escape put the spell away for nothing.
-func _on_scour_pressed(price: float) -> void:
+## One of the fortuneteller's aimed spells, asked for and not yet paid: the town and the tile panel
+## get out of the way and the map is aimed at, an outline under the cursor -- a patch of them for the
+## scour, one tile for the road home. The click is what pays (`_on_cell_aimed`); the panel's X and
+## Escape put the spell away for nothing.
+func _on_spell_aimed(reading: String, price: float, spot: Vector2i) -> void:
 	_on_left_page_closed()
 	_on_close_pressed()
-	_scour_price = price
-	map.aim_radius = FortuneTeller.SCOUR_RADIUS
-	_scour_panel = UITheme.titled_panel("Scour", "Keep the spell for later", _end_scour)
-	_scour_panel.scale = Vector2(ui_scale, ui_scale)
-	_ui_layer.add_child(_scour_panel)
-	UITheme.body_of(_scour_panel).add_child(UITheme.label("Choose the land to uncover.", null, true))
-	_scour_panel.position = Vector2(
-			(get_viewport().get_visible_rect().size.x - _scour_panel.get_combined_minimum_size().x * ui_scale) / 2.0, 0.0)
+	_aiming = reading
+	_aim_price = price
+	_aim_town = spot
+	map.aim_radius = FortuneTeller.SCOUR_RADIUS if reading == FortuneTeller.SCOUR else 0
+	_aim_panel = UITheme.titled_panel(FortuneTeller.LABELS[reading], "Keep the spell for later", _end_aim)
+	_aim_panel.scale = Vector2(ui_scale, ui_scale)
+	_ui_layer.add_child(_aim_panel)
+	UITheme.body_of(_aim_panel).add_child(UITheme.label(AIM_LINES[reading], null, true))
+	_aim_panel.position = Vector2(
+			(get_viewport().get_visible_rect().size.x - _aim_panel.get_combined_minimum_size().x * ui_scale) / 2.0, 0.0)
 
 
-## Land chosen. A patch with nothing in it left to show -- all seen already, or past the edge of what
-## the map has made -- is refused and the aim stays up, so the one spell is never spent on nothing.
+## Land chosen. A spell that could do nothing with it -- a patch with nothing left to show, all seen
+## already or past the edge of what the map has made; a tile that is no settlement the player has
+## charted -- is refused and the aim stays up, so the town's one casting is never spent on nothing.
 func _on_cell_aimed(cell: Vector2i) -> void:
-	if _scour_price <= 0.0 or inventory.gold < _scour_price:
+	if _aiming.is_empty() or _aim_price <= 0.0 or inventory.gold < _aim_price:
 		return
-	var shown := view.scour(cell)
-	if shown == 0:
+	var scouring := _aiming == FortuneTeller.SCOUR
+	var shown := view.scour(cell) if scouring else 0
+	if scouring and shown == 0:
 		return
-	inventory.gold -= _scour_price
-	inventory.fortunes[FortuneTeller.SCOURED] = true
+	if not scouring and not view.jump_to(cell):
+		return
+	inventory.gold -= _aim_price
+	# A great spell is one a settlement, and it is this town that cast it.
+	inventory.towns.visit(_aim_town)[FortuneTeller.ASKED + _aiming] = true
 	inventory.save(inventory_path)
-	_save_map()
-	print("Scoured %d tiles round %s for %s gold" % [shown, cell, BigNumber.format(_scour_price)])
-	_end_scour()
+	if scouring:
+		_save_map()
+		print("Scoured %d tiles round %s for %s gold" % [shown, cell, BigNumber.format(_aim_price)])
+	else:
+		print("Came home to %s for %s gold" % [cell, BigNumber.format(_aim_price)])
+	_end_aim()
 
 
 ## The aim put away, paid for or not.
-func _end_scour() -> void:
-	_scour_price = 0.0
+func _end_aim() -> void:
+	_aiming = ""
+	_aim_price = 0.0
+	_aim_town = TownWorld.NO_SPOT
 	map.aim_radius = -1
-	if _scour_panel != null:
-		_scour_panel.queue_free()
-		_scour_panel = null
+	if _aim_panel != null:
+		_aim_panel.queue_free()
+		_aim_panel = null
 
 
 ## Another counter opened: the bag buys what that counter buys and nothing else.
@@ -1291,13 +1587,27 @@ func _on_reset_pressed() -> void:
 	get_tree().reload_current_scene()
 
 
-## The fortuneteller's way out, asked for and answered yes. The world is left behind the way Reset
-## leaves it -- the map deleted, the scene loaded again into a new one -- but the inventory is not
-## deleted: it is written over with what `Inventory.transcended` keeps, the heirlooms first among it.
+## The fortuneteller's way out, asked for and answered yes: everything on screen goes and the game
+## fades to `TranscendPage`, where the player is paid for the world they are leaving. **Nothing is
+## written until that page is left** (`_transcend`), so a game closed on it has not transcended.
 ## The price is checked and never taken, because the purse is one of the things that stays behind.
 func _on_transcend_pressed() -> void:
-	if inventory.gold < TownPrices.fortune_price(FortuneTeller.TRANSCEND, _town_cell):
+	if _transcend_page != null \
+			or inventory.gold < TownPrices.fortune_price(FortuneTeller.TRANSCEND, _town_cell):
 		return
+	_on_left_page_closed()
+	_on_close_pressed()
+	_show_corner(false)
+	_character.hide()
+	_transcend_page = TranscendPage.new(inventory, ui_scale)
+	_transcend_page.finished.connect(_transcend)
+	_ui_layer.add_child(_transcend_page)
+
+
+## The black screen left behind. The world goes the way Reset sends it -- the map deleted, the scene
+## loaded again into a new one -- but the inventory is not deleted: it is written over with what
+## `Inventory.transcended` keeps, the heirlooms first among it.
+func _transcend() -> void:
 	print("Transcended with %d heirloom(s)" % (inventory.stash().total()
 			+ inventory.stash().equipment.worn.size()))
 	# Written before anything is deleted: a crash between the two leaves the new inventory on the old
@@ -1317,6 +1627,14 @@ func _on_transcend_pressed() -> void:
 ## further down the tree -- except under a tip, where it is not processing and the tip is what closes.
 func _input(event: InputEvent) -> void:
 	Cursors.twitch(get_tree(), event)
+	# A swing decides how the unique banner goes away: one in its first five seconds closes it at the
+	# end of them, one after that closes it there and then. Never marked handled, so the click still
+	# reaches the fight and costs the player nothing.
+	if (_unique_banner != null and event is InputEventMouseButton and event.pressed
+			and event.button_index == MOUSE_BUTTON_LEFT):
+		_banner_clicked = true
+		if _banner_closable:
+			_close_unique_banner()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -1324,13 +1642,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		_zoom_at(event.position, 1.0 if event.button_index == MOUSE_BUTTON_WHEEL_UP else -1.0)
 		get_viewport().set_input_as_handled()
 		return
-	if not event.is_action_pressed("ui_cancel"):
+	# A camp answers for itself: its X and its Break camp are the ways out, so a stray Escape cannot
+	# quietly end a night's rest. The black screen of a transcension is the same.
+	if not event.is_action_pressed("ui_cancel") or _transcend_page != null or _camp != null:
 		return
 	get_viewport().set_input_as_handled()
 	if _tip_panel != null:
 		_on_tip_closed()
-	elif _scour_panel != null:
-		_end_scour()
+	elif _aim_panel != null:
+		_end_aim()
 	elif _combat == null:
 		if _left_page_up() or town_page.visible:
 			_on_left_page_closed()

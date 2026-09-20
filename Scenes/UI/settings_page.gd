@@ -34,6 +34,8 @@ var inventory_path := ""
 var _ui_scale: float
 var _panel: VBoxContainer
 var _rows: VBoxContainer
+## The time played, redrawn every frame while the page is up so it does not sit still as it is read.
+var _played: Label
 
 
 func _init(ui_scale: float) -> void:
@@ -82,9 +84,26 @@ func open() -> void:
 	for part: Control in details.get_children():
 		part.tooltip_text = DETAILS_TIP
 	_rows.add_child(details)
+	_rows.add_child(UITheme.rule(WIDTH))
+	_played = UITheme.label(_spent(), null, true)
+	_rows.add_child(_played)
 	_rows.add_child(_foot(false))
 	# The generator may have left the panel wider than the settings are.
 	layout.call_deferred()
+
+
+func _process(_delta: float) -> void:
+	if _played != null and is_instance_valid(_played) and visible:
+		_played.text = _spent()
+
+
+## How long this save has been played, as words. Hours once there are any, and seconds until then,
+## so a fresh game's line moves while it is watched.
+func _spent() -> String:
+	var seconds := int(inventory.play_seconds) if inventory != null else 0
+	if seconds >= 3600:
+		return "Time played: %dh %dm" % [seconds / 3600, seconds % 3600 / 60]
+	return "Time played: %dm %ds" % [seconds / 60, seconds % 60]
 
 
 ## One tick-box row, the bag's own, already showing `on`. `write` puts a change into `Settings`.
@@ -146,6 +165,7 @@ func _foot(asking: bool) -> VBoxContainer:
 
 ## The generator in the settings' place, wider than they are; its back arrow is `open()`.
 func _open_generator() -> void:
+	_played = null
 	UITheme.clear(_rows)
 	_rows.add_child(ItemGenerator.new(inventory, inventory_path, open))
 	layout.call_deferred()

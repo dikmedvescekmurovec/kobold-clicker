@@ -1,0 +1,36 @@
+{
+  "group_id": "9ff06d05-5c57-49c2-8681-2872ee02c40b",
+  "states": [
+    {
+      "character": {
+        "id": "ee15e5fb-8013-4179-bdb7-baf6085806e2",
+        "name": "Idle",
+        "prompt": "Bog troll, fantasy RPG enemy, full body standing idle pose, side view facing left,\nhunched heavy shoulders and long arms, wielding an uprooted log club,\nmossy green and wet brown palette with saturated colours and warm highlights,\nthick black outline, clean chunky pixel art, sharp pixel edges, no anti-aliasing,\nlit from the upper left, transparent background, no shadow, no ground, no text",
+        "size": {
+          "width": 64,
+          "height": 64
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "side",
+        "created_at": "2026-09-20T11:18:09.828142+00:00"
+      },
+      "folder": "Idle",
+      "frames": {
+        "rotations": {
+          "south": "Idle/rotations/south.png",
+          "south-east": "Idle/rotations/south-east.png",
+          "east": "Idle/rotations/east.png",
+          "north-east": "Idle/rotations/north-east.png",
+          "north": "Idle/rotations/north.png",
+          "north-west": "Idle/rotations/north-west.png",
+          "west": "Idle/rotations/west.png",
+          "south-west": "Idle/rotations/south-west.png"
+        },
+        "animations": {}
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-09-20T11:22:20.193052"
+}
