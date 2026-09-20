@@ -448,6 +448,16 @@ func _shoot_town() -> void:
 	root.get_texture().get_image().save_png("user://ui_town_smith.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_town_smith.png"))
 
+	# And the doll in the comparison's place, which is how a worn piece is handed to him: he works on
+	# one as readily as on a carried piece, so the sheet at his counter is the figure rather than the
+	# room the other counters give away. The shot is here to check it fits beside his page.
+	main.bag_page._select_socket(Equipment.Socket.WEAPON)
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_town_smith_worn.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_town_smith_worn.png"))
+
 	# And what he leaves behind, on the elite sword: a locked modifier, which every orb now works
 	# around, and a break, which is the end of the piece as far as crafting goes. Both are read off the
 	# stat block on the left, and both grey the counter on the right with one reason between them.

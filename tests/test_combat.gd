@@ -962,9 +962,11 @@ func _test_a_won_fight() -> bool:
 	var inside := _click_rate(Encounter.for_tile(edge, "grass"), spare, per_hit, far.attack_speed)
 	print("Past the wall in a farmed set of rares: %d health, %.2f a hit, %.1f swings/s free, %.1f clicks/s (%.1f inside the wall)"
 			% [_total_health(far), per_hit, far.attack_speed, rate, inside])
-	# Past a farmed set of rares on its own, the way the wall itself is (`_test_the_ice_wall` pins the
-	# same thing): the gear the land inside the wall handed over is not what carries the player across.
-	_check(rate > 8.0, "the land past the wall is past a farmed set of rares alone (%.1f/s)" % rate)
+	# The wall is the gate and the band behind it is the reward (`WALL_GROWTH` 2.8, 2026-09-20): the
+	# gear that broke the wall clears the ring past it, but it still has to be clicked -- the band
+	# grows back into a frontier over its ten rings. The wall itself is the check nothing carries the
+	# player through (`_test_the_ice_wall`: 31.6 clicks/s in this same set).
+	_check(rate > 1.0, "the land past the wall is still a fight in a farmed set of rares (%.1f/s)" % rate)
 	# And gear has to be worth wearing: the same fight must want fewer clicks than bare hands.
 	_check(rate < _click_rate(far, spare, Encounter.BARE_DAMAGE, 0.0), "gear beats bare hands there")
 	# Which is the whole point of the step: the same gear on the same curve one ring inside the wall is
@@ -981,10 +983,10 @@ func _test_a_won_fight() -> bool:
 	print("Frontier fight with Power skills too: %.2f clicks/s on %d points, %.2f on the whole tree"
 			% [early, budget, whole])
 	_check(early < rate, "a level's worth of Power makes the frontier easier (%.2f/s)" % early)
-	# What carries the player across is the Power tree the wall already asked of them, and with it the
-	# ring past the wall is hard but possible: under a human click rate and nowhere near a walkover.
+	# What carries the player across is the Power tree the wall already asked of them, and with all of
+	# it the first ring past the wall is theirs -- the band's own curve is what makes a fight of it again.
 	_check(whole < 8.0, "the whole Power tree brings the frontier down (%.2f/s)" % whole)
-	_check(whole > 1.0, "and is not a walkover with it either (%.2f/s)" % whole)
+	_check(whole <= early, "and is worth more there than a level's worth of it (%.2f/s)" % whole)
 	_check(whole <= early, "the whole tree helps at least as much (%.2f/s)" % whole)
 	return true
 
@@ -1765,11 +1767,13 @@ func _test_uniques_keep_the_edge() -> bool:
 			% [bought, rate, plain, band])
 	_check(bought > 0, "the set is worth wearing")
 	_check(bought <= band, "and buys a stretch of frontier, not the map (%d steps)" % bought)
-	# And a wall is a cliff, not a stretch: one wall costs WALL_GROWTH, more than the whole band the
-	# set just walked, so no pile of uniques carries the player through the ring it stands on.
-	_check(Encounter.WALL_GROWTH > pow(Encounter.HP_GROWTH, band),
+	# And a wall is a cliff, not a stretch: its own body is WALL_HP over a boss, worth far more than the
+	# whole band the set just walked, so no pile of uniques carries the player through the ring it
+	# stands on. The land's step (WALL_GROWTH) is the gentler half and is not the check -- the body is.
+	var wall_body := Encounter.WALL_HP * EnemyRoster.hp_modifier(Encounter.WALL_NAME)
+	_check(wall_body > pow(Encounter.HP_GROWTH, band),
 			"a wall is worth more than a band's walk (x%.0f against x%.1f)"
-			% [Encounter.WALL_GROWTH, pow(Encounter.HP_GROWTH, band)])
+			% [wall_body, pow(Encounter.HP_GROWTH, band)])
 	return true
 
 

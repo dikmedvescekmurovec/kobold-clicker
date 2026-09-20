@@ -821,8 +821,11 @@ func _refresh_worn() -> void:
 		judged = null
 	# In a town the page on the far edge needs the room, and the doll is the one thing on this side
 	# that can go without taking a decision with it: the comparison is what says whether to sell, and
-	# nothing is worn while the bag is being emptied over a counter.
-	_worn_panel.visible = judged != null or _services.is_empty()
+	# nothing is worn while the bag is being emptied over a counter. **The smith is the exception:**
+	# he works on a worn piece as readily as a carried one, so there the doll is the decision, and it
+	# is how the player hands him what they are wearing.
+	_worn_panel.visible = (judged != null or _services.is_empty()
+			or TownServices.SMITH in _services)
 	# Hidden, the whole sheet goes, doll or comparison, and only the way back to it stays.
 	_show_button.visible = _compare_hidden and _worn_panel.visible
 	if _show_button.visible:

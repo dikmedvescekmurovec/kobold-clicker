@@ -278,6 +278,8 @@ var _enemy_title: Label
 var _plate_pop := 1.0
 var _plate_tween: Tween
 var _enemy_bar: HealthBar
+## The same health as the bar, in numbers, under it.
+var _enemy_hp_label: Label
 var _result: PanelContainer
 var _result_summary: VBoxContainer
 var _result_label: Label
@@ -571,6 +573,12 @@ func _build_hud() -> void:
 	_enemy_bar = HealthBar.new()
 	_enemy_bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_enemy_panel.add_child(_enemy_bar)
+	# What the bar says, in figures: the share alone cannot tell a sliver that is one hit from one
+	# that is fifty. Body text under the bar, the way the boss's title sits over it.
+	_enemy_hp_label = _hud_label("", Palette.BONE)
+	_enemy_hp_label.theme_type_variation = "SmallLabel"
+	_enemy_hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_enemy_panel.add_child(_enemy_hp_label)
 
 	# The verdict, hidden until there is one.
 	_result = PanelContainer.new()
@@ -1107,6 +1115,10 @@ func _refresh() -> void:
 	# Encounter.tier_in rather than on_elite(): the pips beside this bar colour themselves through the
 	# same call, so the frame over the enemy and the pip standing for it can never disagree.
 	_enemy_bar.show_health(Encounter.tier_in(fight, fight.index), maxf(share, 0.0))
+	# Through BigNumber, like every other growing quantity, and rounded up for the reason the bar
+	# never empties to nothing: anything still standing reads as at least 1.
+	_enemy_hp_label.text = "%s / %s" % [BigNumber.format(ceilf(maxf(fight.hp, 0.0))),
+			BigNumber.format(ceilf(fight.enemy_max_hp()))]
 
 
 func _on_enemy_spawned(_index: int, _enemy_name: String, _hp: float) -> void:

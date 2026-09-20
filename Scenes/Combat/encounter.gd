@@ -98,19 +98,20 @@ const WALL_NAME := "The Ice Wall"
 ## and a steep one with cliffs: `tests/balance_wall.gd` plays it out -- 33 is about 850 kills, 34 already 1600.
 const WALL_HP := 33.0
 ## What every wall already fallen multiplies the health of everything behind it by -- the whole land it
-## opened as well as the next wall, through `base_hp`. So the land past the first wall is ten times the
-## land inside it and the wall on ring 21 is ten times the one on 11, the one on 31 a hundred.
+## opened as well as the next wall, through `base_hp`. The step lands on top of the walk, so with the
+## band's own `HP_GROWTH ^ 10` a wall is about fifteen times the one before it: 34,056 on ring 11,
+## 502,128 on ring 21, 7.4e6 on ring 31.
 ##
 ## The land needs the step as much as the wall does: felling a wall means about forty times the damage
 ## a second that the land inside it asks for (a wall is `WALL_HP` over a boss body, some 930 commons,
 ## in a minute), and a band of ten rings only grows by `HP_GROWTH ^ 10`, about five. Without the step
 ## everything behind a fallen wall died to one click for ever. With it, a wall is crossed with roughly
-## four times the power the new band's first ring wants, the band's own curve eats that, and the next
-## wall is again the same forty-times check -- every band the same shape as the first.
+## fourteen times the power the new band's first ring wants, the band's own curve eats that, and the
+## next wall is again the same forty-times check -- every band the same shape as the first.
 ##
-## The first wall is a day's farming; the second is meant to be out of reach of farming altogether --
-## at 1 it was twenty hours' worth, or two with the right uniques on.
-const WALL_GROWTH := 10.0
+## The first wall is a day's farming; the second is the gate a transcension is for -- half a million
+## health, some fifteen times the first, where at 10 it was 1.79e6 and no farming ever reached it.
+const WALL_GROWTH := 2.8
 const PROFILES := {
 	"plain": ORDINARY,
 	"road": ORDINARY,
@@ -404,7 +405,8 @@ static func for_wall(cell: Vector2i) -> Encounter:
 	fight._take_profile(WALL)
 	fight.lineup.append(WALL_NAME)
 	# `WALL_GROWTH` is not applied here: `hp_of` already carries a step for every wall inside this one,
-	# and a wall's own ring counts none of itself, so the wall on ring 21 comes out ten times this one.
+	# and a wall's own ring counts none of itself, so the wall on ring 21 comes out WALL_GROWTH times
+	# this one on top of the ten rings' walk -- about fifteen times over.
 	fight.health.append(roundf(hp_of(WALL_NAME, cell) * WALL_HP))
 	fight.hp = fight.health[0]
 	return fight

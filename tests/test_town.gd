@@ -995,23 +995,16 @@ func _test_smithing() -> void:
 			"and both of the smith's buttons are dead")
 	_check(Inventory.load_from(TEST_PATH).items[0].broken, "the break was saved")
 
-	# He works out of the bag: a worn piece is refused however good the purse is.
+	# Carried or worn is all one to him: a piece is locked without being stripped off first -- one
+	# modifier pinned, and a second lock refused.
 	var worn := Item.rolled("Leather Helmet", ItemRarity.Rarity.RARE, rng, 3)
 	inventory.add(worn)
 	inventory.equip(worn, Equipment.Socket.HELMET)
 	inventory.gold = TownPrices.lock_price(worn) * 2
 	page.bag_changed(worn)
 	_check(page._smith_note.is_empty(), "a new piece clears what the hammer did to the last one")
-	_check(_button(page._rows, "Upgrade").disabled and _button(page._rows, "Lock").disabled,
-			"a worn piece is not the smith's to work on")
-	page._on_lock_pressed()
-	_check(worn.locked_mod().is_empty(), "and nothing was pinned to it")
-
-	# In the bag, with the gold: one modifier pinned, and a second lock refused.
-	inventory.unequip(Equipment.Socket.HELMET)
-	page.bag_changed(worn)
 	lock = _button(page._rows, "Lock")
-	_check(lock != null and not lock.disabled, "off his back it is his to work on")
+	_check(lock != null and not lock.disabled, "a worn piece is his to work on")
 	var lock_price := TownPrices.lock_price(worn)
 	var purse := inventory.gold
 	page._on_lock_pressed()
@@ -1019,8 +1012,15 @@ func _test_smithing() -> void:
 	_check(inventory.gold == purse - lock_price, "the purse paid the lock (%d, want %d)"
 			% [inventory.gold, purse - lock_price])
 	_check(_button(page._rows, "Lock").disabled, "and the button is dead for a second one")
-	var saved: Item = Inventory.load_from(TEST_PATH).items.back()
-	_check(saved != null and not saved.locked_mod().is_empty(), "the lock was saved with the piece")
+	var saved: Item = Inventory.load_from(TEST_PATH).equipment.item_at(Equipment.Socket.HELMET)
+	_check(saved != null and not saved.locked_mod().is_empty(),
+			"the lock was saved with the worn piece")
+	# And the hammer reaches one on the doll too.
+	inventory.gold = TownPrices.upgrade_price(worn) * 2
+	page._smith_rng = _stream_that(false)
+	page._fill()
+	page._on_upgrade_pressed()
+	_check(worn.level == 4, "a worn piece came back a level higher (%d)" % worn.level)
 	page.queue_free()
 	await process_frame
 
@@ -1466,7 +1466,9 @@ func _test_fortune_page() -> void:
 	_ask(main, FortuneTeller.TREASURE)
 	await process_frame
 	_check(main._chest_pointer.target == chest, "the star is put over the nearest chest")
-	_check(not main._chest_pointer.visible, "but it waits for the town page to close")
+	# And up from that moment, whatever is open over it: it stood down for the tile panel, which is up
+	# whenever a tile is selected, and a star bought that way was never seen short of a restart.
+	_check(main._chest_pointer.visible, "and it is up at once, under the open town")
 	_check(FortuneTeller.chest(Inventory.load_from(TEST_PATH).fortunes) == main.view.origin + chest, "and saved")
 	_check(_dead(main, FortuneTeller.TREASURE), "and not sold again while it is out")
 	main.view._states[chest] = MapBuilder.State.CHARTED

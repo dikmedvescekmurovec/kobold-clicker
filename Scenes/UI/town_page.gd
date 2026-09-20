@@ -150,8 +150,8 @@ var _open_tab := ""
 ## index into the shelf, because it is what `ItemDetails` and the comparison are both reading.
 var _offer: Item
 var _offer_at := -1
-## What the bag has open, which is the piece the smith works on -- never one off a shelf and never
-## one being worn. It arrives through `bag_changed`.
+## What the bag has open, which is the piece the smith works on -- a piece in the grid or one off the
+## doll beside it, never one off a shelf. It arrives through `bag_changed`.
 var _bag_piece: Item
 ## The orb the bag has in hand ("" for none, `orb_held`), and the bag's own `craft_held`, set from
 ## outside: a press on a shelf piece spends that orb on it instead of opening it. The orb, the purse
@@ -570,9 +570,8 @@ func _on_reroll_pressed() -> void:
 	offer_changed.emit(null)
 
 
-## The smith's counter. He has no shelf: what he works on is the piece the bag has open, which is the
-## crafting rule the orb tray has always obeyed -- from the bag, where no fight and no socket is
-## holding a second reference to the same piece.
+## The smith's counter. He has no shelf: what he works on is the piece the bag page has open, carried
+## or worn. No fight can be on while the page is up, so the piece is nobody else's to hold.
 ##
 ## The two prices, and what an upgrade would make of the piece and what it risks. Why a button is
 ## grey is in that button's tooltip and nowhere else on the page.
@@ -580,7 +579,7 @@ func _fill_smith() -> void:
 	if not _smith_note.is_empty():
 		_rows.add_child(_sign(_smith_note, Palette.RUST))
 	if _bag_piece == null:
-		_rows.add_child(_sign("Open a piece in your bag and he will work on it."))
+		_rows.add_child(_sign("Open a piece you are carrying or wearing and he will work on it."))
 		return
 	_rows.add_child(ItemDetails.line(_bag_piece.display_name(), _bag_piece.text_color(), BODY_WIDTH))
 	# Air that takes the slack, so the buttons stand at the page's foot as every counter's do.
@@ -890,13 +889,12 @@ func _on_reading_closed() -> void:
 	layout()
 
 
-## The smith's own refusal, or one of the two the page owns: a piece that is worn rather than carried
-## (the bag is where crafting happens, and the doll is not the bag), and a purse that cannot pay.
+## The smith's own refusal, or the one the page owns: a purse that cannot pay. Carried or worn is all
+## one to him -- `_bag_piece` is whatever the bag page has open, and that is the player's own piece
+## either way -- so a set that is being worn is improved without stripping it off first.
 func _smith_why_not(rule: String, price: float) -> String:
 	if not rule.is_empty():
 		return rule
-	if not inventory.items.has(_bag_piece) and not inventory.stash().items.has(_bag_piece):
-		return "Bag pieces only."
 	return _why_not(price, false)
 
 
@@ -908,7 +906,7 @@ func _upgrade_cap() -> int:
 
 
 ## One blow of the hammer. The gold goes whichever way it falls -- that is what the break chance is --
-## and the piece stays in the bag either way, a level better or ruined for good.
+## and the piece stays where it is either way, a level better or ruined for good.
 func _on_upgrade_pressed() -> void:
 	var cap := _upgrade_cap()
 	var price := TownPrices.upgrade_price(_bag_piece)

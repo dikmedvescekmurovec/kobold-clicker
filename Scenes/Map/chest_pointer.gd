@@ -20,9 +20,6 @@ const BEAT_SECONDS := 0.45
 
 ## The chest pointed at, HexMap.NO_CELL for none. The main scene sets it (`_sync_chest`).
 var target := HexMap.NO_CELL
-## Asked every frame: true while any other interface is up, and the badge stands down for it. The main
-## scene sets it, being the one that knows what there is to be up.
-var covered := func() -> bool: return false
 var _map: HexMap
 var _view: MapBuilder
 ## Turned to face the chest; the arrow is its child, so the beat runs along the way it points.
@@ -34,9 +31,10 @@ func _init(map: HexMap, view: MapBuilder, ui_scale: float) -> void:
 	_view = view
 	# Whole, like everything else drawn at `ui_scale`, so the chest's pixels stay square.
 	scale = Vector2(ui_scale, ui_scale)
-	# Over the corner buttons, which are all that is left to stand under it: anything larger sends it
-	# away (`covered`).
-	z_index = 1
+	# Under every panel on the interface layer, and over nothing else there: the badge stands for as
+	# long as the chest does rather than ducking out for whatever page is open, and a panel that
+	# happens to lie over it simply covers that corner of it.
+	z_index = -1
 	add_child(_disc(DISC_RADIUS + RING_WIDTH, Palette.GOLD))
 	add_child(_disc(DISC_RADIUS, Palette.INK))
 	var chest := Sprite2D.new()
@@ -71,7 +69,7 @@ func _set_beat(out: float) -> void:
 ## seen needs no pointer; one on screen but still in the dark gets the badge over its own tile, with
 ## no arrow, since there is nowhere further to point.
 func _process(_delta: float) -> void:
-	visible = target != HexMap.NO_CELL and _map.visible and not covered.call()
+	visible = target != HexMap.NO_CELL and _map.visible
 	if not visible:
 		return
 	var screen := get_viewport_rect().size

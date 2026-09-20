@@ -333,9 +333,6 @@ func _build_ui() -> void:
 	add_child(layer)
 	_ui_layer = layer
 	_chest_pointer = ChestPointer.new(map, view, ui_scale)
-	_chest_pointer.covered = func() -> bool:
-		return (_panel.visible or town_page.visible or _left_page_up() or _tip_panel != null
-				or _aim_panel != null)
 	layer.add_child(_chest_pointer)
 
 	_panel = UITheme.titled_panel("Tile", "Close and deselect the tile", _on_close_pressed)
@@ -1551,8 +1548,13 @@ func _end_aim() -> void:
 		_aim_panel = null
 
 
-## Another counter opened: the bag buys what that counter buys and nothing else.
+## Another counter opened: the bag buys what that counter buys and nothing else. A page of its own
+## (skills, bounties, settings) standing in the bag's place leaves the counter's other half missing
+## -- the smith with nothing held up to him, no Sell beside a vendor -- so the bag comes back first.
 func _on_town_tab_changed(_service: String) -> void:
+	if not bag_page.visible and not heirloom_page.visible:
+		_open_left_page(bag_page)
+		_layout_ui()
 	_stand_at_counter()
 
 
