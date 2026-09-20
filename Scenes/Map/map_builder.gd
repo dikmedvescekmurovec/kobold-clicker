@@ -393,9 +393,17 @@ func nearest_env(envs: PackedStringArray, min_level := 0) -> Vector2i:
 	return best
 
 
+## Every cell's chest again, for when the dev's `Settings.show_all_chests` changes.
+## ponytail: scans every cell, like `nearest_chest`; only a settings tick and start-up ask.
+func redraw_chests() -> void:
+	for cell in _envs:
+		_draw_chest(cell)
+
+
 ## Puts the chest sprite on a drawn cell that has one, and takes it off one that no longer does.
+## Under the dev's `Settings.show_all_chests` a hidden cell's chest is drawn too.
 func _draw_chest(cell: Vector2i) -> void:
-	var chest := seen(cell) and has_chest(cell)
+	var chest := (seen(cell) or Settings.show_all_chests()) and has_chest(cell)
 	if chest == _chest_sprites.has(cell):
 		return
 	if not chest:

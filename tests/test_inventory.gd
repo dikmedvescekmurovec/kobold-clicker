@@ -37,6 +37,7 @@ func _run() -> void:
 	_check(_test_modifier_rolls() == true, "modifier roll tests ran to the end")
 	_check(_test_rolls() == true, "drop tests ran to the end")
 	_check(_test_a_fight_drops() == true, "fight drop tests ran to the end")
+	_check(_test_drops_cascade() == true, "cascading drop tests ran to the end")
 	_check(_test_the_promised_elite() == true, "promised elite tests ran to the end")
 	_check(_test_counts() == true, "counting tests ran to the end")
 	_check(_test_level_rolls() == true, "level roll tests ran to the end")
@@ -834,6 +835,53 @@ func _test_a_fight_drops() -> bool:
 	_check(lost.finished and not lost.victory, "the clock ran out")
 	_check(kept.size() == before, "losing drops nothing more")
 	return true
+
+
+## A find rolls again: a body that beat the chance leaves a second piece now and then, and never more
+## than `Encounter.MOST_DROPS`. A certain drop rolls nothing after it.
+func _test_drops_cascade() -> bool:
+	# Drop rate enough to pin `chance_for` at its ceiling, where every follow-up lands: every body
+	# leaves exactly the cap, which is also what proves the chain ends at all.
+	var counts := _drops_per_body(1.0e6, false)
+	_check(counts.size() == Encounter.ENEMIES, "every body left something (%d of %d)"
+			% [counts.size(), Encounter.ENEMIES])
+	var capped := true
+	for index: int in counts:
+		capped = capped and int(counts[index]) == Encounter.MOST_DROPS
+	_check(capped, "a certain chance leaves exactly %d pieces a body (%s)"
+			% [Encounter.MOST_DROPS, counts])
+
+	# And a middling one: some bodies leave one piece, some two or more, none more than the cap.
+	var many := {}
+	for attempt in 20:
+		for count: int in _drops_per_body(1500.0, false, attempt).values():
+			many[count] = int(many.get(count, 0)) + 1
+	_check(many.has(1) and many.has(2), "a find rolls again (%s)" % [many])
+	var over := 0
+	for count: int in many:
+		over += int(many[count]) if count > Encounter.MOST_DROPS else 0
+	_check(over == 0, "and never past the cap (%s)" % [many])
+
+	# A promised drop is one piece: it beat nothing, so nothing follows it.
+	var promised := _drops_per_body(0.0, true)
+	var singles := true
+	for index: int in promised:
+		singles = singles and int(promised[index]) == 1
+	_check(singles, "a guaranteed drop rolls nothing after it (%s)" % [promised])
+	return true
+
+
+## How many pieces each body of one seeded tile fight left, by the slot it stood in.
+func _drops_per_body(drop_rate: float, certain: bool, seed_value := WORLD_SEED) -> Dictionary:
+	var fight := Encounter.for_tile(Vector2i(2, 2), "grass")
+	fight.loot_rng.seed = seed_value
+	fight.always_drop = certain
+	fight.arm({"damage": 1.0e9, "drop_rate": drop_rate})
+	var counts := {}
+	fight.loot_dropped.connect(func(index: int, _item: Item) -> void:
+		counts[index] = int(counts.get(index, 0)) + 1)
+	_play(fight)
+	return counts
 
 
 ## The first elite is promised a drop, and only the elite, and only while it is promised.

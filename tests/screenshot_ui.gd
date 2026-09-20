@@ -474,6 +474,10 @@ func _shoot_town() -> void:
 	main.bag_page._select_item(6)
 	for i in 2:
 		await process_frame
+	# One square lit as the cursor lights it, which is the only way the hover halo reaches a shot.
+	main.town_page._rows.find_child(FortuneTeller.ROADS, true, false).mouse_entered.emit()
+	for i in 2:
+		await process_frame
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_town_fortune.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_town_fortune.png"))

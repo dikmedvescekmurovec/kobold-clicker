@@ -1236,10 +1236,8 @@ func _test_entering() -> void:
 	main._on_town_pressed()
 	main.town_page._on_tab_pressed(TownServices.FORTUNE)
 	await process_frame
-	var quarry := _deep_button(main.town_page._rows, "Quarry")
-	_check(quarry != null and not quarry.disabled, "the fortuneteller will say where a bounty's monster lives")
-	if quarry != null:
-		quarry.pressed.emit()
+	_check(not _dead(main, FortuneTeller.QUARRY), "the fortuneteller will say where a bounty's monster lives")
+	_ask(main, FortuneTeller.QUARRY)
 	await process_frame
 	_check(BountyBoard.located(BountyBoard.active(main.inventory.towns)), "which is written on the posting")
 	_check(BountyBoard.located(BountyBoard.active(Inventory.load_from(TEST_PATH).towns)), "and saved")
@@ -1247,8 +1245,7 @@ func _test_entering() -> void:
 	_check(main.town_page.open_tab() == TownServices.BOUNTIES, "and read off the card on the board")
 	main.town_page._on_tab_pressed(TownServices.FORTUNE)
 	await process_frame
-	quarry = _deep_button(main.town_page._rows, "Quarry")
-	_check(quarry != null and quarry.disabled, "and is not sold twice")
+	_check(_dead(main, FortuneTeller.QUARRY), "and is not sold twice")
 	main.town_page.closed.emit()
 	await process_frame
 	main._on_bounty_pressed()
@@ -1400,22 +1397,25 @@ func _test_fortune_page() -> void:
 	main.town_page._on_tab_pressed(TownServices.FORTUNE)
 	await process_frame
 	for reading: String in FortuneTeller.READINGS:
-		# The way out is not on her list while every wall still stands.
-		_check((_deep_button(main.town_page._rows, FortuneTeller.LABELS[reading]) != null)
-				== (reading != FortuneTeller.TRANSCEND), "she offers %s, or not yet" % reading)
-	_check(_deep_button(main.town_page._rows, "Quarry").disabled, "no bounty is out, so there is none to find")
-	_check(_deep_button(main.town_page._rows, "Appraise").disabled, "and no piece is open to read")
+		# Six squares on her grid; the way out is not on it while every wall still stands.
+		if reading == FortuneTeller.TRANSCEND:
+			_check(_deep_button(main.town_page._rows, FortuneTeller.LABELS[reading]) == null,
+					"the way out is not offered yet")
+			continue
+		_check(_spell(main, reading) != null, "she offers %s" % reading)
+	_check(_dead(main, FortuneTeller.QUARRY), "no bounty is out, so there is none to find")
+	_check(_dead(main, FortuneTeller.APPRAISE), "and no piece is open to read")
 
 	# The roads: three sentences, and free in this town from then on.
 	var purse: float = main.inventory.gold
-	_deep_button(main.town_page._rows, "Roads").pressed.emit()
+	_ask(main, FortuneTeller.ROADS)
 	await process_frame
 	_check(main.inventory.gold < purse, "the roads are paid for")
 	_check(_said(main.town_page._rows).contains("fortress"), "and told (%s)" % _said(main.town_page._rows))
 	main.town_page._on_reading_closed()
 	await process_frame
 	purse = main.inventory.gold
-	_deep_button(main.town_page._rows, "Roads").pressed.emit()
+	_ask(main, FortuneTeller.ROADS)
 	await process_frame
 	_check(main.inventory.gold == purse, "and told again for nothing")
 	main.town_page._on_reading_closed()
@@ -1424,19 +1424,19 @@ func _test_fortune_page() -> void:
 	var chest: Vector2i = main.view.nearest_chest(true)
 	_check(chest != HexMap.NO_CELL and not main.view.seen(chest),
 			"there is a chest out there on this seed that the player has not seen")
-	_deep_button(main.town_page._rows, "Treasure").pressed.emit()
+	_ask(main, FortuneTeller.TREASURE)
 	await process_frame
 	_check(main._chest_pointer.target == chest, "the star is put over the nearest chest")
 	_check(not main._chest_pointer.visible, "but it waits for the town page to close")
 	_check(FortuneTeller.chest(Inventory.load_from(TEST_PATH).fortunes) == main.view.origin + chest, "and saved")
-	_check(_deep_button(main.town_page._rows, "Treasure").disabled, "and not sold again while it is out")
+	_check(_dead(main, FortuneTeller.TREASURE), "and not sold again while it is out")
 	main.view._states[chest] = MapBuilder.State.CHARTED
 	main._sync_chest()
 	_check(main._chest_pointer.target == HexMap.NO_CELL and FortuneTeller.chest(main.inventory.fortunes)
 			== TownWorld.NO_SPOT, "an opened chest takes its star with it")
 
 	# A relic: shown on her page, and on the log's card from then on.
-	_deep_button(main.town_page._rows, "Relic").pressed.emit()
+	_ask(main, FortuneTeller.RELIC)
 	await process_frame
 	var peeked := FortuneTeller.peeked(main.inventory.fortunes)
 	_check(peeked.size() == 1, "one relic is shown")
@@ -1445,28 +1445,28 @@ func _test_fortune_page() -> void:
 	main.town_page._on_reading_closed()
 	await process_frame
 	# Each reading is sold once a settlement: the star is gone, but not the fact it was bought here.
-	_check(_deep_button(main.town_page._rows, "Relic").disabled, "one relic a settlement")
-	_check(_deep_button(main.town_page._rows, "Treasure").disabled, "and one star, even with the last one gone")
+	_check(_dead(main, FortuneTeller.RELIC), "one relic a settlement")
+	_check(_dead(main, FortuneTeller.TREASURE), "and one star, even with the last one gone")
 
 	# A piece read: the bag's open piece, as the smith's is.
 	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, RandomNumberGenerator.new())
 	main.inventory.items.append(sword)
 	main.town_page.bag_changed(sword)
 	await process_frame
-	_deep_button(main.town_page._rows, "Appraise").pressed.emit()
+	_ask(main, FortuneTeller.APPRAISE)
 	await process_frame
 	_check(_said(main.town_page._rows).contains("increased Damage"), "a sword's odds are read out")
 	main.town_page.bag_changed(null)
 	await process_frame
-	_check(_deep_button(main.town_page._rows, "Appraise") != null, "and put away with the piece")
+	_check(_dead(main, FortuneTeller.APPRAISE), "and her reading is put away with the piece")
 	main.town_page.bag_changed(sword)
 	await process_frame
-	_check(_deep_button(main.town_page._rows, "Appraise").disabled, "and one piece read a settlement")
+	_check(_dead(main, FortuneTeller.APPRAISE), "and one piece read a settlement")
 	main.town_page.bag_changed(null)
 	await process_frame
 
 	# The scour: the town closes, the map is aimed at, Escape costs nothing, a click pays once.
-	_deep_button(main.town_page._rows, "Scour").pressed.emit()
+	_ask(main, FortuneTeller.SCOUR)
 	await process_frame
 	_check(not main.town_page.visible and main.map.aim_radius == FortuneTeller.SCOUR_RADIUS,
 			"the scour closes the town and aims at the map")
@@ -1496,7 +1496,7 @@ func _test_fortune_page() -> void:
 	main._on_town_pressed()
 	main.town_page._on_tab_pressed(TownServices.FORTUNE)
 	await process_frame
-	_check(_deep_button(main.town_page._rows, "Scour").disabled, "and the spell is never sold again")
+	_check(_dead(main, FortuneTeller.SCOUR), "and the spell is never sold again")
 
 	# The way out: on her list once a wall is down, a question first, and then everything but the
 	# heirlooms and what the player knows is gone, and the map with it.
@@ -1565,6 +1565,25 @@ func _button(parent: Node, text: String) -> Button:
 
 
 ## The same, anywhere under `parent`: a board's rows sit in a scroll inside a box inside the page.
+## One of the fortuneteller's spell squares, by reading, or null when it is not on her grid.
+func _spell(main: Node, reading: String) -> Control:
+	return main.town_page._rows.find_child(reading, true, false)
+
+
+## Whether she is refusing that reading: a square she will not read is greyed and takes no press.
+func _dead(main: Node, reading: String) -> bool:
+	var square := _spell(main, reading)
+	return square != null and square.modulate == OrbSlot.DIM
+
+
+## A left click on one of her squares, which is how a reading is asked for.
+func _ask(main: Node, reading: String) -> void:
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	_spell(main, reading).gui_input.emit(click)
+
+
 func _deep_button(parent: Node, text: String) -> Button:
 	for child: Node in parent.get_children():
 		if child is Button and (child as Button).text.begins_with(text):

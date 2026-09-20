@@ -299,6 +299,15 @@ func _test_chests(map: HexMap, view: MapBuilder) -> bool:
 	_check(nearest != HexMap.NO_CELL and view.has_chest(nearest), "the nearest chest is a chest")
 	for chest in map.chests.get_children():
 		_check(view.seen(map.ground_layer.local_to_map(chest.position)), "only a seen chest is drawn")
+	# The dev tick draws every one, fog or not, and takes the hidden ones off again.
+	var seen_drawn := view._chest_sprites.size()
+	Settings.all_chests = true
+	view.redraw_chests()
+	_check(view._chest_sprites.size() == chests, "show all chests draws all %d (%d)"
+			% [chests, view._chest_sprites.size()])
+	Settings.all_chests = false
+	view.redraw_chests()
+	_check(view._chest_sprites.size() == seen_drawn, "and unticked, only the seen ones stay")
 	# A folder Godot does not import loads as nothing and only logs it: the chest drew invisible.
 	_check(load(MapBuilder.CHEST_TEXTURE) is Texture2D, "the chest's picture loads")
 	return true

@@ -16,6 +16,8 @@ signal reset_pressed
 signal cash_pressed
 ## The debug build's "Show all uniques" was ticked or unticked: the trophy may have come or gone.
 signal uniques_toggled
+## Dev: the "show all chests" box moved; the main scene redraws the map's chests.
+signal chests_toggled
 ## The panel changed width (the generator is wider than the settings): the corner buttons beside it move.
 signal laid_out
 
@@ -111,6 +113,12 @@ func _foot(asking: bool) -> VBoxContainer:
 			for part: Control in uniques.get_children():
 				part.tooltip_text = "Dev: the collection log draws every unique as found"
 			foot.add_child(uniques)
+			var chests := _tick("Show all chests", Settings.all_chests, func(on: bool) -> void:
+				Settings.all_chests = on
+				chests_toggled.emit())
+			for part: Control in chests.get_children():
+				part.tooltip_text = "Dev: every chest is drawn on the map, fog or not"
+			foot.add_child(chests)
 			var cash := UITheme.button("Gold x10", "LightButton", "Dev: multiply the purse by ten")
 			cash.pressed.connect(cash_pressed.emit)
 			foot.add_child(cash)

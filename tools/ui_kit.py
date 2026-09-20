@@ -634,6 +634,21 @@ SKILLS = {
     "alchemist": ("fortune", "Yellow12"),
 }
 SKILL_LOCKS = {"power_locked": "RedLocked", "fortune_locked": "YellowLocked"}
+
+# The fortuneteller's six readings, off the same pack in the one colourway neither skill tree uses:
+# purple is hers alone, so a spell on her grid is never mistaken for a skill. Placeholder art -- the
+# pack draws no fortuneteller, and these stand in until something is drawn for her.
+#
+# reading (FortuneTeller's own names) -> file under "Ability Icons/Icons (All)"
+FORTUNE_OUT = "Assets/Fortune"
+FORTUNE = {
+    "roads": "Purple12",
+    "treasure": "Purple14",
+    "quarry": "Purple6",
+    "relic": "Purple1",
+    "appraise": "Purple15",
+    "scour": "Purple8",
+}
 # The sketch's shape, row by row: which node stands in which of three columns, and its parents. Written
 # here only so the preview can draw a tree; SkillTree in the game is where it is actually decided.
 SKILL_LAYOUT = {
@@ -1630,6 +1645,13 @@ def main():
     skill_preview(skill).save(os.path.join(QA, "ui_kit_skills.png"))
     for name, image in skill.items():
         image.save(os.path.join(SKILL_OUT, name + ".png"))
+
+    # Hers, in their own folder for the same reason: TownPage loads them by path, and a reading is
+    # neither a skill nor an orb. Cut like the skills -- whole files, their own frame, nothing trimmed.
+    os.makedirs(FORTUNE_OUT, exist_ok=True)
+    for name, src in FORTUNE.items():
+        _cut((SKILL_ROOT + src, 0, 0, SKILL_SIDE, SKILL_SIDE, 1), trim=False).save(
+                os.path.join(FORTUNE_OUT, name + ".png"))
 
     # Loose, like the parts: a pip is drawn at its own size and never stretched, so it has no
     # nine-slice and no business in the theme sheet.

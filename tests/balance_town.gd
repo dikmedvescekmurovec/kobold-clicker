@@ -62,9 +62,18 @@ static func _purse(level: int, tier: int) -> float:
 	return _avg(tier, func(enemy: String) -> float: return float(Encounter.gold_of(enemy, cell)))
 
 
-## How often a body of `tier` leaves a piece of gear, and an orb.
+## How many pieces of gear a body of `tier` leaves, and how often it leaves an orb. A find rolls
+## again at the same chance up to `Encounter.MOST_DROPS` times, so the gear figure is pieces a body
+## rather than a chance -- a few percent over `chance_for` on the rabble and rather more on an elite.
 static func _gear_chance(tier: int) -> float:
-	return _avg(tier, func(enemy: String) -> float: return LootTable.chance_for(enemy))
+	return _avg(tier, func(enemy: String) -> float:
+		var chance := LootTable.chance_for(enemy)
+		var pieces := 0.0
+		var run := chance
+		for i in Encounter.MOST_DROPS:
+			pieces += run
+			run *= chance
+		return pieces)
 
 
 static func _orb_chance(tier: int) -> float:

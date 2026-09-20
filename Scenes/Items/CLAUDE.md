@@ -1,7 +1,7 @@
 <!-- Loaded automatically when a file in this folder is read. Rules only: the reasoning behind them is in Scenes/Items/DESIGN.md, which is read on demand. The project overview is in the root CLAUDE.md. -->
 
 ## Items (`Scenes/Items/`)
-Every kill rolls for gear (about one body in thirty), always hands over gold, and rolls separately for an orb. Every drop is its own `Item` with a rarity, a level and modifiers; nothing stacks. **Read `DESIGN.md` here before changing what stats, modifiers, rarities or orbs mean** -- it holds the why.
+Every kill rolls for gear (about one body in thirty), always hands over gold, and rolls separately for an orb. A body that does leave gear rolls again for more, up to `Encounter.MOST_DROPS`. Every drop is its own `Item` with a rarity, a level and modifiers; nothing stacks. **Read `DESIGN.md` here before changing what stats, modifiers, rarities or orbs mean** -- it holds the why.
 
 | File | Contents |
 |---|---|

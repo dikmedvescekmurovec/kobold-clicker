@@ -20,7 +20,7 @@ const FPS := 8.0
 const SCALE := 0.5
 ## How far below the middle of the tile the character's feet stand, in map pixels.
 const FOOT_OFFSET := 6
-## How long the character takes to cross one tile.
+## How long the character takes to cross one tile with no Move Speed.
 const SECONDS_PER_TILE := 2.0
 ## A puff of dust kicked up every DUST_EVERY seconds while walking, drawn under the character.
 const DUST_EVERY := 0.3
@@ -30,6 +30,9 @@ const DUST := Color("c8b48a")
 signal arrived(cell: Vector2i)
 
 var cell := HexMap.NO_CELL
+## The player's Move Speed in percent, asked as each walk sets off (the main scene points it at the worn
+## set), so boots put on mid-walk count from the next one. Unset, it is 0.
+var move_speed := Callable()
 
 var _map: HexMap
 ## Cells still to cross, in order; the first one is the step being walked.
@@ -38,6 +41,8 @@ var _from := Vector2.ZERO
 var _to := Vector2.ZERO
 ## How far along the current step the character is, from 0 to 1.
 var _step := 0.0
+## How long this walk takes per tile: SECONDS_PER_TILE shortened by `move_speed`.
+var _seconds := SECONDS_PER_TILE
 var _dust_left := 0.0
 
 
@@ -80,13 +85,16 @@ func set_cell(value: Vector2i) -> void:
 		position = _map.ground_layer.map_to_local(cell)
 
 
-## Walks the cells of `path` in order, at SECONDS_PER_TILE each. The path starts at a neighbor of the cell the
+## Walks the cells of `path` in order, at SECONDS_PER_TILE each over one plus `move_speed`. The path starts at a neighbor of the cell the
 ## token stands on and ends on the destination; an empty path does nothing.
 func walk(path: Array[Vector2i]) -> void:
 	if path.is_empty():
 		return
 	_path = path.duplicate()
-	play("run")
+	var faster := 1.0 + (float(move_speed.call()) / 100.0 if move_speed.is_valid() else 0.0)
+	_seconds = SECONDS_PER_TILE / faster
+	# The legs keep up with the ground.
+	play("run", faster)
 	_start_step()
 
 
@@ -97,12 +105,12 @@ func is_walking() -> bool:
 ## Moves along the path by `delta` seconds. Called every frame while walking; tests drive it themselves.
 func advance(delta: float) -> void:
 	while is_walking():
-		_step += delta / SECONDS_PER_TILE
+		_step += delta / _seconds
 		if _step < 1.0:
 			position = _from.lerp(_to, _step)
 			return
 		# The step is over: stand on the tile, and carry what's left of `delta` into the next one.
-		delta = (_step - 1.0) * SECONDS_PER_TILE
+		delta = (_step - 1.0) * _seconds
 		_finish_step()
 
 

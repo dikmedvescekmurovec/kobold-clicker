@@ -82,15 +82,21 @@ const SETTLEMENT := {"enemies": 15, "seconds": 60.0, "elite_every": 5, "boss_las
 ## where one stands; the mimic is the only enemy it ever fields.
 const CHEST := {"enemies": 1, "seconds": SECONDS, "elite_every": 1, "boss_last": true}
 const MIMIC := "Mimic"
-## How many times the mimic rolls for loot. The first is guaranteed, so it always pays something.
-const MIMIC_ROLLS := 10
+## A chest is a coin toss: MIMIC_UNIQUE of the time it holds one unique and nothing else, and
+## otherwise MIMIC_ROLLS pieces of gear, each certain and rolled the ordinary way.
+const MIMIC_UNIQUE := 0.5
+const MIMIC_ROLLS := 4
+## The most pieces one body can leave off its own chance: a find rolls again, and the find after it
+## rolls again, until a roll misses or this many have fallen. The cap is what keeps a drop rate at
+## `LootTable.chance_for`'s ceiling -- which a boss reaches -- from rolling for ever.
+const MOST_DROPS := 4
 ## The ice wall round the land: one body, a long clock, and far more health than its ring would give
 ## anything else -- it is the check on whether the player is ready for the land past it.
 const WALL := {"enemies": 1, "seconds": 60.0, "elite_every": 1, "boss_last": true}
 const WALL_NAME := "The Ice Wall"
 ## What the wall's health is multiplied by on top of its boss body. The dial for how hard the wall is,
-## and a steep one: `tests/balance_wall.gd` plays it out, and past 50 every 10 more doubles the farming.
-const WALL_HP := 50.0
+## and a steep one with cliffs: `tests/balance_wall.gd` plays it out -- 33 is about 850 kills, 34 already 1600.
+const WALL_HP := 33.0
 ## What every wall already fallen multiplies that by: the wall on ring 21 is ten times the dial, the
 ## one on 31 a hundred. The first is a day's farming; the second is meant to be out of reach of
 ## farming altogether -- at 1 it was twenty hours' worth, or two with the right uniques on.
@@ -756,25 +762,39 @@ func _kill() -> void:
 	# when the clock runs out.
 	# The tile's level is the ceiling on what can fall here, not what falls -- the drop rolls its
 	# own level under it, so fighting deeper improves the odds rather than the prize.
-	# A mimic rolls MIMIC_ROLLS times, the first of them certain.
-	var rolls := MIMIC_ROLLS if lineup[index] == MIMIC else 1
+	# A mimic holds a unique or MIMIC_ROLLS certain pieces, never both. The unique ignores the
+	# kill count uniques otherwise wait for; a ground with no pool falls back to the gear.
+	var mimic := lineup[index] == MIMIC
+	var chest_unique: Item = null
+	if mimic and loot_rng.randf() < MIMIC_UNIQUE:
+		chest_unique = UniqueTable.roll(lineup[index], env, unique_rng, MapBuilder.level_of(cell),
+				drop_rate, true)
+	var rolls := MIMIC_ROLLS if mimic else 1
 	# The Tithe: no ordinary gear at all, from anything.
-	if "tithe" in effects:
+	if "tithe" in effects or chest_unique != null:
 		rolls = 0
 	for roll in rolls:
-		var certain: bool = always_drop or (roll == 0 and (lineup[index] == MIMIC
-				or (guarantee_elite and on_elite()) or (big and "trophy" in effects)))
+		var certain: bool = always_drop or mimic or (roll == 0
+				and ((guarantee_elite and on_elite()) or (big and "trophy" in effects)))
 		var dropped := LootTable.roll(lineup[index], loot_rng, certain, MapBuilder.level_of(cell),
 				drop_rate, item_rarity)
 		# Lucky Wound: a body that took a crit rolls again and leaves the better of the two.
 		if _crit_landed and "lucky_wound" in effects:
 			dropped = _better(dropped, LootTable.roll(lineup[index], loot_rng, certain,
 					MapBuilder.level_of(cell), drop_rate, item_rarity))
-		if dropped != null and first_sword:
-			first_sword = false
-			dropped = Item.rolled(LootTable.FIRST_DROP, ItemRarity.Rarity.COMMON, loot_rng)
-		if dropped != null:
+		var found := 0
+		while dropped != null:
+			if first_sword:
+				first_sword = false
+				dropped = Item.rolled(LootTable.FIRST_DROP, ItemRarity.Rarity.COMMON, loot_rng)
 			loot_dropped.emit(index, dropped)
+			found += 1
+			# A find that beat the chance rolls again, at the same chance and never guaranteed, up to
+			# MOST_DROPS: a lucky body leaves a second piece and now and then a fourth. A certain roll --
+			# `always_drop`, a mimic, the elite's promise, Trophy Hunter -- does not, because it beat
+			# nothing: the promise is one piece.
+			dropped = null if certain or found >= MOST_DROPS else LootTable.roll(lineup[index],
+					loot_rng, false, MapBuilder.level_of(cell), drop_rate, item_rarity)
 	# Every body carries one, which is the whole difference between gold and gear: nine kills in
 	# ten leave nothing, and all ten leave this.
 	# Gold find lifts the purse here rather than inside `gold_of`, which is what the body is worth
@@ -805,7 +825,10 @@ func _kill() -> void:
 	# verdict need no second path.
 	# None before the player's 100th kill, and pure chance after it.
 	var boss := EnemyRoster.tier_of(lineup[index]) == EnemyRoster.Tier.BOSS
-	if uniques_after != NO_UNIQUES and index >= uniques_after:
+	# A mimic's unique chance is its coin toss above, and nothing on top of it.
+	if chest_unique != null:
+		loot_dropped.emit(index, chest_unique)
+	elif not mimic and uniques_after != NO_UNIQUES and index >= uniques_after:
 		var found := UniqueTable.roll(lineup[index], env, unique_rng, MapBuilder.level_of(cell),
 				drop_rate)
 		if found != null:

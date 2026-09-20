@@ -21,7 +21,7 @@ const WALL_RING := MapBuilder.START_LAND_RADIUS + 1
 ## What `Encounter.WALL_HP` could be instead, each played out at SWEEP_RATE clicks a second. A wall
 ## Giant Slayer did nothing to is the row at twice the figure. Past 50 it is a cliff: the Power tree is
 ## full by level 24 and drops top out at the farmed tile's level, so only rarity is left to grow.
-const SWEEP: Array[float] = [6.0, 25.0, 50.0, 60.0, 70.0]
+const SWEEP: Array[float] = [6.0, 25.0, 33.0, 35.0, 50.0, 60.0]
 const SWEEP_RATE := 5.0
 const SWEEP_RUNS := 7
 ## Kills at which the player walking on to the second wall is looked at.

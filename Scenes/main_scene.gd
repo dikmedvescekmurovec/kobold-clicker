@@ -195,6 +195,7 @@ func _ready() -> void:
 	map.dragged.connect(_on_map_dragged)
 	map.cell_aimed.connect(_on_cell_aimed)
 	view.arrived.connect(_on_player_arrived)
+	map.player.move_speed = func() -> float: return float(inventory.stats().get("move_speed", 0.0))
 	# Before the interface, which is what decides whether the crown stands in the corner.
 	_credit_walls()
 	_build_ui()
@@ -225,6 +226,9 @@ func _sync_chest() -> void:
 		inventory.save(inventory_path)
 		cell = HexMap.NO_CELL
 	_chest_pointer.target = cell
+	# Dev: a fallen wall adds hidden land, whose chests only a full pass draws.
+	if Settings.show_all_chests():
+		view.redraw_chests()
 
 
 ## Writes the map as it stands. A refused save is never written over -- that is the whole point of
@@ -423,6 +427,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 	settings_page.inventory_path = inventory_path
 	settings_page.reset_pressed.connect(_on_reset_pressed)
 	settings_page.uniques_toggled.connect(_show_corner.bind(true))
+	settings_page.chests_toggled.connect(view.redraw_chests)
 	# Dev only: an empty purse becomes 10, so the button always does something.
 	settings_page.cash_pressed.connect(func() -> void:
 		inventory.gold = maxf(inventory.gold, 1.0) * 10.0

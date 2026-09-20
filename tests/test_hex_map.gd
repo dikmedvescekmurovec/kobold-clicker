@@ -230,6 +230,14 @@ func _test_player(map: HexMap) -> bool:
 	player.advance(PlayerToken.SECONDS_PER_TILE * 0.5)
 	_check(player.cell == east and arrivals == ([east] as Array[Vector2i]), "two tiles' time covers two tiles")
 
+	# Move Speed shortens the walk: +100% crosses a tile in half the time, legs and all.
+	player.move_speed = func() -> float: return 100.0
+	player.walk([Vector2i.ZERO] as Array[Vector2i])
+	_check(player.get_playing_speed() == 2.0, "the run plays twice as fast")
+	player.advance(PlayerToken.SECONDS_PER_TILE / 2.0)
+	_check(not player.is_walking() and player.cell == Vector2i.ZERO, "+100% Move Speed crosses a tile in half the time")
+	player.move_speed = Callable()
+
 	player.walk([Vector2i.ZERO, west] as Array[Vector2i])
 	player.finish_walk()
 	_check(not player.is_walking() and player.cell == west, "finishing a walk lands on its last tile")

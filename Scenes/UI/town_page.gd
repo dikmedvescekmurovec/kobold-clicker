@@ -78,7 +78,27 @@ const TAB_REST := Color(1, 1, 1, 0.55)
 const COUNTERS := [TownServices.BOUNTIES, TownServices.GEAR, TownServices.ORBS, TownServices.SMITH,
 		TownServices.FORTUNE]
 
-## What each of the fortuneteller's buttons says when hovered.
+## What each of her readings wears on its square. Placeholder art, cut by `tools/ui_kit.py` off the
+## skill icons' pack in the one colourway neither tree uses: purple is hers.
+const FORTUNE_ICONS := {
+	FortuneTeller.ROADS: "res://Assets/Fortune/roads.png",
+	FortuneTeller.TREASURE: "res://Assets/Fortune/treasure.png",
+	FortuneTeller.QUARRY: "res://Assets/Fortune/quarry.png",
+	FortuneTeller.RELIC: "res://Assets/Fortune/relic.png",
+	FortuneTeller.APPRAISE: "res://Assets/Fortune/appraise.png",
+	FortuneTeller.SCOUR: "res://Assets/Fortune/scour.png",
+}
+## A spell's mark, at the 16 px it is drawn at doubled -- a whole-number step, as a skill's is.
+const SPELL_SIDE := 32
+## The halo a live square wears while the cursor is on it, in panel pixels, and how far its mark
+## lifts under it. The pack draws no hover face for a loose mark, so this is a `StyleBoxFlat` in the
+## gold everything precious in this game is lit in, grown past the square by `expand_margin` and
+## drawn behind the mark -- so what shows is a rim of light around it rather than a frame on it.
+const HOVER_GLOW := 3
+const HOVER_GLOW_COLOR := Color(Palette.GOLD, 0.85)
+const HOVER_LIFT := Color(1.2, 1.2, 1.2)
+
+## What each of the fortuneteller's squares says when hovered.
 const FORTUNE_TIPS := {
 	FortuneTeller.ROADS: "Where the nearest village, town and fortress lie",
 	FortuneTeller.TREASURE: "A star that points at the nearest chest until it is opened",
@@ -363,6 +383,15 @@ func _price_cell(square: Control, price: float) -> VBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 2)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Nothing to pay carries no coin, the way a priced button with no price does: the roads, once
+	# bought in a town, are told again for free, and a coin beside a nought reads as a price of zero
+	# gold rather than as no price at all.
+	if price <= 0.0:
+		var free := UITheme.label("Free", Palette.SLATE)
+		free.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(free)
+		cell.add_child(row)
+		return cell
 	var coin := TextureRect.new()
 	# Set before the texture and the size: a TextureRect's minimum is its own texture until
 	# `expand_mode` says otherwise, so a 16 px coin asked for 8 comes back 16.
@@ -591,15 +620,28 @@ func _priced_button(text: String, price: float, refused: String, tooltip: String
 func _fill_fortune() -> void:
 	var body := _scrolled(ROW_GAP)
 	if _said.is_empty():
+		# Her six on the shelf's own grid, each with its price under it: what she sells is bought the
+		# way everything else in a town is, and six words in a column read as a menu rather than a shop.
+		var grid := GridContainer.new()
+		grid.columns = STOCK_COLS
+		grid.add_theme_constant_override("h_separation", STOCK_GAP)
+		grid.add_theme_constant_override("v_separation", STOCK_GAP)
 		for reading: String in FortuneTeller.READINGS:
-			# The way out is not on her list until a wall has fallen: there is nothing yet to take along.
-			if reading == FortuneTeller.TRANSCEND and (view == null or view.walls_fallen() == 0):
+			if reading == FortuneTeller.TRANSCEND:
 				continue
-			# The way out wears the coin and no figure, as Claim does: six figures beside the longest
-			# word on her list widen the page into the panel beside it. She says the price when asked.
-			body.add_child(_priced_button(FortuneTeller.LABELS[reading], _fortune_price(reading),
-					_fortune_why_not(reading), FORTUNE_TIPS[reading], _on_reading_pressed.bind(reading),
-					reading != FortuneTeller.TRANSCEND))
+			grid.add_child(_price_cell(_spell_square(reading), _fortune_price(reading)))
+		body.add_child(grid)
+		# The way out is not on her grid until a wall has fallen: there is nothing yet to take along.
+		# It keeps its word and the full width under the six -- it is not a spell, and a square beside
+		# them would read as one. The coin and no figure, as Claim has it: six figures beside that word
+		# widen the page into the panel beside it. She says the price when asked.
+		if view != null and view.walls_fallen() > 0:
+			var out_of_here := _priced_button(FortuneTeller.LABELS[FortuneTeller.TRANSCEND],
+					_fortune_price(FortuneTeller.TRANSCEND), _fortune_why_not(FortuneTeller.TRANSCEND),
+					FORTUNE_TIPS[FortuneTeller.TRANSCEND],
+					_on_reading_pressed.bind(FortuneTeller.TRANSCEND), false)
+			out_of_here.custom_minimum_size.x = BODY_WIDTH
+			body.add_child(out_of_here)
 		return
 	match _said:
 		FortuneTeller.ROADS:
@@ -638,6 +680,68 @@ func _fill_fortune() -> void:
 	leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	answers.add_child(leave)
 	_rows.add_child(answers)
+
+
+## One reading on her grid: its name over its mark, lit by a halo while the cursor is on it, and what
+## she will not read greyed and dead with the reason in its tooltip -- the shelf's rule, where a piece
+## the purse cannot cover greys where it stands. `_price_cell` puts the price under what this returns.
+func _spell_square(reading: String) -> Control:
+	var refused := _fortune_why_not(reading)
+	var cell := UITheme.vbox(2, STOCK_CELL)
+	# The name over the mark, in the body font so the longest of them fits a shelf square's width:
+	# the art is a placeholder and says nothing on its own, and six pictures whose words are only in
+	# their tooltips are six questions -- which is the shelf's own reason for writing its prices out.
+	# A refused reading keeps its name in full: what it is has not changed, only whether she will read it.
+	var title := UITheme.label(FortuneTeller.LABELS[reading], null, true)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# Clipped rather than allowed to push, as a shelf price is: a name wider than its square would
+	# widen the whole column, and through the grid the page, into the panel beside it.
+	title.clip_text = true
+	title.custom_minimum_size.x = STOCK_CELL
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cell.add_child(title)
+
+	# A Panel rather than the mark itself, because what the hover lights is a stylebox: the mark is
+	# its child and fills it.
+	var square := Panel.new()
+	# Named after the reading, which is how the tests pick one square out of the six.
+	square.name = reading
+	square.custom_minimum_size = Vector2(SPELL_SIDE, SPELL_SIDE)
+	square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	square.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	square.tooltip_text = refused if not refused.is_empty() else FORTUNE_TIPS[reading]
+	var icon := TextureRect.new()
+	# Mode before texture and size, for the reason `_price_cell`'s coin gives: a TextureRect's minimum
+	# is its own texture until `expand_mode` says otherwise.
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_SCALE
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.texture = load(FORTUNE_ICONS[reading])
+	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	square.add_child(icon)
+	cell.add_child(square)
+	if not refused.is_empty():
+		# OrbSlot's grey, so "you could, and cannot now" reads the same here as on the orb tray. On
+		# the square alone: the name above it stays lit, since a spell nobody can cast is still a
+		# spell the player is reading about.
+		square.modulate = OrbSlot.DIM
+		return cell
+	Cursors.wear(square, Cursors.HAND)
+	var glow := StyleBoxFlat.new()
+	glow.bg_color = HOVER_GLOW_COLOR
+	glow.set_expand_margin_all(HOVER_GLOW)
+	square.mouse_entered.connect(func() -> void:
+		square.add_theme_stylebox_override("panel", glow)
+		icon.modulate = HOVER_LIFT)
+	square.mouse_exited.connect(func() -> void:
+		square.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+		icon.modulate = Color.WHITE)
+	square.gui_input.connect(func(event: InputEvent) -> void:
+		if (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT
+				and event.pressed):
+			_on_reading_pressed(reading))
+	return cell
 
 
 ## One modifier she read off a piece: the line with its band on the left, how often it comes up on the right.
