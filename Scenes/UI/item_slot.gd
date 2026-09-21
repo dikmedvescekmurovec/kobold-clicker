@@ -72,6 +72,9 @@ func setup(held: Item, open := false, translucent := false) -> void:
 		if item.rarity == ItemRarity.Rarity.UNIQUE and Settings.animations != Settings.Anim.NONE:
 			_shine(frame, SIDE, 2.0)
 		add_child(frame)
+	# Last, over the frame, in the orb tray's corner numeral: every square that shows a piece is this one.
+	if item.plus > 0:
+		add_child(OrbSlot.count_label("+%d" % item.plus))
 
 
 ## The glint on `target`: `SHINES` sweeps, one a `period`, and then it lies still. The tween is bound
@@ -101,7 +104,8 @@ static func shadow(item: Item, says: Callable, known := false) -> ItemSlot:
 	slot.tooltip_text = "Not found yet"
 	# No glint: that is what a piece in hand does.
 	for part: Node in slot.get_children():
-		(part as TextureRect).material = null
+		if part is TextureRect:
+			(part as TextureRect).material = null
 	if known:
 		slot.modulate = SHADOW
 		return slot

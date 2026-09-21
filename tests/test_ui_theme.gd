@@ -233,6 +233,13 @@ func _test_item_card() -> bool:
 	await process_frame
 	_check(seen.mouse_filter == Control.MOUSE_FILTER_IGNORE, "a square still takes no mouse")
 	_check(card.slot_at(Vector2(110, 110)) == seen, "the square under the cursor is found")
+	var raised := Item.from_dict(sword.to_dict())
+	raised.plus = 2
+	var marked := ItemSlot.make(raised)
+	_check(not seen.get_children().any(func(n: Node) -> bool: return n is Label)
+			and (marked.get_child(marked.get_child_count() - 1) as Label).text == "+2",
+			"a piece with a plus wears it on its corner, one without wears nothing")
+	marked.free()
 	_check(card.slot_at(below.get_global_rect().get_center()) == null,
 			"one scrolled out of its box is not")
 	_check(card.slot_at(Vector2(310, 110)) == null, "the open piece says nothing twice")

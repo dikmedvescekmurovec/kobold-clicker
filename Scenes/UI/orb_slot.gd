@@ -89,24 +89,7 @@ func setup(which: String, count: int, usable: bool, armed := false) -> void:
 	# saying nothing. Pixellari at its own 16 -- it breaks up below that -- with an ink outline, which
 	# is what makes a light numeral readable over a gem of any colour.
 	if count > 1:
-		var tally := Label.new()
-		tally.theme_type_variation = "PanelLabel"
-		tally.text = str(count)
-		tally.add_theme_color_override("font_color", Palette.BONE)
-		tally.add_theme_color_override("font_outline_color", Palette.INK)
-		tally.add_theme_constant_override("outline_size", 4)
-		tally.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		tally.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		tally.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-		# Laid over the whole square and aligned into its corner, rather than positioned by a
-		# measurement of the glyphs: how wide "12" is at this font is the font's business. The box is
-		# then grown past the corner it is aligned to, which is what lifts the numeral off the icon,
-		# and grown further to the left so a two-digit count has somewhere to go.
-		tally.set_anchors_preset(Control.PRESET_FULL_RECT)
-		tally.offset_left = -COUNT_OVERHANG * 2
-		tally.offset_right = COUNT_OVERHANG
-		tally.offset_bottom = COUNT_OVERHANG
-		add_child(tally)
+		add_child(count_label(str(count)))
 
 	mouse_entered.connect(func() -> void:
 		if _live:
@@ -126,6 +109,28 @@ func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		pressed.emit(orb)
 		accept_event()
+
+
+## The numeral hung off a square's bottom-right corner: an orb's count, and an item's `+n` (`ItemSlot`).
+## Laid over the whole square and aligned into its corner, rather than positioned by a measurement of
+## the glyphs: how wide "12" is at this font is the font's business. The box is then grown past the
+## corner it is aligned to, which is what lifts the numeral off the icon, and grown further to the left
+## so a two-digit count has somewhere to go.
+static func count_label(text: String) -> Label:
+	var tally := Label.new()
+	tally.theme_type_variation = "PanelLabel"
+	tally.text = text
+	tally.add_theme_color_override("font_color", Palette.BONE)
+	tally.add_theme_color_override("font_outline_color", Palette.INK)
+	tally.add_theme_constant_override("outline_size", 4)
+	tally.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tally.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	tally.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	tally.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tally.offset_left = -COUNT_OVERHANG * 2
+	tally.offset_right = COUNT_OVERHANG
+	tally.offset_bottom = COUNT_OVERHANG
+	return tally
 
 
 static func make(which: String, count: int, usable: bool, armed := false) -> OrbSlot:
