@@ -954,6 +954,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	fight.guarantee_elite = fight.first_sword
 	fight.orbs_after = maxi(0, OrbTable.FIRST_ORB_KILLS - inventory.kills)
 	fight.uniques_after = maxi(0, UniqueTable.FIRST_UNIQUE_KILLS - inventory.kills)
+	fight.strikes = true
 	ledger = FightLedger.new(inventory, inventory_path, farming)
 	ledger.tile_level = view.level_of(cell)
 	# Straight off the fight rather than through the scene: what a body was is the fight's business,

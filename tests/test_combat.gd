@@ -19,6 +19,7 @@ func _run() -> void:
 	_check(_test_a_won_fight() == true, "won fight tests ran to the end")
 	_check(_test_the_ice_wall() == true, "ice wall tests ran to the end")
 	_check(_test_a_lost_fight() == true, "lost fight tests ran to the end")
+	_check(_test_enemy_strikes() == true, "enemy strike tests ran to the end")
 	_check(_test_hits_only_land_on_a_waiting_enemy() == true, "hit timing tests ran to the end")
 	_check(_test_what_a_hit_is_worth() == true, "damage tests ran to the end")
 	_check(_test_the_weapon_swings_itself() == true, "attack speed tests ran to the end")
@@ -1049,6 +1050,170 @@ func _test_a_lost_fight() -> bool:
 	return true
 
 
+## The enemies strike the clock: every tier on its own rhythm, each blow cut by armour and then block,
+## dodged whole now and then, and won back by time on hit -- and never on a run, which has no clock.
+func _test_enemy_strikes() -> bool:
+	# The user's own example, as the formula: a hundred-second blow against 90% armour and ten seconds
+	# of block is nothing. 90% armour is a rating of 9 * ARMOUR_K.
+	var sums := Encounter.new()
+	sums.arm({"armor": 9.0 * Encounter.ARMOUR_K, "block": 100.0})
+	_check(is_equal_approx(sums.taken(100.0), 0.0), "100s against 90%% armour and 10s block is 0 (%.3f)"
+			% sums.taken(100.0))
+	sums.arm({"armor": 9.0 * Encounter.ARMOUR_K})
+	_check(is_equal_approx(sums.taken(100.0), 10.0), "armour alone takes 90%% (%.3f)" % sums.taken(100.0))
+	sums.arm({"block": 100.0})
+	_check(is_equal_approx(sums.taken(100.0), 90.0), "block alone takes its ten seconds (%.3f)" % sums.taken(100.0))
+	# A flat share, so the same armour turns the same part of a small blow as of a big one, and none
+	# of it is ever the whole.
+	sums.arm({"armor": Encounter.ARMOUR_K})
+	_check(is_equal_approx(sums.taken(1.0), 0.5) and is_equal_approx(sums.taken(100.0), 50.0),
+			"K armour is half of any blow")
+	sums.arm({"armor": 1.0e12})
+	_check(sums.taken(1.0) > 0.0, "and never all of one")
+	sums.arm({"dodge": 9.0 * Encounter.DODGE_K})
+	_check(is_equal_approx(sums.dodge_chance(), 0.9), "dodge is the same share, as a chance")
+
+	# Each tier strikes on its own rhythm, and the first blow waits a whole interval.
+	# Common every second, elite every two, boss every four: nothing lands in the first 0.999 s, and in
+	# the first 4.001 s that is four, two and one.
+	for case: Array in [[EnemyRoster.Tier.COMMON, 4], [EnemyRoster.Tier.ELITE, 2], [EnemyRoster.Tier.BOSS, 1]]:
+		var fight := _struck_standing(case[0])
+		var blows: Array = []
+		fight.player_hit.connect(func(t: float, _d: bool, _b: bool) -> void: blows.append(t))
+		fight.advance(0.999)
+		_check(blows.is_empty(), "tier %d waits out its first interval (%d)" % [case[0], blows.size()])
+		fight.advance(3.002)
+		_check(blows.size() == case[1], "and strikes %d times in four seconds (%d)" % [case[1], blows.size()])
+		var hit := Encounter.hit_of(fight.enemy_name(), fight.cell)
+		_check(is_equal_approx(float(blows[-1]), hit), "a blow with nothing on is the whole of it")
+		_check(is_equal_approx(fight.time_left, Encounter.SECONDS - Encounter.WALK_IN - 4.001 - hit * blows.size()),
+				"and comes off the clock (%.3f)" % fight.time_left)
+	# A boss's blow is four commons', which its slower rhythm pays for: every tier takes the same a second.
+	var here := Vector2i(12, 0)
+	for tier: EnemyRoster.Tier in [EnemyRoster.Tier.ELITE, EnemyRoster.Tier.BOSS]:
+		var some := _enemy_of(tier)
+		_check(is_equal_approx(Encounter.hit_of(some, here) / float(Encounter.ATTACK_EVERY[tier]),
+				Encounter.hit_of(_enemy_of(EnemyRoster.Tier.COMMON), here)
+				/ float(Encounter.ATTACK_EVERY[EnemyRoster.Tier.COMMON])), "tier %d takes what a common does a second" % tier)
+	# Blows grow with the walk exactly as health does, walls and all.
+	var near := Encounter.hit_of(_enemy_of(EnemyRoster.Tier.COMMON), Vector2i(1, 0))
+	var past := Encounter.hit_of(_enemy_of(EnemyRoster.Tier.COMMON), Vector2i(12, 0))
+	_check(is_equal_approx(past / near, Encounter.base_hp(Vector2i(12, 0)) / Encounter.base_hp(Vector2i(1, 0))),
+			"a blow grows as a body's health does")
+
+	# Dodge: over a long run of blows, about the share the formula says, and a dodge costs nothing.
+	var dodger := _struck_standing(EnemyRoster.Tier.COMMON, {"dodge": 0.5 * Encounter.DODGE_K})
+	dodger.crit_rng.seed = WORLD_SEED
+	var hit := Encounter.hit_of(dodger.enemy_name(), dodger.cell)
+	var chance := dodger.dodge_chance()
+	var dodged := [0, 0]
+	dodger.player_hit.connect(func(t: float, d: bool, _b: bool) -> void:
+		dodged[0 if d else 1] += 1
+		if d:
+			_check(t == 0.0, "a dodge costs nothing"))
+	for i in 2000:
+		dodger.time_left = 1000.0
+		dodger._struck_by(hit)
+	var share := float(dodged[0]) / 2000.0
+	_check(absf(share - chance) < 0.04, "dodged %.2f of blows where the formula says %.2f" % [share, chance])
+
+	# Time on hit wins back what the blows took and never more: the clock's own running is not a wound.
+	var healer := _struck_standing(EnemyRoster.Tier.COMMON, {"time_on_hit": 10.0})
+	var start := healer.time_left
+	healer.hit()
+	_check(healer.time_left == start, "with no wound, a hit wins nothing back")
+	healer._struck_by(2.5)
+	healer.hit()
+	_check(is_equal_approx(healer.time_left, start - 1.5) and is_equal_approx(healer.wounds, 1.5),
+			"a hit wins back its second of the blow (%.2f)" % healer.time_left)
+	healer.hit()
+	healer.hit()
+	_check(is_equal_approx(healer.time_left, start) and healer.wounds == 0.0,
+			"and stops once the wound is healed (%.2f)" % healer.time_left)
+
+	# Nobody strikes a run, the wall or a fight nobody told to (`strikes`).
+	var run := Encounter.farm(Vector2i(12, 0), "grass")
+	run.strikes = true
+	var run_blows: Array = []
+	run.player_hit.connect(func(t: float, _d: bool, _b: bool) -> void: run_blows.append(t))
+	run.start()
+	run.advance(10.0)
+	_check(run_blows.is_empty(), "a farm run is never struck")
+	var wall := Encounter.for_wall(Vector2i(MapBuilder.START_LAND_RADIUS + 1, 0))
+	wall.strikes = true
+	wall.start()
+	wall.advance(10.0)
+	_check(is_equal_approx(wall.time_left, wall.seconds - 10.0), "the ice wall never strikes")
+	var quiet := Encounter.for_tile(Vector2i(12, 0), "grass")
+	quiet.start()
+	quiet.advance(5.0)
+	_check(is_equal_approx(quiet.time_left, Encounter.SECONDS - 5.0), "nor does a fight nobody armed for it")
+
+	# The first ring still falls to bare hands with the enemies striking, at the brisk eight clicks a
+	# second `_play` stands for.
+	var bare := _played(Vector2i(1, 0), {}, 8.0)
+	_check(bare.victory, "the first ring is beatable with nothing on while struck (%.1fs left)" % bare.time_left)
+
+	# And defence is what carries the frontier: the first ring past the wall, in the farmed set of rares
+	# the land inside it handed over, at four clicks a second -- about twice what its damage alone asks
+	# (`_test_a_won_fight`). With the set's armour, dodge and block it is won; with them taken off, the
+	# same damage loses to the clock. The whole Power tree is left out on purpose: with it the ring
+	# wants no clicking at all, and a body that dies before its first blow tests nothing.
+	var edge := Vector2i(MapBuilder.START_LAND_RADIUS, 0)
+	var beyond := Vector2i(MapBuilder.START_LAND_RADIUS + 2, 0)
+	var worn := _typical_farmed(edge, ItemRarity.Rarity.RARE).totals()
+	var armed := _played(beyond, worn, 4.0)
+	var stripped := worn.duplicate()
+	for stat: String in ["armor", "dodge", "block", "time_on_hit"]:
+		stripped.erase(stat)
+	var naked := _played(beyond, stripped, 4.0)
+	print("Past the wall, struck, at 4 clicks/s: %.1fs left in the farmed set, %.1fs left without its defence"
+			% [armed.time_left, naked.time_left])
+	_check(armed.victory, "the farmed set's defence holds the frontier (%.1fs left)" % armed.time_left)
+	_check(not naked.victory, "and without it the same damage loses")
+	return true
+
+
+## A tile fight with the enemies striking and the first body of `tier` standing there, armed with
+## `stats`. Walked on to the moment it can be hit, so its first blow is a whole interval away.
+func _struck_standing(tier: EnemyRoster.Tier, stats := {}) -> Encounter:
+	var fight := Encounter.for_tile(Vector2i(1, 0), "grass")
+	fight.lineup[0] = _enemy_of(tier)
+	fight.health[0] = 1.0e9
+	fight.hp = 1.0e9
+	fight.strikes = true
+	fight.arm(stats)
+	fight.start()
+	fight.advance(Encounter.WALK_IN)
+	return fight
+
+
+## Some enemy of `tier` that lives on grass.
+func _enemy_of(tier: EnemyRoster.Tier) -> String:
+	for name: String in EnemyRoster.names():
+		if EnemyRoster.tier_of(name) == tier:
+			return name
+	return ""
+
+
+## A whole fight on `cell`, struck, armed with `stats`, clicked `clicks` times a second.
+func _played(cell: Vector2i, stats: Dictionary, clicks: float) -> Encounter:
+	var fight := Encounter.for_tile(cell, "grass")
+	fight.strikes = true
+	fight.crit_rng.seed = WORLD_SEED
+	fight.arm(stats)
+	fight.start()
+	var step := 1.0 / 60.0
+	var owed := 0.0
+	while not fight.finished:
+		fight.advance(step)
+		owed += step * clicks
+		while owed >= 1.0:
+			owed -= 1.0
+			fight.hit()
+	return fight
+
+
 ## An enemy can only be hit while it is standing in front of the player.
 func _test_hits_only_land_on_a_waiting_enemy() -> bool:
 	var fight := Encounter.for_tile(Vector2i(1, 0), "grass")
@@ -1887,26 +2052,25 @@ func _test_more_unique_effects() -> bool:
 	_check(blows == [12.0, 20.0], "momentum builds and stops at double (%s)" % [blows])
 	blows.clear()
 
-	# Bulwark: block is a second swing, and the second swing is never a third.
-	var wall := _standing(["riposte"], {"damage": 0.0, "block_chance": 100.0})
-	wall.crit_rng.seed = WORLD_SEED
+	# Bulwark: a blow block stops entirely is answered with a swing; one it only cuts is not.
+	var wall := _standing(["riposte"], {"damage": 0.0, "block": 50.0})
 	listen.call(wall)
-	for i in 400:
-		wall.hit()
-	_check(wall.block_chance == Encounter.RIPOSTE_CAP, "block is read, and capped for this")
-	_check(blows.size() > 640 and blows.size() <= 800, "three clicks in four swing again, once (%d)" % blows.size())
+	wall._struck_by(4.0)
+	_check(blows.size() == 1, "a blow blocked whole is answered (%d)" % blows.size())
+	wall._struck_by(9.0)
+	_check(blows.size() == 1, "and one that gets through is not (%d)" % blows.size())
 	blows.clear()
 
-	# Heartwood Plate: a second a hundred health, ten at most, none on a run.
-	for case: Array in [[450.0, 4.0], [50000.0, Encounter.HEARTWOOD_MOST]]:
+	# Heartwood Plate: a second every HEARTWOOD_ARMOUR armour, ten at most, none on a run.
+	for case: Array in [[225.0, 4.0], [50000.0, Encounter.HEARTWOOD_MOST]]:
 		var oak := Encounter.for_tile(cell, "grass")
 		oak.effects = ["heartwood"]
-		oak.arm({"health": case[0]})
+		oak.arm({"armor": case[0]})
 		_check(oak.seconds == Encounter.SECONDS + float(case[1]) and oak.time_left == oak.seconds,
-				"%s health is %s seconds" % case)
+				"%s armour is %s seconds" % case)
 	var oak_run := Encounter.farm(cell, "grass")
 	oak_run.effects = ["heartwood"]
-	oak_run.arm({"health": 450.0})
+	oak_run.arm({"armor": 225.0})
 	_check(oak_run.seconds == Encounter.SECONDS, "and a run has no clock to add to")
 
 	# Magpie's Band: some purses are gear instead -- unless a Tithe says there is no gear.

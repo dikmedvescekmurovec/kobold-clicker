@@ -15,10 +15,12 @@ extends RefCounted
 ## Each kill rolls for loot against LootTable, and what drops is kept whatever the fight does next.
 ## Every kill also hands over a purse, which is not rolled for at all -- see `gold_of`.
 ##
-## Nothing the enemies do can hurt the player: the clock is the only way to lose. Beat the lineup
-## inside `seconds` and the tile is charted; run out and nothing happens, the tile stays grey and
-## can be tried again. A tile's lineup is seeded from its cell, so the same tile always fields the
-## same fight, the way everything else about a tile is decided before the player ever reaches it.
+## The clock is the only way to lose, and the enemies strike at it: a body left standing hits every
+## `ATTACK_EVERY` of its tier and each blow takes seconds off (`taken`), which the player's armour,
+## dodge and block cut down and time on hit wins back. Beat the lineup inside `seconds` and the tile
+## is charted; run out and nothing happens, the tile stays grey and can be tried again. A tile's
+## lineup is seeded from its cell, so the same tile always fields the same fight, the way everything
+## else about a tile is decided before the player ever reaches it.
 ##
 ## A farm run (`farm()`) is `endless`: the lineup grows an enemy at a time and is never done, the
 ## clock never runs, and the only ways out are `stop()` and `give_up()`. Nothing about it is seeded
@@ -56,6 +58,9 @@ signal orb_dropped(index: int, orb: String)
 ## That enemy's experience, which every one of them carries the way it carries a purse. Emitted with
 ## the death beside `gold_dropped` and kept for the same reason.
 signal xp_dropped(index: int, amount: int)
+## An enemy struck the clock: `taken` seconds came off it after armour and block, or none at all
+## because the player dodged or because block took the whole of what armour left.
+signal player_hit(taken: float, dodged: bool, blocked: bool)
 ## The whole lineup is down, with time to spare.
 signal won()
 ## The clock ran out.
@@ -153,6 +158,33 @@ const XP_PER_LEVEL := 1.0
 const BARE_DAMAGE := 1
 ## Seconds an enemy spends running in, before it can be hit.
 const WALK_IN := 0.6
+
+## How often a standing enemy strikes the clock, by tier: the rabble fast, a boss slow. The first blow
+## comes a whole interval after it arrives, so a body killed quickly never lands one -- damage is the
+## first defence there is.
+const ATTACK_EVERY := {
+	EnemyRoster.Tier.COMMON: 1.0,
+	EnemyRoster.Tier.ELITE: 2.0,
+	EnemyRoster.Tier.BOSS: 4.0,
+}
+## What one blow is worth against a common's, by tier. Set against ATTACK_EVERY so every tier takes
+## the same seconds a second off an unarmoured player: the big ones hit rarer and harder, which is
+## what makes armour (a share) and block (a flat amount) answer them differently.
+const HIT_TIER := {
+	EnemyRoster.Tier.COMMON: 1.0,
+	EnemyRoster.Tier.ELITE: 2.0,
+	EnemyRoster.Tier.BOSS: 4.0,
+}
+## Seconds a common's blow takes off the clock on a tile next to the start, before the walk out
+## multiplies it the way it multiplies health (`hit_of`). The dial for how much defence matters at
+## all; `test_combat._test_a_won_fight` holds that a bare-handed first ring still wins under it.
+const HIT_SECONDS := 0.25
+## Armour and dodge are ratings, and a rating is a flat share of every blow whatever its size:
+## `rating / (rating + K)`, so K of it is half, 9K is 90%, and no amount of it ever reaches the whole
+## -- which is what lets both grow with the level for ever with no cap. The two dials for what a
+## point of each is worth.
+const ARMOUR_K := 50.0
+const DODGE_K := 50.0
 ## Seconds its death plays out, before the next one comes on.
 const DEATH := 0.5
 
@@ -229,10 +261,9 @@ var orbs := {}
 var roster_rng := RandomNumberGenerator.new()
 
 ## What the player is worth in a fight -- gear and skills together, `Inventory.stats()` -- read once by
-## `arm()` rather than looked up per swing. Only the ones below are read: the rest of what an item
-## carries is still rolled, saved and shown, and waits on the systems that would give it something to
-## do. Five decide what a blow does to the body in front of the player; the rest decide what it
-## leaves when it goes down.
+## `arm()` rather than looked up per swing. Five decide what a blow does to the body in front of the
+## player, the defence further down decides what the body's blows do to the clock, and the rest decide
+## what it leaves when it goes down. The attributes are the one thing an item carries that none reads.
 ## The ceiling on crit chance: crits stay something that happens sometimes, however much gear is
 ## piled up. A chance over certainty is every hit critting, which is a crit meaning nothing.
 const CRIT_CAP := 100.0
@@ -340,17 +371,30 @@ const DOMINO_SHARE := 0.2
 const MOMENTUM_MORE := 0.02      ## per kill
 const MOMENTUM_MOST := 1.0
 const PACKMULE_MORE := 0.01      ## per piece in the bag
-const RIPOSTE_CAP := 75.0
-const HEARTWOOD_HEALTH := 100.0  ## health a second on the clock
+const HEARTWOOD_ARMOUR := 50.0   ## armour a second on the clock
 const HEARTWOOD_MOST := 10.0
 const MAGPIE_CHANCE := 0.05
 const HEATSTROKE_SHARE := 0.02   ## of its health a second
 const GRAZING_MORE := 2          ## enemies
 const GIANTSBANE := 3.0
 const RESTLESS_CHANCE := 0.1
-## What `arm` read that only a unique asks about: block chance for Riposte, and the two counts the
-## fight cannot see for itself (`Inventory.stats()` puts them in).
-var block_chance := 0.0
+## What keeps a blow off the clock (`taken`, `_struck_by`): two ratings, seconds off each blow, and
+## seconds a landed hit of the player's wins back of what the blows took.
+var armor := 0.0
+var dodge := 0.0
+var block := 0.0
+var time_on_hit := 0.0
+## Seconds the enemies' blows have taken off the clock and time on hit has not yet won back. Time on
+## hit heals this and nothing else, so it can undo a blow and never the clock's own running.
+var wounds := 0.0
+## How far the enemy standing there is towards its next blow. Cleared as each one comes on.
+var _attack := 0.0
+## Whether the enemies strike the clock at all. The main scene turns it on for every fight it opens;
+## off, a fight is the one it was before they did, which is what the tests that time a clock to the
+## second and the screenshot scripts want -- the same bargain as `uniques_after`.
+var strikes := false
+## What `arm` read that only a unique asks about: the two counts the fight cannot see for itself
+## (`Inventory.stats()` puts them in).
 var _bare_sockets := 0
 var _bag_pieces := 0
 ## About the enemy that is out: whether it has taken a blow, whether one of them was a crit, whether
@@ -674,13 +718,17 @@ func arm(stats: Dictionary) -> void:
 	# The Overflowing Chalice: what the clamp above throws away is kept as crit damage.
 	if "overcrit" in effects:
 		crit_damage += maxf(0.0, raw_crit - CRIT_CAP) * OVERCRIT
-	block_chance = clampf(float(stats.get("block_chance", 0.0)), 0.0, RIPOSTE_CAP)
+	armor = maxf(0.0, float(stats.get("armor", 0.0)))
+	dodge = maxf(0.0, float(stats.get("dodge", 0.0)))
+	# Both are kept in tenths on the gear (`LootTable.SECONDS_STATS`); the fight wants seconds.
+	block = maxf(0.0, LootTable.seconds_of("block", float(stats.get("block", 0.0))))
+	time_on_hit = maxf(0.0, LootTable.seconds_of("time_on_hit", float(stats.get("time_on_hit", 0.0))))
 	_bare_sockets = maxi(0, int(stats.get("bare_sockets", 0)))
 	_bag_pieces = maxi(0, int(stats.get("bag_pieces", 0)))
-	# Heartwood Plate: health buys clock, and stops buying it at HEARTWOOD_MOST -- health grows with
+	# Heartwood Plate: armour buys clock, and stops buying it at HEARTWOOD_MOST -- armour grows with
 	# every level, and a clock that grew with it would be no clock. A run has none to add to.
 	if "heartwood" in effects and not endless:
-		seconds += minf(floorf(float(stats.get("health", 0.0)) / HEARTWOOD_HEALTH), HEARTWOOD_MOST)
+		seconds += minf(floorf(armor / HEARTWOOD_ARMOUR), HEARTWOOD_MOST)
 		time_left = seconds
 	attack_speed = maxf(0.0, float(stats.get("attack_speed", 0.0)))
 	bleed = maxf(0.0, float(stats.get("bleed", 0.0)))
@@ -693,7 +741,7 @@ func arm(stats: Dictionary) -> void:
 ## One blow, from a click or from the weapon swinging itself. Takes `damage` off the enemy in front
 ## of the player, crits at `crit_chance`, and kills it at zero. Ignored while one is running in or
 ## dying, and once the fight is over. Returns whether it landed.
-func _strike(automatic: bool, riposte := false) -> bool:
+func _strike(automatic: bool) -> bool:
 	if finished or phase != Phase.WAITING:
 		return false
 	var crit := crit_chance > 0.0 and crit_rng.randf() * 100.0 < crit_chance
@@ -737,9 +785,12 @@ func _strike(automatic: bool, riposte := false) -> bool:
 		# not how many of them land -- a weapon that swung twice as fast would otherwise bleed twice
 		# as hard for free.
 		_bleed = maxf(_bleed, dealt * bleed / 100.0)
-		# Bulwark: the chance to block is the chance to swing again at once. Never off its own extra blow.
-		if not riposte and "riposte" in effects and crit_rng.randf() * 100.0 < block_chance:
-			_strike(automatic, true)
+	# Time on hit: a landed blow wins back what the enemies' blows took, and never more. A run has no
+	# clock to win back.
+	if not endless and wounds > 0.0 and time_on_hit > 0.0:
+		var back := minf(time_on_hit, wounds)
+		wounds -= back
+		time_left += back
 	return true
 
 
@@ -911,6 +962,7 @@ func advance(delta: float) -> void:
 		delta -= phase_left
 		_advance_phase()
 	_swing_weapon(delta)
+	_be_struck(delta)
 	# The weapon has swung; now what is already in the body. The Sunscorched Cowl's Heatstroke takes
 	# its share of the body's health, and a mace's wound takes its share of the blow that opened it.
 	if _clause("heatstroke"):
@@ -932,6 +984,60 @@ func _wear_down(a_second: float, delta: float) -> void:
 	if hp <= 0.0:
 		_domino = false
 		_kill()
+
+
+## The enemy standing there striking the clock, once every `ATTACK_EVERY` of its tier. Only in a
+## fight with a clock to strike, and never the ice wall, which is a check on damage and nothing else.
+func _be_struck(delta: float) -> void:
+	if not strikes or endless or finished or phase != Phase.WAITING or delta <= 0.0 			or lineup[index] == WALL_NAME:
+		return
+	var every: float = ATTACK_EVERY[EnemyRoster.tier_of(lineup[index])]
+	_attack += delta
+	while _attack >= every and phase == Phase.WAITING and not finished:
+		_attack -= every
+		_struck_by(hit_of(lineup[index], cell))
+
+
+## One blow at the clock: dodged whole, or cut by armour and then block and taken off `time_left`.
+## Split from `_be_struck` so a test can land one blow of a size it chose.
+func _struck_by(hit: float) -> void:
+	if crit_rng.randf() < dodge_chance():
+		player_hit.emit(0.0, true, false)
+		return
+	var lost := taken(hit)
+	time_left = maxf(time_left - lost, 0.0)
+	wounds += lost
+	player_hit.emit(lost, false, lost <= 0.0)
+	# Bulwark: a blow block stops entirely is answered at once, by the weapon's own swing.
+	if lost <= 0.0 and "riposte" in effects:
+		_strike(true)
+
+
+## What a blow of `hit` seconds takes off the clock once it lands: armour takes its share, then block
+## takes its seconds off what is left. 100 seconds against 90% armour and 10 block is nothing.
+func taken(hit: float) -> float:
+	var kept := hit * (1.0 - _share(armor, ARMOUR_K))
+	return maxf(0.0, kept - block)
+
+
+## The chance, 0 to 1, that the player steps out of a blow altogether, whatever its size.
+func dodge_chance() -> float:
+	return _share(dodge, DODGE_K)
+
+
+## A rating's share of any blow: `rating / (rating + k)`. Never the whole, however high.
+static func _share(rating: float, k: float) -> float:
+	if rating <= 0.0:
+		return 0.0
+	return rating / (rating + k)
+
+
+## How many seconds one blow from this enemy is worth on this tile, before the player's defence: a
+## common's HIT_SECONDS, grown with the walk exactly as its health is (`base_hp`, walls and all), and
+## multiplied by what its tier's blow is worth. The size of the body does not come into it -- a slime
+## and a giant of one tier take the same off the clock.
+static func hit_of(enemy_name: String, cell: Vector2i) -> float:
+	return HIT_SECONDS * base_hp(cell) / BASE_HP * float(HIT_TIER[EnemyRoster.tier_of(enemy_name)])
 
 
 ## The weapon swinging on its own, `attack_speed` times a second. Only earns while an enemy is
@@ -969,6 +1075,7 @@ func _advance_phase() -> void:
 	_struck = false
 	_crit_landed = false
 	_bleed = 0.0
+	_attack = 0.0
 	# Restless dead: the body gets back up where it fell, at half of what it was, and is killed and
 	# paid for again. The slot does not move, so the lineup and the pips stay the length they were.
 	if _rise:

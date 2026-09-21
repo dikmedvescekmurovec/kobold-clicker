@@ -250,11 +250,6 @@ BASE_KINDS = {
         ("Steel Helm", (_RPG + "Equipment/Helm", 0, 0, 32, 32, 1)), ("Golden Helm", ("golden-helm", 0, 0, 32, 32, 1))]),
     "hood": ("Helmet", [
         ("Hide Hood", DRAWN), ("Leather Hood", DRAWN), ("Studded Hood", DRAWN), ("Shadow Hood", DRAWN)]),
-    # The pack's one hat is the second rung, dyed the blue its name has always meant here; the
-    # drawn ones are built the way it is, shorter below it and taller and busier above.
-    "hat": ("Helmet", [
-        ("Apprentice Hat", DRAWN), ("Wizard Hat", (_RPG + "Equipment/Wizard Hat", 0, 0, 32, 32, 1), "silk"),
-        ("Sage's Hat", DRAWN), ("Archmage's Hat", DRAWN)]),
 
     "plate": ("Body", [
         ("Wooden Armor", (_RPG + "Equipment/Wooden Armor", 0, 0, 32, 32, 1)), ("Iron Armor", (_RPG + "Equipment/Iron Armor", 0, 0, 32, 32, 1)),
@@ -262,24 +257,20 @@ BASE_KINDS = {
     # The pack calls a strapped backpack its leather armour (it is rag_and_bone_sack), so all drawn.
     "jerkin": ("Body", [
         ("Hide Jerkin", DRAWN), ("Leather Jerkin", DRAWN), ("Studded Jerkin", DRAWN), ("Shadow Leathers", DRAWN)]),
-    "robe": ("Body", [
-        ("Linen Robe", DRAWN), ("Silk Robe", DRAWN), ("Sage's Robe", DRAWN), ("Archmage's Robe", DRAWN)]),
 
     "boot": ("Boots", [
         ("Leather Boot", (_RPG + "Equipment/Leather Boot", 0, 0, 32, 32, 1)), ("Studded Boot", DRAWN), ("Ranger's Boot", DRAWN), ("Shadow Boot", DRAWN)]),
     "greaves": ("Boots", [
         ("Bronze Greaves", DRAWN), ("Iron Greaves", (_RPG + "Equipment/Iron Boot", 0, 0, 32, 32, 1)),
         ("Steel Greaves", DRAWN), ("Golden Greaves", DRAWN)]),
-    "slippers": ("Boots", [
-        ("Linen Slippers", DRAWN), ("Silk Slippers", DRAWN), ("Sage's Slippers", DRAWN),
-        ("Archmage's Slippers", DRAWN)]),
 
     # Untiered, so here the drawing parts one piece from the next rather than one tier from the
-    # last: a stone on a gold band, a broad riveted band, a ring cut from jade; four pendants of
-    # four shapes.
+    # last: a stone on a gold band, a broad riveted band, a ring cut from jade; three pendants of
+    # three shapes. (The hat, robe, slippers and Sapphire Amulet went with energy shield, 2026-09-21;
+    # their drawings are still in gear.py and their icons still in Assets/Gear, unused.)
     "ring": ("Ring", [("Gold Ring", DRAWN), ("Iron Band", DRAWN), ("Jade Ring", DRAWN)]),
     "amulet": ("Amulet", [
-        ("Ruby Amulet", DRAWN), ("Gold Amulet", DRAWN), ("Sapphire Amulet", DRAWN), ("Emerald Amulet", DRAWN)]),
+        ("Ruby Amulet", DRAWN), ("Gold Amulet", DRAWN), ("Emerald Amulet", DRAWN)]),
 }
 # The one dye a cut piece takes, as `_shift` wants it: the pack's warm band landed on a hue, and the
 # greys given the same. Everything drawn is dyed where it is drawn (gearlib.TINTS).

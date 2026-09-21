@@ -151,9 +151,9 @@ func items() -> Array[Item]:
 ## What the whole set is worth: every worn piece's `effective_stats`, added up stat by stat, and then
 ## whatever the set's GLOBAL modifiers ask of the total.
 ##
-## Adding is the rule for the first pass. Two rings of +3 Health make 6, two pieces of armour add,
-## and a second source of crit damage adds to the first -- which is exactly why the tables put health
-## and armour on nearly every piece. A piece's own percent modifiers were folded into it before it
+## Adding is the rule for the first pass. Two rings of +3 Armour make 6, two pieces of armour add,
+## and a second source of crit damage adds to the first -- which is exactly why the tables put armour
+## and dodge on nearly every piece. A piece's own percent modifiers were folded into it before it
 ## got here, so nothing there scales anything across pieces.
 ##
 ## The second pass is the one thing that does, and it is why GLOBAL exists as its own kind: a ring's

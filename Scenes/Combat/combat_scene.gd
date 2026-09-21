@@ -130,6 +130,12 @@ const CRIT_FONT := 48
 ## A crit is the game's own damage red, the colour the enemy's health bar empties in, rather than
 ## GOLD -- gold is the unique item step and reads as a reward, and a crit is not one.
 const CRIT_COLOR := BAR_HEALTH
+## What the clock turns as an enemy's blow lands on it, and how long it takes to fade back. Over-bright
+## red rather than a colour, because it is multiplied over the clock's own ramp.
+const CLOCK_STRUCK := Color(2.2, 0.6, 0.6)
+const CLOCK_STRUCK_TIME := 0.35
+## Where what a blow did to the clock rises from, as a share of a fighter's height: over the hero's head.
+const STRUCK_HEIGHT := 1.05
 ## Where up the enemy the number starts, as a share of its height. Low on the body, so the whole
 ## rise is read against the enemy it came off rather than against the sky over it.
 const DAMAGE_HEIGHT := 0.45
@@ -344,6 +350,7 @@ func begin(encounter: Encounter, for_cell: Vector2i, ui_scale: float, variant :=
 	fight.enemy_spawned.connect(_on_enemy_spawned)
 	fight.enemy_hit.connect(_on_enemy_hit)
 	fight.hit_landed.connect(_on_hit_landed)
+	fight.player_hit.connect(_on_player_hit)
 	fight.enemy_died.connect(_on_enemy_died)
 	fight.loot_dropped.connect(_on_loot_dropped)
 	fight.gold_dropped.connect(_on_gold_dropped)
@@ -786,14 +793,55 @@ func _swing() -> void:
 ## The number that floats off the enemy. This is the only place the player can read what their gear
 ## is worth: everything else about a hit looks the same whether it took one point off or nine.
 func _show_damage(amount: float, crit: bool) -> void:
+	var written := BigNumber.format(amount)
+	_float_text((written + "!") if crit else written, CRIT_COLOR if crit else Palette.BONE,
+			CRIT_FONT if crit else DAMAGE_FONT, ENEMY_X, 1.25 if crit else 1.0)
+
+
+## What an enemy's blow did to the clock, over the player the way a damage number is over the enemy:
+## the seconds it took in the clock's own red, or the word for a blow that took nothing. The enemy
+## swings for it, and a blow that cost something flashes the clock, which is where it was paid.
+func _on_player_hit(taken: float, dodged: bool, blocked: bool) -> void:
+	if _enemy != null and _enemy.sprite_frames != null:
+		_enemy.play_once("attack")
+	# Over the player's head and outlined: the words stand on the sky and the hero rather than on an
+	# enemy's plain body, and nothing up there is a panel for them to climb into.
+	if dodged:
+		_float_text("Dodge", Palette.BONE, DAMAGE_FONT, PLAYER_X, 1.0, STRUCK_HEIGHT, true)
+	elif blocked:
+		_float_text("Block", Palette.BONE, DAMAGE_FONT, PLAYER_X, 1.0, STRUCK_HEIGHT, true)
+	else:
+		_float_text("-%ss" % _seconds_written(taken), BAR_HEALTH, DAMAGE_FONT, PLAYER_X, 1.0,
+				STRUCK_HEIGHT, true)
+		_flash_clock()
+
+
+## Seconds as a blow's number says them: a tenth while it is small enough for a tenth to matter.
+static func _seconds_written(seconds: float) -> String:
+	return "%.1f" % seconds if seconds < 100.0 else BigNumber.format(seconds)
+
+
+## The clock showing it has just been struck: red over its own colour, fading back. Not behind the
+## animation level -- it is how a player without the numbers sees that the time went.
+func _flash_clock() -> void:
+	if _clock == null or fight.endless:
+		return
+	_clock.modulate = CLOCK_STRUCK
+	create_tween().tween_property(_clock, "modulate", Color.WHITE, CLOCK_STRUCK_TIME)
+
+
+## A word or a number rising off one of the fighters: across at `across` of the view, `height` of a
+## fighter up from the ground, popping in at `pop` times its settled size, and with the HUD's dark
+## outline where it asks for one. Everything that floats off a fight comes through here.
+func _float_text(text: String, colour: Color, font_size: int, across: float, pop := 1.0,
+		height := DAMAGE_HEIGHT, outlined := false) -> void:
 	if Settings.animations == Settings.Anim.NONE:
 		return
 	# LOW keeps the number and its rise, without the pop or the wander.
 	var lively := Settings.animations == Settings.Anim.DEFAULT
-	var written := BigNumber.format(amount)
-	var label := _label((written + "!") if crit else written)
-	label.add_theme_color_override("font_color", CRIT_COLOR if crit else Palette.BONE)
-	label.add_theme_font_size_override("font_size", CRIT_FONT if crit else DAMAGE_FONT)
+	var label := _hud_label(text, colour) if outlined else _label(text)
+	label.add_theme_color_override("font_color", colour)
+	label.add_theme_font_size_override("font_size", font_size)
 	label.z_index = 1
 	label.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(label)
@@ -808,19 +856,17 @@ func _show_damage(amount: float, crit: bool) -> void:
 	# there clears the name panel. The width is asked of the font rather than read off the label,
 	# which has not been laid out yet.
 	var font := label.get_theme_font("font")
-	var width := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1,
-			CRIT_FONT if crit else DAMAGE_FONT).x * _ui_scale
-	var from := Vector2(view.x * ENEMY_X + randf_range(-DAMAGE_SPREAD, DAMAGE_SPREAD) - width * 0.5,
-			view.y * (GROUND - ACTOR_HEIGHT * DAMAGE_HEIGHT))
+	var width := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x * _ui_scale
+	var from := Vector2(view.x * across + randf_range(-DAMAGE_SPREAD, DAMAGE_SPREAD) - width * 0.5,
+			view.y * (GROUND - ACTOR_HEIGHT * height))
 	# Pops in large about its own middle and settles, which is what makes a number land rather than
 	# appear. The pivot is in the label's own unscaled pixels, and scaling about it moves the corner,
 	# so `from` is shifted back by what the settled scale would move it.
-	var font_size := CRIT_FONT if crit else DAMAGE_FONT
 	label.pivot_offset = Vector2(width / _ui_scale, font_size) / 2.0
 	from += label.pivot_offset * (_ui_scale - 1.0)
 	label.position = from
 	if lively:
-		label.scale = Vector2(_ui_scale, _ui_scale) * DAMAGE_POP_SCALE * (1.25 if crit else 1.0)
+		label.scale = Vector2(_ui_scale, _ui_scale) * DAMAGE_POP_SCALE * pop
 	var float_up := create_tween()
 	float_up.set_parallel(true)
 	float_up.tween_property(label, "scale", Vector2(_ui_scale, _ui_scale), DAMAGE_POP) \
@@ -1126,8 +1172,10 @@ func _on_enemy_spawned(_index: int, _enemy_name: String, _hp: float) -> void:
 	_slide_enemy()
 
 
+## A blow the enemy survived flinches it -- unless it is swinging at the clock, which a flinch would cut
+## off before the blow it stands for had been seen. The flash and the squash still say the hit landed.
 func _on_enemy_hit(hp_left: float) -> void:
-	if hp_left > 0:
+	if hp_left > 0 and not (_enemy.is_playing() and _enemy.animation == "attack"):
 		_enemy.play_once("hurt")
 
 

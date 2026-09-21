@@ -6,8 +6,8 @@ extends RefCounted
 ##
 ## A PERCENT one scales a stat the item already has, so it needs that *base* stat: a boot has no
 ## damage to increase. A FLAT one adds a stat outright, so it needs only that the piece be allowed to
-## carry it -- LootTable's `affixes` -- which is how a ring with no health of its own rolls "+8
-## Health". A GLOBAL one is a percentage of what the *whole set* is worth rather than of anything the
+## carry it -- LootTable's `affixes` -- which is how a ring with no crit of its own rolls "+2%
+## Crit Chance". A GLOBAL one is a percentage of what the *whole set* is worth rather than of anything the
 ## piece has, so it needs neither: LootTable's `globals` says which pieces may carry one, which today
 ## is the jewellery and nothing else. A PLAYER one is a buff to the player rather than the item, and
 ## can land on anything; the pool of those is deliberately small and every one of them names
@@ -49,30 +49,19 @@ const MODS := {
 	"increased_attack_speed": {"kind": Kind.PERCENT, "stat": "attack_speed", "range": [5, 12], "weight": 10},
 	"increased_armor": {"kind": Kind.PERCENT, "stat": "armor", "range": [8, 20], "weight": 10},
 	"added_armor": {"kind": Kind.FLAT, "stat": "armor", "range": [2, 6], "weight": 10},
-	"increased_block": {"kind": Kind.PERCENT, "stat": "block_chance", "range": [10, 25], "weight": 10},
-	"added_block": {"kind": Kind.FLAT, "stat": "block_chance", "range": [2, 5], "weight": 10},
-	"increased_health": {"kind": Kind.PERCENT, "stat": "health", "range": [8, 20], "weight": 10},
-	"added_health": {"kind": Kind.FLAT, "stat": "health", "range": [5, 15], "weight": 10},
+	"increased_block": {"kind": Kind.PERCENT, "stat": "block", "range": [10, 25], "weight": 10},
+	# Block and time on hit are tenths of a second (`LootTable.SECONDS_STATS`): 1-3 is 0.1-0.3s.
+	"added_block": {"kind": Kind.FLAT, "stat": "block", "range": [1, 3], "weight": 10},
 	"increased_move_speed": {"kind": Kind.PERCENT, "stat": "move_speed", "range": [6, 15], "weight": 10},
 	"added_move_speed": {"kind": Kind.FLAT, "stat": "move_speed", "range": [2, 5], "weight": 10},
-	"increased_dodge": {"kind": Kind.PERCENT, "stat": "dodge_chance", "range": [10, 25], "weight": 10},
-	"added_dodge": {"kind": Kind.FLAT, "stat": "dodge_chance", "range": [1, 3], "weight": 10},
+	"increased_dodge": {"kind": Kind.PERCENT, "stat": "dodge", "range": [8, 20], "weight": 10},
+	"added_dodge": {"kind": Kind.FLAT, "stat": "dodge", "range": [2, 6], "weight": 10},
 	"increased_crit_damage": {"kind": Kind.PERCENT, "stat": "crit_damage", "range": [8, 20], "weight": 10},
 	"added_crit_damage": {"kind": Kind.FLAT, "stat": "crit_damage", "range": [5, 15], "weight": 10},
-	"increased_energy_shield": {"kind": Kind.PERCENT, "stat": "energy_shield", "range": [8, 20], "weight": 10},
-	"added_energy_shield": {"kind": Kind.FLAT, "stat": "energy_shield", "range": [2, 8], "weight": 10},
-	"increased_health_regen": {"kind": Kind.PERCENT, "stat": "health_regen", "range": [8, 20], "weight": 10},
-	"added_health_regen": {"kind": Kind.FLAT, "stat": "health_regen", "range": [1, 3], "weight": 10},
-	# The resistances, the attributes and what a hit gives back are all flat-only: each is a quantity
-	# you add up across the set rather than a thing an item has more or less of, so "+35% to Fire
-	# Resistance" is the whole idea and "+14% increased Fire Resistance" would be a percentage of a
-	# percentage. That they have no PERCENT form is also what lets them sit in `affixes` on pieces
-	# that show none of them.
-	"added_fire_resist": {"kind": Kind.FLAT, "stat": "fire_resist", "range": [5, 15], "weight": 8},
-	"added_cold_resist": {"kind": Kind.FLAT, "stat": "cold_resist", "range": [5, 15], "weight": 8},
-	"added_lightning_resist": {"kind": Kind.FLAT, "stat": "lightning_resist", "range": [5, 15], "weight": 8},
-	"added_leech": {"kind": Kind.FLAT, "stat": "leech", "range": [1, 3], "weight": 6},
-	"added_life_on_hit": {"kind": Kind.FLAT, "stat": "life_on_hit", "range": [1, 4], "weight": 8},
+	# The attributes and what a hit wins back are flat-only: each is a quantity you add up across the
+	# set rather than a thing an item has more or less of. That they have no PERCENT form is also what
+	# lets them sit in `affixes` on pieces that show none of them.
+	"added_time_on_hit": {"kind": Kind.FLAT, "stat": "time_on_hit", "range": [1, 2], "weight": 8},
 	"added_strength": {"kind": Kind.FLAT, "stat": "strength", "range": [2, 8], "weight": 8},
 	"added_dexterity": {"kind": Kind.FLAT, "stat": "dexterity", "range": [2, 8], "weight": 8},
 	"added_intelligence": {"kind": Kind.FLAT, "stat": "intelligence", "range": [2, 8], "weight": 8},
@@ -110,13 +99,14 @@ const MODS := {
 ## No modifier can be drawn without a stat to hang on, so attack speed has no flat form: "+0.2
 ## attacks a second" would be the one fraction in the file.
 
-## The modifiers no item can roll today, and that is on purpose rather than an oversight. The
-## resistances came off every piece when it became clear nothing can hurt the player, so there is
-## nothing for them to defend against -- but a resistance is a system half-written rather than a bad
-## idea, and the table keeps them so that putting them back is a word on an item and nothing else.
-## Written down here because "unreachable" is exactly what a test would otherwise fail on, and a
-## silently unreachable modifier and a deliberately dormant one have to be told apart by name.
-const DORMANT := ["added_fire_resist", "added_cold_resist", "added_lightning_resist"]
+## The modifiers no item can roll today on purpose rather than by oversight. Written down because
+## "unreachable" is exactly what a test would otherwise fail on, and a silently unreachable modifier
+## and a deliberately dormant one have to be told apart by name.
+##
+## Empty today: the resistances were the dormant ones, and they went when enemies began to strike the
+## clock -- there is one thing to defend and no elements to defend it from. The list stays for the
+## next modifier that is written ahead of its piece.
+const DORMANT: Array[String] = []
 
 ## The modifiers no pool holds because only a unique's row may name them (`UniqueTable.UNIQUES`). Named
 ## for the reason the dormant ones are: a test has to tell this from a modifier nothing can reach.
@@ -264,7 +254,7 @@ static func line(mod: Dictionary) -> String:
 	var id: String = mod.get("id", "")
 	if not MODS.has(id):
 		return ""
-	return _written(id, _amount(id, int(mod.get("value", 0))))
+	return _written(id, amount(id, int(mod.get("value", 0))))
 
 
 ## A modifier written with the band it rolls in at `level` in the number's place: "+8-20% increased
@@ -274,16 +264,22 @@ static func band_line(id: String, level: int) -> String:
 	if not MODS.has(id):
 		return ""
 	var band := band_for(id, level)
-	var low := _amount(id, int(band[0]))
-	var high := _amount(id, int(band[1]))
+	var low := amount(id, int(band[0]))
+	var high := amount(id, int(band[1]))
 	return _written(id, low if low == high else "%s-%s" % [low, high])
 
 
 ## A modifier's number as it is written. A flat one is the one number here that grows with the
 ## level, so it is written the way every other growing quantity is (`BigNumber`) rather than spelled
 ## out to twenty digits.
-static func _amount(id: String, value: int) -> String:
-	return BigNumber.format(value) if MODS[id]["kind"] == Kind.FLAT else str(value)
+static func amount(id: String, value: int) -> String:
+	var entry: Dictionary = MODS[id]
+	if entry["kind"] != Kind.FLAT:
+		return str(value)
+	# Tenths of a second, written as seconds with the unit on: the "s" is the number's, not the line's.
+	if entry["stat"] in LootTable.SECONDS_STATS:
+		return LootTable.seconds_text(value)
+	return BigNumber.format(value)
 
 
 static func _written(id: String, amount: String) -> String:
@@ -297,7 +293,7 @@ static func _written(id: String, amount: String) -> String:
 			return "+%s%% increased %s" % [amount, LootTable.STAT_LABELS[entry["stat"]]]
 		_:
 			# A flat roll on a stat that is itself a percentage adds percentage points, and has to
-			# say so: "+10% Fire Resistance", never "+10 Fire Resistance".
+			# say so: "+10% Drop Rate", never "+10 Drop Rate". Seconds carry their own "s" (`amount`).
 			var stat: String = entry["stat"]
 			var unit := "%" if stat in LootTable.PERCENT_STATS else ""
 			return "+%s%s %s" % [amount, unit, LootTable.STAT_LABELS[stat]]

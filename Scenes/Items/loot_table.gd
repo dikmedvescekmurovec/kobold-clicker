@@ -30,7 +30,7 @@ const ROOT := "res://Assets/Gear/"
 ## `stats` is what the piece *is* -- the handful of numbers it shows, and the only stats a PERCENT
 ## modifier can scale, because "+14% increased Armour" needs armour to increase. `affixes` is what
 ## the piece can *carry*: stats it does not show and has none of, but can still roll a flat modifier
-## for. A ring has no health of its own and still rolls "+8 Health", which is how Path of Exile has
+## for. A helm has no time on hit of its own and still rolls "+1s Time on Hit", which is how Path of Exile has
 ## always done it, and it is what keeps a stat block two lines long while the modifier pool stays deep.
 ## `globals` is what the piece can carry a *global* percent for -- a percentage of what the whole set
 ## is worth rather than of anything the piece has, which is the only way "+14% increased Damage" can
@@ -46,59 +46,48 @@ const ROOT := "res://Assets/Gear/"
 ## and states each one's Sight outright rather than multiplying a number.
 ##
 ## Stats span pieces on purpose. Base `damage` lives on the weapons -- a click's damage comes from
-## what is held, or that stops being the interesting slot -- while health and armour roll nearly
+## what is held, or that stops being the interesting slot -- while armour and dodge roll nearly
 ## everywhere, because a stat that adds up across what the player wears is what makes swapping any
 ## single piece worth doing. Four stay locked by what a piece is: `move_speed` is the boots',
-## `block_chance` belongs to a thing you hold, `bleed` is what a mace leaves behind, and `sight` is
+## `block` belongs to a thing you hold, `bleed` is what a mace leaves behind, and `sight` is
 ## the whole reason to hold a torch. The jewellery is the exception to the weapons' monopoly, and
 ## carries its offence as modifiers rather than as base stats: a ring is worth something to a fight
 ## without ever being the thing that swings.
 ##
-## The resistances are off every piece for now. Nothing can hurt the player, so a resistance defends
-## against nothing -- but their labels, their level steps and the modifiers that roll them are all
-## still written down, so putting them back is one word per kind.
+## Defence is spent on the fight clock, which is what an enemy's blow takes off (`Encounter.taken`):
+## armour takes a share of a hit, block a flat amount after it, dodge now and then all of it, and
+## time on hit wins back what the blows took. Health, energy shield, regen, leech and the
+## resistances went with the kinds built on them -- the clock is the one pool there is to defend.
 ##
 ## None of it depends on rarity: an elite sword hits like a common one and simply carries more on
 ## top.
 const KINDS := {
-	# --- Helmet: a third each, and the three ways of defending a head the whole table is split by --
-	# armour, dodge and the mage's shield and regen.
+	# --- Helmet: a half each, and the two ways a head keeps a blow off the clock -- armour, which
+	# takes a share of every hit, and dodge, which now and then takes all of one.
 	"helm": {
-		"slot": "helmet", "weight": 12,
-		"stats": {"armor": 3, "health": 5},
-		"affixes": ["energy_shield", "strength", "intelligence"],
+		"slot": "helmet", "weight": 18,
+		"stats": {"armor": 3},
+		"affixes": ["time_on_hit", "strength", "intelligence"],
 		"tiers": ["Leather Helmet", "Iron Helmet", "Steel Helm", "Golden Helm"],
 	},
 	"hood": {
-		"slot": "helmet", "weight": 12,
-		"stats": {"dodge_chance": 3, "health": 5},
+		"slot": "helmet", "weight": 18,
+		"stats": {"dodge": 3},
 		"affixes": ["armor", "dexterity", "intelligence"],
 		"tiers": ["Hide Hood", "Leather Hood", "Studded Hood", "Shadow Hood"],
 	},
-	"hat": {
-		"slot": "helmet", "weight": 12,
-		"stats": {"energy_shield": 5, "health_regen": 0.5},
-		"affixes": ["health", "armor", "intelligence"],
-		"tiers": ["Apprentice Hat", "Wizard Hat", "Sage's Hat", "Archmage's Hat"],
-	},
 	# --- Boots: every one of them keeps Move Speed, because that is what a boot is for.
 	"boot": {
-		"slot": "boots", "weight": 16,
-		"stats": {"move_speed": 5, "dodge_chance": 2},
-		"affixes": ["armor", "health", "dexterity"],
+		"slot": "boots", "weight": 24,
+		"stats": {"move_speed": 5, "dodge": 2},
+		"affixes": ["armor", "dexterity"],
 		"tiers": ["Leather Boot", "Studded Boot", "Ranger's Boot", "Shadow Boot"],
 	},
 	"greaves": {
-		"slot": "boots", "weight": 16,
+		"slot": "boots", "weight": 24,
 		"stats": {"move_speed": 4, "armor": 3},
-		"affixes": ["health", "dodge_chance", "strength"],
+		"affixes": ["dodge", "strength"],
 		"tiers": ["Bronze Greaves", "Iron Greaves", "Steel Greaves", "Golden Greaves"],
-	},
-	"slippers": {
-		"slot": "boots", "weight": 16,
-		"stats": {"move_speed": 5, "energy_shield": 4},
-		"affixes": ["health", "health_regen", "intelligence"],
-		"tiers": ["Linen Slippers", "Silk Slippers", "Sage's Slippers", "Archmage's Slippers"],
 	},
 	# --- Weapon: the same base damage on all four, and a factor apiece. On its own swings the dagger,
 	# the sword and the greatsword come out about even; the dagger is the idler's weapon and the
@@ -106,27 +95,27 @@ const KINDS := {
 	"sword": {
 		"slot": "weapon", "weight": 12,
 		"stats": {"damage": 1, "crit_chance": 5, "crit_damage": 50, "attack_speed": 1.0},
-		"affixes": ["leech", "life_on_hit", "strength"],
+		"affixes": ["time_on_hit", "strength"],
 		"tiers": ["Wooden Sword", "Iron Sword", "Steel Sword", "Golden Sword"],
 	},
 	"dagger": {
 		"slot": "weapon", "weight": 9,
 		"stats": {"damage": 1, "crit_chance": 8, "crit_damage": 50, "attack_speed": 1.8},
-		"affixes": ["leech", "life_on_hit", "dexterity"],
+		"affixes": ["time_on_hit", "dexterity"],
 		"power": {"damage": 0.6},
 		"tiers": ["Bone Knife", "Iron Dagger", "Steel Stiletto", "Golden Kris"],
 	},
 	"mace": {
 		"slot": "weapon", "weight": 9,
 		"stats": {"damage": 1, "crit_damage": 50, "attack_speed": 0.9, "bleed": 20},
-		"affixes": ["leech", "life_on_hit", "strength"],
+		"affixes": ["time_on_hit", "strength"],
 		"power": {"damage": 0.9},
 		"tiers": ["Wooden Club", "Iron Mace", "Steel Morningstar", "Golden Sceptre"],
 	},
 	"greatsword": {
 		"slot": "weapon", "weight": 6, "two_handed": true,
 		"stats": {"damage": 1, "crit_chance": 5, "crit_damage": 75, "attack_speed": 0.5},
-		"affixes": ["leech", "life_on_hit", "strength"],
+		"affixes": ["time_on_hit", "strength"],
 		"power": {"damage": 2.2},
 		"tiers": ["Wooden Greatsword", "Iron Claymore", "Steel Zweihander", "Golden Greatsword"],
 	},
@@ -134,21 +123,22 @@ const KINDS := {
 	"broken_sword": {
 		"slot": "weapon", "weight": 0,
 		"stats": {"damage": 1},
-		"affixes": ["leech", "life_on_hit", "strength"],
+		"affixes": ["time_on_hit", "strength"],
 		"tiers": ["Broken Sword"],
 	},
 	# --- Offhand: the shield is the commonest thing to find in the hand, and the torch the rarest,
-	# because Sight is worth more than any number on it.
+	# because Sight is worth more than any number on it. Block lives here and nowhere else: a
+	# greatsword gives it up with the hand it closes.
 	"shield": {
 		"slot": "offhand", "weight": 30,
-		"stats": {"armor": 3, "block_chance": 5},
-		"affixes": ["health", "energy_shield", "strength"],
+		"stats": {"armor": 3, "block": 2},
+		"affixes": ["strength"],
 		"tiers": ["Wooden Shield", "Iron Shield", "Steel Kite Shield", "Golden Aegis"],
 	},
 	"buckler": {
 		"slot": "offhand", "weight": 24,
-		"stats": {"dodge_chance": 3, "block_chance": 4},
-		"affixes": ["health", "armor", "dexterity"],
+		"stats": {"dodge": 3, "block": 2},
+		"affixes": ["armor", "dexterity"],
 		"tiers": ["Hide Buckler", "Iron Buckler", "Steel Targe", "Golden Buckler"],
 	},
 	# Sight is the whole piece and it has only two values, so the torch has two materials rather than
@@ -158,31 +148,25 @@ const KINDS := {
 		"slot": "offhand", "weight": 18,
 		"tier_levels": [1, 10],
 		"tier_stats": [{"sight": 1}, {"sight": 2}],
-		"affixes": ["block_chance", "energy_shield", "health_regen", "crit_damage", "intelligence"],
+		"affixes": ["block", "crit_damage", "intelligence"],
 		"tiers": ["Wooden Torch", "Blazing Torch"],
 	},
-	# --- Body: the biggest numbers in the table, and the same three-way split as the head.
+	# --- Body: the biggest numbers in the table, and the same two-way split as the head.
 	"plate": {
-		"slot": "body", "weight": 8,
-		"stats": {"armor": 5, "health": 10},
-		"affixes": ["energy_shield", "dodge_chance", "strength"],
+		"slot": "body", "weight": 12,
+		"stats": {"armor": 5},
+		"affixes": ["time_on_hit", "dodge", "strength"],
 		"tiers": ["Wooden Armor", "Iron Armor", "Steel Plate", "Golden Plate"],
 	},
 	"jerkin": {
-		"slot": "body", "weight": 8,
-		"stats": {"dodge_chance": 4, "health": 10},
-		"affixes": ["armor", "energy_shield", "dexterity"],
+		"slot": "body", "weight": 12,
+		"stats": {"dodge": 5},
+		"affixes": ["armor", "time_on_hit", "dexterity"],
 		"tiers": ["Hide Jerkin", "Leather Jerkin", "Studded Jerkin", "Shadow Leathers"],
-	},
-	"robe": {
-		"slot": "body", "weight": 8,
-		"stats": {"energy_shield": 8, "health_regen": 1.0},
-		"affixes": ["health", "dodge_chance", "intelligence"],
-		"tiers": ["Linen Robe", "Silk Robe", "Sage's Robe", "Archmage's Robe"],
 	},
 	# --- Jewellery: one material apiece, the way Path of Exile's is. There is one drawing of a ring
 	# and one of an amulet, so the kinds are gem and metal recolours rather than a ladder, and all
-	# seven carry the global offence.
+	# six carry the global offence.
 	#
 	# The Gold Ring is the drop-rate piece, and the one place a stat of the player's own is a base
 	# stat: a ring is worn for what it finds. What offence it carries is all modifiers -- flat damage
@@ -191,24 +175,24 @@ const KINDS := {
 	"gold_ring": {
 		"slot": "ring", "weight": 8,
 		"stats": {"drop_rate": 5},
-		"affixes": ["health", "health_regen", "damage", "crit_chance", "crit_damage", "strength",
-			"dexterity", "intelligence", "item_rarity"],
+		"affixes": ["damage", "crit_chance", "crit_damage", "strength", "dexterity", "intelligence",
+			"item_rarity"],
 		"globals": ["damage", "attack_speed"],
 		"tiers": ["Gold Ring"],
 	},
 	"iron_band": {
 		"slot": "ring", "weight": 8,
-		"stats": {"health": 6, "armor": 2},
-		"affixes": ["health_regen", "damage", "crit_chance", "crit_damage", "strength", "dexterity",
-			"intelligence", "item_rarity"],
+		"stats": {"armor": 2},
+		"affixes": ["damage", "crit_chance", "crit_damage", "strength", "dexterity", "intelligence",
+			"item_rarity"],
 		"globals": ["damage", "attack_speed"],
 		"tiers": ["Iron Band"],
 	},
 	"jade_ring": {
 		"slot": "ring", "weight": 8,
-		"stats": {"dodge_chance": 2, "health_regen": 0.5},
-		"affixes": ["health", "damage", "crit_chance", "crit_damage", "strength", "dexterity",
-			"intelligence", "item_rarity"],
+		"stats": {"dodge": 2},
+		"affixes": ["damage", "crit_chance", "crit_damage", "strength", "dexterity", "intelligence",
+			"item_rarity"],
 		"globals": ["damage", "attack_speed"],
 		"tiers": ["Jade Ring"],
 	},
@@ -217,34 +201,26 @@ const KINDS := {
 	# to show Gold Find, and it carries the big number of the three finders because it is the narrow
 	# one -- drop rate lifts gear, uniques, orbs and gold alike, and a purse alone is worth less.
 	"ruby_amulet": {
-		"slot": "amulet", "weight": 3,
-		"stats": {"health": 8, "crit_damage": 10},
-		"affixes": ["energy_shield", "health_regen", "crit_chance", "damage", "drop_rate", "leech",
-			"strength", "dexterity", "intelligence", "item_rarity"],
+		"slot": "amulet", "weight": 4,
+		"stats": {"crit_damage": 10},
+		"affixes": ["crit_chance", "damage", "drop_rate", "time_on_hit", "strength", "dexterity",
+			"intelligence", "item_rarity"],
 		"globals": ["damage", "attack_speed"],
 		"tiers": ["Ruby Amulet"],
 	},
 	"gold_amulet": {
-		"slot": "amulet", "weight": 3,
+		"slot": "amulet", "weight": 4,
 		"stats": {"gold_find": 20},
-		"affixes": ["health", "energy_shield", "health_regen", "crit_chance", "crit_damage", "damage",
-			"drop_rate", "leech", "strength", "dexterity", "intelligence", "item_rarity"],
+		"affixes": ["crit_chance", "crit_damage", "damage", "drop_rate", "time_on_hit", "strength",
+			"dexterity", "intelligence", "item_rarity"],
 		"globals": ["damage", "attack_speed"],
 		"tiers": ["Gold Amulet"],
 	},
-	"sapphire_amulet": {
-		"slot": "amulet", "weight": 3,
-		"stats": {"energy_shield": 8, "health_regen": 0.5},
-		"affixes": ["health", "crit_chance", "crit_damage", "damage", "drop_rate", "leech",
-			"strength", "dexterity", "intelligence", "item_rarity"],
-		"globals": ["damage", "attack_speed"],
-		"tiers": ["Sapphire Amulet"],
-	},
 	"emerald_amulet": {
-		"slot": "amulet", "weight": 3,
-		"stats": {"dodge_chance": 5},
-		"affixes": ["health", "energy_shield", "health_regen", "crit_chance", "crit_damage", "damage",
-			"drop_rate", "leech", "strength", "dexterity", "intelligence", "item_rarity"],
+		"slot": "amulet", "weight": 4,
+		"stats": {"dodge": 5},
+		"affixes": ["crit_chance", "crit_damage", "damage", "drop_rate", "time_on_hit", "strength",
+			"dexterity", "intelligence", "item_rarity"],
 		"globals": ["damage", "attack_speed"],
 		"tiers": ["Emerald Amulet"],
 	},
@@ -298,19 +274,12 @@ const STAT_LABELS := {
 	"attack_speed": "Attack Speed",
 	# What a blow leaves behind: a share of it that goes on hurting. The mace's, and nothing else's.
 	"bleed": "Bleed",
-	# Defence, which rolls nearly everywhere.
+	# Defence, which rolls nearly everywhere: what keeps an enemy's blow off the fight clock.
 	"armor": "Armour",
-	"energy_shield": "Energy Shield",
-	"health": "Health",
-	"health_regen": "Health Regen",
-	"block_chance": "Block Chance",
-	"dodge_chance": "Dodge Chance",
-	"fire_resist": "Fire Resistance",
-	"cold_resist": "Cold Resistance",
-	"lightning_resist": "Lightning Resistance",
-	# What a hit gives back.
-	"leech": "Life Leech",
-	"life_on_hit": "Life on Hit",
+	"dodge": "Dodge",
+	"block": "Block",
+	# What a blow of the player's wins back of the clock the enemies took.
+	"time_on_hit": "Time on Hit",
 	# Utility.
 	"move_speed": "Move Speed",
 	"drop_rate": "Drop Rate",
@@ -327,12 +296,11 @@ const STAT_LABELS := {
 	"gold_find": "Gold Find",
 	"orb_find": "Orb Find",
 }
-const PERCENT_STATS := ["crit_chance", "crit_damage", "block_chance", "move_speed", "dodge_chance",
-	"fire_resist", "cold_resist", "lightning_resist", "leech", "drop_rate", "bleed",
+const PERCENT_STATS := ["crit_chance", "crit_damage", "move_speed", "drop_rate", "bleed",
 	"item_rarity", "gold_find", "orb_find"]
 ## The percentages that are a *probability*: how often something happens, rather than how much of it
 ## there is. They are the ones a level may not multiply -- see `scale`. Crit damage is not one of
-## them (500% crit damage is a fine number), and neither is leech, which is a share of a hit.
+## them (500% crit damage is a fine number).
 ##
 ## Drop rate is one of them at one remove: it multiplies a probability, so the exponent would walk
 ## through the same ceiling it walked through on crit chance -- a level-30 ring would be finding four
@@ -348,11 +316,17 @@ const PERCENT_STATS := ["crit_chance", "crit_damage", "block_chance", "move_spee
 ## Sight is the odd one out and is here for the arithmetic rather than for the reasoning. It is a
 ## number of tiles, its step is zero, and the material of the torch is the only thing that moves it --
 ## so what this list does for it is keep a level from multiplying one tile into twenty-six.
-const CHANCE_STATS := ["crit_chance", "block_chance", "dodge_chance", "drop_rate", "gold_find",
-	"item_rarity", "bleed", "sight"]
-## Per second: attacks in one case and health in the other. The two stats that are neither a plain
-## number nor a percentage.
-const RATE_STATS := ["attack_speed", "health_regen"]
+const CHANCE_STATS := ["crit_chance", "drop_rate", "gold_find", "item_rarity", "bleed", "sight"]
+## Per second: attacks. The one stat that is neither a plain number nor a percentage.
+const RATE_STATS := ["attack_speed"]
+## Seconds of the fight clock: how much of a blow block takes off, and how much a hit wins back.
+## Quantities that grow like armour does -- **kept in tenths of a second**, the one place a stat is not
+## stored as the number it shows. A blow near the start is a quarter of a second, and a modifier rolls
+## whole numbers (`ModifierTable`), so a stat counted in whole seconds would have made the smallest
+## "+1 Block" a wall against every blow in the first band. `seconds_of` is the conversion, and every
+## place that writes or reads one goes through it: `stat_value`, `stat_delta`, `ModifierTable.amount`
+## and `Encounter.arm`.
+const SECONDS_STATS := ["block", "time_on_hit"]
 
 ## How much one level multiplies every scaled number by. The dial for how fast gear answers the
 ## frontier; Encounter.HP_GROWTH is the dial for how fast the frontier pulls away.
@@ -376,10 +350,10 @@ const LEVEL_GROWTH := 1.12
 const LEVEL_FLAT := {
 	"damage": 1.0,
 	"crit_chance": 1.0, "crit_damage": 5.0, "attack_speed": 0.05, "bleed": 1.0,
-	"armor": 2.0, "energy_shield": 2.0, "health": 3.0, "health_regen": 0.1,
-	"block_chance": 1.0, "dodge_chance": 1.0, "move_speed": 1.0, "drop_rate": 1.0,
-	"fire_resist": 1.0, "cold_resist": 1.0, "lightning_resist": 1.0,
-	"leech": 0.2, "life_on_hit": 1.0,
+	# Armour and dodge are the same kind of number -- a rating set against the size of the hit -- so
+	# they grow alike. Block and time on hit are tenths of a second (SECONDS_STATS), a tenth a level.
+	"armor": 2.0, "dodge": 2.0, "block": 1.0, "time_on_hit": 1.0,
+	"move_speed": 1.0, "drop_rate": 1.0,
 	"strength": 1.0, "dexterity": 1.0, "intelligence": 1.0,
 	# The two finders a piece can carry now. They take the same point a level drop rate does, which is
 	# all a CHANCE_STAT ever takes.
@@ -532,6 +506,8 @@ static func stat_value(stat: String, value: float) -> String:
 		return "%.1f/s" % value
 	# A quantity, which grows with the walk: written through the one formatter, so a late stat is
 	# "1.23e6" rather than twenty digits across a panel (`BigNumber`).
+	if stat in SECONDS_STATS:
+		return seconds_text(value)
 	return BigNumber.format(value)
 
 
@@ -548,7 +524,23 @@ static func stat_delta(stat: String, delta: float) -> String:
 	if stat in RATE_STATS:
 		return "%+.1f/s %s" % [delta, label]
 	# `signed` is what keeps the sign on a gain, which is the whole of what a delta line means.
+	if stat in SECONDS_STATS:
+		return "%s %s" % [seconds_text(delta, true), label]
 	return "%s %s" % [BigNumber.format(delta, true), label]
+
+
+## What a SECONDS_STAT's stored tenths are worth in seconds of the clock.
+static func seconds_of(stat: String, value: float) -> float:
+	return value / 10.0 if stat in SECONDS_STATS else value
+
+
+## Tenths of a second written as seconds: "0.3s", "+1.2s", and "1.23e6s" once it is past the point
+## where a tenth means anything.
+static func seconds_text(tenths: float, signed := false) -> String:
+	var seconds := tenths / 10.0
+	if absf(seconds) >= 100.0:
+		return BigNumber.format(seconds, signed) + "s"
+	return ("%+.1fs" if signed else "%.1fs") % seconds
 
 
 ## Whether a difference is worth saying at all. A delta that rounds to nothing on the line would read
@@ -563,7 +555,7 @@ static func delta_shows(stat: String, delta: float) -> bool:
 
 
 ## How often this enemy leaves anything at all: its tier times its body, lifted by whatever drop rate
-## the player is wearing, and never more than certain. Unlike health, a chance has a ceiling.
+## the player is wearing, and never more than certain. Unlike a quantity, a chance has a ceiling.
 ##
 ## `drop_rate` is a percentage the way every stat in PERCENT_STATS is, so 50 is half again as much
 ## gear. It does it here rather than at the caller so there is one answer to "how often does this body drop".

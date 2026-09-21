@@ -7,9 +7,13 @@ extends "res://tests/harness.gd"
 ## out to the wall with the real `Encounter` and the real drops, at a steady click rate: how many
 ## kills and how long it takes to be wearing it.
 ##
+## The played-out player's tile fights are struck (`Encounter.strikes`), the way the game's are, and
+## the table says what the blows cost it: `struck` is seconds of clock lost to them over the whole run,
+## `lost` the tile fights it lost. The wall itself never strikes.
+##
 ## ponytail: the played-out player walks one straight line of grass, puts every point in Power, wears
-## whatever raises wall damage and ignores uniques, orbs, vendors and the smith -- so its kill counts
-## are a ceiling on the farming, not a forecast. Teach it a system when that system is being tuned.
+## whatever raises wall damage and ignores defence, uniques, orbs, vendors and the smith -- so its kill
+## counts are a ceiling on the farming, not a forecast. Teach it a system when that system is being tuned.
 
 const RUNS := 15
 const RATES: Array[float] = [3.0, 5.0, 7.0]
@@ -153,7 +157,7 @@ func _print_played(rate: float) -> void:
 	if done.is_empty():
 		return
 	for key: String in ["kills", "farmed", "minutes", "level", "damage", "crit_chance", "crit_damage",
-			"attack_speed", "gear_level", "rares", "elites"]:
+			"attack_speed", "gear_level", "rares", "elites", "struck", "lost"]:
 		var values := done.map(func(run: Dictionary) -> float: return float(run[key]))
 		values.sort()
 		print("  %-13s median %8.1f   (%.1f to %.1f)" % [key, values[values.size() / 2], values[0], values[-1]])
@@ -173,7 +177,7 @@ func _play_out(rate: float, take: int, wall_hp := Encounter.WALL_HP, last_wall :
 	var inv := Inventory.new()
 	var st := {"kills": 0, "farmed": 0, "seconds": 0.0, "fights": 0, "first_elite": false,
 			"farm_by_ring": PackedInt32Array(), "take": take, "won": false,
-			"walls": PackedFloat64Array(), "wall_kills": PackedInt32Array()}
+			"walls": PackedFloat64Array(), "wall_kills": PackedInt32Array(), "struck": 0.0, "lost": 0}
 	st["farm_by_ring"].resize(last_wall)
 	var ring := 0
 	while st["kills"] < give_up:
@@ -223,6 +227,9 @@ func _fight(fight: Encounter, inv: Inventory, rate: float, st: Dictionary) -> bo
 		drops.append(item)
 		if EnemyRoster.tier_of(fight.lineup[index]) == EnemyRoster.Tier.ELITE:
 			st["first_elite"] = true)
+	fight.strikes = true
+	fight.player_hit.connect(func(taken: float, _dodged: bool, _blocked: bool) -> void:
+		st["struck"] += taken)
 	fight.wear(inv.effects())
 	fight.arm(inv.stats())
 	fight.start()
@@ -231,6 +238,8 @@ func _fight(fight: Encounter, inv: Inventory, rate: float, st: Dictionary) -> bo
 		fight.hit()
 		fight.advance(step)
 		st["seconds"] += step
+	if not fight.endless and not fight.victory:
+		st["lost"] += 1
 	fight.stop()
 	st["kills"] += fight.kills()
 	inv.add_xp(fight.xp)

@@ -100,7 +100,7 @@ const UNIQUES := {
 	},
 	"rimeplate": {
 		"name": "Rimeplate", "base": "Wooden Armor",
-		"mods": ["added_damage", "increased_health"],
+		"mods": ["added_damage", "increased_armor"],
 		"effect": "home", "home": "ice", "clause": "frozen_clock",
 		"effect_text": "Double damage on ice. The clock there stands still while an enemy walks in.",
 		"envs": ["ice"],
@@ -153,7 +153,7 @@ const UNIQUES := {
 	# --- The clock ---
 	"last_gasp": {
 		"name": "Last Gasp", "base": "Leather Helmet",
-		"mods": ["added_crit", "increased_health"],
+		"mods": ["added_crit", "increased_armor"],
 		"effect": "last_gasp",
 		"effect_text": "Triple damage while five seconds or fewer remain.",
 		"envs": ["dirt", "forest"],
@@ -189,24 +189,24 @@ const UNIQUES := {
 	},
 	"packmule": {
 		"name": "Packmule's Harness", "base": "Wooden Armor",
-		"mods": ["increased_health", "added_drop_rate"],
+		"mods": ["increased_armor", "added_drop_rate"],
 		"effect": "packmule",
 		"effect_text": "1% more damage for every piece in your bag.",
 		"envs": ["mountains", "dirt"],
 	},
-	# --- Dead stats given a job (armour, health and block do nothing otherwise) ---
+	# --- Defence given a second job, on top of keeping blows off the clock ---
 	"bulwark": {
 		"name": "Bulwark", "base": "Wooden Shield",
 		"mods": ["increased_block", "added_block"],
 		"effect": "riposte",
-		"effect_text": "Your chance to block is your chance to swing again at once.",
+		"effect_text": "A blow your block stops entirely is answered at once with a swing of your own.",
 		"envs": ["mountains"],
 	},
 	"heartwood_plate": {
 		"name": "Heartwood Plate", "base": "Wooden Armor",
-		"mods": ["increased_health", "added_health"],
+		"mods": ["increased_armor", "added_armor"],
 		"effect": "heartwood",
-		"effect_text": "Every hundred health you have is a second more on the clock, up to ten.",
+		"effect_text": "Every fifty armour you have is a second more on the clock, up to ten.",
 		"envs": ["forest"],
 	},
 	"spiked_helm": {
@@ -233,7 +233,7 @@ const UNIQUES := {
 	},
 	"rag_and_bone_sack": {
 		"name": "Rag and Bone Sack", "base": "Wooden Armor",
-		"mods": ["added_gold_find", "increased_health"],
+		"mods": ["added_gold_find", "increased_armor"],
 		"effect": "salvage",
 		"effect_text": "Gear you throw away pays a quarter of what a trader would give.",
 		"envs": ["dirt"],

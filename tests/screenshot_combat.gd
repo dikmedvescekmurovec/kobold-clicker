@@ -178,6 +178,19 @@ func _shoot_fight() -> void:
 		await process_frame
 	await _save(combat, "combat_hurt.png")
 
+	# The enemy striking back: a blow that took time off the clock and one that block stopped, each
+	# landed by hand (`_struck_by`) so the shot does not wait on the rhythm. Caught while the clock is
+	# still flushed red from the first.
+	fight._struck_by(2.4)
+	# A common's own rhythm apart, so the two rise one over the other as they would in a fight.
+	await create_timer(Encounter.ATTACK_EVERY[EnemyRoster.Tier.COMMON]).timeout
+	fight.block = 99.0
+	fight._struck_by(2.4)
+	fight.block = 0.0
+	for i in 8:
+		await process_frame
+	await _save(combat, "combat_struck.png")
+
 	# The first enemy down, and its experience caught in the air between the body and the panel.
 	# Only up to the killing blow: `index` moves on in `advance`, while the body plays its death, so
 	# hitting until it moves would never stop.

@@ -424,9 +424,9 @@ func _test_slot_locks() -> bool:
 		# Base damage is still what is held, but the jewellery carries damage as an affix -- what is
 		# locked is where a click's damage *comes from*, not everything that can add to it.
 		"damage": ["sword", "dagger", "mace", "greatsword", "broken_sword", "gold_ring", "iron_band", "jade_ring",
-			"ruby_amulet", "gold_amulet", "sapphire_amulet", "emerald_amulet"],
-		"move_speed": ["boot", "greaves", "slippers"],
-		"block_chance": ["shield", "buckler", "torch"],
+			"ruby_amulet", "gold_amulet", "emerald_amulet"],
+		"move_speed": ["boot", "greaves"],
+		"block": ["shield", "buckler", "torch"],
 		"bleed": ["mace"],
 		"sight": ["torch"],
 	}
@@ -434,8 +434,8 @@ func _test_slot_locks() -> bool:
 	# a ring may roll flat damage and a torch may roll flat block, and neither shows any.
 	var shows := {
 		"damage": ["sword", "dagger", "mace", "greatsword", "broken_sword"],
-		"move_speed": ["boot", "greaves", "slippers"],
-		"block_chance": ["shield", "buckler"],
+		"move_speed": ["boot", "greaves"],
+		"block": ["shield", "buckler"],
 		"bleed": ["mace"],
 		"sight": ["torch"],
 	}
@@ -2332,16 +2332,24 @@ func _test_item_levels() -> bool:
 		_check(old.level == 1, "as a level-1 piece")
 		_check(old.base_stats() == LootTable.stats_of("Wooden Sword"), "carrying the table as written")
 
-	# And a piece saved with a stat its kind has since lost keeps it. A ring found today shows no Life
+	# And a piece saved with a stat its kind has since lost keeps it. A ring found today shows no Time
 	# on Hit; one already on a finger is frozen, and what the file holds is what it is worth.
 	var ringed := Item.from_dict({"type": "Gold Ring", "rarity": "common", "level": 1,
-			"stats": {"drop_rate": 5.0, "life_on_hit": 1.0}, "mods": []})
+			"stats": {"drop_rate": 5.0, "time_on_hit": 1.0}, "mods": []})
 	_check(ringed != null, "a Gold Ring from an older save loads")
 	if ringed != null:
-		_check(is_equal_approx(float(ringed.base_stats().get("life_on_hit", 0.0)), 1.0),
-				"with the Life on Hit it was found with")
+		_check(is_equal_approx(float(ringed.base_stats().get("time_on_hit", 0.0)), 1.0),
+				"with the Time on Hit it was found with")
 		_check(is_equal_approx(float(ringed.base_stats().get("drop_rate", 0.0)), 5.0), "and its drop rate")
-	_check(not LootTable.stats_of("Gold Ring").has("life_on_hit"), "though a ring found today has none")
+	_check(not LootTable.stats_of("Gold Ring").has("time_on_hit"), "though a ring found today has none")
+	# A stat the game no longer has at all is dropped on the way in, and a kind it no longer has
+	# drops the whole piece: that is the migration for the health and the mage's gear that went.
+	var gone := Item.from_dict({"type": "Wooden Armor", "rarity": "common", "level": 1,
+			"stats": {"armor": 5.0, "health": 10.0}, "mods": [{"id": "added_health", "value": 8}]})
+	_check(gone != null and gone.base_stats() == {"armor": 5.0} and gone.mods.is_empty(),
+			"a retired stat and a retired modifier are dropped")
+	_check(Item.from_dict({"type": "Linen Robe", "rarity": "common", "level": 1}) == null,
+			"and a retired kind is dropped whole")
 	return true
 
 
@@ -2410,7 +2418,7 @@ func _test_kinds() -> bool:
 
 	# The pieces the game shipped with are the plainest of their kind and carry no power of their own,
 	# so every one of them is worth exactly what it was before any of this. The torch is not among
-	# them: it gave up its energy shield, its regen and its crit damage for Sight.
+	# them: it gave up what it showed before (energy shield and regen, both since retired, and crit damage) for Sight.
 	for level in [1, 10, 30]:
 		for type: String in ["Leather Helmet", "Leather Boot", "Wooden Sword", "Wooden Shield",
 				"Wooden Armor", "Gold Ring", "Ruby Amulet"]:
@@ -2498,14 +2506,14 @@ func _test_deltas() -> bool:
 	worse.type = "Wooden Sword"
 	worse.rarity = ItemRarity.Rarity.COMMON
 	worse.level = 1
-	worse.stats = {"damage": 12.0, "crit_chance": 6.0, "health": 30.0}
+	worse.stats = {"damage": 12.0, "crit_chance": 6.0, "dodge": 30.0}
 
 	# What the swap takes off is a list now, because a two-hander takes two pieces off for one going on.
 	var off: Array[Item] = [worse]
 	var change := ItemDetails.deltas(better, off)
 	_check(change.get("damage") == 8.0, "a stat both have is the difference: %s" % change.get("damage"))
 	_check(change.get("armor") == 5.0, "a stat only the new piece has is the whole of it")
-	_check(change.get("health") == -30.0, "and one only the old piece has is the whole of it, lost")
+	_check(change.get("dodge") == -30.0, "and one only the old piece has is the whole of it, lost")
 	_check(not change.has("crit_chance"), "a stat that does not move is not mentioned at all")
 
 	# Nothing rounds to zero on the line, either. An "+0 Armour" line says a stat changed and then
@@ -2526,7 +2534,10 @@ func _test_deltas() -> bool:
 
 	# And the spelling, which lives beside stat_line for the reason stat_line gives.
 	_check(LootTable.stat_delta("damage", 8.0) == "+8 Damage", "a gain is written with its sign")
-	_check(LootTable.stat_delta("health", -30.0) == "-30 Health", "and a loss with its own")
+	_check(LootTable.stat_delta("dodge", -30.0) == "-30 Dodge", "and a loss with its own")
+	_check(LootTable.stat_delta("block", 3.0) == "+0.3s Block", "and seconds say they are seconds")
+	_check(LootTable.stat_line("time_on_hit", 12.0) == "1.2s Time on Hit", "kept in tenths, written in seconds")
+	_check(ModifierTable.line({"id": "added_block", "value": 2}) == "+0.2s Block", "a roll the same way")
 	_check(LootTable.stat_delta("crit_chance", 3.0) == "+3% Crit Chance", "a percentage keeps its sign")
 	_check(LootTable.stat_delta("attack_speed", 0.3) == "+0.3/s Attack Speed", "and so does a rate")
 	_check(LootTable.stat_line("damage", 5.0) == "5 Damage", "a base stat leads with its number too")
