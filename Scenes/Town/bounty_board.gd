@@ -13,7 +13,7 @@ extends RefCounted
 ## town they belong to rather than worked out from a seed again. A caller hands in the environments
 ## and the town's cell rather than a map, so the rules can be read with no world around them.
 ##
-## A posting is `{enemy, need, have, gold, orb, accepted, done}`. Only an **accepted** posting counts
+## A posting is `{enemy, need, have, gold, orb, accepted, done, level, located}`. Only an **accepted** posting counts
 ## kills, and only one posting anywhere may be accepted at a time -- a bounty is a job taken on, not a
 ## tally that runs by itself -- until it is handed in. `have` stops at `need`; `done` is a bounty
 ## handed in, which stays on the board, spent, until the whole board is `cleared` and posted afresh.

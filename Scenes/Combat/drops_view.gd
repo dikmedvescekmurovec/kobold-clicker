@@ -10,8 +10,8 @@ extends VBoxContainer
 ## It draws with the same squares the bag does (ItemSlot) and the same stat block (ItemDetails), so
 ## a rare piece looks and reads the same in every place the game shows it.
 ##
-## The grid and the details swap rather than stack, the way `_bag_scroll` and `_bag_detail` swap on
-## the item panel: a piece carrying six modifiers is taller than the verdict it would push down.
+## The grid and the details swap rather than stack, the way `BagPage`'s `_scroll` and `_detail` swap on
+## the bag: a piece carrying six modifiers is taller than the verdict it would push down.
 
 ## How many drops stand in a row. How big a square is belongs to ItemSlot, not here.
 const PER_ROW := 4
@@ -44,9 +44,7 @@ var _discard: Button
 func _init() -> void:
 	add_theme_constant_override("separation", 8)
 
-	# The squares. Everything stays at the theme's 16 px: Pixellari breaks up below that, so a
-	# quieter line is said with words rather than with a smaller font.
-	# On the bag's own light panel, so a find stands on the ground it will stand on once it is kept.
+	# The squares, on the bag's own light panel, so a find stands on the ground it will stand on once it is kept.
 	_ground = PanelContainer.new()
 	_ground.theme_type_variation = "TextPanel"
 	add_child(_ground)

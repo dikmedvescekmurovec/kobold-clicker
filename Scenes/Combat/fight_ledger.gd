@@ -10,7 +10,7 @@ extends RefCounted
 
 ## What the fight has turned up, banked or not. Kept after banking, for the report.
 var drops: Array[Item] = []
-## The three below are zeroed by `bank`, so a second call has nothing to repeat. Gold is a whole
+## These four are zeroed by `bank`, so a second call has nothing to repeat. Gold is a whole
 ## number in a double, the way `Encounter.gold` is: a purse grows exponentially with the walk.
 var gold := 0.0
 ## Orb name -> how many.

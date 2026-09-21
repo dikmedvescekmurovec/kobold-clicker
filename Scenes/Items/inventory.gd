@@ -81,7 +81,8 @@ var tips: Array[String] = []
 ## walk and would pass int64 out past the two hundredth hex.
 var gold := 0.0
 
-## Every enemy the player has ever killed. It is what holds orbs back until `OrbTable.FIRST_ORB_KILLS`.
+## Every enemy the player has ever killed. It is what holds orbs back until `OrbTable.FIRST_ORB_KILLS`,
+## and uniques until `UniqueTable.FIRST_UNIQUE_KILLS`.
 var kills := 0
 
 ## How long the game has been open on this save, in seconds. The main scene adds each frame's delta;
@@ -99,8 +100,8 @@ var play_seconds := 0.0
 var orbs := {}
 
 ## The player's level and the experience held towards the next one -- `PlayerLevel` says what a level
-## costs. Kept here beside the purse for the purse's reason: it is carried, not explored. Nothing reads
-## the level yet.
+## costs. Kept here beside the purse for the purse's reason: it is carried, not explored. Every level
+## past the first is a skill point (`Skills.earned`).
 var level := 1
 var xp := 0
 
@@ -138,7 +139,7 @@ var autodiscard: Array[int] = []
 ## stash and its own doll, worn as well as the ordinary one -- and the one thing that goes with the
 ## player when the world is left behind (`transcended`). Read through `stash()`, which makes it: an
 ## Inventory that made one of these as it was made would never finish being made.
-## ponytail: it shares CAPACITY, 40 heirlooms; a pick is a wall broken, and nobody breaks forty.
+## ponytail: it shares CAPACITY, 40 heirlooms; one is made a transcension, and nobody transcends forty times.
 var heirlooms: Inventory
 ## Super orbs the player may still spend at a transcension (`SuperOrbTable`): one for every wall
 ## broken, in any world, less those spent. One count for all six, spent on whichever is pressed.
@@ -286,8 +287,7 @@ func count_at(level: int) -> int:
 	return held
 
 
-## Nothing drops or sells an item yet. It is here so the first feature that does is a call rather
-## than a save migration -- without it the file only ever grows.
+## Takes one piece out of the bag -- a discard or a sale. False when it was not in the bag.
 func remove(item: Item) -> bool:
 	var at := items.find(item)
 	if at < 0:
@@ -365,7 +365,6 @@ func spend_orb(orb: String) -> bool:
 	return true
 
 
-## Every orb held, counted together. What a fight's verdict says it earned.
 ## Banks `amount` experience, levelling up as many times as it pays for. Returns how many levels that
 ## was, which is almost always none.
 func add_xp(amount: int) -> int:
@@ -528,6 +527,7 @@ func respec(tree: String) -> bool:
 	return true
 
 
+## Every orb held, counted together.
 func total_orbs() -> int:
 	var total := 0
 	for orb: String in orbs:

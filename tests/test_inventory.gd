@@ -42,7 +42,6 @@ func _run() -> void:
 	_check(_test_counts() == true, "counting tests ran to the end")
 	_check(_test_level_rolls() == true, "level roll tests ran to the end")
 	_check(_test_item_levels() == true, "item level tests ran to the end")
-	_check(_test_player_buffs() == true, "player buff tests ran to the end")
 	_check(_test_saving() == true, "saving tests ran to the end")
 	_check(_test_orb_tables() == true, "orb table tests ran to the end")
 	_check(_test_orb_verbs() == true, "orb verb tests ran to the end")
@@ -623,20 +622,13 @@ func _test_modifier_tables() -> bool:
 	for id: String in ModifierTable.MODS:
 		var mod: Dictionary = ModifierTable.MODS[id]
 		_check(int(mod["weight"]) > 0, id + " can be drawn at all")
-		var band := ModifierTable.band_for(id, 1)
+		var band: Array = mod["range"]
 		_check(int(band[0]) <= int(band[1]), id + " rolls in a real range")
 		_check(int(band[0]) > 0, id + " is worth something")
 		if mod["kind"] == ModifierTable.Kind.PLAYER:
 			_check(not str(mod["line"]).is_empty(), id + " says what it does")
-			_check(int(mod["cap"]) >= int(mod["range"][1]), id + " is capped above where it starts")
 			continue
 		var stat: String = mod["stat"]
-		# The shape of a band follows the stat: a flat amount of a CHANCE_STAT, which a level may not
-		# multiply, is the one kind written with a step -- a percentage of one is a percentage like any
-		# other. And a base under 3 is where rounding ties neighbouring levels.
-		var chance: bool = mod["kind"] == ModifierTable.Kind.FLAT and stat in LootTable.CHANCE_STATS
-		_check(mod.has("step") == chance, "%s is written with a step if and only if it adds a chance" % id)
-		_check(int(mod["base"]) >= 3, "%s starts at %d, under the 3 rounding needs" % [id, mod["base"]])
 		_check(LootTable.STAT_LABELS.has(stat), "%s names %s, which has no label" % [id, stat])
 		# A modifier for a stat nothing carries could never be rolled: dead weight in the table. A
 		# PERCENT one needs a piece with the base stat; a FLAT one only needs one allowed to carry it.
@@ -686,7 +678,7 @@ func _test_modifier_rolls() -> bool:
 					_check(not seen.has(id), "%s carries %s twice" % [item_type, id])
 					seen[id] = true
 					var entry: Dictionary = ModifierTable.MODS[id]
-					var range_band := ModifierTable.band_for(id, item.level)
+					var range_band: Array = entry["range"]
 					_check(typeof(mod["value"]) == TYPE_INT, id + " rolled a whole number")
 					_check(mod["value"] >= int(range_band[0]) and mod["value"] <= int(range_band[1]),
 							"%s rolled %d, outside %s" % [id, mod["value"], range_band])
@@ -2232,40 +2224,6 @@ func _test_level_rolls() -> bool:
 
 
 ## What a level is worth to a piece, and the promise that a piece never changes once it is rolled.
-## The player-wide buffs: summed over every worn piece of both dolls, held to their caps, and read
-## by the fight's clock, the drop's rarity and the walk -- none of which had a reader before.
-func _test_player_buffs() -> bool:
-	var ring := func(id: String, value: int) -> Item:
-		var piece := Item.rolled("Gold Ring", ItemRarity.Rarity.COMMON, RandomNumberGenerator.new(), 1)
-		piece.mods = [{"id": id, "value": value}]
-		return piece
-	var gear := Equipment.new()
-	gear.equip(Equipment.Socket.RING_LEFT, ring.call("fight_clock", 4))
-	gear.equip(Equipment.Socket.RING_RIGHT, ring.call("fight_clock", 3))
-	_check(is_equal_approx(float(gear.totals().get("buff_fight_clock", 0.0)), 7.0),
-			"two pieces of fight clock stack (%s)" % gear.totals().get("buff_fight_clock"))
-	var heirlooms := Equipment.new()
-	heirlooms.equip(Equipment.Socket.RING_LEFT, ring.call("fight_clock", 2))
-	_check(is_equal_approx(float(gear.totals({}, {}, heirlooms).get("buff_fight_clock", 0.0)), 9.0),
-			"and the heirlooms' doll stacks with them")
-	gear.equip(Equipment.Socket.RING_LEFT, ring.call("fight_clock", 29))
-	_check(is_equal_approx(float(gear.totals().get("buff_fight_clock", 0.0)), 30.0),
-			"but never past the cap of 30 (%s)" % gear.totals().get("buff_fight_clock"))
-	_check(not LootTable.STAT_LABELS.has("buff_fight_clock"), "and a buff is not a stat the character page lists")
-
-	var fight := Encounter.for_tile(Vector2i(2, 0), "grass")
-	fight.arm({"buff_fight_clock": 5.0})
-	_check(is_equal_approx(fight.seconds, Encounter.SECONDS + 5.0) and is_equal_approx(fight.time_left, fight.seconds),
-			"the fight clock reaches the fight (%s)" % fight.seconds)
-	var run := Encounter.farm(Vector2i(2, 0), "grass")
-	var before := run.seconds
-	run.arm({"buff_fight_clock": 5.0})
-	_check(is_equal_approx(run.seconds, before), "and a farm run, which has no clock, ignores it")
-	fight.arm({"item_rarity": 20.0, "buff_item_rarity": 30.0})
-	_check(is_equal_approx(fight.item_rarity, 50.0), "better item rarity adds to the item rarity stat (%s)" % fight.item_rarity)
-	return true
-
-
 func _test_item_levels() -> bool:
 	for stat: String in LootTable.STAT_LABELS:
 		_check(LootTable.LEVEL_FLAT.has(stat), "%s says what a level is worth to it" % stat)
@@ -2293,7 +2251,7 @@ func _test_item_levels() -> bool:
 			_check(is_equal_approx(float(sword.base_stats()[stat]), float(roundi(want))),
 					"a level-%d sword has %s %s, not the curve's %.2f"
 							% [level, stat, sword.base_stats()[stat], want])
-		# Damage is three whole points a level, which is the reason the flat step exists at all.
+		# Damage is a whole point a level, which is the reason the flat step exists at all.
 		var damage: float = sword.base_stats()["damage"]
 		_check(is_equal_approx(damage, float(roundi(damage))), "a level-%d sword's damage is whole" % level)
 		if level > 1:
@@ -2330,40 +2288,32 @@ func _test_item_levels() -> bool:
 	var table_damage: Variant = LootTable.stats_of("Wooden Sword")["damage"]
 	_check(table_damage == 1, "and the table itself was never written into: damage %s" % table_damage)
 
-	# Modifiers grow with the level too: a rolled value always lands in its level's band.
+	# Modifiers grow with the level too, each kind its own way.
 	for level in [1, 12]:
 		var ring := Item.rolled("Gold Ring", ItemRarity.Rarity.ELITE, rng, level)
 		for mod in ring.mods:
-			var band := ModifierTable.band_for(mod["id"], level)
+			var entry: Dictionary = ModifierTable.MODS[mod["id"]]
+			var band: Array = entry["range"]
 			var value := int(mod["value"])
-			_check(value >= int(band[0]) and value <= int(band[1]),
-					"%s rolled %d at level %d, outside %s" % [mod["id"], value, level, band])
-
-	# The rule the bands are built on: a level up always rolls better. The bottom of every band is
-	# above the top of the band a level under it, 180 levels deep -- just short of where whole numbers
-	# run out (ModifierTable's ponytail note), which is far past anywhere anybody is playing. A PLAYER buff is the exception by
-	# design: it climbs a logarithm to its cap and stops, so it only has to rise, and never overshoot.
-	for id: String in ModifierTable.MODS:
-		var entry: Dictionary = ModifierTable.MODS[id]
-		var under := ModifierTable.band_for(id, 1)
-		var overlapped := 0
-		for level in range(2, 181):
-			var band := ModifierTable.band_for(id, level)
-			if entry["kind"] == ModifierTable.Kind.PLAYER:
-				if int(band[1]) < int(under[1]) or int(band[1]) > int(entry["cap"]):
-					overlapped += 1
-			elif int(band[0]) <= int(under[1]):
-				overlapped += 1
-			under = band
-		_check(overlapped == 0, "%s: %d level(s) fail to beat the level under them" % [id, overlapped])
-		if entry["kind"] == ModifierTable.Kind.PLAYER:
-			var capped := ModifierTable.band_for(id, ModifierTable.PLAYER_CAP_LEVEL)
-			_check(int(capped[1]) == int(entry["cap"]), "%s reaches its cap of %d at level %d (%s)"
-					% [id, entry["cap"], ModifierTable.PLAYER_CAP_LEVEL, capped])
-			_check(ModifierTable.band_for(id, 100) == capped, "and stays there")
-			_check(int(ModifierTable.band_for(id, 10)[1]) > (int(entry["range"][1]) + int(entry["cap"])) / 3,
-					"%s climbs a logarithm: most of the way comes early (%s at level 10)"
-					% [id, ModifierTable.band_for(id, 10)])
+			_check(value == roundi(value), "every modifier value is whole: %s" % mod)
+			match entry["kind"]:
+				ModifierTable.Kind.FLAT:
+					# The stat's own per-level step, unless the entry names a smaller one of its own --
+					# which `added_damage` does, its band being sized for a piece that has no damage.
+					var step: float = float(entry.get("level_flat",
+							LootTable.LEVEL_FLAT.get(entry["stat"], 0.0)))
+					var low := maxi(1, roundi(LootTable.scale(entry["stat"], float(band[0]), level, step)))
+					var high := maxi(1, roundi(LootTable.scale(entry["stat"], float(band[1]), level, step)))
+					_check(value >= low and value <= high,
+							"%s rolled %d at level %d, outside %d-%d" % [mod["id"], value, level, low, high])
+				ModifierTable.Kind.PERCENT, ModifierTable.Kind.GLOBAL:
+					var grow := pow(LootTable.LEVEL_GROWTH, level - 1)
+					_check(value >= maxi(1, roundi(int(band[0]) * grow))
+							and value <= maxi(1, roundi(int(band[1]) * grow)),
+							"%s rolled %d at level %d, outside its multiplied band" % [mod["id"], value, level])
+				_:
+					_check(value >= int(band[0]) and value <= int(band[1]),
+							"a player buff keeps its written band: %s rolled %d" % [mod["id"], value])
 
 	# Through the save and back, unchanged.
 	var deep := Item.rolled("Ruby Amulet", ItemRarity.Rarity.RARE, rng, 14)
@@ -2478,8 +2428,8 @@ func _test_kinds() -> bool:
 		var jewel: bool = LootTable.slot_of(type) in ["ring", "amulet"]
 		_check(("added_item_rarity" in ModifierTable.pool_for(type)) == jewel,
 				"%s %s roll item rarity" % [type, "should" if jewel else "should not"])
-	_check(int(ModifierTable.band_for("added_gold_find", 30)[0]) > int(ModifierTable.band_for("added_gold_find", 1)[1]),
-			"gold find grows with the level like everything else (%s at level 30)"
+	_check(ModifierTable.band_for("added_gold_find", 30) == ModifierTable.band_for("added_gold_find", 1),
+			"gold find's band is the same at level 30 as at level 1 (%s)"
 					% [ModifierTable.band_for("added_gold_find", 30)])
 	return true
 

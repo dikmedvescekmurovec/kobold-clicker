@@ -10,7 +10,7 @@ extends Panel
 ## wearing one name.
 ##
 ## Three states, because there are three things true of an orb and the player has to tell them apart
-## at a glance in a row of eight:
+## at a glance in a row of six:
 ##
 ##   never found  -- the icon at ItemSlot.EMPTY_MARK_ALPHA, the faintness the empty ring and amulet
 ##                   sockets already use, so "nothing there" reads one way across the interface
@@ -20,8 +20,8 @@ extends Panel
 ## The card that says *why* an orb is grey is the panel's business, not this one's; this emits
 ## `hovered` and lets whoever owns it put the words somewhere with room for them.
 
-## The square, and the icon in it. Eight of these with SLOT_GAP between them come to exactly
-## BagPage.WIDTH, which is what settles both numbers.
+## The square, and the icon in it. Six of these with `BagPage.ORB_GAP` between them come to
+## BagPage.WIDTH less under a gap, which is what settles both numbers.
 const SIDE := 24
 ## Half the 32 px the icon is cut at. A 2:1 step, so a source pixel stays a square pair of pixels on
 ## screen; every other scale in this game is a whole number for the same reason `zoom` is.

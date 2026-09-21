@@ -9,7 +9,7 @@ extends RefCounted
 ## town actually is.
 ##
 ## A drawer is a plain Dictionary and this file does not read what is in it. `VendorStock` puts a
-## vendor's shelf there (`items`, `orbs`, `stocked_at`) and knows that shape; a drawer from a save
+## vendor's shelf there (`items`, `orbs`, `rerolls`) and knows that shape, and `BountyBoard` its postings; a drawer from a save
 ## written before there was anything to put in one simply has none of those keys, and the reader is
 ## what turns an absent key into "not stocked yet" rather than into a repair. So a later counter
 ## needs a key of its own here and nothing else, and nothing has to migrate.

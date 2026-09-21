@@ -55,7 +55,7 @@ const STATES := ["normal", "hover", "pressed", "disabled"]
 ## like the ones above, stretched to whatever it holds, but padded equally on all four sides, so one
 ## wearing a square mark comes out square. "brown" is a key of its own rather than a surface: these
 ## stand on the map rather than on a panel, which is also what they are brown for -- a green face in
-## the corner reads as an action to take, and these two are places to go.
+## the corner reads as an action to take, and the corner buttons are places to go.
 const ICON_FACES := {"BrownIconButton": "ui_btn_brown"}
 ## What such a face pads its mark by; tools/ui_kit.py draws its preview at the same number.
 const ICON_FACE_MARGIN := 4

@@ -11,11 +11,11 @@ extends RefCounted
 ## piece is rolled from and still owns the slot, the icon, the affix list and the labels; it is not
 ## where a piece already in the bag gets its numbers. The one hand that moves a level afterwards is
 ## the fortress smith (`Blacksmith`), and it moves the base stats with it, to exactly what
-## `scaled_stats` would have rolled there.
+## `scaled_stats` would have rolled there, and rolls the modifiers' numbers again in the new band.
 ##
 ## A drop is one object with two references -- the main scene's inventory and the fight's summary
-## both point at it. That is fine while nothing changes an item after it falls; the first verb that
-## does (identifying, upgrading, enchanting) has to know both views move together.
+## both point at it. The verbs that change a held piece -- the orbs and the smith -- therefore work only
+## on one the bag page has open, when no fight is holding the other reference.
 
 var type: String   ## a key of LootTable.ITEMS
 var rarity: ItemRarity.Rarity = ItemRarity.Rarity.COMMON
@@ -45,8 +45,8 @@ var plus := 0
 ## An Orb of Expansion has gone into it: one modifier more than its rarity allows, once per piece.
 var extra_slot := false
 
-## What one `plus` is worth to a piece's modifiers, in item levels. A percent band grows 25% a level,
-## so three levels is about double a plus -- it was +40% at 12%. A dial, unplayed.
+## What one `plus` is worth to a piece's modifiers, in item levels. A percent band grows 12% a level,
+## so three levels is about +40% a plus. A dial, unplayed.
 const PLUS_LEVELS := 3
 
 
@@ -192,17 +192,6 @@ func global_percents() -> Dictionary:
 	return out
 
 
-## The player-wide buffs this piece carries, as {id: value}. Not stats -- they name no stat -- so
-## `Equipment.totals` sums them apart, under a `buff_` key each, and holds each to its cap there.
-func player_buffs() -> Dictionary:
-	var out := {}
-	for mod in mods:
-		var entry: Dictionary = ModifierTable.MODS.get(mod.get("id", ""), {})
-		if entry.get("kind") == ModifierTable.Kind.PLAYER:
-			out[mod["id"]] = float(out.get(mod["id"], 0.0)) + float(mod["value"])
-	return out
-
-
 ## The one modifier a smith has pinned to this piece, or {} when none is. The dictionary itself, not
 ## a copy: whoever holds it holds the modifier, which is how the orbs put it back where they found it.
 func locked_mod() -> Dictionary:
@@ -257,8 +246,8 @@ func stat_lines() -> PackedStringArray:
 ## the ink a base stat wears, as fixed as they are.
 ##
 ## `detailed` puts the band the value rolled in at this piece's level beside it, "+14(8-20)% increased Damage":
-## what a Divine could make of it. A smith's upgrade lifts the level and not the roll, so a value can
-## sit under its band, which is the truth about it.
+## what a Divine could make of it. A line held fast while the level moved can sit under its band,
+## which is the truth about it.
 func mod_lines(detailed := false) -> PackedStringArray:
 	var lines := PackedStringArray()
 	for mod in mods:

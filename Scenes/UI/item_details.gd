@@ -3,8 +3,8 @@ extends RefCounted
 ## What one item is, written out: its name and rarity in that rarity's colour, what the piece itself
 ## is worth, and then whatever it rolled on top.
 ##
-## Both places that inspect an item fill their panel from here -- the bag, and the fight's own panel
-## when a drop is clicked -- for the same reason ItemSlot draws both of their squares: an item that
+## Every place that inspects an item fills its panel from here -- the bag, the fight's own panel
+## when a drop is clicked, a shelf, the cards -- for the same reason ItemSlot draws both of their squares: an item that
 ## reads one way in one place and another way in the other is two things to keep in step, and they
 ## would not stay in step.
 ##
@@ -17,8 +17,8 @@ extends RefCounted
 ## What a smith has left on a piece reads here and so reads everywhere a piece is shown: "Broken"
 ## under its rarity, and the locked modifier (`Item.locked_line`) in ink among the rust.
 ##
-## `against` is what this one would replace, when there is anything: it adds a last block saying what
-## wearing this would gain or lose, which is the question the bag is actually being read to answer.
+## `against` is what this one would replace, when there is anything: it adds a block, first under the
+## name, saying what wearing this would gain or lose, which is the question the bag is actually being read to answer.
 ## A list rather than one piece, because a greatsword takes the offhand off with the weapon.
 static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[Item] = []) -> void:
 	for child: Node in rows.get_children():

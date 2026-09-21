@@ -9,7 +9,7 @@ Use the console build, so output reaches the terminal: `C:\Users\Dik\Godot_v4.7.
 |---|---|
 | Import sprites and refresh the class cache (after adding scripts or sprites) | `--headless --path . --editor --quit` |
 | **All tests** (run before calling anything done) | `python tests/run_all.py` -- every `tests/test_*.gd`, failing on a non-zero exit **or any `SCRIPT ERROR`**: Godot exits 0 when a script a suite depends on does not parse, so a bare exit code lies |
-| One or more suites | `python tests/run_all.py combat inventory` -- `hex_map` (map, tileset), `generation` (generation, towns, map builder, map save), `ui_theme`, `enemies` (roster, sprite geometry), `combat`, `skills`, `inventory` (loot, rarity, inventory, save, heirlooms), `town` (services, prices, selling, buying, vendor stock, town state, bounty board, fortuneteller, transcending), `camp` (rates, earnings, the save) |
+| One or more suites | `python tests/run_all.py combat inventory` -- `hex_map` (map, tileset), `generation` (generation, towns, map builder, map save), `ui_theme`, `enemies` (roster, sprite geometry), `combat`, `skills`, `inventory` (loot, rarity, inventory, save, heirlooms), `town` (services, prices, selling, buying, vendor stock, town state, bounty board, fortuneteller, transcending), `camp` (rates, earnings, the save), `big_number` |
 | A suite with its full output | `--headless --path . -s res://tests/test_<suite>.gd` |
 | Run the game briefly | `--headless --path . --quit-after 30` |
 | The town balance table (prices against what a fight pays, at tile levels 1/3/5/8/10) | `--headless --path . -s res://tests/balance_town.gd` -- prints only, asserts nothing; run it before and after moving a dial in `Scenes/Town/` |
@@ -28,11 +28,13 @@ Each code folder has its own `CLAUDE.md`: a one-line description per file plus t
 
 **Map** — details in `Scenes/Map/CLAUDE.md`: `hex_grid.gd` (`HexGrid`), `sheet_meta.gd` (`SheetMeta`), `hex_tileset.gd` (`HexTileset`), `hex_map.tscn` / `hex_map.gd` (`HexMap`), `player_token.gd` (`PlayerToken`), `fog_overlay.gd` (`FogOverlay`), `hex_highlight.gd`, `environment_generator.gd` (`EnvironmentGenerator`), `town_world.gd` (`TownWorld`), `road_network.gd` (`RoadNetwork`), `map_builder.gd` (`MapBuilder`), `tile_names.gd` (`TileNames`), `map_save.gd` (`MapSave`), `ambient.gd` (`Ambient`), `chest_pointer.gd` (`ChestPointer`), `ice_overlay.gd` (`IceOverlay`)
 
+**Shared** — `Scenes/big_number.gd` (`BigNumber`, how every growing quantity is written) and `Scenes/safe_file.gd` (`SafeFile`, how every save is written); both are covered in `Scenes/CLAUDE.md`.
+
 **Settings** — `Scenes/settings.gd` (`Settings`): static music / sfx / animation level / detailed item lines / the dev "show all uniques" and "show all chests", kept in `user://settings.cfg`.
 
 **Main scene** — `Scenes/main_scene.gd`: seeds, zoom, `ui_scale`, start-up and saves, the tile panel and corner buttons, which left-hand page is up, tips, and opening and closing fights. Details and cross-area rules in `Scenes/CLAUDE.md`.
 
-**Combat** — details in `Scenes/Combat/CLAUDE.md`: `encounter.gd` (`Encounter`), `fight_ledger.gd` (`FightLedger`), `drops_view.gd` (`DropsView`), `combat_actor.gd` (`CombatActor`), `combat_scene.tscn` / `combat_scene.gd` (`CombatScene`)
+**Combat** — details in `Scenes/Combat/CLAUDE.md`: `encounter.gd` (`Encounter`), `fight_ledger.gd` (`FightLedger`), `drops_view.gd` (`DropsView`), `combat_actor.gd` (`CombatActor`), `combat_scene.tscn` / `combat_scene.gd` (`CombatScene`), `camp.gd` (`Camp`), `camp_scene.gd` (`CampScene`)
 
 **Towns** — details in `Scenes/Town/CLAUDE.md`: `town_services.gd` (`TownServices`), `town_prices.gd` (`TownPrices`), `town_state.gd` (`TownState`), `vendor_stock.gd` (`VendorStock`), `blacksmith.gd` (`Blacksmith`), `bounty_board.gd` (`BountyBoard`), `fortune_teller.gd` (`FortuneTeller`)
 
@@ -40,7 +42,7 @@ Each code folder has its own `CLAUDE.md`: a one-line description per file plus t
 
 **Skills** — details in `Scenes/Skills/CLAUDE.md`: `skill_tree.gd` (`SkillTree`), `skills.gd` (`Skills`)
 
-**Items** — details in `Scenes/Items/CLAUDE.md`: `loot_table.gd` (`LootTable`), `item_rarity.gd` (`ItemRarity`), `modifier_table.gd` (`ModifierTable`), `equipment.gd` (`Equipment`), `item.gd` (`Item`), `orb_table.gd` (`OrbTable`), `super_orb_table.gd` (`SuperOrbTable`), `unique_table.gd` (`UniqueTable`), `inventory.gd` (`Inventory`)
+**Items** — details in `Scenes/Items/CLAUDE.md`: `loot_table.gd` (`LootTable`), `item_rarity.gd` (`ItemRarity`), `modifier_table.gd` (`ModifierTable`), `equipment.gd` (`Equipment`), `item.gd` (`Item`), `orb_table.gd` (`OrbTable`), `super_orb_table.gd` (`SuperOrbTable`), `unique_table.gd` (`UniqueTable`), `player_level.gd` (`PlayerLevel`), `inventory.gd` (`Inventory`)
 
 **UI** — details in `Scenes/UI/CLAUDE.md`: `bag_page.gd` (`BagPage`), `skills_page.gd` (`SkillsPage`), `town_page.gd` (`TownPage`), `transcend_page.gd` (`TranscendPage`), `bounty_list.gd` (`BountyList`), `settings_page.gd` (`SettingsPage`), `item_generator.gd` (`ItemGenerator`), `collection_page.gd` (`CollectionPage`), `character_panel.gd` (`CharacterPanel`), `character_page.gd` (`CharacterPage`), `juice.gd` (`Juice`), `cursors.gd` (`Cursors`), `palette.gd` (`Palette`), `item_details.gd` (`ItemDetails`), `item_slot.gd` (`ItemSlot`), `item_card.gd` (`ItemCard`), `tip_card.gd` (`TipCard`), `coins.gd` (`Coins`), `kill_pips.gd` (`KillPips`), `health_bar.gd` (`HealthBar`), `orb_slot.gd` (`OrbSlot`), `orb_card.gd` (`OrbCard`), `loot_beam.gd` (`LootBeam`), `skill_slot.gd` (`SkillSlot`), `skill_tree_view.gd` (`SkillTreeView`), `skill_card.gd` (`SkillCard`), `ui_theme.gd` (`UITheme`)
 

@@ -1,8 +1,11 @@
 # AI-sprites generator
 
 Rebuilds the 420-sprite hex tileset in `../AI-sprites/` (24 environments, 63 roads, 18 towns, 315 blend overlays, plus the spritesheet and JSON),
-the 18-sprite 9-slice UI kit in `../AI-sprites/ui/` (2 panels, 16 buttons),
-and the six per-environment slimes in `../Assets/Enemies/` (21 frames each, recoloured from the blue slime pack).
+the 120 battle backdrops in `../Assets/Area/`,
+the six per-environment slimes in `../Assets/Enemies/` (21 frames each, recoloured from the blue slime pack),
+the combat nameplate's health-bar parts in `../Assets/UI/`,
+and the gear icons no bought pack draws (55 item bases and ten uniques), which `../tools/ui_kit.py` imports and writes to `../Assets/Gear/`.
+The earlier 18-sprite 9-slice UI kit in `../AI-sprites/ui/` (2 panels, 16 buttons) is still buildable but no longer wired to anything: the interface is cut from a bought pack by `tools/ui_kit.py`.
 Everything is procedural and deterministic: the same code always produces the same pixels.
 
 Godot skips this folder because of `.gdignore`.
@@ -24,10 +27,13 @@ Godot skips this folder because of `.gdignore`.
 | `python qa.py areas <tag> [env...]` | Battle backdrops: skeleton, variant, palette-size, layout-twin and cross-environment `cousins` checks, plus the 6x5 contact sheet `qa/area_sheet_<tag>.png` and the layouts sheet. Name environments to scope it -- a full pass is over two minutes, one place is ten seconds |
 | `python qa.py frozen check` | The desert's twenty scenes against their recorded hashes. Two seconds; run it after anything that touches a shared primitive |
 | `python qa.py audit` | Every piece name every plan asks for, resolved against the kit that would draw it, plus whether anything anchored to a rock actually sits on it. Under a second, no rendering |
-| `python qa.py ui <tag>` | 9-slice UI: size, silhouette, outline and 8-periodicity checks, plus `qa/ui_sheet_<tag>.png` and a `qa/ui_mock_<tag>.png` showing every state and the panels stretched from 16 px to 428 px |
+| `python qa.py hpbar <tag>` | The health bar's nine parts: checks, plus `qa/hpbar_<tag>.png` |
+| `python qa.py gear <tag>` | The generated gear icons among the pack's own: doubling, soft alpha, outline room, determinism, colour count and outline-ink checks, plus `qa/gear_<tag>.png` |
+| `python qa.py ui <tag>` | The old 9-slice UI (unwired): size, silhouette, outline and 8-periodicity checks, plus `qa/ui_sheet_<tag>.png` and a `qa/ui_mock_<tag>.png` showing every state and the panels stretched from 16 px to 428 px |
 | `python build.py` | Exports every hex PNG through Aseprite into `../AI-sprites/`, writes the spritesheet and JSON, then verifies each file pixel by pixel |
 | `python build_ui.py` | The same for the UI sprites, into `../AI-sprites/ui/` with its own `ui_sheet.json` |
 | `python build_areas.py` | Writes the 120 backdrops into `../Assets/Area/<env>_<variant>_<n>.png` at 4x, prunes names it no longer writes, and reads every file back to check it |
+| `python build_hpbar.py` | Writes the health bar's parts loose into `../Assets/UI/` and reads every file back. No Aseprite |
 | `python build_slimes.py` | Writes the six slimes into `../Assets/Enemies/<Env> Slime/` and reads every file back to check it. No Aseprite: the source is already a PNG pack and these ship as ordinary RGBA sprites, not as part of an indexed atlas |
 
 `qa/` output is preview-only and git-ignored. `build.py` overwrites the files in `../AI-sprites/` (change `OUT` in `build.py` to write elsewhere).
@@ -52,8 +58,11 @@ Godot skips this folder because of `.gdignore`.
 | `lay_<env>.py` | One culture's own twelve plans, four to a variant |
 | `areaplan.py` | The settlement layout engine: `Site`, the `Land`/`Row`/`Course`/`Fix`/`Belt` steps, and the `KIT`/`TREE`/`LATE` tables. `KIT[env]` -- there is no style name in between, because nothing is shared. A plan is an ordered list of steps and list order is draw order |
 | `arealayouts.py` | A thin index over the six `lay_<env>` catalogues: `LAYOUTS[env][variant]`, one plan per layout index |
-| `ui.py` | 9-slice UI: `RectTile` (rectangular, not hex), rect primitives, the two panels and the 16 buttons |
-| `build.py`, `build_ui.py`, `build_slimes.py`, `emit.lua` | Export through Aseprite in batch mode, JSON metadata, verification. `emit.lua` takes per-sprite `w`/`h`, so both builds share it |
+| `hpbar.py` | The health bar's parts: a left cap, a right cap and a track in three tier colourways, in `hexlib.PALETTE` |
+| `gearlib.py`, `gear.py` | The gear icons: `gearlib` is the kit and what was measured off the RPG pack, `gear` one function a kind (`ICONS`) and a unique (`UNIQUES`). No build script: `tools/ui_kit.py` writes them |
+| `ui.py` | The old 9-slice UI (unwired): `RectTile` (rectangular, not hex), rect primitives, the two panels and the 16 buttons |
+| `build.py`, `build_ui.py`, `buildlib.py`, `emit.lua` | Export through Aseprite in batch mode, JSON metadata, verification. `emit.lua` takes per-sprite `w`/`h`, and `buildlib.py` holds the Aseprite call and the read-back, so both builds share them |
+| `build_areas.py`, `build_slimes.py`, `build_hpbar.py` | The builds that skip Aseprite: straight to RGBA PNGs under `../Assets/`, every file read back and compared |
 
 ## Rules that keep the set consistent
 - **Geometry:** 56×64 pointy-top hex. Place tiles at 56 px columns and 48 px rows, with odd rows shifted 28 px.
@@ -77,7 +86,7 @@ Godot skips this folder because of `.gdignore`.
 ### Battle backdrops
 - **The reference sets the grid:** `Assets/Area/Summer2.png` is 2304x1296 but blocky at exactly 4x, so the art is **576x324** and ships nearest-upscaled. `arealib.W/H/SCALE` hold that.
 - **One skeleton, six places:** every scene has the horizon at y=200 and the land starting at y=202, with four bands under it. An enemy standing at a given height stands in the same spot whatever the backdrop, and `qa.py areas` fails if a scene moves the land.
-- **A settlement is a plan, not a function.** `areaplan.py` walks a cursor along a span dropping seeded pieces, so two seeds give two villages rather than one village jittered; `arealayouts.py` says which plan each (style, variant) builds. The bar the engine had to clear was the ksar -- a `Land("mesa")` publishes a standing line, a `Course` walks down it and draws the highest houses first, which is why it reads as a stack of cubes and not a pile.
+- **A settlement is a plan, not a function.** `areaplan.py` walks a cursor along a span dropping seeded pieces, so two seeds give two villages rather than one village jittered; `arealayouts.py` says which plan each (environment, variant) builds. The bar the engine had to clear was the ksar -- a `Land("mesa")` publishes a standing line, a `Course` walks down it and draws the highest houses first, which is why it reads as a stack of cubes and not a pile.
 - **Measure a layout family by its roofline, not by its pixels.** Two seeds of one plan already differ in thousands of pixels and still read as one town, and a whole-image diff passes at about a third whatever you do, because the sky and the cover are seeded anyway. `qa.py areas` takes the topmost row where a scene differs from `plain` at the same layout -- which isolates the settlement exactly -- and counts columns whose roofline moved, out of the columns that have anything built in them.
 - **Six places, six ways of building, and nothing shared between them.** Each environment commits
   to one wall material, one roof logic and one signature motif, and no two share any of the three:
@@ -123,7 +132,7 @@ Godot skips this folder because of `.gdignore`.
 - **The pale top is the cloud ceiling, not a band.** Each sky ramp starts at its deepest blue and `overcast()` paints the pale sheet over it with a ragged edge; baking the pale into the ramp gives a dead straight line across the top of the picture.
 - **Ground reads as noise when every mark is the same size.** Each cover is big soft `patches` first, then mid-scale marks (`furrows`, `ripple_layer`, `clump_layer`), then a few `boulders` -- never one dense speckle layer.
 - **A road runs across the shot, not into it.** The fight happens on the near band, and at this scale a vanishing point is four pixels wide and reads as a spike, so the road variant lays a track across the front and a second one out in the field. Roads on the map run town to town anyway.
-- **The desert builds in earth, so it gets its own vocabulary.** Re-tinting a gabled hut sand-colour gives a European village in a desert; `areabuild`'s mud set is drawn from the kasbah references instead -- walls that batter inward as they rise, flat roofs behind a parapet, pointed merlons, a lattice pressed into the upper courses. The town is Ait Benhaddou: houses placed by walking down a crag in courses and drawing the highest first, so every roof line sits against the wall behind it. Four towers of one height at one spacing read as a fence, so nothing in the fortress is mirrored and its quarter stands a storey above the curtain.
+- **The desert builds in earth, so it gets its own vocabulary.** Re-tinting a gabled hut sand-colour gives a European village in a desert; `bld_desert`'s mud set is drawn from the kasbah references instead -- walls that batter inward as they rise, flat roofs behind a parapet, pointed merlons, a lattice pressed into the upper courses. The town is Ait Benhaddou: houses placed by walking down a crag in courses and drawing the highest first, so every roof line sits against the wall behind it. Four towers of one height at one spacing read as a fence, so nothing in the fortress is mirrored and its quarter stands a storey above the curtain.
 - **The desert settlement goes in front of its cover, not behind it.** Its cover is dune ripples and dust patches drawn right across the mid band, which scribble over a mud wall rather than standing in front of it. The palm belt each desert settlement ends with is what stands in front instead -- and that belt stays broken and low, because a continuous green stripe across a desert reads as a lawn.
 - **Settlements sit on the mid band, behind the cover**, on a low trodden `_patch`: anything taller than about ten pixels reads as a wall of earth behind the houses rather than as ground.
 - **Mountains are triangles.** A noise ridge makes hills; `mountain_range` overlaps straight-sloped peaks and snows the ones above the snow line. Distant ranges are mixed toward `PEAKS[env]["haze"]`.

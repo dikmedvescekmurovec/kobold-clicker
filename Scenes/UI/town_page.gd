@@ -13,8 +13,8 @@ extends Control
 ## The smith is the same arrangement with no shelf at all: he works on whatever the bag has open, and
 ## his tab is the two prices for it and the reasons he will not. The board is the third shape again:
 ## three postings that say who to kill, what it pays and where that monster lives, with a Claim on a
-## finished one. The fortuneteller is the fourth: a list of what she can be asked, each with its
-## price, and what she said in its place once one has been paid for (`FortuneTeller`).
+## finished one. The fortuneteller is the fourth: two grids of what she can be asked, each square with
+## its price, and what she said in their place once one has been paid for (`FortuneTeller`).
 ##
 ## Built like `SkillsPage`: it takes the inventory and the save path, `open()` redraws it, `layout()`
 ## fits it to the window, `closed` is its X, and it carries `UITheme.theme()` itself because it hangs
@@ -61,7 +61,7 @@ const PRICE_COIN := 8
 ## it has to reach the foot of a 648 px window without going past it.
 const ROW_GAP := 4
 
-## What each counter wears on its tab. A mark rather than a word, so a fortress's four stand in one
+## What each counter wears on its tab. A mark rather than a word, so a fortress's five stand in one
 ## row: in words they took two, and the second row was what pushed the gear tab past the window's
 ## foot. The full name is the heading under them and the tab's tooltip.
 const TAB_ICONS := {
@@ -308,8 +308,8 @@ func _fill() -> void:
 	if _offer != null:
 		_fill_offer()
 		return
-	# The shelf and the lines under it scroll, because a fortress carries two rows of tabs over six
-	# squares and their prices and that is more than a 648 px window has room for. The tabs and the
+	# The shelf and the lines under it scroll, because tabs, a heading, six squares and their prices
+	# and an open piece's lines are more than a 648 px window has room for. The tabs and the
 	# counter's name stay pinned above, so what moves is the counter's own contents.
 	var body := _scrolled(ROW_GAP)
 	body.add_child(UITheme.label("Buy"))
@@ -472,7 +472,7 @@ func _fill_offer() -> void:
 ##
 ## Each posting carries **Accept**, and only one bounty anywhere may be out at a time: kills count
 ## against the accepted one and nothing else, and the rest are refused until it is handed in. A
-## handed-in posting drops off the board and its square comes back at the next restock.
+## handed-in posting stays on the board, spent, until all three are in and new work is posted.
 func _fill_board() -> void:
 	# Having read a board is what puts the journal in the corner, so it is written down as it is drawn.
 	if BountyBoard.see(_drawer):

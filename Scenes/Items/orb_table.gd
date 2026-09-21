@@ -63,13 +63,13 @@ const ORBS := {
 	},
 }
 
-## How often a body carries an orb at all. Read beside LootTable's own pair: an orb is a little more
-## common than a piece of gear off the same body, because one piece of gear is worth a great many
-## Transmutation orbs and a currency nobody accumulates is a currency nobody spends.
 ## Kills the player makes, across every fight, before the first orb can fall. Orbs change gear, so
 ## they wait until the player has had time to find some.
 const FIRST_ORB_KILLS := 50
 
+## How often a body carries an orb at all. Read beside LootTable's own pair: an orb is a little more
+## common than a piece of gear off the same body, because one piece of gear is worth a great many
+## Transmutation orbs and a currency nobody accumulates is a currency nobody spends.
 const TIER_CHANCE := {
 	EnemyRoster.Tier.COMMON: 0.05,
 	EnemyRoster.Tier.ELITE: 0.22,

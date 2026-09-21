@@ -215,7 +215,7 @@ static func reroll_value(id: String, rng: RandomNumberGenerator, level := 1) -> 
 
 ## A rolled value carried to another level: as far up `to_level`'s band as it stood in `from_level`'s.
 ## What an heirloom's modifiers go through when the world ends (`Item.transcend`). A value outside
-## its band -- a smith's upgrade lifts the level and leaves the roll under it -- is held to the band's
+## its band -- a line held fast while the level moved sits under it -- is held to the band's
 ## ends, and a band of one number counts as its top.
 static func rescaled(id: String, value: int, from_level: int, to_level: int) -> int:
 	var from := band_for(id, from_level)

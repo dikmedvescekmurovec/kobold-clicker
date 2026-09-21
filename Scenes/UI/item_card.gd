@@ -10,8 +10,8 @@ extends PanelContainer
 ## whatever draws a square next.
 ##
 ## Not Godot's tooltip, for `OrbCard`'s reason: a tooltip is its own window and cannot inherit
-## `ui_scale`. And `TextPanel` rather than the wood the other cards stand on, because the darker half
-## of the rarity ramp that `ItemDetails` writes in is picked to be read on cream.
+## `ui_scale`. On `TextPanel`, as every card is, because the darker half of the rarity ramp that
+## `ItemDetails` writes in is picked to be read on cream.
 
 ## `OrbCard.WIDTH`: what the game already uses for a block of text that floats.
 const WIDTH := 150.0

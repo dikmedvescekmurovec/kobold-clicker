@@ -1,6 +1,7 @@
 extends Node2D
 
-## Seeds for the town world and the rendered map. 0 picks a random seed each run; the used seeds are printed.
+## Seeds for the town world and the rendered map. 0 carries on with the save's, or picks a random one when
+## there is no save; any other value replaces a save of another world. The used seeds are printed.
 @export var world_seed := 0
 @export var map_seed := 0
 ## World spot shown at the map's center cell (0, 0), which is the middle of the screen. The row must be even.
@@ -13,7 +14,7 @@ const ZOOM_MAX := 6.0
 ## The same for the UI panel. Pixellari only renders cleanly at its native 16 px, so the way to make
 ## the interface smaller is to draw its pixels smaller, not to shrink the font.
 @export var ui_scale := 2.0
-## Where the collection log is kept. The tests and the screenshot scripts point this somewhere else
+## Where the inventory is kept. The tests and the screenshot scripts point this somewhere else
 ## before the scene enters the tree, so they never read or overwrite the player's own inventory.
 @export var inventory_path := Inventory.SAVE_PATH
 ## Where the explored map is kept. Pointed elsewhere by the tests and the screenshot scripts for the
@@ -25,7 +26,7 @@ const ZOOM_MAX := 6.0
 ## `inventory_path` elsewhere -- still see what a town of each tier really has.
 @export var debug_all_services := true
 
-## The marks the three corner buttons wear. A chest for what has been carried home, a star for what
+## The marks the corner buttons wear. The first three: a chest for what has been carried home, a star for what
 ## the player has become and a scroll for the work they have taken on: all three are places to go
 ## rather than actions to take, which is what the brown face says and what puts them in a row of their
 ## own rather than among the panels' green buttons.
@@ -101,7 +102,7 @@ var bag_page: BagPage
 ## one left-hand page that can also stand at a town's counter, in the bag's place (`_counter_page`).
 var heirloom_page: BagPage
 var skills_page: SkillsPage
-## The bounties taken on, everywhere: a left-hand page like the other two, so progress and the walk to
+## The bounties taken on, everywhere: a left-hand page like the rest, so progress and the walk to
 ## the monster are readable away from the town that posted the work.
 var bounty_page: BountyList
 ## Sound, animations, what an item says, and Reset. A left-hand page like the rest, always on offer.
@@ -117,7 +118,7 @@ var _skills_button: Button
 var _bounty_button: Button
 var _settings_button: Button
 var _collection_button: Button
-## There once a wall has left a choice to spend or an heirloom is held, and the one corner button a
+## There while an heirloom is held, and the one corner button a
 ## town leaves standing: pressed there it swaps the bag and the heirlooms at the counter.
 var _heirloom_button: Button
 ## The card beside the square under the cursor. Kept so its Alt comparison can follow the doll of
@@ -173,7 +174,7 @@ var _flashes := {}
 var _camp: CampScene
 ## The weather and the day over the map.
 var _ambient: Ambient
-## The glimmer pointing at the chest a fortuneteller was paid to find (`_sync_chest`).
+## The badge pointing at the chest a fortuneteller was paid to find (`_sync_chest`).
 var _chest_pointer: ChestPointer
 ## The fortuneteller's aimed spell while its land is being chosen: which one it is ("" when nobody is
 ## choosing), what the click will cost, the town whose drawer it is spent out of, and the panel saying
@@ -227,10 +228,7 @@ func _ready() -> void:
 	map.dragged.connect(_on_map_dragged)
 	map.cell_aimed.connect(_on_cell_aimed)
 	view.arrived.connect(_on_player_arrived)
-	# Move speed and the player-wide walk speed buff are both percentages off SECONDS_PER_TILE.
-	map.player.move_speed = func() -> float:
-		var stats := inventory.stats()
-		return float(stats.get("move_speed", 0.0)) + float(stats.get("buff_walk_speed", 0.0))
+	map.player.move_speed = func() -> float: return float(inventory.stats().get("move_speed", 0.0))
 	# Before the interface, which is what decides whether the crown stands in the corner.
 	_credit_walls()
 	_build_ui()
@@ -254,8 +252,8 @@ func _ready() -> void:
 		_open_camp()
 
 
-## Points the star at the chest a fortuneteller was paid to find, for as long as it stands: a chest
-## goes when its tile is charted, and the star and what was written down go with it. Nothing points
+## Points the badge at the chest a fortuneteller was paid to find, for as long as it stands: a chest
+## goes when its tile is charted, and the badge and what was written down go with it. Nothing points
 ## at a chest for nothing any more.
 func _sync_chest() -> void:
 	var spot := FortuneTeller.chest(inventory.fortunes)
@@ -1036,7 +1034,7 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 	_check_tips()
 
 
-## Every wall down in this world that has not yet paid its heirloom pick pays it, and the save says
+## Every wall down in this world that has not yet paid its super orb pays it, and the save says
 ## so. Asked wherever a wall can have fallen -- a tile charted -- and once at start-up, which is what
 ## pays a save from before there were heirlooms for the walls it already has down.
 func _credit_walls() -> void:
@@ -1060,15 +1058,15 @@ func _on_combat_retry(cell: Vector2i) -> void:
 	_on_chart_pressed()
 
 
-## The player walks to the tile; both buttons stay disabled until they get there.
+## The player walks to the tile; the tile panel's buttons stay hidden until they get there.
 func _on_move_pressed() -> void:
 	var cell := map.selected_cell
 	print("Walking to %s, %d tile(s) away" % [cell, view.move_to(cell).size()])
 	_update_buttons()
 
 
-## The one place the map's own state changes: charting a tile walks the player onto it, and the
-## map grows on arrival. So this is where it is written down, and a crash costs at most the step in
+## Where the map's own state has changed: charting a tile walks the player onto it (and a paid scour
+## is the one other change, `_on_cell_aimed`). So this is where it is written down, and a crash costs at most the step in
 ## progress rather than the session.
 func _on_player_arrived(cell: Vector2i) -> void:
 	print("Arrived at %s" % cell)
@@ -1192,8 +1190,8 @@ func _bank_run() -> void:
 		bag_page.refresh()
 
 
-## The square buttons in a column, the ones there are closed up: what you carry, then what you are,
-## then what you have promised to do. Under the character panel on the map; beside whichever page is
+## The square buttons in a column, the ones there are closed up: what you carry (the bag, then the
+## heirlooms), what you are, what you have promised to do, then the settings and the log. Under the character panel on the map; beside whichever page is
 ## up -- which has that panel's corner -- so one press goes from page to page without an X between.
 func _place_corner() -> void:
 	# The bag measures itself as it is built (`laid_out`), before the pages after it exist.

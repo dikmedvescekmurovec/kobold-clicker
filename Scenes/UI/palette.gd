@@ -22,7 +22,7 @@ const SLOT_TAN_DK := Color("825c2f")
 ## The rarity ramp, one pair per step. The light one is for a border on the dark socket of an item
 ## square, the dark one for that rarity's name on the bone text panel: a colour that sings on the
 ## socket is nearly invisible on bone, which is the same reason UITheme keeps two tables of font
-## colours. LILAC is dark enough to do both jobs, and GOLD above is the unique step, unrolled so far.
+## colours. LILAC is dark enough to do both jobs, and GOLD above is the unique step.
 const STONE_LT := Color("a6aabb")
 const LEAF_LT := Color("86c25a")
 const LEAF := Color("58a046")

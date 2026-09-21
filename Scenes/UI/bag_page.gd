@@ -1,7 +1,7 @@
 class_name BagPage
 extends Control
 ## The bag against the left edge, with the character sheet standing beside it and the orb tray at its
-## foot. Showing or hiding this node opens or closes all of it. Design notes in Scenes/UI/CLAUDE.md.
+## foot. Showing or hiding this node opens or closes all of it. Design notes in Scenes/DESIGN.md.
 ##
 ## Children, in draw order: the bag panel, the sheet, then the orb card, which overhangs the sheet.
 
@@ -92,7 +92,7 @@ const DOLL_SOCKETS := {
 ## Whose grid and whose doll this page is: the player's inventory, or -- on the heirlooms' page --
 ## the stash inside it (`Inventory.stash`), which is an inventory too and so needs no second page.
 var inventory: Inventory
-## The player's inventory whichever page this is: the purse, the orbs, the tips, the picks, and the
+## The player's inventory whichever page this is: the purse, the orbs, the tips, the super orbs, and the
 ## one thing that is ever saved. The same object as `inventory` on the ordinary bag.
 var _purse: Inventory
 ## Whether this is the heirlooms' page. An heirloom is not sold, not thrown away by the level and not

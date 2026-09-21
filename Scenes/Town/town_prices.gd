@@ -25,7 +25,7 @@ const SELL_SHARE := 0.20
 
 ## What one level off the smith's hammer costs, in bodies at the piece's **own** level -- so walking
 ## a piece up the map gets dearer with every step, the way the ground it is walking towards does.
-## Twenty bodies is a little more than buying a plain piece off a shelf (twelve) and a fraction of
+## Twenty bodies is a little more than buying a plain piece off a shelf (fifteen) and a fraction of
 ## buying a good one, which is the shape it should have: an upgrade is worth doing to a piece you
 ## already want, and never worth doing to one you would otherwise sell.
 const UPGRADE_BODIES := 20.0

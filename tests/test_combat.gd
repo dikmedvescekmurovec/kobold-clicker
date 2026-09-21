@@ -473,7 +473,7 @@ func _test_gold() -> bool:
 
 	# Every body pays, unlike every body dropping something: what the fight has earned is the sum of
 	# what fell off it, and nothing is rolled for.
-	var fight := Encounter.for_tile(Vector2i(2, 0), "grass")
+	var fight := Encounter.for_tile(Vector2i(4, 0), "grass")
 	var purses: Array = []
 	fight.gold_dropped.connect(func(_index: int, amount: float) -> void: purses.append(amount))
 	fight.start()
@@ -509,7 +509,7 @@ func _test_experience() -> bool:
 	_check(Encounter.xp_of("Skeleton Warrior", far) < Encounter.xp_of("Medusa", far),
 			"an elite is worth more than a common of the same size")
 
-	var fight := Encounter.for_tile(Vector2i(2, 0), "grass")
+	var fight := Encounter.for_tile(Vector2i(4, 0), "grass")
 	var drops: Array = []
 	fight.xp_dropped.connect(func(_index: int, amount: int) -> void: drops.append(amount))
 	fight.start()
@@ -821,18 +821,17 @@ func _test_health() -> bool:
 	_check(Encounter.base_hp(MapBuilder.CENTER) == Encounter.BASE_HP, "an ordinary body in the middle")
 	_check(Encounter.base_hp(far) > Encounter.base_hp(near), "and a tougher one at the edge")
 
-	# Health is exponential in the walk, not a flat sum: every step multiplies by HP_GROWTH, and every
-	# level of the tile past the second by LEVEL_HP_GROWTH, so the frontier pulls away from whatever the
-	# player is carrying at the pace gear grows. Checked step by step out to the wall, with the slack
-	# that rounding to whole points of health allows. Only to the wall: past one the curve has a third
-	# term, pinned below.
+	# Health is exponential in the walk, not a flat sum: every step multiplies by HP_GROWTH, so the
+	# frontier pulls away from whatever the player is carrying. Checked step by step out to the wall,
+	# with the slack that rounding to whole points of health allows. Only to the wall: past one the
+	# curve has a second term, pinned below.
 	for steps in range(1, MapBuilder.START_LAND_RADIUS + 2):
 		var here := Vector2i(steps, 0)
 		var back := Vector2i(steps - 1, 0)
 		_check(HexGrid.distance(MapBuilder.CENTER, here) == steps, "cell %d is %d steps out" % [steps, steps])
 		_check(Encounter.base_hp(here) > Encounter.base_hp(back),
 				"step %d is tougher than step %d" % [steps, steps - 1])
-		var want := Encounter.BASE_HP * pow(Encounter.HP_GROWTH, steps) * _level_term(here)
+		var want := Encounter.BASE_HP * pow(Encounter.HP_GROWTH, steps)
 		_check(absf(Encounter.base_hp(here) - want) <= 0.5,
 				"step %d is %d, not the curve's %.1f" % [steps, Encounter.base_hp(here), want])
 
@@ -851,7 +850,7 @@ func _test_health() -> bool:
 					"%d wall(s) stand inside step %d" % [walls, steps])
 	for walls in range(0, 4):
 		var steps := wall_ring + walls * MapBuilder.WALL_STEP + 1
-		var want := Encounter.BASE_HP * pow(Encounter.HP_GROWTH, steps) * _level_term(Vector2i(steps, 0)) 				* pow(Encounter.WALL_GROWTH, walls + 1)
+		var want := Encounter.BASE_HP * pow(Encounter.HP_GROWTH, steps) * pow(Encounter.WALL_GROWTH, walls + 1)
 		_check(absf(Encounter.base_hp(Vector2i(steps, 0)) / want - 1.0) < 0.01,
 				"step %d is %s, not the curve's %s past %d wall(s)"
 				% [steps, BigNumber.format(Encounter.base_hp(Vector2i(steps, 0))),
@@ -966,7 +965,7 @@ func _test_a_won_fight() -> bool:
 	# The wall is the gate and the band behind it is the reward (`WALL_GROWTH` 2.8, 2026-09-20): the
 	# gear that broke the wall clears the ring past it, but it still has to be clicked -- the band
 	# grows back into a frontier over its ten rings. The wall itself is the check nothing carries the
-	# player through (`_test_the_ice_wall`: 25.4 clicks/s in this same set).
+	# player through (`_test_the_ice_wall`: 31.6 clicks/s in this same set).
 	_check(rate > 1.0, "the land past the wall is still a fight in a farmed set of rares (%.1f/s)" % rate)
 	# And gear has to be worth wearing: the same fight must want fewer clicks than bare hands.
 	_check(rate < _click_rate(far, spare, Encounter.BARE_DAMAGE, 0.0), "gear beats bare hands there")
@@ -1235,7 +1234,7 @@ func _test_the_ice_wall() -> bool:
 	for wall: Encounter in [fight, second]:
 		_check(is_equal_approx(wall.hp, roundf(Encounter.hp_of(Encounter.WALL_NAME, wall.cell) * Encounter.WALL_HP)),
 				"the wall on ring %d is WALL_HP over its own body" % HexGrid.distance(MapBuilder.CENTER, wall.cell))
-	var by_ring := pow(Encounter.HP_GROWTH, MapBuilder.WALL_STEP) * _level_term(second.cell) / _level_term(cell)
+	var by_ring := pow(Encounter.HP_GROWTH, MapBuilder.WALL_STEP)
 	_check(absf(second.hp / fight.hp / by_ring / Encounter.WALL_GROWTH - 1.0) < 0.01,
 			"the second wall is %.0f times the first on top of its ring (%s health)"
 			% [Encounter.WALL_GROWTH, BigNumber.format(second.hp)])
@@ -1492,7 +1491,7 @@ func _test_a_settlement_is_a_set_piece() -> bool:
 	var run := Encounter.farm(Vector2i(4, 6), "grass", "fortress")
 	run.roster_rng.seed = WORLD_SEED
 	run.start()
-	_play(run, 2000)
+	_play(run, 400)
 	_check(run.elite_every == 5, "a run on a fortress throws up an elite every %d" % run.elite_every)
 	_check(run.lineup.size() > run.elite_every * 2,
 			"and runs past two whole cycles of it, at %d" % run.lineup.size())
@@ -2047,12 +2046,6 @@ func _test_home_clauses() -> bool:
 	return true
 
 
-## What a tile's level multiplies its bodies' health by: LEVEL_HP_GROWTH for every level past the
-## second, so the first ring -- where bare hands must still win -- takes none of it.
-func _level_term(cell: Vector2i) -> float:
-	return pow(Encounter.LEVEL_HP_GROWTH, maxi(MapBuilder.level_of(cell) - 2, 0))
-
-
 func _play(fight: Encounter, limit: int) -> int:
 	var clicks := 0
 	var step := 1.0 / 8.0   # A brisk but human eight clicks a second.
@@ -2069,7 +2062,7 @@ func _play(fight: Encounter, limit: int) -> int:
 ## than instead of it.
 func _test_orb_drops() -> bool:
 	# Guaranteed, so the tally is the kill count and not a sample of a 5% chance.
-	var fight := Encounter.for_tile(Vector2i(2, 0), "grass")
+	var fight := Encounter.for_tile(Vector2i(4, 0), "grass")
 	fight.always_orb = true
 	var dropped: Array = []
 	fight.orb_dropped.connect(func(_index: int, orb: String) -> void: dropped.append(orb))
@@ -2086,7 +2079,7 @@ func _test_orb_drops() -> bool:
 
 	# Beside the gear, not against it: one body can hand over both, which is what makes the two rates
 	# independent numbers rather than one number split in two.
-	var both := Encounter.for_tile(Vector2i(2, 0), "grass")
+	var both := Encounter.for_tile(Vector2i(4, 0), "grass")
 	both.always_drop = true
 	both.always_orb = true
 	# Gathered into Arrays rather than counted into ints: a lambda captures by value, so a counter

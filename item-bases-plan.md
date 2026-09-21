@@ -1,5 +1,7 @@
 # Item bases: kinds and material tiers for every slot
 
+> **Status: built** (79b6c77, 2026-09-18). Kept as the record of the plan. Where it and the code disagree, the code and `Scenes/Items/CLAUDE.md` / `DESIGN.md` are current -- for one, 14 of the 69 icons ended up cut and 55 drawn (`tools/DESIGN.md`).
+
 ## Context
 
 Every slot has one base today (`LootTable.ITEMS`, eight rows), so a drop only differs by level, rarity and modifiers. The goal is PoE-style bases: each slot gets several **kinds** that play differently (sword average, dagger weak and fast, mace bleeds, two-hander slow and heavy and takes the offhand), and each kind comes in **material tiers** gated by item level. Decisions taken with the user: every slot now; a two-hander closes the offhand; bleed is a base stat that does not stack; kinds *and* tiers.

@@ -1,8 +1,8 @@
 class_name Coins
 ## The coin: the picture gold is said with, and the rule for how many of them a purse is worth.
 ##
-## Three places want it -- the bag's footer, the fight's verdict and the burst a body throws out --
-## and the sheet's geometry is measured rather than guessed, so it lives in one place for the reason
+## Everywhere gold is said wants it -- the purse, every price, the fight's verdict and the burst a
+## body throws out -- and the sheet's geometry is measured rather than guessed, so it lives in one place for the reason
 ## KillPips owns its pip parts. The two UI rows take a single resting frame; only the coins in the
 ## air spin, because a widget that never stops moving is furniture that fidgets.
 

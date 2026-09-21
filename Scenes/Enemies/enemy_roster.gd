@@ -22,8 +22,8 @@ enum Tier {
 }
 
 ## How much room the creature takes on a tile, measured off the trimmed idle frame rather than judged:
-## TINY under 1000 pxÂ², SMALL under 2000, MEDIUM under 4000, LARGE under 6000, HUGE above it.
-## Flying Eye is the one entry that overrides its measurement â€” the frame is nearly all wingspan.
+## TINY under 1000 px², SMALL under 2000, MEDIUM under 4000, LARGE under 6000, HUGE above it.
+## Flying Eye is the one entry that overrides its measurement -- the frame is nearly all wingspan.
 enum Size { TINY, SMALL, MEDIUM, LARGE, HUGE }
 
 ## Which way a pack drew its creature. The packs do not agree -- most face left, nine face right --
@@ -509,7 +509,7 @@ static func facing_of(name: String) -> Facing:
 
 
 ## What to multiply an encounter's base health by for this enemy: its body times its tier. Ranges from
-## 0.5 (the slime) to 24.0 (Huge Knight, Demon Boss), so a base of 20 HP spans 10 to 480.
+## 0.5 (the slime) to 24.0 (Huge Knight, Demon Boss): a boss is 48 slimes on the same tile.
 static func hp_modifier(name: String) -> float:
 	return SIZE_HP[size_of(name)] * TIER_HP[tier_of(name)]
 

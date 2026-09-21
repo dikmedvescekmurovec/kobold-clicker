@@ -1,6 +1,6 @@
 class_name BountyList
 extends Control
-## Every bounty the player has taken on, as a page against the left edge: what each board wants, how
+## The bounty the player has taken on, as a page against the left edge: what the board wants, how
 ## far along it is, what it pays, and -- the whole point of it -- where that monster lives.
 ##
 ## The same rows the town page's board draws, because they are built here and it calls them: a bounty
@@ -78,7 +78,7 @@ func _ready() -> void:
 	open()
 
 
-## Redraws the page: every board the player has stood at, town by town, with what is still open on it.
+## Redraws the page: the accepted bounty, under the name of the town that posted it.
 func open() -> void:
 	UITheme.clear(_rows)
 	var listed := 0

@@ -172,10 +172,6 @@ func items() -> Array[Item]:
 ## `also` is a second doll worn at the same time -- the heirlooms'. **Flats add and percents
 ## multiply:** its pieces go into the same sum, and its globals are a multiplier of their own over
 ## that sum rather than more of this doll's, so +20% on each doll is x1.44 and not x1.4.
-##
-## The player-wide buffs ride along under `buff_<id>` (`buff_fight_clock` and the rest): summed over
-## both dolls, so two pieces carrying one stack, and held to the modifier's `cap`, so nothing stacks
-## past it. Not stats, so the character page, which walks LootTable.STAT_LABELS, never lists them.
 func totals(skill_flat := {}, skill_percent := {}, also: Equipment = null) -> Dictionary:
 	var out := {}
 	var globals: Array[Dictionary] = []
@@ -188,11 +184,6 @@ func totals(skill_flat := {}, skill_percent := {}, also: Equipment = null) -> Di
 			var percents := item.global_percents()
 			for stat: String in percents:
 				global[stat] = float(global.get(stat, 0.0)) + float(percents[stat])
-			var buffs := item.player_buffs()
-			for id: String in buffs:
-				var key := "buff_" + id
-				out[key] = minf(float(out.get(key, 0.0)) + float(buffs[id]),
-						float(ModifierTable.MODS[id]["cap"]))
 		globals.append(global)
 	for stat: String in skill_flat:
 		out[stat] = float(out.get(stat, 0.0)) + float(skill_flat[stat])

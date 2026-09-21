@@ -1,7 +1,7 @@
 class_name CombatScene
 extends CanvasLayer
 ## Draws one Encounter: the player on the left, the tile's enemies walking in one at a time from the
-## right, and a click doing a point of damage to whichever is standing there. When it is over, a
+## right, and a click striking whichever is standing there. When it is over, a
 ## panel says whether the lineup was beaten and lists what it dropped.
 ##
 ## Everything below the HUD is built in code, so the .tscn stays a stub the editor can hold open --
@@ -12,7 +12,7 @@ extends CanvasLayer
 ## the map without unloading it. The map holds a whole generated world in memory that a scene change
 ## would throw away.
 ##
-## How far through the fight the player is is said by the KillPips bar under the clock and nowhere
+## How far through the fight the player is is said by the KillPips bar over the clock and nowhere
 ## else: a pip an enemy in its tier colour, draining from the left as the enemies go down. A
 ## number saying the same thing is the one thing on that panel a player mid-fight has no time to read.
 
@@ -1204,10 +1204,7 @@ func _on_drop_discarded(item: Item) -> void:
 	drop_discarded.emit(item)
 
 
-## The counter in the corner: the newest find, and how many there are. It wears the last thing
-## that dropped rather than an icon of its own -- no pack here draws a bag, and a picture of what
-## was just found says more than one would. With nothing found it is a dead button reading 0.
-## Green through gold to red as the bag fills, the way the clock ramps as it runs out. Nobody having
+## The counter's face: green through gold to red as the bag fills, the way the clock ramps as it runs out. Nobody having
 ## said (`bag_room` at -1) is an empty bag: a fight with no bag behind it has nothing to warn about.
 func _tint_loot_button() -> void:
 	var fill := 0.0 if bag_room < 0 else clampf(1.0 - float(bag_room) / Inventory.CAPACITY, 0.0, 1.0)
@@ -1233,6 +1230,8 @@ func _show_warning(showing: bool) -> void:
 		_centre_loot()
 
 
+## The counter in the corner: the sack and how many finds there are. With nothing found it is a
+## dead button reading 0.
 func _refresh_loot_button() -> void:
 	_loot_button.text = str(_drops.size())
 	_loot_button.disabled = _drops.is_empty()

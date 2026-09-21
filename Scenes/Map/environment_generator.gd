@@ -26,7 +26,7 @@ const MIN_REGION_SIZE := 15
 ## Extra weight multiplier for a 1-tile region, shrinking linearly to none at MIN_REGION_SIZE.
 const SMALL_BOOST := 3.0
 ## Regions larger than this grow at LARGE_DAMPING weight, so one environment doesn't swallow the map.
-## Tuned on 20x11 maps: about 3.7 environments and 4.5 regions per map, largest region about 43%.
+## Tuned on the 20x11 maps from before the ice wall: about 3.7 environments and 4.5 regions per map, largest region about 43%.
 const MAX_REGION_SIZE := 50
 const LARGE_DAMPING := 0.25
 
@@ -39,7 +39,7 @@ static func generate(cells: Rect2i, seed_value: int) -> Dictionary[Vector2i, Str
 
 
 ## Fills the cells of `cells` that `envs` doesn't have yet, growing out of the ones it does, so a map can be
-## enlarged as the player travels. Cells already in `envs` are never changed, and the new ones border them
+## enlarged when an ice wall falls. Cells already in `envs` are never changed, and the new ones border them
 ## legally; what is already there also decides what the new land is likely to be. `envs` may hold cells
 ## outside `cells`, which count as neighbors but are not filled in.
 static func extend(envs: Dictionary[Vector2i, String], cells: Rect2i, seed_value: int) -> void:

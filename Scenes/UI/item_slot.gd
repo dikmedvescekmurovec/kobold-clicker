@@ -57,7 +57,7 @@ func setup(held: Item, open := false, translucent := false) -> void:
 	# Centred by hand: the square is fixed and the icon is fixed, so there is nothing for a container
 	# to work out.
 	icon.position = Vector2(SIDE - ICON, SIDE - ICON) / 2.0
-	# Rare and better glint now and then, so the good pieces catch the eye across the bag.
+	# Rare and better glint as they are drawn, so the good pieces catch the eye across the bag.
 	if item.rarity >= ItemRarity.Rarity.RARE:
 		_shine(icon, ICON, 3.0)
 	add_child(icon)
