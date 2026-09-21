@@ -302,6 +302,7 @@ var _loot_drops: DropsView
 var _finds_shown := 0
 ## Leaves a farm run. Only built for one -- a tile fight is left by beating it or running out.
 var _terminate: Button
+var _gave_up := false
 ## What this fight has turned up, in the order it fell. Autodiscarded finds are not in here.
 var _drops: Array[Item] = []
 ## How many finds the bag can still take before something has to be destroyed to fit them, or -1
@@ -375,7 +376,7 @@ func _process(delta: float) -> void:
 ## hit a moving sprite as well would be a second difficulty on top of the one the fight is about.
 ##
 ## Escape is the fight's own X: the loot popup if it is up, else Terminate on a run, else Back under a
-## verdict. A tile fight has no way out but the clock, so there it does nothing.
+## verdict. A tile fight is given up only by its button, so a stray Escape cannot throw one away.
 func _unhandled_input(event: InputEvent) -> void:
 	if fight != null and event.is_action_pressed("ui_cancel"):
 		get_viewport().set_input_as_handled()
@@ -538,12 +539,13 @@ func _build_hud() -> void:
 	# enemy in the middle of the screen, and the button that ends the run has to be somewhere a stray
 	# one cannot reach -- which is now a corner rather than the bottom middle, that being where the
 	# enemy's health went.
-	if fight.endless:
-		_terminate = _square_button(FLAG_ICON)
-		_terminate.scale = Vector2(_ui_scale, _ui_scale)
-		_terminate.tooltip_text = "End the run and keep everything it turned up"
-		_terminate.pressed.connect(_on_terminate_pressed)
-		hud.add_child(_terminate)
+	# A tile fight has one too: giving up is a loss, with what already dropped kept as any loss keeps it.
+	_terminate = _square_button(FLAG_ICON)
+	_terminate.scale = Vector2(_ui_scale, _ui_scale)
+	_terminate.tooltip_text = ("End the run and keep everything it turned up" if fight.endless
+			else "Give up the fight and keep what it already turned up")
+	_terminate.pressed.connect(_on_terminate_pressed)
+	hud.add_child(_terminate)
 
 	# Centred on the bottom edge: the enemy's name and health, standing on the arena with no panel
 	# behind them -- the same as the place's name and the clock on the top edge, and for the same
@@ -1335,9 +1337,14 @@ func _on_loot_closed() -> void:
 	_loot_panel.hide()
 
 
-## The run ends because the player says so, which is the only way a farm run ends at all.
+## The run ends because the player says so, which is the only way a farm run ends at all. A tile
+## fight ended that way is given up: a loss, told apart from running out of time under the verdict.
 func _on_terminate_pressed() -> void:
-	fight.stop()
+	if fight.endless:
+		fight.stop()
+	else:
+		_gave_up = true
+		fight.give_up()
 
 
 func _on_finished(won: bool) -> void:
@@ -1352,7 +1359,7 @@ func _on_finished(won: bool) -> void:
 	else:
 		_result_label.text = "Success" if won else "Failed"
 	# Only a loss has anything to add: the word says a win, and a run has no second line.
-	_result_detail.text = "Out of time"
+	_result_detail.text = "Given up" if _gave_up else "Out of time"
 	_result_detail.visible = not won and not fight.endless
 	_collect.visible = not _result_detail.visible
 	_lost_row.visible = _result_detail.visible

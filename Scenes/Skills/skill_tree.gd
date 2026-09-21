@@ -94,7 +94,41 @@ const TREES := {
 				"effect": "transmute", "effect_text": "Transmute: an orb that falls has a one in four chance to fall twice"},
 		},
 	},
+	# What answers the enemies' strikes. Block and time on hit are in tenths of a second, as on gear.
+	"guard": {
+		"label": "Guard",
+		"locked": "guard_locked",
+		"nodes": {
+			"toughness": {"name": "Toughness", "parents": [], "max_rank": 5, "row": 0, "col": 1,
+				"flat": {"armor": 2}, "percent": {}},
+			"footwork": {"name": "Footwork", "parents": ["toughness"], "max_rank": 3, "row": 1, "col": 0,
+				"flat": {"dodge": 2}, "percent": {}},
+			"steady_guard": {"name": "Steady Guard", "parents": ["toughness"], "max_rank": 3, "row": 1, "col": 2,
+				"flat": {"block": 1}, "percent": {}},
+			"resolve": {"name": "Resolve", "parents": ["footwork", "steady_guard"], "max_rank": 3,
+				"row": 2, "col": 1, "flat": {}, "percent": {"armor": 5, "dodge": 5}},
+			"evasion": {"name": "Evasion", "parents": ["resolve"], "max_rank": 2, "row": 3, "col": 0,
+				"flat": {}, "percent": {"dodge": 10}},
+			"shield_mastery": {"name": "Shield Mastery", "parents": ["resolve"], "max_rank": 2, "row": 3, "col": 1,
+				"flat": {"block": 2}, "percent": {}},
+			"tenacity": {"name": "Tenacity", "parents": ["resolve"], "max_rank": 2, "row": 3, "col": 2,
+				"flat": {"time_on_hit": 1}, "percent": {}},
+			"phantom": {"name": "Phantom", "parents": ["evasion"], "max_rank": 1, "row": 4, "col": 0,
+				"flat": {}, "percent": {"dodge": 15},
+				"effect": "afterimage", "effect_text": "Afterimage: a dodged blow wins back up to 1s the blows have taken"},
+			"bastion": {"name": "Bastion", "parents": ["shield_mastery"], "max_rank": 1, "row": 4, "col": 1,
+				"flat": {"block": 3}, "percent": {},
+				"effect": "shieldwall", "effect_text": "Shield Wall: block counts double against elites and bosses"},
+			"undying": {"name": "Undying", "parents": ["tenacity"], "max_rank": 1, "row": 4, "col": 2,
+				"flat": {"time_on_hit": 2}, "percent": {},
+				"effect": "second_wind", "effect_text": "Second Wind: once a fight, running out of time gives back 5s"},
+		},
+	},
 }
+
+## How much stronger every skill's numbers grow each time the trees are transcended: +50% a time, in a
+## straight line, so a player can add it up. The effects do not grow, only the stat lines.
+const TRANSCEND_GAIN := 0.5
 
 ## How many rows and columns every tree is laid out on.
 const ROWS := 5
@@ -176,12 +210,13 @@ static func points_in(tree: String, ranks: Dictionary) -> int:
 ## Whether one more point can go into `id`, given what is learned and how many points are free.
 ## `can_rank` and `why_not` are two faces of one rule, the way OrbTable's are, so they are written
 ## side by side and read the same conditions in the same order.
-static func can_rank(id: String, ranks: Dictionary, free_points: int) -> bool:
-	return why_not(id, ranks, free_points).is_empty()
+static func can_rank(id: String, ranks: Dictionary, free_points: int, cost := 1) -> bool:
+	return why_not(id, ranks, free_points, cost).is_empty()
 
 
-## The sentence explaining why a point cannot go into `id`, or "" when it can.
-static func why_not(id: String, ranks: Dictionary, free_points: int) -> String:
+## The sentence explaining why a point cannot go into `id`, or "" when it can. A rank costs `cost`
+## points (`Skills.rank_cost`: more after the trees are transcended).
+static func why_not(id: String, ranks: Dictionary, free_points: int, cost := 1) -> String:
 	var entry := node(id)
 	if entry.is_empty():
 		return "No such skill"
@@ -196,19 +231,34 @@ static func why_not(id: String, ranks: Dictionary, free_points: int) -> String:
 		return "Needs %d points in %s" % [points_for_row(id), TREES[tree_of(id)]["label"]]
 	if free_points <= 0:
 		return "No skill points left"
+	if free_points < cost:
+		return "Needs %d skill points" % cost
 	return ""
 
 
-## What one point in `id` does, one clause a stat: "+1 Damage", "6% increased Damage".
-static func describe(id: String, points := 1) -> String:
+## What one point of a skill worth `value` of a stat is worth after the trees have been transcended
+## `times`: the gain, rounded **up** -- to a whole number, or to the first decimal where the value is a
+## fraction to begin with (Quick Hands' 0.05/s), so no point is ever worth an unreadable figure.
+static func scaled(value: float, times: int) -> float:
+	if times <= 0:
+		return value
+	var grown := value * (1.0 + TRANSCEND_GAIN * times)
+	if absf(value) >= 1.0:
+		return ceilf(grown - 0.0001)
+	return ceilf(grown * 10.0 - 0.0001) / 10.0
+
+
+## What `points` in `id` do, one clause a stat: "+1 Damage", "6% increased Damage", after the trees
+## have been transcended `times`.
+static func describe(id: String, points := 1, times := 0) -> String:
 	var entry := node(id)
 	var parts := PackedStringArray()
 	var flat: Dictionary = entry["flat"]
 	for stat: String in flat:
-		parts.append(_flat_line(stat, float(flat[stat]) * points))
+		parts.append(_flat_line(stat, scaled(float(flat[stat]), times) * points))
 	var percent: Dictionary = entry["percent"]
 	for stat: String in percent:
-		parts.append("%d%% increased %s" % [roundi(float(percent[stat]) * points),
+		parts.append("%d%% increased %s" % [roundi(scaled(float(percent[stat]), times) * points),
 				LootTable.STAT_LABELS.get(stat, stat)])
 	return ", ".join(parts)
 
@@ -217,6 +267,8 @@ static func _flat_line(stat: String, value: float) -> String:
 	var label: String = LootTable.STAT_LABELS.get(stat, stat)
 	if stat in LootTable.RATE_STATS:
 		return "+%.1f/s %s" % [value, label]
+	if stat in LootTable.SECONDS_STATS:
+		return "%s %s" % [LootTable.seconds_text(value, true), label]
 	if stat in LootTable.PERCENT_STATS:
 		return "+%d%% %s" % [roundi(value), label]
 	return "+%d %s" % [roundi(value), label]

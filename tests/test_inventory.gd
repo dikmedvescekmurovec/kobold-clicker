@@ -3712,6 +3712,18 @@ func _test_curses() -> bool:
 			"a version 17 save is a world under none")
 	_clear_save()
 
+	# Hard Lessons' pay: every skill point counts double, flat and percent alike, and the card says so.
+	var student := Inventory.new()
+	student.level = 10
+	_check(student.skills.rank_up("sharpened_edge", student.level), "a point goes into Sharpened Edge")
+	var taught := float(student.stats().get("damage", 0.0))
+	student.curses = [Curses.HARD_LESSONS]
+	_check(taught > 0.0 and float(student.stats().get("damage", 0.0)) == taught * 2.0 and student.skill_worth() == 2,
+			"under Hard Lessons the point is worth double (%s against %s)" % [student.stats().get("damage", 0.0), taught])
+	_check(SkillTree.describe("sharpened_edge", student.skill_worth()) == SkillTree.describe("sharpened_edge", 2)
+			and Inventory.new().skill_worth() == 1, "and the card describes two points for one")
+	_check(student.effects().count(Curses.effect(Curses.HARD_LESSONS)) == 1, "the fight hears of it once")
+
 	# The Long Winter's pay: a wall twice as hard is worth two.
 	var winter := Inventory.new()
 	winter.curses = [Curses.LONG_WINTER]

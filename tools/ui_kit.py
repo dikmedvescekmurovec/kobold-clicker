@@ -602,7 +602,8 @@ ICONS_DRAWN = {
 
 # The skill trees' icons, off "Ability Icons" -- loose 16 px files that carry their own framed square,
 # so an entry is a whole file and nothing is trimmed. One colourway a tree, so a tree reads as one
-# thing: red for Power, and the gold-orange for Fortune, which is the colour loot already speaks in.
+# thing: red for Power, the gold-orange for Fortune, which is the colour loot already speaks in, and
+# blue for Guard. The pack's blues are water and ice, not shields: stand-ins until something is drawn.
 # The pack's Locked mark in each colourway stands in for a node that cannot be learned yet.
 #
 # node id -> (tree, file under "Ability Icons/Icons (All)")
@@ -631,8 +632,18 @@ SKILLS = {
     "midas": ("fortune", "Yellow9"),
     "orb_seeker": ("fortune", "Yellow11"),
     "alchemist": ("fortune", "Yellow12"),
+    "toughness": ("guard", "Blue3"),
+    "footwork": ("guard", "Blue2"),
+    "steady_guard": ("guard", "Blue13"),
+    "resolve": ("guard", "Blue7"),
+    "evasion": ("guard", "Blue14"),
+    "phantom": ("guard", "Blue10"),
+    "shield_mastery": ("guard", "Blue8"),
+    "bastion": ("guard", "Blue1"),
+    "tenacity": ("guard", "Blue12"),
+    "undying": ("guard", "Blue5"),
 }
-SKILL_LOCKS = {"power_locked": "RedLocked", "fortune_locked": "YellowLocked"}
+SKILL_LOCKS = {"power_locked": "RedLocked", "fortune_locked": "YellowLocked", "guard_locked": "BlueLocked"}
 
 # The fortuneteller's seven spells, off the same pack in the one colourway neither skill tree uses:
 # purple is hers alone, so a spell on her grid is never mistaken for a skill. Placeholder art -- the
@@ -666,6 +677,13 @@ SKILL_LAYOUT = {
         ("treasure_hunter", 3, 0, ["fortunes_favour"]), ("greed", 3, 1, ["fortunes_favour"]),
         ("orb_seeker", 3, 2, ["fortunes_favour"]), ("collector", 4, 0, ["treasure_hunter"]),
         ("midas", 4, 1, ["greed"]), ("alchemist", 4, 2, ["orb_seeker"]),
+    ],
+    "guard": [
+        ("toughness", 0, 1, []), ("footwork", 1, 0, ["toughness"]),
+        ("steady_guard", 1, 2, ["toughness"]), ("resolve", 2, 1, ["footwork", "steady_guard"]),
+        ("evasion", 3, 0, ["resolve"]), ("shield_mastery", 3, 1, ["resolve"]),
+        ("tenacity", 3, 2, ["resolve"]), ("phantom", 4, 0, ["evasion"]),
+        ("bastion", 4, 1, ["shield_mastery"]), ("undying", 4, 2, ["tenacity"]),
     ],
 }
 # What the face pads its icon by. The game's own copy is UITheme.ICON_FACE_MARGIN -- padding is a
@@ -1286,7 +1304,7 @@ def skills():
 
 
 def skill_preview(cut):
-    """Both trees on the cream panel at the 2x they are drawn at, laid out as the sketch is.
+    """Every tree on the cream panel at the 2x they are drawn at, laid out as the sketch is.
 
     Each tree is shown twice: the left copy fresh, where only the root is open and everything else
     wears the locked mark, and the right copy part-spent, which is the only state worth judging whether
@@ -1297,8 +1315,9 @@ def skill_preview(cut):
     tree_w = 3 * side + 2 * gap_x
     tree_h = 5 * side + 4 * gap_y
     learned = {"sharpened_edge", "keen_eye", "battle_rhythm", "flurry",
-               "scavenger", "appraiser", "prospector", "fortunes_favour", "greed", "midas"}
-    out = Image.new("RGBA", (pad + 4 * (tree_w + pad), tree_h + 2 * pad), cream)
+               "scavenger", "appraiser", "prospector", "fortunes_favour", "greed", "midas",
+               "toughness", "footwork", "resolve", "shield_mastery", "bastion"}
+    out = Image.new("RGBA", (pad + 2 * len(SKILL_LAYOUT) * (tree_w + pad), tree_h + 2 * pad), cream)
     draw = ImageDraw.Draw(out)
 
     def centre(ox, row, col):

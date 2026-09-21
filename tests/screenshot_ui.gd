@@ -271,6 +271,24 @@ func _shoot_skills() -> void:
 	root.get_texture().get_image().save_png("user://ui_tooltip.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_tooltip.png"))
 	root.warp_mouse(Vector2.ZERO)
+
+	# Every tree full, so Transcend trees is up, and pressed once, so it asks.
+	main.inventory.level = 71
+	main.inventory.skills = Skills.new()
+	for tree: String in SkillTree.trees():
+		for row in SkillTree.ROWS:
+			for id: String in SkillTree.nodes_of(tree):
+				if int(SkillTree.node(id)["row"]) == row:
+					while main.inventory.skills.rank_up(id, main.inventory.level):
+						pass
+	main.inventory.skills.transcended = 1
+	main.skills_page.open()
+	main.skills_page._on_transcend_pressed()
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_skills_transcend.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_skills_transcend.png"))
 	main.queue_free()
 	await process_frame
 
@@ -572,6 +590,8 @@ func _shoot_town() -> void:
 			black._show_curses()
 			black._on_curse_toggled(true, Curses.THICK_FOG)
 			black._on_curse_toggled(true, Curses.LEAN_PICKINGS), "ui_transcend_curses"],
+		# And the foot of the same table, which is longer than the window and scrolls under its headings.
+		[func() -> void: black._curse_scroll.scroll_vertical = 100000, "ui_transcend_curses_end"],
 	]
 	for shot in black_shots:
 		(shot[0] as Callable).call()
@@ -652,6 +672,15 @@ func _shoot_town() -> void:
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_character_curses.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_character_curses.png"))
+	# The curses folded away, and the page drawn again to show it stays folded.
+	main.character_page.find_children("*", "VBoxContainer", true, false).filter(func(n: Node) -> bool: return n is Accordion)[0].toggle()
+	main.character_page.open()
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_character_folded.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_character_folded.png"))
+	main.character_page.find_children("*", "VBoxContainer", true, false).filter(func(n: Node) -> bool: return n is Accordion)[0].toggle()
 	main._on_left_page_closed()
 	var radius: int = main.view.land_radius
 	var generated := MapBuilder.START_LAND_RADIUS + MapBuilder.WASTE_DEPTH + 1

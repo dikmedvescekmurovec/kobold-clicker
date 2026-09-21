@@ -20,6 +20,7 @@ func _run() -> void:
 	_check(_test_the_ice_wall() == true, "ice wall tests ran to the end")
 	_check(_test_a_lost_fight() == true, "lost fight tests ran to the end")
 	_check(_test_enemy_strikes() == true, "enemy strike tests ran to the end")
+	_check(_test_guard_capstones() == true, "guard capstone tests ran to the end")
 	_check(_test_hits_only_land_on_a_waiting_enemy() == true, "hit timing tests ran to the end")
 	_check(_test_what_a_hit_is_worth() == true, "damage tests ran to the end")
 	_check(_test_the_weapon_swings_itself() == true, "attack speed tests ran to the end")
@@ -1179,6 +1180,42 @@ func _test_enemy_strikes() -> bool:
 
 ## A tile fight with the enemies striking and the first body of `tier` standing there, armed with
 ## `stats`. Walked on to the moment it can be hit, so its first blow is a whole interval away.
+## The Guard tree's three capstones.
+func _test_guard_capstones() -> bool:
+	# Afterimage: a dodge wins back up to a second of what blows took, and never more than they took.
+	var dodger := _struck_standing(EnemyRoster.Tier.COMMON, {"dodge": 1.0e12})
+	dodger.effects = ["afterimage"]
+	var start := dodger.time_left
+	dodger._struck_by(3.0)
+	_check(dodger.time_left == start, "with no wound, a dodge wins nothing back")
+	dodger.wounds = 2.5
+	dodger.time_left = start - 2.5
+	dodger._struck_by(3.0)
+	_check(is_equal_approx(dodger.wounds, 1.5) and is_equal_approx(dodger.time_left, start - 1.5),
+			"a dodge wins back one second (%.2f)" % dodger.time_left)
+
+	# Shield Wall: block counts double against an elite, and only against one.
+	for case: Array in [[EnemyRoster.Tier.COMMON, 2.0], [EnemyRoster.Tier.ELITE, 1.0]]:
+		var guard := _struck_standing(case[0], {"block": 10.0})
+		guard.effects = ["shieldwall"]
+		var before := guard.time_left
+		guard._struck_by(3.0)
+		_check(is_equal_approx(before - guard.time_left, case[1]),
+				"tier %d takes %.1fs of a 3s blow (%.2f)" % [case[0], case[1], before - guard.time_left])
+
+	# Second Wind: the clock running out gives back five seconds, once.
+	var winded := Encounter.for_tile(Vector2i(1, 0), "grass")
+	winded.health[0] = 1.0e9
+	winded.effects = ["second_wind"]
+	winded.start()
+	winded.advance(Encounter.SECONDS + 0.01)
+	_check(not winded.finished and is_equal_approx(winded.time_left, Encounter.SECOND_WIND_SECONDS),
+			"the first time out is a second wind (%.2f)" % winded.time_left)
+	winded.advance(Encounter.SECOND_WIND_SECONDS + 0.01)
+	_check(winded.finished, "and the second is the end")
+	return true
+
+
 func _struck_standing(tier: EnemyRoster.Tier, stats := {}) -> Encounter:
 	var fight := Encounter.for_tile(Vector2i(1, 0), "grass")
 	fight.lineup[0] = _enemy_of(tier)
@@ -1267,7 +1304,10 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 	_check(main._combat != null, "pressing Chart starts a fight")
 	_check(not main.map.visible and main.map.process_mode == Node.PROCESS_MODE_DISABLED,
 			"the map stops while the fight is on")
-	main._combat.fight.give_up()
+	main._combat._on_terminate_pressed()
+	_check(main._combat.fight.finished and not main._combat.fight.victory,
+			"Terminate gives a tile fight up as a loss")
+	_check(main._combat._result_detail.text == "Given up", "and the verdict says it was given up")
 	_check(main._combat._lost_row.visible and not main._combat._collect.visible,
 			"a lost fight offers the arrow and Retry, and nothing to collect")
 	# Retry is a loss left and the same tile's fight opened again, in one press.
@@ -2585,6 +2625,20 @@ func _test_curses() -> bool:
 		kept.hit()
 		kept.advance(Encounter.DEATH)
 	_check(ascended[0] == 0, "without the curse nothing falls ascended")
+
+	# Hard Lessons: a quarter of the experience, taken off after every "more" has been added.
+	var lessons := {}
+	for worn: Array in [[], [Curses.effect(Curses.HARD_LESSONS)]]:
+		var fight := Encounter.for_tile(Vector2i(30, 0), "grass", "plain")
+		fight.wear(worn)
+		fight.arm({"xp_more": 100.0})
+		fight.damage = 1e12
+		fight.start()
+		fight.advance(Encounter.WALK_IN)
+		fight.hit()
+		lessons[worn.size()] = fight.xp
+	_check(lessons[0] >= 8 and lessons[1] == roundi(lessons[0] * Encounter.LESSONS_XP),
+			"Hard Lessons leaves a quarter of the experience (%s against %s)" % [lessons[1], lessons[0]])
 	return true
 
 

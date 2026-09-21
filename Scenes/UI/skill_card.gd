@@ -20,8 +20,10 @@ func _init() -> void:
 	add_child(_rows)
 
 
-## Fills the card for skill `id`, for a player whose learned skills are `skills` at `level`.
-func fill(id: String, skills: Skills, level: int) -> void:
+## Fills the card for skill `id`, for a player whose learned skills are `skills` at `level`. `worth`
+## is what a point counts for (`Inventory.skill_worth`: two under Hard Lessons), so the card says what
+## the fight will be armed with.
+func fill(id: String, skills: Skills, level: int, worth := 1) -> void:
 	for child: Node in _rows.get_children():
 		_rows.remove_child(child)
 		child.queue_free()
@@ -29,13 +31,15 @@ func fill(id: String, skills: Skills, level: int) -> void:
 	var rank := skills.rank_of(id)
 	var most := int(entry["max_rank"])
 	_rows.add_child(ItemDetails.line(str(entry["name"]), Palette.INK, WIDTH))
-	_rows.add_child(ItemDetails.line("Per point: " + SkillTree.describe(id), Palette.SLATE, WIDTH, true))
+	_rows.add_child(ItemDetails.line("Per point: " + SkillTree.describe(id, worth, skills.transcended), Palette.SLATE, WIDTH, true))
 	if entry.has("effect_text"):
 		_rows.add_child(ItemDetails.line(str(entry["effect_text"]), Palette.SLOT_TAN_DK, WIDTH, true))
 	if rank > 0:
-		_rows.add_child(ItemDetails.line("Now: " + SkillTree.describe(id, rank), Palette.LEAF, WIDTH, true))
+		_rows.add_child(ItemDetails.line("Now: " + SkillTree.describe(id, rank * worth, skills.transcended), Palette.LEAF, WIDTH, true))
 	var refusal := skills.why_not(id, level)
 	var status := "Click to learn (%d/%d)" % [rank, most]
+	if skills.rank_cost() > 1:
+		status = "Click to learn for %d points (%d/%d)" % [skills.rank_cost(), rank, most]
 	var tone := Palette.LEAF
 	if rank >= most:
 		status = "Fully learned"

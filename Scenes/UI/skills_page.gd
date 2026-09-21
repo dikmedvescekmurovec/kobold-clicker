@@ -1,13 +1,15 @@
 class_name SkillsPage
 extends Control
-## The skills page against the left edge: the free points over the two trees side by side, each with
+## The skills page against the left edge: the free points over the three trees side by side, each with
 ## a Reset that buys its points back for gold, and a card beside the skill under the cursor,
-## placed as `ItemCard` is. Showing or hiding this node opens or closes the whole page.
+## placed as `ItemCard` is. Once every tree is full, **Transcend trees** beside the points takes every point
+## for good and makes every skill stronger (`Skills.transcend`); it asks by turning into "Sure?", the
+## way the bounty journal's Cancel does. Showing or hiding this node opens or closes the whole page.
 
 ## The page's X was pressed.
 signal closed
 
-## The gap between the two trees, in panel pixels.
+## The gap between the trees, in panel pixels.
 const TREE_GAP := 20
 
 var inventory: Inventory
@@ -18,6 +20,10 @@ var _points: Label
 var _skill_views := {}
 var _respec_buttons := {}
 var _card: SkillCard
+var _transcend: Button
+
+const TRANSCEND := "Transcend trees"
+const SURE := "Sure?"
 
 
 func _init(player_inventory: Inventory, save_path: String, ui_scale: float) -> void:
@@ -33,9 +39,19 @@ func _ready() -> void:
 	_panel.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_panel)
 	var rows := UITheme.body_of(_panel)
+	# The points, and beside them the way to transcend the trees: up here, because the page is as tall
+	# as a 648 px window lets it be and there is no room under the resets.
+	var top := HBoxContainer.new()
+	rows.add_child(top)
 	_points = UITheme.label()
 	_points.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	rows.add_child(_points)
+	_points.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(_points)
+	_transcend = UITheme.button(TRANSCEND, "WoodDangerButton", "Every skill back to nothing and every "
+			+ "point spent for good. Every skill is %d%% stronger from then on, in every world"
+			% roundi(SkillTree.TRANSCEND_GAIN * 100))
+	_transcend.pressed.connect(_on_transcend_pressed)
+	top.add_child(_transcend)
 
 	var trees := HBoxContainer.new()
 	trees.add_theme_constant_override("separation", TREE_GAP)
@@ -70,6 +86,9 @@ func _ready() -> void:
 func open() -> void:
 	var free := inventory.skills.points(inventory.level)
 	_points.text = "%d skill point%s" % [free, "" if free == 1 else "s"]
+	var times := inventory.skills.transcended
+	if times > 0:
+		_points.text += ", skills +%d" % times
 	_points.add_theme_color_override("font_color", Palette.LEAF if free > 0 else Palette.SLATE)
 	for tree: String in _skill_views:
 		_skill_views[tree].fill(tree, inventory.skills.ranks)
@@ -78,6 +97,8 @@ func open() -> void:
 		var cost := inventory.respec_cost(tree)
 		UITheme.set_price(reset, cost if spent > 0 else 0.0)
 		reset.disabled = spent <= 0 or inventory.gold < cost
+	_transcend.text = TRANSCEND
+	_transcend.visible = inventory.skills.can_transcend()
 	# Whatever the cursor was over has just been redrawn.
 	_hide_card()
 
@@ -98,6 +119,18 @@ func _on_skill_pressed(id: String) -> void:
 	open()
 
 
+## The first press asks, the second does it.
+func _on_transcend_pressed() -> void:
+	if _transcend.text != SURE:
+		_transcend.text = SURE
+		return
+	if not inventory.skills.transcend():
+		return
+	inventory.save(_save_path)
+	print("Transcended the skill trees (%d)" % inventory.skills.transcended)
+	open()
+
+
 func _on_respec_pressed(tree: String) -> void:
 	var cost := inventory.respec_cost(tree)
 	if not inventory.respec(tree):
@@ -109,7 +142,7 @@ func _on_respec_pressed(tree: String) -> void:
 
 ## Placed now and again deferred: the first pass measures labels that have not laid out yet.
 func _on_skill_hovered(id: String, slot: SkillSlot) -> void:
-	_card.fill(id, inventory.skills, inventory.level)
+	_card.fill(id, inventory.skills, inventory.level, inventory.skill_worth())
 	_card.show()
 	_place_card(slot.get_global_rect())
 	_place_card.call_deferred(slot.get_global_rect())

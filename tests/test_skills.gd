@@ -15,6 +15,7 @@ func _run() -> void:
 	_check(_test_stacking() == true, "stacking tests ran to the end")
 	_check(_test_respec() == true, "reset tests ran to the end")
 	_check(_test_save() == true, "save tests ran to the end")
+	_check(_test_transcend() == true, "tree transcension tests ran to the end")
 	_check(_test_rarity() == true, "rarity tests ran to the end")
 	_check(_test_gold_and_orbs() == true, "gold and orb find tests ran to the end")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_PATH))
@@ -23,7 +24,7 @@ func _run() -> void:
 
 ## Every tree is the sketch: one root, parents that exist and sit higher, strength paid for in depth.
 func _test_tables() -> bool:
-	_check(SkillTree.trees() == ["power", "fortune"], "two trees, power first")
+	_check(SkillTree.trees() == ["power", "fortune", "guard"], "three trees, power first")
 	var seen := {}
 	for tree: String in SkillTree.trees():
 		var nodes := SkillTree.nodes_of(tree)
@@ -207,6 +208,67 @@ func _test_save() -> bool:
 			"titan": 1}, 30).ranks.is_empty(), "a capstone held on too few points refunds everything")
 	_check(Skills.from_dict("nonsense", 30).ranks.is_empty(), "the wrong shape is nothing learned")
 	return true
+
+
+## Every tree full: the points go for good, and every skill's numbers grow half again, rounded up.
+func _test_transcend() -> bool:
+	var full := SkillTree.capacity("power") + SkillTree.capacity("fortune") + SkillTree.capacity("guard")
+	var level := full + 1
+	var skills := Skills.new()
+	_check(not skills.can_transcend(), "an empty tree cannot be transcended")
+	_check(not skills.transcend(), "and the press is refused")
+	for tree: String in SkillTree.trees():
+		_fill(skills, tree, level)
+	_check(skills.points(level) == 0, "every tree full takes every point at level %d" % level)
+	_check(skills.can_transcend(), "every tree full can be transcended")
+	var plain_damage := float(skills.flat()["damage"])
+	_check(skills.transcend(), "and is")
+	_check(skills.ranks.is_empty() and skills.transcended == 1, "every skill goes back to nothing")
+	_check(skills.points(level) == 0, "and the points are not handed back")
+	_check(skills.rank_cost() == 2, "a rank now costs two points")
+	_check(not skills.can_rank("sharpened_edge", level + 1), "so one point is not enough")
+	_check(skills.why_not("sharpened_edge", level + 1) == "Needs 2 skill points",
+			"and the card says so (%s)" % skills.why_not("sharpened_edge", level + 1))
+	_check(skills.rank_up("sharpened_edge", level + 2) and skills.points(level + 2) == 0, "two buy it")
+	skills.reset("power")
+
+	_check(SkillTree.scaled(1.0, 0) == 1.0, "nothing transcended changes nothing")
+	_check(SkillTree.scaled(1.0, 1) == 2.0, "1.5 is rounded up to 2")
+	_check(SkillTree.scaled(4.0, 1) == 6.0, "4 grows to 6")
+	_check(SkillTree.scaled(0.05, 1) == 0.1, "a fraction is rounded up to the first decimal")
+	_check(SkillTree.scaled(4.0, 2) == 8.0, "twice is +100%")
+	for tree: String in SkillTree.trees():
+		_fill(skills, tree, level * 3)
+	_check(float(skills.flat()["damage"]) > plain_damage,
+			"the same skills add more damage (%s against %s)" % [skills.flat()["damage"], plain_damage])
+	_check(SkillTree.describe("sharpened_edge", 1, 1) == "+2 Damage", "and the card says so (%s)"
+			% SkillTree.describe("sharpened_edge", 1, 1))
+
+	# The save keeps what was taken and how often; a world's transcension keeps only the count.
+	var inventory := Inventory.new()
+	inventory.level = level
+	for tree: String in SkillTree.trees():
+		_fill(inventory.skills, tree, level)
+	inventory.skills.transcend()
+	_check(inventory.save(TEST_PATH), "saved")
+	var back := Inventory.load_from(TEST_PATH)
+	_check(back.skills.sunk == inventory.skills.sunk and back.skills.transcended == 1,
+			"a transcension survives the save (%d, %d)" % [back.skills.sunk, back.skills.transcended])
+	_check(back.skills.points(level) == 0, "and the points stay spent")
+	var next := inventory.transcended()
+	_check(next.skills.transcended == 1 and next.skills.sunk == 0, "a new world keeps the count, not the points")
+	_check(Skills.from_dict({}, 5, 1000, 2).sunk == 4, "more taken than the level earned is cut to it")
+	return true
+
+
+## Every skill of `tree` learned, row by row, which is an order the rules always allow.
+func _fill(skills: Skills, tree: String, level: int) -> void:
+	var nodes := SkillTree.nodes_of(tree)
+	for row in SkillTree.ROWS:
+		for id: String in nodes:
+			if int(nodes[id]["row"]) == row:
+				while skills.rank_up(id, level):
+					pass
 
 
 func _test_rarity() -> bool:

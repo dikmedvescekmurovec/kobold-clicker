@@ -373,6 +373,8 @@ const MOMENTUM_MOST := 1.0
 const PACKMULE_MORE := 0.01      ## per piece in the bag
 const HEARTWOOD_ARMOUR := 50.0   ## armour a second on the clock
 const HEARTWOOD_MOST := 10.0
+const AFTERIMAGE_SECONDS := 1.0  ## the most a dodge wins back, of what blows have taken
+const SECOND_WIND_SECONDS := 5.0 ## given back once a fight, as the clock runs out
 const MAGPIE_CHANCE := 0.05
 const HEATSTROKE_SHARE := 0.02   ## of its health a second
 const GRAZING_MORE := 2          ## enemies
@@ -388,6 +390,7 @@ const LONG_WINTER_HP := 2.0      ## what the ice wall's health is multiplied by
 const LEAN_LESS := 0.5           ## what is left of the chance of gear
 const LEAN_PLUS := [0.10, 0.01]  ## a find that is +1, and one that is +2
 const PAUPER_PURSE := 0.5
+const LESSONS_XP := 0.25         ## what is left of every body's experience
 const FOG_UNIQUES := 2.0         ## what the chance of a unique is multiplied by
 
 ## What the tile itself does to the fight (`TileMods`, by id): land past the second wall, told to
@@ -414,6 +417,8 @@ var time_on_hit := 0.0
 ## Seconds the enemies' blows have taken off the clock and time on hit has not yet won back. Time on
 ## hit heals this and nothing else, so it can undo a blow and never the clock's own running.
 var wounds := 0.0
+## Whether the Guard tree's Second Wind has been spent this fight.
+var _second_wind_used := false
 ## How far the enemy standing there is towards its next blow. Cleared as each one comes on.
 var _attack := 0.0
 ## Whether the enemies strike the clock at all. The main scene turns it on for every fight it opens;
@@ -1024,7 +1029,9 @@ func _kill() -> void:
 	if purse > 0.0:
 		gold += purse
 		gold_dropped.emit(index, purse)
-	var worth := maxi(1, roundi(xp_of(lineup[index], cell) * (1.0 + xp_more / 100.0)))
+	# Hard Lessons is a "less": what is left of the experience once every "more" has been added.
+	var lessons := LESSONS_XP if Curses.effect(Curses.HARD_LESSONS) in effects else 1.0
+	var worth := maxi(1, roundi(xp_of(lineup[index], cell) * (1.0 + xp_more / 100.0) * lessons))
 	xp += worth
 	xp_dropped.emit(index, worth)
 	# A unique, beside the gear and not from its table: any body can carry one, off the pool of the
@@ -1103,7 +1110,12 @@ func advance(delta: float) -> void:
 		_wear_down(enemy_max_hp() * HEATSTROKE_SHARE, delta)
 	_wear_down(_bleed, delta)
 	if not endless and time_left <= 0.0 and not finished:
-		_finish(false)
+		# Second Wind: once a fight, the clock gets back what the capstone says rather than running out.
+		if "second_wind" in effects and not _second_wind_used:
+			_second_wind_used = true
+			time_left = SECOND_WIND_SECONDS
+		else:
+			_finish(false)
 
 
 ## A body wearing down with nobody touching it, at `a_second` damage a second: the heat and the bleed
@@ -1137,9 +1149,16 @@ func _be_struck(delta: float) -> void:
 ## Split from `_be_struck` so a test can land one blow of a size it chose.
 func _struck_by(hit: float) -> void:
 	if crit_rng.randf() < dodge_chance():
+		# Afterimage: a dodge wins back some of what the blows took, never more, so it banks nothing.
+		if "afterimage" in effects:
+			var back := minf(AFTERIMAGE_SECONDS, wounds)
+			wounds -= back
+			time_left += back
 		player_hit.emit(0.0, true, false)
 		return
-	var lost := taken(hit)
+	# Shield Wall: block counts double against an elite's or a boss's blow.
+	var big := index < lineup.size() and EnemyRoster.tier_of(lineup[index]) != EnemyRoster.Tier.COMMON
+	var lost := taken(hit, block * (2.0 if big and "shieldwall" in effects else 1.0))
 	time_left = maxf(time_left - lost, 0.0)
 	wounds += lost
 	player_hit.emit(lost, false, lost <= 0.0)
@@ -1150,9 +1169,9 @@ func _struck_by(hit: float) -> void:
 
 ## What a blow of `hit` seconds takes off the clock once it lands: armour takes its share, then block
 ## takes its seconds off what is left. 100 seconds against 90% armour and 10 block is nothing.
-func taken(hit: float) -> float:
+func taken(hit: float, blocked := -1.0) -> float:
 	var kept := hit * (1.0 - _share(armor, ARMOUR_K))
-	return maxf(0.0, kept - block)
+	return maxf(0.0, kept - (block if blocked < 0.0 else blocked))
 
 
 ## The chance, 0 to 1, that the player steps out of a blow altogether, whatever its size.
