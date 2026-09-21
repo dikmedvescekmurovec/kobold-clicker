@@ -45,8 +45,9 @@ const SAVE_PATH := "user://inventory.json"
 ## a version 14 save's unspent picks are read as that many orbs. 16 adds `play_seconds`, the time
 ## the game has been open on this save; a version 15 save has none counted and starts from nothing.
 ## 17 adds `camp`, the tile the hero is resting on and what that rest earns an hour; a version 16
-## save is simply not camped anywhere.
-const VERSION := 17
+## save is simply not camped anywhere. 18 adds `curses`, what the player took on at the last
+## transcension; a version 17 save is a world under none.
+const VERSION := 18
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -146,6 +147,13 @@ var heirlooms: Inventory
 var super_orbs := 0
 ## How many of this world's fallen walls have paid their orb (`credit_walls`).
 var walls_credited := 0
+## The curses this world is played under, by `Curses` id: what the player chose on the way in, and
+## theirs until the next transcension. The fight hears of them through `effects()`, the numbers they
+## pay are added by `stats()`.
+var curses: Array[String] = []
+## The ones chosen on the black screen for the world to come. **In memory only**, like everything
+## `TranscendPage` does: `transcended()` is what makes them the next world's.
+var pending_curses: Array[String] = []
 
 
 ## Puts `item` in the bag and returns whatever had to be destroyed to make room -- empty almost
@@ -402,6 +410,11 @@ func stats() -> Dictionary:
 	# and skills made rather than adding to either.
 	if out.has("damage"):
 		out["damage"] = float(out["damage"]) * (1.0 + collection_bonus() / 100.0)
+	# What the world's curses pay in numbers, added like any other percent of that kind.
+	for curse: String in curses:
+		var pays: Dictionary = Curses.CURSES[curse].get("stats", {})
+		for stat: String in pays:
+			out[stat] = float(out.get(stat, 0.0)) + float(pays[stat])
 	return out
 
 
@@ -434,7 +447,8 @@ func collection_bonus() -> int:
 ## as one list of effect ids for `Encounter.effects`. Each doll answers for itself, which is what
 ## keeps a Pilgrim's set inside one doll: a home piece on each is two lone pieces.
 func effects() -> Array:
-	return skills.effects() + equipment.effects() + stash().equipment.effects()
+	return skills.effects() + equipment.effects() + stash().equipment.effects() \
+			+ curses.map(Curses.effect)
 
 
 ## The heirlooms, made the first time they are asked for.
@@ -449,7 +463,8 @@ func stash() -> Inventory:
 func credit_walls(fallen: int) -> bool:
 	if fallen <= walls_credited:
 		return false
-	super_orbs += fallen - walls_credited
+	# The Long Winter's pay: a wall twice as hard is worth two.
+	super_orbs += (fallen - walls_credited) * (2 if Curses.LONG_WINTER in curses else 1)
 	walls_credited = fallen
 	return true
 
@@ -493,6 +508,11 @@ func transcended() -> Inventory:
 	next.play_seconds = play_seconds
 	next.first_sword_taken = true
 	next.super_orbs = super_orbs
+	# What was chosen on the black screen is the new world's, and the old world's curses end with it.
+	next.curses = Curses.known(pending_curses)
+	if Curses.THICK_FOG in next.curses:
+		next.items.append(Item.rolled(LootTable.BROKEN_TORCH, ItemRarity.Rarity.COMMON,
+				RandomNumberGenerator.new()))
 	# Copies, through the save's own shape: this inventory is untouched, so a caller whose write
 	# fails is still holding the heirlooms as they were.
 	for item in stash().items:
@@ -566,6 +586,7 @@ func save(path := SAVE_PATH) -> bool:
 		"heirlooms": {"items": kept, "equipped": stash().equipment.to_dict()},
 		"super_orbs": super_orbs,
 		"walls_credited": walls_credited,
+		"curses": curses,
 	},"\t"))
 
 
@@ -688,6 +709,11 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	# Version 14 called them picks and spent them on making heirlooms; what is left of them are orbs.
 	inventory.super_orbs = maxi(0, int(data.get("super_orbs", data.get("heirloom_picks", 0))))
 	inventory.walls_credited = maxi(0, int(data.get("walls_credited", 0)))
+	# Version 17 knew nothing about curses: an absent key is a world under none. One this build no
+	# longer has is dropped by name, the way a retired orb is.
+	var cursed: Variant = data.get("curses", [])
+	if typeof(cursed) == TYPE_ARRAY:
+		inventory.curses = Curses.known(cursed)
 	# A file written before the cap, or edited by hand, comes back obeying it. A bag allowed over the
 	# cap in one place is a bag every other rule in the game has to check for.
 	inventory.trim()

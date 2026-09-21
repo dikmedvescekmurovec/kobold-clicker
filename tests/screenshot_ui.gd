@@ -566,6 +566,12 @@ func _shoot_town() -> void:
 			black._upgrade_page._select_item(0), "ui_transcend_upgrade"],
 		[func() -> void: black._upgrade_page._on_super_orb_pressed(SuperOrbTable.PERFECTION),
 			"ui_transcend_aim"],
+		# The curses behind the third card, two of them taken.
+		[func() -> void:
+			black._show_choice()
+			black._show_curses()
+			black._on_curse_toggled(true, Curses.THICK_FOG)
+			black._on_curse_toggled(true, Curses.LEAN_PICKINGS), "ui_transcend_curses"],
 	]
 	for shot in black_shots:
 		(shot[0] as Callable).call()
@@ -575,6 +581,7 @@ func _shoot_town() -> void:
 		root.get_texture().get_image().save_png("user://%s.png" % shot[1])
 		print("Saved ", ProjectSettings.globalize_path("user://%s.png" % shot[1]))
 	black.queue_free()
+	main.inventory.pending_curses.clear()
 	main._character.show()
 	Settings.animations = animations
 
@@ -633,6 +640,36 @@ func _shoot_town() -> void:
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_character.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_character.png"))
+
+	# The same page in a world under curses, which it lists at its foot; and the tile panel of land
+	# that carries modifiers. That land lies past the second wall, which this world has not reached, so
+	# Wild Tiles and a wall counted as fallen stand in: the rings generated past the first wall then
+	# carry theirs.
+	main.inventory.curses.assign([Curses.WILD_TILES, Curses.BLOODTHIRST, Curses.LONG_WINTER])
+	main.character_page.open()
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_character_curses.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_character_curses.png"))
+	main._on_left_page_closed()
+	var radius: int = main.view.land_radius
+	var generated := MapBuilder.START_LAND_RADIUS + MapBuilder.WASTE_DEPTH + 1
+	main.view.land_radius = maxi(radius, generated)
+	for x in range(MapBuilder.START_LAND_RADIUS + 2, generated):
+		var wild := Vector2i(x, 0)
+		if main._mods_of(wild).size() > 1:
+			main.map.select_cell(wild)
+			break
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_tile_mods.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_tile_mods.png"))
+	main.view.land_radius = radius
+	main.inventory.curses.clear()
+	main.map.deselect()
+	main._panel.hide()
 
 	# The settings, behind the corner's cog, and then the question its Reset asks.
 	main._on_left_page_closed()

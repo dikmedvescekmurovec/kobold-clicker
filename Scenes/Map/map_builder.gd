@@ -105,6 +105,7 @@ static func create(map: HexMap, towns: TownWorld, origin: Vector2i, env_seed: in
 	# Blends read the environment of every generated cell, not just the drawn ones, so a tile is drawn with the
 	# same overlays whether its neighbors are already charted or still hidden.
 	map.hidden_env = builder.env_at
+	map.can_pick = builder.can_chart
 	# Rebuilding the map hands the player over to the new builder, so any earlier one lets go.
 	for connection in map.player.arrived.get_connections():
 		map.player.arrived.disconnect(connection["callable"])
@@ -184,6 +185,7 @@ static func restore(map: HexMap, towns: TownWorld, save: MapSave) -> MapBuilder:
 	# Before anything is drawn, or the first cells get their blends worked out against land that
 	# reads as empty. Same reason create() sets it before its own first _show.
 	map.hidden_env = builder.env_at
+	map.can_pick = builder.can_chart
 	for connection in map.player.arrived.get_connections():
 		map.player.arrived.disconnect(connection["callable"])
 	map.player.arrived.connect(builder._on_player_arrived)
@@ -333,6 +335,16 @@ func has_chest(cell: Vector2i) -> bool:
 	return rng.randf() < CHEST_CHANCE
 
 
+## What the land on `cell` does to its own fight (`TileMods`): open land past the second wall, and
+## nothing where the fight is a set piece -- a settlement, a chest, the wall. Derived from the seed the
+## way `has_chest` is, so nothing is saved. `wild` is the Wild Tiles curse, which the builder cannot
+## know: whoever asks passes it.
+func mods_of(cell: Vector2i, wild := false) -> Array[String]:
+	if not _envs.has(cell) or not is_land(cell) or towns.has_town(_spot(cell)) or has_chest(cell):
+		return []
+	return TileMods.for_cell(env_seed, cell, Encounter.walls_inside(cell), wild)
+
+
 ## The closest chest to the player anywhere on the generated map, fog or not; NO_CELL when there is none.
 ## `unseen_only` leaves out a chest whose tile the player can already see: it is drawn there, so a
 ## fortuneteller pointing at it would be selling what is in plain sight.
@@ -447,10 +459,14 @@ func seen(cell: Vector2i) -> bool:
 	return state(cell) != State.HIDDEN
 
 
-## Whether the player can chart this cell: a tile they can see next to any charted one, and they have to be
-## standing still. Every charted tile is reachable, since charting only ever grows out from the start.
+## Whether the player can chart this cell: generated land or wall next to any charted tile, and they have
+## to be standing still. **Seen or not:** the first tile into the fog can be taken blind, which is how
+## a player under the Thick Fog, whose charts uncover nothing round them, moves at all. With a ring of
+## sight or more every such tile has been seen already, so for everyone else this is the rule it was.
+## Every charted tile is reachable, since charting only ever grows out from the start.
 func can_chart(cell: Vector2i) -> bool:
-	return not walking and state(cell) == State.UNCHARTED and chart_from(cell) != HexMap.NO_CELL
+	return not walking and _tiles.has(cell) and not charted(cell) and not is_wasteland(cell) \
+			and chart_from(cell) != HexMap.NO_CELL
 
 
 ## The charted tile next to `cell` the player is fewest steps from: where they stand if it borders `cell`,
@@ -642,7 +658,8 @@ func _tile_name(cell: Vector2i) -> String:
 ## Charts a tile the player can see next to them: its grey veil comes off, the land within `sight` steps of
 ## it comes out of the fog as uncharted, and the player sets off for it, arriving a couple of seconds later.
 ## `sight` is the one ring behind the tile for a player carrying nothing and further with a torch in hand;
-## anything under 1 is that one ring. Returns how many tiles newly showed, or -1 if it can't be charted.
+## at none or less -- the Thick Fog's, with no torch held -- only the tile taken comes out of the fog.
+## Returns how many tiles newly showed, or -1 if it can't be charted.
 ##
 ## The caller reads the torch at the moment it charts and never again, so a torch put on afterwards uncovers
 ## nothing and one taken off hides nothing: what a tile showed when it was taken is what it showed.
@@ -652,7 +669,7 @@ func chart(cell: Vector2i, sight := 1) -> int:
 	if is_wall(cell):
 		_break_wall()
 	_show(cell, State.CHARTED)
-	var shown := _reveal_around(cell, maxi(sight, 1))
+	var shown := _reveal_around(cell, maxi(sight, 0))
 	# Looking at the tile next door is the first half of going there, so the walk follows by itself.
 	move_to(cell)
 	return shown

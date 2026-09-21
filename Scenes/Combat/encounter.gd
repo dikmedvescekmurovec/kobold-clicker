@@ -378,6 +378,33 @@ const HEATSTROKE_SHARE := 0.02   ## of its health a second
 const GRAZING_MORE := 2          ## enemies
 const GIANTSBANE := 3.0
 const RESTLESS_CHANCE := 0.1
+## What the world's curses are tuned by (`Curses`, which writes the same figures in words).
+const IRON_HP := 0.6             ## more health, added to a tile's own `hp`
+const SHORT_DAYS := 8.0          ## seconds off every clock
+const BLOODTHIRST_HIT := 0.75    ## more of every blow, added to a tile's own `hit`
+const HUNGRY_HP := 2.0           ## more health on a mimic: three times over
+const HUNGRY_ROLLS := 6          ## in MIMIC_ROLLS' place
+const LONG_WINTER_HP := 2.0      ## what the ice wall's health is multiplied by
+const LEAN_LESS := 0.5           ## what is left of the chance of gear
+const LEAN_PLUS := [0.10, 0.01]  ## a find that is +1, and one that is +2
+const PAUPER_PURSE := 0.5
+const FOG_UNIQUES := 2.0         ## what the chance of a unique is multiplied by
+
+## What the tile itself does to the fight (`TileMods`, by id): land past the second wall, told to
+## `for_tile` and `farm` by whoever opens the fight. A fight nobody tells has none.
+var mods: Array = []
+## Seconds an enemy of this fight spends running in: `WALK_IN`, or longer in a Mire.
+var walk_in := WALK_IN
+## What the tile and the world add to every body's health, to every blow and to how often one comes,
+## as shares: **one sum each**, the way `_unique_more` is, so a Thick-skinned tile under Iron Foes is
+## +110% and not +140%.
+var _hp_more := 0.0
+var _hit_more := 0.0
+var _attack_more := 0.0
+## More experience off every body, in percent: the tile's and the world's, added.
+var xp_more := 0.0
+## Whether `wear` has already taken the curses on, which it must do once however often it is called.
+var _cursed := false
 ## What keeps a blow off the clock (`taken`, `_struck_by`): two ratings, seconds off each blow, and
 ## seconds a landed hit of the player's wins back of what the blows took.
 var armor := 0.0
@@ -423,7 +450,8 @@ static func profile_for(variant: String) -> Dictionary:
 ## The fight waiting on `cell`, whose terrain is `env` and whose `variant` is what the world put
 ## there. Commons with an elite at each pitch, drawn from the enemies that live on that terrain and
 ## seeded from the cell, so the tile always fields the same fight.
-static func for_tile(cell: Vector2i, env: String, variant := "", chest := false) -> Encounter:
+static func for_tile(cell: Vector2i, env: String, variant := "", chest := false,
+		mods: Array = []) -> Encounter:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(["combat", cell])
 	var fight := Encounter.new()
@@ -435,6 +463,7 @@ static func for_tile(cell: Vector2i, env: String, variant := "", chest := false)
 		fight.health.append(hp_of(MIMIC, cell))
 	else:
 		fight._take_profile(profile_for(variant))
+		fight._take_mods(mods)
 		for i in fight.enemies:
 			fight._append_enemy(rng)
 	fight.hp = fight.health[0]
@@ -448,10 +477,7 @@ static func for_wall(cell: Vector2i) -> Encounter:
 	fight.cell = cell
 	fight._take_profile(WALL)
 	fight.lineup.append(WALL_NAME)
-	# `WALL_GROWTH` is not applied here: `hp_of` already carries a step for every wall inside this one,
-	# and a wall's own ring counts none of itself, so the wall on ring 21 comes out WALL_GROWTH times
-	# this one on top of the ten rings' walk -- about fifteen times over.
-	fight.health.append(roundf(hp_of(WALL_NAME, cell) * WALL_HP))
+	fight.health.append(fight._health_of(WALL_NAME))
 	fight.hp = fight.health[0]
 	return fight
 
@@ -461,12 +487,14 @@ static func for_wall(cell: Vector2i) -> Encounter:
 ##
 ## It keeps the tile's own elite rhythm -- a run on a town throws one up every five -- and never its
 ## boss: a boss is what a set piece ends on, and a run does not end.
-static func farm(cell: Vector2i, env: String, variant := "") -> Encounter:
+static func farm(cell: Vector2i, env: String, variant := "", mods: Array = []) -> Encounter:
 	var fight := Encounter.new()
 	fight.env = env
 	fight.cell = cell
 	fight.endless = true
 	fight.elite_every = int(profile_for(variant)["elite_every"])
+	# Only what can bite with no clock and nothing striking it, reward and all.
+	fight._take_mods(TileMods.farmable(mods))
 	fight._append_enemy(fight.roster_rng)
 	fight.hp = fight.health[0]
 	return fight
@@ -479,6 +507,61 @@ func _take_profile(profile: Dictionary) -> void:
 	elite_every = int(profile["elite_every"])
 	boss_last = bool(profile["boss_last"])
 	time_left = seconds
+
+
+## Takes on what the tile does to its own fight, after the profile and before the lineup is rolled:
+## the numbers that shape it. What they do to the player's numbers, and what they pay, waits for `arm`.
+func _take_mods(carried: Array) -> void:
+	mods = carried
+	for id: String in mods:
+		var mod: Dictionary = TileMods.MODS[id]
+		enemies += int(mod.get("enemies", 0))
+		elite_every = int(mod.get("elite_every", elite_every))
+	seconds = maxf(1.0, seconds + TileMods.total(mods, "seconds"))
+	time_left = seconds
+	_hp_more += TileMods.total(mods, "hp")
+	_hit_more += TileMods.total(mods, "hit")
+	_attack_more += TileMods.total(mods, "attack")
+	walk_in = WALK_IN * TileMods.factor(mods, "walk_in")
+	phase_left = walk_in
+
+
+## The health `enemy` starts this fight with: what the tile makes it worth (`hp_of`), more for whatever
+## the tile and the world add. The ice wall answers to `WALL_HP` and the Long Winter and to nothing
+## else -- it is the check on the player, and a tile's modifier is not what it checks.
+func _health_of(enemy: String) -> float:
+	if enemy == WALL_NAME:
+		# `WALL_GROWTH` is not applied here: `hp_of` already carries a step for every wall inside this
+		# one, and a wall's own ring counts none of itself, so the wall on ring 21 comes out
+		# WALL_GROWTH times this one on top of the ten rings' walk -- about fifteen times over.
+		return roundf(hp_of(enemy, cell) * WALL_HP
+				* (LONG_WINTER_HP if Curses.effect(Curses.LONG_WINTER) in effects else 1.0))
+	var more := 1.0 + _hp_more
+	if enemy == MIMIC and Curses.effect(Curses.HUNGRY_MIMICS) in effects:
+		more += HUNGRY_HP
+	return maxf(1.0, roundf(hp_of(enemy, cell) * more))
+
+
+## What the world's curses do to the shape of the fight, once: `wear` hands them over with the rest of
+## `effects`, after the lineup was rolled, so every body already out is sized again.
+func _take_curses() -> void:
+	if _cursed:
+		return
+	_cursed = true
+	if Curses.effect(Curses.IRON_FOES) in effects:
+		_hp_more += IRON_HP
+	if Curses.effect(Curses.BLOODTHIRST) in effects:
+		_hit_more += BLOODTHIRST_HIT
+	if Curses.effect(Curses.SHORT_DAYS) in effects and not endless:
+		seconds = maxf(1.0, seconds - SHORT_DAYS)
+		time_left = seconds
+	# Only where a curse moved a body's health: a fight built by hand keeps the health it was given.
+	for curse: String in [Curses.IRON_FOES, Curses.HUNGRY_MIMICS, Curses.LONG_WINTER]:
+		if Curses.effect(curse) in effects:
+			for i in lineup.size():
+				health[i] = _health_of(lineup[i])
+			hp = health[0]
+			break
 
 
 ## What tier belongs at `position` in this fight's lineup: the boss that ends a set piece, an elite
@@ -512,6 +595,7 @@ func _clause(clause: String) -> bool:
 ## Setting `effects` by hand does everything but that reshaping, which is what most tests want.
 func wear(worn: Array) -> void:
 	effects = worn
+	_take_curses()
 	if endless or lineup.is_empty() or lineup[0] == MIMIC or lineup[0] == WALL_NAME:
 		return
 	# Grazing: more bodies on the same clock, on the front so the fight still ends on its elite.
@@ -522,7 +606,7 @@ func wear(worn: Array) -> void:
 		for i in GRAZING_MORE:
 			var picked := EnemyRoster.pick(env, EnemyRoster.Tier.COMMON, rng)
 			lineup.insert(0, picked)
-			health.insert(0, hp_of(picked, cell))
+			health.insert(0, _health_of(picked))
 		_lead = GRAZING_MORE
 		enemies += GRAZING_MORE
 	# Flush out: open land only. A settlement is a set piece and keeps its order and its boss.
@@ -564,7 +648,7 @@ func _append_enemy(rng: RandomNumberGenerator) -> void:
 		push_error("No tier %d enemy lives on %s" % [tier, env])
 		picked = EnemyRoster.names()[0]
 	lineup.append(picked)
-	health.append(hp_of(picked, cell))
+	health.append(_health_of(picked))
 
 
 ## Announces the first enemy, so whoever is drawing the fight can put it on the field. Safe to call
@@ -736,6 +820,42 @@ func arm(stats: Dictionary) -> void:
 	item_rarity = maxf(0.0, float(stats.get("item_rarity", 0.0)))
 	gold_find = maxf(0.0, float(stats.get("gold_find", 0.0)))
 	orb_find = maxf(0.0, float(stats.get("orb_find", 0.0)))
+	xp_more = maxf(0.0, float(stats.get("xp_more", 0.0)))
+	# The tile's own say, last: what it takes off the player's numbers, and what it pays for the fight
+	# it made -- added to the finders like any other percent, so `_kill` has no second path.
+	armor *= TileMods.factor(mods, "armor")
+	dodge *= TileMods.factor(mods, "dodge")
+	block *= TileMods.factor(mods, "block")
+	time_on_hit *= TileMods.factor(mods, "time_on_hit")
+	attack_speed *= TileMods.factor(mods, "swing")
+	var pays := TileMods.WILD_REWARD if Curses.effect(Curses.WILD_TILES) in effects else 1.0
+	drop_rate += TileMods.total(mods, "drop_rate") * pays
+	item_rarity += TileMods.total(mods, "item_rarity") * pays
+	gold_find += TileMods.total(mods, "gold_find") * pays
+	xp_more += TileMods.total(mods, "xp") * pays
+
+
+## `rate` as the lift that multiplies the finished chance by `factor`: a finder is a percent added to
+## 100, so half the chance at +20% is -40%, and twice it is +140%.
+static func _lifted(rate: float, factor: float) -> float:
+	return (100.0 + rate) * factor - 100.0
+
+
+## The drop rate a gear roll is handed: the player's, or half the finished chance under Lean Pickings.
+func _gear_rate() -> float:
+	return _lifted(drop_rate, LEAN_LESS) if Curses.effect(Curses.LEAN_PICKINGS) in effects else drop_rate
+
+
+## Lean Pickings' other half: a find that falls may fall already ascended. Drawn only under the
+## curse, so nobody else's loot rolls as it did not before.
+func _lean(item: Item) -> Item:
+	if item == null or not Curses.effect(Curses.LEAN_PICKINGS) in effects:
+		return item
+	var roll := loot_rng.randf()
+	var plus := 2 if roll < LEAN_PLUS[1] else 1 if roll < LEAN_PLUS[0] + LEAN_PLUS[1] else 0
+	for i in plus:
+		item.ascend()
+	return item
 
 
 ## One blow, from a click or from the weapon swinging itself. Takes `damage` off the enemy in front
@@ -845,24 +965,30 @@ func _kill() -> void:
 	if mimic and loot_rng.randf() < MIMIC_UNIQUE:
 		chest_unique = UniqueTable.roll(lineup[index], env, unique_rng, MapBuilder.level_of(cell),
 				drop_rate, true)
-	var rolls := MIMIC_ROLLS if mimic else 1
-	# The Tithe: no ordinary gear at all, from anything.
-	if "tithe" in effects or chest_unique != null:
+	var rolls := 1
+	if mimic:
+		rolls = HUNGRY_ROLLS if Curses.effect(Curses.HUNGRY_MIMICS) in effects else MIMIC_ROLLS
+	# The Tithe, and a Gilded tile: no ordinary gear at all, from anything.
+	var no_gear := "tithe" in effects or "gilded" in mods
+	if no_gear or chest_unique != null:
 		rolls = 0
+	var gear_rate := _gear_rate()
 	for roll in rolls:
 		var certain: bool = always_drop or mimic or (roll == 0
 				and ((guarantee_elite and on_elite()) or (big and "trophy" in effects)))
 		var dropped := LootTable.roll(lineup[index], loot_rng, certain, MapBuilder.level_of(cell),
-				drop_rate, item_rarity)
+				gear_rate, item_rarity)
 		# Lucky Wound: a body that took a crit rolls again and leaves the better of the two.
 		if _crit_landed and "lucky_wound" in effects:
 			dropped = _better(dropped, LootTable.roll(lineup[index], loot_rng, certain,
-					MapBuilder.level_of(cell), drop_rate, item_rarity))
+					MapBuilder.level_of(cell), gear_rate, item_rarity))
 		var found := 0
 		while dropped != null:
 			if first_sword:
 				first_sword = false
 				dropped = Item.rolled(LootTable.FIRST_DROP, ItemRarity.Rarity.COMMON, loot_rng)
+			else:
+				dropped = _lean(dropped)
 			loot_dropped.emit(index, dropped)
 			found += 1
 			# A find that beat the chance rolls again, at the same chance and never guaranteed, up to
@@ -870,7 +996,7 @@ func _kill() -> void:
 			# `always_drop`, a mimic, the elite's promise, Trophy Hunter -- does not, because it beat
 			# nothing: the promise is one piece.
 			dropped = null if certain or found >= MOST_DROPS else LootTable.roll(lineup[index],
-					loot_rng, false, MapBuilder.level_of(cell), drop_rate, item_rarity)
+					loot_rng, false, MapBuilder.level_of(cell), gear_rate, item_rarity)
 	# Every body carries one, which is the whole difference between gold and gear: nine kills in
 	# ten leave nothing, and all ten leave this.
 	# Gold find lifts the purse here rather than inside `gold_of`, which is what the body is worth
@@ -886,14 +1012,19 @@ func _kill() -> void:
 		purse *= 5
 	# The Magpie's Band: now and then the purse is a piece of gear instead. The Tithe wins where
 	# both are worn -- no ordinary gear means none -- and the purse stays a purse.
-	if "magpie" in effects and not "tithe" in effects and loot_rng.randf() < MAGPIE_CHANCE:
+	if "magpie" in effects and not no_gear and loot_rng.randf() < MAGPIE_CHANCE:
 		purse = 0.0
-		loot_dropped.emit(index, LootTable.roll(lineup[index], loot_rng, true,
-				MapBuilder.level_of(cell), drop_rate, item_rarity))
+		loot_dropped.emit(index, _lean(LootTable.roll(lineup[index], loot_rng, true,
+				MapBuilder.level_of(cell), drop_rate, item_rarity)))
+	# The Pauper's curse, and a Barren tile, where a body carries nothing at all.
+	if purse > 0.0 and Curses.effect(Curses.PAUPER) in effects:
+		purse = maxf(1.0, roundf(purse * PAUPER_PURSE))
+	if "barren" in mods:
+		purse = 0.0
 	if purse > 0.0:
 		gold += purse
 		gold_dropped.emit(index, purse)
-	var worth := xp_of(lineup[index], cell)
+	var worth := maxi(1, roundi(xp_of(lineup[index], cell) * (1.0 + xp_more / 100.0)))
 	xp += worth
 	xp_dropped.emit(index, worth)
 	# A unique, beside the gear and not from its table: any body can carry one, off the pool of the
@@ -903,12 +1034,15 @@ func _kill() -> void:
 	var boss := EnemyRoster.tier_of(lineup[index]) == EnemyRoster.Tier.BOSS
 	# A mimic's unique chance is its coin toss above, and nothing on top of it.
 	if chest_unique != null:
-		loot_dropped.emit(index, chest_unique)
+		loot_dropped.emit(index, _lean(chest_unique))
 	elif not mimic and uniques_after != NO_UNIQUES and index >= uniques_after:
+		# Thick Fog's pay: twice the finished chance, whatever the drop rate already made of it.
+		var unique_rate := _lifted(drop_rate, FOG_UNIQUES) \
+				if Curses.effect(Curses.THICK_FOG) in effects else drop_rate
 		var found := UniqueTable.roll(lineup[index], env, unique_rng, MapBuilder.level_of(cell),
-				drop_rate)
+				unique_rate)
 		if found != null:
-			loot_dropped.emit(index, found)
+			loot_dropped.emit(index, _lean(found))
 	# The Hourglass: a second back for anything but a boss, and never past what the fight began
 	# with, so the clock can be held but not banked. A run has no clock to give to.
 	if "hourglass" in effects and not endless and not boss:
@@ -991,11 +1125,12 @@ func _wear_down(a_second: float, delta: float) -> void:
 func _be_struck(delta: float) -> void:
 	if not strikes or endless or finished or phase != Phase.WAITING or delta <= 0.0 			or lineup[index] == WALL_NAME:
 		return
-	var every: float = ATTACK_EVERY[EnemyRoster.tier_of(lineup[index])]
+	# A Frenzied tile brings the blows round sooner; a Savage one and the Bloodthirst make each bigger.
+	var every: float = ATTACK_EVERY[EnemyRoster.tier_of(lineup[index])] / (1.0 + _attack_more)
 	_attack += delta
 	while _attack >= every and phase == Phase.WAITING and not finished:
 		_attack -= every
-		_struck_by(hit_of(lineup[index], cell))
+		_struck_by(hit_of(lineup[index], cell) * (1.0 + _hit_more))
 
 
 ## One blow at the clock: dodged whole, or cut by armour and then block and taken off `time_left`.
@@ -1086,7 +1221,7 @@ func _advance_phase() -> void:
 		_overkill = 0.0
 		_domino = false
 		phase = Phase.WALKING_IN
-		phase_left = WALK_IN
+		phase_left = walk_in
 		enemy_coming.emit(index, lineup[index], hp)
 		return
 	_has_risen = false
@@ -1105,7 +1240,7 @@ func _advance_phase() -> void:
 	hp = maxf(1.0, fresh - _overkill)
 	_overkill = 0.0
 	phase = Phase.WALKING_IN
-	phase_left = WALK_IN
+	phase_left = walk_in
 	enemy_coming.emit(index, lineup[index], hp)
 
 

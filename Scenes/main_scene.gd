@@ -84,6 +84,8 @@ var _camp_button: Button
 var _town_button: Button
 ## What a town on the selected tile offers, listed under the land it stands on.
 var _service_rows: VBoxContainer
+## What the land does to its own fight (`TileMods`), one row a modifier, under the services.
+var _mod_rows: VBoxContainer
 ## The settlement the player has walked into, on the right edge in the tile panel's place, and the
 ## cell it stands on -- kept because the map is still clickable behind the page, so the selection is
 ## not what the town is.
@@ -358,6 +360,8 @@ func _build_ui() -> void:
 	_service_rows = VBoxContainer.new()
 	_service_rows.add_theme_constant_override("separation", 4)
 	rows.add_child(_service_rows)
+	_mod_rows = UITheme.vbox(2)
+	rows.add_child(_mod_rows)
 
 	# Only the buttons that can be pressed are shown (`_update_buttons`), at the column's foot.
 	var buttons := VBoxContainer.new()
@@ -722,7 +726,8 @@ func _show_environments(weights: Dictionary) -> void:
 ## which town has a blacksmith is exactly the sort of thing that decides where to walk next.
 func _show_services(cell: Vector2i) -> void:
 	UITheme.clear(_service_rows)
-	var tier := view.town_tier(cell)
+	# Nothing about a tile still under the fog, which one taken blind is when it is clicked.
+	var tier := view.town_tier(cell) if view.seen(cell) else -1
 	if tier == -1:
 		return
 	_service_rows.add_child(UITheme.rule())
@@ -742,6 +747,23 @@ func _show_services(cell: Vector2i) -> void:
 		face.add_child(icon)
 		icons.add_child(face)
 	_service_rows.add_child(icons)
+
+
+## What the land on a tile does to the fight for it, one line a modifier in the body font, with what
+## it does and what it pays in the line's tooltip. Only for a tile the player can see: what lies under
+## the fog is for charting to find out.
+func _show_mods(cell: Vector2i) -> void:
+	UITheme.clear(_mod_rows)
+	var mods: Array = _mods_of(cell) if view.seen(cell) else []
+	if mods.is_empty():
+		return
+	_mod_rows.add_child(UITheme.rule())
+	_mod_rows.add_child(UITheme.label("Modifiers", Palette.SLATE))
+	for id: String in mods:
+		var row := UITheme.label(str(TileMods.MODS[id]["name"]), Palette.INK, true)
+		row.tooltip_text = TileMods.tip(id)
+		row.mouse_filter = Control.MOUSE_FILTER_STOP
+		_mod_rows.add_child(row)
 
 
 ## The tile panel is a full-height column against the right edge, its buttons at its foot. The
@@ -771,19 +793,22 @@ func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
 	_layout_ui()
 	var spot := map_origin + cell
 	# The ice hides whatever land is under it, so it has no rows of its own.
-	var weights: Dictionary = info["environments"] if view.is_land(cell) else {}
+	# A tile under the fog that can be taken blind has nothing drawn, so no `info` and no rows either.
+	var weights: Dictionary = info.get("environments", {}) if view.is_land(cell) else {}
 	var parts := PackedStringArray()
 	for env: String in weights:
 		parts.append("%s %.1f%%" % [env, weights[env] * 100])
-	var line := "Clicked %s (world %s): %s | %s" % [cell, spot, info["name"], ", ".join(parts)]
+	var line := "Clicked %s (world %s): %s | %s" % [cell, spot, info.get("name", "fog"), ", ".join(parts)]
 	if towns.has_town(spot):
 		line += " | town connected to %s" % [towns.connections(spot)]
 	print(line)
-	var tile_name := view.name_of(cell)
+	# Not named either: a tile is named as it comes out of the fog, and asking would name it now.
+	var tile_name := view.name_of(cell) if view.seen(cell) else "Unknown land"
 	_tile_title.text = tile_name if tile_name != "" else "Tile"
 	_level_label.text = "Level %d" % view.level_of(cell)
 	_show_environments(weights)
 	_show_services(cell)
+	_show_mods(cell)
 	# The rows are filled after _layout_ui ran, and the level line can be wider than the environment
 	# rows that pin the panel's width, so the panel is measured again now that it holds everything.
 	_layout_ui()
@@ -828,7 +853,8 @@ func _on_chart_pressed() -> void:
 		view.move_to(from)
 		_update_buttons()
 		return
-	var env: String = map.get_tile_info(cell).get("env", "")
+	# Asked of the builder and not of what is drawn: a tile taken blind has nothing drawn on it yet.
+	var env := view.env_at(cell)
 	var variant := view.area_variant(cell)
 	print("Fighting for %s, %s (%s, %s %d)" % [view.name_of(cell), cell, env, variant,
 			CombatScene.layout_for(cell)])
@@ -839,7 +865,7 @@ func _on_chart_pressed() -> void:
 	var chest := view.has_chest(cell)
 	if chest:
 		print("A treasure chest waits on %s" % cell)
-	_open_fight(Encounter.for_tile(cell, env, variant, chest), cell, false)
+	_open_fight(Encounter.for_tile(cell, env, variant, chest, _mods_of(cell)), cell, false)
 
 
 ## Farming the selected tile: the same arena and the same enemies, coming forever, with no clock
@@ -851,7 +877,7 @@ func _on_farm_pressed() -> void:
 	var env: String = map.get_tile_info(cell).get("env", "")
 	var variant := view.area_variant(cell)
 	print("Farming %s, %s (%s, %s)" % [view.name_of(cell), cell, env, variant])
-	_open_fight(Encounter.farm(cell, env, variant), cell, true)
+	_open_fight(Encounter.farm(cell, env, variant, _mods_of(cell)), cell, true)
 
 
 ## What the Set up camp button says while it can be pressed.
@@ -863,6 +889,8 @@ const CAMP_TIP := "Rest here, and let the hero hold the tile while you are away"
 ## nothing. That is worth saying on the button rather than finding out in the morning. The two
 ## conditions are `Camp.hunts`', asked of what is worn rather than of a fight nobody has built yet.
 func _cannot_camp() -> String:
+	if Curses.NO_REST in inventory.curses:
+		return "This world is under No Rest: no camp can be set up in it."
 	if float(inventory.stats().get("attack_speed", 0.0)) <= 0.0:
 		return "Your weapon does not swing on its own, and a camp is held by the weapon alone."
 	if "berserk" in inventory.effects():
@@ -880,7 +908,7 @@ func _on_camp_pressed() -> void:
 	var env: String = map.get_tile_info(cell).get("env", "")
 	# Armed exactly as `_open_fight` arms one, and for the same reason: a camp is that fight. What it
 	# is never given is the things a camp does not pay -- no first sword, no orbs, no uniques.
-	var fight := Encounter.farm(cell, env, view.area_variant(cell))
+	var fight := Encounter.farm(cell, env, view.area_variant(cell), _mods_of(cell))
 	fight.wear(inventory.effects())
 	fight.arm(inventory.stats())
 	inventory.camp = Camp.make(cell, view.name_of(cell), fight, Time.get_unix_time_from_system())
@@ -1048,7 +1076,14 @@ func _credit_walls() -> void:
 ## torch adds. It is read here and nowhere else -- at the moment the tile is charted -- so a torch put
 ## on afterwards uncovers nothing and one taken off hides nothing. What a tile showed is what it showed.
 func _sight() -> int:
-	return 1 + int(inventory.stats().get("sight", 0))
+	# Under the Thick Fog the player's own ring is gone, and a torch is what buys it back. None at all
+	# is a chart that uncovers the tile taken and nothing round it (`MapBuilder.chart`).
+	return (0 if Curses.THICK_FOG in inventory.curses else 1) + int(inventory.stats().get("sight", 0))
+
+
+## What the land on `cell` does to its own fight, under this world's curses.
+func _mods_of(cell: Vector2i) -> Array[String]:
+	return view.mods_of(cell, Curses.WILD_TILES in inventory.curses)
 
 
 ## Retry under a lost verdict. Out through the one door every fight leaves by, so what it earned is

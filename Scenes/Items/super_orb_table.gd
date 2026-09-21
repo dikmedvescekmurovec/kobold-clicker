@@ -150,12 +150,7 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator, index := 
 				return false
 			item.mods[index] = fresh
 		ASCENSION:
-			var was := item.mod_level()
-			item.plus += 1
-			for mod in item.mods:
-				mod["value"] = ModifierTable.rescaled(str(mod["id"]), int(mod["value"]), was,
-						item.mod_level())
-			item.refresh_perfect()
+			item.ascend()
 		PERFECTION:
 			item.mods[index]["perfect"] = true
 			item.refresh_perfect()

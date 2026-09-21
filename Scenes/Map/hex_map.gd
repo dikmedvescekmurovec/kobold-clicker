@@ -30,6 +30,10 @@ var aim_radius := -1:
 ## ("" when there is none). Whoever generates the map sets it, so a tile can blend with land around it that the
 ## player hasn't charted, and looks the same however late it is drawn.
 var hidden_env := Callable()
+## Whether a cell nothing is drawn on can still be hovered and clicked, as a Callable taking a cell:
+## the first tile into the fog, which can be charted blind (`MapBuilder.can_chart`). Whoever owns the
+## map sets it; unset, only a drawn tile answers the mouse.
+var can_pick := Callable()
 
 var _press_at := Vector2.ZERO
 var _pressing := false
@@ -99,7 +103,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _pressing and not _dragging and aim_radius >= 0:
 				cell_aimed.emit(cell)
 				get_viewport().set_input_as_handled()
-			elif _pressing and not _dragging and has_tile(cell):
+			elif _pressing and not _dragging and _answers(cell):
 				select_cell(cell)
 				get_viewport().set_input_as_handled()
 			_pressing = false
@@ -252,8 +256,13 @@ func deselect() -> void:
 	highlight.queue_redraw()
 
 
+## Whether a press or the hover means anything on `cell`: a drawn tile, or one `can_pick` vouches for.
+func _answers(cell: Vector2i) -> bool:
+	return has_tile(cell) or (can_pick.is_valid() and bool(can_pick.call(cell)))
+
+
 func _set_hovered(cell: Vector2i) -> void:
-	if not has_tile(cell) and aim_radius < 0:
+	if not _answers(cell) and aim_radius < 0:
 		cell = NO_CELL
 	if cell == hovered_cell:
 		return

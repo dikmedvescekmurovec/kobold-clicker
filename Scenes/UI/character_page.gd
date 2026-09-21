@@ -58,6 +58,17 @@ func open() -> void:
 	UITheme.clear(_rows)
 	var totals := inventory.stats()
 	_rows.add_child(_who())
+	# What this world is under, if anything, straight under the card: at the foot it would be under the
+	# fold. A name a line, what it costs and pays in its tooltip; the numbers a curse pays are in the
+	# table below (`Inventory.stats`).
+	if not inventory.curses.is_empty():
+		_rows.add_child(UITheme.label("Curses", Palette.SLATE))
+		for id: String in inventory.curses:
+			var curse: Dictionary = Curses.CURSES[id]
+			var row := UITheme.label(str(curse["name"]), Palette.RUST, true)
+			row.tooltip_text = "%s\n%s" % [curse["text"], curse["reward"]]
+			row.mouse_filter = Control.MOUSE_FILTER_STOP
+			_rows.add_child(row)
 	_rows.add_child(UITheme.label("Attributes", Palette.SLATE))
 	var discs := HBoxContainer.new()
 	discs.alignment = BoxContainer.ALIGNMENT_CENTER

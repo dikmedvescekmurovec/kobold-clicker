@@ -119,6 +119,16 @@ func mod_level() -> int:
 	return level + plus * PLUS_LEVELS
 
 
+## One plus more: every modifier keeps its place in its band as the band moves up `PLUS_LEVELS`
+## levels. What an Orb of Ascension does, and what Lean Pickings does to a find as it falls.
+func ascend() -> void:
+	var was := mod_level()
+	plus += 1
+	for mod in mods:
+		mod["value"] = ModifierTable.rescaled(str(mod["id"]), int(mod["value"]), was, mod_level())
+	refresh_perfect()
+
+
 ## Puts every perfected modifier (`"perfect": true`, an Orb of Perfection's) at the top of its band
 ## as the band now stands. Called by whatever moves `mod_level`: the smith's upgrade, an Orb of
 ## Ascension, the end of a world. A Divine steps over one instead, so it never leaves the top.

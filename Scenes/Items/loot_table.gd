@@ -151,6 +151,16 @@ const KINDS := {
 		"affixes": ["block", "crit_damage", "intelligence"],
 		"tiers": ["Wooden Torch", "Blazing Torch"],
 	},
+	# What a world under the Thick Fog begins with and nothing else hands out (BROKEN_TORCH): weight
+	# 0, like the Broken Sword. A Wooden Torch's Sight and nothing more, so holding it buys back what
+	# the curse took and costs the hand a shield would have had.
+	"broken_torch": {
+		"slot": "offhand", "weight": 0,
+		"stats": {"sight": 1},
+		"affixes": ["block", "crit_damage", "intelligence"],
+		"tiers": ["Broken Torch"],
+		"borrows": "Wooden Torch",
+	},
 	# --- Body: the biggest numbers in the table, and the same two-way split as the head.
 	"plate": {
 		"slot": "body", "weight": 12,
@@ -235,6 +245,8 @@ const TIER_POWER := 0.2
 ## The player's first piece of gear, whatever the roll said it was: `Encounter.first_sword` swaps it
 ## in at level 1, keeping the rarity, so it is always 1 Damage and the modifiers that rarity carries.
 const FIRST_DROP := "Broken Sword"
+## What a transcension under the Thick Fog puts in the new world's bag (`Inventory.transcended`).
+const BROKEN_TORCH := "Broken Torch"
 
 ## Every piece a monster can leave, keyed by name: the row every caller has always read -- `icon`,
 ## `weight`, `slot`, `stats`, `affixes` and the jewellery's `globals` -- plus the `kind` it belongs to
@@ -390,8 +402,12 @@ static func items() -> PackedStringArray:
 ## a base is playable the day the table names it, and the art follows when it is approved.
 static func icon_path(item: String) -> String:
 	var row: Dictionary = ITEMS[item]
-	var tiers: Array = KINDS[row["kind"]]["tiers"]
-	for name: String in [item, str(tiers[0]), _first_of_slot(str(row["slot"]))]:
+	var kind: Dictionary = KINDS[row["kind"]]
+	var tiers: Array = kind["tiers"]
+	# `borrows` is a kind saying whose picture it wears until it has one: the Broken Torch the torch's,
+	# where the slot's first would have handed it a shield.
+	for name: String in [item, str(tiers[0]), str(kind.get("borrows", item)),
+			_first_of_slot(str(row["slot"]))]:
 		var path: String = ROOT + str(ITEMS[name]["icon"])
 		if ResourceLoader.exists(path):
 			return path
@@ -562,7 +578,8 @@ static func delta_shows(stat: String, delta: float) -> bool:
 static func chance_for(enemy_name: String, drop_rate := 0.0) -> float:
 	var tier: float = TIER_CHANCE[EnemyRoster.tier_of(enemy_name)]
 	var size: float = SIZE_CHANCE[EnemyRoster.size_of(enemy_name)]
-	return minf(tier * size * (1.0 + maxf(drop_rate, 0.0) / 100.0), 1.0)
+	# Down to nothing and no further: Lean Pickings hands in a lift under zero (`Encounter._gear_rate`).
+	return minf(tier * size * (1.0 + maxf(drop_rate, -100.0) / 100.0), 1.0)
 
 
 ## One kill's worth of loot: null for nothing, or the item that dropped, rarity and modifiers and

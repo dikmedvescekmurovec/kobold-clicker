@@ -91,7 +91,7 @@ func _test_items() -> bool:
 		_check(icon != null, item + " has an icon")
 		if icon != null:
 			_check(icon.get_size() == Vector2(32, 32), "%s is %s, not 32x32" % [item, icon.get_size()])
-		_check(int(LootTable.ITEMS[item]["weight"]) > 0 or item == LootTable.FIRST_DROP,
+		_check(int(LootTable.ITEMS[item]["weight"]) > 0 or item in [LootTable.FIRST_DROP, LootTable.BROKEN_TORCH],
 				item + " can come up at all")
 		var stats := LootTable.stats_of(item)
 		_check(not stats.is_empty(), item + " is worth something")
@@ -426,9 +426,9 @@ func _test_slot_locks() -> bool:
 		"damage": ["sword", "dagger", "mace", "greatsword", "broken_sword", "gold_ring", "iron_band", "jade_ring",
 			"ruby_amulet", "gold_amulet", "emerald_amulet"],
 		"move_speed": ["boot", "greaves"],
-		"block": ["shield", "buckler", "torch"],
+		"block": ["shield", "buckler", "torch", "broken_torch"],
 		"bleed": ["mace"],
-		"sight": ["torch"],
+		"sight": ["torch", "broken_torch"],
 	}
 	# And the kinds whose own numbers it is, which for four of them is narrower than the line above:
 	# a ring may roll flat damage and a torch may roll flat block, and neither shows any.
@@ -437,7 +437,7 @@ func _test_slot_locks() -> bool:
 		"move_speed": ["boot", "greaves"],
 		"block": ["shield", "buckler"],
 		"bleed": ["mace"],
-		"sight": ["torch"],
+		"sight": ["torch", "broken_torch"],
 	}
 	for stat: String in locked:
 		var carries := {}
@@ -1857,6 +1857,7 @@ func _test_heirlooms() -> bool:
 	SafeFile.write(TEST_PATH, JSON.stringify(old_save))
 	_check(Inventory.load_from(TEST_PATH).super_orbs == 2, "a version 14 save's picks are read as orbs")
 	_clear_save()
+	_check(_test_curses() == true, "curse tests ran to the end")
 
 	# The pages. The ordinary bag makes no heirloom; a transcension's does, at its foot, and writes
 	# nothing: the whole transcension is one write, and the main scene's.
@@ -2368,7 +2369,7 @@ func _test_kinds() -> bool:
 	for kind: String in LootTable.KINDS:
 		var slot := str(LootTable.KINDS[kind]["slot"])
 		var weight := int(LootTable.KINDS[kind]["weight"])
-		_check(weight > 0 or kind == "broken_sword", "%s can come up at all" % kind)
+		_check(weight > 0 or kind in ["broken_sword", "broken_torch"], "%s can come up at all" % kind)
 		weights[slot] = int(weights.get(slot, 0)) + weight
 		total += weight
 	_check(weights.size() == was.size(), "there are still seven slots (%s)" % [weights.keys()])
@@ -3664,4 +3665,66 @@ func _test_fight_ledger() -> bool:
 	purse.add_gold(3)
 	_check(purse.bank() and bag.gold == 3, "a run that found only gold is still paid")
 	_clear_save()
+	return true
+
+
+## The world's curses as the inventory keeps them: chosen for the world to come and the next world's
+## only once it is transcended into, saved by name, paid in `stats()` and told to the fight by
+## `effects()`. What each does to a fight is test_combat's.
+func _test_curses() -> bool:
+	_clear_save()
+	var leaving := Inventory.new()
+	leaving.curses = [Curses.IRON_FOES]
+	leaving.pending_curses = [Curses.THICK_FOG, Curses.BLOODTHIRST, "one this build never had"]
+	_check(Curses.effect(Curses.IRON_FOES) in leaving.effects() and not Curses.effect(Curses.THICK_FOG) in leaving.effects(),
+			"the fight hears of the world's curses, and not of the ones only chosen")
+	_check(float(leaving.stats().get("gold_find", 0.0)) == 40.0, "and Iron Foes pays its gold find in the stats")
+	var next := leaving.transcended()
+	_check(next.curses == [Curses.BLOODTHIRST, Curses.THICK_FOG] and next.pending_curses.is_empty(),
+			"the chosen ones are the next world's, the old world's are left in it (%s)" % [next.curses])
+	_check(float(next.stats().get("item_rarity", 0.0)) == 30.0 and float(next.stats().get("gold_find", 0.0)) == 0.0,
+			"with what they pay")
+	_check(next.total() == 1 and next.items[0].type == LootTable.BROKEN_TORCH
+			and float(next.items[0].effective_stats().get("sight", 0.0)) == 1.0 and next.items[0].mods.is_empty(),
+			"the Thick Fog's world begins with a Broken Torch: a ring of sight and nothing else")
+	_check(next.equip(next.items[0], Equipment.Socket.OFFHAND) and float(next.stats().get("sight", 0.0)) == 1.0,
+			"which goes in the offhand and sees")
+	_check(leaving.transcended().total() == 1 and Inventory.new().transcended().total() == 0,
+			"and a world under no fog begins with nothing")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	for roll in 3000:
+		var dropped := LootTable.roll("Goblin", rng, true, 30)
+		_check(dropped.type != LootTable.BROKEN_TORCH, "no roll ever deals a Broken Torch")
+
+	# Saved by name, and an older save is a world under none.
+	next.save(TEST_PATH)
+	_check(Inventory.load_from(TEST_PATH).curses == next.curses, "the curses come back off the save")
+	var old_save: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(TEST_PATH))
+	old_save["curses"] = ["thick_fog", "retired_curse", 7]
+	SafeFile.write(TEST_PATH, JSON.stringify(old_save))
+	_check(Inventory.load_from(TEST_PATH).curses == [Curses.THICK_FOG], "one this build does not know is dropped by name")
+	old_save.erase("curses")
+	old_save["version"] = 17
+	SafeFile.write(TEST_PATH, JSON.stringify(old_save))
+	var problem := []
+	_check(Inventory.load_from(TEST_PATH, problem).curses.is_empty() and problem.is_empty(),
+			"a version 17 save is a world under none")
+	_clear_save()
+
+	# The Long Winter's pay: a wall twice as hard is worth two.
+	var winter := Inventory.new()
+	winter.curses = [Curses.LONG_WINTER]
+	_check(winter.credit_walls(1) and winter.super_orbs == 2, "a wall under the Long Winter pays two orbs")
+	_check(not winter.credit_walls(1) and winter.credit_walls(3) and winter.super_orbs == 6, "every one of them, once")
+
+	# An ascended find: one plus more, every modifier still in its place in the band.
+	var piece := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 10)
+	var before: Array = piece.mods.duplicate(true)
+	_check(not before.is_empty(), "a rare has modifiers to move")
+	piece.ascend()
+	_check(piece.plus == 1 and piece.mod_level() == 10 + Item.PLUS_LEVELS, "ascending is one plus (%d)" % piece.plus)
+	for i in before.size():
+		_check(int(piece.mods[i]["value"]) == ModifierTable.rescaled(str(before[i]["id"]), int(before[i]["value"]), 10,
+				piece.mod_level()), "%s keeps its place in the band" % before[i]["id"])
 	return true

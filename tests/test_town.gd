@@ -1637,17 +1637,43 @@ func _test_fortune_page() -> void:
 			"none of which has been written: a game closed here never left")
 	black._show_choice()
 	await process_frame
+	# The curses: a third card, a row each, three at most, and nothing of it written until the way on.
+	_deep_button(black, "Take on a curse").pressed.emit()
+	await process_frame
+	_check(black._curse_face != null and not black._choice.visible and black._back.visible,
+			"the third card opens the curses, with the arrow back")
+	for id: String in [Curses.THICK_FOG, Curses.NO_REST, Curses.LONG_WINTER]:
+		(black._curse_face.find_child(id, true, false) as Button).toggled.emit(true)
+		await process_frame
+	var fourth := black._curse_face.find_child(Curses.PAUPER, true, false) as Button
+	_check(main.inventory.pending_curses.size() == Curses.MOST and fourth.disabled
+			and not (black._curse_face.find_child(Curses.NO_REST, true, false) as Button).disabled,
+			"three may be taken, and the rest grey while they are")
+	(black._curse_face.find_child(Curses.NO_REST, true, false) as Button).toggled.emit(false)
+	await process_frame
+	_check(main.inventory.pending_curses == [Curses.THICK_FOG, Curses.LONG_WINTER]
+			and not (black._curse_face.find_child(Curses.PAUPER, true, false) as Button).disabled,
+			"one let go makes room again")
+	_check(main.inventory.curses.is_empty() and FileAccess.get_file_as_string(TEST_PATH) == written,
+			"the world being left is under none of them, and nothing is written")
+	black._show_choice()
+	await process_frame
+	_check("Thick Fog" in _said(black._choice) and "Long Winter" in _said(black._choice), "the card says what was taken")
 	_deep_button(black, "Enter the new world").pressed.emit()
 	await process_frame
 	_check(not FileAccess.file_exists(TEST_MAP_PATH), "the way on leaves the world: the map is gone")
 	var after := Inventory.load_from(TEST_PATH)
-	_check(after.gold == 0.0 and after.total() == 0 and after.level == 1, "the purse, the bag and the levels stay behind")
+	_check(after.gold == 0.0 and after.level == 1
+			and after.items.all(func(item: Item) -> bool: return item.type == LootTable.BROKEN_TORCH),
+			"the purse, the bag and the levels stay behind")
 	_check(after.stash().total() == 1 and after.stash().items[0].level == 1
 			and after.stash().items[0].safe_level == 5 and after.stash().items[0].plus == 1,
 			"the heirloom goes along, +1, at level 1 and remembering 5")
 	_check(after.kills == 321 and after.first_sword_taken and "first_town" in after.tips,
 			"and so does what the player knows, so no helping hand is dealt twice")
 	_check(after.walls_credited == 0, "the new world's walls have paid nothing yet")
+	_check(after.curses == [Curses.THICK_FOG, Curses.LONG_WINTER], "the new world is under what was chosen (%s)" % [after.curses])
+	_check(after.total() == 1 and after.items[0].type == LootTable.BROKEN_TORCH, "and the fog's torch is in its bag")
 	# The scene would have been loaded again; here it is only told it may not write the old world back.
 	main.queue_free()
 	await process_frame

@@ -557,15 +557,59 @@ func _test_sight() -> bool:
 			"%s comes back out of the save still under the veil" % outer)
 	_check(restored.name_of(outer) == view.name_of(outer), "and still called what it was called")
 
-	# A sight of 0 is a sight of 1: nobody is blinded by carrying nothing.
-	var next_out := HexGrid.neighbor(beyond, HexGrid.Edge.E)
-	var next_ring := _unseen_within(view, next_out, 1)
-	_check(view.can_chart(next_out) and view.chart(next_out, 0) == next_ring.size(),
-			"a sight under 1 charts as an empty hand does (%d)" % next_ring.size())
-	map.player.finish_walk()
-
 	map.queue_free()
 	other.queue_free()
+	return _test_blind_charting()
+
+
+## No sight at all, which is the Thick Fog's with no torch held: a chart uncovers the tile taken and
+## nothing round it, so the next tile out is taken blind -- the first one into the fog, beside charted
+## land, and never one further than that.
+func _test_blind_charting() -> bool:
+	var map: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
+	root.add_child(map)
+	var view := MapBuilder.create(map, TownWorld.generate(WORLD_SEED), Vector2i(128, 128), 99)
+	var rim := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
+	var blind := HexGrid.neighbor(rim, HexGrid.Edge.E)
+	var further := HexGrid.neighbor(blind, HexGrid.Edge.E)
+	_check(not view.seen(blind) and not view.can_chart(blind), "a tile under the fog with nothing charted beside it is out of reach")
+	_check(view.chart(rim, 0) == 0, "a chart with no sight shows nothing round the tile taken")
+	map.player.finish_walk()
+	_check(view.charted(rim) and not view.seen(blind), "the tile is taken and the fog behind it stands")
+	_check(view.can_chart(blind) and view.chart_from(blind) == rim, "the first tile into the fog can be taken blind")
+	_check(not view.can_chart(further), "and the one behind it cannot")
+	_check(map._answers(blind) and not map._answers(further) and not map.has_tile(blind),
+			"the map answers the mouse on it though nothing is drawn there")
+	_check(view.to_save().names.get(blind, "") == "", "it has no name until it is taken")
+	_check(view.chart(blind, -1) == 0, "taking it shows that tile alone, however far under 1 the sight")
+	map.player.finish_walk()
+	_check(view.charted(blind) and map.has_tile(blind) and view.name_of(blind) != "" and not view.seen(further),
+			"it is drawn and named as it is taken, and the fog past it stands")
+	var lit := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.W)
+	var ring := _unseen_within(view, lit, 1)
+	_check(not ring.is_empty() and view.chart(lit, 1) == ring.size(), "and a ring of sight still shows its ring (%d)" % ring.size())
+	map.player.finish_walk()
+
+	# What the land does to its own fight: nothing inside the second wall, and nothing on a set piece.
+	for cell: Vector2i in _cells_within(MapBuilder.CENTER, view.land_radius):
+		_check(view.mods_of(cell).is_empty() and view.mods_of(cell, true).is_empty(),
+				"%s is inside the first wall and carries nothing" % cell)
+	# The rings generated past the wall are past one wall, which is where Wild Tiles begins.
+	view.land_radius += MapBuilder.WASTE_DEPTH + 1
+	var carried := 0
+	for cell: Vector2i in _cells_within(MapBuilder.CENTER, view.land_radius):
+		if HexGrid.distance(MapBuilder.CENTER, cell) <= MapBuilder.START_LAND_RADIUS + 1:
+			continue
+		_check(view.mods_of(cell).is_empty(), "%s is short of the second wall" % cell)
+		var wild := view.mods_of(cell, true)
+		_check(wild == view.mods_of(cell, true), "and its modifiers are the same every time they are asked")
+		if view.town_tier(cell) != -1 or view.has_chest(cell):
+			_check(wild.is_empty(), "a settlement or a chest at %s is a set piece and carries none" % cell)
+		else:
+			_check(wild.size() == 2, "open land at %s carries its one and Wild Tiles' one (%s)" % [cell, wild])
+			carried += 1
+	_check(carried > 0, "some land past the wall was looked at")
+	map.queue_free()
 	return true
 
 

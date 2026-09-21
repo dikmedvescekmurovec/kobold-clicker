@@ -40,10 +40,13 @@ func _run() -> void:
 	_check(_test_coins() == true, "coin tests ran to the end")
 	_check(_test_orb_drops() == true, "orb drop tests ran to the end")
 	_check(_test_drop_rate_finds_everything() == true, "drop rate tests ran to the end")
+	_check(_test_tile_mods() == true, "tile modifier tests ran to the end")
+	_check(_test_curses() == true, "curse tests ran to the end")
 	await _test_thrown_finds()
 	await _test_settings()
 	await _test_the_nameplate_wears_the_tier()
 	await _test_the_map_hands_over_and_takes_back()
+	await _test_a_world_under_the_fog()
 	_report("combat")
 
 
@@ -2334,3 +2337,318 @@ func _test_drop_rate_finds_everything() -> bool:
 					bodies.size(), wanted])
 	_check(wanted > bare * 1.5, "which is well past what the bare rate would have paid (%.1f)" % bare)
 	return true
+
+
+## What the land past the second wall does to its own fight (`TileMods`): which tiles carry anything,
+## each dial moving what it says it moves, what it pays, and which of them a farm run keeps.
+func _test_tile_mods() -> bool:
+	var here := Vector2i(4, 6)
+	# Where they are: nowhere short of two walls, then one, one or two, two or three; Wild Tiles a wall
+	# sooner and one more. The same seed and cell always the same ones, and another seed others.
+	var counts := {}
+	var differs := false
+	for x in 40:
+		var cell := Vector2i(x, 3)
+		for walls in 5:
+			var mods := TileMods.for_cell(1, cell, walls)
+			_check(mods == TileMods.for_cell(1, cell, walls), "a tile's modifiers are its seed's and its cell's")
+			differs = differs or mods != TileMods.for_cell(2, cell, walls)
+			var seen: Dictionary = counts.get(walls, {})
+			seen[mods.size()] = true
+			counts[walls] = seen
+			var wild := TileMods.for_cell(1, cell, walls, true)
+			_check(wild.is_empty() == (walls == 0), "Wild Tiles starts a wall sooner (%d walls: %s)" % [walls, wild])
+			if walls >= TileMods.FROM_WALLS:
+				_check(wild.size() > 1, "and carries one more (%s)" % [wild])
+			for id: String in mods:
+				for other: String in TileMods.MODS[id].get("not_with", []):
+					_check(not other in mods, "%s never stands with %s" % [id, other])
+	_check(differs, "another world's tiles carry other modifiers")
+	_check(counts[0].keys() == [0] and counts[1].keys() == [0], "none short of the second wall %s" % counts)
+	_check(counts[2].keys() == [1], "one in the first band past it %s" % [counts[2].keys()])
+	var two: Array = counts[3].keys()
+	two.sort()
+	var three: Array = counts[4].keys()
+	three.sort()
+	_check(two == [1, 2] and three == [2, 3], "then one or two, then two or three (%s, %s)" % [two, three])
+	for id: String in TileMods.MODS:
+		for other: String in TileMods.MODS[id].get("not_with", []):
+			_check(TileMods.MODS.has(other), "%s names a modifier there is (%s)" % [id, other])
+
+	# The shape of the fight.
+	var plain := Encounter.for_tile(here, "grass", "plain")
+	var horde := Encounter.for_tile(here, "grass", "plain", false, ["horde"])
+	_check(horde.enemies == 15 and horde.lineup.size() == 15 and horde.seconds == plain.seconds,
+			"a Horde is fifteen on the same clock (%d)" % horde.enemies)
+	_check(Encounter.tier_in(horde, 14) == EnemyRoster.Tier.ELITE and Encounter.tier_in(horde, 9) == EnemyRoster.Tier.COMMON,
+			"five more of the rabble, and still ending on its elite")
+	var sparse := Encounter.for_tile(here, "grass", "plain", false, ["sparse"])
+	_check(sparse.lineup.size() == 6 and Encounter.tier_in(sparse, 5) == EnemyRoster.Tier.ELITE,
+			"a Sparse tile is six, the last of them the elite (%d)" % sparse.lineup.size())
+	var short := Encounter.for_tile(here, "grass", "plain", false, ["short_day"])
+	_check(is_equal_approx(short.seconds, plain.seconds - 8.0) and short.time_left == short.seconds,
+			"a Short Day is 8 s off the clock (%s)" % short.seconds)
+	var elites := Encounter.for_tile(here, "grass", "plain", false, ["elite_ground"])
+	_check(Encounter.tier_in(elites, 4) == EnemyRoster.Tier.ELITE
+			and Encounter.tier_in(elites, 9) == EnemyRoster.Tier.ELITE, "Elite Ground fields one every fifth")
+	var thick := Encounter.for_tile(here, "grass", "plain", false, ["thick_skinned"])
+	_check(thick.lineup == plain.lineup, "a modifier that leaves the count alone leaves the lineup alone")
+	_check(is_equal_approx(thick.health[0], roundf(plain.health[0] * 1.5)),
+			"Thick-skinned is half again the health (%s against %s)" % [thick.health[0], plain.health[0]])
+	var mire := Encounter.for_tile(here, "grass", "plain", false, ["mire"])
+	_check(is_equal_approx(mire.walk_in, Encounter.WALK_IN * 2.0) and mire.phase_left == mire.walk_in,
+			"a Mire doubles the walk-in")
+	mire.start()
+	mire.advance(Encounter.WALK_IN)
+	_check(mire.phase == Encounter.Phase.WALKING_IN, "so the first enemy is still on its way in")
+
+	# What they do to the player's numbers, and what they pay.
+	var stats := {"armor": 100.0, "dodge": 100.0, "block": 20.0, "time_on_hit": 10.0, "attack_speed": 2.0,
+			"drop_rate": 10.0, "item_rarity": 10.0, "gold_find": 10.0}
+	var bare := Encounter.for_tile(here, "grass", "plain")
+	bare.arm(stats)
+	var pays := {"piercing": ["armor", "gold_find"], "keen_eyed": ["dodge", "gold_find"],
+			"sundering": ["block", "gold_find"], "timeless": ["time_on_hit", "xp_more"],
+			"stillness": ["attack_speed", "drop_rate"]}
+	for id: String in pays:
+		var fight := Encounter.for_tile(here, "grass", "plain", false, [id])
+		fight.arm(stats)
+		var cut: String = pays[id][0]
+		var paid: String = pays[id][1]
+		_check(float(fight.get(cut)) < float(bare.get(cut)), "%s cuts %s" % [id, cut])
+		_check(float(fight.get(paid)) > float(bare.get(paid)), "%s pays in %s" % [id, paid])
+	for id: String in TileMods.MODS:
+		var fight := Encounter.for_tile(here, "grass", "plain", false, [id])
+		fight.arm(stats)
+		var paid := fight.drop_rate + fight.item_rarity + fight.gold_find + fight.xp_more \
+				- bare.drop_rate - bare.item_rarity - bare.gold_find - bare.xp_more
+		_check((paid > 0.0) == (not str(TileMods.MODS[id]["reward"]).is_empty()),
+				"%s pays exactly when its row says so (%s)" % [id, paid])
+	var wild_pay := Encounter.for_tile(here, "grass", "plain", false, ["savage"])
+	wild_pay.wear([Curses.effect(Curses.WILD_TILES)])
+	wild_pay.arm(stats)
+	_check(is_equal_approx(wild_pay.drop_rate, 10.0 + 20.0 * TileMods.WILD_REWARD), "Wild Tiles pays a tenth more")
+
+	# The blows: a Savage tile's are half again, a Frenzied one's come round sooner.
+	var blows := {}
+	for id: String in ["", "savage", "frenzied"]:
+		var fight := Encounter.for_tile(here, "grass", "plain", false, [] if id.is_empty() else [id])
+		fight.strikes = true
+		fight.crit_rng.seed = 1
+		var lost: Array[float] = []
+		fight.player_hit.connect(func(taken: float, _d: bool, _b: bool) -> void: lost.append(taken))
+		fight.start()
+		fight.advance(Encounter.WALK_IN)
+		fight.advance(3.2)
+		blows[id] = lost
+	_check(blows[""].size() == 3 and blows["frenzied"].size() > 3, "a Frenzied tile strikes oftener %s" % [blows])
+	_check(is_equal_approx(blows["savage"][0], blows[""][0] * 1.5), "and a Savage one half again as hard")
+
+	# What a body leaves: nothing in a Barren purse, no gear off a Gilded one.
+	for id: String in ["barren", "gilded"]:
+		var fight := Encounter.for_tile(here, "grass", "plain", false, [id])
+		fight.always_drop = true
+		var found: Array[Item] = []
+		fight.loot_dropped.connect(func(_i: int, item: Item) -> void: found.append(item))
+		fight.damage = 1e12
+		fight.start()
+		fight.advance(Encounter.WALK_IN)
+		fight.hit()
+		_check((fight.gold == 0.0) == (id == "barren"), "%s: the purse is %s" % [id, fight.gold])
+		_check(found.is_empty() == (id == "gilded"), "%s: %d find(s)" % [id, found.size()])
+
+	# A farm run has no clock and is never struck, so it carries only what changes the bodies.
+	var every: Array = TileMods.MODS.keys()
+	var run := Encounter.farm(here, "grass", "plain", every)
+	_check(run.mods == TileMods.farmable(every) and not run.mods.is_empty(), "a run keeps the farmable ones %s" % [run.mods])
+	for id: String in run.mods:
+		_check(bool(TileMods.MODS[id]["farm"]), "%s is one a run can carry" % id)
+	_check(not "short_day" in run.mods and not "savage" in run.mods, "and none that needs a clock")
+	# Set pieces carry none: the chest is built before the modifiers are looked at.
+	var chest := Encounter.for_tile(here, "grass", "plain", true, ["horde", "thick_skinned"])
+	_check(chest.lineup.size() == 1 and chest.mods.is_empty(), "a chest is the mimic alone, whatever the land says")
+	return true
+
+
+## The world's curses as the fight hears them (`"curse:<id>"` in `effects`): each one's handicap, and
+## the pay that is the fight's to give. The numbers a curse pays are `Inventory.stats`' (test_inventory).
+func _test_curses() -> bool:
+	var here := Vector2i(4, 6)
+	var plain := Encounter.for_tile(here, "grass", "plain")
+	for id: String in Curses.CURSES:
+		var curse: Dictionary = Curses.CURSES[id]
+		_check(int(curse["skulls"]) in [1, 2, 3] and not str(curse["text"]).is_empty()
+				and not str(curse["reward"]).is_empty(), "%s says what it costs and pays" % id)
+		for stat: String in curse.get("stats", {}):
+			_check(stat == "xp_more" or LootTable.STAT_LABELS.has(stat), "%s pays in a stat there is (%s)" % [id, stat])
+	var iron := Encounter.for_tile(here, "grass", "plain", false, ["thick_skinned"])
+	iron.wear([Curses.effect(Curses.IRON_FOES)])
+	_check(is_equal_approx(iron.health[3], roundf(Encounter.hp_of(iron.lineup[3], here) * (1.0 + 0.5 + Encounter.IRON_HP)))
+			and iron.hp == iron.health[0], "Iron Foes adds to a tile's own, never compounds (%s)" % iron.health[3])
+	iron.wear([Curses.effect(Curses.IRON_FOES)])
+	_check(is_equal_approx(iron.health[3], roundf(Encounter.hp_of(iron.lineup[3], here) * (1.0 + 0.5 + Encounter.IRON_HP))),
+			"and is taken on once however often the fight is dressed")
+	var run := Encounter.farm(here, "grass", "plain")
+	run.wear([Curses.effect(Curses.IRON_FOES)])
+	_check(is_equal_approx(run.health[0], roundf(Encounter.hp_of(run.lineup[0], here) * (1.0 + Encounter.IRON_HP))),
+			"a farm run's bodies are iron too")
+	var days := Encounter.for_tile(here, "grass", "plain")
+	days.wear([Curses.effect(Curses.SHORT_DAYS)])
+	_check(is_equal_approx(days.seconds, plain.seconds - Encounter.SHORT_DAYS) and days.time_left == days.seconds,
+			"Short Days is %s s off every clock" % Encounter.SHORT_DAYS)
+	var wall := Encounter.for_wall(Vector2i(11, 0))
+	var winter := Encounter.for_wall(Vector2i(11, 0))
+	winter.wear([Curses.effect(Curses.LONG_WINTER), Curses.effect(Curses.IRON_FOES)])
+	_check(is_equal_approx(winter.health[0], wall.health[0] * Encounter.LONG_WINTER_HP) and winter.hp == winter.health[0],
+			"the Long Winter doubles the wall, and Iron Foes leaves it alone (%s)" % winter.health[0])
+	var mimic := Encounter.for_tile(here, "grass", "plain", true)
+	var hungry := Encounter.for_tile(here, "grass", "plain", true)
+	hungry.wear([Curses.effect(Curses.HUNGRY_MIMICS)])
+	_check(is_equal_approx(hungry.health[0], roundf(mimic.health[0] * (1.0 + Encounter.HUNGRY_HP))),
+			"a Hungry Mimic has three times the health")
+	var paid := 0
+	for attempt in 20:
+		var chest := Encounter.for_tile(here, "grass", "plain", true)
+		chest.wear([Curses.effect(Curses.HUNGRY_MIMICS)])
+		chest.loot_rng.seed = attempt
+		chest.unique_rng.seed = attempt
+		var found: Array[Item] = []
+		chest.loot_dropped.connect(func(_i: int, item: Item) -> void: found.append(item))
+		chest.damage = 1e12
+		chest.start()
+		chest.advance(Encounter.WALK_IN)
+		chest.hit()
+		if found.size() > 1:
+			paid += 1
+			_check(found.size() == Encounter.HUNGRY_ROLLS, "and pays %d pieces (%d)" % [Encounter.HUNGRY_ROLLS, found.size()])
+	_check(paid > 0, "some of twenty chests held gear")
+
+	# Bloodthirst, added to a Savage tile's share of the blow.
+	var blows := {}
+	for worn: Array in [[], [Curses.effect(Curses.BLOODTHIRST)]]:
+		var fight := Encounter.for_tile(here, "grass", "plain", false, ["savage"])
+		fight.wear(worn)
+		fight.strikes = true
+		fight.crit_rng.seed = 1
+		var lost: Array[float] = []
+		fight.player_hit.connect(func(taken: float, _d: bool, _b: bool) -> void: lost.append(taken))
+		fight.start()
+		fight.advance(Encounter.WALK_IN)
+		fight.advance(1.05)
+		blows[worn.size()] = lost[0]
+	_check(is_equal_approx(blows[1] / blows[0], (1.5 + Encounter.BLOODTHIRST_HIT) / 1.5),
+			"Bloodthirst adds its share to the tile's (%s against %s)" % [blows[1], blows[0]])
+
+	# Pauper halves the purse; Lean Pickings halves the finished chance of gear and ascends some of it.
+	var purses := {}
+	for worn: Array in [[], [Curses.effect(Curses.PAUPER)]]:
+		var fight := Encounter.for_tile(here, "grass", "plain")
+		fight.wear(worn)
+		fight.damage = 1e12
+		fight.start()
+		fight.advance(Encounter.WALK_IN)
+		fight.hit()
+		purses[worn.size()] = fight.gold
+	_check(is_equal_approx(purses[1], maxf(1.0, roundf(purses[0] * Encounter.PAUPER_PURSE))),
+			"a Pauper's purse is half (%s against %s)" % [purses[1], purses[0]])
+	_check(is_equal_approx(Encounter._lifted(20.0, 0.5), -40.0) and is_equal_approx(Encounter._lifted(0.0, 2.0), 100.0),
+			"a finished chance is halved and doubled through the lift")
+	var some := plain.lineup[0]
+	_check(is_equal_approx(LootTable.chance_for(some, Encounter._lifted(20.0, 0.5)), LootTable.chance_for(some, 20.0) * 0.5),
+			"and half of it is half the drops")
+	_check(LootTable.chance_for(some, -500.0) == 0.0, "down to nothing and no further")
+	var lean := Encounter.farm(here, "grass", "plain")
+	lean.wear([Curses.effect(Curses.LEAN_PICKINGS)])
+	lean.always_drop = true
+	lean.loot_rng.seed = 7
+	var plus := {0: 0, 1: 0, 2: 0}
+	lean.loot_dropped.connect(func(_i: int, item: Item) -> void: plus[item.plus] = int(plus.get(item.plus, 0)) + 1)
+	lean.damage = 1e12
+	lean.start()
+	for body in 1500:
+		lean.advance(Encounter.WALK_IN)
+		lean.hit()
+		lean.advance(Encounter.DEATH)
+	var all := float(plus[0] + plus[1] + plus[2])
+	_check(absf(plus[1] / all - Encounter.LEAN_PLUS[0]) < 0.03 and plus[2] > 0 and plus[2] / all < 0.03,
+			"about one find in ten is +1 and one in a hundred +2 %s" % plus)
+	_check(plus.size() == 3, "and none is more than +2")
+	var kept := Encounter.farm(here, "grass", "plain")
+	kept.always_drop = true
+	kept.loot_rng.seed = 7
+	var ascended := [0]
+	kept.loot_dropped.connect(func(_i: int, item: Item) -> void: ascended[0] += item.plus)
+	kept.damage = 1e12
+	kept.start()
+	for body in 200:
+		kept.advance(Encounter.WALK_IN)
+		kept.hit()
+		kept.advance(Encounter.DEATH)
+	_check(ascended[0] == 0, "without the curse nothing falls ascended")
+	return true
+
+
+## A world under the Thick Fog, played through the main scene: a won tile uncovers itself and nothing
+## round it, the next one is clicked and fought for blind, and the torch in hand buys the ring back.
+## No Rest greys the camp beside it, with the reason.
+func _test_a_world_under_the_fog() -> void:
+	_clear_saves()
+	var cursed := Inventory.new()
+	cursed.curses = [Curses.THICK_FOG, Curses.NO_REST]
+	cursed.first_sword_taken = true
+	cursed.save(SCRATCH_INVENTORY)
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	main.inventory_path = SCRATCH_INVENTORY
+	main.map_path = SCRATCH_MAP
+	root.add_child(main)
+	for i in 3:
+		await process_frame
+	_check(main._sight() == 0, "under the fog, with nothing held, there is no sight at all")
+	_check("No Rest" in main._cannot_camp(), "and No Rest is why no camp can be made (%s)" % main._cannot_camp())
+
+	var rim := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
+	var blind := HexGrid.neighbor(rim, HexGrid.Edge.E)
+	main.map.select_cell(rim)
+	main._on_chart_pressed()
+	_play(main._combat.fight, 10000)
+	main._combat._on_back_pressed()
+	await process_frame
+	main.map.player.finish_walk()
+	await process_frame
+	_check(main.view.charted(rim) and not main.view.seen(blind), "a won tile comes out of the fog alone")
+
+	# The first tile into the fog: nothing drawn, and still a tile to click, read and fight for.
+	main.map.select_cell(blind)
+	await process_frame
+	_check(main._panel.visible and main._tile_title.text == "Unknown land"
+			and main._level_label.text == "Level %d" % main.view.level_of(blind),
+			"a tile under the fog reads as unknown land, and its level is the walk's (%s)" % main._tile_title.text)
+	_check(main._env_rows.get_child_count() == 0 and main._service_rows.get_child_count() == 0
+			and main._mod_rows.get_child_count() == 0, "with nothing said of what is on it")
+	_check(main.view.to_save().names.get(blind, "") == "", "and looking at it has not named it")
+	_check(main._chart_button.visible, "Chart is offered on it")
+	main._on_chart_pressed()
+	_check(main._combat != null and main._combat.fight.env == main.view.env_at(blind) and main._combat.fight.env != "",
+			"and the fight is on the land that is really there (%s)" % main._combat.fight.env)
+	main._combat.fight.give_up()
+	main._combat._on_back_pressed()
+	await process_frame
+
+	# The torch: a ring of sight back, read as the tile is charted.
+	var torch := Item.rolled(LootTable.BROKEN_TORCH, ItemRarity.Rarity.COMMON, RandomNumberGenerator.new())
+	main.inventory.items.append(torch)
+	_check(main.inventory.equip(torch, Equipment.Socket.OFFHAND) and main._sight() == 1, "the Broken Torch in hand is a ring of sight")
+	main.map.select_cell(blind)
+	main._on_chart_pressed()
+	_play(main._combat.fight, 10000)
+	main._combat._on_back_pressed()
+	await process_frame
+	main.map.player.finish_walk()
+	await process_frame
+	_check(main.view.charted(blind) and main.view.seen(HexGrid.neighbor(blind, HexGrid.Edge.E)),
+			"and the tile taken with it shows the ring behind it")
+	main.queue_free()
+	await process_frame
+	_clear_saves()

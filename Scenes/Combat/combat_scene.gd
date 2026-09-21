@@ -1129,7 +1129,7 @@ func _slide_enemy() -> void:
 	var view := _size()
 	var home := view.x * ENEMY_X
 	if fight.phase == Encounter.Phase.WALKING_IN:
-		var left := fight.phase_left / Encounter.WALK_IN
+		var left := fight.phase_left / fight.walk_in
 		_enemy.position.x = lerpf(home, view.x * OFFSCREEN_X, left)
 	else:
 		_enemy.position.x = home
