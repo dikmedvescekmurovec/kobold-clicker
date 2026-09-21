@@ -356,8 +356,10 @@ const CHANCE_STATS := ["crit_chance", "block_chance", "dodge_chance", "drop_rate
 const RATE_STATS := ["attack_speed", "health_regen"]
 
 ## How much one level multiplies every scaled number by. The dial for how fast gear answers the
-## frontier; Encounter.HP_GROWTH is the dial for how fast the frontier pulls away.
-const LEVEL_GROWTH := 1.12
+## frontier; Encounter.HP_GROWTH is the dial for how fast the frontier pulls away. It is also how
+## wide a modifier's roll may be -- ModifierTable.ROLL_SPREAD sits under it, so a higher item level
+## always rolls better -- which is why it is a quarter a level: at 1.12 a roll could only vary by 12%.
+const LEVEL_GROWTH := 1.25
 
 ## What one level *adds*, on top of that multiplier, per stat.
 ##
@@ -366,17 +368,15 @@ const LEVEL_GROWTH := 1.12
 ## damage, which starts at 50. A multiplier alone would leave a sword reading "Damage 1" for four
 ## levels; a flat step alone would do nothing to the large stats. Both together carry the range.
 ##
-## Damage is a quarter of a point, and that number is about how many things can carry it rather than
-## about how fast a sword should grow. It was a whole point while the sword was the only source; the
-## jewellery carries flat damage now, so four sockets each take the step and the *set* still gains
-## about a point a level. Handing all four the old step put the far edge inside a third of a click a
-## second, which is the frontier stopping being one -- see test_combat's edge-fight line, which is
-## where this number is actually read off.
+## Damage is three points a level, so a weapon's level reads as a jump: a sword is 1, 4, 8 and 14
+## damage at levels 1, 2, 3 and 5. The step is the weapon's alone -- a modifier band takes no flat
+## step (see ModifierTable.band_for), so four jewellery sockets rolling added damage do not each take
+## it. test_combat's edge-fight line is where this number is actually read off.
 ##
 ## Every key of STAT_LABELS has an entry here and test_inventory holds that, so a new stat cannot be
 ## added without saying what a level is worth to it.
 const LEVEL_FLAT := {
-	"damage": 1.0,
+	"damage": 3.0,
 	"crit_chance": 1.0, "crit_damage": 5.0, "attack_speed": 0.05, "bleed": 1.0,
 	"armor": 2.0, "energy_shield": 2.0, "health": 3.0, "health_regen": 0.1,
 	"block_chance": 1.0, "dodge_chance": 1.0, "move_speed": 1.0, "drop_rate": 1.0,

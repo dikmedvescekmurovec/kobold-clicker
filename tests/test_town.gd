@@ -1333,7 +1333,7 @@ func _test_fortune() -> bool:
 	_check(odds.size() == pool.size() and absf(share - 100.0) < 0.001,
 			"the odds are the whole pool and add up to a hundred (%f)" % share)
 	_check(odds[0]["weight"] >= odds[-1]["weight"], "commonest first")
-	_check(ModifierTable.band_line("increased_damage", 1) == "+8-20% increased Damage",
+	_check(ModifierTable.band_line("increased_damage", 1) == "+16-19% increased Damage",
 			"a band is written the way its modifier is (%s)" % ModifierTable.band_line("increased_damage", 1))
 	_check(ModifierTable.line({"id": "fight_clock", "value": 3}) == "+3s on the fight clock",
 			"and a rolled line still reads as it did")

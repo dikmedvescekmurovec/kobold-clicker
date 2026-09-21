@@ -227,7 +227,10 @@ func _ready() -> void:
 	map.dragged.connect(_on_map_dragged)
 	map.cell_aimed.connect(_on_cell_aimed)
 	view.arrived.connect(_on_player_arrived)
-	map.player.move_speed = func() -> float: return float(inventory.stats().get("move_speed", 0.0))
+	# Move speed and the player-wide walk speed buff are both percentages off SECONDS_PER_TILE.
+	map.player.move_speed = func() -> float:
+		var stats := inventory.stats()
+		return float(stats.get("move_speed", 0.0)) + float(stats.get("buff_walk_speed", 0.0))
 	# Before the interface, which is what decides whether the crown stands in the corner.
 	_credit_walls()
 	_build_ui()

@@ -45,8 +45,8 @@ var plus := 0
 ## An Orb of Expansion has gone into it: one modifier more than its rarity allows, once per piece.
 var extra_slot := false
 
-## What one `plus` is worth to a piece's modifiers, in item levels. A percent band grows 12% a level,
-## so three levels is about +40% a plus. A dial, unplayed.
+## What one `plus` is worth to a piece's modifiers, in item levels. A percent band grows 25% a level,
+## so three levels is about double a plus -- it was +40% at 12%. A dial, unplayed.
 const PLUS_LEVELS := 3
 
 
@@ -189,6 +189,17 @@ func global_percents() -> Dictionary:
 		var entry: Dictionary = ModifierTable.MODS.get(mod.get("id", ""), {})
 		if entry.get("kind") == ModifierTable.Kind.GLOBAL:
 			out[entry["stat"]] = float(out.get(entry["stat"], 0.0)) + float(mod["value"])
+	return out
+
+
+## The player-wide buffs this piece carries, as {id: value}. Not stats -- they name no stat -- so
+## `Equipment.totals` sums them apart, under a `buff_` key each, and holds each to its cap there.
+func player_buffs() -> Dictionary:
+	var out := {}
+	for mod in mods:
+		var entry: Dictionary = ModifierTable.MODS.get(mod.get("id", ""), {})
+		if entry.get("kind") == ModifierTable.Kind.PLAYER:
+			out[mod["id"]] = float(out.get(mod["id"], 0.0)) + float(mod["value"])
 	return out
 
 

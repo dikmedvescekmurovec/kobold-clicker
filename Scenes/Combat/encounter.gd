@@ -95,12 +95,15 @@ const MOST_DROPS := 4
 const WALL := {"enemies": 1, "seconds": 60.0, "elite_every": 1, "boss_last": true}
 const WALL_NAME := "The Ice Wall"
 ## What the wall's health is multiplied by on top of its boss body. The dial for how hard the wall is,
-## and a steep one with cliffs: `tests/balance_wall.gd` plays it out -- 33 is about 850 kills, 34 already 1600.
-const WALL_HP := 33.0
+## and a steep one with cliffs: `tests/balance_wall.gd` plays it out. 33 until LEVEL_HP_GROWTH came in
+## (2026-09-21) and made every body behind level 2 heavier; 17 is now the lowest that keeps
+## test_combat's pin that the whole Power tree still has to click, and a fresh player at 5 clicks a
+## second reaches it in about 44 minutes (1,700 kills) where 33 had been 30.
+const WALL_HP := 17.0
 ## What every wall already fallen multiplies the health of everything behind it by -- the whole land it
 ## opened as well as the next wall, through `base_hp`. The step lands on top of the walk, so with the
-## band's own `HP_GROWTH ^ 10` a wall is about fifteen times the one before it: 34,056 on ring 11,
-## 502,128 on ring 21, 7.4e6 on ring 31.
+## band's own `HP_GROWTH ^ 10` and the levels it crosses (LEVEL_HP_GROWTH) a wall is some twenty-five
+## to fifty times the one before it: about 103,000 on ring 11 and 4.9e6 on ring 21.
 ##
 ## The land needs the step as much as the wall does: felling a wall means about forty times the damage
 ## a second that the land inside it asks for (a wall is `WALL_HP` over a boss body, some 930 commons,
@@ -109,8 +112,8 @@ const WALL_HP := 33.0
 ## fourteen times the power the new band's first ring wants, the band's own curve eats that, and the
 ## next wall is again the same forty-times check -- every band the same shape as the first.
 ##
-## The first wall is a day's farming; the second is the gate a transcension is for -- half a million
-## health, some fifteen times the first, where at 10 it was 1.79e6 and no farming ever reached it.
+## The first wall is a day's farming; the second is the gate a transcension is for, and no farming
+## alone has ever reached it (`balance_wall.gd` walks one player out to it and gives up).
 const WALL_GROWTH := 2.8
 const PROFILES := {
 	"plain": ORDINARY,
@@ -128,6 +131,13 @@ const BASE_HP := 7
 ## flat addition, so the frontier pulls away from whatever the player is carrying and farming a tile
 ## already taken is the way to catch up. The dial for how fast that happens.
 const HP_GROWTH := 1.18
+## And what each level of the tile multiplies it by on top. Gear grows per item level
+## (LootTable.LEVEL_GROWTH, and three points of weapon damage a level), while HP_GROWTH is per hex step
+## and levels come in bands that widen, so no step dial matches gear's pace everywhere: moving
+## BASE_HP broke the bare-handed start, which gear has not reached yet, and moving HP_GROWTH made the
+## far map a brick. A term per level is the same shape as what it answers. The middle tile is level 1
+## and takes none of it.
+const LEVEL_HP_GROWTH := 1.8
 
 ## What a body is carrying, on a tile next to the start. An ordinary common one at the very middle
 ## of the map is worth exactly BASE_GOLD, which is where the whole curve is pinned.
@@ -136,9 +146,10 @@ const BASE_GOLD := 1.0
 ## exponent. It is what keeps the first few tiles from all paying the same, where an exponent barely
 ## moves.
 const GOLD_PER_STEP := 1.0
-## And the exponential half. Set near LootTable.LEVEL_GROWTH rather than near HP_GROWTH, so a purse
-## keeps pace with the gear that has to kill for it rather than with the health it has to get
-## through. Nothing spends gold yet, so the two above are a starting point and a pair of dials.
+## And the exponential half, per hex step. It was set beside LootTable.LEVEL_GROWTH when that was
+## 1.12, and stayed when gear went to 1.25 a level: LEVEL_HP_GROWTH moved with it, so a fight takes
+## about as long as it did and `balance_town.gd`, whose every price quotes off a purse, came out
+## identical. Move this only against that table.
 const GOLD_GROWTH := 1.12
 
 ## What an ordinary common body is worth in experience, per level of the tile it stands on. Off the
@@ -543,7 +554,7 @@ static func hp_of(enemy_name: String, cell: Vector2i) -> float:
 ## The step is what makes the land a wall opens a frontier again -- see `WALL_GROWTH`.
 static func base_hp(cell: Vector2i) -> float:
 	return maxf(1.0, roundf(BASE_HP * pow(HP_GROWTH, HexGrid.distance(MapBuilder.CENTER, cell))
-			* pow(WALL_GROWTH, walls_inside(cell))))
+			* pow(LEVEL_HP_GROWTH, maxi(MapBuilder.level_of(cell) - 2, 0)) * pow(WALL_GROWTH, walls_inside(cell))))
 
 
 ## How many walls stand between the middle of the map and `cell`. A wall's own ring counts none of
@@ -682,10 +693,17 @@ func arm(stats: Dictionary) -> void:
 	if "heartwood" in effects and not endless:
 		seconds += minf(floorf(float(stats.get("health", 0.0)) / HEARTWOOD_HEALTH), HEARTWOOD_MOST)
 		time_left = seconds
+	# The player-wide fight clock from gear, already summed and capped by Equipment.totals. Fenced off
+	# a farm run the way the Heartwood Plate is: a run has no clock to add to.
+	if not endless:
+		seconds += maxf(0.0, float(stats.get("buff_fight_clock", 0.0)))
+		time_left = seconds
 	attack_speed = maxf(0.0, float(stats.get("attack_speed", 0.0)))
 	bleed = maxf(0.0, float(stats.get("bleed", 0.0)))
 	drop_rate = maxf(0.0, float(stats.get("drop_rate", 0.0)))
-	item_rarity = maxf(0.0, float(stats.get("item_rarity", 0.0)))
+	# The item rarity stat and the player-wide "better item rarity" buff are one figure by the time a
+	# drop rolls: both lift the same weights, ItemRarity.weights_for's.
+	item_rarity = maxf(0.0, float(stats.get("item_rarity", 0.0)) + float(stats.get("buff_item_rarity", 0.0)))
 	gold_find = maxf(0.0, float(stats.get("gold_find", 0.0)))
 	orb_find = maxf(0.0, float(stats.get("orb_find", 0.0)))
 
