@@ -283,7 +283,7 @@ static func rescaled(id: String, value: int, from_level: int, to_level: int) -> 
 ## it has. Empty when there is nothing left to give it, which today's tables cannot produce and a
 ## test holds them to.
 ##
-## Exalted is this -- which pieces it is offered on is `OrbTable.can_apply`'s business and not this
+## Augmentation is this -- which pieces it is offered on is `OrbTable.can_apply`'s business and not this
 ## function's.
 static func add_one(item_type: String, existing: Array[Dictionary], rng: RandomNumberGenerator,
 		level := 1) -> Dictionary:

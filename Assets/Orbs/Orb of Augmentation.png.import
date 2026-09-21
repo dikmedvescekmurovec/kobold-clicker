@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cfp2kepdtm8qo"
-path="res://.godot/imported/Orb of Alteration.png-798baa4c382e216d2156f013dc7a802a.ctex"
+uid="uid://dit2ygd7xxtxx"
+path="res://.godot/imported/Orb of Augmentation.png-da827682b80aa5d27731e4daa4901879.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Orbs/Orb of Alteration.png"
-dest_files=["res://.godot/imported/Orb of Alteration.png-798baa4c382e216d2156f013dc7a802a.ctex"]
+source_file="res://Assets/Orbs/Orb of Augmentation.png"
+dest_files=["res://.godot/imported/Orb of Augmentation.png-da827682b80aa5d27731e4daa4901879.ctex"]
 
 [params]
 

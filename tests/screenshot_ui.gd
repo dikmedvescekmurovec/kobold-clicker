@@ -93,7 +93,7 @@ func _shoot_inventory() -> void:
 	# all three of its states at once -- and one of them past nine, because a two-digit count on a
 	# 24 px square is the tightest thing in the row.
 	main.inventory.add_orb("Orb of Transmutation", 12)
-	main.inventory.add_orb("Orb of Alteration", 3)
+	main.inventory.add_orb("Orb of Augmentation", 3)
 	main.inventory.add_orb("Orb of Chaos")
 	main.inventory.add_orb("Orb of Divine", 2)
 	# Most of a set worn, so the shot shows what an equipped socket looks like against an empty one.

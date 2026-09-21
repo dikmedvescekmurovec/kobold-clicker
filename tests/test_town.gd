@@ -794,7 +794,8 @@ func _test_orb_on_a_shelf() -> void:
 	_check(TownPrices.buy_price(after) > before, "the vendor asks more for what it has become")
 	var saved: Item = VendorStock.items(Inventory.load_from(TEST_PATH).towns.visit(Vector2i(140, 128)))[0]
 	_check(saved.rarity == ItemRarity.Rarity.UNCOMMON, "and the save holds the shelf as it now stands")
-	# It has nothing more to do to that piece: a second press costs nothing and still opens nothing.
+	# A rare is past what it makes: a press there costs nothing and still opens nothing.
+	VendorStock.put(drawer, 0, Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 3))
 	page._on_shelf_input(_press(), 0)
 	_check(inventory.orb_count("Orb of Transmutation") == 1 and page._offer == null,
 			"a refused shelf piece spends nothing")

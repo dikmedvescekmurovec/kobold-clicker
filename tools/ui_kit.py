@@ -293,7 +293,7 @@ BASES_EXPORT = True
 # name -> (sheet under Assets/Potential, x, y, w, h, scale), a source 6-tuple
 ORBS = {
     "Orb of Transmutation": ("OreAndGem/OreGemSpritesheet", 9 * 32, 1 * 32, 32, 32, 1),
-    "Orb of Alteration": ("OreAndGem/OreGemSpritesheet", 7 * 32, 1 * 32, 32, 32, 1),
+    "Orb of Augmentation": ("OreAndGem/OreGemSpritesheet", 7 * 32, 1 * 32, 32, 32, 1),
     "Orb of Alchemy": ("OreAndGem/OreGemSpritesheet", 9 * 32, 3 * 32, 32, 32, 1),
     "Orb of Chaos": ("OreAndGem/OreGemSpritesheet", 6 * 32, 2 * 32, 32, 32, 1),
     "Orb of Exalted": ("OreAndGem/OreGemSpritesheet", 5 * 32, 1 * 32, 32, 32, 1),

@@ -2090,8 +2090,8 @@ func _test_super_orbs() -> bool:
 	# Expansion: one past the rarity's most, once, and a reroll keeps the room.
 	var most := int(ItemRarity.MOD_COUNT[ItemRarity.Rarity.ELITE][1])
 	while sword.mods.size() < most:
-		OrbTable.apply("Orb of Exalted", sword, rng)
-	_check(not OrbTable.can_apply("Orb of Exalted", sword), "a full elite takes no more")
+		OrbTable.apply("Orb of Augmentation", sword, rng)
+	_check(not OrbTable.can_apply("Orb of Augmentation", sword), "a full elite takes no more")
 	_check(SuperOrbTable.apply(SuperOrbTable.EXPANSION, sword, rng) and sword.mods.size() == most + 1,
 			"until it is expanded")
 	_check(not SuperOrbTable.can_apply(SuperOrbTable.EXPANSION, sword), "once per piece")
@@ -2811,43 +2811,63 @@ func _test_orb_verbs() -> bool:
 	# much as an orb can change it.
 	_check(common.level == was_level, "an orb never moves a piece's level")
 	_check(common.base_stats() == was_stats, "an orb never moves a piece's base stats")
-	_check(not OrbTable.can_apply("Orb of Transmutation", common), "an uncommon cannot be transmuted")
-	_check(not OrbTable.why_not("Orb of Transmutation", common).is_empty(),
+	var magic := Item.rolled("Wooden Shield", ItemRarity.Rarity.UNCOMMON, rng, 3)
+	_check(OrbTable.can_apply("Orb of Transmutation", magic), "an uncommon can be transmuted again")
+	_check(OrbTable.apply("Orb of Transmutation", magic, rng), "and the reroll lands")
+	_check(magic.rarity == ItemRarity.Rarity.UNCOMMON, "a transmuted uncommon stays uncommon")
+
+	# --- Alchemy: straight to rare from below, a reroll at rare, refused above ---
+	var climbing := Item.rolled("Leather Boot", ItemRarity.Rarity.COMMON, rng, 2)
+	_check(OrbTable.apply("Orb of Alchemy", climbing, rng), "alchemy lands on a common")
+	_check(climbing.rarity == ItemRarity.Rarity.RARE, "alchemy makes it rare in one step")
+	_check(OrbTable.apply("Orb of Alchemy", climbing, rng), "alchemy rerolls a rare")
+	_check(climbing.rarity == ItemRarity.Rarity.RARE, "and it stays rare")
+	_check(not OrbTable.can_apply("Orb of Transmutation", climbing), "no orb lowers a rare to uncommon")
+	_check(not OrbTable.why_not("Orb of Transmutation", climbing).is_empty(),
 			"a refused transmutation says why")
 
-	var magic := Item.rolled("Wooden Shield", ItemRarity.Rarity.UNCOMMON, rng, 3)
-
-	# --- Alteration: rerolls an uncommon, and it stays uncommon ---
-	_check(OrbTable.can_apply("Orb of Alteration", magic), "an uncommon can be altered")
-	_check(OrbTable.apply("Orb of Alteration", magic, rng), "alteration lands")
-	_check(magic.rarity == ItemRarity.Rarity.UNCOMMON, "alteration keeps the rarity")
-
-	# --- Alchemy: one step at a time, and never as far as unique ---
-	var climbing := Item.rolled("Leather Boot", ItemRarity.Rarity.COMMON, rng, 2)
-	var steps := 0
-	while OrbTable.can_apply("Orb of Alchemy", climbing):
-		var before_rarity := climbing.rarity
-		_check(OrbTable.apply("Orb of Alchemy", climbing, rng), "alchemy lands")
-		_check(climbing.rarity == before_rarity + 1, "alchemy steps exactly one rarity")
-		steps += 1
-		_check(steps <= 8, "alchemy terminates")
-	_check(climbing.rarity == ItemRarity.Rarity.ELITE, "alchemy stops at elite")
-	_check(climbing.rarity != ItemRarity.Rarity.UNIQUE, "alchemy can never reach unique")
-
-	# --- Chaos: rerolls at any rarity above common, keeping it ---
-	_check(OrbTable.can_apply("Orb of Chaos", climbing), "an elite can be chaosed")
-	_check(OrbTable.apply("Orb of Chaos", climbing, rng), "chaos lands")
-	_check(climbing.rarity == ItemRarity.Rarity.ELITE, "chaos keeps the rarity")
+	# --- Exalted: straight to elite, a reroll at elite, and never as far as unique ---
+	_check(OrbTable.apply("Orb of Exalted", climbing, rng), "exalted lands on a rare")
+	_check(climbing.rarity == ItemRarity.Rarity.ELITE, "exalted makes it elite")
+	_check(OrbTable.apply("Orb of Exalted", climbing, rng), "exalted rerolls an elite")
+	_check(climbing.rarity == ItemRarity.Rarity.ELITE, "and it stays elite, never unique")
+	_check(not OrbTable.can_apply("Orb of Alchemy", climbing), "alchemy refuses an elite")
 	var bare := Item.rolled("Wooden Armor", ItemRarity.Rarity.COMMON, rng, 1)
 	_check(not OrbTable.can_apply("Orb of Chaos", bare), "a common has nothing to chaos")
 
-	# --- Exalted: any rarity with room, and a common has none ---
-	_check(not OrbTable.can_apply("Orb of Exalted", bare), "a common cannot be exalted")
+	# --- Augmentation: any rarity with room, and a common has none ---
+	_check(not OrbTable.can_apply("Orb of Augmentation", bare), "a common cannot be augmented")
 	var rare := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 6)
 	var rare_cap := int(ItemRarity.MOD_COUNT[ItemRarity.Rarity.RARE][1])
 	while rare.mods.size() < rare_cap:
-		_check(OrbTable.apply("Orb of Exalted", rare, rng), "exalt lands while there is room")
-	_check(not OrbTable.can_apply("Orb of Exalted", rare), "a full rare refuses an exalt")
+		var had := rare.mods.size()
+		_check(OrbTable.apply("Orb of Augmentation", rare, rng), "augmentation lands while there is room")
+		_check(rare.mods.size() == had + 1, "augmentation adds exactly one modifier")
+	_check(not OrbTable.can_apply("Orb of Augmentation", rare), "a full rare refuses an augmentation")
+
+	# --- Chaos: the ids stay, the tiers move, and every number sits in its new tier's band ---
+	var chaos := Item.rolled("Wooden Sword", ItemRarity.Rarity.ELITE, rng, 12)
+	var chaos_ids := PackedStringArray()
+	for mod in chaos.mods:
+		chaos_ids.append(str(mod["id"]))
+	var tiers_moved := false
+	for attempt in 20:
+		var before_tiers := []
+		for mod in chaos.mods:
+			before_tiers.append(chaos.tier_of(mod))
+		_check(OrbTable.apply("Orb of Chaos", chaos, rng), "chaos lands")
+		for i in chaos.mods.size():
+			if chaos.tier_of(chaos.mods[i]) != int(before_tiers[i]):
+				tiers_moved = true
+	var chaos_after := PackedStringArray()
+	for mod in chaos.mods:
+		chaos_after.append(str(mod["id"]))
+		var chaos_band := ModifierTable.band_for(str(mod["id"]), chaos.tier_of(mod))
+		_check(int(mod["value"]) >= int(chaos_band[0]) and int(mod["value"]) <= int(chaos_band[1]),
+				"a chaosed %s sits in its new band" % mod["id"])
+	_check(chaos_ids == chaos_after, "chaos keeps every modifier it found")
+	_check(tiers_moved, "chaos moves a tier at least once in twenty tries")
+	_check(chaos.rarity == ItemRarity.Rarity.ELITE, "chaos keeps the rarity")
 
 	# --- Divine: the ids stay, the numbers may move, and stay inside the band ---
 	var divine := Item.rolled("Wooden Sword", ItemRarity.Rarity.ELITE, rng, 9)
@@ -2878,7 +2898,7 @@ func _test_orb_verbs() -> bool:
 	# `why_not` is the exact complement of `can_apply`, for every orb against every piece the suite
 	# has in hand -- so the card can ask one question rather than two and never go silent.
 	for orb: String in OrbTable.ORBS:
-		for piece: Item in [common, magic, climbing, bare, rare, divine]:
+		for piece: Item in [common, magic, climbing, bare, rare, chaos, divine]:
 			var quiet := OrbTable.why_not(orb, piece).is_empty()
 			_check(quiet == OrbTable.can_apply(orb, piece),
 					"%s explains itself on a %s %s" % [orb, piece.rarity_name(), piece.type])
@@ -2900,7 +2920,7 @@ func _test_locks_and_breaks() -> bool:
 	var landed := {}
 	for run in RUNS:
 		rng.seed = run
-		# Half start uncommon: nothing lowers a rarity, so that is the only way Alteration meets a lock.
+		# Half start uncommon: nothing lowers a rarity, so that is the only way Transmutation meets a lock.
 		var start := ItemRarity.Rarity.UNCOMMON if run % 2 == 0 else ItemRarity.Rarity.RARE
 		var piece := Item.rolled("Wooden Sword", start, rng, 7)
 		_check(Blacksmith.lock(piece, rng), "a piece with modifiers takes a lock")
@@ -2929,10 +2949,8 @@ func _test_locks_and_breaks() -> bool:
 			# No orb takes a piece down a rarity, so a locked piece is never a common and never
 			# transmuted: a common carrying a modifier is a contradiction in MOD_COUNT.
 			_check(piece.rarity != ItemRarity.Rarity.COMMON, "a locked piece never lands on common")
-			_check(not OrbTable.can_apply("Orb of Transmutation", piece),
-					"and so is never offered a transmutation")
 	# The walk has to have actually used the orbs it is meant to be testing.
-	for orb: String in ["Orb of Chaos", "Orb of Alchemy", "Orb of Alteration", "Orb of Divine"]:
+	for orb: String in OrbTable.orbs():
 		_check(int(landed.get(orb, 0)) > 0, "%s was tried against a lock (%s)" % [orb, landed])
 	rng.seed = WORLD_SEED
 	var pinned_piece := Item.rolled("Wooden Sword", ItemRarity.Rarity.ELITE, rng, 5)
@@ -3075,14 +3093,16 @@ func _test_orb_saving() -> bool:
 	var edited := {
 		"version": Inventory.VERSION, "first_elite_taken": false, "gold": 0,
 		"items": [], "equipped": {}, "autodiscard": [],
-		"orbs": {"Orb of Chaos": 2, "Orb of Scouring": 9, "Orb of Divine": -4},
+		"orbs": {"Orb of Chaos": 2, "Orb of Scouring": 9, "Orb of Divine": -4, "Orb of Alteration": 3,
+				"Orb of Transmutation": 1},
 	}
 	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
 	file.store_string(JSON.stringify(edited, "\t"))
 	file = null
 	var pruned := Inventory.load_from(TEST_PATH)
 	_check(pruned.orb_count("Orb of Chaos") == 2, "a known orb survives the read")
-	_check(pruned.total_orbs() == 2, "an unknown orb is dropped and a negative one reads as none")
+	_check(pruned.orb_count("Orb of Transmutation") == 4, "a retired Alteration reads as Transmutation")
+	_check(pruned.total_orbs() == 6, "an unknown orb is dropped and a negative one reads as none")
 	_clear_save()
 	return true
 
@@ -3142,18 +3162,21 @@ func _test_crafting_from_the_bag() -> bool:
 	_check(main.bag_page._selected == 0, "the block stayed open on the same piece")
 	_check(main.bag_page._detail.visible, "and is still showing")
 
-	# That orb now has nothing to do, and pressing it again must not cost the player the second one.
-	# The square is grey and ignores the click; the handler is checked too, because the guarantee is
-	# apply first and spend only if it landed.
+	# Alchemy takes it to rare, and then Transmutation has nothing to do: no orb lowers a rarity, and
+	# pressing it must not cost the player the second one. The square is grey and ignores the click;
+	# the handler is checked too, because the guarantee is apply first and spend only if it landed.
+	main.inventory.add_orb("Orb of Alchemy")
+	main.bag_page._on_orb_pressed("Orb of Alchemy")
+	_check(sword.rarity == ItemRarity.Rarity.RARE, "alchemy made it rare")
 	main.bag_page._on_orb_pressed("Orb of Transmutation")
 	_check(main.inventory.orb_count("Orb of Transmutation") == 1, "a refused orb is not spent")
-	_check(sword.rarity == ItemRarity.Rarity.UNCOMMON, "and the piece did not change again")
+	_check(sword.rarity == ItemRarity.Rarity.RARE, "and the piece did not change again")
 
 	# Divine is lit now that there are modifiers to reroll.
 	main.bag_page._on_orb_pressed("Orb of Divine")
 	for i in 2:
 		await process_frame
-	_check(sword.rarity == ItemRarity.Rarity.UNCOMMON, "divine kept the rarity")
+	_check(sword.rarity == ItemRarity.Rarity.RARE, "divine kept the rarity")
 	_check(main.inventory.orb_count("Orb of Divine") == 0, "the divine orb was spent")
 
 	# The card says what it is looking at, in all three of the states it can find an orb in. Hovered
@@ -3368,8 +3391,10 @@ func _test_unique_items() -> bool:
 	_check(not _piece(ItemRarity.Rarity.RARE, 3).to_dict().has("unique"), "an ordinary piece's save says nothing of it")
 
 	for orb: String in OrbTable.ORBS:
-		_check(OrbTable.can_apply(orb, axe) == (orb == "Orb of Divine"), "%s on a unique" % orb)
-	_check(not OrbTable.why_not("Orb of Chaos", axe).is_empty(), "and the refusal is said")
+		_check(OrbTable.can_apply(orb, axe) == (orb in ["Orb of Divine", "Orb of Chaos"]), "%s on a unique" % orb)
+	_check(not OrbTable.why_not("Orb of Alchemy", axe).is_empty(), "and the refusal is said")
+	OrbTable.apply("Orb of Chaos", axe, rng)
+	_check(axe.mods.map(func(m: Dictionary) -> String: return m["id"]) == ids, "Chaos moves the tiers and nothing else")
 	OrbTable.apply("Orb of Divine", axe, rng)
 	_check(axe.mods.map(func(m: Dictionary) -> String: return m["id"]) == ids, "Divine moves the values and nothing else")
 
@@ -3654,7 +3679,7 @@ func _test_item_generator() -> bool:
 	page.pick("helm", 3, 12)
 	_check(page.item.type == "Golden Helm" and page.item.level == 12, "the generator makes the tier and level it was asked for")
 	_check(page.item.rarity == ItemRarity.Rarity.COMMON and page.item.mods.is_empty(), "a fresh piece is a bare common")
-	_check(not page.spend("Orb of Alteration"), "an orb with nothing to do to the piece is refused")
+	_check(not page.spend("Orb of Augmentation"), "an orb with nothing to do to the piece is refused")
 	_check(page.spend("Orb of Transmutation") and page.item.rarity == ItemRarity.Rarity.UNCOMMON,
 			"a free orb does what the bag's does")
 	var made := page.item
