@@ -117,8 +117,3 @@ static func factor(mods: Array, key: String) -> float:
 		product *= float(MODS[id].get(key, 1.0))
 	return product
 
-
-## The tile panel's tooltip for one: what it does, and under it what it pays.
-static func tip(id: String) -> String:
-	var mod: Dictionary = MODS[id]
-	return str(mod["text"]) if str(mod["reward"]).is_empty() else "%s\n%s" % [mod["text"], mod["reward"]]

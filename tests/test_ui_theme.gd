@@ -16,6 +16,7 @@ func _run() -> void:
 	_check(await _test_item_card() == true, "item card tests ran to the end")
 	_check(_test_cursors() == true, "cursor tests ran to the end")
 	_check(_test_tip_card() == true, "tip card tests ran to the end")
+	_check(_test_accordion() == true, "accordion tests ran to the end")
 	_report("UI theme")
 
 
@@ -232,7 +233,6 @@ func _test_item_card() -> bool:
 	await process_frame
 	await process_frame
 	_check(seen.mouse_filter == Control.MOUSE_FILTER_IGNORE, "a square still takes no mouse")
-	_check(card.slot_at(Vector2(110, 110)) == seen, "the square under the cursor is found")
 	var raised := Item.from_dict(sword.to_dict())
 	raised.plus = 2
 	var marked := ItemSlot.make(raised)
@@ -240,6 +240,7 @@ func _test_item_card() -> bool:
 			and (marked.get_child(marked.get_child_count() - 1) as Label).text == "+2",
 			"a piece with a plus wears it on its corner, one without wears nothing")
 	marked.free()
+	_check(card.slot_at(Vector2(110, 110)) == seen, "the square under the cursor is found")
 	_check(card.slot_at(below.get_global_rect().get_center()) == null,
 			"one scrolled out of its box is not")
 	_check(card.slot_at(Vector2(310, 110)) == null, "the open piece says nothing twice")
@@ -476,4 +477,20 @@ func _test_tip_card() -> bool:
 	_check(float(ProjectSettings.get_setting("gui/timers/tooltip_delay_sec")) > 1000.0,
 			"Godot's own tooltip is out of reach, so nothing is said twice")
 	row.queue_free()
+	return true
+
+
+## A section folds and opens on a press, and one built again under the same id stays as it was left.
+func _test_accordion() -> bool:
+	var section := Accordion.new("Stats", "test:accordion")
+	_check(section.is_open() and section.body.visible, "a section starts open")
+	section.toggle()
+	_check(not section.body.visible, "a press folds it")
+	var again := Accordion.new("Stats", "test:accordion")
+	_check(not again.is_open(), "and the page drawn again keeps it folded")
+	again.toggle()
+	var third := Accordion.new("Stats", "test:accordion")
+	_check(third.is_open(), "until it is opened")
+	for made: Node in [section, again, third]:
+		made.free()
 	return true

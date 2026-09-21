@@ -1146,7 +1146,7 @@ func _test_entering() -> void:
 	main._update_buttons()
 	_check(main.view.can_visit(town), "standing on a charted town, it can be entered")
 	_check(main._town_button.visible, "and the button is there")
-	var marks: Node = main._service_rows.get_child(main._service_rows.get_child_count() - 1)
+	var marks: Node = main._service_rows.get_child(main._service_rows.get_child_count() - 1).body.get_child(0)
 	_check(marks.get_child_count() > 0, "the tile panel shows a mark for what is traded here")
 	for mark: Control in marks.get_children():
 		_check(mark.tooltip_text != "", "and each mark says what it is when pointed at")

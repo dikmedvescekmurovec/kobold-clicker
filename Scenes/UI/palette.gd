@@ -18,6 +18,8 @@ const PANEL_CREAM := Color("e5d6a1")
 const SLOT_TAN := Color("cda677")
 ## The same slot pressed in: the pack's wood face, which is the next step down its brown ramp.
 const SLOT_TAN_DK := Color("825c2f")
+## The brown button's face (`ui_btn_brown_normal`), for a mark drawn in code that has to read as one.
+const BUTTON_BROWN := Color("714c2a")
 
 ## The rarity ramp, one pair per step. The light one is for a border on the dark socket of an item
 ## square, the dark one for that rarity's name on the bone text panel: a colour that sings on the

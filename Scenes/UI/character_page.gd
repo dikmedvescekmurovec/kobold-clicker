@@ -59,31 +59,31 @@ func open() -> void:
 	var totals := inventory.stats()
 	_rows.add_child(_who())
 	# What this world is under, if anything, straight under the card: at the foot it would be under the
-	# fold. A name a line, what it costs and pays in its tooltip; the numbers a curse pays are in the
-	# table below (`Inventory.stats`).
+	# fold. Each its name with what it costs and pays written under it, as the tile panel writes a
+	# modifier; the numbers a curse pays are in the table below (`Inventory.stats`).
 	if not inventory.curses.is_empty():
-		_rows.add_child(UITheme.label("Curses", Palette.SLATE))
+		var cursed := _section("Curses")
 		for id: String in inventory.curses:
 			var curse: Dictionary = Curses.CURSES[id]
-			var row := UITheme.label(str(curse["name"]), Palette.RUST, true)
-			row.tooltip_text = "%s\n%s" % [curse["text"], curse["reward"]]
-			row.mouse_filter = Control.MOUSE_FILTER_STOP
-			_rows.add_child(row)
-	_rows.add_child(UITheme.label("Attributes", Palette.SLATE))
+			# A block of its own at the tile panel's gap: the page's row gap would pull the lines apart.
+			var block := UITheme.vbox(2)
+			block.add_child(UITheme.label(str(curse["name"]), Palette.RUST))
+			block.add_child(ItemDetails.line(str(curse["text"]), Palette.INK, BagPage.WIDTH, true))
+			block.add_child(ItemDetails.line(str(curse["reward"]), Palette.LEAF, BagPage.WIDTH, true))
+			cursed.add_child(block)
 	var discs := HBoxContainer.new()
 	discs.alignment = BoxContainer.ALIGNMENT_CENTER
 	discs.add_theme_constant_override("separation", DISC_GAP)
 	for stat: String in ATTRIBUTES:
 		discs.add_child(_disc(stat, float(totals.get(stat, 0.0))))
-	_rows.add_child(discs)
+	_section("Attributes").add_child(discs)
 
-	_rows.add_child(UITheme.label("Stats", Palette.SLATE))
 	# A framed block of its own: the page's row gap is for cards, and would pull a table apart.
 	var table := PanelContainer.new()
 	table.add_theme_stylebox_override("panel", BountyList.flat(Color.TRANSPARENT, 1))
 	var body := UITheme.vbox(0)
 	table.add_child(body)
-	_rows.add_child(table)
+	_section("Stats").add_child(table)
 	for stat: String in LootTable.STAT_LABELS:
 		var value := float(totals.get(stat, 0.0))
 		if ATTRIBUTES.has(stat) or value <= 0.0:
@@ -94,6 +94,13 @@ func open() -> void:
 	if inventory.collection_bonus() > 0:
 		body.add_child(UITheme.table_row("Collection", "+%d%% Damage" % inventory.collection_bonus(),
 				body.get_child_count() % 2 == 1, 0.0, Palette.SLOT_TAN_DK, Palette.SLATE))
+
+
+## A heading that folds what is under it, added to the page; returns what to fill.
+func _section(title: String) -> VBoxContainer:
+	var section := Accordion.new(title, "character:" + title, BountyList.ROW_GAP)
+	_rows.add_child(section)
+	return section.body
 
 
 ## The card at the head of the page: the portrait on a socket, and beside it the level, the

@@ -44,6 +44,8 @@ const CORNER_GAP := 4.0
 ## in panel pixels, and the air it keeps either side of it on a window too narrow for that.
 const REFUSAL_WIDTH := 300.0
 const REFUSAL_MARGIN := 32.0
+## What a tile modifier's sentences wrap at on the tile panel, so a long one never widens the column.
+const MOD_WIDTH := 130.0
 
 ## What the panel over an aimed spell says to do with the map behind it, by the spell's own name.
 const AIM_LINES := {
@@ -731,7 +733,8 @@ func _show_services(cell: Vector2i) -> void:
 	if tier == -1:
 		return
 	_service_rows.add_child(UITheme.rule())
-	_service_rows.add_child(UITheme.label("Services", Palette.SLATE))
+	var services := Accordion.new("Services", "tile:services", 4)
+	_service_rows.add_child(services)
 	# The marks the town page's tabs wear, so a counter looks the same from the road as from inside;
 	# the name is the tooltip, as it is on the tab.
 	var icons := HBoxContainer.new()
@@ -746,24 +749,26 @@ func _show_services(cell: Vector2i) -> void:
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		face.add_child(icon)
 		icons.add_child(face)
-	_service_rows.add_child(icons)
+	services.body.add_child(icons)
 
 
-## What the land on a tile does to the fight for it, one line a modifier in the body font, with what
-## it does and what it pays in the line's tooltip. Only for a tile the player can see: what lies under
-## the fog is for charting to find out.
+## What the land on a tile does to the fight for it: each modifier's name, then what it does and what
+## it pays written out under it, never hidden in a tooltip -- they are what the tile is chosen on.
+## Only for a tile the player can see: what lies under the fog is for charting to find out.
 func _show_mods(cell: Vector2i) -> void:
 	UITheme.clear(_mod_rows)
 	var mods: Array = _mods_of(cell) if view.seen(cell) else []
 	if mods.is_empty():
 		return
 	_mod_rows.add_child(UITheme.rule())
-	_mod_rows.add_child(UITheme.label("Modifiers", Palette.SLATE))
+	var section := Accordion.new("Modifiers", "tile:modifiers")
+	_mod_rows.add_child(section)
 	for id: String in mods:
-		var row := UITheme.label(str(TileMods.MODS[id]["name"]), Palette.INK, true)
-		row.tooltip_text = TileMods.tip(id)
-		row.mouse_filter = Control.MOUSE_FILTER_STOP
-		_mod_rows.add_child(row)
+		var mod: Dictionary = TileMods.MODS[id]
+		section.body.add_child(UITheme.label(str(mod["name"]), Palette.INK))
+		section.body.add_child(ItemDetails.line(str(mod["text"]), Palette.INK, MOD_WIDTH, true))
+		if not str(mod["reward"]).is_empty():
+			section.body.add_child(ItemDetails.line(str(mod["reward"]), Palette.LEAF, MOD_WIDTH, true))
 
 
 ## The tile panel is a full-height column against the right edge, its buttons at its foot. The
