@@ -3198,7 +3198,7 @@ func _test_tips() -> bool:
 	main._check_tips()
 	_check(main._tip_panel != null and main._tip_queue.size() == 1, "two tips: one up, one waiting")
 	_check(main._bag_button.visible and main._skills_button.visible, "both buttons come on")
-	_check(main._flashes.has("opened_bag") and main._flashes.has("opened_skills"), "both pulsing")
+	_check(main._flashes.has("opened_bag") and main._flashes.has("skill_point"), "both pulsing")
 	_check(Inventory.load_from(TEST_PATH).tips.has("level_up"), "and the tips are saved")
 	main._on_tip_closed()
 	_check(main._tip_panel != null and main._tip_queue.is_empty(), "closing one shows the next")
@@ -3209,7 +3209,11 @@ func _test_tips() -> bool:
 	main._on_bag_pressed()
 	_check(not main._flashes.has("opened_bag") and main._bag_button.modulate == Color.WHITE,
 			"pressing the bag stops its pulse")
-	_check(main._flashes.has("opened_skills"), "while the star keeps pulsing")
+	_check(main._flashes.has("skill_point"), "while the star keeps pulsing")
+	main.inventory.level = 1
+	main.skills_page.open()
+	_check(not main._flashes.has("skill_point") and main._skills_button.modulate == Color.WHITE,
+			"until no point is left to spend")
 	main.queue_free()
 	_clear_save()
 	return true
@@ -3455,15 +3459,22 @@ func _test_collection() -> bool:
 	_check(not main._collection_button.visible, "no collection button before the first unique")
 	main.inventory.note_unique("metronome")
 	main._check_tips()
-	_check(main._collection_button.visible and main._flashes.has("opened_collection"), "it comes on, pulsing")
+	_check(main._collection_button.visible and main._flashes.has("new_unique"), "it comes on, pulsing")
 	_check("first_unique" in main.inventory.tips and main._tip_panel != null, "with a word about what was found")
 	main._on_tip_closed()
 	main.inventory.fortunes[FortuneTeller.PEEKED] = ["rimeplate"]
 	main._on_collection_pressed()
 	await process_frame
 	_check(main.collection_page.visible and main._collection_button.visible, "the page opens, its button beside it")
-	_check(not main._flashes.has("opened_collection"), "and the pulse stops")
+	_check(main._flashes.has("new_unique"), "still pulsing while the find is not looked at")
 	var squares: Array = main.collection_page.find_children("*", "ItemSlot", true, false)
+	var fresh: Array = squares.filter(func(slot: ItemSlot) -> bool: return slot.has_node(ItemSlot.GLINT_NAME))
+	_check(fresh.size() == 1 and fresh[0].item.unique == "metronome", "the new find glints (%d)" % fresh.size())
+	fresh[0].hint.call(VBoxContainer.new(), 100.0)
+	await process_frame
+	_check(not main._flashes.has("new_unique") and not fresh[0].has_node(ItemSlot.GLINT_NAME),
+			"hovering it stills both")
+	_check(Inventory.load_from(TEST_PATH).uniques_new.is_empty(), "and that is saved")
 	_check(squares.size() == UniqueTable.UNIQUES.size(), "one square a unique (%d)" % squares.size())
 	# The foot, under the scroll: what the log adds and how full it is, in the body font.
 	var bonus: Label = main.collection_page.find_child(CollectionPage.BONUS_NAME, true, false)

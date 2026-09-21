@@ -120,6 +120,8 @@ var towns := TownState.new()
 ## collection log lights up -- and found is found: selling one, or losing it to a full bag, takes
 ## nothing off this list.
 var uniques_found: Array[String] = []
+## The found ones the player has not hovered in the log yet: what makes its button and their squares shine.
+var uniques_new: Array[String] = []
 
 ## What the fortuneteller has sold that belongs to the player rather than to a town: the chest the
 ## star points at, the uniques she has shown, whether the scour is spent. A plain Dictionary whose
@@ -521,6 +523,7 @@ func transcended() -> Inventory:
 	var next := Inventory.new()
 	next.tips = tips.duplicate()
 	next.uniques_found = uniques_found.duplicate()
+	next.uniques_new = uniques_new.duplicate()
 	next.kills = kills
 	next.play_seconds = play_seconds
 	next.first_sword_taken = true
@@ -547,6 +550,7 @@ func note_unique(id: String) -> bool:
 	if not UniqueTable.UNIQUES.has(id) or uniques_found.has(id):
 		return false
 	uniques_found.append(id)
+	uniques_new.append(id)
 	return true
 
 
@@ -602,6 +606,7 @@ func save(path := SAVE_PATH) -> bool:
 		"equipped": equipment.to_dict(),
 		"autodiscard": autodiscard,
 		"uniques_found": uniques_found,
+		"uniques_new": uniques_new,
 		"fortunes": fortunes,
 		"camp": camp,
 		"heirlooms": {"items": kept, "equipped": stash().equipment.to_dict()},
@@ -710,6 +715,13 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	if typeof(found) == TYPE_ARRAY:
 		for id: Variant in found:
 			inventory.note_unique(str(id))
+	# Absent in an older save: nothing is new. Only what is also found counts.
+	inventory.uniques_new.clear()
+	var unseen: Variant = data.get("uniques_new", [])
+	if typeof(unseen) == TYPE_ARRAY:
+		for id: Variant in unseen:
+			if inventory.uniques_found.has(str(id)):
+				inventory.uniques_new.append(str(id))
 	# Version 11 knew nothing about the fortuneteller: an absent key is nothing bought.
 	var told: Variant = data.get("fortunes", {})
 	if typeof(told) == TYPE_DICTIONARY:

@@ -8,6 +8,8 @@ extends Control
 
 ## The page's X was pressed.
 signal closed
+## Redrawn, and the points to spend may have moved with it.
+signal changed
 
 ## The gap between the trees, in panel pixels.
 const TREE_GAP := 20
@@ -84,6 +86,7 @@ func _ready() -> void:
 
 ## Redraws the page from the inventory: levels and gold both move while it is shut.
 func open() -> void:
+	changed.emit()
 	var free := inventory.skills.points(inventory.level)
 	_points.text = "%d skill point%s" % [free, "" if free == 1 else "s"]
 	var times := inventory.skills.transcended

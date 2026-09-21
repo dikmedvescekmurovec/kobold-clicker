@@ -13,7 +13,8 @@ extends Control
 ##
 ## Built like the other left-hand pages (`BountyList`): `open()` redraws it, `layout()` fits it to the
 ## window, `closed` is its X, and it carries `UITheme.theme()` because it hangs off a `CanvasLayer`.
-## It changes nothing and so saves nothing -- `FightLedger` is what writes a find into the log.
+## It changes one thing and saves nothing: a find new to the log (`Inventory.uniques_new`) glints until
+## the cursor has been over it, and then `seen` asks the main scene to save and still the button.
 ##
 ## Every square is an `ItemSlot`, so the one `ItemCard` the main scene built describes these too --
 ## every one of them through the `hint` it carries, except the one nobody has shown them, whose hint is
@@ -21,6 +22,8 @@ extends Control
 
 ## The page's X was pressed.
 signal closed
+## A new find was hovered for the first time and left `Inventory.uniques_new`.
+signal seen
 
 const HELP_ICON := "res://Assets/UI/ui_icon_info.png"
 ## The foot's two labels, for the tests.
@@ -97,7 +100,23 @@ func open() -> void:
 	for id: String in UniqueTable.ids():
 		# Dev (`Settings.show_all_uniques`): every square as found. The count and the bonus stay the save's.
 		var found := Settings.show_all_uniques() or inventory.uniques_found.has(id)
-		grid.add_child(CollectionPage.square(id, found, view, id in peeked))
+		var slot := CollectionPage.square(id, found, view, id in peeked)
+		grid.add_child(slot)
+		if found and id in inventory.uniques_new:
+			slot.keep_shining()
+			# The card writes the hint as the cursor comes onto the square, which is when it is seen.
+			var write := slot.hint
+			slot.hint = func(rows: VBoxContainer, width: float) -> void:
+				write.call(rows, width)
+				_on_seen(id, slot)
+
+
+func _on_seen(id: String, slot: ItemSlot) -> void:
+	if not inventory.uniques_new.has(id):
+		return
+	inventory.uniques_new.erase(id)
+	slot.stop_shining()
+	seen.emit()
 
 
 ## One unique's square. A specimen rather than the player's own: the log says what the thing *is*, at

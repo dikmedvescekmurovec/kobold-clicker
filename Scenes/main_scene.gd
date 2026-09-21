@@ -464,7 +464,9 @@ func _build_pages(layer: CanvasLayer) -> void:
 	layer.add_child(_character_button)
 	character_page = CharacterPage.new(inventory, ui_scale)
 	collection_page = CollectionPage.new(inventory, view, ui_scale)
+	collection_page.seen.connect(_on_unique_seen)
 	skills_page = SkillsPage.new(inventory, inventory_path, ui_scale)
+	skills_page.changed.connect(func() -> void: _pulse(_skills_button, "skill_point", _skill_point_free()))
 	bag_page = BagPage.new(inventory, inventory_path, ui_scale)
 	heirloom_page = BagPage.new(inventory, inventory_path, ui_scale, true)
 	bounty_page = BountyList.new(inventory, view, inventory_path, ui_scale)
@@ -1282,12 +1284,10 @@ func _show_corner(shown: bool) -> void:
 	# The log is a thing to be found, like what it lists: it is not there until the first unique is.
 	_collection_button.visible = shown and (Settings.show_all_uniques()
 			or not inventory.uniques_found.is_empty())
-	if _collection_button.visible:
-		_flash(_collection_button, "opened_collection")
+	_pulse(_collection_button, "new_unique", not inventory.uniques_new.is_empty())
 	if _bag_button.visible:
 		_flash(_bag_button, "opened_bag")
-	if _skills_button.visible:
-		_flash(_skills_button, "opened_skills")
+	_pulse(_skills_button, "skill_point", _skill_point_free())
 	_place_corner()
 
 
@@ -1362,15 +1362,9 @@ func _on_tip_closed() -> void:
 		_combat.process_mode = Node.PROCESS_MODE_INHERIT
 
 
-## Pulses a button until it has been pressed once. The tween is the scene's, so a button hidden for
-## a fight is still pulsing when it comes back.
+## Pulses a button until it has been pressed once.
 func _flash(button: Button, id: String) -> void:
-	if id in inventory.tips or _flashes.has(id):
-		return
-	var tween := create_tween().set_loops()
-	tween.tween_property(button, "modulate", FLASH_BRIGHT, FLASH_SECONDS)
-	tween.tween_property(button, "modulate", Color.WHITE, FLASH_SECONDS)
-	_flashes[id] = [tween, button]
+	_pulse(button, id, id not in inventory.tips)
 
 
 ## The first press: the pulse stops for good.
@@ -1379,10 +1373,34 @@ func _stop_flash(id: String) -> void:
 		return
 	inventory.tips.append(id)
 	inventory.save(inventory_path)
-	if _flashes.has(id):
-		_flashes[id][0].kill()
-		_flashes[id][1].modulate = Color.WHITE
-		_flashes.erase(id)
+	_pulse(null, id, false)
+
+
+## Pulses a button while `on` and stills it once not. The tween is the scene's, so a button hidden for
+## a fight is still pulsing when it comes back.
+func _pulse(button: Button, id: String, on: bool) -> void:
+	if on == _flashes.has(id):
+		return
+	if on:
+		var tween := create_tween().set_loops()
+		tween.tween_property(button, "modulate", FLASH_BRIGHT, FLASH_SECONDS)
+		tween.tween_property(button, "modulate", Color.WHITE, FLASH_SECONDS)
+		_flashes[id] = [tween, button]
+		return
+	_flashes[id][0].kill()
+	_flashes[id][1].modulate = Color.WHITE
+	_flashes.erase(id)
+
+
+## Whether a rank can be bought: a point is not always enough, once the trees have been transcended.
+func _skill_point_free() -> bool:
+	return inventory.skills.points(inventory.level) >= inventory.skills.rank_cost()
+
+
+## A new unique hovered in the log: kept, and the trophy stops pulsing once none are left.
+func _on_unique_seen() -> void:
+	inventory.save(inventory_path)
+	_pulse(_collection_button, "new_unique", not inventory.uniques_new.is_empty())
 
 
 ## Every page that stands against the left edge. They share it, so opening one closes the rest and
@@ -1456,7 +1474,6 @@ func _close_town() -> void:
 
 
 func _on_skills_pressed() -> void:
-	_stop_flash("opened_skills")
 	_toggle_left_page(skills_page)
 
 
@@ -1489,7 +1506,6 @@ func _on_bounty_pressed() -> void:
 
 
 func _on_collection_pressed() -> void:
-	_stop_flash("opened_collection")
 	_toggle_left_page(collection_page)
 
 

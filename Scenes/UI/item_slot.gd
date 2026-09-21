@@ -31,6 +31,8 @@ const SHINES := 2
 const GROUP := "item_slots"
 ## The child that is the rarity's frame (`ItemRarity.frame`); a common square has none.
 const FRAME_NAME := "Frame"
+## The child `keep_shining` adds.
+const GLINT_NAME := "Glint"
 ## What a `shadow` square is multiplied by: dark enough to read as not held, light enough to tell what it is.
 const SHADOW := Color(0.35, 0.35, 0.35)
 
@@ -86,6 +88,29 @@ func _shine(target: TextureRect, side: int, period: float) -> void:
 	target.material = glint
 	create_tween().set_loops(SHINES).tween_method(
 		func(at: float) -> void: glint.set_shader_parameter("progress", at), 0.0, 1.0, period)
+
+
+## Glints over the icon without end, until `stop_shining`: a unique new to the collection log. A copy
+## of the icon over it carries the glint, so the tween dies with the copy.
+func keep_shining() -> void:
+	var glint := TextureRect.new()
+	glint.name = GLINT_NAME
+	glint.texture = item.icon()
+	glint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	glint.position = Vector2(SIDE - ICON, SIDE - ICON) / 2.0
+	var shader := ShaderMaterial.new()
+	shader.shader = SHINE
+	shader.set_shader_parameter("side", float(ICON))
+	glint.material = shader
+	add_child(glint)
+	glint.create_tween().set_loops().tween_method(
+		func(at: float) -> void: shader.set_shader_parameter("progress", at), 0.0, 1.0, 1.5)
+
+
+func stop_shining() -> void:
+	var glint := get_node_or_null(GLINT_NAME)
+	if glint != null:
+		glint.queue_free()
 
 
 ## The square for `item`, ready to be put in a grid or a row.
