@@ -37,6 +37,11 @@ const MAX_SECONDS := 12.0 * 3600.0
 
 ## The keys of the drawer kept in `inventory.camp`, the way `FortuneTeller`'s live in
 ## `inventory.fortunes`: `Inventory` never reads what is in one.
+## The Restless curse: a camp that fills in `RESTLESS_SECONDS` and pays `RESTLESS_PAY` times over.
+## Both are written into the drawer as the camp is made (`MOST`), so a camp is still arithmetic.
+const RESTLESS_SECONDS := 2.0 * 3600.0
+const RESTLESS_PAY := 2.0
+const MOST := "most"
 const SINCE := "since"
 const CELL := "cell"
 const PLACE := "place"
@@ -49,7 +54,7 @@ const KILLS := "kills"
 ## is the one way to camp for nothing, so it is asked before a camp is made rather than found out
 ## twelve hours later. The two conditions are `Encounter._swing_weapon`'s own.
 static func hunts(fight: Encounter) -> bool:
-	return fight.attack_speed > 0.0 and not ("berserk" in fight.effects)
+	return fight.swings()
 
 
 ## What `fight` earns a second with nobody clicking: gold, experience and bodies. It plays the fight
@@ -68,13 +73,16 @@ static func rates(fight: Encounter) -> Dictionary:
 ## earns a second. Everything `earned` needs, so a camp survives any change to the ground under it.
 static func make(cell: Vector2i, place: String, fight: Encounter, at: float) -> Dictionary:
 	var earns := rates(fight)
+	var restless := Curses.effect(Curses.RESTLESS) in fight.effects
+	var pay := RESTLESS_PAY if restless else 1.0
 	return {
 		SINCE: int(at),
 		CELL: [cell.x, cell.y],
 		PLACE: place,
-		GOLD: float(earns[GOLD]),
-		XP: float(earns[XP]),
+		GOLD: float(earns[GOLD]) * pay,
+		XP: float(earns[XP]) * pay,
 		KILLS: float(earns[KILLS]),
+		MOST: RESTLESS_SECONDS if restless else MAX_SECONDS,
 	}
 
 
@@ -82,10 +90,12 @@ static func make(cell: Vector2i, place: String, fight: Encounter, at: float) -> 
 ## `full` is whether the cap is what stopped it, which is the one thing the screen must say -- a
 ## player back after a week is owed an explanation, not a number that looks short.
 static func earned(camp: Dictionary, at: float) -> Dictionary:
-	var spent := clampf(at - float(camp.get(SINCE, at)), 0.0, MAX_SECONDS)
+	# A camp saved before there was a `MOST` fills when camps always did.
+	var most := float(camp.get(MOST, MAX_SECONDS))
+	var spent := clampf(at - float(camp.get(SINCE, at)), 0.0, most)
 	return {
 		"seconds": spent,
-		"full": spent >= MAX_SECONDS,
+		"full": spent >= most,
 		GOLD: float(camp.get(GOLD, 0.0)) * spent,
 		XP: int(float(camp.get(XP, 0.0)) * spent),
 		KILLS: int(float(camp.get(KILLS, 0.0)) * spent),

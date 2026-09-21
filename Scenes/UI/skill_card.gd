@@ -23,7 +23,7 @@ func _init() -> void:
 ## Fills the card for skill `id`, for a player whose learned skills are `skills` at `level`. `worth`
 ## is what a point counts for (`Inventory.skill_worth`: two under Hard Lessons), so the card says what
 ## the fight will be armed with.
-func fill(id: String, skills: Skills, level: int, worth := 1) -> void:
+func fill(id: String, skills: Skills, level: int, worth := 1.0, refused: Variant = null) -> void:
 	for child: Node in _rows.get_children():
 		_rows.remove_child(child)
 		child.queue_free()
@@ -36,7 +36,9 @@ func fill(id: String, skills: Skills, level: int, worth := 1) -> void:
 		_rows.add_child(ItemDetails.line(str(entry["effect_text"]), Palette.SLOT_TAN_DK, WIDTH, true))
 	if rank > 0:
 		_rows.add_child(ItemDetails.line("Now: " + SkillTree.describe(id, rank * worth, skills.transcended), Palette.LEAF, WIDTH, true))
-	var refusal := skills.why_not(id, level)
+	# `refused` is whoever owns the skills saying why not, where there is more to it than the trees'
+	# own rules (`Inventory.why_not_skill`: the Specialist's one tree).
+	var refusal: String = skills.why_not(id, level) if refused == null else str(refused)
 	var status := "Click to learn (%d/%d)" % [rank, most]
 	if skills.rank_cost() > 1:
 		status = "Click to learn for %d points (%d/%d)" % [skills.rank_cost(), rank, most]

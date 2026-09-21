@@ -163,5 +163,5 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator, index := 
 		MENDING:
 			item.broken = false
 		BINDING:
-			item.mods[index]["bound"] = true
+			item.hold(index, "bound")
 	return true

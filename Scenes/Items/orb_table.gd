@@ -200,7 +200,8 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator) -> bool:
 	return true
 
 
-## Rolls every modifier's number again in its band at the piece's `mod_level`, leaving the ids alone:
+## Rolls every modifier's number again in its own tier's band (`Item.tier_of`), leaving the ids and
+## the tiers alone:
 ## that is the whole difference between a Divine and a Chaos, and the reason a piece with the right
 ## modifiers and poor rolls is worth keeping. **The smith's upgrade calls this too** (`Blacksmith`),
 ## which is why it is a function rather than a branch: a band read at two levels in two files is two
@@ -213,7 +214,7 @@ static func reroll_values(item: Item, rng: RandomNumberGenerator) -> void:
 	for mod in item.mods:
 		if Item.held_fast(mod) or bool(mod.get("perfect", false)):
 			continue
-		mod["value"] = ModifierTable.reroll_value(str(mod["id"]), rng, item.mod_level())
+		mod["value"] = ModifierTable.reroll_value(str(mod["id"]), rng, item.tier_of(mod))
 
 
 ## Sets the piece to a rarity and gives it that rarity's own fresh handful of modifiers. Four of the

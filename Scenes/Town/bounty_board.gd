@@ -44,15 +44,17 @@ const LOCATED := "located"
 const COMMONS := 2
 const ELITES := 1
 
-## How many bodies a posting asks for. A couple of dozen commons is two or three tiles' fighting; a
-## handful of elites is the same walk the other way round, since a tile fields one elite in ten.
-const NEED_COMMON := 24
-const NEED_ELITE := 5
+## How many bodies a posting asks for. Five commons is a tile's fighting or less; one elite is a
+## tile or so of looking, since a tile fields one elite in ten.
+const NEED_COMMON := 5
+const NEED_ELITE := 1
 
-## What a board pays against what the bodies themselves carried: the purse of `need` of that monster,
-## this many times over. Quoted in the monster's own worth rather than in gold, so a deep town's board
-## pays deep-town money without a second curve to keep in step. The dial for what a bounty is worth.
-const REWARD_MULT := 3.0
+## What a board pays, in purses of the monster it asks for. Quoted in the monster's own worth rather
+## than in gold, so a deep town's board pays deep-town money without a second curve to keep in step.
+## The dials for what a bounty is worth: 72 and 15 are what 24 commons and 5 elites at three times
+## their purse paid before `need` was cut, kept when it was.
+const REWARD_COMMON := 72.0
+const REWARD_ELITE := 15.0
 
 ## How far from the town its board looks for land to post monsters from, in hex steps. Far enough
 ## that a town has several environments to draw on, near enough that "where it lives" is a walk rather
@@ -223,6 +225,11 @@ static func _target(envs: PackedStringArray, tier: int, taken: Dictionary,
 	return candidates[rng.randi_range(0, candidates.size() - 1)]
 
 
+## How many purses of its monster a posting of `tier` pays.
+static func reward_of(tier: int) -> float:
+	return REWARD_ELITE if tier == EnemyRoster.Tier.ELITE else REWARD_COMMON
+
+
 ## One posting, priced off what the bodies it asks for are carrying. The elite's board work carries an
 ## orb as well, drawn the way a vendor's shelf draws one: what a bounty is for is the thing the ground
 ## will not hand over on its own.
@@ -233,7 +240,7 @@ static func _posting(enemy: String, tier: int, cell: Vector2i,
 		ENEMY: enemy,
 		NEED: need,
 		HAVE: 0,
-		GOLD: maxf(1.0, roundf(Encounter.gold_of(enemy, cell) * need * REWARD_MULT)),
+		GOLD: maxf(1.0, roundf(Encounter.gold_of(enemy, cell) * reward_of(tier))),
 		ORB: OrbTable.roll_favoured(rng) if tier == EnemyRoster.Tier.ELITE else "",
 		DONE: false,
 		LEVEL: MapBuilder.level_of(cell),

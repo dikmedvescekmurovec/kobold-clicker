@@ -267,8 +267,7 @@ func _run_orb_gold(level: int) -> float:
 
 ## What a board pays for `need` of that tier, the way `BountyBoard._posting` prices one.
 func _bounty(level: int, tier: int) -> float:
-	var need: int = BountyBoard.NEED_ELITE if tier == EnemyRoster.Tier.ELITE else BountyBoard.NEED_COMMON
-	return maxf(1.0, roundf(_purse(level, tier) * need * BountyBoard.REWARD_MULT))
+	return maxf(1.0, roundf(_purse(level, tier) * BountyBoard.reward_of(tier)))
 
 
 ## One cell of the row per level.

@@ -35,6 +35,7 @@ func _run() -> void:
 	await _test_board()
 	await _test_entering()
 	await _test_fortune_page()
+	await _test_curses_the_world_feels()
 	for scratch in [TEST_PATH, TEST_MAP_PATH]:
 		if FileAccess.file_exists(scratch):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch))
@@ -351,7 +352,7 @@ func _test_smith() -> bool:
 	var ids_after := piece.mods.map(func(mod: Dictionary) -> String: return str(mod["id"]))
 	_check(ids_after == ids_before, "carrying the modifiers it already had")
 	for mod: Dictionary in piece.mods:
-		var band := ModifierTable.band_for(str(mod["id"]), piece.mod_level())
+		var band := ModifierTable.band_for(str(mod["id"]), piece.tier_of(mod))
 		_check(int(mod["value"]) >= int(band[0]) and int(mod["value"]) <= int(band[1]),
 				"%s rerolled inside its band at the new level (%d in %d-%d)"
 				% [mod["id"], int(mod["value"]), int(band[0]), int(band[1])])
@@ -498,7 +499,7 @@ func _test_bounties() -> bool:
 		_check(int(bounty[BountyBoard.HAVE]) == 0, "%s starts at nothing" % enemy)
 		_check(not bool(bounty[BountyBoard.DONE]), "and is not handed in")
 		_check(float(bounty[BountyBoard.GOLD]) == maxf(1.0, roundf(Encounter.gold_of(enemy, TOWN_CELL)
-				* need * BountyBoard.REWARD_MULT)), "%s pays what its bodies are worth" % enemy)
+				* BountyBoard.reward_of(tier))), "%s pays what its bodies are worth" % enemy)
 		_check((not str(bounty[BountyBoard.ORB]).is_empty()) == (tier == EnemyRoster.Tier.ELITE),
 				"only the elite posting carries an orb (%s)" % enemy)
 	_check(tiers[EnemyRoster.Tier.COMMON] == BountyBoard.COMMONS
@@ -876,7 +877,7 @@ func _test_buying() -> void:
 	_check(inventory.gold == 0 and inventory.total() == 0, "and nothing moved")
 	_check(VendorStock.items(drawer)[0] != null, "the piece is still on the shelf")
 
-	# Nor does a full bag: `Inventory.add` would destroy the worst piece in it to make room.
+	# Nor does a full bag: `Inventory.add` would push it over the cap and overencumber the player.
 	inventory.gold = price * 4
 	var rng := RandomNumberGenerator.new()
 	rng.seed = WORLD_SEED
@@ -1612,6 +1613,9 @@ func _test_fortune_page() -> void:
 	main.inventory.gold = full_purse
 	main.town_page.redraw()
 	await process_frame
+	# Five skulls to spend on the black screen, more than the one wall down earns: the budget is read as
+	# the screen opens.
+	main.inventory.skull_budget = 5
 	var written := FileAccess.get_file_as_string(TEST_PATH)
 	_deep_button(main.town_page._rows, "Transcend").pressed.emit()
 	await process_frame
@@ -1637,23 +1641,30 @@ func _test_fortune_page() -> void:
 			"none of which has been written: a game closed here never left")
 	black._show_choice()
 	await process_frame
-	# The curses: a third card, a row each, three at most, and nothing of it written until the way on.
+	# The curses: a third card, a row each, as many skulls as the budget, and nothing of it written until
+	# the way on.
 	_deep_button(black, "Take on a curse").pressed.emit()
 	await process_frame
 	_check(black._curse_face != null and not black._choice.visible and black._back.visible,
 			"the third card opens the curses, with the arrow back")
-	for id: String in [Curses.THICK_FOG, Curses.NO_REST, Curses.LONG_WINTER]:
+	for id: String in [Curses.THICK_FOG, Curses.NO_REST]:
 		(black._curse_face.find_child(id, true, false) as Button).toggled.emit(true)
 		await process_frame
-	var fourth := black._curse_face.find_child(Curses.PAUPER, true, false) as Button
-	_check(main.inventory.pending_curses.size() == Curses.MOST and fourth.disabled
-			and not (black._curse_face.find_child(Curses.NO_REST, true, false) as Button).disabled,
-			"three may be taken, and the rest grey while they are")
+	var winter := black._curse_face.find_child(Curses.LONG_WINTER, true, false) as Button
+	_check(main.inventory.pending_curses.size() == 2 and winter.disabled
+			and not (black._curse_face.find_child(Curses.IRON_FOES, true, false) as Button).disabled
+			and not (black._curse_face.find_child(Curses.NO_REST, true, false) as Button).disabled
+			and "Skulls: 3 of 5" in _said(black._curse_face),
+			"three skulls of five taken: a curse of three greys, one of one does not")
+	winter.toggled.emit(true)
+	await process_frame
+	_check(main.inventory.pending_curses.size() == 2, "and a greyed one pressed anyway is refused")
 	(black._curse_face.find_child(Curses.NO_REST, true, false) as Button).toggled.emit(false)
 	await process_frame
-	_check(main.inventory.pending_curses == [Curses.THICK_FOG, Curses.LONG_WINTER]
-			and not (black._curse_face.find_child(Curses.PAUPER, true, false) as Button).disabled,
-			"one let go makes room again")
+	(black._curse_face.find_child(Curses.LONG_WINTER, true, false) as Button).toggled.emit(true)
+	await process_frame
+	_check(main.inventory.pending_curses == [Curses.THICK_FOG, Curses.LONG_WINTER],
+			"one let go makes room again, to the last skull")
 	_check(main.inventory.curses.is_empty() and FileAccess.get_file_as_string(TEST_PATH) == written,
 			"the world being left is under none of them, and nothing is written")
 	black._show_choice()
@@ -1736,3 +1747,66 @@ func _deep_button(parent: Node, text: String) -> Button:
 		if found != null:
 			return found
 	return null
+
+
+## Three curses the main scene has a hand in: the Ring of Walls moves where the next wall stands,
+## the Homeland's lands are chosen as the world's map first exists, and under No Second Chances a
+## lost tile is a lost world -- the black screen, with no heirloom to be made on it.
+func _test_curses_the_world_feels() -> void:
+	_clear_scratch()
+	var cursed := Inventory.new()
+	cursed.curses = [Curses.RING_OF_WALLS, Curses.HOMELAND, Curses.NO_SECOND_CHANCES]
+	cursed.first_sword_taken = true
+	cursed.items.append(Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, RandomNumberGenerator.new(), 3))
+	cursed.save(TEST_PATH)
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	main.inventory_path = TEST_PATH
+	main.map_path = TEST_MAP_PATH
+	root.add_child(main)
+	for i in 3:
+		await process_frame
+
+	_check(main.view.wall_step == MapBuilder.RING_OF_WALLS_STEP, "the Ring of Walls is told to the map")
+	var home: Array = main.inventory.homeland
+	_check(home.size() == 2 and home[0] == main.view.env_at(MapBuilder.CENTER) and home[0] != home[1],
+			"the Homeland is the land the start stands on and one other %s" % [home])
+	_check(Inventory.load_from(TEST_PATH).homeland == main.inventory.homeland, "and is saved as it is chosen")
+	main._settle_homeland()
+	_check(main.inventory.homeland == home, "asked again, it stays what it was")
+
+	# A wall down opens five rings, not ten, and is counted as one wall.
+	var radius: int = main.view.land_radius
+	main.view._break_wall()
+	_check(main.view.land_radius == radius + MapBuilder.RING_OF_WALLS_STEP and main.view.walls_fallen() == 1,
+			"a fallen wall opens five rings (%d)" % main.view.land_radius)
+	_check(Encounter.walls_inside(Vector2i(radius + 2, 0)) == 1, "and the land past it is as hard as it ever was")
+
+	# The lost fight: banked, and then the black screen with nothing to keep.
+	var target := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
+	main.map.select_cell(target)
+	main._on_chart_pressed()
+	main._combat.fight.give_up()
+	main._combat.retry.emit()
+	await process_frame
+	_check(main._combat == null and main._transcend_page != null, "a lost tile ends the world, Retry or no")
+	var black: TranscendPage = main._transcend_page
+	black._show_choice()
+	_check(_deep_button(black, "Create an heirloom").disabled and "lost" in _said(black),
+			"and a world lost that way makes no heirloom")
+	black.finish()
+	await process_frame
+	var after := Inventory.load_from(TEST_PATH)
+	_check(after.curses.is_empty() and after.stash().total() == 0 and after.total() == 0,
+			"the next world begins under nothing, with nothing")
+	_check(after.skull_budget == 0, "and eight skulls carried into a lost world earn none (%d)" % after.skull_budget)
+	main.queue_free()
+	await process_frame
+	_clear_scratch()
+
+
+func _clear_scratch() -> void:
+	for scratch in [TEST_PATH, TEST_MAP_PATH]:
+		if FileAccess.file_exists(scratch):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch))

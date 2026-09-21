@@ -19,6 +19,9 @@ const PER_ROW := 4
 const INSPECT_WIDTH := 150.0
 ## The gap between squares. The same seven-to-one proportion the bag's grid keeps.
 const GAP := ItemSlot.SIDE / 7
+## How many rows of squares show before the rest scroll by the wheel. A half row, so the cut-off
+## squares say there is more; sized so the verdict still fits a 648 px window at `ui_scale` 2.
+const MAX_ROWS := 3.5
 
 ## Fired whenever the view changes height -- a drop opened or closed, or the list refilled -- so an
 ## owner that centres this panel knows to measure it again.
@@ -35,6 +38,7 @@ var discardable := false
 var _items: Array[Item] = []
 var _ground: PanelContainer
 var _grid: VBoxContainer
+var _scroll: ScrollContainer
 var _orbs: HBoxContainer
 var _inspect: PanelContainer
 var _inspect_rows: VBoxContainer
@@ -54,7 +58,12 @@ func _init() -> void:
 	_grid = VBoxContainer.new()
 	_grid.add_theme_constant_override("separation", GAP)
 	_grid.gui_input.connect(_on_grid_input)
-	found.add_child(_grid)
+	# No bar, as on the bag: the half row showing is the hint, and the wheel does the rest.
+	_scroll = ScrollContainer.new()
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	found.add_child(_scroll)
+	_scroll.add_child(_grid)
 	# The orbs the fight turned up, under the squares as the tray is under the bag. A record only:
 	# they take no mouse, because there is nothing here an orb can be pressed to do.
 	_orbs = HBoxContainer.new()
@@ -104,7 +113,7 @@ func fill(items: Array[Item], orbs := {}) -> void:
 		held.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_orbs.add_child(held)
 	_orbs.visible = not orbs.is_empty()
-	_grid.visible = not (_items.is_empty() and _orbs.visible)
+	_scroll.visible = not (_items.is_empty() and _orbs.visible)
 	if _items.is_empty():
 		var none := Label.new()
 		none.theme_type_variation = "PanelLabel"
@@ -112,6 +121,7 @@ func fill(items: Array[Item], orbs := {}) -> void:
 		none.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		none.modulate = Color(1.0, 1.0, 1.0, 0.5)
 		_grid.add_child(none)
+		_fit_scroll()
 		return
 	var row: HBoxContainer = null
 	for i in _items.size():
@@ -124,6 +134,17 @@ func fill(items: Array[Item], orbs := {}) -> void:
 		# Which drop this is, so a click on it can find its way back to the item.
 		slot.set_meta("drop_index", i)
 		row.add_child(slot)
+	_fit_scroll()
+
+
+## Up to MAX_ROWS the box does not scroll and so is as tall as the grid; past it, it is cut to
+## MAX_ROWS and scrolls. Counted rather than measured: the grid has not been laid out yet.
+func _fit_scroll() -> void:
+	_scroll.scroll_vertical = 0
+	var long := ceili(_items.size() / float(PER_ROW)) > MAX_ROWS
+	_scroll.vertical_scroll_mode = (ScrollContainer.SCROLL_MODE_SHOW_NEVER if long
+			else ScrollContainer.SCROLL_MODE_DISABLED)
+	_scroll.custom_minimum_size.y = MAX_ROWS * ItemSlot.SIDE + floorf(MAX_ROWS) * GAP if long else 0.0
 
 
 ## Whether one drop's details are open rather than the grid.

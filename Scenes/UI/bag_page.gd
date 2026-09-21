@@ -661,8 +661,9 @@ func _show_item(index: int) -> void:
 			coming_off.append(piece.display_name())
 		# Greyed rather than destroying a piece to make room for what comes off -- `_unequip_button`'s
 		# rule, and the reason is in the tooltip as it is there.
-		var full := not inventory.can_equip(item, socket)
-		var equip := UITheme.button("Equip", "LightButton", "The bag is full" if full
+		var refusal := inventory.why_not_equip(item, socket)
+		var full := not refusal.is_empty()
+		var equip := UITheme.button("Equip", "LightButton", refusal if full
 				else "Wear this in the %s socket%s" % [Equipment.LABELS[socket].to_lower(),
 					"" if coming_off.is_empty()
 					else ", putting %s back in the bag" % ", ".join(coming_off)])

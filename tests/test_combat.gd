@@ -43,6 +43,7 @@ func _run() -> void:
 	_check(_test_drop_rate_finds_everything() == true, "drop rate tests ran to the end")
 	_check(_test_tile_mods() == true, "tile modifier tests ran to the end")
 	_check(_test_curses() == true, "curse tests ran to the end")
+	_check(_test_more_curses() == true, "second batch curse tests ran to the end")
 	await _test_thrown_finds()
 	await _test_settings()
 	await _test_the_nameplate_wears_the_tier()
@@ -780,7 +781,7 @@ func _test_settings() -> void:
 	var piece := _thrown_piece(ItemRarity.Rarity.COMMON)
 	piece.mods = [{"id": "increased_damage", "value": 14}]
 	var band := ModifierTable.band_for("increased_damage", piece.level)
-	_check(piece.mod_lines(true)[0] == "+14(%d-%d)%% increased Damage" % band,
+	_check(piece.mod_lines(true)[0] == "+14(%d-%d)%% increased Damage T1" % band,
 			"a detailed line carries its band: %s" % piece.mod_lines(true)[0])
 
 	Settings.animations = Settings.Anim.NONE
@@ -2706,3 +2707,132 @@ func _test_a_world_under_the_fog() -> void:
 	main.queue_free()
 	await process_frame
 	_clear_saves()
+
+
+## The second batch of curses as the fight hears them: three uniques' rules made a world's (each
+## adding to its unique where both are had), Raw Finds, the Homeland, and the Restless camp.
+func _test_more_curses() -> bool:
+	var here := Vector2i(4, 6)
+	var one := func(worn: Array, stats: Dictionary) -> Encounter:
+		var fight := Encounter.for_tile(here, "grass", "plain")
+		fight.wear(worn)
+		fight.arm(stats)
+		fight.start()
+		fight.advance(Encounter.WALK_IN)
+		return fight
+
+	# Pacifist Hands: a click lands nothing, as under the Metronome; the weapon's own swing still does.
+	var pacifist: Encounter = one.call([Curses.effect(Curses.PACIFIST_HANDS)], {"damage": 3.0, "attack_speed": 2.0})
+	var before := pacifist.hp
+	_check(not pacifist.hit() and pacifist.hp == before, "under Pacifist Hands a click deals no damage")
+	pacifist.advance(0.6)
+	_check(pacifist.hp < before or pacifist.index > 0, "and the weapon goes on swinging for itself")
+
+	# Berserker's World: no swing of its own, clicks doubled, and the Band's share added to it.
+	var bare: Encounter = one.call([], {"damage": 3.0, "attack_speed": 2.0})
+	var berserk: Encounter = one.call([Curses.effect(Curses.BERSERKERS_WORLD)], {"damage": 3.0, "attack_speed": 2.0})
+	_check(bare.swings() and not berserk.swings() and not Camp.hunts(berserk),
+			"in a Berserker's World the weapon never swings, so nothing holds a camp")
+	var full := berserk.hp
+	berserk.advance(0.9)
+	_check(berserk.hp == full, "a second of standing there costs the enemy nothing")
+	_check(is_equal_approx(berserk._unique_more(false), Encounter.BERSERK_WORLD_MORE)
+			and is_equal_approx(berserk._unique_more(true), 0.0), "its clicks are worth double, its swings no more")
+	var banded: Encounter = one.call([Curses.effect(Curses.BERSERKERS_WORLD), "berserk"], {"damage": 3.0})
+	_check(is_equal_approx(banded._unique_more(false), Encounter.BERSERK_WORLD_MORE + Encounter.BERSERK_MORE),
+			"and a Berserker's Band adds its share to the same sum")
+
+	# Glass World: the clock a third faster and +100%, and with the Glass Edge both twice over.
+	for case: Array in [[[Curses.effect(Curses.GLASS_WORLD)], 1], [[Curses.effect(Curses.GLASS_WORLD), "glass_edge"], 2]]:
+		var glass: Encounter = one.call(case[0], {"damage": 3.0})
+		var left := glass.time_left
+		glass.advance(0.3)
+		_check(is_equal_approx(left - glass.time_left, 0.3 * pow(Encounter.GLASS_CLOCK, case[1])),
+				"the glass spends the clock %d time(s) over" % case[1])
+		_check(is_equal_approx(glass._unique_more(false), Encounter.GLASS_MORE * case[1]), "and pays for each")
+	var run := Encounter.farm(here, "grass", "plain")
+	run.wear([Curses.effect(Curses.GLASS_WORLD)])
+	_check(is_equal_approx(run._unique_more(false), 0.0), "a run has no clock to spend, and is paid nothing")
+
+	# Raw Finds: gear falls common and bare, a unique as it always did, and orbs three times as often.
+	var raw := Encounter.farm(here, "grass", "plain")
+	raw.wear([Curses.effect(Curses.RAW_FINDS)])
+	raw.always_drop = true
+	raw.loot_rng.seed = 3
+	var finds: Array[Item] = []
+	raw.loot_dropped.connect(func(_i: int, item: Item) -> void: finds.append(item))
+	raw.damage = 1e12
+	raw.start()
+	for body in 60:
+		raw.advance(Encounter.WALK_IN)
+		raw.hit()
+		raw.advance(Encounter.DEATH)
+	_check(finds.size() >= 60 and finds.all(func(item: Item) -> bool:
+		return item.rarity == ItemRarity.Rarity.COMMON and item.mods.is_empty()), "every raw find is a bare common")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var unique := Item.rolled_unique(UniqueTable.ids()[0], rng, 5)
+	_check(raw._raw(unique).rarity == ItemRarity.Rarity.UNIQUE and not unique.mods.is_empty(), "a unique is left as it fell")
+	var some := raw.lineup[0]
+	_check(is_equal_approx(OrbTable.chance_for(some, Encounter._lifted(10.0, Encounter.RAW_ORBS)),
+			minf(OrbTable.chance_for(some, 10.0) * Encounter.RAW_ORBS, 1.0)), "three times the finished chance of an orb")
+
+	# The Homeland: gear on its two lands and none on the rest, but a chest and the wall still pay.
+	var home := [Curses.effect(Curses.HOMELAND), Curses.HOME_PREFIX + "grass", Curses.HOME_PREFIX + "forest"]
+	for env: String in ["grass", "desert"]:
+		var fight := Encounter.for_tile(here, env, "plain")
+		fight.wear(home)
+		fight.arm({"item_rarity": 10.0})
+		fight.always_drop = true
+		var left: Array[Item] = []
+		fight.loot_dropped.connect(func(_i: int, item: Item) -> void: left.append(item))
+		fight.damage = 1e12
+		fight.start()
+		fight.advance(Encounter.WALK_IN)
+		fight.hit()
+		_check(left.is_empty() == (env == "desert"), "%s leaves %d piece(s)" % [env, left.size()])
+		_check(is_equal_approx(fight.item_rarity, 10.0 + (Encounter.HOME_RARITY if env == "grass" else 0.0)),
+				"and %s rarity is %s" % [env, fight.item_rarity])
+	var chest := Encounter.for_tile(here, "desert", "plain", true)
+	chest.wear(home)
+	chest.loot_rng.seed = 1
+	var paid: Array[Item] = []
+	chest.loot_dropped.connect(func(_i: int, item: Item) -> void: paid.append(item))
+	chest.damage = 1e12
+	chest.start()
+	chest.advance(Encounter.WALK_IN)
+	chest.hit()
+	_check(not paid.is_empty(), "a chest abroad still pays")
+
+	# Restless: a camp made under it pays twice a second and is full in two hours.
+	var rested := {}
+	for worn: Array in [[], [Curses.effect(Curses.RESTLESS)]]:
+		var camped := Encounter.farm(here, "grass", "plain")
+		camped.wear(worn)
+		camped.arm({"damage": 50.0, "attack_speed": 2.0})
+		# A run's first body is rolled before anybody can seed it, so both camps are handed the same one.
+		camped.lineup[0] = bare.lineup[0]
+		camped.health[0] = Encounter.hp_of(bare.lineup[0], here)
+		camped.hp = camped.health[0]
+		camped.crit_rng.seed = 1
+		camped.roster_rng.seed = 1
+		camped.loot_rng.seed = 1
+		rested[worn.size()] = Camp.make(here, "Here", camped, 1000.0)
+	_check(is_equal_approx(float(rested[1][Camp.GOLD]), float(rested[0][Camp.GOLD]) * Camp.RESTLESS_PAY)
+			and is_equal_approx(float(rested[1][Camp.XP]), float(rested[0][Camp.XP]) * Camp.RESTLESS_PAY),
+			"a Restless camp pays double a second")
+	var long := Camp.earned(rested[1], 1000.0 + Camp.MAX_SECONDS)
+	_check(bool(long["full"]) and is_equal_approx(float(long["seconds"]), Camp.RESTLESS_SECONDS), "and is full after two hours")
+	var old_camp: Dictionary = rested[0].duplicate()
+	old_camp.erase(Camp.MOST)
+	_check(is_equal_approx(float(Camp.earned(old_camp, 1000.0 + Camp.MAX_SECONDS * 2.0)["seconds"]), Camp.MAX_SECONDS),
+			"a camp saved before the curse fills when camps always did")
+
+	# Two that cannot stand together, and every row still says what it costs and pays.
+	_check(not Curses.allowed(Curses.PACIFIST_HANDS, [Curses.BERSERKERS_WORLD])
+			and not Curses.allowed(Curses.BERSERKERS_WORLD, [Curses.PACIFIST_HANDS])
+			and Curses.allowed(Curses.GLASS_WORLD, [Curses.PACIFIST_HANDS]), "no damage at all is not a world on offer")
+	for id: String in Curses.CURSES:
+		for other: String in Curses.CURSES[id].get("not_with", []):
+			_check(Curses.CURSES.has(other), "%s names a curse there is (%s)" % [id, other])
+	return true

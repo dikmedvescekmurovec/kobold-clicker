@@ -391,6 +391,10 @@ const LEAN_LESS := 0.5           ## what is left of the chance of gear
 const LEAN_PLUS := [0.10, 0.01]  ## a find that is +1, and one that is +2
 const PAUPER_PURSE := 0.5
 const LESSONS_XP := 0.25         ## what is left of every body's experience
+const BERSERK_WORLD_MORE := 1.0  ## a click, under Berserker's World: beside the Band's in one sum
+const RAW_ORBS := 3.0            ## what the chance of an orb is multiplied by under Raw Finds
+const HOME_RARITY := 80.0        ## item rarity on the Homeland's two lands
+const HOME_UNIQUES := 3.0        ## and what the chance of a unique is multiplied by there
 const FOG_UNIQUES := 2.0         ## what the chance of a unique is multiplied by
 
 ## What the tile itself does to the fight (`TileMods`, by id): land past the second wall, told to
@@ -787,7 +791,8 @@ func kills() -> int:
 func hit() -> bool:
 	# The Metronome's price: the player's own hand does nothing. The click still counts towards a
 	# Knucklebone streak, which is the one thing clicking is good for beside it.
-	var landed := false if "metronome" in effects else _strike(false)
+	var landed := false if "metronome" in effects or _cursed_with(Curses.PACIFIST_HANDS) \
+			else _strike(false)
 	if "knucklebone" in effects:
 		_click_streak = mini(_click_streak + 1, KNUCKLE_MOST)
 		_since_click = 0.0
@@ -833,11 +838,41 @@ func arm(stats: Dictionary) -> void:
 	block *= TileMods.factor(mods, "block")
 	time_on_hit *= TileMods.factor(mods, "time_on_hit")
 	attack_speed *= TileMods.factor(mods, "swing")
+	if _cursed_with(Curses.HOMELAND) and _at_home():
+		item_rarity += HOME_RARITY
 	var pays := TileMods.WILD_REWARD if Curses.effect(Curses.WILD_TILES) in effects else 1.0
 	drop_rate += TileMods.total(mods, "drop_rate") * pays
 	item_rarity += TileMods.total(mods, "item_rarity") * pays
 	gold_find += TileMods.total(mods, "gold_find") * pays
 	xp_more += TileMods.total(mods, "xp") * pays
+
+
+func _cursed_with(curse: String) -> bool:
+	return Curses.effect(curse) in effects
+
+
+## Whether this fight is on one of the Homeland's two lands.
+func _at_home() -> bool:
+	return (Curses.HOME_PREFIX + env) in effects
+
+
+## How many things are spending the clock for damage: the Glass Edge, the Glass World, or both.
+func _glass() -> int:
+	return effects.count("glass_edge") + int(_cursed_with(Curses.GLASS_WORLD))
+
+
+## Whether the weapon swings on its own at all: it has a speed, and neither the Berserker's Band nor
+## the Berserker's World has stilled it. `Camp.hunts` asks the same question of the same place.
+func swings() -> bool:
+	return attack_speed > 0.0 and not "berserk" in effects and not _cursed_with(Curses.BERSERKERS_WORLD)
+
+
+## Raw Finds: a piece of gear falls as a common with nothing on it. Never a unique.
+func _raw(item: Item) -> Item:
+	if item != null and item.unique.is_empty() and _cursed_with(Curses.RAW_FINDS):
+		item.rarity = ItemRarity.Rarity.COMMON
+		item.mods = []
+	return item
 
 
 ## `rate` as the lift that multiplies the finished chance by `factor`: a finder is a percent added to
@@ -929,14 +964,15 @@ func _unique_more(automatic: bool) -> float:
 		more += METRONOME_MORE * effects.count("metronome")
 	else:
 		more += BERSERK_MORE * effects.count("berserk")
+		if _cursed_with(Curses.BERSERKERS_WORLD):
+			more += BERSERK_WORLD_MORE
 		# The streak is the hand's: the weapon's own swings are not what it rewards.
 		more += KNUCKLE_STEP * _click_streak * effects.count("knucklebone")
 	if ("home:" + env) in effects:
 		more += HOME_MORE
 	if not endless:
 		# Both are paid for in clock, and a run has none: there they are worth nothing.
-		if "glass_edge" in effects:
-			more += GLASS_MORE
+		more += GLASS_MORE * _glass()
 		if "last_gasp" in effects and time_left <= LAST_GASP_SECONDS:
 			more += LAST_GASP_MORE
 	if "ascetic" in effects:
@@ -974,7 +1010,10 @@ func _kill() -> void:
 	if mimic:
 		rolls = HUNGRY_ROLLS if Curses.effect(Curses.HUNGRY_MIMICS) in effects else MIMIC_ROLLS
 	# The Tithe, and a Gilded tile: no ordinary gear at all, from anything.
-	var no_gear := "tithe" in effects or "gilded" in mods
+	# And the Homeland's other four lands -- but never a chest or the wall, which are no land's.
+	var abroad := _cursed_with(Curses.HOMELAND) and not _at_home() and not mimic \
+			and lineup[index] != WALL_NAME
+	var no_gear := "tithe" in effects or "gilded" in mods or abroad
 	if no_gear or chest_unique != null:
 		rolls = 0
 	var gear_rate := _gear_rate()
@@ -993,7 +1032,7 @@ func _kill() -> void:
 				first_sword = false
 				dropped = Item.rolled(LootTable.FIRST_DROP, ItemRarity.Rarity.COMMON, loot_rng)
 			else:
-				dropped = _lean(dropped)
+				dropped = _lean(_raw(dropped))
 			loot_dropped.emit(index, dropped)
 			found += 1
 			# A find that beat the chance rolls again, at the same chance and never guaranteed, up to
@@ -1019,8 +1058,8 @@ func _kill() -> void:
 	# both are worn -- no ordinary gear means none -- and the purse stays a purse.
 	if "magpie" in effects and not no_gear and loot_rng.randf() < MAGPIE_CHANCE:
 		purse = 0.0
-		loot_dropped.emit(index, _lean(LootTable.roll(lineup[index], loot_rng, true,
-				MapBuilder.level_of(cell), drop_rate, item_rarity)))
+		loot_dropped.emit(index, _lean(_raw(LootTable.roll(lineup[index], loot_rng, true,
+				MapBuilder.level_of(cell), drop_rate, item_rarity))))
 	# The Pauper's curse, and a Barren tile, where a body carries nothing at all.
 	if purse > 0.0 and Curses.effect(Curses.PAUPER) in effects:
 		purse = maxf(1.0, roundf(purse * PAUPER_PURSE))
@@ -1043,9 +1082,11 @@ func _kill() -> void:
 	if chest_unique != null:
 		loot_dropped.emit(index, _lean(chest_unique))
 	elif not mimic and uniques_after != NO_UNIQUES and index >= uniques_after:
-		# Thick Fog's pay: twice the finished chance, whatever the drop rate already made of it.
-		var unique_rate := _lifted(drop_rate, FOG_UNIQUES) \
-				if Curses.effect(Curses.THICK_FOG) in effects else drop_rate
+		# Thick Fog's pay, and the Homeland's on its own two lands: factors on the finished chance,
+		# whatever the drop rate already made of it.
+		var lucky := (FOG_UNIQUES if _cursed_with(Curses.THICK_FOG) else 1.0) \
+				* (HOME_UNIQUES if _cursed_with(Curses.HOMELAND) and _at_home() else 1.0)
+		var unique_rate := _lifted(drop_rate, lucky)
 		var found := UniqueTable.roll(lineup[index], env, unique_rng, MapBuilder.level_of(cell),
 				unique_rate)
 		if found != null:
@@ -1061,7 +1102,8 @@ func _kill() -> void:
 	# handed the sum rather than taught about a second stat.
 	var orb := ""
 	if always_orb or index >= orbs_after:
-		orb = OrbTable.roll(lineup[index], orb_rng, always_orb, orb_find + drop_rate)
+		orb = OrbTable.roll(lineup[index], orb_rng, always_orb, _lifted(orb_find + drop_rate,
+				RAW_ORBS if _cursed_with(Curses.RAW_FINDS) else 1.0))
 	if not orb.is_empty():
 		var count := 2 if "transmute" in effects and orb_rng.randf() < 0.25 else 1
 		for i in count:
@@ -1088,9 +1130,8 @@ func advance(delta: float) -> void:
 		# Rimeplate's Frozen clock: a walk-in costs nothing.
 		if _clause("frozen_clock") and phase == Phase.WALKING_IN:
 			spent -= minf(delta, phase_left)
-		# The Glass Edge's price.
-		if "glass_edge" in effects:
-			spent *= GLASS_CLOCK
+		# The Glass Edge's price, and the Glass World's: each is a third faster, and both are both.
+		spent *= pow(GLASS_CLOCK, _glass())
 		time_left = maxf(time_left - spent, 0.0)
 	_since_click += delta
 	if _since_click > KNUCKLE_WINDOW:
@@ -1199,7 +1240,7 @@ static func hit_of(enemy_name: String, cell: Vector2i) -> float:
 ## cannot arrive at the next body with a fistful of banked swings.
 func _swing_weapon(delta: float) -> void:
 	# The Berserker's Band: the weapon never swings on its own.
-	if attack_speed <= 0.0 or finished or phase != Phase.WAITING or "berserk" in effects:
+	if not swings() or finished or phase != Phase.WAITING:
 		return
 	_swing += delta * attack_speed
 	while _swing >= 1.0 and phase == Phase.WAITING and not finished:

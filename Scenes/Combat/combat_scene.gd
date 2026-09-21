@@ -305,7 +305,7 @@ var _terminate: Button
 var _gave_up := false
 ## What this fight has turned up, in the order it fell. Autodiscarded finds are not in here.
 var _drops: Array[Item] = []
-## How many finds the bag can still take before something has to be destroyed to fit them, or -1
+## How many finds the bag can still take before the player is overencumbered, or -1
 ## when nobody has said -- a fight with no bag behind it, which is what the screenshot scripts run.
 ## The scene owns no rules here: it is handed a number and it draws it.
 var bag_room := -1
@@ -710,7 +710,7 @@ func _build_hud() -> void:
 	# the whole of it. Here rather than out in the arena because this is where something can be done
 	# about it: every square below carries a Discard.
 	_warning = ItemDetails.line(
-			"Bag full -- the worst finds will be destroyed", Palette.RUST, WARNING_WIDTH)
+			"Bag full -- more finds will leave you too laden to fight", Palette.RUST, WARNING_WIDTH)
 	_warning.hide()
 	found.add_child(_warning)
 	_loot_drops = DropsView.new()

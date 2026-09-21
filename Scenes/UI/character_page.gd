@@ -70,6 +70,10 @@ func open() -> void:
 			block.add_child(UITheme.label(str(curse["name"]), Palette.RUST))
 			block.add_child(ItemDetails.line(str(curse["text"]), Palette.INK, BagPage.WIDTH, true))
 			block.add_child(ItemDetails.line(str(curse["reward"]), Palette.LEAF, BagPage.WIDTH, true))
+			# The one curse whose terms were dealt and not written: which two lands are home.
+			if id == Curses.HOMELAND and not inventory.homeland.is_empty():
+				block.add_child(ItemDetails.line("Your lands: %s." % " and ".join(inventory.homeland.map(
+						func(env: String) -> String: return env.capitalize())), Palette.SLATE, BagPage.WIDTH, true))
 			cursed.add_child(block)
 	var discs := HBoxContainer.new()
 	discs.alignment = BoxContainer.ALIGNMENT_CENTER

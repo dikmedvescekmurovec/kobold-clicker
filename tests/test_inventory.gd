@@ -26,6 +26,7 @@ func _run() -> void:
 	_check(_test_items() == true, "item tests ran to the end")
 	_check(_test_kinds() == true, "kind tests ran to the end")
 	_check(_test_slot_locks() == true, "slot lock tests ran to the end")
+	_check(_test_drops_scroll() == true, "drops scroll tests ran to the end")
 	_check(_test_sockets() == true, "socket tests ran to the end")
 	_check(_test_totals() == true, "stat total tests ran to the end")
 	_check(_test_wearing() == true, "wearing tests ran to the end")
@@ -69,6 +70,7 @@ func _run() -> void:
 	_check(await _test_item_generator() == true, "item generator tests ran to the end")
 	_check(await _test_heirlooms() == true, "heirloom tests ran to the end")
 	_check(_test_super_orbs() == true, "super orb tests ran to the end")
+	_check(_test_mod_tiers() == true, "modifier tier tests ran to the end")
 	_clear_save()
 	_report("inventory")
 
@@ -1074,20 +1076,14 @@ func _test_saving() -> bool:
 	file.close()
 	_check(Inventory.load_from(TEST_PATH).play_seconds == 0.0, "a save from before the clock has played no time")
 
-	# A bag from before the cap, or one edited by hand. It comes back obeying the cap, because a bag
-	# allowed over it in one place is a bag every other rule in the game has to check for.
+	# A bag over the cap comes back whole and overencumbered: nothing is ever destroyed to fit it.
 	var bloated := Inventory.new()
 	for i in Inventory.CAPACITY + 5:
-		bloated.items.append(_piece(
-				ItemRarity.Rarity.RARE if i >= 5 else ItemRarity.Rarity.COMMON, 6))
+		bloated.items.append(_piece(ItemRarity.Rarity.COMMON, 6))
 	_check(bloated.save(TEST_PATH), "an over-full save is written")
-	var trimmed := Inventory.load_from(TEST_PATH)
-	_check(trimmed.total() == Inventory.CAPACITY, "and comes back at the cap")
-	var kept_commons := 0
-	for item in trimmed.items:
-		if item.rarity == ItemRarity.Rarity.COMMON:
-			kept_commons += 1
-	_check(kept_commons == 0, "having dropped the worst of it")
+	var heavy := Inventory.load_from(TEST_PATH)
+	_check(heavy.total() == Inventory.CAPACITY + 5 and heavy.encumbered(),
+			"and comes back whole, overencumbered")
 	_clear_save()
 	return true
 
@@ -1552,6 +1548,18 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 	for i in Inventory.CAPACITY:
 		main.inventory.items.append(_piece(ItemRarity.Rarity.ELITE, 99))
 	main.map.select_cell(here)
+	# One over the cap and no fight can start: the buttons grey and the handlers refuse.
+	var extra := _piece(ItemRarity.Rarity.COMMON, 1)
+	main.inventory.items.append(extra)
+	main._update_buttons()
+	_check(main._farm_button.disabled and main._chart_button.disabled and main._camp_button.disabled,
+			"an overencumbered player cannot fight")
+	_check(main._farm_button.tooltip_text == main.ENCUMBERED_TIP, "and the button says why")
+	main._on_farm_pressed()
+	_check(main._combat == null, "and pressing Farm anyway opens nothing")
+	main.inventory.remove(extra)
+	main._process(0.0)
+	_check(not main._farm_button.disabled, "back at the cap the button comes back by itself")
 	main._on_farm_pressed()
 	_check(main._combat != null, "a run starts")
 	if main._combat == null:
@@ -1858,6 +1866,7 @@ func _test_heirlooms() -> bool:
 	_check(Inventory.load_from(TEST_PATH).super_orbs == 2, "a version 14 save's picks are read as orbs")
 	_clear_save()
 	_check(_test_curses() == true, "curse tests ran to the end")
+	_check(_test_more_curses() == true, "second batch curse tests ran to the end")
 
 	# The pages. The ordinary bag makes no heirloom; a transcension's does, at its foot, and writes
 	# nothing: the whole transcension is one write, and the main scene's.
@@ -1925,6 +1934,89 @@ func _test_heirlooms() -> bool:
 
 
 ## What each super orb does to a piece, and what it leaves there for the ordinary orbs and the smith.
+## What a modifier's band was at an item level before there were tiers, worked out here rather than
+## asked of `ModifierTable`: the mean the tiers have to keep.
+func _old_band(id: String, level: int) -> Array:
+	var entry: Dictionary = ModifierTable.MODS[id]
+	var band: Array = entry["range"]
+	if entry["kind"] == ModifierTable.Kind.FLAT:
+		var step := float(entry.get("level_flat", LootTable.LEVEL_FLAT.get(entry["stat"], 0.0)))
+		return [LootTable.scale(entry["stat"], float(band[0]), level, step),
+				LootTable.scale(entry["stat"], float(band[1]), level, step)]
+	var grow := pow(LootTable.LEVEL_GROWTH, level - 1)
+	return [float(band[0]) * grow, float(band[1]) * grow]
+
+
+## Tiers: the same average a modifier always had, a top about twice what it was, and a tier that
+## moves with the piece's level and with nothing else.
+func _test_mod_tiers() -> bool:
+	var falloff := ModifierTable.TIER_FALLOFF
+	for id: String in ["increased_damage", "global_increased_damage", "added_armor", "added_crit", "added_damage"]:
+		for level: int in [1, 5, 20]:
+			var sum := 0.0
+			var weights := 0.0
+			for tier in range(1, level + 1):
+				var band := ModifierTable.band_for(id, tier)
+				sum += pow(falloff, level - tier) * (int(band[0]) + int(band[1])) / 2.0
+				weights += pow(falloff, level - tier)
+			var old := _old_band(id, level)
+			var target := (float(old[0]) + float(old[1])) / 2.0
+			_check(absf(sum / weights - target) <= maxf(0.5, target * 0.02),
+					"%s at level %d averages what it did: %.1f against %.1f" % [id, level, sum / weights, target])
+	var lift := float(ModifierTable.band_for("increased_damage", 30)[1]) / float(_old_band("increased_damage", 30)[1])
+	_check(lift > 1.8 and lift < 2.1, "the top tier is about twice the old top (x%.2f)" % lift)
+	_check(ModifierTable.band_for("increased_damage", 1) == [8, 20], "and tier 1 is the band as written")
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var total := 0.0
+	var tops := 0
+	for i in 2000:
+		var mod := ModifierTable.rolled_mod("increased_damage", rng, 20)
+		var under := int(mod.get("under", 0))
+		_check(under >= 0 and under < 20 and (under > 0) == mod.has("under"), "a tier from 1 to the level: %s" % mod)
+		tops += int(under == 0)
+		total += int(mod["value"])
+	var old_20 := _old_band("increased_damage", 20)
+	var target_20 := (float(old_20[0]) + float(old_20[1])) / 2.0
+	_check(absf(total / 2000.0 - target_20) < target_20 * 0.05,
+			"two thousand rolls average what they did: %.1f against %.1f" % [total / 2000.0, target_20])
+	_check(tops > 100 and tops < 400, "and the top tier is a tenth of them or so (%d)" % tops)
+	for id: String in ["fight_clock", "added_gold_find"]:
+		_check(not ModifierTable.tiered(id) and not ModifierTable.rolled_mod(id, rng, 20).has("under"),
+				"%s has one band, and so no tier" % id)
+
+	# A Divine moves the number and never the tier; the smith takes the tier up with the level.
+	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.ELITE, rng, 20)
+	var unders := sword.mods.map(func(mod: Dictionary) -> int: return int(mod.get("under", 0)))
+	for i in 10:
+		OrbTable.apply("Orb of Divine", sword, rng)
+	_check(sword.mods.map(func(mod: Dictionary) -> int: return int(mod.get("under", 0))) == unders,
+			"a Divine keeps every tier")
+	for mod in sword.mods:
+		var band := ModifierTable.band_for(str(mod["id"]), sword.tier_of(mod))
+		_check(int(mod["value"]) >= int(band[0]) and int(mod["value"]) <= int(band[1]),
+				"and rolls inside it: %s in %s" % [mod, band])
+	var tiers := sword.mods.map(sword.tier_of)
+	_check(Blacksmith.upgrade(sword, 99, _never_breaks()), "the hammer lands")
+	_check(sword.mods.map(sword.tier_of) == tiers.map(func(tier: int) -> int: return tier + 1),
+			"an upgrade is a tier as well as a level")
+
+	# A line saved before there were tiers keeps its number and is given the tier that holds it.
+	var saved := sword.to_dict()
+	saved["mods"] = [{"id": "increased_damage", "value": roundi(old_20[0])}]
+	var old_piece := Item.from_dict(saved)
+	var line: Dictionary = old_piece.mods[0]
+	var fitted := ModifierTable.band_for("increased_damage", old_piece.tier_of(line))
+	_check(int(line["value"]) == roundi(old_20[0]) and int(line.get("under", 0)) > 0
+			and int(fitted[0]) <= int(line["value"]) and int(line["value"]) <= int(fitted[1]),
+			"an old line keeps its number, in a tier that holds it: %s in %s" % [line, fitted])
+	_check(Item.from_dict(old_piece.to_dict()).mods == old_piece.mods, "and the save keeps the tier")
+	_check(old_piece.mod_lines(true)[0].ends_with(" T%d" % old_piece.tier_of(line))
+			and not old_piece.mod_lines()[0].contains(" T"), "which only a detailed line writes")
+	return true
+
+
 func _test_super_orbs() -> bool:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = WORLD_SEED
@@ -1940,7 +2032,8 @@ func _test_super_orbs() -> bool:
 			and sword.mod_level() == 10 + Item.PLUS_LEVELS and sword.level == 10, "+1 lifts the modifiers' level, not the piece's")
 	for i in sword.mods.size():
 		var id: String = sword.mods[i]["id"]
-		_check(sword.mods[i]["value"] == ModifierTable.rescaled(id, before[i]["value"], 10, sword.mod_level()),
+		_check(sword.mods[i]["value"] == ModifierTable.rescaled(id, before[i]["value"],
+				maxi(1, 10 - int(before[i].get("under", 0))), sword.tier_of(sword.mods[i])),
 				"%s moved with its band" % id)
 	_check(sword.display_name() == "Wooden Sword +1", "and it is written after the name")
 	_check(SuperOrbTable.apply(SuperOrbTable.ASCENSION, sword, rng) and sword.plus == 2, "and it can be done again")
@@ -1968,7 +2061,7 @@ func _test_super_orbs() -> bool:
 			"its line is known to whoever writes it")
 
 	# Binding: a second lock beside the smith's, once, and no orb moves either.
-	sword.mods[1]["locked"] = true
+	sword.hold(1, "locked")
 	_check(not SuperOrbTable.can_aim(SuperOrbTable.BINDING, sword, 1), "a locked line is not bound as well")
 	_check(SuperOrbTable.apply(SuperOrbTable.BINDING, sword, rng, 2), "Binding locks another")
 	_check(not SuperOrbTable.can_apply(SuperOrbTable.BINDING, sword), "once per piece")
@@ -1979,6 +2072,20 @@ func _test_super_orbs() -> bool:
 		OrbTable.apply("Orb of Divine", sword, rng)
 		_check(sword.mods.has(fast[0]) and sword.mods.has(fast[1]), "both locks survive a Chaos and a Divine")
 	_check(sword.fast_lines().size() == 2, "and both are written in ink")
+
+	# A held line keeps its band as well as its number: Ascension walks past it, a world's end does not.
+	var written := sword.fast_lines(true)
+	var bound: Dictionary = sword.mods.filter(func(mod: Dictionary) -> bool: return mod.get("bound", false))[0]
+	var held := bound.duplicate()
+	SuperOrbTable.apply(SuperOrbTable.ASCENSION, sword, rng)
+	_check(bound == held and sword.fast_lines(true) == written, "an Ascension leaves a held line, band and all")
+	_check(Item.from_dict(sword.to_dict()).fast_lines(true) == written, "and the save keeps its band")
+	var heir := Item.from_dict(sword.to_dict())
+	heir.transcend()
+	var moved: Dictionary = heir.mods.filter(func(mod: Dictionary) -> bool: return mod.get("bound", false))[0]
+	_check(moved["at"] == heir.mod_level() and moved["value"] == ModifierTable.rescaled(
+			str(held["id"]), int(held["value"]), sword.tier_of(held), heir.tier_of(moved)),
+			"the end of a world carries it to the new band, and holds it there")
 
 	# Expansion: one past the rarity's most, once, and a reroll keeps the room.
 	var most := int(ItemRarity.MOD_COUNT[ItemRarity.Rarity.ELITE][1])
@@ -2052,8 +2159,7 @@ func _piece(rarity: ItemRarity.Rarity, level: int) -> Item:
 	return item
 
 
-## The bag is read one way and emptied another, and both are checked here: level-major for the
-## player looking for a piece, rarity-major for the game deciding what has to go.
+## The bag is read level-major, for the player looking for a piece.
 func _test_bag_order() -> bool:
 	var bag := Inventory.new()
 	# Added oldest first. Two at level 5, so the tie-break inside a rarity is exercised too.
@@ -2070,59 +2176,35 @@ func _test_bag_order() -> bool:
 		read.append(bag.items[i])
 	_check(read == [l9_common, l5_rare, l5_common_new, l5_common_old, l2_elite],
 			"the bag reads by level, then rarity, then newest first")
-
-	var doomed: Array[Item] = []
-	for i in bag.worst_first():
-		doomed.append(bag.items[i])
-	_check(doomed == [l5_common_old, l5_common_new, l9_common, l5_rare, l2_elite],
-			"and empties by rarity, then level, then oldest first")
-
-	# The whole reason there are two: the plainest piece goes first even though it is not the lowest,
-	# and the level-2 elite outlives the level-9 common.
-	var backwards := bag.order().duplicate()
-	backwards.reverse()
-	_check(backwards != bag.worst_first(),
-			"the two orders are not one reversed -- level-major to read, rarity-major to destroy")
 	_check(bag.levels() == [9, 5, 2], "and the sections run highest level first")
 	_check(bag.count_at(5) == 3 and bag.count_at(9) == 1 and bag.count_at(1) == 0,
 			"with the right number in each")
 	return true
 
 
-## The bag has a bottom to it, and the worst is what falls out of it.
+## The bag has a bottom to it, and going past it destroys nothing: it overencumbers the player.
 func _test_capacity() -> bool:
 	var bag := Inventory.new()
-	var destroyed: Array[Item] = []
 	for i in Inventory.CAPACITY:
-		destroyed = bag.add(_piece(ItemRarity.Rarity.RARE, 5))
+		bag.add(_piece(ItemRarity.Rarity.RARE, 5))
 	_check(bag.total() == Inventory.CAPACITY, "the bag fills to the cap")
-	_check(destroyed.is_empty(), "with nothing destroyed on the way")
 	_check(bag.is_full() and bag.room_left() == 0, "and says it is full")
+	_check(not bag.encumbered(), "which is not yet too heavy")
 
-	# A common falling into a bag of rares is the worst thing in it, so it is what goes. Nothing is
-	# lost that was better than what arrived, which is the whole promise.
 	var common := _piece(ItemRarity.Rarity.COMMON, 9)
-	destroyed = bag.add(common)
-	_check(destroyed == [common], "a find worse than everything held is what gets destroyed")
-	_check(bag.total() == Inventory.CAPACITY and not bag.items.has(common),
-			"and the bag is unchanged")
+	bag.add(common)
+	_check(bag.total() == Inventory.CAPACITY + 1 and bag.items.has(common),
+			"a find past the cap goes in all the same")
+	_check(bag.encumbered() and bag.room_left() == 0, "and leaves the player overencumbered")
 
-	var elite := _piece(ItemRarity.Rarity.ELITE, 1)
-	destroyed = bag.add(elite)
-	_check(destroyed.size() == 1 and destroyed[0].rarity == ItemRarity.Rarity.RARE,
-			"a find better than the worst held destroys that one instead")
-	_check(bag.items.has(elite), "and is kept")
-
-	# Five at once, into a bag that is already at the cap.
-	var over := Inventory.new()
-	for i in Inventory.CAPACITY + 5:
-		over.add(_piece(ItemRarity.Rarity.RARE if i >= 5 else ItemRarity.Rarity.COMMON, 3))
-	_check(over.total() == Inventory.CAPACITY, "five too many leaves the cap")
-	var commons := 0
-	for item in over.items:
-		if item.rarity == ItemRarity.Rarity.COMMON:
-			commons += 1
-	_check(commons == 0, "and the five commons are the five that went")
+	# A swap takes one out for one back, so an over-full bag may still make it; a two-hander that
+	# hands two back may not.
+	var worn_blade := _piece(ItemRarity.Rarity.RARE, 4)
+	bag.equipment.equip(Equipment.Socket.WEAPON, worn_blade)
+	_check(bag.can_equip(bag.items[0], Equipment.Socket.WEAPON), "an over-full bag can still swap one for one")
+	bag.remove(common)
+	bag.equipment.unequip(Equipment.Socket.WEAPON)
+	_check(not bag.encumbered(), "back at the cap the weight is gone")
 
 	# Taking a piece off is the one thing the player can do that grows the bag, so it refuses rather
 	# than destroying something to make room for a piece they only wanted a closer look at.
@@ -2298,20 +2380,11 @@ func _test_item_levels() -> bool:
 			var value := int(mod["value"])
 			_check(value == roundi(value), "every modifier value is whole: %s" % mod)
 			match entry["kind"]:
-				ModifierTable.Kind.FLAT:
-					# The stat's own per-level step, unless the entry names a smaller one of its own --
-					# which `added_damage` does, its band being sized for a piece that has no damage.
-					var step: float = float(entry.get("level_flat",
-							LootTable.LEVEL_FLAT.get(entry["stat"], 0.0)))
-					var low := maxi(1, roundi(LootTable.scale(entry["stat"], float(band[0]), level, step)))
-					var high := maxi(1, roundi(LootTable.scale(entry["stat"], float(band[1]), level, step)))
-					_check(value >= low and value <= high,
-							"%s rolled %d at level %d, outside %d-%d" % [mod["id"], value, level, low, high])
-				ModifierTable.Kind.PERCENT, ModifierTable.Kind.GLOBAL:
-					var grow := pow(LootTable.LEVEL_GROWTH, level - 1)
-					_check(value >= maxi(1, roundi(int(band[0]) * grow))
-							and value <= maxi(1, roundi(int(band[1]) * grow)),
-							"%s rolled %d at level %d, outside its multiplied band" % [mod["id"], value, level])
+				ModifierTable.Kind.FLAT, ModifierTable.Kind.PERCENT, ModifierTable.Kind.GLOBAL:
+					# In the band of the tier it drew; what the tiers add up to is `_test_mod_tiers`'.
+					var tier_band := ModifierTable.band_for(mod["id"], ring.tier_of(mod))
+					_check(ring.tier_of(mod) <= level and value >= int(tier_band[0]) and value <= int(tier_band[1]),
+							"%s rolled %d at level %d, outside its tier's %s" % [mod["id"], value, level, tier_band])
 				_:
 					_check(value >= int(band[0]) and value <= int(band[1]),
 							"a player buff keeps its written band: %s rolled %d" % [mod["id"], value])
@@ -2797,7 +2870,7 @@ func _test_orb_verbs() -> bool:
 	_check(before_ids == after_ids, "divine keeps every modifier it found")
 	_check(moved, "divine moves a value at least once in twenty tries")
 	for mod in divine.mods:
-		var mod_band := ModifierTable.band_for(str(mod["id"]), divine.level)
+		var mod_band := ModifierTable.band_for(str(mod["id"]), divine.tier_of(mod))
 		_check(int(mod["value"]) >= int(mod_band[0]) and int(mod["value"]) <= int(mod_band[1]),
 				"a divined %s stays in its band" % mod["id"])
 	_check(not OrbTable.can_apply("Orb of Divine", bare), "a bare common has nothing to divine")
@@ -2978,8 +3051,7 @@ func _test_orb_saving() -> bool:
 	_check(bag.is_full(), "the bag is full of boots")
 	_check(bag.total() == Inventory.CAPACITY, "orbs are not counted against the cap")
 	bag.add_orb("Orb of Chaos")
-	bag.trim()
-	_check(bag.orb_count("Orb of Chaos") == 4, "trimming a full bag never touches the orbs")
+	_check(bag.orb_count("Orb of Chaos") == 4 and not bag.encumbered(), "and orbs weigh nothing")
 
 	_check(bag.save(TEST_PATH), "the bag with orbs in it saved")
 	var back := Inventory.load_from(TEST_PATH)
@@ -3276,7 +3348,7 @@ func _test_unique_items() -> bool:
 	var ids := []
 	for mod in axe.mods:
 		ids.append(mod["id"])
-		var band := ModifierTable.band_for(str(mod["id"]), 7)
+		var band := ModifierTable.band_for(str(mod["id"]), axe.tier_of(mod))
 		_check(int(mod["value"]) >= int(band[0]) and int(mod["value"]) <= int(band[1]),
 				"%s rolled inside its band" % mod["id"])
 	_check(ids == UniqueTable.UNIQUES["headsman"]["mods"], "it carries its row's modifiers, in order (%s)" % [ids])
@@ -3337,13 +3409,6 @@ func _test_unique_items() -> bool:
 	_check(run_bag.uniques_found.is_empty(), "a run holds it in the pouch")
 	run.bank()
 	_check(run_bag.uniques_found == ["stonebreaker"], "and logs it at the bank")
-
-	# The last thing a full bag gives up.
-	var full := Inventory.new()
-	full.items.append(Item.rolled_unique("stonebreaker", rng, 1))
-	for i in Inventory.CAPACITY:
-		full.items.append(_piece(ItemRarity.Rarity.ELITE, 9))
-	_check(full.items[full.worst_first()[-1]].unique == "stonebreaker", "a unique is the last thing to go")
 	_clear_save()
 	return true
 
@@ -3750,4 +3815,152 @@ func _test_curses() -> bool:
 	for i in before.size():
 		_check(int(piece.mods[i]["value"]) == ModifierTable.rescaled(str(before[i]["id"]), int(before[i]["value"]), 10,
 				piece.mod_level()), "%s keeps its place in the band" % before[i]["id"])
+	return true
+
+
+## A long haul scrolls rather than running the verdict off the screen; a short one shows whole.
+func _test_drops_scroll() -> bool:
+	var view := DropsView.new()
+	var few: Array[Item] = [_piece(ItemRarity.Rarity.COMMON, 1), _piece(ItemRarity.Rarity.RARE, 2)]
+	view.fill(few)
+	_check(view._scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED,
+			"one row shows whole, with nothing to scroll")
+	var many: Array[Item] = []
+	for i in 30:
+		many.append(_piece(ItemRarity.Rarity.COMMON, 1))
+	view.fill(many)
+	_check(view._scroll.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED
+			and view._scroll.custom_minimum_size.y < 8 * ItemSlot.SIDE,
+			"thirty drops are cut to a scrolling window: %s" % view._scroll.custom_minimum_size.y)
+	view.free()
+	return true
+
+
+## The second batch of curses as the inventory keeps them: what they do to the stats, the skills, the
+## log, the heirlooms' doll and the walls' pay, and what two of them write into the save.
+func _test_more_curses() -> bool:
+	_clear_save()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+
+	# Pacifist Hands: the hands swing for themselves, so even bare ones do, and a camp can be held.
+	var pacifist := Inventory.new()
+	_check(float(pacifist.stats().get("attack_speed", 0.0)) == 0.0, "bare hands swing at nothing of their own")
+	pacifist.curses = [Curses.PACIFIST_HANDS]
+	_check(is_equal_approx(float(pacifist.stats()["attack_speed"]), Inventory.PACIFIST_SWINGS * Inventory.PACIFIST_FASTER),
+			"under Pacifist Hands they swing (%s a second)" % pacifist.stats()["attack_speed"])
+
+	# The Specialist: one tree, and every point worth half again -- added to Hard Lessons', never compounded.
+	var student := Inventory.new()
+	student.level = 10
+	var trees := SkillTree.trees()
+	var first := str(SkillTree.nodes_of(trees[0]).keys()[0])
+	var second := ""
+	for id: String in SkillTree.nodes_of(trees[1]):
+		if SkillTree.node(id)["parents"].is_empty():
+			second = id
+			break
+	_check(student.rank_up_skill(first), "a point goes into the first tree")
+	_check(student.why_not_skill(second).is_empty(), "and without the curse the second tree is open")
+	student.curses = [Curses.SPECIALIST]
+	_check("Specialist" in student.why_not_skill(second) and not student.rank_up_skill(second)
+			and student.skills.spent(trees[1]) == 0, "a Specialist is refused a second tree (%s)" % student.why_not_skill(second))
+	_check(not "Specialist" in student.why_not_skill(first), "and never the tree already begun")
+	_check(is_equal_approx(student.skill_worth(), 1.5), "every point is worth half again")
+	student.curses = [Curses.HARD_LESSONS, Curses.SPECIALIST]
+	_check(is_equal_approx(student.skill_worth(), 2.5), "and beside Hard Lessons the two add (%s)" % student.skill_worth())
+
+	# Forgotten: no damage off the log this world, and its new finds count twice from the next one on.
+	var ids := UniqueTable.ids()
+	var collector := Inventory.new()
+	collector.note_unique(ids[0])
+	var was := collector.collection_bonus()
+	collector.curses = [Curses.FORGOTTEN]
+	_check(was == UniqueTable.COLLECTION_DAMAGE and collector.collection_bonus() == 0, "the Forgotten's log adds nothing")
+	_check(collector.note_unique(ids[1]) and collector.uniques_doubled == [ids[1]], "a find made under it is marked")
+	var remembered := collector.transcended()
+	_check(remembered.collection_bonus() == 3 * UniqueTable.COLLECTION_DAMAGE,
+			"and counts twice in every world after (%d%%)" % remembered.collection_bonus())
+
+	# Lone Heir: the world begins with the heirlooms' doll bare, one may go on, and the heirloom made
+	# at its end is made +1.
+	var heir := Inventory.new()
+	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 5)
+	var boots := Item.rolled("Leather Boot", ItemRarity.Rarity.RARE, rng, 5)
+	for piece: Item in [sword, boots]:
+		heir.stash().items.append(piece)
+		_check(heir.stash().equip(piece, heir.stash().equipment.sockets_for(piece)[0]), "%s goes on" % piece.type)
+	heir.pending_curses = [Curses.LONE_HEIR]
+	var lone := heir.transcended()
+	_check(lone.stash().equipment.worn.is_empty() and lone.stash().total() == 2, "the Lone Heir's doll begins bare")
+	var one: Item = lone.stash().items[0]
+	var other: Item = lone.stash().items[1]
+	_check(lone.stash().equip(one, lone.stash().equipment.sockets_for(one)[0]), "one heirloom goes on")
+	var socket: Equipment.Socket = lone.stash().equipment.sockets_for(other)[0]
+	_check("Lone Heir" in lone.stash().why_not_equip(other, socket) and not lone.stash().equip(other, socket),
+			"and a second is refused (%s)" % lone.stash().why_not_equip(other, socket))
+	var same_socket := Item.rolled(one.type, ItemRarity.Rarity.COMMON, rng, 1)
+	lone.stash().items.append(same_socket)
+	_check(lone.stash().can_equip(same_socket, lone.stash().equipment.sockets_for(same_socket)[0]),
+			"but the one worn can be swapped for another")
+	_check(lone.most_worn == -1 and heir.stash().most_worn == -1, "the ordinary doll, and an uncursed world's heirlooms, wear what they like")
+	var kept := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 8)
+	lone.items.append(kept)
+	_check(lone.make_heirloom(kept) and kept.plus == 1, "the heirloom made at the end of that world is +1")
+	var plain_kept := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 8)
+	heir.items.append(plain_kept)
+	_check(heir.make_heirloom(plain_kept) and plain_kept.plus == 0, "and no other world's is")
+
+	# The skull budget: this world's depth plus the skulls carried in, never lower than it was, and
+	# nothing at all from a world lost to No Second Chances.
+	var climber := Inventory.new()
+	climber.walls_credited = 3
+	climber.curses = [Curses.BLOODTHIRST, Curses.IRON_FOES]
+	_check(climber.skulls_earned() == 6 and climber.transcended().skull_budget == 6,
+			"three walls carrying three skulls earn six (%d)" % climber.skulls_earned())
+	climber.skull_budget = 9
+	_check(climber.skulls_earned() == 9, "and a budget already past that stays where it is")
+	climber.skull_budget = 2
+	_check(climber.skulls_earned(true) == 2 and climber.transcended(true).skull_budget == 2,
+			"a lost world raises nothing")
+	var ringed := Inventory.new()
+	ringed.walls_credited = 6
+	ringed.curses = [Curses.RING_OF_WALLS]
+	_check(ringed.skulls_earned() == 6, "six walls five rings apart are three deep: 3 + 3 (%d)" % ringed.skulls_earned())
+	climber.skull_budget = 7
+	climber.save(TEST_PATH)
+	_check(Inventory.load_from(TEST_PATH).skull_budget == 7, "and the budget comes back off the save")
+	_check(Curses.skulls_of([Curses.LONG_WINTER, Curses.IRON_FOES]) == 4
+			and Curses.fits(Curses.IRON_FOES, [Curses.LONG_WINTER], 4)
+			and not Curses.fits(Curses.BLOODTHIRST, [Curses.LONG_WINTER], 4)
+			and not Curses.fits(Curses.BERSERKERS_WORLD, [Curses.PACIFIST_HANDS], 99),
+			"a curse fits the skulls left, and still not beside one it cannot stand with")
+
+	# No Second Chances: one more orb a wall, added to the Long Winter's.
+	var gambler := Inventory.new()
+	gambler.curses = [Curses.NO_SECOND_CHANCES]
+	_check(gambler.credit_walls(1) and gambler.super_orbs == 2, "a wall under No Second Chances pays two")
+	gambler.curses = [Curses.LONG_WINTER, Curses.NO_SECOND_CHANCES]
+	_check(gambler.credit_walls(2) and gambler.super_orbs == 5, "and three under both")
+
+	# The Homeland's lands reach the fight, and both new lists come back off the save.
+	var settler := Inventory.new()
+	settler.curses = [Curses.HOMELAND]
+	settler.homeland = ["grass", "forest"]
+	settler.uniques_found = [ids[0]]
+	settler.uniques_doubled = [ids[0]]
+	_check(Curses.HOME_PREFIX + "forest" in settler.effects() and Curses.effect(Curses.HOMELAND) in settler.effects(),
+			"the fight is told which lands are home")
+	settler.save(TEST_PATH)
+	var back := Inventory.load_from(TEST_PATH)
+	_check(back.homeland == settler.homeland and back.uniques_doubled == settler.uniques_doubled, "both lists are saved")
+	var old_save: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(TEST_PATH))
+	old_save["uniques_doubled"] = [ids[0], ids[0], "no such unique", 4]
+	old_save.erase("homeland")
+	old_save["version"] = 19
+	SafeFile.write(TEST_PATH, JSON.stringify(old_save))
+	var older := Inventory.load_from(TEST_PATH)
+	_check(older.homeland.is_empty() and older.uniques_doubled == [ids[0]], "a version 19 save has no homeland, and junk is dropped")
+	_check(settler.transcended().homeland.is_empty(), "the next world chooses its own")
+	_clear_save()
 	return true

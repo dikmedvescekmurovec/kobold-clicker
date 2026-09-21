@@ -116,15 +116,17 @@ than growing a fourth way to travel.
 **Three postings, two of the rabble and one elite.** The pair of commons are something a walk works
 off by itself; the elite is the one worth going out of the way for, and it is the one that pays an orb
 -- `OrbTable.roll_favoured`, the vendor's own draw, because what a bounty is for is the thing the
-ground will not hand over. `NEED_COMMON` 24 is two or three tiles' fighting and `NEED_ELITE` 5 is the
-same walk the other way round, since a tile fields one elite in ten.
+ground will not hand over. `NEED_COMMON` 5 is a tile's fighting or less and `NEED_ELITE` 1 is a tile
+or so of looking, since a tile fields one elite in ten. (Cut from 24 and 5 on 2026-09-21 at the
+user's call: postings should be quick errands, paying what they paid before.)
 
-The reward is quoted the way everything else in a town is, in bodies: `REWARD_MULT` 3.0 times what
-`need` of that monster were carrying (`Encounter.gold_of` at the town's cell). So a board out at the
-frontier pays frontier money with no second curve to keep in step, and a bounty is worth about three
-times the purses it was earned from -- enough to notice beside a shelf's prices, never enough to make
-farming for gold beat farming for gear. The balance pass left it exactly there: a common posting pays
-five and a half tile fights' gold for under three fights of work.
+The reward is quoted the way everything else in a town is, in bodies: `REWARD_COMMON` 72 and
+`REWARD_ELITE` 15 purses of that monster (`Encounter.gold_of` at the town's cell). So a board out at
+the frontier pays frontier money with no second curve to keep in step. Those were first `REWARD_MULT`
+3.0 times `need` -- three times the purses a posting was earned from -- with the old counts of 24 and
+5; when `need` was cut the payout was held where it was rather than cut with it, so a posting now pays
+well over its bodies' purses: a common one about five and a half tile fights' gold for under one
+fight of work.
 
 **One bounty at a time, and it has to be accepted.** The first cut had no accept button -- reading
 the board took all three postings on, and a kill counted against every open one anywhere. The user
@@ -192,7 +194,7 @@ That width is the whole shape of the page. Three squares across plus their gutte
 
 The smith is what finally broke that budget. A fortress carries three tabs and so a **second row of them**, which cost the gear tab fifteen panel pixels it did not have -- and Tier 4's board makes four tabs on the same two rows, so the row is here to stay. Rather than shave the shelf or drop a line, everything under the counter's **name** now sits in a scroll (`_scrolled`), the way an open piece's modifiers already did: the tabs and the counter's name stay pinned above it, the Buy button stays pinned below it, and what runs past the foot of a 648 px window is the shelf's own tail rather than a button. It also means the page survives a window the game has not been shown in yet. One line was shortened with it -- "Stock: 100 kills" rather than a sentence -- because the restock was the least urgent thing on the page; that line went with the kills clock, and the tabs have since become marks in one row (below).
 
-A piece off the shelf **opens like any other piece**: the same `ItemDetails` block the bag writes, with Buy and its price under it, and the comparison on the other edge pointed at what is worn in that socket. So judging a purchase is the same act as judging a drop, and the player learns one thing rather than two. Buy is greyed, **with the reason in its tooltip**, when the purse is short or the bag is full -- the bag's refusal is not a nicety, because `Inventory.add` on a full bag destroys the worst piece in it, and a vendor who takes your gold and throws away your boots is a bug with a receipt.
+A piece off the shelf **opens like any other piece**: the same `ItemDetails` block the bag writes, with Buy and its price under it, and the comparison on the other edge pointed at what is worn in that socket. So judging a purchase is the same act as judging a drop, and the player learns one thing rather than two. Buy is greyed, **with the reason in its tooltip**, when the purse is short or the bag is full -- the bag's refusal is not a nicety, because `Inventory.add` past the cap overencumbers the player (no fight until the bag is cleared; it once destroyed the worst piece instead), and a vendor should never sell someone into that.
 
 ## Where it stands on screen, and what gives way
 

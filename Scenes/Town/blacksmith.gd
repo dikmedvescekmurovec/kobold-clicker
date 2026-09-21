@@ -101,5 +101,5 @@ static func why_not_lock(item: Item) -> String:
 static func lock(item: Item, rng: RandomNumberGenerator) -> bool:
 	if not can_lock(item):
 		return false
-	item.mods[rng.randi_range(0, item.mods.size() - 1)]["locked"] = true
+	item.hold(rng.randi_range(0, item.mods.size() - 1), "locked")
 	return true

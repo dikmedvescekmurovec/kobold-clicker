@@ -83,6 +83,8 @@ var _farm_button: Button
 ## Rest on the selected tile: the same ground as Farm, held by the weapon alone while the player is
 ## away. Greyed rather than hidden where nothing would swing (`_cannot_camp`).
 var _camp_button: Button
+## What `_update_buttons` last greyed the fights for, so `_process` knows when the bag has crossed the cap.
+var _was_encumbered := false
 var _town_button: Button
 ## What a town on the selected tile offers, listed under the land it stands on.
 var _service_rows: VBoxContainer
@@ -225,6 +227,10 @@ func _ready() -> void:
 	else:
 		view = MapBuilder.create(map, TownWorld.generate(used_world_seed), map_origin, used_map_seed)
 	towns = view.towns
+	# What two of the world's curses ask of the map, said before anything is charted or paid.
+	if Curses.RING_OF_WALLS in inventory.curses:
+		view.wall_step = MapBuilder.RING_OF_WALLS_STEP
+	_settle_homeland()
 	print("%s world seed %d (%d towns), map seed %d, first town at cell %s" % [
 			"Loaded" if save else "New", used_world_seed, towns.towns().size(), used_map_seed,
 			view.start_town - map_origin])
@@ -232,7 +238,10 @@ func _ready() -> void:
 	map.dragged.connect(_on_map_dragged)
 	map.cell_aimed.connect(_on_cell_aimed)
 	view.arrived.connect(_on_player_arrived)
-	map.player.move_speed = func() -> float: return float(inventory.stats().get("move_speed", 0.0))
+	map.player.move_speed = func() -> float:
+		var speed := float(inventory.stats().get("move_speed", 0.0))
+		# An overfull bag slows the whole pace, whatever the boots add to it.
+		return (100.0 + speed) * Inventory.ENCUMBERED_SPEED - 100.0 if inventory.encumbered() else speed
 	# Before the interface, which is what decides whether the crown stands in the corner.
 	_credit_walls()
 	_build_ui()
@@ -322,6 +331,10 @@ func _center_panel(panel: Control) -> void:
 ## where the player drags it. The play clock is wound on here: every frame the game is open counts.
 func _process(delta: float) -> void:
 	inventory.play_seconds += delta
+	# The bag is emptied from several pages (a discard, a sale, Clear level); watched here rather than
+	# wired to each, so the fight buttons come back the moment it is under the cap again.
+	if _panel != null and inventory.encumbered() != _was_encumbered:
+		_update_buttons()
 	if view != null and view.walking:
 		camera.position = _clamp_to_map(map.player.position)
 
@@ -370,7 +383,7 @@ func _build_ui() -> void:
 	buttons.add_theme_constant_override("separation", 4)
 	buttons.size_flags_vertical = Control.SIZE_EXPAND | Control.SIZE_SHRINK_END
 	rows.add_child(buttons)
-	_chart_button = UITheme.button("Chart", "LightButton", "Fight for this tile and what lies behind it")
+	_chart_button = UITheme.button("Chart", "LightButton", CHART_TIP)
 	_chart_button.pressed.connect(_on_chart_pressed)
 	Cursors.wear(_chart_button, Cursors.SWORD)
 	buttons.add_child(_chart_button)
@@ -388,7 +401,7 @@ func _build_ui() -> void:
 	buttons.add_child(_move_button)
 	# And a third thing to do with a tile you have already taken: stand on it and fight until you
 	# have had enough. Nothing is won by it but what the bodies were carrying.
-	_farm_button = UITheme.button("Farm", "LightButton", "Fight here for as long as you like, for the loot")
+	_farm_button = UITheme.button("Farm", "LightButton", FARM_TIP)
 	_farm_button.pressed.connect(_on_farm_pressed)
 	Cursors.wear(_farm_button, Cursors.SWORD)
 	buttons.add_child(_farm_button)
@@ -850,7 +863,7 @@ func _clamp_to_map(to: Vector2) -> Vector2:
 ## Winning charts it as before; losing leaves the map exactly as it was, free to try again.
 func _on_chart_pressed() -> void:
 	var cell := map.selected_cell
-	if not view.can_chart(cell):
+	if not view.can_chart(cell) or inventory.encumbered():
 		return
 	# Not next to it yet: walk to the nearest charted tile beside it, and the fight opens on arrival.
 	var from := view.chart_from(cell)
@@ -879,7 +892,7 @@ func _on_chart_pressed() -> void:
 ## and nothing riding on it. It takes a tile already taken, so nothing about the map can change.
 func _on_farm_pressed() -> void:
 	var cell := map.selected_cell
-	if not view.can_farm(cell):
+	if not view.can_farm(cell) or inventory.encumbered():
 		return
 	var env: String = map.get_tile_info(cell).get("env", "")
 	var variant := view.area_variant(cell)
@@ -889,6 +902,10 @@ func _on_farm_pressed() -> void:
 
 ## What the Set up camp button says while it can be pressed.
 const CAMP_TIP := "Rest here, and let the hero hold the tile while you are away"
+const CHART_TIP := "Fight for this tile and what lies behind it"
+const FARM_TIP := "Fight here for as long as you like, for the loot"
+## What Chart, Farm and Set up camp say while the bag is over its cap and greys them.
+const ENCUMBERED_TIP := "Your bag is too heavy to fight with. Sell or throw away gear until it holds %d or fewer." 		% Inventory.CAPACITY
 
 
 ## Why the hero cannot hold a camp, or "" where they can. A camp is fought by the weapon alone --
@@ -896,10 +913,14 @@ const CAMP_TIP := "Rest here, and let the hero hold the tile while you are away"
 ## nothing. That is worth saying on the button rather than finding out in the morning. The two
 ## conditions are `Camp.hunts`', asked of what is worn rather than of a fight nobody has built yet.
 func _cannot_camp() -> String:
+	if inventory.encumbered():
+		return ENCUMBERED_TIP
 	if Curses.NO_REST in inventory.curses:
 		return "This world is under No Rest: no camp can be set up in it."
 	if float(inventory.stats().get("attack_speed", 0.0)) <= 0.0:
 		return "Your weapon does not swing on its own, and a camp is held by the weapon alone."
+	if Curses.BERSERKERS_WORLD in inventory.curses:
+		return "This is a Berserker's World: no weapon swings on its own, so nothing would hold a camp."
 	if "berserk" in inventory.effects():
 		return "The Berserker's Band never lets the weapon swing on its own, so nothing would hold this camp."
 	return ""
@@ -1062,12 +1083,18 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 		_credit_walls()
 	else:
 		print("Lost the fight for %s; it stays uncharted" % cell)
+	var world_lost := not won and not ledger.farming and Curses.NO_SECOND_CHANCES in inventory.curses
 	ledger.farming = false
 	if map.selected_cell != HexMap.NO_CELL:
 		_panel.show()
 	_update_buttons()
 	# After banking, so a run's pouch counts; after the fight, so a pop-up never covers one.
 	_check_tips()
+	# No Second Chances: the tile's fight was the world's. Last, so everything the fight earned is
+	# banked and saved before the black screen, on which nothing may be.
+	if world_lost:
+		print("No Second Chances: the world ends with the fight for %s" % cell)
+		_open_transcend(true)
 
 
 ## Every wall down in this world that has not yet paid its super orb pays it, and the save says
@@ -1088,6 +1115,21 @@ func _sight() -> int:
 	return (0 if Curses.THICK_FOG in inventory.curses else 1) + int(inventory.stats().get("sight", 0))
 
 
+## The Homeland's two lands, chosen once, the first time the cursed world's map exists: the kind the
+## start stands on, so the first fights leave something, and one other, seeded from the map so a world
+## reloaded before its first save chooses the same. Saved with the inventory from then on.
+func _settle_homeland() -> void:
+	if not Curses.HOMELAND in inventory.curses or not inventory.homeland.is_empty():
+		return
+	var first := view.env_at(MapBuilder.CENTER)
+	var others: Array = SheetMeta.env_adjacency().keys().filter(
+			func(env: String) -> bool: return env != first)
+	others.sort()
+	inventory.homeland.assign([first, others[absi(hash([view.env_seed, "homeland"])) % others.size()]])
+	print("Homeland: %s" % [inventory.homeland])
+	inventory.save(inventory_path)
+
+
 ## What the land on `cell` does to its own fight, under this world's curses.
 func _mods_of(cell: Vector2i) -> Array[String]:
 	return view.mods_of(cell, Curses.WILD_TILES in inventory.curses)
@@ -1097,6 +1139,9 @@ func _mods_of(cell: Vector2i) -> Array[String]:
 ## banked and its kills counted, and back in through Chart, so the second go is opened like the first.
 func _on_combat_retry(cell: Vector2i) -> void:
 	_on_combat_finished(false, cell)
+	# Under No Second Chances the loss just ended the world, and there is no second go.
+	if _transcend_page != null:
+		return
 	map.select_cell(cell)
 	_on_chart_pressed()
 
@@ -1137,6 +1182,13 @@ func _update_buttons() -> void:
 	_skip_button.visible = _chart_button.visible and OS.is_debug_build()
 	_move_button.visible = view.can_move_to(cell)
 	_farm_button.visible = view.can_farm(cell)
+	# An overfull bag greys the fights rather than hiding them, with the reason on each.
+	var heavy := inventory.encumbered()
+	_chart_button.disabled = heavy
+	_chart_button.tooltip_text = ENCUMBERED_TIP if heavy else CHART_TIP
+	_farm_button.disabled = heavy
+	_farm_button.tooltip_text = ENCUMBERED_TIP if heavy else FARM_TIP
+	_was_encumbered = heavy
 	# Camping takes exactly what farming takes -- a tile already won -- because it is that fight
 	# with nobody clicking. Where nothing would swing it is greyed with the reason rather than
 	# taken away: "why can I not camp" is a worse question than the answer.
@@ -1652,14 +1704,22 @@ func _on_reset_pressed() -> void:
 ## written until that page is left** (`_transcend`), so a game closed on it has not transcended.
 ## The price is checked and never taken, because the purse is one of the things that stays behind.
 func _on_transcend_pressed() -> void:
-	if _transcend_page != null \
-			or inventory.gold < TownPrices.fortune_price(FortuneTeller.TRANSCEND, _town_cell):
+	if inventory.gold < TownPrices.fortune_price(FortuneTeller.TRANSCEND, _town_cell):
+		return
+	_open_transcend(false)
+
+
+## Stands the black screen up. `lost` is a world ended by No Second Chances rather than left through
+## the fortuneteller: it asks no price, waits for no wall, and makes no heirloom -- or losing a fight
+## on purpose would be the cheapest way out there is.
+func _open_transcend(lost: bool) -> void:
+	if _transcend_page != null:
 		return
 	_on_left_page_closed()
 	_on_close_pressed()
 	_show_corner(false)
 	_character.hide()
-	_transcend_page = TranscendPage.new(inventory, ui_scale)
+	_transcend_page = TranscendPage.new(inventory, ui_scale, lost)
 	_transcend_page.finished.connect(_transcend)
 	_ui_layer.add_child(_transcend_page)
 
@@ -1672,7 +1732,7 @@ func _transcend() -> void:
 			+ inventory.stash().equipment.worn.size()))
 	# Written before anything is deleted: a crash between the two leaves the new inventory on the old
 	# map, which plays, and never the old inventory on no map at all.
-	if not inventory.transcended().save(inventory_path):
+	if not inventory.transcended(_transcend_page.lost).save(inventory_path):
 		return
 	_resetting = true
 	if FileAccess.file_exists(map_path):

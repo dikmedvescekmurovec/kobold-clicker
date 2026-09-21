@@ -23,7 +23,8 @@ var rarity: ItemRarity.Rarity = ItemRarity.Rarity.COMMON
 ## under what that tile allowed rather than handed out at it.
 var level := 1
 ## [{"id": String, "value": int}], in the order they were drawn. One of them may carry
-## `"locked": true`, which the smith puts there and every orb then works around.
+## `"locked": true`, which the smith puts there and every orb then works around. A held-fast line
+## (locked or bound) also carries `"at"`: the level its band is read at, frozen with its number.
 var mods: Array[Dictionary] = []
 ## The piece's own numbers, scaled by its level when it was rolled. Stored rather than worked out
 ## on demand: that is what keeps a held piece the piece it was.
@@ -74,7 +75,7 @@ static func rolled_unique(id: String, rng: RandomNumberGenerator, item_level := 
 	item.level = maxi(1, item_level)
 	item.stats = scaled_stats(item.type, item.level)
 	for mod_id: String in row["mods"]:
-		item.mods.append({"id": mod_id, "value": ModifierTable.reroll_value(mod_id, rng, item.level)})
+		item.mods.append(ModifierTable.rolled_mod(mod_id, rng, item.level))
 	return item
 
 
@@ -103,12 +104,16 @@ static func scaled_stats(item_type: String, item_level: int) -> Dictionary:
 ## there would carry and every modifier put where it stood in its band, at level 1's band. What it
 ## was is remembered as `safe_level`, and the best it has ever been rather than the last, so a short
 ## run never costs a piece what a long one earned. Rarity, locks, `broken` and `unique` do not move.
+## The one hand that moves a held-fast line: from its own band to the new level's, and held there.
 func transcend() -> void:
 	safe_level = maxi(safe_level, level)
-	var was := mod_level()
+	var was := mods.map(tier_of)
 	level = 1
-	for mod in mods:
-		mod["value"] = ModifierTable.rescaled(str(mod["id"]), int(mod["value"]), was, mod_level())
+	for i in mods.size():
+		var mod := mods[i]
+		if mod.has("at"):
+			mod["at"] = mod_level()
+		mod["value"] = ModifierTable.rescaled(str(mod["id"]), int(mod["value"]), int(was[i]), tier_of(mod))
 	refresh_perfect()
 	stats = scaled_stats(type, 1)
 
@@ -120,27 +125,52 @@ func mod_level() -> int:
 
 
 ## One plus more: every modifier keeps its place in its band as the band moves up `PLUS_LEVELS`
-## levels. What an Orb of Ascension does, and what Lean Pickings does to a find as it falls.
+## levels. What an Orb of Ascension does, and what Lean Pickings does to a find as it falls. A
+## held-fast line stays where it was locked, number and band alike.
 func ascend() -> void:
-	var was := mod_level()
+	var was := mods.map(tier_of)
 	plus += 1
-	for mod in mods:
-		mod["value"] = ModifierTable.rescaled(str(mod["id"]), int(mod["value"]), was, mod_level())
+	for i in mods.size():
+		var mod := mods[i]
+		if held_fast(mod):
+			continue
+		mod["value"] = ModifierTable.rescaled(str(mod["id"]), int(mod["value"]), int(was[i]), tier_of(mod))
 	refresh_perfect()
 
 
-## Puts every perfected modifier (`"perfect": true`, an Orb of Perfection's) at the top of its band
-## as the band now stands. Called by whatever moves `mod_level`: the smith's upgrade, an Orb of
+## Puts every perfected modifier (`"perfect": true`, an Orb of Perfection's) at the top of the top
+## tier as it now stands -- perfect is the best the piece could carry, so its `"under"` goes. Called by whatever moves `mod_level`: the smith's upgrade, an Orb of
 ## Ascension, the end of a world. A Divine steps over one instead, so it never leaves the top.
 func refresh_perfect() -> void:
 	for mod in mods:
 		if bool(mod.get("perfect", false)):
-			mod["value"] = int(ModifierTable.band_for(str(mod["id"]), mod_level())[1])
+			mod.erase("under")
+			mod["value"] = int(ModifierTable.band_for(str(mod["id"]), tier_of(mod))[1])
 
 
 ## Whether an orb must leave this modifier as it is: the smith's lock, or an Orb of Binding's.
 static func held_fast(mod: Dictionary) -> bool:
 	return bool(mod.get("locked", false)) or bool(mod.get("bound", false))
+
+
+## Holds `mods[index]` fast under `flag` ("locked" or "bound"): its number and the band it is read
+## in stop moving with the piece. A line already held keeps the band it was first held at.
+func hold(index: int, flag: String) -> void:
+	var mod := mods[index]
+	mod[flag] = true
+	mod["at"] = int(mod.get("at", mod_level()))
+
+
+## The level this modifier's band is read at: where it was held fast, else the piece's own.
+func band_level(mod: Dictionary) -> int:
+	return int(mod.get("at", mod_level()))
+
+
+## The tier this modifier's band is read at (`ModifierTable.band_for`): as far under its band level
+## as it was rolled (`"under"`), so whatever moves the level moves the tier with it. Anything that
+## reads or rerolls a band for a line on a made piece asks this.
+func tier_of(mod: Dictionary) -> int:
+	return maxi(1, band_level(mod) - int(mod.get("under", 0)))
 
 
 ## What the panel calls it. A method rather than reading `type`, because a unique has a name of its
@@ -301,9 +331,12 @@ func _mod_line(mod: Dictionary, detailed: bool) -> String:
 		var number := RegEx.create_from_string("^\\+[0-9.e]+").search(line)
 		if number != null:
 			var id := str(mod["id"])
-			var band := ModifierTable.band_for(id, mod_level())
+			var band := ModifierTable.band_for(id, tier_of(mod))
 			line = "%s(%s-%s)%s" % [number.get_string(), ModifierTable.amount(id, int(band[0])).trim_suffix("s"),
 					ModifierTable.amount(id, int(band[1])).trim_suffix("s"), line.substr(number.get_end())]
+			# The tier last, where the row's name ends; a modifier with one band at every tier has none.
+			if ModifierTable.tiered(id):
+				line += " T%d" % tier_of(mod)
 	return line
 
 
@@ -392,5 +425,15 @@ static func from_dict(data: Variant) -> Item:
 			for flag: String in ["locked", "bound", "perfect"]:
 				if bool(entry.get(flag, false)):
 					mod[flag] = true
+			if entry.has("at"):
+				mod["at"] = int(entry["at"])
+			# Written only above 0. A line saved before there were tiers has none either, and is given
+			# the highest tier that holds its number -- which for a top-tier line is the top again, so
+			# asking every time is safe. A perfect line is the top by definition.
+			var under := int(entry.get("under", 0))
+			if not entry.has("under") and not mod.has("perfect"):
+				under = ModifierTable.fit_under(id, int(mod["value"]), item.band_level(mod))
+			if under > 0:
+				mod["under"] = under
 			item.mods.append(mod)
 	return item

@@ -114,7 +114,7 @@ func layout() -> void:
 
 ## One point into a skill. A refused press does nothing: the card already says why.
 func _on_skill_pressed(id: String) -> void:
-	if not inventory.skills.rank_up(id, inventory.level):
+	if not inventory.rank_up_skill(id):
 		return
 	inventory.save(_save_path)
 	print("Learned %s (%d/%d)" % [SkillTree.node(id)["name"], inventory.skills.rank_of(id),
@@ -145,7 +145,7 @@ func _on_respec_pressed(tree: String) -> void:
 
 ## Placed now and again deferred: the first pass measures labels that have not laid out yet.
 func _on_skill_hovered(id: String, slot: SkillSlot) -> void:
-	_card.fill(id, inventory.skills, inventory.level, inventory.skill_worth())
+	_card.fill(id, inventory.skills, inventory.level, inventory.skill_worth(), inventory.why_not_skill(id))
 	_card.show()
 	_place_card(slot.get_global_rect())
 	_place_card.call_deferred(slot.get_global_rect())

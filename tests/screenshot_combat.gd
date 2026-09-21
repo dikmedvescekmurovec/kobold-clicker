@@ -306,7 +306,8 @@ func _shoot_farm() -> void:
 
 	# Far enough in that the counter has something on it and the tally reads properly.
 	var guard := 0
-	while combat._drops.size() < 3 and guard < 2000:
+	# Enough that the popup and the verdict both have to scroll.
+	while combat._drops.size() < 20 and guard < 4000:
 		guard += 1
 		if not fight.hit():
 			fight.advance(0.05)

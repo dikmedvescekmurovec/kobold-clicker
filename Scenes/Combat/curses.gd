@@ -1,7 +1,8 @@
 class_name Curses
 extends RefCounted
-## The curses a player may take into a new world: up to `MOST`, chosen on the black screen of a
-## transcension (`TranscendPage`), each a handicap on the whole world for a bonus on the whole world.
+## The curses a player may take into a new world: any whose skulls add up to no more than the player's
+## `Inventory.skull_budget`, chosen on the black screen of a transcension (`TranscendPage`), each a
+## handicap on the whole world for a bonus on the whole world.
 ## A table and nothing else -- `Inventory.curses` holds the ids, `Inventory.effects()` hands each to
 ## the fight as `"curse:<id>"` (`effect`), where it is one `if` like a worn unique's, and
 ## `Inventory.stats()` adds a row's `stats`, so what a curse pays in numbers is on the character page
@@ -12,9 +13,7 @@ extends RefCounted
 ## and what it is against ("two super orbs, not one").
 ##
 ## A curse takes from one side of the game and pays on another, so none of them nets to nothing.
-## `skulls` is how hard it is, for the player to read; nothing counts them.
-
-const MOST := 3
+## `skulls` is how hard it is, and what it costs of the budget (`fits`).
 
 const IRON_FOES := "iron_foes"
 const SHORT_DAYS := "short_days"
@@ -27,6 +26,21 @@ const WILD_TILES := "wild_tiles"
 const THICK_FOG := "thick_fog"
 const LONG_WINTER := "long_winter"
 const HARD_LESSONS := "hard_lessons"
+const PACIFIST_HANDS := "pacifist_hands"
+const BERSERKERS_WORLD := "berserkers_world"
+const GLASS_WORLD := "glass_world"
+const RAW_FINDS := "raw_finds"
+const HOMELAND := "homeland"
+const SPECIALIST := "specialist"
+const RESTLESS := "restless"
+const FORGOTTEN := "forgotten"
+const RING_OF_WALLS := "ring_of_walls"
+const LONE_HEIR := "lone_heir"
+const NO_SECOND_CHANCES := "no_second_chances"
+
+## What a fight is told beside `effect(HOMELAND)`: one entry a land that still leaves gear, as
+## `"homeland:<env>"` (`Inventory.homeland`, chosen by the main scene as the world begins).
+const HOME_PREFIX := "homeland:"
 
 ## `stats` is what `Inventory.stats()` adds while the curse is on; `xp_more` is read by `Encounter.arm`
 ## and by nothing else. What is not a number is written where it is done, and named in the row's text.
@@ -59,9 +73,68 @@ const CURSES := {
 	# the doubling is `Inventory.skill_worth`, read by `stats()` and by the skill's card.
 	HARD_LESSONS: {"name": "Hard Lessons", "skulls": 2,
 		"text": "Enemies give 75% less experience.", "reward": "Every skill point is worth double."},
+	# Three uniques' rules made a whole world's. **Each adds to its unique where both are had** (the
+	# user's ruling): the curse and the piece are two entries in the same sum.
+	PACIFIST_HANDS: {"name": "Pacifist Hands", "skulls": 2, "not_with": [BERSERKERS_WORLD],
+		"text": "Your clicks deal no damage.",
+		"reward": "You swing on your own: 1.5 swings a second more, and every swing of your own comes twice as fast."},
+	BERSERKERS_WORLD: {"name": "Berserker's World", "skulls": 2, "not_with": [PACIFIST_HANDS],
+		"text": "Your weapon never swings on its own, and you cannot set up camp.",
+		"reward": "Clicks deal double damage. A Berserker's Band adds to it."},
+	GLASS_WORLD: {"name": "Glass World", "skulls": 2,
+		"text": "Every fight clock runs a third faster.",
+		"reward": "+100% damage in every fight that has a clock. The Glass Edge adds to it."},
+	RAW_FINDS: {"name": "Raw Finds", "skulls": 2,
+		"text": "Every piece of gear drops as a common, with no modifiers. Uniques are untouched.",
+		"reward": "Orbs drop three times as often."},
+	HOMELAND: {"name": "Homeland", "skulls": 2,
+		"text": "Only two kinds of land leave gear: the kind you start on, and one other. Chests and the ice wall still pay.",
+		"reward": "On those two, +80% item rarity, and uniques drop three times as often."},
+	SPECIALIST: {"name": "Specialist", "skulls": 2,
+		"text": "Only one skill tree may hold points.",
+		"reward": "Every skill point is worth 50% more."},
+	RESTLESS: {"name": "Restless", "skulls": 1,
+		"text": "A camp is full after 2 hours, not 12.",
+		"reward": "A camp pays double for every hour."},
+	FORGOTTEN: {"name": "Forgotten", "skulls": 2,
+		"text": "The collection log adds no damage in this world.",
+		"reward": "Every unique first found in this world counts twice in the log, for good."},
 	LONG_WINTER: {"name": "Long Winter", "skulls": 3,
 		"text": "The ice wall has twice the health.", "reward": "Every ice wall pays two super orbs, not one."},
+	RING_OF_WALLS: {"name": "Ring of Walls", "skulls": 3,
+		"text": "An ice wall stands every 5 rings, not every 10.",
+		"reward": "Every wall still pays its super orb, so there are twice as many to earn."},
+	LONE_HEIR: {"name": "Lone Heir", "skulls": 3,
+		"text": "Only one heirloom may be worn. The rest come off as the world begins.",
+		"reward": "The heirloom you make at the end of this world is made +1."},
+	NO_SECOND_CHANCES: {"name": "No Second Chances", "skulls": 3,
+		"text": "Losing the fight for a tile ends the world at once, and a world lost that way leaves no heirloom.",
+		"reward": "Every ice wall pays one more super orb."},
 }
+
+
+## Whether `id` may be taken beside what is already `taken`: a row's `not_with` names the ones it
+## cannot stand with -- clicks that do nothing and a weapon that never swings is a world nobody can
+## play.
+static func allowed(id: String, taken: Array) -> bool:
+	for other: String in CURSES[id].get("not_with", []):
+		if other in taken:
+			return false
+	return true
+
+
+## How many skulls `taken` costs, together.
+static func skulls_of(taken: Array) -> int:
+	var sum := 0
+	for id: String in taken:
+		sum += int(CURSES[id]["skulls"])
+	return sum
+
+
+## Whether `id` may be added to `taken` under `budget` skulls: it fits what is left, and stands with
+## the rest (`allowed`).
+static func fits(id: String, taken: Array, budget: int) -> bool:
+	return skulls_of(taken) + int(CURSES[id]["skulls"]) <= budget and allowed(id, taken)
 
 
 ## What the fight is told for one, in `Encounter.effects`.

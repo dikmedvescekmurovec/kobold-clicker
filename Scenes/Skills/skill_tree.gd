@@ -250,7 +250,7 @@ static func scaled(value: float, times: int) -> float:
 
 ## What `points` in `id` do, one clause a stat: "+1 Damage", "6% increased Damage", after the trees
 ## have been transcended `times`.
-static func describe(id: String, points := 1, times := 0) -> String:
+static func describe(id: String, points := 1.0, times := 0) -> String:
 	var entry := node(id)
 	var parts := PackedStringArray()
 	var flat: Dictionary = entry["flat"]

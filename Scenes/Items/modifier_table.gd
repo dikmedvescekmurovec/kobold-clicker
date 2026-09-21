@@ -154,19 +154,83 @@ static func roll(item_type: String, count: int, rng: RandomNumberGenerator,
 			break
 		var id := _weighted(pool, rng)
 		pool.remove_at(pool.find(id))
-		rolled.append({"id": id, "value": reroll_value(id, rng, level)})
+		rolled.append(rolled_mod(id, rng, level))
 	return rolled
 
 
-## What one modifier rolls between at this level. Its own function because three callers need the
-## same answer and any two of them disagreeing would be invisible: `roll` draws a new modifier here,
-## `reroll_value` draws a fresh number for one already on a piece, and a test reads the band to check
-## that a divined value stayed inside it.
-static func band_for(id: String, level: int) -> Array:
+## How much likelier each tier is than the one under it, read the other way: at item level L, tier T
+## is drawn with weight TIER_FALLOFF^(L - T). The one dial of the tiers. Nearer 1 spreads the draw
+## down the tiers and lifts the top tier's band (it settles at (1 - r/g) / (1 - r) of the old band,
+## g being `LootTable.LEVEL_GROWTH`: 1.96 at 0.9); nearer 0 is the old single band back.
+const TIER_FALLOFF := 0.9
+
+
+## Whether this modifier's band grows with the level at all. One that does not -- the PLAYER three,
+## and gold find with its `level_flat` of 0 -- is the same band at every tier, so it draws none and
+## writes none.
+static func tiered(id: String) -> bool:
+	return _level_band(id, 1) != _level_band(id, 50)
+
+
+## How many tiers under the top a fresh modifier lands, at a piece whose bands are read at `level`:
+## 0 to level - 1, each step down TIER_FALLOFF times as likely as the one above. One `randf` through
+## the inverse of the truncated geometric sum, never a loop of coin tosses -- which would pile what
+## is left over onto tier 1.
+static func roll_under(level: int, rng: RandomNumberGenerator) -> int:
+	var tiers := maxi(level, 1)
+	var share := rng.randf() * (1.0 - pow(TIER_FALLOFF, tiers))
+	return clampi(floori(log(1.0 - share) / log(TIER_FALLOFF)), 0, tiers - 1)
+
+
+## A fresh modifier: its id, how far under the top tier it landed (`"under"`, written only above 0,
+## the way a lock is) and a number in that tier's band. The tier is kept as a distance from the top
+## rather than by its own number so that everything which moves a piece's level -- the smith, an Orb
+## of Ascension, the end of a world -- carries the tier along with no code of its own.
+static func rolled_mod(id: String, rng: RandomNumberGenerator, level := 1) -> Dictionary:
+	var under := roll_under(level, rng) if tiered(id) else 0
+	var mod := {"id": id, "value": reroll_value(id, rng, level - under)}
+	if under > 0:
+		mod["under"] = under
+	return mod
+
+
+## The `"under"` a modifier saved before there were tiers is given: the highest tier whose band
+## reaches down to the number it has, so the piece is worth what it was and sits inside a band.
+static func fit_under(id: String, value: int, level: int) -> int:
+	if not tiered(id):
+		return 0
+	for under in maxi(level, 1):
+		if int(band_for(id, level - under)[0]) <= value:
+			return under
+	return maxi(level, 1) - 1
+
+
+## What one modifier rolls between at this tier. Its own function because three callers need the
+## same answer and any two of them disagreeing would be invisible: `rolled_mod` draws a new modifier
+## here, `reroll_value` draws a fresh number for one already on a piece, and a test reads the band to
+## check that a divined value stayed inside it.
+##
+## A tier's band is fixed, whatever piece it lands on, and built so that the tiers a piece of level
+## L can draw (`roll_under`'s weights) average out to exactly `_level_band(id, L)` -- what a modifier
+## was worth before there were tiers. With m the old band's end, r the falloff and S(n) the sum of
+## r^0..r^(n-1), that is m(T) + r * S(T-1) * (m(T) - m(T-1)): tier 1 is the old level-1 band, and
+## every tier above is the old band at its level plus a share of how fast that band was growing.
+static func band_for(id: String, tier: int) -> Array:
+	tier = maxi(tier, 1)
+	var here := _level_band(id, tier)
+	var before := _level_band(id, tier - 1)
+	var carry := TIER_FALLOFF * (1.0 - pow(TIER_FALLOFF, tier - 1)) / (1.0 - TIER_FALLOFF)
+	return [maxi(1, roundi(here[0] + carry * (here[0] - before[0]))),
+			maxi(1, roundi(here[1] + carry * (here[1] - before[1])))]
+
+
+## What a modifier was worth at this item level before there were tiers, unrounded: the mean the
+## tiers are built to keep.
+static func _level_band(id: String, level: int) -> Array[float]:
 	var entry: Dictionary = MODS[id]
 	var band: Array = entry["range"]
-	var low := int(band[0])
-	var high := int(band[1])
+	var low := float(band[0])
+	var high := float(band[1])
 	match entry["kind"]:
 		Kind.FLAT:
 			# An amount of a stat, so it grows the way that stat's own numbers do -- unless the entry
@@ -179,14 +243,14 @@ static func band_for(id: String, level: int) -> Array:
 			# where a monster's health would have; retype the pair to float then.
 			var step: float = float(entry.get("level_flat",
 					LootTable.LEVEL_FLAT.get(entry["stat"], 0.0)))
-			low = maxi(1, roundi(LootTable.scale(entry["stat"], float(low), level, step)))
-			high = maxi(1, roundi(LootTable.scale(entry["stat"], float(high), level, step)))
+			low = LootTable.scale(entry["stat"], low, level, step)
+			high = LootTable.scale(entry["stat"], high, level, step)
 		Kind.PERCENT, Kind.GLOBAL:
 			# A percentage of a stat that has already grown -- the piece's own or the whole set's,
 			# which is the same arithmetic. It takes the multiplier and not the flat step, which
 			# is sized for the stat itself rather than for a percentage of it.
-			low = maxi(1, roundi(low * pow(LootTable.LEVEL_GROWTH, maxi(level - 1, 0))))
-			high = maxi(1, roundi(high * pow(LootTable.LEVEL_GROWTH, maxi(level - 1, 0))))
+			low *= pow(LootTable.LEVEL_GROWTH, maxi(level - 1, 0))
+			high *= pow(LootTable.LEVEL_GROWTH, maxi(level - 1, 0))
 		_:
 			# PLAYER: a buff to the player rather than a stat on the piece, so LEVEL_FLAT has
 			# nothing to say about it and it keeps the band as written. One of them is seconds on
@@ -195,11 +259,11 @@ static func band_for(id: String, level: int) -> Array:
 	return [low, high]
 
 
-## A fresh number for one modifier, in the band its level allows. What an Orb of Divine spends
-## itself on: the id stays and only the roll moves, which is why it is drawn here rather than by
+## A fresh number for one modifier, in its tier's band. What an Orb of Divine spends itself on: the
+## id and the tier stay and only the roll moves, which is why it is drawn here rather than by
 ## rolling the modifier again from scratch.
-static func reroll_value(id: String, rng: RandomNumberGenerator, level := 1) -> int:
-	var band := band_for(id, level)
+static func reroll_value(id: String, rng: RandomNumberGenerator, tier := 1) -> int:
+	var band := band_for(id, tier)
 	return rng.randi_range(int(band[0]), int(band[1]))
 
 
@@ -232,8 +296,7 @@ static func add_one(item_type: String, existing: Array[Dictionary], rng: RandomN
 			pool.append(id)
 	if pool.is_empty():
 		return {}
-	var id := _weighted(pool, rng)
-	return {"id": id, "value": reroll_value(id, rng, level)}
+	return rolled_mod(_weighted(pool, rng), rng, level)
 
 
 ## One draw from what is left, by weight -- the same walk LootTable and EnemyRoster use.
@@ -263,9 +326,9 @@ static func line(mod: Dictionary) -> String:
 static func band_line(id: String, level: int) -> String:
 	if not MODS.has(id):
 		return ""
-	var band := band_for(id, level)
-	var low := amount(id, int(band[0]))
-	var high := amount(id, int(band[1]))
+	# Everything the piece could roll: the bottom of tier 1 to the top of the tier its level allows.
+	var low := amount(id, int(band_for(id, 1)[0]))
+	var high := amount(id, int(band_for(id, level)[1]))
 	return _written(id, low if low == high else "%s-%s" % [low, high])
 
 

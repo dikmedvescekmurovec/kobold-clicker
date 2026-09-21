@@ -24,6 +24,8 @@ const START_LAND_RADIUS := 10
 ## The ring just outside the land is the ice wall, and beating any one tile of it brings the whole ring
 ## down: the land then reaches this many rings further, to the next wall.
 const WALL_STEP := 10
+## And how many under the Ring of Walls curse (`wall_step`).
+const RING_OF_WALLS_STEP := 5
 ## How far past the wall the map is generated: the frozen wasteland the player can see out there, and
 ## real land under it for the wall to blend against and for the day the wall falls.
 const WASTE_DEPTH := 5
@@ -52,6 +54,12 @@ var towns: TownWorld
 var rect := Rect2i()
 ## How far the land reaches from cell (0, 0); ring `land_radius + 1` is the ice wall.
 var land_radius := START_LAND_RADIUS
+## How many rings a fallen wall opens: `WALL_STEP`, or fewer under the Ring of Walls, which the main
+## scene says as the world is built. Never saved: it is the curse's, and the curse is the inventory's.
+## **Only where the next wall stands moves with it** -- `Encounter.walls_inside`, which sizes every
+## body, goes on counting in `WALL_STEP`s, so the land is as hard as it ever was and the extra walls
+## are extra gates at the health their own ring gives them.
+var wall_step := WALL_STEP
 ## Seed the environments are generated from; kept, since the map is generated in pieces as it grows.
 var env_seed: int
 ## World spot at the center cell (0, 0).
@@ -254,7 +262,7 @@ func is_wall(cell: Vector2i) -> bool:
 ## How many walls have come down in this world. What heirloom picks are paid against
 ## (`Inventory.credit_walls`), and what the fortuneteller waits for before she offers the way out.
 func walls_fallen() -> int:
-	return maxi(0, (land_radius - START_LAND_RADIUS) / WALL_STEP)
+	return maxi(0, (land_radius - START_LAND_RADIUS) / wall_step)
 
 
 ## Whether `cell` lies past the wall, in the frozen wasteland: seen as snow, never walked on.
@@ -602,7 +610,7 @@ func _cover() -> bool:
 ## uncharted under the fog.
 func _break_wall() -> void:
 	var old_wall := land_radius + 1
-	land_radius += WALL_STEP
+	land_radius += wall_step
 	_cover()
 	for cell in _states:
 		if HexGrid.distance(CENTER, cell) == old_wall:

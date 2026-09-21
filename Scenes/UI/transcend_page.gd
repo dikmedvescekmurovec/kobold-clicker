@@ -5,7 +5,8 @@ extends Control
 ## orb (`SuperOrbTable`) for every wall they broke**, spent on the heirlooms they hold.
 ##
 ## Four faces, one up at a time: the choice (Create an heirloom / Upgrade an heirloom / Take on a
-## curse, and the way on under them), the curses (`Curses`: up to `Curses.MOST` for the world to come,
+## curse, and the way on under them), the curses (`Curses`: as many skulls as the budget this world earned,
+## `Inventory.skulls_earned`, for the world to come,
 ## kept in `Inventory.pending_curses` and nowhere else until `transcended()` reads them), and behind
 ## each of the first two cards a `BagPage` built for it (`transcending` true) -- over the bag
 ## and the ordinary doll to choose the piece to keep, over the heirlooms with the super orbs for its
@@ -24,10 +25,10 @@ const CROWN_ICON := "res://Assets/UI/ui_icon_crown.png"
 const SKULL_ICON := "res://Assets/UI/ui_icon_skull.png"
 ## The curses' table, in panel pixels a column: the tick box and the name, the skulls, what it costs
 ## and what it pays. A budget, like every width here: the four and their gaps stay inside a 576 px window.
-const CURSE_NAME_WIDTH := 104.0
+const CURSE_NAME_WIDTH := 116.0
 const CURSE_SKULLS_WIDTH := 28.0
 const CURSE_COST_WIDTH := 190.0
-const CURSE_PAYS_WIDTH := 150.0
+const CURSE_PAYS_WIDTH := 140.0
 const SKULL_SIDE := 8.0
 ## Panel pixels of black left above and below the curses' panel when the table is taller than the window.
 const CURSE_MARGIN := 6.0
@@ -42,6 +43,11 @@ var _inventory: Inventory
 var _ui_scale: float
 ## Whether this world's one heirloom has been made.
 var _made := false
+## Whether the world was lost rather than left (No Second Chances): then nothing of it may be kept,
+## and it raises no skulls. Read by the main scene, which hands it to `Inventory.transcended`.
+var lost := false
+## The skulls the curses may add up to: the budget this world leaves the player (`skulls_earned`).
+var _budget := 0
 ## The way on has been pressed once with the heirloom still unmade, and asked if that was meant.
 var _warned := false
 
@@ -57,8 +63,10 @@ var _curse_scroll: ScrollContainer
 var _curse_table: Control
 
 
-func _init(inventory: Inventory, ui_scale: float) -> void:
+func _init(inventory: Inventory, ui_scale: float, world_lost := false) -> void:
 	_inventory = inventory
+	lost = world_lost
+	_budget = inventory.skulls_earned(world_lost)
 	_ui_scale = ui_scale
 	theme = UITheme.theme()
 	# The whole window, and it stops the mouse: the world under it is over.
@@ -117,8 +125,9 @@ func _show_choice() -> void:
 
 	var held := _inventory.stash().total() + _inventory.stash().equipment.worn.size()
 	var orbs := _inventory.super_orbs
-	cards.add_child(_card("Create an heirloom", load(CROWN_ICON), not _made,
-			"Done. It goes with you." if _made
+	cards.add_child(_card("Create an heirloom", load(CROWN_ICON), not _made and not lost,
+			"This world was lost to No Second Chances, and nothing of it goes with you." if lost
+			else "Done. It goes with you." if _made
 			else "Choose one piece of this world, carried or worn. It goes with you into every world after this one.",
 			_open.bind(_create_page)))
 	cards.add_child(_card("Upgrade an heirloom", SuperOrbTable.icon(SuperOrbTable.ASCENSION),
@@ -130,9 +139,11 @@ func _show_choice() -> void:
 	var taken := PackedStringArray()
 	for id: String in _inventory.pending_curses:
 		taken.append(str(Curses.CURSES[id]["name"]))
-	cards.add_child(_card("Take on a curse", load(SKULL_ICON), true,
-			"A harder world that pays for it, if you want one. None taken." if taken.is_empty()
-			else "The new world is under %s." % ", ".join(taken),
+	var spent := Curses.skulls_of(_inventory.pending_curses)
+	cards.add_child(_card("Take on a curse", load(SKULL_ICON), _budget > 0,
+			"No skulls to spend. Break walls under curses to earn them." if _budget == 0
+			else "A harder world that pays for it, up to %d skulls. None taken." % _budget if taken.is_empty()
+			else "The new world is under %s: %d of %d skulls." % [", ".join(taken), spent, _budget],
 			_show_curses))
 
 	var on := UITheme.button("Leave without an heirloom" if _warned and not _made
@@ -164,7 +175,7 @@ func _card(title: String, mark: Texture2D, live: bool, text: String, pressed: Ca
 
 ## The curses for the world to come, as the character page's stats are written: a cream panel, and in
 ## it a framed table of striped rows -- a tick box and the name, the skulls, what it costs in rust and
-## what it pays in leaf. The rows past `Curses.MOST` stand back and take no press. Built again at every
+## what it pays in leaf. The rows the skulls left cannot pay for stand back and take no press. Built again at every
 ## tick, so what is ticked and what is faded is never stale.
 func _show_curses() -> void:
 	_warned = false
@@ -175,7 +186,7 @@ func _show_curses() -> void:
 		scrolled = _curse_scroll.scroll_vertical
 		_curse_face.queue_free()
 	var pending := _inventory.pending_curses
-	_curse_face = UITheme.titled_panel("Curses: %d of %d" % [pending.size(), Curses.MOST],
+	_curse_face = UITheme.titled_panel("Skulls: %d of %d" % [Curses.skulls_of(pending), _budget],
 			"Back to the choice", _show_choice)
 	_curse_face.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_curse_face)
@@ -201,7 +212,8 @@ func _show_curses() -> void:
 	_curse_table = table
 	for id: String in Curses.CURSES:
 		var curse: Dictionary = Curses.CURSES[id]
-		var full := not id in pending and pending.size() >= Curses.MOST
+		# Dead where the skulls left cannot pay for it, or it cannot stand with one taken (`Curses.fits`).
+		var full := not id in pending and not Curses.fits(id, pending, _budget)
 		var tick := BagPage.check_box(str(curse["name"]))
 		var box := tick.get_child(0) as Button
 		# Named for the curse, which is how a test finds it; ticked before anything listens.
@@ -269,7 +281,7 @@ func _curse_cells(first: Control, skulls: Control, costs: Label, pays: Label) ->
 
 func _on_curse_toggled(on: bool, id: String) -> void:
 	_inventory.pending_curses.erase(id)
-	if on and _inventory.pending_curses.size() < Curses.MOST:
+	if on and Curses.fits(id, _inventory.pending_curses, _budget):
 		_inventory.pending_curses.append(id)
 	_show_curses()
 
@@ -316,7 +328,7 @@ func _layout() -> void:
 ## The way on. Asked twice only where it would throw the heirloom away unmade -- an orb unspent is
 ## kept (`Inventory.transcended`), the heirloom not made is not.
 func _on_finish_pressed() -> void:
-	if not _made and not _warned and _can_make_any():
+	if not _made and not _warned and not lost and _can_make_any():
 		_warned = true
 		_show_choice()
 		return

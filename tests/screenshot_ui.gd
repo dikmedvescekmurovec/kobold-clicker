@@ -571,6 +571,8 @@ func _shoot_town() -> void:
 	# animations, so it is black at once.
 	var animations := Settings.animations
 	Settings.animations = Settings.Anim.NONE
+	# Budget enough for the two curses the shot takes, and some left over.
+	main.inventory.skull_budget = 6
 	var black := TranscendPage.new(main.inventory, main.ui_scale)
 	main._ui_layer.add_child(black)
 	main._character.hide()
@@ -665,7 +667,8 @@ func _shoot_town() -> void:
 	# that carries modifiers. That land lies past the second wall, which this world has not reached, so
 	# Wild Tiles and a wall counted as fallen stand in: the rings generated past the first wall then
 	# carry theirs.
-	main.inventory.curses.assign([Curses.WILD_TILES, Curses.BLOODTHIRST, Curses.LONG_WINTER])
+	main.inventory.curses.assign([Curses.WILD_TILES, Curses.HOMELAND, Curses.LONG_WINTER])
+	main.inventory.homeland.assign(["grass", "forest"])
 	main.character_page.open()
 	for i in 2:
 		await process_frame
@@ -697,6 +700,7 @@ func _shoot_town() -> void:
 	print("Saved ", ProjectSettings.globalize_path("user://ui_tile_mods.png"))
 	main.view.land_radius = radius
 	main.inventory.curses.clear()
+	main.inventory.homeland.clear()
 	main.map.deselect()
 	main._panel.hide()
 

@@ -13,9 +13,9 @@ extends RefCounted
 ## by hand or written by a build that no longer exists, because a bad save must never be the reason
 ## the game won't start.
 ##
-## The bag has a bottom to it: CAPACITY loose items, and the worst go when something has to. That
-## invariant lives here rather than at the places that add to it, so every path -- a drop, a run
-## banking its pouch, a piece coming off, a hand-edited file -- gets it for free.
+## The bag has a bottom to it: CAPACITY loose items. Nothing is ever destroyed to keep to it -- a drop
+## into a full bag goes in anyway and leaves the player overencumbered (`encumbered`): slow on the
+## map and unable to start a fight until the bag is cleared back down.
 
 const SAVE_PATH := "user://inventory.json"
 ## 1 was the tally of names this kept before items had rarities. 2 is the list of items. 3 adds what
@@ -49,12 +49,18 @@ const SAVE_PATH := "user://inventory.json"
 ## transcension; a version 17 save is a world under none. 19 adds `skill_sunk` and `skill_transcends`,
 ## what transcending the skill trees took and how often it has been done; a version 18 save has done
 ## neither.
-const VERSION := 19
+## 20 adds what two of the curses have to remember: `homeland`, the two lands that still leave gear,
+## and `uniques_doubled`, the finds a Forgotten world made count twice; a version 19 save has neither.
+## 21 adds `skull_budget`; a version 20 save has none, and earns it at its next transcension.
+const VERSION := 21
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
 ## a pressure to choose rather than a pressure to hoard nothing.
 const CAPACITY := 40
+
+## How fast an overencumbered player walks the map, as a share of their usual pace.
+const ENCUMBERED_SPEED := 0.5
 
 ## The Spiked Helm: how much of the set's armour is added to its damage.
 const SPIKES_SHARE := 0.01
@@ -78,7 +84,7 @@ var first_sword_taken := false
 var tips: Array[String] = []
 
 ## What the player has earned. Not in the bag and not against its cap: a purse is a number rather
-## than a thing, so it can never be the worst item in a full bag and can never be trimmed. It lives
+## than a thing, so it never weighs the bag down. It lives
 ## here rather than beside the map because it is carried, not explored. A whole number in a double,
 ## for the reason every growing quantity is one (`BigNumber`): a purse climbs exponentially with the
 ## walk and would pass int64 out past the two hundredth hex.
@@ -97,9 +103,8 @@ var play_seconds := 0.0
 ## orb has nothing to tell apart -- two Orbs of Chaos are the same orb, which is exactly what gear
 ## stopped being when it started rolling modifiers.
 ##
-## Like the purse and unlike the bag: outside CAPACITY, never trimmed, never filtered by an
-## autodiscard rule and never sorted into a level section. A count cannot be the worst thing in a
-## full bag, so none of the machinery that decides what to destroy has anything to say about it.
+## Like the purse and unlike the bag: outside CAPACITY, never filtered by an autodiscard rule and
+## never sorted into a level section. A count weighs nothing, so it never overencumbers anybody.
 var orbs := {}
 
 ## The player's level and the experience held towards the next one -- `PlayerLevel` says what a level
@@ -117,8 +122,7 @@ var skills := Skills.new()
 var towns := TownState.new()
 
 ## Every unique the player has ever found, by `UniqueTable` id, in the order they were found. What the
-## collection log lights up -- and found is found: selling one, or losing it to a full bag, takes
-## nothing off this list.
+## collection log lights up -- and found is found: selling one takes nothing off this list.
 var uniques_found: Array[String] = []
 ## The found ones the player has not hovered in the log yet: what makes its button and their squares shine.
 var uniques_new: Array[String] = []
@@ -155,21 +159,33 @@ var walls_credited := 0
 ## theirs until the next transcension. The fight hears of them through `effects()`, the numbers they
 ## pay are added by `stats()`.
 var curses: Array[String] = []
+## How many skulls of curses the player may take into a new world (`Curses.fits`). Raised at every
+## transcension to this world's depth plus the skulls carried into it (`skulls_earned`), and never lowered.
+var skull_budget := 0
 ## The ones chosen on the black screen for the world to come. **In memory only**, like everything
 ## `TranscendPage` does: `transcended()` is what makes them the next world's.
 var pending_curses: Array[String] = []
+## The Homeland curse's two lands, by environment: the one the world starts on and one other. The
+## main scene chooses them once the new world's map exists (`_settle_homeland`), which is the first
+## moment anybody knows what the start stands on; until then there are none and no land leaves gear.
+var homeland: Array[String] = []
+## Every unique first found in a Forgotten world, which counts twice in the log from then on
+## (`collection_bonus`). It only grows, and it goes with the player like the log itself.
+var uniques_doubled: Array[String] = []
+## The most pieces this doll may wear, or -1 for no limit. Never saved and never the player's own:
+## `stash()` sets it on the heirlooms each time they are asked for, which is how the Lone Heir
+## reaches a second `Inventory` that knows nothing of curses.
+var most_worn := -1
+
+## Pacifist Hands: swings a second the hands make on their own, before everything is doubled.
+const PACIFIST_SWINGS := 1.5
+const PACIFIST_FASTER := 2.0
 
 
-## Puts `item` in the bag and returns whatever had to be destroyed to make room -- empty almost
-## always. The trim happens here rather than at the call sites so that a drop, a run banking its
-## pouch and a test all obey the cap without any of them remembering to.
-##
-## The piece just added can itself be the thing destroyed: a level-1 common falling into a bag of
-## better things is the worst thing in it. That is correct, and it is exactly what the warning
-## standing in the fight while the bag is full is for.
-func add(item: Item) -> Array[Item]:
+## Puts `item` in the bag, full or not. Past CAPACITY the player is overencumbered (`encumbered`)
+## rather than anything being destroyed, which is what the warning in a fight with a full bag says.
+func add(item: Item) -> void:
 	items.append(item)
-	return trim()
 
 
 ## How many of that piece are held, whatever their rarities.
@@ -185,13 +201,18 @@ func total() -> int:
 	return items.size()
 
 
-## How many more loose items fit. Never negative: a bag over the cap has been trimmed already.
+## How many more loose items fit. Never negative, even for a bag over the cap.
 func room_left() -> int:
 	return maxi(0, CAPACITY - items.size())
 
 
 func is_full() -> bool:
 	return items.size() >= CAPACITY
+
+
+## Over the cap: slow on the map, and no fight can be started until the bag is back down to it.
+func encumbered() -> bool:
+	return items.size() > CAPACITY
 
 
 ## The order the bag is read in: by level, highest first, and inside a level by rarity, best first,
@@ -209,44 +230,11 @@ func order() -> Array[int]:
 	return by
 
 
-## What goes first when something has to go: the plainest, then the lowest, then the oldest.
-##
-## This is not `order()` reversed, and the difference is the point. The bag is read level-major,
-## because that is how a player looks for a piece; it is emptied rarity-major, because that is what
-## "worst" means -- a level-2 elite is worth keeping over a level-9 common.
-func worst_first() -> Array[int]:
-	var by := _indices()
-	by.sort_custom(func(a: int, b: int) -> bool:
-		if items[a].rarity != items[b].rarity:
-			return items[a].rarity < items[b].rarity
-		if items[a].level != items[b].level:
-			return items[a].level < items[b].level
-		return a < b)
-	return by
-
-
 func _indices() -> Array[int]:
 	var by: Array[int] = []
 	for i in items.size():
 		by.append(i)
 	return by
-
-
-## Destroys the worst until the bag fits, and hands back what went, worst first. Does nothing at all
-## while there is room, which is almost always.
-func trim() -> Array[Item]:
-	var destroyed: Array[Item] = []
-	if items.size() <= CAPACITY:
-		return destroyed
-	var doomed := worst_first().slice(0, items.size() - CAPACITY)
-	for index in doomed:
-		destroyed.append(items[index])
-	# Taken out highest index first, so removing one does not move the next one being removed.
-	doomed.sort()
-	doomed.reverse()
-	for index in doomed:
-		items.remove_at(index)
-	return destroyed
 
 
 ## Whether finds at this level are thrown away as they land.
@@ -311,10 +299,22 @@ func remove(item: Item) -> bool:
 ## Whether `item` would go into `socket` at all: it has to fit, and the bag has to hold everything
 ## that comes off. One piece leaving the bag makes room for one coming back, which is why a swap
 ## never needed a guard -- but a greatsword takes the offhand's piece off as well, and two coming
-## back into a full bag would destroy something to make room for a hand the player had two of.
+## back into a full bag would push it over the cap. A bag already over it may still swap one for one.
 func can_equip(item: Item, socket: Equipment.Socket) -> bool:
-	return Equipment.fits(socket, item) \
-			and items.size() - 1 + equipment.displaced_by(socket, item).size() <= CAPACITY
+	return why_not_equip(item, socket).is_empty()
+
+
+## Why `item` cannot go on at `socket`, or "" where it can: it does not fit, the bag has no room for
+## what comes off, or this doll is at `most_worn` and the press would add a piece rather than swap one.
+func why_not_equip(item: Item, socket: Equipment.Socket) -> String:
+	if not Equipment.fits(socket, item):
+		return "It does not go there"
+	var off := equipment.displaced_by(socket, item).size()
+	if items.size() - 1 + off > maxi(CAPACITY, items.size()):
+		return "The bag is full"
+	if most_worn >= 0 and equipment.worn.size() - off + 1 > most_worn:
+		return "Lone Heir: only one heirloom may be worn"
+	return ""
 
 
 ## Takes `item` out of the bag and puts it on, and drops whatever it displaced back into the bag.
@@ -334,8 +334,8 @@ func equip(item: Item, socket: Equipment.Socket) -> bool:
 ## Takes the socket's piece off and puts it back in the bag. False if the socket was empty, and
 ## false if the bag is full.
 ##
-## Taking a piece off grows the bag, so it has to refuse. Trimming here would destroy something to
-## make room for a piece they only wanted a closer look at, which is a trap. `equip` refuses for the
+## Taking a piece off grows the bag, so it has to refuse: going over the cap here would stop the
+## player fighting for the sake of a piece they only wanted a closer look at, which is a trap. `equip` refuses for the
 ## same reason and by the same arithmetic (`can_equip`): one going on usually pays for the one coming
 ## off, but a two-hander takes two off for one.
 func unequip(socket: Equipment.Socket) -> bool:
@@ -414,6 +414,9 @@ func stats() -> Dictionary:
 	# and skills made rather than adding to either.
 	if out.has("damage"):
 		out["damage"] = float(out["damage"]) * (1.0 + collection_bonus() / 100.0)
+	# Pacifist Hands: the hands swing for themselves, and then everything that swings swings faster.
+	if Curses.PACIFIST_HANDS in curses:
+		out["attack_speed"] = (float(out.get("attack_speed", 0.0)) + PACIFIST_SWINGS) * PACIFIST_FASTER
 	# What the world's curses pay in numbers, added like any other percent of that kind.
 	for curse: String in curses:
 		var pays: Dictionary = Curses.CURSES[curse].get("stats", {})
@@ -424,8 +427,23 @@ func stats() -> Dictionary:
 
 ## What one skill point is worth against what the tree says: double under Hard Lessons. A whole
 ## number, because a skill's card writes it by describing that many points (`SkillCard.fill`).
-func skill_worth() -> int:
-	return 2 if Curses.HARD_LESSONS in curses else 1
+func skill_worth() -> float:
+	return 1.0 + (1.0 if Curses.HARD_LESSONS in curses else 0.0) \
+			+ (0.5 if Curses.SPECIALIST in curses else 0.0)
+
+
+## Why a point cannot go into skill `id`, or "" where it can: the trees' own rules, and before them
+## the Specialist's -- only one tree may hold points. The skills page asks here, never `skills`.
+func why_not_skill(id: String) -> String:
+	if Curses.SPECIALIST in curses:
+		for tree: String in SkillTree.trees():
+			if tree != SkillTree.tree_of(id) and skills.spent(tree) > 0:
+				return "Specialist: only one skill tree may hold points"
+	return skills.why_not(id, level)
+
+
+func rank_up_skill(id: String) -> bool:
+	return why_not_skill(id).is_empty() and skills.rank_up(id, level)
 
 
 ## What the learned skills add up to at `skill_worth`, as a copy: the capstones' effects are not
@@ -459,7 +477,9 @@ func salvage(item: Item) -> float:
 ## What the collection log adds to the player's damage, in percent: `UniqueTable.COLLECTION_DAMAGE`
 ## for every unique found, whether or not it is still owned.
 func collection_bonus() -> int:
-	return uniques_found.size() * UniqueTable.COLLECTION_DAMAGE
+	if Curses.FORGOTTEN in curses:
+		return 0
+	return (uniques_found.size() + uniques_doubled.size()) * UniqueTable.COLLECTION_DAMAGE
 
 
 ## What changes how a fight plays rather than a number: the capstones learned and the uniques worn,
@@ -467,13 +487,15 @@ func collection_bonus() -> int:
 ## keeps a Pilgrim's set inside one doll: a home piece on each is two lone pieces.
 func effects() -> Array:
 	return skills.effects() + equipment.effects() + stash().equipment.effects() \
-			+ curses.map(Curses.effect)
+			+ curses.map(Curses.effect) \
+			+ homeland.map(func(env: String) -> String: return Curses.HOME_PREFIX + env)
 
 
 ## The heirlooms, made the first time they are asked for.
 func stash() -> Inventory:
 	if heirlooms == null:
 		heirlooms = Inventory.new()
+	heirlooms.most_worn = 1 if Curses.LONE_HEIR in curses else -1
 	return heirlooms
 
 
@@ -483,9 +505,23 @@ func credit_walls(fallen: int) -> bool:
 	if fallen <= walls_credited:
 		return false
 	# The Long Winter's pay: a wall twice as hard is worth two.
-	super_orbs += (fallen - walls_credited) * (2 if Curses.LONG_WINTER in curses else 1)
+	# No Second Chances pays one more, and the two add: three a wall under both.
+	super_orbs += (fallen - walls_credited) * (1 + int(Curses.LONG_WINTER in curses)
+			+ int(Curses.NO_SECOND_CHANCES in curses))
 	walls_credited = fallen
 	return true
+
+
+## The budget the next world is given: this world's depth -- walls broken, counted in ordinary walls
+## of `MapBuilder.WALL_STEP` rings, so the Ring of Walls' twice as many count as many as they reach --
+## plus the skulls carried into it, or the budget as it was if that is more. **A world lost to No
+## Second Chances raises nothing** (`lost`): the gamble is all or nothing, the user's ruling.
+func skulls_earned(lost := false) -> int:
+	if lost:
+		return skull_budget
+	var step := MapBuilder.RING_OF_WALLS_STEP if Curses.RING_OF_WALLS in curses else MapBuilder.WALL_STEP
+	var depth := walls_credited * step / MapBuilder.WALL_STEP
+	return maxi(skull_budget, depth + Curses.skulls_of(curses))
 
 
 ## Where `item` is worn on the ordinary doll, or -1.
@@ -511,6 +547,9 @@ func make_heirloom(item: Item) -> bool:
 		return false
 	if not remove(item):
 		equipment.unequip(_socket_of(item))
+	# The Lone Heir's pay: the heirloom made at the end of a world played under it is made +1.
+	if Curses.LONE_HEIR in curses:
+		item.ascend()
 	stash().items.append(item)
 	return true
 
@@ -518,16 +557,19 @@ func make_heirloom(item: Item) -> bool:
 ## What is left of the player when the world is left behind: the heirlooms, each gone through
 ## `Item.transcend`, the super orbs not yet spent, and what the player *knows* -- the collection log, the
 ## tips already read, and the kills, which with `first_sword_taken` is what keeps a second world from
-## handing out the first one's helping hands again. Everything else is a fresh start.
-func transcended() -> Inventory:
+## handing out the first one's helping hands again, and the skull budget, raised by this world unless it
+## was `lost` (`skulls_earned`). Everything else is a fresh start.
+func transcended(lost := false) -> Inventory:
 	var next := Inventory.new()
 	next.tips = tips.duplicate()
 	next.uniques_found = uniques_found.duplicate()
 	next.uniques_new = uniques_new.duplicate()
+	next.uniques_doubled = uniques_doubled.duplicate()
 	next.kills = kills
 	next.play_seconds = play_seconds
 	next.first_sword_taken = true
 	next.super_orbs = super_orbs
+	next.skull_budget = skulls_earned(lost)
 	# The skill trees' transcensions go with the player; the points they took were this world's level.
 	next.skills.transcended = skills.transcended
 	# What was chosen on the black screen is the new world's, and the old world's curses end with it.
@@ -540,6 +582,10 @@ func transcended() -> Inventory:
 	for item in stash().items:
 		next.stash().items.append(Item.from_dict(item.to_dict()))
 	next.stash().equipment = Equipment.from_dict(stash().equipment.to_dict())
+	# The Lone Heir's world begins with the heirlooms' doll bare, so which one is worn is chosen.
+	if Curses.LONE_HEIR in next.curses:
+		for socket: Equipment.Socket in next.stash().equipment.worn.keys():
+			next.stash().items.append(next.stash().equipment.unequip(socket))
 	for item: Item in next.stash().items + next.stash().equipment.items():
 		item.transcend()
 	return next
@@ -551,6 +597,8 @@ func note_unique(id: String) -> bool:
 		return false
 	uniques_found.append(id)
 	uniques_new.append(id)
+	if Curses.FORGOTTEN in curses:
+		uniques_doubled.append(id)
 	return true
 
 
@@ -613,6 +661,9 @@ func save(path := SAVE_PATH) -> bool:
 		"super_orbs": super_orbs,
 		"walls_credited": walls_credited,
 		"curses": curses,
+		"skull_budget": skull_budget,
+		"homeland": homeland,
+		"uniques_doubled": uniques_doubled,
 	},"\t"))
 
 
@@ -649,7 +700,6 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 		return Inventory.new()
 	if version < 2:
 		inventory._read_v1(data)
-		inventory.trim()
 		return inventory
 	var saved: Variant = data.get("items", [])
 	if typeof(saved) != TYPE_ARRAY:
@@ -749,10 +799,25 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var cursed: Variant = data.get("curses", [])
 	if typeof(cursed) == TYPE_ARRAY:
 		inventory.curses = Curses.known(cursed)
-	# A file written before the cap, or edited by hand, comes back obeying it. A bag allowed over the
-	# cap in one place is a bag every other rule in the game has to check for.
-	inventory.trim()
+	inventory.skull_budget = maxi(0, int(data.get("skull_budget", 0)))
+	# Version 19 knew nothing of either: no land chosen, no find counted twice. A name that is not a
+	# unique's is dropped, and one that is not a land's simply never matches a fight's.
+	for entry: Variant in _strings(data.get("homeland", [])):
+		inventory.homeland.append(entry)
+	for entry: Variant in _strings(data.get("uniques_doubled", [])):
+		if UniqueTable.UNIQUES.has(entry) and not inventory.uniques_doubled.has(entry):
+			inventory.uniques_doubled.append(entry)
 	return inventory
+
+
+## The strings in a saved list, and nothing else that a hand-edited file put there.
+static func _strings(saved: Variant) -> Array[String]:
+	var out: Array[String] = []
+	if typeof(saved) == TYPE_ARRAY:
+		for entry: Variant in saved:
+			if typeof(entry) == TYPE_STRING:
+				out.append(entry)
+	return out
 
 
 ## The old shape: item name -> how many were held. Each becomes that many plain common items with no
