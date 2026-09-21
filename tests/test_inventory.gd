@@ -1071,6 +1071,11 @@ func _test_saving() -> bool:
 	_check(played.save(TEST_PATH), "an inventory with time on the clock saves")
 	_check(is_equal_approx(Inventory.load_from(TEST_PATH).play_seconds, 125.5), "and its clock comes back")
 	_check(played.transcended().play_seconds == played.play_seconds, "a transcension carries the clock over")
+	# The depths of the dungeon the player has won are kept the same way, and are the player's too.
+	played.dungeon_depth = 37
+	played.save(TEST_PATH)
+	_check(Inventory.load_from(TEST_PATH).dungeon_depth == 37, "the depths won in the dungeon come back")
+	_check(played.transcended().dungeon_depth == 37, "and a transcension carries it over")
 	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
 	file.store_string('{"version": 15, "items": []}')
 	file.close()

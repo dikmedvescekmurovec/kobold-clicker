@@ -31,6 +31,10 @@ signal tab_changed(service: String)
 signal offer_changed(item: Item)
 ## The fortuneteller was paid to put the star over the chest on `cell`. The star is the main scene's.
 signal chest_bought(cell: Vector2i)
+## The roads lifted settlements out of the dark: the map has changed and wants saving.
+signal towns_revealed
+## The relic reading showed the unique `id`: the main scene raises the collection log's banner over it.
+signal relic_shown(id: String)
 ## A spell that is aimed at the map was asked for, at `price`, in the town on `spot`. Nothing has been
 ## charged and nothing is written down: choosing the land happens on the map, which is the main
 ## scene's, and so does the paying -- and the marking of that town's drawer -- once land has been
@@ -103,7 +107,7 @@ const HOVER_LIFT := Color(1.2, 1.2, 1.2)
 
 ## What each of the fortuneteller's squares says when hovered.
 const FORTUNE_TIPS := {
-	FortuneTeller.ROADS: "Where the nearest village, town and fortress lie",
+	FortuneTeller.ROADS: "Where the nearest village, town and fortress lie, and every settlement in this ring of land",
 	FortuneTeller.TREASURE: "A star that points at the nearest chest until it is opened",
 	FortuneTeller.QUARRY: "Where the monster of your bounty lives",
 	FortuneTeller.RELIC: "One unique you have not found, and where it is carried",
@@ -165,6 +169,8 @@ var _smith_note := ""
 ## list), and the unique she showed when it is the relic.
 var _said := ""
 var _relic := ""
+## How many settlements the last telling of the roads lifted out of the dark.
+var _revealed := 0
 ## The town's world spot, which the roads are measured from, and the nearest unseen chest as the town was
 ## walked into -- the player does not move while the page is up, and finding it scans the whole map.
 var _spot := Vector2i.ZERO
@@ -654,6 +660,8 @@ func _fill_fortune() -> void:
 		FortuneTeller.ROADS:
 			for line in FortuneTeller.road_lines(view.towns, _spot):
 				body.add_child(_sign(line))
+			body.add_child(_sign("%d more settlements in this ring come out of the dark." % _revealed
+					if _revealed > 0 else "Every settlement in this ring is already known."))
 		FortuneTeller.RELIC:
 			CollectionPage.write_hint(body, BODY_WIDTH, _relic, view, CollectionPage.specimen(_relic))
 		FortuneTeller.APPRAISE:
@@ -856,6 +864,9 @@ func _on_reading_pressed(reading: String) -> void:
 			# The one drawer key a reading still writes, and it means the opposite of a great spell's:
 			# this town has paid for the roads, so it tells them again for nothing from now on.
 			_drawer[FortuneTeller.ASKED + reading] = true
+			_revealed = view.reveal_ring_towns(_cell)
+			if _revealed > 0:
+				towns_revealed.emit()
 			_said = reading
 		FortuneTeller.TREASURE:
 			var spot := view.origin + _near_chest
@@ -868,6 +879,7 @@ func _on_reading_pressed(reading: String) -> void:
 			_relic = FortuneTeller.peek(inventory.uniques_found, shown, _stock_rng)
 			shown.append(_relic)
 			inventory.fortunes[FortuneTeller.PEEKED] = shown
+			relic_shown.emit(_relic)
 			_said = reading
 		FortuneTeller.APPRAISE:
 			_said = reading

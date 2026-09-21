@@ -58,7 +58,7 @@ const REROLL_GROWTH := 2.0
 ## only just brought that wall down, and a purse the second ring's monsters fill for anyone who stays
 ## to farm them. Two hundred fights' worth there; see `DESIGN.md` for the table it was set against.
 const FORTUNE_BODIES := {
-	"roads": 10.0,
+	"roads": 50.0,
 	"treasure": 20.0,
 	"quarry": 5.0,
 	"relic": 50.0,

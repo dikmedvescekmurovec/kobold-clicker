@@ -19,6 +19,7 @@ func _run() -> void:
 	_check(_test_roads() == true, "road tests ran to the end")
 	_check(_test_map_builder() == true, "map builder tests ran to the end")
 	_check(_test_sight() == true, "sight tests ran to the end")
+	_check(_test_ring_towns() == true, "ring town tests ran to the end")
 	_check(_test_tile_levels() == true, "tile level tests ran to the end")
 	_check(_test_map_saving() == true, "map save tests ran to the end")
 	_check(await _test_the_map_comes_back() == true, "map reload tests ran to the end")
@@ -773,6 +774,27 @@ func _test_start_town(map: HexMap, world: TownWorld, origin: Vector2i, start_tow
 
 ## The ice wall: ring 11 round a land of radius 10, snow past it, and beating one wall tile brings the
 ## whole ring down and pushes the wall ten rings out. Run on a map revealed end to end.
+## The roads reading: every settlement in the ring comes out of the dark, uncharted, and nothing else does.
+func _test_ring_towns() -> bool:
+	var map: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
+	root.add_child(map)
+	var view := MapBuilder.create(map, TownWorld.generate(WORLD_SEED), Vector2i(128, 128), 99)
+	_check(view.ring_of(MapBuilder.CENTER) == 0 and view.ring_of(Vector2i(MapBuilder.START_LAND_RADIUS, 0)) == 0
+			and view.ring_of(Vector2i(MapBuilder.START_LAND_RADIUS + 1, 0)) == 1, "the first ring ends at the first wall")
+	var ring: Array[Vector2i] = []
+	for spot in view.towns.towns():
+		if view.is_land(spot - view.origin):
+			ring.append(spot - view.origin)
+	var hidden := ring.filter(func(cell: Vector2i) -> bool: return not view.seen(cell))
+	_check(not hidden.is_empty(), "some of the ring's settlements start in the dark (%d of %d)" % [hidden.size(), ring.size()])
+	_check(view.reveal_ring_towns(MapBuilder.CENTER) == hidden.size(), "the roads show every one still hidden")
+	_check(hidden.all(func(cell: Vector2i) -> bool: return view.state(cell) == MapBuilder.State.UNCHARTED),
+			"each comes out uncharted")
+	_check(view.reveal_ring_towns(MapBuilder.CENTER) == 0, "a second telling shows nothing new")
+	map.queue_free()
+	return true
+
+
 func _test_wall(map: HexMap, view: MapBuilder) -> bool:
 	var wall := Vector2i(MapBuilder.START_LAND_RADIUS + 1, 0)
 	var waste := Vector2i(MapBuilder.START_LAND_RADIUS + 3, 0)

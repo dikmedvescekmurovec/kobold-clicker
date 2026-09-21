@@ -704,6 +704,25 @@ func _reveal_around(center: Vector2i, radius: int) -> int:
 	return shown
 
 
+## Which ring of land `cell` stands in: 0 inside where the first wall stood, n between the nth wall
+## and the next. Counted in `wall_step`s, so under the Ring of Walls a ring is the land between its walls.
+func ring_of(cell: Vector2i) -> int:
+	return maxi(0, ceili(float(HexGrid.distance(CENTER, cell) - START_LAND_RADIUS) / wall_step))
+
+
+## The fortuneteller's roads: every settlement in the same ring of land as `cell` that is still in the
+## dark comes out of it as uncharted, the way the scour shows land. Returns how many did.
+func reveal_ring_towns(cell: Vector2i) -> int:
+	var ring := ring_of(cell)
+	var shown := 0
+	for spot in towns.towns():
+		var town := spot - origin
+		if is_land(town) and ring_of(town) == ring and _tiles.has(town) and not seen(town):
+			_show(town, State.UNCHARTED)
+			shown += 1
+	return shown
+
+
 ## Charts the whole land at once, for tests and screenshots, and shows the wall and the wasteland past it.
 func reveal_all() -> void:
 	for cell in _tiles:

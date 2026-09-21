@@ -103,6 +103,14 @@ static func bounties(drawer: Dictionary) -> Array:
 		return posted
 	for entry: Variant in saved as Array:
 		if typeof(entry) == TYPE_DICTIONARY:
+			# An orb this build no longer has is looked up by name wherever the reward is drawn, so it
+			# is renamed here, by `Inventory.load_from`'s rule: Alteration's job is Transmutation's now,
+			# and anything else retired pays no orb.
+			var orb := str(entry.get(ORB, ""))
+			if orb == "Orb of Alteration":
+				entry[ORB] = "Orb of Transmutation"
+			elif not orb.is_empty() and not OrbTable.ORBS.has(orb):
+				entry[ORB] = ""
 			posted.append(entry)
 	return posted
 

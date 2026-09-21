@@ -21,10 +21,6 @@ const ZOOM_MAX := 6.0
 ## reason `inventory_path` is -- and more sharply, since they all pin a seed, and a pinned seed that
 ## differs from a save is a request for another world that replaces it on the first write.
 @export var map_path := MapSave.SAVE_PATH
-## Dev: every settlement offers every counter (`TownServices.show_all`). Debug builds only, and only
-## on the player's own save, so the tests and the screenshot scripts -- which all point
-## `inventory_path` elsewhere -- still see what a town of each tier really has.
-@export var debug_all_services := true
 
 ## The marks the corner buttons wear. The first three: a chest for what has been carried home, a star for what
 ## the player has become and a scroll for the work they have taken on: all three are places to go
@@ -35,6 +31,9 @@ const STAR_ICON := "res://Assets/UI/ui_icon_star.png"
 const SCROLL_ICON := "res://Assets/UI/ui_icon_scroll.png"
 ## And a fourth that is about the game rather than the player: the settings, behind a cog.
 const COG_ICON := "res://Assets/UI/ui_icon_cog.png"
+const SKULL_ICON := "res://Assets/UI/ui_icon_skull.png"
+## What the dungeon is called over its fight, and on its corner button.
+const DUNGEON_NAME := "The Descent"
 const TROPHY_ICON := "res://Assets/UI/ui_icon_trophy.png"
 ## The heirlooms'. A stand-in from the pack until they have a mark of their own.
 const CROWN_ICON := "res://Assets/UI/ui_icon_crown.png"
@@ -123,6 +122,8 @@ var _bag_button: Button
 var _skills_button: Button
 var _bounty_button: Button
 var _settings_button: Button
+## The way down the dungeon, which comes on with the bag: it is gear that it measures.
+var _dungeon_button: Button
 var _collection_button: Button
 ## There while an heirloom is held, and the one corner button a
 ## town leaves standing: pressed there it swaps the bag and the heirlooms at the counter.
@@ -197,13 +198,12 @@ func _ready() -> void:
 	# to a bad read is worse than an error message.
 	# The inventory first, and by the same rule: it is what the player owns, and an empty bag saved over
 	# a file that could not be read is that file gone on the first kill.
-	TownServices.show_all = (debug_all_services and OS.is_debug_build()
-			and inventory_path == Inventory.SAVE_PATH)
 	# The player's own settings only beside the player's own save, for the same reason: a test or a
 	# screenshot sees the defaults and writes nothing.
 	Settings.path = Settings.SAVE_PATH if inventory_path == Inventory.SAVE_PATH else ""
 	Settings.load_settings()
 	Settings.apply_audio()
+	TownServices.show_all = Settings.show_all_services()
 	var problem: Array = []
 	inventory = Inventory.load_from(inventory_path, problem)
 	if not problem.is_empty():
@@ -459,6 +459,9 @@ func _build_pages(layer: CanvasLayer) -> void:
 	_bounty_button = UITheme.icon_button(load(SCROLL_ICON), "The work you have taken on", ui_scale)
 	_bounty_button.pressed.connect(_on_bounty_pressed)
 	layer.add_child(_bounty_button)
+	_dungeon_button = UITheme.icon_button(load(SKULL_ICON), DUNGEON_NAME, ui_scale)
+	_dungeon_button.pressed.connect(_on_dungeon_pressed)
+	layer.add_child(_dungeon_button)
 	_settings_button = UITheme.icon_button(load(COG_ICON), "Settings", ui_scale)
 	_settings_button.pressed.connect(_on_settings_pressed)
 	layer.add_child(_settings_button)
@@ -501,6 +504,9 @@ func _build_pages(layer: CanvasLayer) -> void:
 	town_page.tab_changed.connect(_on_town_tab_changed)
 	town_page.chest_bought.connect(func(_cell: Vector2i) -> void: _sync_chest())
 	town_page.spell_aimed.connect(_on_spell_aimed)
+	town_page.towns_revealed.connect(_save_map)
+	town_page.relic_shown.connect(func(id: String) -> void:
+		_announce_unique(CollectionPage.specimen(id), "Unique Revealed"))
 	town_page.transcend_pressed.connect(_on_transcend_pressed)
 	# A bounty given up on the journal frees the board standing open on the other edge.
 	bounty_page.abandoned.connect(town_page.redraw)
@@ -595,7 +601,7 @@ func _is_new_unique(item: Item) -> bool:
 ## an `ItemSlot`, so the gold frame and its glint come for nothing. What that costs is one line -- the
 ## square has to leave `ItemSlot.GROUP` at once, or the one `ItemCard` finds it under the cursor and
 ## stands its own card over this one.
-func _announce_unique(item: Item) -> void:
+func _announce_unique(item: Item, title := "Unique Found") -> void:
 	_close_unique_banner()
 	var layer := _character.get_parent()
 	if Settings.animations == Settings.Anim.DEFAULT:
@@ -621,7 +627,7 @@ func _announce_unique(item: Item) -> void:
 	_banner_head.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	body.add_child(_banner_head)
 	# The unique's own name colour, which is the half of the ramp picked to be read on cream.
-	var heading := UITheme.label("Unique Found", item.text_color())
+	var heading := UITheme.label(title, item.text_color())
 	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_banner_head.add_child(heading)
 	var row := HBoxContainer.new()
@@ -1054,6 +1060,52 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	_check_tips()
 
 
+## Down the dungeon: a fight on the screen as `_open_fight` puts one there, and nothing else of what
+## that does -- it pays nothing, so there is no ledger, no drop to promise and no body for a board.
+## It begins under the depths already won, whichever world they were won in.
+func _on_dungeon_pressed() -> void:
+	var fight := Encounter.for_dungeon(inventory.dungeon_depth)
+	fight.wear(inventory.effects())
+	fight.arm(inventory.stats())
+	print("Down the dungeon, depth %d" % fight.depth())
+	_combat = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
+	_combat.finished.connect(_on_dungeon_finished)
+	add_child(_combat)
+	_combat.place = DUNGEON_NAME
+	_combat.begin(fight, Vector2i.ZERO, ui_scale)
+	map.hide()
+	map.process_mode = Node.PROCESS_MODE_DISABLED
+	_close_town()
+	_panel.hide()
+	_close_left_pages()
+	_show_corner(false)
+	_character.show()
+
+
+## Back from the dungeon. The depths it won are the whole of what it earned.
+func _on_dungeon_finished(_won: bool) -> void:
+	_bank_depths()
+	_combat.queue_free()
+	_combat = null
+	map.process_mode = Node.PROCESS_MODE_INHERIT
+	map.show()
+	_show_corner(true)
+	if map.selected_cell != HexMap.NO_CELL:
+		_panel.show()
+	_update_buttons()
+
+
+## Writes down the depths the descent that is open has won, if it has won any. On the way out of it
+## and on the way out of the game, so quitting under a dead Gollux cannot cost him.
+func _bank_depths() -> void:
+	var fight: Encounter = _combat.fight
+	var won := fight.first_floor / fight.enemies + fight.cleared()
+	print("Left the dungeon at depth %d, %d won" % [fight.depth(), fight.cleared()])
+	if won > inventory.dungeon_depth:
+		inventory.dungeon_depth = won
+		inventory.save(inventory_path)
+
+
 ## Back from the fight. The tile is charted only if it was won; either way the map comes back
 ## exactly as it was left.
 func _on_combat_finished(won: bool, cell: Vector2i) -> void:
@@ -1307,7 +1359,7 @@ func _place_corner() -> void:
 		at = Vector2(edge + CORNER_GAP * ui_scale, top)
 	var step := (_bag_button.get_combined_minimum_size().y + CORNER_GAP) * ui_scale
 	for button: Button in [_bag_button, _heirloom_button, _skills_button, _bounty_button,
-			_settings_button, _collection_button]:
+			_dungeon_button, _settings_button, _collection_button]:
 		if button.visible:
 			button.position = at
 			at.y += step
@@ -1330,6 +1382,10 @@ func _show_corner(shown: bool) -> void:
 	# The journal has nothing in it until the player has stood at a board, which is also when their
 	# kills start counting towards one.
 	_bounty_button.visible = shown and BountyBoard.any_seen(inventory.towns)
+	# The dungeon measures what is worn, so it comes on when the bag does.
+	_dungeon_button.visible = _bag_button.visible
+	_dungeon_button.tooltip_text = "%s, depth %d: kill Gollux to go deeper" % [DUNGEON_NAME,
+			inventory.dungeon_depth + 1]
 	# Nothing earns the settings: they are there from the first step.
 	_settings_button.visible = shown
 	_character_button.visible = shown and _left_page() == null
@@ -1684,7 +1740,11 @@ func _exit_tree() -> void:
 	if _resetting or _save_blocked:
 		return
 	_bank_run()
-	if _combat != null:
+	# A descent's bodies are nobody's kills -- what they count towards is for the land -- but a depth
+	# it has won is won.
+	if _combat != null and _combat.fight.dungeon:
+		_bank_depths()
+	elif _combat != null:
 		ledger.bank_kills(_combat.fight.kills())
 	_save_map()
 

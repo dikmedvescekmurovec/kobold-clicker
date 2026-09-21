@@ -52,7 +52,8 @@ const SAVE_PATH := "user://inventory.json"
 ## 20 adds what two of the curses have to remember: `homeland`, the two lands that still leave gear,
 ## and `uniques_doubled`, the finds a Forgotten world made count twice; a version 19 save has neither.
 ## 21 adds `skull_budget`; a version 20 save has none, and earns it at its next transcension.
-const VERSION := 21
+## 22 adds `dungeon_depth`; a version 21 save has won no depth of the dungeon.
+const VERSION := 22
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -98,6 +99,11 @@ var kills := 0
 ## it is written whenever anything else is, so a quit loses the seconds since the last save. Carried
 ## through a transcension, like the kills: it is the player's time, not the world's.
 var play_seconds := 0.0
+
+## How many depths of the dungeon the player has won -- the Golluxes killed, one a depth
+## (`Encounter.cleared`) -- which is where the next descent begins. It only ever rises, and it is the
+## player's and not the world's, like the kills and the clock: every transcension carries it over.
+var dungeon_depth := 0
 
 ## What currency the player is holding: orb name -> how many. Counts rather than objects, because an
 ## orb has nothing to tell apart -- two Orbs of Chaos are the same orb, which is exactly what gear
@@ -567,6 +573,7 @@ func transcended(lost := false) -> Inventory:
 	next.uniques_doubled = uniques_doubled.duplicate()
 	next.kills = kills
 	next.play_seconds = play_seconds
+	next.dungeon_depth = dungeon_depth
 	next.first_sword_taken = true
 	next.super_orbs = super_orbs
 	next.skull_budget = skulls_earned(lost)
@@ -643,6 +650,7 @@ func save(path := SAVE_PATH) -> bool:
 		"gold": gold,
 		"kills": kills,
 		"play_seconds": play_seconds,
+		"dungeon_depth": dungeon_depth,
 		"level": level,
 		"xp": xp,
 		"skills": skills.to_dict(),
@@ -733,6 +741,10 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var played: Variant = data.get("play_seconds", 0.0)
 	if typeof(played) in [TYPE_INT, TYPE_FLOAT]:
 		inventory.play_seconds = maxf(0.0, float(played))
+	# Version 21 knew nothing about the dungeon: an absent key is a player who has never been down it.
+	var deepest: Variant = data.get("dungeon_depth", 0)
+	if typeof(deepest) in [TYPE_INT, TYPE_FLOAT]:
+		inventory.dungeon_depth = maxi(0, int(deepest))
 	# Version 7 knew nothing about levels: an absent key reads as a fresh level 1. A level below 1 or
 	# experience below nothing in a hand-edited file is clamped rather than guessed at, and experience
 	# already worth a level is paid out, so the file comes back obeying the curve.

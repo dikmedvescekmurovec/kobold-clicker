@@ -26,6 +26,10 @@ static var item_details := false
 static var all_uniques := false
 ## Dev: every chest on the map is drawn, fog or not. Read through `show_all_chests()`, like the uniques.
 static var all_chests := false
+## Dev: every settlement offers every counter (`TownServices.show_all`). On by default, so read through
+## `show_all_services()`, which also answers no off the player's own settings file: the tests and the
+## screenshot scripts still see what a town of each tier really has.
+static var all_services := true
 ## Where the file is. Empty means nowhere: nothing is read and nothing written, which is what every
 ## test and screenshot script gets, because the main scene only sets it on the player's own save.
 static var path := ""
@@ -41,6 +45,7 @@ static func load_settings() -> void:
 	item_details = bool(file.get_value(SECTION, "item_details", item_details))
 	all_uniques = bool(file.get_value(SECTION, "all_uniques", all_uniques))
 	all_chests = bool(file.get_value(SECTION, "all_chests", all_chests))
+	all_services = bool(file.get_value(SECTION, "all_services", all_services))
 
 
 static func save() -> void:
@@ -53,6 +58,7 @@ static func save() -> void:
 	file.set_value(SECTION, "item_details", item_details)
 	file.set_value(SECTION, "all_uniques", all_uniques)
 	file.set_value(SECTION, "all_chests", all_chests)
+	file.set_value(SECTION, "all_services", all_services)
 	if file.save(path) != OK:
 		push_warning("Settings: cannot write %s" % path)
 
@@ -63,6 +69,10 @@ static func show_all_uniques() -> bool:
 
 static func show_all_chests() -> bool:
 	return all_chests and OS.is_debug_build()
+
+
+static func show_all_services() -> bool:
+	return all_services and OS.is_debug_build() and not path.is_empty()
 
 
 ## Mutes or opens the two buses, making them first if this run has not yet. Made here rather than in

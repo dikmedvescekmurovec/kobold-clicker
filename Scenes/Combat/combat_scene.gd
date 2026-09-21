@@ -76,6 +76,18 @@ const AREA_PATH := "res://Assets/Area/%s_%s_%d.png"
 const AREA_LAYOUTS := 4
 ## What to draw when the world asks for a place that has no art: a fight always has a backdrop.
 const AREA_FALLBACK := "res://Assets/Area/grass_plain_1.png"
+## The dungeon's backdrop is not one picture but the cave's layers (`tools/cave_dungeon.py`), numbered
+## from the front as the pack numbers them: 1 is the rock nearest the eye, which stands **in front of
+## the fighters**, and 7 the flat dark behind everything. (The pack's 0 is all of them put together.)
+const CAVE_PATH := "res://Assets/Area/cave/%d.png"
+const CAVE_NEAREST := 1
+const CAVE_FARTHEST := 7
+## Where the fighters stand down there: on the cave's floor, which lies lower than a backdrop's grass
+## band, with their feet just behind the top of the nearest rock.
+const CAVE_GROUND := 0.915
+## Art pixels a second the nearest layer slides while the hero walks on to the next floor. Each layer
+## behind it goes a layer's share slower and the last not at all, which is the whole of the depth.
+const CAVE_SPEED := 90.0
 const ATTACK_SOUND := preload("res://Assets/Player/attack.mp3")
 ## Where a swing re-triggered mid-swing cuts back in: past the wind-up, at the blow. Two frames at
 ## CombatActor.FPS is 0.2s, so the picture and the sound come back in at the same instant -- move one
@@ -263,6 +275,10 @@ var xp_target := Vector2(-1, -1)
 var _ui_scale := 2.0
 ## The backdrop and both fighters, which is what a shake rattles -- the HUD stays still over it.
 var _arena: Node2D
+## The cave's layers, from the back, while the fight is the dungeon; empty otherwise.
+var _cave: Array[Sprite2D] = []
+## The gold half of the HUD's heading, which the dungeon rewrites floor by floor.
+var _level_label: Label
 var _player: CombatActor
 var _enemy: CombatActor
 ## The enemy's own scale, which a squash springs back to, and the tween doing it.
@@ -368,6 +384,7 @@ func _process(delta: float) -> void:
 	if fight == null or fight.finished:
 		return
 	fight.advance(delta)
+	_scroll_cave(delta)
 	_slide_enemy()
 	_refresh()
 
@@ -429,27 +446,33 @@ func _build() -> void:
 	add_child(arena)
 	_arena = arena
 
-	var art := backdrop_for(fight.env if fight != null else "", area_variant, area_layout)
-	var backdrop := Sprite2D.new()
-	backdrop.texture = art
-	backdrop.centered = false
-	# Cover the viewport whatever its shape; the ground band stays across the bottom.
-	# A little over, so a shake never shows the edge.
-	var cover := maxf(view.x / art.get_width(), view.y / art.get_height()) * BACKDROP_BLEED
-	backdrop.scale = Vector2(cover, cover)
-	backdrop.position = (view - Vector2(art.get_size()) * cover) / 2.0
-	arena.add_child(backdrop)
+	if fight != null and fight.dungeon:
+		_build_cave(arena, view)
+	else:
+		var art := backdrop_for(fight.env if fight != null else "", area_variant, area_layout)
+		var backdrop := Sprite2D.new()
+		backdrop.texture = art
+		backdrop.centered = false
+		# Cover the viewport whatever its shape; the ground band stays across the bottom.
+		# A little over, so a shake never shows the edge.
+		var cover := maxf(view.x / art.get_width(), view.y / art.get_height()) * BACKDROP_BLEED
+		backdrop.scale = Vector2(cover, cover)
+		backdrop.position = (view - Vector2(art.get_size()) * cover) / 2.0
+		arena.add_child(backdrop)
 
 	_player = CombatActor.new()
 	_player.name = "Player"
 	arena.add_child(_player)
 	_player.setup_player(view.y * ACTOR_HEIGHT)
-	_player.position = Vector2(view.x * PLAYER_X, view.y * GROUND)
+	_player.position = Vector2(view.x * PLAYER_X, view.y * _ground())
 	_player.animation_finished.connect(func() -> void: _player.play("idle"))
 
 	_enemy = CombatActor.new()
 	_enemy.name = "Enemy"
 	arena.add_child(_enemy)
+	# The cave's nearest rock goes on after them both, so it is what they stand behind.
+	if fight != null and fight.dungeon:
+		_add_cave_layer(arena, view, CAVE_NEAREST)
 
 	_sound = AudioStreamPlayer.new()
 	_sound.bus = Settings.SFX_BUS
@@ -457,6 +480,45 @@ func _build() -> void:
 	add_child(_sound)
 
 	_build_hud()
+
+
+## Where the fighters' feet are, as a share of the view's height.
+func _ground() -> float:
+	return CAVE_GROUND if fight != null and fight.dungeon else GROUND
+
+
+## The cave behind the fighters, back to front; `_build` adds the nearest rock once they are in.
+func _build_cave(arena: Node2D, view: Vector2) -> void:
+	for n in range(CAVE_FARTHEST, CAVE_NEAREST, -1):
+		_add_cave_layer(arena, view, n)
+
+
+## One layer of the cave: it covers the view the way a backdrop does, and is a region of a texture
+## that repeats, so sliding the region along (`_scroll_cave`) is a cave with no end to it.
+func _add_cave_layer(arena: Node2D, view: Vector2, n: int) -> void:
+	var art: Texture2D = load(CAVE_PATH % n)
+	var layer := Sprite2D.new()
+	layer.texture = art
+	layer.centered = false
+	layer.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	layer.region_enabled = true
+	layer.region_rect = Rect2(Vector2.ZERO, art.get_size())
+	var cover := maxf(view.x / art.get_width(), view.y / art.get_height()) * BACKDROP_BLEED
+	layer.scale = Vector2(cover, cover)
+	layer.position = (view - Vector2(art.get_size()) * cover) / 2.0
+	arena.add_child(layer)
+	_cave.append(layer)
+
+
+## The hero walking on: while the next floor's body is coming in the cave slides past, the near rock
+## fastest. Only for show, so it asks the animation level, and the fight knows nothing of it.
+func _scroll_cave(delta: float) -> void:
+	if _cave.is_empty() or fight.phase != Encounter.Phase.WALKING_IN \
+			or Settings.animations == Settings.Anim.NONE:
+		return
+	# `_cave` runs from the farthest, which stays still, to the nearest, which goes at the full speed.
+	for i in _cave.size():
+		_cave[i].region_rect.position.x += CAVE_SPEED * delta * i / (_cave.size() - 1)
 
 
 func _build_hud() -> void:
@@ -493,7 +555,8 @@ func _build_hud() -> void:
 	_tally.add_child(header)
 	if not place.is_empty():
 		header.add_child(_hud_label(place, Palette.BONE))
-	header.add_child(_hud_label("Level %d" % MapBuilder.level_of(cell), Palette.GOLD))
+	_level_label = _hud_label("Level %d" % MapBuilder.level_of(cell), Palette.GOLD)
+	header.add_child(_level_label)
 	# As many pips as this fight has enemies -- fifteen on a settlement tile, ten on open land -- or,
 	# for a run, the cycle it repeats between elites.
 	var slots: int = fight.elite_every if fight.endless else fight.enemies
@@ -532,6 +595,8 @@ func _build_hud() -> void:
 		_loot_faces.append(face)
 		_loot_button.add_theme_stylebox_override(state, face)
 	hud.add_child(_loot_button)
+	# The dungeon turns nothing up, so it has no counter to show and no finds under its verdict.
+	_loot_button.visible = not fight.dungeon
 	_refresh_loot_button()
 	_tint_loot_button()
 
@@ -543,6 +608,7 @@ func _build_hud() -> void:
 	_terminate = _square_button(FLAG_ICON)
 	_terminate.scale = Vector2(_ui_scale, _ui_scale)
 	_terminate.tooltip_text = ("End the run and keep everything it turned up" if fight.endless
+			else "End the descent here" if fight.dungeon
 			else "Give up the fight and keep what it already turned up")
 	_terminate.pressed.connect(_on_terminate_pressed)
 	hud.add_child(_terminate)
@@ -860,7 +926,7 @@ func _float_text(text: String, colour: Color, font_size: int, across: float, pop
 	var font := label.get_theme_font("font")
 	var width := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x * _ui_scale
 	var from := Vector2(view.x * across + randf_range(-DAMAGE_SPREAD, DAMAGE_SPREAD) - width * 0.5,
-			view.y * (GROUND - ACTOR_HEIGHT * height))
+			view.y * (_ground() - ACTOR_HEIGHT * height))
 	# Pops in large about its own middle and settles, which is what makes a number land rather than
 	# appear. The pivot is in the label's own unscaled pixels, and scaling about it moves the corner,
 	# so `from` is shifted back by what the settled scale would move it.
@@ -888,7 +954,7 @@ func _drop_origin() -> Vector2:
 	var view := _size()
 	if _enemy != null and _enemy.sprite_frames != null:
 		return _enemy.position - Vector2(0, _enemy.drawn_size().y * 0.5)
-	return Vector2(view.x * ENEMY_X, view.y * (GROUND - ACTOR_HEIGHT * DAMAGE_HEIGHT))
+	return Vector2(view.x * ENEMY_X, view.y * (_ground() - ACTOR_HEIGHT * DAMAGE_HEIGHT))
 
 
 ## Throws one thing out of the body: an arc onto the ground, a rest where it landed, and a fade.
@@ -920,7 +986,7 @@ func _throw(node: Node2D, index: int, from: Vector2, spread: float, rest: float,
 	arc.tween_property(node, "position:x", to, THROW_TIME).set_delay(delay)
 	arc.tween_property(node, "position:y", top, THROW_TIME / 2.0) \
 			.set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	arc.tween_property(node, "position:y", _size().y * GROUND, THROW_TIME / 2.0) \
+	arc.tween_property(node, "position:y", _size().y * _ground(), THROW_TIME / 2.0) \
 			.set_delay(delay + THROW_TIME / 2.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	# It lies where it fell and then goes.
 	arc.chain().tween_interval(rest)
@@ -1083,8 +1149,11 @@ func _on_enemy_coming(_index: int, enemy_name: String, _hp: float) -> void:
 	_enemy.modulate = Color.WHITE
 	_enemy.setup_enemy(enemy_name, view.y * ACTOR_HEIGHT * band * elite)
 	_enemy_scale = _enemy.scale
-	_enemy.position = Vector2(view.x * OFFSCREEN_X, view.y * GROUND)
+	_enemy.position = Vector2(view.x * OFFSCREEN_X, view.y * _ground())
 	_enemy.play("walk")
+	# Down the dungeon the hero walks on to meet it, and the cave goes by (`_scroll_cave`).
+	if fight.dungeon and Settings.animations != Settings.Anim.NONE:
+		_player.play("walk")
 	_dress_nameplate()
 
 
@@ -1152,6 +1221,8 @@ func _refresh() -> void:
 		var tint := _clock_color(share)
 		_clock_fill.color = tint
 		_clock_label.add_theme_color_override("font_color", tint)
+	if fight.dungeon:
+		_level_label.text = "Depth %d" % fight.depth()
 	_pips.show_fight(fight)
 	_place_corners(view)
 
@@ -1171,6 +1242,8 @@ func _refresh() -> void:
 
 func _on_enemy_spawned(_index: int, _enemy_name: String, _hp: float) -> void:
 	_enemy.play("idle")
+	if fight.dungeon:
+		_player.play("idle")
 	_slide_enemy()
 
 
@@ -1340,7 +1413,8 @@ func _on_loot_closed() -> void:
 ## The run ends because the player says so, which is the only way a farm run ends at all. A tile
 ## fight ended that way is given up: a loss, told apart from running out of time under the verdict.
 func _on_terminate_pressed() -> void:
-	if fight.endless:
+	# A descent is ended as a run is: neither is lost, and the floor it reached stands.
+	if fight.endless or fight.dungeon:
 		fight.stop()
 	else:
 		_gave_up = true
@@ -1356,13 +1430,24 @@ func _on_finished(won: bool) -> void:
 	# A farm run is not won or lost, only ended, so it is told what it did rather than how it went.
 	if fight.endless:
 		_result_label.text = "Run ended"
+	elif fight.dungeon:
+		_result_label.text = "Depth %d" % fight.depth()
 	else:
 		_result_label.text = "Success" if won else "Failed"
-	# Only a loss has anything to add: the word says a win, and a run has no second line.
+	# Only a loss has anything to add: the word says a win, and a run has no second line. A descent's
+	# is whether it got any deeper, which only a dead Gollux makes it.
+	var lost := not won and not fight.endless
 	_result_detail.text = "Given up" if _gave_up else "Out of time"
-	_result_detail.visible = not won and not fight.endless
-	_collect.visible = not _result_detail.visible
-	_lost_row.visible = _result_detail.visible
+	if fight.dungeon:
+		_result_detail.text = "Gollux still stands" if fight.cleared() == 0 \
+				else "Gollux fell" if fight.cleared() == 1 else "Gollux fell %d times" % fight.cleared()
+		# There is nothing to collect: the dungeon pays nothing.
+		_result_drops.hide()
+		_collect.text = "Leave"
+		_collect.tooltip_text = "Back to the map"
+	_result_detail.visible = lost or fight.dungeon
+	_collect.visible = not lost
+	_lost_row.visible = lost
 	_loot_panel.hide()
 	if fight.gold > 0.0:
 		_gold_label.text = BigNumber.format(fight.gold)

@@ -33,7 +33,7 @@ const LABELS := {
 const ORDER := [BOUNTIES, GEAR, ORBS, SMITH, FORTUNE]
 
 ## Dev: every settlement offers every counter, so each can be looked at from the start village. The
-## main scene sets it (`debug_all_services`); nothing else may, and the tests never see it on.
+## main scene and the settings page set it (`Settings.show_all_services`); nothing else may, and the tests never see it on.
 static var show_all := false
 
 

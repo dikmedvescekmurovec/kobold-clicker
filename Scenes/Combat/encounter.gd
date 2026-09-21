@@ -27,6 +27,12 @@ extends RefCounted
 ## from the cell -- a tile always fields the same lineup, and never the same run twice. It keeps the
 ## tile's elite rhythm and never its boss.
 ##
+## The dungeon (`for_dungeon()`) is the third kind, and measures one thing: damage. It has a clock and
+## a lineup that never ends, each floor a body with `DUNGEON_GROWTH` times the health of the one above
+## it, in depths of fifteen floors with Gollux on the last. A depth is only ever won by killing him
+## (`depth()`, `cleared()`), and the next descent begins under the last one won. Nothing in it strikes
+## and it pays nothing.
+##
 ## The rules live here with no nodes in sight, so a test can play a whole fight in a few lines --
 ## `advance(delta)` steps the clock the way PlayerToken.advance steps a walk. CombatScene draws it.
 
@@ -117,6 +123,22 @@ const WALL_HP := 33.0
 ## The first wall is a day's farming; the second is the gate a transcension is for -- half a million
 ## health, some fifteen times the first, where at 10 it was 1.79e6 and no farming ever reached it.
 const WALL_GROWTH := 2.8
+## The dungeon: a block of fifteen floors that repeats for ever, an elite every fifth and a boss on
+## the fifteenth, against one minute. `enemies` is the block, which is what the HUD's bar stands.
+const DUNGEON := {"enemies": 15, "seconds": 60.0, "elite_every": 5, "boss_last": true}
+## Where its creatures live (`EnemyRoster`) and what is drawn behind them: no land on the map.
+const DUNGEON_ENV := "cave"
+## What one floor down multiplies a body's health by: a depth is fifteen of them, so the next Gollux
+## wants about fifteen times the damage the last one did. The dial for how far apart the depths are.
+const DUNGEON_GROWTH := 1.2
+## What a floor's body is worth by its tier, and nothing else about it: the roster's sizes and its
+## own tiers are for land, where a boss is 24 bodies -- here that would be a wall every fifteenth
+## floor that every score piled up against. A rat and a crab on one floor are the same health.
+const DUNGEON_TIER_HP := {
+	EnemyRoster.Tier.COMMON: 1.0,
+	EnemyRoster.Tier.ELITE: 2.0,
+	EnemyRoster.Tier.BOSS: 5.0,
+}
 const PROFILES := {
 	"plain": ORDINARY,
 	"road": ORDINARY,
@@ -216,6 +238,12 @@ var health: PackedFloat64Array = []
 var cell := Vector2i.ZERO
 ## Whether the enemies never run out: no count to beat and no clock to beat it in.
 var endless := false
+
+## Whether this is the dungeon: a clock like a tile's, a lineup that grows like a run's.
+var dungeon := false
+## The floor the dungeon's first body stands on, from 0: the top of the depth the descent begins in.
+## Nought in every other fight.
+var first_floor := 0
 
 ## Which one is out, from 0. Reaches `enemies` once the last of a tile fight is down; endlessly it is
 ## simply the number already slain.
@@ -491,6 +519,30 @@ static func for_wall(cell: Vector2i) -> Encounter:
 	return fight
 
 
+## The dungeon, begun under the `won` depths the player already has: at the top of the next one, with
+## a whole clock. The descent goes on past its Gollux into the depth after, on what is left of it.
+static func for_dungeon(won := 0) -> Encounter:
+	var fight := Encounter.new()
+	fight.env = DUNGEON_ENV
+	fight.dungeon = true
+	fight._take_profile(DUNGEON)
+	fight.first_floor = maxi(0, won) * fight.enemies
+	fight._append_enemy(fight.roster_rng)
+	fight.hp = fight.health[0]
+	return fight
+
+
+## The depth the player is in, from 1. It moves only as a Gollux goes down: he is the last floor of
+## his depth, so the floor after him is the first of the next.
+func depth() -> int:
+	return (first_floor + index) / enemies + 1
+
+
+## How many depths this descent has won: the Golluxes it has killed.
+func cleared() -> int:
+	return depth() - 1 - first_floor / enemies
+
+
 ## A farm run on `cell`: the same enemies the tile's terrain fields, coming forever, with no clock
 ## and no count. It ends when the player says so.
 ##
@@ -538,7 +590,14 @@ func _take_mods(carried: Array) -> void:
 ## The health `enemy` starts this fight with: what the tile makes it worth (`hp_of`), more for whatever
 ## the tile and the world add. The ice wall answers to `WALL_HP` and the Long Winter and to nothing
 ## else -- it is the check on the player, and a tile's modifier is not what it checks.
-func _health_of(enemy: String) -> float:
+func _health_of(enemy: String, position := -1) -> float:
+	if dungeon:
+		# The floor and the tier and nothing else: no tile's modifier and no world's curse reaches down
+		# here. Asked as a body joins, the floor is how many are already built; `_take_curses`, sizing
+		# them again, says which.
+		var at := health.size() if position < 0 else position
+		return maxf(1.0, roundf(BASE_HP * pow(DUNGEON_GROWTH, first_floor + at)
+				* float(DUNGEON_TIER_HP[EnemyRoster.tier_of(enemy)])))
 	if enemy == WALL_NAME:
 		# `WALL_GROWTH` is not applied here: `hp_of` already carries a step for every wall inside this
 		# one, and a wall's own ring counts none of itself, so the wall on ring 21 comes out
@@ -568,7 +627,7 @@ func _take_curses() -> void:
 	for curse: String in [Curses.IRON_FOES, Curses.HUNGRY_MIMICS, Curses.LONG_WINTER]:
 		if Curses.effect(curse) in effects:
 			for i in lineup.size():
-				health[i] = _health_of(lineup[i])
+				health[i] = _health_of(lineup[i], i)
 			hp = health[0]
 			break
 
@@ -578,6 +637,13 @@ func _take_curses() -> void:
 ## answer for a place a farm run has not filled yet -- which is how the HUD's bar draws the pips of
 ## a cycle before their enemies exist.
 func tier_for(position: int) -> EnemyRoster.Tier:
+	if dungeon:
+		# The block comes round for ever, counted in floors: Gollux on the fifteenth of every depth.
+		var floor_at := first_floor + position
+		if floor_at % enemies == enemies - 1:
+			return EnemyRoster.Tier.BOSS
+		return EnemyRoster.Tier.ELITE if floor_at % elite_every == elite_every - 1 \
+				else EnemyRoster.Tier.COMMON
 	if boss_last and position == enemies - 1:
 		return EnemyRoster.Tier.BOSS
 	# Flush out swapped the head of the lineup with its first elite slot.
@@ -605,7 +671,7 @@ func _clause(clause: String) -> bool:
 func wear(worn: Array) -> void:
 	effects = worn
 	_take_curses()
-	if endless or lineup.is_empty() or lineup[0] == MIMIC or lineup[0] == WALL_NAME:
+	if endless or dungeon or lineup.is_empty() or lineup[0] == MIMIC or lineup[0] == WALL_NAME:
 		return
 	# Grazing: more bodies on the same clock, on the front so the fight still ends on its elite.
 	# Seeded from the cell like the lineup itself, so the tile fields the same herd every time.
@@ -739,7 +805,7 @@ func enemy_name() -> String:
 ## What the nameplate calls the ground a boss holds, by environment.
 const TITLE_GROUND := {
 	"desert": "Dunes", "dirt": "Barrens", "forest": "Deepwood",
-	"grass": "Meadows", "ice": "Frost", "mountains": "Peaks",
+	"grass": "Meadows", "ice": "Frost", "mountains": "Peaks", DUNGEON_ENV: "Deep",
 }
 const BOSS_TITLES: Array[String] = ["Scourge", "Terror", "Warden", "Bane", "Tyrant"]
 const ELITE_TITLES: Array[String] = [
@@ -753,7 +819,7 @@ const ELITE_TITLES: Array[String] = [
 func enemy_title() -> String:
 	if index >= lineup.size():
 		return ""
-	var pick := hash(["title", cell, index])
+	var pick := hash(["title", cell, first_floor + index])
 	match EnemyRoster.tier_of(lineup[index]):
 		EnemyRoster.Tier.ELITE:
 			return ELITE_TITLES[pick % ELITE_TITLES.size()]
@@ -995,6 +1061,10 @@ func _kill() -> void:
 	# Restless dead: an ordinary body, once, one time in ten. Drawn only while worn.
 	_rise = not big and not _has_risen and _clause("restless") and loot_rng.randf() < RESTLESS_CHANCE
 	enemy_died.emit(index)
+	# The dungeon pays nothing, from anything: no gear, purse, experience, unique or orb, and no
+	# Hourglass second either, which down here would be a clock that never ran out.
+	if dungeon:
+		return
 	# The only path to a death, which is why drops survive a loss for free: nothing is rolled
 	# when the clock runs out.
 	# The tile's level is the ceiling on what can fall here, not what falls -- the drop rolls its
@@ -1128,7 +1198,10 @@ func advance(delta: float) -> void:
 	if not endless:
 		var spent := delta
 		# Rimeplate's Frozen clock: a walk-in costs nothing.
-		if _clause("frozen_clock") and phase == Phase.WALKING_IN:
+		# And in the dungeon neither does a death: a floor's comings and goings are the same second for
+		# everybody, and charged for they would be most of what a strong descent is scored on.
+		if (_clause("frozen_clock") and phase == Phase.WALKING_IN) \
+				or (dungeon and phase != Phase.WAITING):
 			spent -= minf(delta, phase_left)
 		# The Glass Edge's price, and the Glass World's: each is a third faster, and both are both.
 		spent *= pow(GLASS_CLOCK, _glass())
@@ -1156,7 +1229,8 @@ func advance(delta: float) -> void:
 			_second_wind_used = true
 			time_left = SECOND_WIND_SECONDS
 		else:
-			_finish(false)
+			# A descent is not lost, only over: the floor it reached is the whole of it.
+			_finish(dungeon)
 
 
 ## A body wearing down with nobody touching it, at `a_second` damage a second: the heat and the bleed
@@ -1176,7 +1250,7 @@ func _wear_down(a_second: float, delta: float) -> void:
 ## The enemy standing there striking the clock, once every `ATTACK_EVERY` of its tier. Only in a
 ## fight with a clock to strike, and never the ice wall, which is a check on damage and nothing else.
 func _be_struck(delta: float) -> void:
-	if not strikes or endless or finished or phase != Phase.WAITING or delta <= 0.0 			or lineup[index] == WALL_NAME:
+	if not strikes or endless or dungeon or finished or phase != Phase.WAITING or delta <= 0.0 			or lineup[index] == WALL_NAME:
 		return
 	# A Frenzied tile brings the blows round sooner; a Savage one and the Bloodthirst make each bigger.
 	var every: float = ATTACK_EVERY[EnemyRoster.tier_of(lineup[index])] / (1.0 + _attack_more)
@@ -1287,7 +1361,7 @@ func _advance_phase() -> void:
 	_has_risen = false
 	index += 1
 	if index >= lineup.size():
-		if not endless:
+		if not endless and not dungeon:
 			_finish(true)
 			return
 		# The next one is decided the moment the last one falls, so a run never runs dry.

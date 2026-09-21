@@ -10,7 +10,8 @@ extends "res://tests/harness.gd"
 ## clicked through). Also
 ## saves a contact sheet of every enemy's idle frame at the size the fight draws it, which is what
 ## catches a frame or crop measured wrong in EnemyRoster, and one shot per environment on its own
-## backdrop (combat_area_<env>_<variant>.png).
+## backdrop (combat_area_<env>_<variant>.png), and the dungeon: a floor of it, its boss and the
+## verdict a descent ends on (combat_dungeon.png, combat_dungeon_boss.png, combat_dungeon_end.png).
 
 const MAP_SEED := 1
 ## The tile the shots are taken on: far enough out that the enemies have some health.
@@ -30,6 +31,7 @@ func _run() -> void:
 	await _shoot_camp()
 	await _shoot_backdrops()
 	await _shoot_roster()
+	await _shoot_dungeon()
 	quit()
 
 
@@ -377,6 +379,37 @@ func _shoot_roster() -> void:
 		label.position = Vector2((i % columns) * cell_size.x + 4, (row + 0.84) * cell_size.y)
 		page.add_child(label)
 	await _save(null, "combat_roster.png")
+
+
+## The dungeon, three depths won: its first floor, then Gollux at the foot of it -- the floors between
+## felled one blow each -- and the verdict of a descent that did not get past him.
+func _shoot_dungeon() -> void:
+	for child in root.get_children():
+		child.queue_free()
+	await process_frame
+	var fight := Encounter.for_dungeon(3)
+	fight.arm({"damage": 3.0, "attack_speed": 1.0})
+	var combat: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
+	root.add_child(combat)
+	combat.place = "The Descent"
+	combat.begin(fight, Vector2i.ZERO, 2.0)
+	# Past the walk-in, so the body is standing.
+	for i in 60:
+		await process_frame
+	await _save(combat, "combat_dungeon.png")
+	var blow := fight.damage
+	fight.damage = 1e12
+	while fight.index < fight.enemies - 1:
+		fight.hit()
+		await process_frame
+	fight.damage = blow
+	for i in 60:
+		await process_frame
+	await _save(combat, "combat_dungeon_boss.png")
+	fight.stop()
+	for i in 5:
+		await process_frame
+	await _save(combat, "combat_dungeon_end.png")
 
 
 func _save(_scene: Node, name: String) -> void:

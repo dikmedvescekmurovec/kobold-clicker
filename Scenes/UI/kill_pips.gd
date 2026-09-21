@@ -17,6 +17,8 @@ extends HBoxContainer
 ## * A tile fight is exactly its lineup long, so the bar is that lineup draining once.
 ## * A farm run never ends, so the bar is the cycle between elites -- one bar is a block of
 ##   `Encounter.elite_every` with the elite last. It drains, and refills when that elite falls.
+## * The dungeon never ends either, and its bar is its block of fifteen floors with the boss last.
+##   A descent begun part-way down a block opens on a bar already part drained.
 ##
 ## A dead pip takes the pack's own undivided grey rather than a darkened pip, which is how the pack
 ## drains its own bars: the gone part is one smooth run, and what is counted is what is left.
@@ -104,8 +106,10 @@ func show_fight(fight: Encounter) -> void:
 	# it is in, so it refills the moment the last of the block goes down.
 	var slots := _pips.size()
 	var base := 0
-	if fight.endless:
-		base = (fight.index / slots) * slots
+	if fight.endless or fight.dungeon:
+		# Counted in floors, which for a run are its kills: `first_floor` is nought everywhere but the
+		# dungeon. A block begun part-way down starts before the lineup does, and those pips are spent.
+		base = ((fight.first_floor + fight.index) / slots) * slots - fight.first_floor
 	# Variant, not String: a live pip's key is an EnemyRoster.Tier and a dead one's is EMPTY, and the
 	# dictionaries above are keyed by both.
 	var last: Variant = EMPTY

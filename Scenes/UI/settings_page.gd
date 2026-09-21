@@ -138,6 +138,12 @@ func _foot(asking: bool) -> VBoxContainer:
 			for part: Control in chests.get_children():
 				part.tooltip_text = "Dev: every chest is drawn on the map, fog or not"
 			foot.add_child(chests)
+			var services := _tick("Show all services", Settings.all_services, func(on: bool) -> void:
+				Settings.all_services = on
+				TownServices.show_all = Settings.show_all_services())
+			for part: Control in services.get_children():
+				part.tooltip_text = "Dev: every settlement offers every counter, from the next time one is entered"
+			foot.add_child(services)
 			var cash := UITheme.button("Gold x10", "LightButton", "Dev: multiply the purse by ten")
 			cash.pressed.connect(cash_pressed.emit)
 			foot.add_child(cash)

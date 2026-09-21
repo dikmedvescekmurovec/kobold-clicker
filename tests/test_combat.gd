@@ -18,6 +18,7 @@ func _run() -> void:
 	_check(_test_health() == true, "health tests ran to the end")
 	_check(_test_a_won_fight() == true, "won fight tests ran to the end")
 	_check(_test_the_ice_wall() == true, "ice wall tests ran to the end")
+	_check(_test_the_dungeon() == true, "dungeon tests ran to the end")
 	_check(_test_a_lost_fight() == true, "lost fight tests ran to the end")
 	_check(_test_enemy_strikes() == true, "enemy strike tests ran to the end")
 	_check(_test_guard_capstones() == true, "guard capstone tests ran to the end")
@@ -49,6 +50,7 @@ func _run() -> void:
 	await _test_the_nameplate_wears_the_tier()
 	await _test_the_map_hands_over_and_takes_back()
 	await _test_a_world_under_the_fog()
+	await _test_the_way_down()
 	_report("combat")
 
 
@@ -1403,10 +1405,106 @@ func _click_rate(fight: Encounter, seconds: float, per_hit: float, swings: float
 	return left / per_hit / seconds
 
 
-## The ice wall round the first land: one body on the ice, a wall nobody walks through bare-handed or
-## on farmed rares alone, and one the same rares bring down with the whole Power tree behind them --
-## Giant Slayer included, the wall being a boss. `WALL_HP` is the dial; `tests/balance_wall.gd` plays
-## a fresh player out to it and says what a figure costs in kills.
+## A descent played to the end of its clock with a weapon worth `damage` a swing, `speed` swings a
+## second, begun under `won` depths: the fight, finished.
+func _descended(damage: float, speed: float, won := 0) -> Encounter:
+	var fight := Encounter.for_dungeon(won)
+	fight.strikes = true
+	fight.arm({"damage": damage, "attack_speed": speed})
+	fight.start()
+	for i in 100000:
+		if fight.finished:
+			break
+		fight.advance(0.05)
+	return fight
+
+
+func _test_the_dungeon() -> bool:
+	var fight := Encounter.for_dungeon()
+	var block := int(Encounter.DUNGEON["enemies"])
+	_check(fight.dungeon and fight.env == Encounter.DUNGEON_ENV and not fight.endless
+			and is_equal_approx(fight.time_left, float(Encounter.DUNGEON["seconds"])),
+			"the dungeon is a clocked fight in the cave")
+	# Its creatures are the cave's and nobody else's, and no land fields one.
+	for tier: EnemyRoster.Tier in [EnemyRoster.Tier.COMMON, EnemyRoster.Tier.ELITE, EnemyRoster.Tier.BOSS]:
+		_check(not EnemyRoster.in_environment(Encounter.DUNGEON_ENV, tier).is_empty(),
+				"the cave has a tier %d creature" % tier)
+	for name in EnemyRoster.in_environment(Encounter.DUNGEON_ENV):
+		_check(EnemyRoster.environments_of(name) == PackedStringArray([Encounter.DUNGEON_ENV]),
+				name + " lives in the cave alone")
+	# A depth is fifteen floors: an elite every fifth and the boss on the fifteenth, for ever, and a
+	# descent begun under depths already won meets them on the same floors.
+	for won in [0, 3]:
+		var from := Encounter.for_dungeon(won)
+		_check(from.first_floor == won * block and from.depth() == won + 1 and from.cleared() == 0,
+				"%d depths won begins depth %d, on its first floor" % [won, won + 1])
+		for position in 40:
+			var want := EnemyRoster.Tier.BOSS if position % block == block - 1 \
+					else EnemyRoster.Tier.ELITE if position % 5 == 4 else EnemyRoster.Tier.COMMON
+			_check(from.tier_for(position) == want, "floor %d under %d is tier %d" % [position + 1, won, want])
+	# A floor's health is the floor and the tier: the same whoever stands there, and one step a floor,
+	# so a depth is DUNGEON_GROWTH ^ 15 harder than the one over it.
+	_check(is_equal_approx(fight.hp, Encounter.BASE_HP), "the first floor is one ordinary body")
+	var deep := Encounter.for_dungeon(2)
+	_check(is_equal_approx(deep.hp, roundf(Encounter.BASE_HP * pow(Encounter.DUNGEON_GROWTH, 2 * block))),
+			"and the third depth opens thirty steps on (%s)" % BigNumber.format(deep.hp))
+	# A world's curse that sizes bodies again leaves a floor the health its floor gives it.
+	var cursed := Encounter.for_dungeon(2)
+	cursed.wear([Curses.effect(Curses.IRON_FOES)])
+	_check(is_equal_approx(cursed.hp, deep.hp), "Iron Foes does not reach down the dungeon")
+	# The player's own hand lands as it does anywhere, and nothing strikes the clock.
+	fight.start()
+	fight.advance(Encounter.WALK_IN)
+	_check(fight.hit() and fight.hp < Encounter.BASE_HP, "a click lands down here")
+	# The clock only runs while a body stands, so with no swing at all the whole minute is seen out
+	# on the first floor -- and running out is an end, not a loss.
+	var bare := _descended(0.0, 0.0)
+	_check(bare.finished and bare.victory and bare.depth() == 1 and bare.cleared() == 0 and bare.index == 0,
+			"nobody swinging ends on the first floor of the first depth, not lost")
+	_check(is_zero_approx(bare.wounds), "and was never struck")
+	# It pays nothing, however far it goes.
+	var paid: Array = []
+	var armed := Encounter.for_dungeon()
+	armed.always_drop = true
+	armed.always_orb = true
+	armed.uniques_after = 0
+	armed.effects = ["hourglass"]
+	for sent: Signal in [armed.loot_dropped, armed.gold_dropped, armed.orb_dropped, armed.xp_dropped]:
+		sent.connect(func(_index: int, _what: Variant) -> void: paid.append(1))
+	armed.arm({"damage": 50.0, "attack_speed": 4.0})
+	armed.start()
+	while not armed.finished:
+		armed.advance(0.05)
+	_check(armed.kills() > 5 and paid.is_empty() and is_zero_approx(armed.gold) and armed.xp == 0,
+			"%d floors cleared and nothing paid" % armed.kills())
+	_check(armed.time_left <= 0.0, "and the Hourglass held no clock")
+	# A depth is won by killing its Gollux and by nothing short of it: the floor under him is still
+	# his depth, and the one after him is the next.
+	var under := Encounter.for_dungeon()
+	under.arm({"damage": 1e9})
+	under.start()
+	while under.index < block - 1:
+		under.advance(Encounter.WALK_IN)
+		under.hit()
+		under.advance(Encounter.DEATH)
+	_check(under.enemy_name() == "Gollux" and under.depth() == 1 and under.cleared() == 0,
+			"fourteen floors down is Gollux, and still the first depth")
+	under.advance(Encounter.WALK_IN)
+	under.hit()
+	_check(under.depth() == 1 and under.cleared() == 0, "he is not dead until he has fallen")
+	under.advance(Encounter.DEATH)
+	_check(under.depth() == 2 and under.cleared() == 1 and not under.finished,
+			"with him dead it is the second depth, and the descent goes on")
+	# More damage gets deeper, and a depth is a real step: DUNGEON_GROWTH ^ 15 of it.
+	var weak := _descended(100.0, 2.0)
+	var strong := _descended(100.0 * pow(Encounter.DUNGEON_GROWTH, block), 2.0)
+	_check(strong.cleared() > weak.cleared(),
+			"a depth's worth more damage wins more depths (%d against %d)" % [strong.cleared(), weak.cleared()])
+	print("The dungeon: 100 damage at 2 swings/s wins %d depth(s) from the top, %s damage %d"
+			% [weak.cleared(), BigNumber.format(100.0 * pow(Encounter.DUNGEON_GROWTH, block)), strong.cleared()])
+	return true
+
+
 func _test_the_ice_wall() -> bool:
 	var cell := Vector2i(MapBuilder.START_LAND_RADIUS + 1, 0)
 	var fight := Encounter.for_wall(cell)
@@ -2643,9 +2741,70 @@ func _test_curses() -> bool:
 	return true
 
 
-## A world under the Thick Fog, played through the main scene: a won tile uncovers itself and nothing
-## round it, the next one is clicked and fought for blind, and the torch in hand buys the ring back.
-## No Rest greys the camp beside it, with the reason.
+## The dungeon from the main scene: the corner's skull comes on with the bag, a descent pays nothing
+## and counts no kill, and a depth is written down only once its Gollux is dead.
+func _test_the_way_down() -> void:
+	_clear_saves()
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	main.inventory_path = SCRATCH_INVENTORY
+	main.map_path = SCRATCH_MAP
+	root.add_child(main)
+	for i in 3:
+		await process_frame
+	main._show_corner(true)
+	_check(not main._dungeon_button.visible, "there is no way down before there is a bag")
+	main.inventory.tips.append("first_item")
+	main._show_corner(true)
+	_check(main._dungeon_button.visible and "depth 1" in main._dungeon_button.tooltip_text,
+			"it comes on with the bag (%s)" % main._dungeon_button.tooltip_text)
+	main._on_dungeon_pressed()
+	var fight: Encounter = main._combat.fight if main._combat != null else null
+	_check(fight != null and fight.dungeon and main._combat.place == main.DUNGEON_NAME and not main.map.visible
+			and not main._dungeon_button.visible, "it opens the dungeon over the map, the corner out of its way")
+	if fight == null:
+		return
+	var kills_before: int = main.inventory.kills
+	var gold_before: float = main.inventory.gold
+	# Bare hands at eight clicks a second: some floors, and no Gollux.
+	_play(fight, 100000)
+	_check(fight.finished and fight.index > 0 and fight.cleared() == 0,
+			"bare hands get %d floors down and no further" % fight.index)
+	main._combat._on_back_pressed()
+	await process_frame
+	_check(main._combat == null and main.map.visible, "leaving brings the map back")
+	_check(main.inventory.dungeon_depth == 0, "floors short of Gollux win no depth")
+	_check(main.inventory.kills == kills_before and is_equal_approx(main.inventory.gold, gold_before),
+			"with no kill counted and nothing paid")
+	# A Gollux killed is a depth won, written down, and where the next descent begins.
+	main._on_dungeon_pressed()
+	fight = main._combat.fight
+	fight.damage = 1e9
+	while fight.cleared() < 2:
+		fight.advance(Encounter.WALK_IN)
+		fight.hit()
+		fight.advance(Encounter.DEATH)
+	fight.stop()
+	main._combat._on_back_pressed()
+	await process_frame
+	_check(main.inventory.dungeon_depth == 2 and Inventory.load_from(SCRATCH_INVENTORY).dungeon_depth == 2,
+			"two Golluxes dead is two depths won, and saved")
+	_check("depth 3" in main._dungeon_button.tooltip_text, "the skull says where that leaves the player (%s)"
+			% main._dungeon_button.tooltip_text)
+	main._on_dungeon_pressed()
+	_check(main._combat.fight.depth() == 3 and main._combat.fight.first_floor == 30,
+			"and the next descent begins under them")
+	main._combat.fight.stop()
+	main._combat._on_back_pressed()
+	await process_frame
+	_check(main.inventory.dungeon_depth == 2, "a descent that wins nothing moves nothing")
+	_check(main.inventory.transcended().dungeon_depth == 2, "and a transcension carries the depths over")
+	main.queue_free()
+	await process_frame
+	_clear_saves()
+
+
 func _test_a_world_under_the_fog() -> void:
 	_clear_saves()
 	var cursed := Inventory.new()
