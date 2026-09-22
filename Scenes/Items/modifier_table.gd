@@ -78,6 +78,10 @@ const MODS := {
 	# which is a unique and a percentage of a purse that is already exponential in the walk.
 	"added_gold_find": {"kind": Kind.FLAT, "stat": "gold_find", "range": [20, 40], "weight": 1,
 		"level_flat": 0.0},
+	# On anything (`LootTable.ANY_AFFIXES`), and flat at every level: eight sockets of top rolls is the
+	# cap, where the next enemy is there the moment the last one is dead.
+	"added_spawn_speed": {"kind": Kind.FLAT, "stat": "spawn_speed", "range": [5, 15], "weight": 4,
+		"level_flat": 0.0},
 	# The globals, and the jewellery is the only place they land. A percentage of the whole set is
 	# worth more than a percentage of one piece, so increased damage rolls the smaller of the two
 	# bands here -- the frontier is beaten with what the set adds up to, and test_combat's edge-fight

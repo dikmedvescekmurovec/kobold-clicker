@@ -25,6 +25,7 @@ func _run() -> void:
 	_check(_test_hits_only_land_on_a_waiting_enemy() == true, "hit timing tests ran to the end")
 	_check(_test_what_a_hit_is_worth() == true, "damage tests ran to the end")
 	_check(_test_the_weapon_swings_itself() == true, "attack speed tests ran to the end")
+	_check(_test_spawn_speed() == true, "spawn speed tests ran to the end")
 	_check(_test_bleed() == true, "bleed tests ran to the end")
 	_check(_test_capstone_effects() == true, "capstone effect tests ran to the end")
 	_check(_test_unique_drops() == true, "unique drop tests ran to the end")
@@ -65,6 +66,31 @@ func _environments() -> PackedStringArray:
 	for env: String in SheetMeta.env_adjacency():
 		envs.append(env)
 	return envs
+
+
+## Spawn speed is a share taken off the walk-in, and at the cap there is no walk-in at all.
+func _test_spawn_speed() -> bool:
+	var half := Encounter.for_tile(Vector2i(3, 0), "grass")
+	half.arm({"spawn_speed": 50.0})
+	half.arm({"spawn_speed": 50.0})
+	half.start()
+	_check(is_equal_approx(half.walk_in, Encounter.WALK_IN * 0.5),
+			"50%% halves the walk-in, armed twice or once (%.2f)" % half.walk_in)
+	half.advance(Encounter.WALK_IN * 0.5)
+	_check(half.phase == Encounter.Phase.WAITING, "and the enemy is there in half the time")
+
+	var instant := Encounter.for_tile(Vector2i(3, 0), "grass")
+	instant.arm({"spawn_speed": 250.0})
+	instant.start()
+	_check(instant.spawn_speed == 100.0 and instant.walk_in == 0.0, "past 100%% is 100%%, and no walk-in")
+	instant.advance(0.001)
+	_check(instant.phase == Encounter.Phase.WAITING, "the first enemy is simply there")
+	instant.hp = 1.0
+	instant.hit()
+	instant.advance(Encounter.DEATH + 0.001)
+	_check(instant.index == 1 and instant.phase == Encounter.Phase.WAITING,
+			"and the next is there the moment the death has played")
+	return true
 
 
 ## What a click takes off, and what a crit turns it into.
@@ -767,13 +793,16 @@ func _test_settings() -> void:
 	Settings.sfx = false
 	Settings.animations = Settings.Anim.LOW
 	Settings.item_details = true
+	Settings.uniques = Settings.Uniques.KEEP
 	Settings.save()
 	Settings.sfx = true
 	Settings.animations = Settings.Anim.DEFAULT
 	Settings.item_details = false
+	Settings.uniques = Settings.Uniques.ASK
 	Settings.load_settings()
-	_check(not Settings.sfx and Settings.animations == Settings.Anim.LOW and Settings.item_details,
-			"settings come back off their file")
+	_check(not Settings.sfx and Settings.animations == Settings.Anim.LOW and Settings.item_details
+			and Settings.uniques == Settings.Uniques.KEEP, "settings come back off their file")
+	Settings.uniques = Settings.Uniques.ASK
 	Settings.apply_audio()
 	_check(AudioServer.is_bus_mute(AudioServer.get_bus_index(Settings.SFX_BUS)), "a muted SFX bus is muted")
 	_check(not AudioServer.is_bus_mute(AudioServer.get_bus_index(Settings.MUSIC_BUS)), "and music is not")
@@ -1615,8 +1644,9 @@ func _rate_for(cell: Vector2i, gear: Equipment, seconds: float, variant := "") -
 	return _click_rate(fight, seconds, per_hit, fight.attack_speed)
 
 
-## How many farmed sets the frontier is measured against. An odd handful, so there is a middle one.
-const FARMED_SETS := 7
+## How many farmed sets the frontier is measured against. Odd, so there is a middle one; twenty-one
+## rather than seven because the median over seven moved when spawn speed joined every pool.
+const FARMED_SETS := 21
 
 ## The set the frontier is actually held to: FARMED_SETS of them rolled at `cell`'s level, and the
 ## middling one handed back -- the one whose fight wants the median number of clicks a second.

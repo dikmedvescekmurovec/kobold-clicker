@@ -494,9 +494,10 @@ func chart_from(cell: Vector2i) -> Vector2i:
 
 ## Whether the player can farm this cell: a tile already taken, which the player can go back to and
 ## fight on for as long as they like. Unlike charting, it asks nothing about where they stand --
-## a run is a thing you choose to do, not a step you take.
+## a run is a thing you choose to do, not a step you take. Never a settlement: a town is taken once
+## and then visited, not hunted.
 func can_farm(cell: Vector2i) -> bool:
-	return not walking and charted(cell)
+	return not walking and charted(cell) and town_tier(cell) == -1
 
 
 ## The tier of the settlement on `cell`, or -1 where there is no town. The one place outside this file

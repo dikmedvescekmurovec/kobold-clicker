@@ -257,11 +257,12 @@ func set_autodiscard(level: int, on: bool) -> void:
 		autodiscard.erase(level)
 
 
-## Throws away everything held at one level, and hands back what went, oldest first.
-func discard_level(level: int) -> Array[Item]:
+## Throws away everything held at one level, and hands back what went, oldest first. With `uniques`
+## false a unique stays: the bag page asks about those on their own.
+func discard_level(level: int, uniques := true) -> Array[Item]:
 	var gone: Array[Item] = []
 	for i in range(items.size() - 1, -1, -1):
-		if items[i].level == level:
+		if items[i].level == level and (uniques or items[i].unique.is_empty()):
 			gone.append(items[i])
 			items.remove_at(i)
 	gone.reverse()

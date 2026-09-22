@@ -693,8 +693,8 @@ func _test_selling() -> void:
 
 	# Out of a town nothing has changed: the piece is thrown away, not sold.
 	page._select_item(inventory.items.find(piece))
-	_check(_deep_button(page._detail, "Discard") != null, "outside a town a piece is discarded")
-	_check(_deep_button(page._detail, "Sell") == null, "and there is nothing to sell it to")
+	_check(_deep_button(page._actions, "Discard") != null, "outside a town a piece is discarded")
+	_check(_deep_button(page._actions, "Sell") == null, "and there is nothing to sell it to")
 	_check(page._sections.get_child(0).get_children().any(func(child: Node) -> bool:
 			return child is Button and (child as Button).tooltip_text.begins_with("Throw away the")),
 			"and a level is cleared")
@@ -702,8 +702,8 @@ func _test_selling() -> void:
 	# At the gear merchant the same two buttons buy instead.
 	page.shop(PackedStringArray([TownServices.GEAR]), TOWN_CELL)
 	page._select_item(inventory.items.find(piece))
-	var sell := _deep_button(page._detail, "Sell")
-	_check(sell != null and _deep_button(page._detail, "Discard") == null,
+	var sell := _deep_button(page._actions, "Sell")
+	_check(sell != null and _deep_button(page._actions, "Discard") == null,
 			"at the merchant the piece is sold rather than thrown away")
 	_check(page._sections.get_child(0).get_children().any(func(child: Node) -> bool:
 			return child is Button and (child as Button).tooltip_text.begins_with("Sell the")),
@@ -714,6 +714,50 @@ func _test_selling() -> void:
 	_check(inventory.gold == price and price > 0, "the purse holds the price (%d, want %d)"
 			% [inventory.gold, price])
 	_check(inventory.items.find(piece) == -1, "and the piece is gone from the bag")
+	# A Ctrl-click sells too, and the square says so for the card's foot.
+	await process_frame
+	var boot_square: Control = page._sections.get_children().filter(
+			func(n: Node) -> bool: return n is GridContainer)[0].get_child(0)
+	_check(boot_square.get_meta(ItemCard.KEYS, {}) == {"shift": "equip", "ctrl": "sell"},
+			"at the merchant a square answers to Ctrl for Sell")
+	var boot: Item = (boot_square as ItemSlot).item
+	page._on_clicked((boot_square.get_parent() as Control).position + boot_square.position
+			+ boot_square.size / 2.0, false, true)
+	_check(inventory.items.find(boot) == -1 and inventory.gold == price + TownPrices.sell_price(boot),
+			"a Ctrl-click sells the piece")
+	# Put back for the checks below, which count the purse and the bag as they were.
+	inventory.add(boot)
+	inventory.gold = price
+	page.refresh()
+
+	# Sell all takes the ordinary pieces over the counter and asks about a unique among them on its
+	# own; Sell on that question sells it for its own price.
+	var relic := Item.rolled_unique(UniqueTable.ids()[0], rng, 4)
+	inventory.add(relic)
+	page.refresh()
+	await process_frame
+	for button: Button in page._sections.find_children("", "Button", true, false):
+		if button.tooltip_text.begins_with("Sell the"):
+			button.pressed.emit()
+			break
+	var sell_all := _deep_button(page._confirm, "Sell")
+	if sell_all != null:
+		sell_all.pressed.emit()
+	_check(inventory.gold == price + TownPrices.sell_price(boot) and inventory.items.size() == 1
+			and inventory.items[0] == relic,
+			"Sell all sells the ordinary pieces and keeps the unique (%d, want %d)"
+			% [inventory.gold, price + TownPrices.sell_price(boot)])
+	_check(page._confirm != null and _deep_button(page._confirm, "Don't sell") != null,
+			"and asks whether to sell the unique too")
+	var relic_price := TownPrices.sell_price(relic)
+	var sell_relic := _deep_button(page._confirm, "Sell")
+	if sell_relic != null:
+		sell_relic.pressed.emit()
+	_check(inventory.items.is_empty() and inventory.gold == price + TownPrices.sell_price(boot) + relic_price,
+			"Sell on that question sells it for its price")
+	inventory.add(boot)
+	inventory.gold = price
+	page.refresh()
 
 	# An orb cannot be sold over a gear counter.
 	var held := inventory.orb_count("Orb of Chaos")
@@ -724,7 +768,7 @@ func _test_selling() -> void:
 	# At the orb vendor the tray sells and the gear button is gone.
 	page.shop(PackedStringArray([TownServices.ORBS]), TOWN_CELL)
 	page._select_item(0)
-	_check(_deep_button(page._detail, "Discard") != null and _deep_button(page._detail, "Sell") == null,
+	_check(_deep_button(page._actions, "Discard") != null and _deep_button(page._actions, "Sell") == null,
 			"the orb vendor does not buy gear")
 	page._select_item(-1)
 	var orb_price := TownPrices.orb_sell_price("Orb of Chaos", TOWN_CELL)
@@ -744,7 +788,7 @@ func _test_selling() -> void:
 	# A board is a counter for work, not for goods: nothing is bought or sold over one.
 	page.shop(PackedStringArray([TownServices.BOUNTIES]), TOWN_CELL)
 	page._select_item(0)
-	_check(_deep_button(page._detail, "Discard") != null and _deep_button(page._detail, "Sell") == null,
+	_check(_deep_button(page._actions, "Discard") != null and _deep_button(page._actions, "Sell") == null,
 			"over a bounty board a piece is thrown away rather than sold")
 	page._select_item(-1)
 	var carried := inventory.orb_count("Orb of Chaos")
@@ -754,7 +798,7 @@ func _test_selling() -> void:
 	# Leaving the town puts every one of those back.
 	page.shop(PackedStringArray())
 	page._select_item(0)
-	_check(_deep_button(page._detail, "Discard") != null and _deep_button(page._detail, "Sell") == null,
+	_check(_deep_button(page._actions, "Discard") != null and _deep_button(page._actions, "Sell") == null,
 			"outside a town Discard is Discard again")
 	page.queue_free()
 	await process_frame

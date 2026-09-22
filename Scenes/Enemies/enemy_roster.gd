@@ -223,7 +223,7 @@ const ENEMIES := {
 		"tier": Tier.BOSS,
 		"size": Size.HUGE,
 		"weight": 1,
-		"faces": Facing.LEFT,
+		"faces": Facing.RIGHT,
 		"environments": ["grass", "dirt", "desert", "ice", "forest", "mountains"],
 		"dir": "Huge Knight/Sprites/outline",
 		"frame": Vector2i(237, 187),

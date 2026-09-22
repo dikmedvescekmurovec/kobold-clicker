@@ -155,9 +155,8 @@ func _shoot_inventory() -> void:
 	crop.save_png("user://ui_inventory_crop.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_inventory_crop.png"))
 
-	# The stat block, open on the elite sword -- the newest item, and the only shot that shows what a
-	# modifier reads like. A rare sword is worn, so this is also the comparison: the elite piece on
-	# the left, what it would replace on the right, and what the swap is worth under its stats.
+	# The elite sword selected -- the newest item -- with its buttons beside its square, and the doll
+	# still standing beside the bag: what the piece would replace is the hover card's to say under Alt.
 	main.bag_page._select_item(main.inventory.total() - 1)
 	for i in 2:
 		await process_frame
@@ -295,7 +294,7 @@ func _shoot_skills() -> void:
 
 ## A settlement: what the tile panel says about one from outside, then the inside of it -- each
 ## counter's shelf with the bag standing beside it, and one piece off the shelf open with its price.
-## The whole point of these is the width and the height: the town page, the bag and the comparison
+## The whole point of these is the width and the height: the town page, the bag and the doll at the smith
 ## have to share a 1152x648 window and the shelf has to fit down the page, so they are full-window
 ## shots.
 func _shoot_town() -> void:
@@ -323,9 +322,7 @@ func _shoot_town() -> void:
 	main.inventory.add_orb("Orb of Transmutation", 11)
 	main.inventory.add_orb("Orb of Chaos", 2)
 	main.inventory.add_orb("Orb of Exalted")
-	# Something worn, so the comparison beside an open piece is a whole stat block rather than the one
-	# short line an empty socket gets -- that is the widest the character sheet ever is, and the width
-	# is the whole question these shots exist to answer.
+	# Something worn, so the doll at the smith has a piece to hand him.
 	var worn := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 4)
 	main.inventory.add(worn)
 	main.inventory.equip(worn, Equipment.Socket.WEAPON)
@@ -408,9 +405,34 @@ func _shoot_town() -> void:
 	print("Saved ", ProjectSettings.globalize_path("user://ui_confirm_sell.png"))
 	main.bag_page._close_confirm()
 
-	# One piece off the shelf, open: the price on the Buy button, and the comparison beside the bag
-	# saying what wearing it would replace. The square whose piece fills a socket that is worn, so the
-	# comparison is a whole stat block rather than "Nothing worn".
+	# The second question, about a unique among the handful: the level's ordinary pieces have gone over
+	# the counter on the first answer, and this one names what is left.
+	var before: Array[Item] = main.inventory.items.duplicate()
+	main.inventory.add(Item.rolled_unique("stonebreaker", rng, 6))
+	main.bag_page.refresh()
+	await process_frame
+	for button: Button in main.bag_page._sections.find_children("", "Button", true, false):
+		if button.tooltip_text.begins_with("Sell the"):
+			button.pressed.emit()
+			break
+	for button: Button in main.bag_page._confirm.find_children("", "Button", true, false):
+		if button.text == "Sell":
+			button.pressed.emit()
+			break
+	(main.bag_page._confirm.find_child(BagPage.TICK_NAME, true, false) as Button).button_pressed = true
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_confirm_uniques.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_confirm_uniques.png"))
+	main.bag_page._close_confirm()
+	# The bag and the purse put back as they were, so the shots below are the ones they have always been.
+	main.inventory.items.assign(before)
+	main.inventory.gold = 60000
+	main.bag_page.refresh()
+
+	# One piece off the shelf, open: the price on the Buy button. The square whose piece fills a socket
+	# that is worn, and the best of those, so the block is photographed carrying modifiers.
 	main.bag_page._select_item(-1)
 	var press := InputEventMouseButton.new()
 	press.button_index = MOUSE_BUTTON_LEFT
@@ -466,7 +488,7 @@ func _shoot_town() -> void:
 	root.get_texture().get_image().save_png("user://ui_town_smith.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_town_smith.png"))
 
-	# And the doll in the comparison's place, which is how a worn piece is handed to him: he works on
+	# And the doll beside the bag, which is how a worn piece is handed to him: he works on
 	# one as readily as on a carried piece, so the sheet at his counter is the figure rather than the
 	# room the other counters give away. The shot is here to check it fits beside his page.
 	main.bag_page._select_socket(Equipment.Socket.WEAPON)
@@ -478,16 +500,11 @@ func _shoot_town() -> void:
 
 	# And what he leaves behind, on the elite sword: a locked modifier, which every orb now works
 	# around, and a break, which is the end of the piece as far as crafting goes. Both are read off the
-	# stat block on the left, and both grey the counter on the right with one reason between them.
+	# hover card, and both grey the counter on the right with one reason between them.
 	var marked: Item = main.inventory.items[0]
 	Blacksmith.lock(marked, rng)
 	marked.broken = true
 	main.bag_page._select_item(0)
-	for i in 2:
-		await process_frame
-	# Wound down to the modifiers: an elite carries more lines than the block is tall, and the locked
-	# one is what this shot is here for.
-	main.bag_page._detail_scroll.scroll_vertical = 9999
 	for i in 2:
 		await process_frame
 	await RenderingServer.frame_post_draw

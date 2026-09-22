@@ -225,7 +225,7 @@ func _ready() -> void:
 	if save != null:
 		view = MapBuilder.restore(map, TownWorld.from_dict(save.towns), save)
 	else:
-		view = MapBuilder.create(map, TownWorld.generate(used_world_seed), map_origin, used_map_seed)
+		view = MapBuilder.create(map, TownWorld.generate(used_world_seed, map_origin), map_origin, used_map_seed)
 	towns = view.towns
 	# What two of the world's curses ask of the map, said before anything is charted or paid.
 	if Curses.RING_OF_WALLS in inventory.curses:
@@ -510,8 +510,8 @@ func _build_pages(layer: CanvasLayer) -> void:
 	town_page.transcend_pressed.connect(_on_transcend_pressed)
 	# A bounty given up on the journal frees the board standing open on the other edge.
 	bounty_page.abandoned.connect(town_page.redraw)
-	# What the counter has open goes straight to the bag: the comparison points at what wearing it
-	# would replace, and a purchase reaches the purse and the grid by the same redraw. Back the other
+	# What the counter does goes straight to the bag: a purchase reaches the purse and the grid by the
+	# same redraw (`offer`; the bag draws nothing of the shelf piece itself). Back the other
 	# way, the counter redraws around whatever the bag has open, so a piece sold to make room unlocks
 	# the Buy that was greyed out for a full bag.
 	# An orb in the bag's hand works on a shelf piece too; the bag still does the spending and saving.
@@ -1348,15 +1348,13 @@ func _place_corner() -> void:
 	var page := _left_page()
 	if page != null:
 		# Every page's own panel is its first child, against the left edge; the bag runs on past its.
+		# The bag's sheet is centred down the window, and a column at the window's top beside it
+		# belonged to nothing: it starts where the sheet does, or under the caret that brings it back.
 		var panel: Control = page.get_child(0)
 		var bag := page as BagPage
-		var edge: float = (bag.right_edge() if bag != null
-				else panel.position.x + panel.size.x * ui_scale)
-		# The bag's sheet is centred down the window, and a column at the window's top beside it
-		# belonged to nothing: it starts where the sheet does.
-		var top: float = (bag.sheet_top(_character.position.y) if bag != null
-				else _character.position.y)
-		at = Vector2(edge + CORNER_GAP * ui_scale, top)
+		at = (bag.column_origin(CORNER_GAP, _character.position.y) if bag != null
+				else Vector2(panel.position.x + (panel.size.x + CORNER_GAP) * ui_scale,
+						_character.position.y))
 	var step := (_bag_button.get_combined_minimum_size().y + CORNER_GAP) * ui_scale
 	for button: Button in [_bag_button, _heirloom_button, _skills_button, _bounty_button,
 			_dungeon_button, _settings_button, _collection_button]:
@@ -1559,10 +1557,14 @@ func _on_left_page_closed() -> void:
 
 ## A corner button or the character panel pressed: its page, redrawn because what it shows moves
 ## while it is shut -- or, pressed beside its own open page, that page put away as its X would.
+## Opening one drops the selected tile, so nothing stays outlined behind the page; in a town the
+## tile stays, since the town stands on it.
 func _toggle_left_page(page: Control) -> void:
 	if page.visible:
 		_on_left_page_closed()
 		return
+	if not town_page.visible:
+		_on_close_pressed()
 	page.open()
 	_open_left_page(page)
 
@@ -1818,7 +1820,11 @@ func _input(event: InputEvent) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed and _combat == null and map.visible 			and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+	# A Control's STOP filter never stops the wheel (only an accepted one does), so a wheel over a
+	# panel or a page still lands here: it zooms only with nothing under the cursor but the map.
+	if (event is InputEventMouseButton and event.pressed and _combat == null and map.visible
+			and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]
+			and get_viewport().gui_get_hovered_control() == null):
 		_zoom_at(event.position, 1.0 if event.button_index == MOUSE_BUTTON_WHEEL_UP else -1.0)
 		get_viewport().set_input_as_handled()
 		return

@@ -222,6 +222,10 @@ const BEAM_LIFT := 9.0
 const HIT_FLASH := Color(2.5, 2.5, 2.5)
 const HIT_SQUASH := Vector2(1.12, 0.88)
 const HIT_TIME := 0.12
+## How high the player hops on a swing, in screen pixels, and how long the hop takes: a click that
+## re-triggers a swing mid-animation would otherwise show nothing at all when it is spammed.
+const SWING_HOP := 6.0
+const SWING_HOP_TIME := 0.16
 ## How far the arena rattles, in screen pixels: a crit, an ordinary death, and an elite's or a boss's.
 ## The backdrop is drawn BACKDROP_BLEED larger than the window so a shake never shows its edge.
 const SHAKE_CRIT := 4.0
@@ -299,6 +303,8 @@ var _enemy_title: Label
 ## How much larger than it belongs the nameplate is drawn this frame: 1 but for a boss's entrance.
 var _plate_pop := 1.0
 var _plate_tween: Tween
+## The player's hop on a swing, so a swing landing mid-hop starts it over rather than stacking.
+var _hop: Tween
 var _enemy_bar: HealthBar
 ## The same health as the bar, in numbers, under it.
 var _enemy_hp_label: Label
@@ -856,6 +862,21 @@ func _swing() -> void:
 	var again := _player.is_playing() and _player.animation == "attack"
 	_player.play_once("attack", SWING_RESTART_FRAME)
 	_sound.play(SWING_RESTART_SECONDS if again else 0.0)
+	_hop_player()
+
+
+## A small hop on the spot with every swing, so spamming clicks shows a bounce even when the attack
+## animation is only being cut back to its blow frame.
+func _hop_player() -> void:
+	if Settings.animations == Settings.Anim.NONE:
+		return
+	if _hop != null and _hop.is_valid():
+		_hop.kill()
+	var ground := _size().y * _ground()
+	_player.position.y = ground
+	_hop = create_tween()
+	_hop.tween_property(_player, "position:y", ground - SWING_HOP, SWING_HOP_TIME / 2.0) 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_hop.tween_property(_player, "position:y", ground, SWING_HOP_TIME / 2.0) 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 
 
 ## The number that floats off the enemy. This is the only place the player can read what their gear
@@ -1200,7 +1221,8 @@ func _slide_enemy() -> void:
 	var view := _size()
 	var home := view.x * ENEMY_X
 	if fight.phase == Encounter.Phase.WALKING_IN:
-		var left := fight.phase_left / fight.walk_in
+		# A walk-in of nothing (spawn speed at its cap) is over before the view sees it.
+		var left := fight.phase_left / fight.walk_in if fight.walk_in > 0.0 else 0.0
 		_enemy.position.x = lerpf(home, view.x * OFFSCREEN_X, left)
 	else:
 		_enemy.position.x = home

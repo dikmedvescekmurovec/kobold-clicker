@@ -20,6 +20,19 @@ const GAP := 4
 ## What the second card says under Alt when nothing is worn where the hovered piece would go, the
 ## socket named by `Equipment.LABELS`.
 const BARE := "Nothing is equipped in the %s slot"
+## The meta a square may carry naming a Control standing beside it (the bag's buttons): the card is
+## placed past the two of them together, so it never covers what the square has to press.
+const BESIDE := "beside"
+## The meta a square may carry naming the keys a click on it answers to, key -> the word the card
+## writes beside that key's picture: `{"shift": "equip", "ctrl": "sell"}`. The page that draws the
+## square sets it, since only it knows what its buttons do; Alt is the card's own.
+const KEYS := "keys"
+## The keys' pictures, cut from the keyboard pack by `tools/ui_kit.py`.
+const KEY_ICONS := {
+	"alt": "res://Assets/UI/ui_key_alt.png",
+	"shift": "res://Assets/UI/ui_key_shift.png",
+	"ctrl": "res://Assets/UI/ui_key_ctrl.png",
+}
 
 ## What the player has on, for the second card. The main scene sets it; without it there is no second card.
 var equipment: Equipment
@@ -87,6 +100,10 @@ func _process(_delta: float) -> void:
 		slot.hint.call(_rows, WIDTH)
 	else:
 		ItemDetails.fill(_rows, slot.item, WIDTH)
+		var hints := hints_for(slot, alt)
+		if not hints.is_empty():
+			_rows.add_child(UITheme.rule())
+			_rows.add_child(key_row(hints))
 		var worn := worn_for(slot.item) if alt else null
 		if worn != null:
 			UITheme.clear(_worn_rows)
@@ -101,9 +118,12 @@ func _process(_delta: float) -> void:
 			_worn_rows.add_child(ItemDetails.line(bare_text(slot.item), Palette.SLATE, WIDTH, true))
 			_worn.show()
 	show()
+	var anchor := slot.get_global_rect()
+	if slot.has_meta(BESIDE) and (slot.get_meta(BESIDE) as Control).visible:
+		anchor = anchor.merge((slot.get_meta(BESIDE) as Control).get_global_rect())
 	# Placed now and again deferred: the first pass measures labels that have not laid out yet.
-	_place(slot.get_global_rect())
-	_place.call_deferred(slot.get_global_rect())
+	_place(anchor)
+	_place.call_deferred(anchor)
 
 
 ## The square the card should be describing, or null. Nothing while the button is down: that is a
@@ -112,7 +132,7 @@ func _process(_delta: float) -> void:
 ## nothing more until the cursor has been somewhere else, whether the press opened it, shut it or
 ## did nothing at all, and neither does whatever a sale slid under a cursor that has not moved.
 func hovered(at: Vector2, pressed: bool) -> ItemSlot:
-	var slot := slot_at(at, pressed)
+	var slot := slot_at(at)
 	if pressed:
 		_muted = slot.get_global_rect() if slot != null else Rect2()
 		_pressed_at = at
@@ -136,12 +156,10 @@ func unmute() -> void:
 
 
 ## The square under `at` (in viewport pixels), or null. A square scrolled out of its box is still
-## where it was as far as its own rect knows, so every clipping ancestor has to hold the point too;
-## and the one that is already open says nothing, because its block is written out beside it --
-## unless `open_too` asks for it all the same.
-func slot_at(at: Vector2, open_too := false) -> ItemSlot:
+## where it was as far as its own rect knows, so every clipping ancestor has to hold the point too.
+func slot_at(at: Vector2) -> ItemSlot:
 	for slot: ItemSlot in get_tree().get_nodes_in_group(ItemSlot.GROUP):
-		if slot.item == null or (slot.selected and not open_too) or not slot.is_visible_in_tree() \
+		if slot.item == null or not slot.is_visible_in_tree() \
 				or not slot.get_global_rect().has_point(at):
 			continue
 		var clipped := false
@@ -178,6 +196,39 @@ func bare_for(item: Item) -> bool:
 ## `BARE` for the socket `item` would go in: "the ring slot", "the offhand slot".
 func bare_text(item: Item) -> String:
 	return BARE % str(Equipment.LABELS[equipment.sockets_for(item)[0]]).to_lower()
+
+
+## The keys a press or a hold on `slot` would answer, for the card's foot: Alt while it is not held
+## (held, the second card is the answer) and the card has something to say under it, then whatever
+## the square's page says a click does (`KEYS`).
+func hints_for(slot: ItemSlot, alt: bool) -> Dictionary:
+	var hints := {}
+	if not alt and (worn_for(slot.item) != null or bare_for(slot.item)):
+		hints["alt"] = "compare"
+	hints.merge(slot.get_meta(KEYS, {}))
+	return hints
+
+
+## One row of `[key] word` pairs, the picture at its own size beside the word in the body font. A
+## flow rather than a box, so three pairs wrap inside the card's width instead of widening it, and
+## each pair a box of its own, so a key never ends one line with its word starting the next.
+static func key_row(hints: Dictionary) -> HFlowContainer:
+	var row := HFlowContainer.new()
+	row.custom_minimum_size = Vector2(WIDTH, 0)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for key: String in hints:
+		var pair := HBoxContainer.new()
+		pair.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var picture := TextureRect.new()
+		picture.texture = load(KEY_ICONS[key])
+		picture.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+		picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pair.add_child(picture)
+		var word := UITheme.label(str(hints[key]), Palette.SLATE, true)
+		word.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pair.add_child(word)
+		row.add_child(pair)
+	return row
 
 
 ## Where a card of `card` window pixels stands beside `anchor`: to its right, or to its left when the

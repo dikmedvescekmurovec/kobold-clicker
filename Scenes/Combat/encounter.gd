@@ -428,8 +428,11 @@ const FOG_UNIQUES := 2.0         ## what the chance of a unique is multiplied by
 ## What the tile itself does to the fight (`TileMods`, by id): land past the second wall, told to
 ## `for_tile` and `farm` by whoever opens the fight. A fight nobody tells has none.
 var mods: Array = []
-## Seconds an enemy of this fight spends running in: `WALK_IN`, or longer in a Mire.
+## Seconds an enemy of this fight spends running in: `WALK_IN`, or longer in a Mire, or shorter for
+## what the gear's spawn speed takes off it -- none at all at 100%.
 var walk_in := WALK_IN
+## The gear's share of the walk-in taken off, 0-100.
+var spawn_speed := 0.0
 ## What the tile and the world add to every body's health, to every blow and to how often one comes,
 ## as shares: **one sum each**, the way `_unique_more` is, so a Thick-skinned tile under Iron Foes is
 ## +110% and not +140%.
@@ -904,6 +907,11 @@ func arm(stats: Dictionary) -> void:
 	block *= TileMods.factor(mods, "block")
 	time_on_hit *= TileMods.factor(mods, "time_on_hit")
 	attack_speed *= TileMods.factor(mods, "swing")
+	# From the const rather than from `walk_in`, so arming twice does not take the share off twice.
+	spawn_speed = clampf(float(stats.get("spawn_speed", 0.0)), 0.0, 100.0)
+	walk_in = WALK_IN * TileMods.factor(mods, "walk_in") * (1.0 - spawn_speed / 100.0)
+	if phase == Phase.WALKING_IN:
+		phase_left = minf(phase_left, walk_in)
 	if _cursed_with(Curses.HOMELAND) and _at_home():
 		item_rarity += HOME_RARITY
 	var pays := TileMods.WILD_REWARD if Curses.effect(Curses.WILD_TILES) in effects else 1.0

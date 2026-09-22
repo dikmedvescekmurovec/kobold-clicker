@@ -243,7 +243,7 @@ func _test_item_card() -> bool:
 	_check(card.slot_at(Vector2(110, 110)) == seen, "the square under the cursor is found")
 	_check(card.slot_at(below.get_global_rect().get_center()) == null,
 			"one scrolled out of its box is not")
-	_check(card.slot_at(Vector2(310, 110)) == null, "the open piece says nothing twice")
+	_check(card.slot_at(Vector2(310, 110)) == open, "the open piece has a card too: nothing else says what it is")
 	_check(card.slot_at(Vector2(5, 5)) == null, "and bare window is nothing")
 	_check(card.hovered(Vector2(110, 110), false) == seen, "a hovered square gets its card")
 	_check(card.hovered(Vector2(110, 110), true) == null, "a press puts the card away")
@@ -265,6 +265,26 @@ func _test_item_card() -> bool:
 	_check(card.worn_for(other) == null, "and the worn piece is not held against itself")
 	_check(not card.bare_for(sword) and not card.bare_for(other),
 			"and a taken socket, or the worn piece itself, is not called bare")
+	# The keys at the card's foot: Alt while the card can answer it, and whatever the square names.
+	for key: String in ItemCard.KEY_ICONS:
+		_check(ResourceLoader.exists(ItemCard.KEY_ICONS[key]), "the %s key is cut" % key)
+	var row := ItemCard.key_row({"alt": "compare", "shift": "equip"})
+	_check(row.get_child_count() == 2 and row.get_child(0).get_child(0) is TextureRect
+			and (row.get_child(0).get_child(1) as Label).text == "compare"
+			and (row.get_child(1).get_child(1) as Label).text == "equip",
+			"a key row is a picture and a word a key, each pair a box that wraps whole")
+	_check((row.get_child(0).get_child(0) as TextureRect).texture.get_size() == Vector2(18, 12),
+			"the picture at the key's own size")
+	_check(row.custom_minimum_size.x == ItemCard.WIDTH, "wrapping inside the card")
+	seen.set_meta(ItemCard.KEYS, {"ctrl": "discard"})
+	_check(card.hints_for(seen, false) == {"alt": "compare", "ctrl": "discard"},
+			"over a bag square the foot names Alt and the square's own key")
+	_check(card.hints_for(seen, true) == {"ctrl": "discard"},
+			"held, Alt is answered by the second card and leaves the foot")
+	var worn_square := ItemSlot.make(other)
+	_check(card.hints_for(worn_square, false) == {}, "the worn piece itself has no Alt to offer")
+	worn_square.free()
+	row.free()
 	for node: Node in [box, open, card]:
 		node.queue_free()
 	return true

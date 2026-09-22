@@ -24,6 +24,11 @@ signal laid_out
 const WIDTH := 140.0
 const ROW_GAP := 6
 const ANIM_NAMES := ["None", "Low", "Default"]
+## `Settings.Uniques` in order: what a heading's Sell all and bin do with a unique among the handful.
+const UNIQUES_NAMES := ["Ask", "Sell", "Keep"]
+const UNIQUES_TIPS := ["A unique among the handful is asked about on its own",
+		"A unique among the handful is sold or thrown away with the rest",
+		"A unique among the handful is left in the bag"]
 const DETAILS_TIP := "Shows beside each modifier the lowest and highest it could have rolled at the item's level, like +14(8-20)% increased Damage."
 
 ## The debug build's item generator works on these; the main scene sets them, as it sets a town
@@ -62,21 +67,8 @@ func open() -> void:
 	_rows.add_child(_tick("Sound effects", Settings.sfx, func(on: bool) -> void: Settings.sfx = on))
 	_rows.add_child(UITheme.rule(WIDTH))
 	_rows.add_child(UITheme.label("Animations"))
-	var levels := HBoxContainer.new()
-	levels.add_theme_constant_override("separation", 2)
-	for level in ANIM_NAMES.size():
-		var pick := UITheme.button(ANIM_NAMES[level], "LightButton", "")
-		# The town's tabs' way of saying which is open: the pack's held face is one pixel, so the ones
-		# not picked fade instead.
-		if level != Settings.animations:
-			pick.modulate = TownPage.TAB_REST
-		pick.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		pick.pressed.connect(func() -> void:
-			Settings.animations = level as Settings.Anim
-			Settings.save()
-			open.call_deferred())
-		levels.add_child(pick)
-	_rows.add_child(levels)
+	_rows.add_child(_choice(ANIM_NAMES, [], Settings.animations,
+			func(level: int) -> void: Settings.animations = level as Settings.Anim))
 	_rows.add_child(UITheme.rule(WIDTH))
 	var details := _tick("Detailed item descriptions", Settings.item_details,
 			func(on: bool) -> void: Settings.item_details = on)
@@ -84,6 +76,10 @@ func open() -> void:
 	for part: Control in details.get_children():
 		part.tooltip_text = DETAILS_TIP
 	_rows.add_child(details)
+	_rows.add_child(UITheme.rule(WIDTH))
+	_rows.add_child(UITheme.label("Uniques in Sell all"))
+	_rows.add_child(_choice(UNIQUES_NAMES, UNIQUES_TIPS, Settings.uniques,
+			func(rule: int) -> void: Settings.uniques = rule as Settings.Uniques))
 	_rows.add_child(UITheme.rule(WIDTH))
 	_played = UITheme.label(_spent(), null, true)
 	_rows.add_child(_played)
@@ -104,6 +100,25 @@ func _spent() -> String:
 	if seconds >= 3600:
 		return "Time played: %dh %dm" % [seconds / 3600, seconds % 3600 / 60]
 	return "Time played: %dm %ds" % [seconds / 60, seconds % 60]
+
+
+## A row of buttons one of which is `picked`, with the others faded (the town's tabs' way of saying
+## which is open: the pack's held face is one pixel). `write` puts the pressed one into `Settings`;
+## `tips`, where there are any, go on the buttons in order.
+func _choice(names: Array, tips: Array, picked: int, write: Callable) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 2)
+	for at in names.size():
+		var pick := UITheme.button(names[at], "LightButton", tips[at] if at < tips.size() else "")
+		if at != picked:
+			pick.modulate = TownPage.TAB_REST
+		pick.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pick.pressed.connect(func() -> void:
+			write.call(at)
+			Settings.save()
+			open.call_deferred())
+		row.add_child(pick)
+	return row
 
 
 ## One tick-box row, the bag's own, already showing `on`. `write` puts a change into `Settings`.

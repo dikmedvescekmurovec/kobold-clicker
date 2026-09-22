@@ -222,6 +222,44 @@ func _test_towns() -> bool:
 			and average_links[TownWorld.Tier.MEDIUM] > average_links[TownWorld.Tier.SMALL], "fortresses have the most links, small towns the fewest")
 	_check(TownWorld.generate(WORLD_SEED).towns() == world.towns(), "same seed gives the same towns")
 
+	# Laid out ring by ring round the origin. TownWorld may not name MapBuilder, so its twins are held here.
+	_check(TownWorld.RING == MapBuilder.WALL_STEP and TownWorld.RING == MapBuilder.START_LAND_RADIUS
+			and TownWorld.KEEP_OUT == MapBuilder.START_TOWN_DISTANCE, "TownWorld's ring and keep-out are MapBuilder's")
+	var origin := TownWorld.SIZE / 2
+	var ring_spots := {}
+	var ring_towns := {}
+	var ring_fortresses := {}
+	for y in world.size.y:
+		for x in world.size.x:
+			var ring := TownWorld.ring_of(HexGrid.distance(origin, Vector2i(x, y)))
+			if ring != -1:
+				ring_spots[ring] = ring_spots.get(ring, 0) + 1
+	var too_near := 0
+	for spot in world.towns():
+		var ring := TownWorld.ring_of(HexGrid.distance(origin, spot))
+		if ring == -1:
+			too_near += 1
+			continue
+		ring_towns[ring] = ring_towns.get(ring, 0) + 1
+		if world.tier_at(spot) == TownWorld.Tier.FORTRESS:
+			ring_fortresses[ring] = ring_fortresses.get(ring, 0) + 1
+	_check(too_near == 0, "no town within %d of the origin (%d)" % [TownWorld.KEEP_OUT, too_near])
+	var density := 0.0
+	for tier: int in TownWorld.TIER_CHANCES:
+		density += TownWorld.TIER_CHANCES[tier]
+	var thin_rings := []
+	var fortress_less := []
+	for ring: int in ring_spots:
+		var share := float(ring_towns.get(ring, 0)) / int(ring_spots[ring])
+		# A sliver of a ring in the world's corner holds its one fortress and little else.
+		if int(ring_spots[ring]) >= 200 and (share < density * 0.8 or share > density * 1.3):
+			thin_rings.append([ring, ring_towns.get(ring, 0), ring_spots[ring]])
+		if ring_fortresses.get(ring, 0) < 1:
+			fortress_less.append(ring)
+	_check(thin_rings.is_empty(), "every ring holds its share of towns (off: %s)" % [thin_rings])
+	_check(fortress_less.is_empty(), "every ring has a fortress (none in %s)" % [fortress_less])
+	_check(ring_fortresses.get(0, 0) >= 1 and ring_spots.size() > 10, "the first ring has one, and there are many rings")
+
 	# The guaranteed starting town, on the ring MapBuilder asks about.
 	var candidates: Array[Vector2i] = []
 	for cell in MapBuilder.start_town_cells():
@@ -239,7 +277,7 @@ func _test_towns() -> bool:
 
 	# Clearing the area around a starting point.
 	var scratch := TownWorld.generate(WORLD_SEED)
-	var center := Vector2i(60, 60)
+	var center: Vector2i = scratch.towns()[0]
 	var removed := scratch.clear_towns_near(center, MapBuilder.START_TOWN_DISTANCE)
 	_check(removed > 0, "clearing removes the towns around the center")
 	_check(scratch.towns().filter(func(spot: Vector2i) -> bool:
@@ -646,6 +684,9 @@ func _test_blends_stay(map: HexMap, view: MapBuilder) -> bool:
 
 	view.reveal_all()
 	_check(map.fog.cells().all(view.is_wall), "revealing the map takes the fog off every tile but the wall's")
+	var town := view.start_town - view.origin
+	_check(view.charted(town) and not view.can_farm(town) and view.can_farm(MapBuilder.CENTER),
+			"a charted town cannot be farmed, the land beside it can")
 	for cell: Vector2i in blends_when_found:
 		_check(map.blends_at(cell) == blends_when_found[cell],
 				"%s keeps its blends once its neighbors are charted (%s, was %s)" % [

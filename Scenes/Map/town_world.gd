@@ -1,15 +1,22 @@
 class_name TownWorld
 extends RefCounted
-## Where the towns of the world are and which of them are connected. Independent of the rendered map,
-## which shows a window of this world.
+## Where the towns of the world are and which of them are connected. Laid out round the map's origin,
+## ring by ring, since the rings of land are counted from there; the rendered map shows a window of it.
 
 enum Tier { SMALL, MEDIUM, FORTRESS }
 
 ## Sprite suffix for each Tier.
 const TIER_NAMES := ["small", "medium", "fortress"]
 const SIZE := Vector2i(256, 256)
-## Chance per spot to become a town of each tier.
+## The share of a ring's spots that hold a town of each tier, rounded per ring.
 const TIER_CHANCES := {Tier.FORTRESS: 0.001, Tier.MEDIUM: 0.005, Tier.SMALL: 0.01}
+## The width of a ring of land: `MapBuilder.START_LAND_RADIUS` and `WALL_STEP`, both 10, which TownWorld may
+## not name (MapBuilder names it). `test_generation` holds them together. Counted in `WALL_STEP`s whatever the
+## Ring of Walls says, the way `Encounter.walls_inside` counts: the land is the same land.
+const RING := 10
+## No town is generated nearer than this to the origin: `MapBuilder.START_TOWN_DISTANCE`, held together the
+## same way, so the start clearing finds nothing and a ring's one fortress can never be cleared away.
+const KEEP_OUT := 5
 ## How many of its nearest towns a town of each tier connects to. Links go both ways, so a town can end up
 ## with more links than its own tier asks for.
 const LINKS_PER_TIER := {Tier.SMALL: 1, Tier.MEDIUM: 2, Tier.FORTRESS: 4}
@@ -28,21 +35,49 @@ var _links: Dictionary[Vector2i, Array] = {}
 var _buckets: Dictionary[Vector2i, Array] = {}
 
 
-## Every spot rolls for a town, except spots next to an existing town, so towns never touch.
-static func generate(seed_value: int, world_size := SIZE) -> TownWorld:
+## Lays the towns out ring by ring round `origin`: each ring of land gets `round(spots * TIER_CHANCES)` of
+## each tier, at least one fortress, on a seeded shuffle of its spots, never next to another town.
+static func generate(seed_value: int, origin := SIZE / 2, world_size := SIZE) -> TownWorld:
 	var world := TownWorld.new()
 	world.size = world_size
 	world.seed_value = seed_value
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
+	var rings: Array[Array] = []
 	for y in world_size.y:
 		for x in world_size.x:
 			var spot := Vector2i(x, y)
-			var tier := _roll_tier(rng.randf())
-			if tier != -1 and not HexGrid.neighbors(spot).any(world.has_town):
-				world._tiers[spot] = tier
+			var ring := ring_of(HexGrid.distance(origin, spot))
+			if ring == -1:
+				continue
+			while rings.size() <= ring:
+				rings.append([])
+			rings[ring].append(spot)
+	for spots: Array in rings:
+		for i in range(spots.size() - 1, 0, -1):
+			var j := rng.randi_range(0, i)
+			var swap: Vector2i = spots[i]
+			spots[i] = spots[j]
+			spots[j] = swap
+		var next := 0
+		for tier: int in [Tier.FORTRESS, Tier.MEDIUM, Tier.SMALL]:
+			var want := roundi(spots.size() * float(TIER_CHANCES[tier]))
+			if tier == Tier.FORTRESS:
+				want = maxi(want, 1)
+			while want > 0 and next < spots.size():
+				var spot: Vector2i = spots[next]
+				next += 1
+				if not HexGrid.neighbors(spot).any(world.has_town):
+					world._tiers[spot] = tier
+					want -= 1
 	world._connect_towns()
 	return world
+
+
+## Which ring of land a spot `steps` from the origin is in, counted the way `MapBuilder.ring_of` counts:
+## 0 inside the first wall, n between the nth wall and the next. -1 inside the keep-out.
+static func ring_of(steps: int) -> int:
+	return -1 if steps < KEEP_OUT else maxi(0, ceili(float(steps - RING) / RING))
 
 
 ## The town's Tier, or -1 if there is no town.
@@ -184,15 +219,6 @@ static func from_dict(data: Dictionary) -> TownWorld:
 		world._links[a].append(b)
 		world._links[b].append(a)
 	return world
-
-
-static func _roll_tier(roll: float) -> int:
-	var threshold := 0.0
-	for tier: int in TIER_CHANCES:
-		threshold += TIER_CHANCES[tier]
-		if roll < threshold:
-			return tier
-	return -1
 
 
 func _in_bounds(spot: Vector2i) -> bool:

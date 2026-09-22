@@ -344,6 +344,18 @@ ICONS = {
 # Both icons are centred on one square, so both buttons come out the same size whatever they wear.
 ICON_SIDE = 14
 
+# The keys the item card names at its foot, off the keyboard pack's extras sheet: a 4 x 8 grid of
+# 32 x 16 cells, the top four rows the unpressed keys (white face) and the bottom four the pressed
+# ones (blue face). Cut at their own size and never recoloured: they stand on the cream card beside
+# 10 px body text, and each is 12 px tall and as wide as its word. name -> (column, row).
+KEY_SHEET = "Keyboard/Keyboard Extras"
+KEY_CELL = (32, 16)
+KEYS = {
+    "ui_key_shift": (0, 1),
+    "ui_key_ctrl": (0, 2),
+    "ui_key_alt": (1, 2),
+}
+
 # The marks no pack draws, for the fight's two square buttons and the corner's bounty journal: drawn
 # here in Icons.png's own
 # brown ramp and shading (a dark outline, light from the top left), so that they go through the
@@ -1381,6 +1393,31 @@ def icons():
     return out
 
 
+def keys():
+    """The item card's keys, trimmed to their own faces."""
+    w, h = KEY_CELL
+    return {name: _cut((KEY_SHEET, col * w, row * h, w, h, 1)) for name, (col, row) in KEYS.items()}
+
+
+def key_preview(cut, sprites, margins):
+    """Each key on the cream card and on wood, at 1x and 3x: does a dark key read beside body text?"""
+    pad = 4
+    widest = max(image.width for image in cut.values())
+    tallest = max(image.height for image in cut.values())
+    cell = (widest + 2 * pad, tallest + 2 * pad)
+    out = Image.new("RGBA", (2 * cell[0], len(cut) * cell[1]), (0, 0, 0, 0))
+    for col, panel in enumerate(("ui_panel_white", "ui_panel_wood")):
+        face = nine_slice(sprites[panel], margins[panel], (cell[0], len(cut) * cell[1]))
+        out.alpha_composite(face, (col * cell[0], 0))
+        for row, image in enumerate(cut.values()):
+            out.alpha_composite(image, (col * cell[0] + pad, row * cell[1] + pad))
+    big = out.resize((out.width * 3, out.height * 3), Image.NEAREST)
+    both = Image.new("RGBA", (out.width + pad + big.width, big.height), (0, 0, 0, 0))
+    both.alpha_composite(out, (0, 0))
+    both.alpha_composite(big, (out.width + pad, 0))
+    return both
+
+
 def character():
     """The character panel's frame, portrait and three bars, plus the XP gem, each at its own size."""
     sheet = Image.open(os.path.join(POTENTIAL, CHAR_SHEET + ".png")).convert("RGBA")
@@ -1651,6 +1688,12 @@ def main():
     for name, image in mark.items():
         image.save(os.path.join(OUT, name + ".png"))
 
+    # Loose too, and at their own size: a key is drawn beside a word, never on a button.
+    key = keys()
+    key_preview(key, sprites, margins).save(os.path.join(QA, "ui_kit_keys.png"))
+    for name, image in key.items():
+        image.save(os.path.join(OUT, name + ".png"))
+
     # Their own folder, not Assets/Gear: an orb is not a piece of gear and OrbTable loads it by its
     # own ROOT. Unlike GEAR_OUT this one is made here, because it did not exist before this chunk.
     os.makedirs(ORB_OUT, exist_ok=True)
@@ -1721,6 +1764,7 @@ def main():
     print("wrote %d kill pips to %s/ and %s/ui_kit_pips.png" % (len(pip), OUT, QA))
     print("wrote %d orb icons to %s/ and %s/ui_kit_orbs.png" % (len(orb), ORB_OUT, QA))
     print("wrote %d button marks to %s/ and %s/ui_kit_icons.png" % (len(mark), OUT, QA))
+    print("wrote %d keys to %s/ and %s/ui_kit_keys.png" % (len(key), OUT, QA))
 
 
 if __name__ == "__main__":

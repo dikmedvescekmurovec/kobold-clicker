@@ -21,6 +21,10 @@ static var sfx := true
 static var animations := Anim.DEFAULT
 ## Whether a modifier's line carries the band it rolled in: "+14(8-20)% increased Damage".
 static var item_details := false
+## What Sell all and the bin do with a unique among the handful: ask (the second question, whose tick
+## writes the answer given here), sell it with the rest, or leave it in the bag.
+enum Uniques { ASK, SELL, KEEP }
+static var uniques := Uniques.ASK
 ## Dev: the collection log draws every unique as found, and its trophy is there from the start. Read
 ## through `show_all_uniques()`, which a release build answers no to whatever the file says.
 static var all_uniques := false
@@ -43,6 +47,7 @@ static func load_settings() -> void:
 	sfx = bool(file.get_value(SECTION, "sfx", sfx))
 	animations = clampi(int(file.get_value(SECTION, "animations", animations)), Anim.NONE, Anim.DEFAULT) as Anim
 	item_details = bool(file.get_value(SECTION, "item_details", item_details))
+	uniques = clampi(int(file.get_value(SECTION, "uniques", uniques)), Uniques.ASK, Uniques.KEEP) as Uniques
 	all_uniques = bool(file.get_value(SECTION, "all_uniques", all_uniques))
 	all_chests = bool(file.get_value(SECTION, "all_chests", all_chests))
 	all_services = bool(file.get_value(SECTION, "all_services", all_services))
@@ -56,6 +61,7 @@ static func save() -> void:
 	file.set_value(SECTION, "sfx", sfx)
 	file.set_value(SECTION, "animations", int(animations))
 	file.set_value(SECTION, "item_details", item_details)
+	file.set_value(SECTION, "uniques", int(uniques))
 	file.set_value(SECTION, "all_uniques", all_uniques)
 	file.set_value(SECTION, "all_chests", all_chests)
 	file.set_value(SECTION, "all_services", all_services)

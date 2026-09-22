@@ -307,9 +307,12 @@ const STAT_LABELS := {
 	"item_rarity": "Item Rarity",
 	"gold_find": "Gold Find",
 	"orb_find": "Orb Find",
+	# How much shorter the next enemy's walk-in is. A percentage of the walk, capped at 100 by
+	# `Encounter.arm`: at the cap the next body is simply there.
+	"spawn_speed": "Spawn Speed",
 }
 const PERCENT_STATS := ["crit_chance", "crit_damage", "move_speed", "drop_rate", "bleed",
-	"item_rarity", "gold_find", "orb_find"]
+	"item_rarity", "gold_find", "orb_find", "spawn_speed"]
 ## The percentages that are a *probability*: how often something happens, rather than how much of it
 ## there is. They are the ones a level may not multiply -- see `scale`. Crit damage is not one of
 ## them (500% crit damage is a fine number).
@@ -328,7 +331,12 @@ const PERCENT_STATS := ["crit_chance", "crit_damage", "move_speed", "drop_rate",
 ## Sight is the odd one out and is here for the arithmetic rather than for the reasoning. It is a
 ## number of tiles, its step is zero, and the material of the torch is the only thing that moves it --
 ## so what this list does for it is keep a level from multiplying one tile into twenty-six.
-const CHANCE_STATS := ["crit_chance", "drop_rate", "gold_find", "item_rarity", "bleed", "sight"]
+##
+## Spawn speed is a share of the walk-in with a hard cap at the whole of it, so it is a chance's shape.
+const CHANCE_STATS := ["crit_chance", "drop_rate", "gold_find", "item_rarity", "bleed", "sight",
+	"spawn_speed"]
+## The stats any piece at all may roll a FLAT modifier for, without being told so kind by kind.
+const ANY_AFFIXES := ["spawn_speed"]
 ## Per second: attacks. The one stat that is neither a plain number nor a percentage.
 const RATE_STATS := ["attack_speed"]
 ## Seconds of the fight clock: how much of a blow block takes off, and how much a hit wins back.
@@ -373,6 +381,9 @@ const LEVEL_FLAT := {
 	# And the two a level is worth nothing to: a torch's Sight is one tile or two and the material is
 	# what says which, and nothing but a skill has ever rolled orb find.
 	"sight": 0.0, "orb_find": 0.0,
+	# Spawn speed reaches its cap by being worn on every socket, not by levelling: a level is worth
+	# nothing to it, so the cap is a set's worth of rolls at any level.
+	"spawn_speed": 0.0,
 }
 
 ## What a body's tier adds to the ceiling on what it drops, over the tile's own level. The elite at
@@ -473,7 +484,7 @@ static func affixes_of(item: String) -> Array:
 ## Whether this piece can carry this stat at all, as a base stat or as an affix. The gate on a FLAT
 ## modifier, where `has_stat` is the gate on a PERCENT one.
 static func can_roll(item: String, stat: String) -> bool:
-	return has_stat(item, stat) or (ITEMS.has(item) and stat in ITEMS[item]["affixes"])
+	return has_stat(item, stat) or (ITEMS.has(item) and (stat in ITEMS[item]["affixes"] or stat in ANY_AFFIXES))
 
 
 ## The stats this piece can roll a *global* percent for -- a percentage of what the whole set is

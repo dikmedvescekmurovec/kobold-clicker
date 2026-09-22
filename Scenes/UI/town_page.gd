@@ -26,7 +26,7 @@ signal closed
 ## so the orb vendor's tray and the gear merchant's Sell button are never both live at once.
 signal tab_changed(service: String)
 ## What the page has open off the shelf, or null when it is showing the shelf itself. The bag beside
-## it redraws around this: the comparison is pointed at the piece being considered, and a purchase
+## it redraws around this: what wearing it would replace is the hover card's under Alt, and a purchase
 ## reaches the purse, the grid and the tray the same way.
 signal offer_changed(item: Item)
 ## The fortuneteller was paid to put the star over the chest on `cell`. The star is the main scene's.
@@ -45,7 +45,7 @@ signal spell_aimed(reading: String, price: float, spot: Vector2i)
 signal transcend_pressed
 
 ## How wide the page's contents run before they wrap, in panel pixels. It shares a 1152 px window
-## with the bag and the comparison beside it, so this is a width budget rather than a matter of taste
+## with the bag and the doll beside it, so this is a width budget rather than a matter of taste
 ## -- and it is settled by the shelf: three squares across and the gutters between them, which is
 ## what makes a price readable under each one. See `Scenes/Town/DESIGN.md`.
 const STOCK_COLS := 3
@@ -151,7 +151,7 @@ var _drawer := {}
 var _tabs: PackedStringArray = []
 var _open_tab := ""
 ## The piece off the shelf the page has open, and which square it stands on. A piece rather than an
-## index into the shelf, because it is what `ItemDetails` and the comparison are both reading.
+## index into the shelf, because it is what `ItemDetails` is reading.
 var _offer: Item
 var _offer_at := -1
 ## What the bag has open, which is the piece the smith works on -- a piece in the grid or one off the
@@ -451,7 +451,7 @@ static func _sold_square(side: float) -> VBoxContainer:
 
 ## The piece the player has picked up off the shelf, written out the way the bag writes one, with
 ## Buy and Back under it. The same `ItemDetails` block, so a piece reads the same on a shelf as it
-## does in the bag, and the comparison beside the page is doing the rest of the work.
+## does in the bag, and the hover card's Alt is doing the rest of the work.
 func _fill_offer() -> void:
 	ItemDetails.fill(_scrolled(2), _offer, BODY_WIDTH)
 
