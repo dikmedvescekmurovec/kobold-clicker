@@ -56,6 +56,7 @@ func _init(ui_scale: float) -> void:
 	_ui_scale = ui_scale
 	theme = UITheme.theme()
 	theme_type_variation = "TextPanel"
+	UITheme.notched(self)
 	scale = Vector2(ui_scale, ui_scale)
 	# It stands beside the cursor and must never take a press meant for what is under it.
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -64,6 +65,7 @@ func _init(ui_scale: float) -> void:
 	add_child(_rows)
 	_worn.theme = theme
 	_worn.theme_type_variation = "TextPanel"
+	UITheme.notched(_worn)
 	_worn.scale = scale
 	_worn.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_worn_rows = UITheme.vbox(2, WIDTH)
@@ -115,7 +117,7 @@ func _process(_delta: float) -> void:
 		elif alt and bare_for(slot.item):
 			# Alt answered, so a bare socket does not read as a key that did nothing.
 			UITheme.clear(_worn_rows)
-			_worn_rows.add_child(ItemDetails.line(bare_text(slot.item), Palette.SLATE, WIDTH, true))
+			_worn_rows.add_child(ItemDetails.line(bare_text(slot.item), Palette.TEXT_SOFT, WIDTH, true))
 			_worn.show()
 	show()
 	var anchor := slot.get_global_rect()
@@ -224,7 +226,7 @@ static func key_row(hints: Dictionary) -> HFlowContainer:
 		picture.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
 		picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		pair.add_child(picture)
-		var word := UITheme.label(str(hints[key]), Palette.SLATE, true)
+		var word := UITheme.label(str(hints[key]), Palette.TEXT_SOFT, true)
 		word.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		pair.add_child(word)
 		row.add_child(pair)

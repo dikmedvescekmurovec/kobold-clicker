@@ -195,8 +195,8 @@ func _show_curses() -> void:
 	# their columns.
 	var headings := MarginContainer.new()
 	headings.add_theme_constant_override("margin_left", 1)
-	headings.add_child(_curse_row(_curse_cells(UITheme.label("Name", Palette.SLATE, true), null,
-			UITheme.label("Curse", Palette.SLATE, true), UITheme.label("Boon", Palette.SLATE, true)), false))
+	headings.add_child(_curse_row(_curse_cells(UITheme.label("Name", Palette.TEXT_SOFT, true), null,
+			UITheme.label("Curse", Palette.TEXT_SOFT, true), UITheme.label("Boon", Palette.TEXT_SOFT, true)), false))
 	body.add_child(headings)
 	# A framed block of its own, as the stats are: the panel's row gap would pull a table apart. In a
 	# scroll, because the sentences are written to be understood and not to fit, and the list will grow.

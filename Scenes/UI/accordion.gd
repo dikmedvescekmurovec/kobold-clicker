@@ -32,7 +32,7 @@ func _init(title: String, id: String, separation := 2) -> void:
 	heading.mouse_filter = Control.MOUSE_FILTER_STOP
 	Cursors.wear(heading, Cursors.HAND)
 	heading.gui_input.connect(_on_heading_input)
-	var label := UITheme.label(title, Palette.SLATE)
+	var label := UITheme.label(title, Palette.TEXT_SOFT)
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	heading.add_child(label)
 	_caret = TextureRect.new()

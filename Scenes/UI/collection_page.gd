@@ -81,12 +81,12 @@ func open() -> void:
 	help.set_meta(TipCard.NOW, true)
 	help.tooltip_text = ("Each unique found adds %d%% increased Damage, worn or not."
 			% UniqueTable.COLLECTION_DAMAGE)
-	var bonus := UITheme.label("+%d%% Damage" % inventory.collection_bonus(), Palette.SLATE, true)
+	var bonus := UITheme.label("+%d%% Damage" % inventory.collection_bonus(), Palette.TEXT_SOFT, true)
 	bonus.name = BONUS_NAME
 	bonus.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_foot.add_child(bonus)
 	var count := UITheme.label("Found %d of %d" % [inventory.uniques_found.size(),
-			UniqueTable.UNIQUES.size()], Palette.SLATE, true)
+			UniqueTable.UNIQUES.size()], Palette.TEXT_SOFT, true)
 	count.name = COUNT_NAME
 	_foot.add_child(count)
 	# Last in the row, so its card stands past the panel and not over the two figures it explains.
@@ -152,19 +152,19 @@ static func specimen(id: String) -> Item:
 static func write_hint(rows: VBoxContainer, width: float, id: String, map_view: MapBuilder,
 		specimen: Item = null, found := false) -> void:
 	if specimen == null:
-		rows.add_child(ItemDetails.line("Not found yet", Palette.SLATE, width))
-		rows.add_child(ItemDetails.line("A fortuneteller could say more.", Palette.SLATE, width, true))
+		rows.add_child(ItemDetails.line("Not found yet", Palette.TEXT_SOFT, width))
+		rows.add_child(ItemDetails.line("A fortuneteller could say more.", Palette.TEXT_SOFT, width, true))
 		return
 	# `fill` empties the rows it is given, so the piece goes in first and whether it is held under it.
 	ItemDetails.fill(rows, specimen, width)
 	rows.add_child(UITheme.rule())
 	rows.add_child(ItemDetails.line("Found" if found else "Not found yet",
-			Palette.LEAF if found else Palette.SLATE, width, true))
+			Palette.LEAF if found else Palette.TEXT_SOFT, width, true))
 	var envs: Array = UniqueTable.UNIQUES[id]["envs"]
 	if envs.is_empty():
-		rows.add_child(ItemDetails.line("Carried by monsters everywhere.", Palette.INK, width, true))
+		rows.add_child(ItemDetails.line("Carried by monsters everywhere.", Palette.TEXT, width, true))
 	else:
-		rows.add_child(ItemDetails.line("Carried by the monsters of:", Palette.INK, width, true))
+		rows.add_child(ItemDetails.line("Carried by the monsters of:", Palette.TEXT, width, true))
 		if map_view != null:
 			var swatches := HBoxContainer.new()
 			swatches.add_theme_constant_override("separation", 2)
@@ -172,16 +172,17 @@ static func write_hint(rows: VBoxContainer, width: float, id: String, map_view: 
 				swatches.add_child(map_view.map.tileset.env_icon(env))
 			rows.add_child(swatches)
 		else:
-			rows.add_child(ItemDetails.line(", ".join(PackedStringArray(envs)), Palette.INK, width, true))
+			rows.add_child(ItemDetails.line(", ".join(PackedStringArray(envs)), Palette.TEXT, width, true))
 		if map_view != null:
 			var near := map_view.nearest_env(PackedStringArray(envs), 0)
 			rows.add_child(ItemDetails.line("Nearest: %s" % (map_view.name_of(near)
-					if near != HexMap.NO_CELL else "none you have seen yet."), Palette.SLATE, width, true))
+					if near != HexMap.NO_CELL else "none you have seen yet."), Palette.TEXT_SOFT, width, true))
 	rows.add_child(ItemDetails.line("Bosses carry one far more often than the rabble.",
-			Palette.SLATE, width, true))
+			Palette.TEXT_SOFT, width, true))
 
 
 ## Full window height against the left edge, where the other pages stand.
 func layout() -> void:
-	_panel.size = Vector2(_panel.get_combined_minimum_size().x, get_viewport_rect().size.y / _ui_scale)
-	_panel.position = Vector2.ZERO
+	_panel.size = Vector2(_panel.get_combined_minimum_size().x,
+			get_viewport_rect().size.y / _ui_scale - 2 * UITheme.EDGE)
+	_panel.position = Vector2.ONE * UITheme.EDGE * _ui_scale

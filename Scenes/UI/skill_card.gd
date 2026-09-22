@@ -13,6 +13,7 @@ var _rows: VBoxContainer
 
 func _init() -> void:
 	theme_type_variation = "TextPanel"
+	UITheme.notched(self)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_rows = VBoxContainer.new()
 	_rows.add_theme_constant_override("separation", 2)
@@ -30,8 +31,8 @@ func fill(id: String, skills: Skills, level: int, worth := 1.0, refused: Variant
 	var entry := SkillTree.node(id)
 	var rank := skills.rank_of(id)
 	var most := int(entry["max_rank"])
-	_rows.add_child(ItemDetails.line(str(entry["name"]), Palette.INK, WIDTH))
-	_rows.add_child(ItemDetails.line("Per point: " + SkillTree.describe(id, worth, skills.transcended), Palette.SLATE, WIDTH, true))
+	_rows.add_child(ItemDetails.line(str(entry["name"]), Palette.TEXT, WIDTH))
+	_rows.add_child(ItemDetails.line("Per point: " + SkillTree.describe(id, worth, skills.transcended), Palette.TEXT_SOFT, WIDTH, true))
 	if entry.has("effect_text"):
 		_rows.add_child(ItemDetails.line(str(entry["effect_text"]), Palette.SLOT_TAN_DK, WIDTH, true))
 	if rank > 0:

@@ -27,14 +27,16 @@ const GRID_COLS := 4
 const SLOT_GAP := ItemSlot.SIDE / 7
 ## Fixed, so the panel keeps its width as the bag fills.
 ## The marks on a level's two buttons, and how far Auto's face is darkened while it is held down.
-const AUTO_ICON := "res://Assets/UI/ui_icon_filter.png"
-const CLEAR_ICON := "res://Assets/UI/ui_icon_trash.png"
-const SELL_ICON := "res://Assets/UI/ui_icon_coins.png"
+## Bare on the cream, so the pack's own brown cut of each mark; the funnel turns green while Auto
+## is on, as the pack turns its open tab green.
+const AUTO_ICON := "res://Assets/UI/ui_icon_filter_brown.png"
+const AUTO_ON_ICON := "res://Assets/UI/ui_icon_filter_green.png"
+const CLEAR_ICON := "res://Assets/UI/ui_icon_trash_brown.png"
+const SELL_ICON := "res://Assets/UI/ui_icon_coins_brown.png"
 const SWAP_ICON := "res://Assets/UI/ui_icon_swap.png"
 ## Hide points back at the bag the doll folds into, Show out to where it opens.
 const HIDE_ICON := "res://Assets/UI/ui_icon_caret_left.png"
 const SHOW_ICON := "res://Assets/UI/ui_icon_caret_right.png"
-const AUTO_HELD := Color(0.6, 0.6, 0.6)
 ## What goes in front of a question's id in `inventory.tips` once the player has said not to ask it
 ## again, how wide the question is set, and its tick box: the node's name and the mark it wears.
 const SKIP_CONFIRM := "skip_confirm_"
@@ -196,7 +198,7 @@ func _ready() -> void:
 	coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	top.add_child(coin)
 	# Slate rather than GOLD: amber on cream is too weak a pairing.
-	_gold = UITheme.label("", Palette.SLATE)
+	_gold = UITheme.label("", Palette.TEXT_SOFT)
 	top.add_child(_gold)
 
 	# Wheel scrolling is the container's, dragging is `_on_grid_input`'s; no bar is drawn.
@@ -295,8 +297,8 @@ func refresh_gold() -> void:
 ## transcension the two stand in the middle of the window instead, the bag `TRANSCEND_HEIGHT` of it.
 func layout() -> void:
 	var view_size := get_viewport_rect().size
-	_panel.size = Vector2(_panel.get_combined_minimum_size().x, view_size.y / _ui_scale)
-	_panel.position = Vector2.ZERO
+	_panel.size = Vector2(_panel.get_combined_minimum_size().x, view_size.y / _ui_scale - 2 * UITheme.EDGE)
+	_panel.position = Vector2.ONE * UITheme.EDGE * _ui_scale
 	_worn_panel.size = _worn_panel.get_combined_minimum_size()
 	if _transcending:
 		_panel.size.y = floorf(_panel.size.y * TRANSCEND_HEIGHT)
@@ -371,7 +373,7 @@ func refresh() -> void:
 	_count.text = ("%d to spend" % _purse.super_orbs if _heirlooms and _transcending
 			else str(inventory.total()) if _heirlooms
 			else "%d / %d" % [inventory.total(), Inventory.CAPACITY])
-	_count.add_theme_color_override("font_color", Palette.RUST if inventory.is_full() else Palette.SLATE)
+	_count.add_theme_color_override("font_color", Palette.RUST if inventory.is_full() else Palette.TEXT_SOFT)
 	refresh_gold()
 	refresh_orbs()
 	_refresh_make()
@@ -393,7 +395,7 @@ func _section_heading(level: int) -> HBoxContainer:
 	# The rule is said in words and colour: the toggle's pressed face is too quiet to read a state off.
 	var ruled := inventory.autodiscards(level)
 	var title := UITheme.label("Level %d auto" % level if ruled else "Level %d" % level,
-			Palette.RUST if ruled else Palette.SLATE)
+			Palette.RUST if ruled else Palette.TEXT_SOFT)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(title)
@@ -402,16 +404,14 @@ func _section_heading(level: int) -> HBoxContainer:
 	if _heirlooms or _transcending:
 		return row
 
-	var auto := UITheme.button("", "BrownIconButton",
+	var auto := UITheme.button("", UITheme.BARE_BUTTON,
 			"Auto is on: what is found at level %d is thrown away. Press to stop" % level if ruled
 			else "Auto: throw away everything found at level %d from now on" % level)
-	auto.icon = load(AUTO_ICON)
+	# Held down is a pixel lower -- and green as well, because that pixel alone is a press being
+	# watched and not a state being read off a column of headings.
+	auto.icon = load(AUTO_ON_ICON if ruled else AUTO_ICON)
 	auto.toggle_mode = true
 	auto.button_pressed = ruled
-	# Held down is the pack's pressed face, a pixel lower -- and darkened as well, because that pixel
-	# alone is a press being watched and not a state being read off a column of headings.
-	if ruled:
-		auto.self_modulate = AUTO_HELD
 	auto.toggled.connect(_on_autodiscard_toggled.bind(level))
 	row.add_child(auto)
 
@@ -422,7 +422,7 @@ func _section_heading(level: int) -> HBoxContainer:
 	var worth := TownPrices.sell_total(inventory.items.filter(
 			func(item: Item) -> bool: return item.level == level)) if selling else 0.0
 	# A mark either way, coins for selling and a bin for throwing away; the tooltip says the sum.
-	var clear := UITheme.button("", "BrownIconButton",
+	var clear := UITheme.button("", UITheme.BARE_BUTTON,
 			"Sell the %d item(s) held at level %d for %s gold"
 			% [held, level, BigNumber.format(worth)] if selling
 			else "Throw away the %d item(s) held at level %d" % [held, level])

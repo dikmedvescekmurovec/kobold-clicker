@@ -67,15 +67,19 @@ const ROW_GAP := 4
 
 ## What each counter wears on its tab. A mark rather than a word, so a fortress's five stand in one
 ## row: in words they took two, and the second row was what pushed the gear tab past the window's
-## foot. The full name is the heading under them and the tab's tooltip.
+## foot. The full name is the heading under them and the tab's tooltip. The marks stand bare on the
+## cream as the pack's craft tabs do, in the pack's brown, and the open one alone is green
+## (`tab_mark`) -- which is all the pack changes on its open tab.
 const TAB_ICONS := {
-	TownServices.BOUNTIES: "res://Assets/UI/ui_icon_scroll.png",
-	TownServices.GEAR: "res://Assets/UI/ui_icon_sword.png",
-	TownServices.ORBS: "res://Assets/UI/ui_icon_gem.png",
-	TownServices.SMITH: "res://Assets/UI/ui_icon_anvil.png",
-	TownServices.FORTUNE: "res://Assets/UI/ui_icon_help.png",
+	TownServices.BOUNTIES: "scroll",
+	TownServices.GEAR: "sword",
+	TownServices.ORBS: "gem",
+	TownServices.SMITH: "anvil",
+	TownServices.FORTUNE: "help",
 }
-## How far a tab that is not the open one is faded, so the open one is read off the row at a glance.
+const TAB_MARK := "res://Assets/UI/ui_icon_%s_%s.png"
+## How far a choice that is not the one picked is faded, so the picked one is read off a row of them
+## at a glance: the settings' three-way rows, and a curse the skulls cannot pay for.
 const TAB_REST := Color(1, 1, 1, 0.55)
 
 ## The counters this build has actually built, and so the only ones that get a tab: a service not
@@ -147,6 +151,11 @@ var _tier := -1
 ## That town's drawer in the save, where its shelves live. `TownState.visit` hands it over and it is
 ## written in place, so a purchase is saved with the purse it came out of.
 var _drawer := {}
+## A counter's mark: the pack's brown, or green for the open tab.
+static func tab_mark(service: String, lit: bool) -> Texture2D:
+	return load(TAB_MARK % [TAB_ICONS[service], "green" if lit else "brown"])
+
+
 ## The counters with a tab, in `TownServices.ORDER`, and which of them is open.
 var _tabs: PackedStringArray = []
 var _open_tab := ""
@@ -274,8 +283,8 @@ func redraw() -> void:
 func layout() -> void:
 	var view_size := get_viewport_rect().size
 	var width := _panel.get_combined_minimum_size().x
-	_panel.size = Vector2(width, view_size.y / _ui_scale)
-	_panel.position = Vector2(view_size.x - width * _ui_scale, 0.0)
+	_panel.size = Vector2(width, view_size.y / _ui_scale - 2 * UITheme.EDGE)
+	_panel.position = Vector2(view_size.x - (width + UITheme.EDGE) * _ui_scale, UITheme.EDGE * _ui_scale)
 
 
 func _fill() -> void:
@@ -285,10 +294,8 @@ func _fill() -> void:
 	_rows.add_child(tabs)
 	var group := ButtonGroup.new()
 	for service: String in _tabs:
-		var tab := UITheme.button("", "BrownIconButton", TownServices.label(service))
-		tab.icon = load(TAB_ICONS[service])
-		if service != _open_tab:
-			tab.modulate = TAB_REST
+		var tab := UITheme.button("", UITheme.BARE_BUTTON, TownServices.label(service))
+		tab.icon = tab_mark(service, service == _open_tab)
 		tab.toggle_mode = true
 		tab.button_group = group
 		tab.button_pressed = service == _open_tab
@@ -405,7 +412,7 @@ func _price_cell(square: Control, price: float) -> VBoxContainer:
 	# bought in a town, are told again for free, and a coin beside a nought reads as a price of zero
 	# gold rather than as no price at all.
 	if price <= 0.0:
-		var free := UITheme.label("Free", Palette.SLATE)
+		var free := UITheme.label("Free", Palette.TEXT_SOFT)
 		free.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(free)
 		cell.add_child(row)
@@ -425,7 +432,7 @@ func _price_cell(square: Control, price: float) -> VBoxContainer:
 	# Clipped rather than allowed to push: gold grows with the walk, and a six-figure price out at the
 	# frontier would widen the shelf into the panel beside it. The whole number is in the square's
 	# tooltip and on the Buy button.
-	var label := UITheme.label(BigNumber.format(price), Palette.SLATE)
+	var label := UITheme.label(BigNumber.format(price), Palette.TEXT_SOFT)
 	label.clip_text = true
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -603,7 +610,7 @@ func _fill_smith() -> void:
 		var risk := Blacksmith.break_chance(_bag_piece)
 		_rows.add_child(_sign("Level %d of %d. %s" % [_bag_piece.level + 1, cap,
 				"%d%% to break." % roundi(risk * 100.0) if risk > 0.0
-				else "Cannot break until level %d." % _bag_piece.safe_level], Palette.SLATE))
+				else "Cannot break until level %d." % _bag_piece.safe_level], Palette.TEXT_SOFT))
 	var lock_price := TownPrices.lock_price(_bag_piece)
 	var lock_why := _smith_why_not(Blacksmith.why_not_lock(_bag_piece), lock_price)
 	_rows.add_child(_smith_button("Lock", lock_price, lock_why,
@@ -675,7 +682,7 @@ func _fill_fortune() -> void:
 		FortuneTeller.TRANSCEND:
 			for line: String in TRANSCEND_LINES:
 				body.add_child(_sign(line))
-			body.add_child(_sign("She asks %s gold." % BigNumber.format(_fortune_price(_said)), Palette.SLATE))
+			body.add_child(_sign("She asks %s gold." % BigNumber.format(_fortune_price(_said)), Palette.TEXT_SOFT))
 	var back := UITheme.back_button("Back to what she can be asked")
 	back.pressed.connect(_on_reading_closed)
 	if _said != FortuneTeller.TRANSCEND:
@@ -784,7 +791,7 @@ func _spell_square(reading: String) -> Control:
 ## One modifier she read off a piece: the line with its band on the left, how often it comes up on the right.
 func _odds_row(row: Dictionary, striped: bool) -> PanelContainer:
 	var line := UITheme.table_row(str(row["line"]), "%.1f%%" % float(row["share"]), striped,
-			BODY_WIDTH, null, Palette.SLATE)
+			BODY_WIDTH, null, Palette.TEXT_SOFT)
 	var share: Label = line.find_child(UITheme.TABLE_VALUE, true, false)
 	share.tooltip_text = "Weight %d" % int(row["weight"])
 	share.mouse_filter = Control.MOUSE_FILTER_STOP

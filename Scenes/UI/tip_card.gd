@@ -28,7 +28,7 @@ func _init(ui_scale: float) -> void:
 	theme_type_variation = "TextPanel"
 	scale = Vector2(ui_scale, ui_scale)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_line = UITheme.label("", Palette.INK, true)
+	_line = UITheme.label("", Palette.TEXT, true)
 	_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_line)
 	hide()

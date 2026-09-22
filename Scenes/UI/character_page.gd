@@ -68,12 +68,12 @@ func open() -> void:
 			# A block of its own at the tile panel's gap: the page's row gap would pull the lines apart.
 			var block := UITheme.vbox(2)
 			block.add_child(UITheme.label(str(curse["name"]), Palette.RUST))
-			block.add_child(ItemDetails.line(str(curse["text"]), Palette.INK, BagPage.WIDTH, true))
+			block.add_child(ItemDetails.line(str(curse["text"]), Palette.TEXT, BagPage.WIDTH, true))
 			block.add_child(ItemDetails.line(str(curse["reward"]), Palette.LEAF, BagPage.WIDTH, true))
 			# The one curse whose terms were dealt and not written: which two lands are home.
 			if id == Curses.HOMELAND and not inventory.homeland.is_empty():
 				block.add_child(ItemDetails.line("Your lands: %s." % " and ".join(inventory.homeland.map(
-						func(env: String) -> String: return env.capitalize())), Palette.SLATE, BagPage.WIDTH, true))
+						func(env: String) -> String: return env.capitalize())), Palette.TEXT_SOFT, BagPage.WIDTH, true))
 			cursed.add_child(block)
 	var discs := HBoxContainer.new()
 	discs.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -93,11 +93,11 @@ func open() -> void:
 		if ATTRIBUTES.has(stat) or value <= 0.0:
 			continue
 		body.add_child(UITheme.table_row(LootTable.STAT_LABELS[stat], LootTable.stat_value(stat, value),
-				body.get_child_count() % 2 == 1, 0.0, Palette.SLOT_TAN_DK, Palette.INK))
+				body.get_child_count() % 2 == 1, 0.0, Palette.SLOT_TAN_DK, Palette.TEXT))
 	# Already inside the damage figure above, and nothing else on the page says where it came from.
 	if inventory.collection_bonus() > 0:
 		body.add_child(UITheme.table_row("Collection", "+%d%% Damage" % inventory.collection_bonus(),
-				body.get_child_count() % 2 == 1, 0.0, Palette.SLOT_TAN_DK, Palette.SLATE))
+				body.get_child_count() % 2 == 1, 0.0, Palette.SLOT_TAN_DK, Palette.TEXT_SOFT))
 
 
 ## A heading that folds what is under it, added to the page; returns what to fill.
@@ -133,14 +133,14 @@ func _who() -> PanelContainer:
 	var level := UITheme.label("Level %d" % inventory.level)
 	level.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	heading.add_child(level)
-	var kills := UITheme.label("%d kills" % inventory.kills, Palette.SLATE, true)
+	var kills := UITheme.label("%d kills" % inventory.kills, Palette.TEXT_SOFT, true)
 	kills.size_flags_vertical = Control.SIZE_SHRINK_END
 	heading.add_child(kills)
 	lines.add_child(heading)
 	# What the card has left once the socket, the gap and both paddings are paid for.
 	var bar_width: float = BagPage.WIDTH - portrait.custom_minimum_size.x - CARD_GAP - CARD_PAD * 4 - 2
 	lines.add_child(BountyList.progress_bar(inventory.xp, PlayerLevel.xp_to_next(inventory.level), bar_width))
-	lines.add_child(UITheme.label("Experience", Palette.SLATE, true))
+	lines.add_child(UITheme.label("Experience", Palette.TEXT_SOFT, true))
 	row.add_child(lines)
 	return card
 
@@ -168,7 +168,7 @@ func _disc(stat: String, value: float) -> VBoxContainer:
 	number.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	disc.add_child(number)
 	column.add_child(disc)
-	var label := UITheme.label(LootTable.STAT_LABELS[stat], Palette.SLATE, true)
+	var label := UITheme.label(LootTable.STAT_LABELS[stat], Palette.TEXT_SOFT, true)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(label)
 	return column
@@ -176,5 +176,6 @@ func _disc(stat: String, value: float) -> VBoxContainer:
 
 ## Full window height against the left edge, where the other pages stand.
 func layout() -> void:
-	_panel.size = Vector2(_panel.get_combined_minimum_size().x, get_viewport_rect().size.y / _ui_scale)
-	_panel.position = Vector2.ZERO
+	_panel.size = Vector2(_panel.get_combined_minimum_size().x,
+			get_viewport_rect().size.y / _ui_scale - 2 * UITheme.EDGE)
+	_panel.position = Vector2.ONE * UITheme.EDGE * _ui_scale

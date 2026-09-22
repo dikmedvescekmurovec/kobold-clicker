@@ -36,7 +36,7 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 		rows.add_child(line("Broken", Palette.RUST, width, true))
 	# An heirloom on its way back up: how far the smith can take it for nothing but gold.
 	elif item.safe_level > item.level:
-		rows.add_child(line("Cannot break until level %d" % item.safe_level, Palette.SLATE, width, true))
+		rows.add_child(line("Cannot break until level %d" % item.safe_level, Palette.TEXT_SOFT, width, true))
 	# What a unique is worn for, straight under what it is: the one line on the block that is a rule
 	# rather than a number. In the pack's wood brown and not the unique's own gold, which carries a
 	# name at 16 px and is too pale on cream for a sentence at 10.
@@ -60,14 +60,14 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 			blocks[0].append([LootTable.stat_delta(stat, change[stat]),
 					Palette.LEAF if change[stat] > 0.0 else Palette.RUST])
 	for text in item.stat_lines():
-		blocks[1].append([text, Palette.INK])
+		blocks[1].append([text, Palette.TEXT])
 	# The locked one in a base stat's ink: it is as fixed as they are, and under the rule that parts
 	# the two it cannot be taken for one of them.
 	# A perfected one in the wood brown a unique's rule wears: the one line as good as it can be.
 	var pinned := item.fast_lines(Settings.item_details)
 	var perfect := item.perfect_lines(Settings.item_details)
 	for text in item.mod_lines(Settings.item_details):
-		blocks[2].append([text, Palette.INK if text in pinned
+		blocks[2].append([text, Palette.TEXT if text in pinned
 				else Palette.SLOT_TAN_DK if text in perfect else Palette.RUST])
 	for block in blocks:
 		if block.is_empty():

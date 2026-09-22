@@ -48,6 +48,15 @@ PANELS = {
     # nine-slice like any other and grows to whatever the title needs, with the body panel under it.
     "ui_bar_green": ("Main_tiles", 203, 0, 26, 13, (4, 2, 4, 2)),
 }
+# The cream body as it stands *under* the bar in the pack's own composed panels (Inventory.png, the
+# blank one at x 7..104): the pack draws bar and body as one sprite, and under the bar there is no
+# frame at all -- one dark-green drop line, one tan row, then cream. ui_panel_white stacked under the
+# bar put its full top frame there, and the bar's dark bottom over the frame's dark top read as a
+# thick seam under every title. This one is assembled from that panel's notch-free stretches: left
+# and right bands of columns x0..x1, and the rows of each band (top, middle, bottom) -- the notches
+# and the edge's colour shifts (see NOTCHES) lie between them. margin (left, top, right, bottom).
+HEADED = ("ui_panel_headed", "Inventory", [(7, 19), (93, 105)], [(13, 16), (48, 64), (95, 101)],
+          (5, 3, 5, 6))
 
 # The blank buttons, four to a row 48 px apart: normal, pressed, hover, hover-pressed. The pack
 # draws each one twice, once with a brown drop shadow to stand on wood and once with a bone one to
@@ -324,6 +333,27 @@ PARTS = {
     "ui_doll": ("2D Pixel UI/PNG/Equipment", 50, 336, 43, 46, 1),
     "ui_socket_amulet": ("2D Pixel UI/PNG/Equipment", 99, 337, 10, 13, 1),
     "ui_socket_ring": ("2D Pixel UI/PNG/Equipment", 99, 354, 11, 12, 1),
+}
+
+# The pack's frames are not clean: along every edge the outline wobbles, the brown shifts a shade
+# for a stretch and swells a pixel or three into the cream, which is what makes its panels look
+# torn rather than drawn. A nine-slice cannot carry that (check() refuses a tiled row that is not
+# one colour), so the wobbles are cut off the composed Inventory panel as patches -- each the whole
+# frame depth plus a little cream -- for UITheme.notched to lay over a panel's edges at a pitch.
+# Cut whole, never trimmed: a patch's size is its placement. The frame under them is ui_panel_white's
+# own (same five columns, pixel for pixel), so a patch's frame pixels vanish into the frame they
+# cover and only the wobble shows. Where the pack chips the outer outline inward (a clear pixel at
+# the very edge) the frame's own outline shows through instead: a knot, not a chip.
+NOTCHES = {
+    "ui_notch_left_a": ("2D Pixel UI/PNG/Inventory", 7, 32, 7, 16, 1),
+    "ui_notch_left_b": ("2D Pixel UI/PNG/Inventory", 7, 64, 7, 16, 1),
+    "ui_notch_right_a": ("2D Pixel UI/PNG/Inventory", 98, 16, 7, 16, 1),
+    "ui_notch_right_b": ("2D Pixel UI/PNG/Inventory", 98, 80, 7, 16, 1),
+    "ui_notch_bottom_a": ("2D Pixel UI/PNG/Inventory", 17, 95, 8, 6, 1),
+    "ui_notch_bottom_b": ("2D Pixel UI/PNG/Inventory", 36, 95, 12, 6, 1),
+    "ui_notch_bottom_c": ("2D Pixel UI/PNG/Inventory", 64, 94, 15, 7, 1),
+    # The bar's: its top highlight breaks for two pixels and then drops a row under a run of shade.
+    "ui_notch_bar_a": ("2D Pixel UI/PNG/Inventory", 9, 0, 13, 4, 1),
 }
 
 # The marks the corner's two square buttons wear, off Icons.png -- the same 6-column, 16 px grid the
@@ -714,6 +744,19 @@ BONE_RAMP = {
     "#825c2f": "#e5d6a1",
     "#88682d": "#f4ecc6",
 }
+# The marks that stand bare on the cream body, with no face behind them -- the way the pack lays its
+# speaker and its note beside the settings' sliders and its three craft tabs on the panel's frame.
+# These keep Icons.png's own brown ramp ("_brown"), and the tabs come a second time in the pack's
+# green ("_green") for the one that is open: the pack turns the open craft tab's mark green and
+# changes nothing else. GREEN_KEY is measured off Icons.png, which draws its T, its pot and its
+# scissors in both colourways: 603928 -> 2c4645, 70492a -> 3f7168, 88682d -> 50a978, a07f2d ->
+# 57c767 -- the outline to the close button's teal family and the ramp to the bar's green.
+BARE = ["ui_icon_filter", "ui_icon_trash", "ui_icon_coins", "ui_icon_scroll", "ui_icon_sword",
+        "ui_icon_gem", "ui_icon_anvil", "ui_icon_help"]
+GREEN_TABS = ["ui_icon_filter", "ui_icon_scroll", "ui_icon_sword", "ui_icon_gem", "ui_icon_anvil",
+              "ui_icon_help"]
+GREEN_KEY = {"#3e1f1d": "#2c4645", "#603928": "#3f7168", "#70492a": "#478773", "#825c2f": "#50a978",
+             "#88682d": "#57c767"}
 
 # The character panel in the top-left corner, off the UI pack's character_panel.png. The pack draws
 # it eight times over -- with and without a portrait, with empty and with filled bars -- so the frame
@@ -892,6 +935,20 @@ def build():
     for name, (src, x, y, w, h, margin) in PANELS.items():
         sprites[name] = sheet(src).crop((x, y, x + w, y + h))
         margins[name] = margin
+
+    name, src, columns, rows, margin = HEADED
+    width = sum(x1 - x0 for x0, x1 in columns)
+    height = sum(y1 - y0 for y0, y1 in rows)
+    headed = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    dy = 0
+    for y0, y1 in rows:
+        dx = 0
+        for x0, x1 in columns:
+            headed.paste(sheet(src).crop((x0, y0, x1, y1)), (dx, dy))
+            dx += x1 - x0
+        dy += y1 - y0
+    sprites[name] = headed
+    margins[name] = margin
 
     w, h = BUTTON_SIZE
     for surface, row in BUTTON_ROW.items():
@@ -1381,16 +1438,114 @@ def icons():
     table = {_rgb(dark): _rgb(light) for dark, light in BONE_RAMP.items()}
     marks = {name: _cut(entry) for name, entry in ICONS.items()}
     marks.update({name: _drawn(rows) for name, rows in ICONS_DRAWN.items()})
+    green = {_rgb(dark): _rgb(lit) for dark, lit in GREEN_KEY.items()}
     out = {}
     for name, art in marks.items():
-        art = _map_colors(art, table)
         if art.width > ICON_SIDE or art.height > ICON_SIDE:
             raise SystemExit("%s is %dx%d, too big for a %d square"
                              % (name, art.width, art.height, ICON_SIDE))
-        square = Image.new("RGBA", (ICON_SIDE, ICON_SIDE), (0, 0, 0, 0))
-        square.alpha_composite(art, ((ICON_SIDE - art.width) // 2, (ICON_SIDE - art.height) // 2))
-        out[name] = square
+        out[name] = _squared_mark(_map_colors(art, table))
+        # Bare on cream the mark keeps the pack's own brown, and an open tab turns green.
+        if name in BARE:
+            out[name + "_brown"] = _squared_mark(art)
+        if name in GREEN_TABS:
+            out[name + "_green"] = _squared_mark(_map_colors(art, green))
     return out
+
+
+def _squared_mark(art):
+    square = Image.new("RGBA", (ICON_SIDE, ICON_SIDE), (0, 0, 0, 0))
+    square.alpha_composite(art, ((ICON_SIDE - art.width) // 2, (ICON_SIDE - art.height) // 2))
+    return square
+
+
+def notches():
+    """The frame's wobbles, each patch cut whole at its own size."""
+    return {name: _cut(entry, trim=False) for name, entry in NOTCHES.items()}
+
+
+def bare_preview(cut, sprites, margins):
+    """Every bare mark on the cream body, brown over green, at 1x and 3x: do they read with no face?"""
+    pad = 4
+    names = [name for name in cut if name.endswith("_brown")]
+    cell = ICON_SIDE + pad
+    out = nine_slice(sprites["ui_panel_white"], margins["ui_panel_white"],
+                     (2 * pad + len(names) * cell, 2 * pad + 2 * cell))
+    for col, name in enumerate(names):
+        out.alpha_composite(cut[name], (pad + col * cell, pad))
+        lit = name[:-len("_brown")] + "_green"
+        if lit in cut:
+            out.alpha_composite(cut[lit], (pad + col * cell, pad + cell))
+    big = out.resize((out.width * 3, out.height * 3), Image.NEAREST)
+    both = Image.new("RGBA", (out.width + pad + big.width, big.height), (0, 0, 0, 0))
+    both.alpha_composite(out, (0, 0))
+    both.alpha_composite(big, (out.width + pad, 0))
+    return both
+
+
+# The pitch UITheme.notched lays the patches at, in panel pixels, and this file's copy of the
+# arithmetic so the preview shows what the game will: left and right alternate their two patches
+# down the edge, staggered against each other, and the bottom cycles its three along. A patch is
+# placed only where it fits clear of the corners.
+NOTCH_PITCH = 40
+NOTCH_STAGGER = 20
+NOTCH_BOTTOM_PITCH = 36
+NOTCH_START = 10
+NOTCH_CLEAR = 8
+NOTCH_BAR_PITCH = 56
+
+
+def notch_places(cut, size, bar=False):
+    places = []
+    w, h = size
+    if bar:
+        patch = cut["ui_notch_bar_a"]
+        x = NOTCH_START
+        while x + patch.width <= w - NOTCH_CLEAR:
+            places.append(("ui_notch_bar_a", x, 0))
+            x += NOTCH_BAR_PITCH
+        return places
+    for side, start in (("left", NOTCH_START), ("right", NOTCH_START + NOTCH_STAGGER)):
+        y, i = start, 0
+        while True:
+            name = "ui_notch_%s_%s" % (side, "ab"[i % 2])
+            patch = cut[name]
+            if y + patch.height > h - NOTCH_CLEAR:
+                break
+            places.append((name, 0 if side == "left" else w - patch.width, y))
+            y += NOTCH_PITCH
+            i += 1
+    x, i = NOTCH_START, 0
+    while True:
+        name = "ui_notch_bottom_%s" % "abc"[i % 3]
+        patch = cut[name]
+        if x + patch.width > w - NOTCH_CLEAR:
+            break
+        places.append((name, x, h - patch.height))
+        x += NOTCH_BOTTOM_PITCH
+        i += 1
+    return places
+
+
+def notch_preview(cut, sprites, margins):
+    """A headed body under its bar with the patches laid along its edges as UITheme.notched lays
+    them, beside the same body bare, at 3x: the one question is whether a patch vanishes into the
+    frame it covers."""
+    size = (120, 150)
+    pad = 6
+    out = Image.new("RGBA", (2 * size[0] + 3 * pad, size[1] + 13 + 2 * pad), (0x2A, 0x28, 0x32, 0xFF))
+    for col in range(2):
+        x = pad + col * (size[0] + pad)
+        bar = nine_slice(sprites["ui_bar_green"], margins["ui_bar_green"], (size[0], 13))
+        body = nine_slice(sprites["ui_panel_headed"], margins["ui_panel_headed"], size)
+        if col == 1:
+            for name, dx, dy in notch_places(cut, (size[0], 13), bar=True):
+                bar.alpha_composite(cut[name], (dx, dy))
+            for name, dx, dy in notch_places(cut, size):
+                body.alpha_composite(cut[name], (dx, dy))
+        out.alpha_composite(bar, (x, pad))
+        out.alpha_composite(body, (x, pad + 13))
+    return out.resize((out.width * 3, out.height * 3), Image.NEAREST)
 
 
 def keys():
@@ -1685,7 +1840,14 @@ def main():
     # face behind it is what stretches.
     mark = icons()
     icon_preview(mark, sprites, margins).save(os.path.join(QA, "ui_kit_icons.png"))
+    bare_preview(mark, sprites, margins).save(os.path.join(QA, "ui_kit_bare.png"))
     for name, image in mark.items():
+        image.save(os.path.join(OUT, name + ".png"))
+
+    # Loose too: a patch is laid over a frame at its own size, never stretched.
+    notch = notches()
+    notch_preview(notch, sprites, margins).save(os.path.join(QA, "ui_kit_notches.png"))
+    for name, image in notch.items():
         image.save(os.path.join(OUT, name + ".png"))
 
     # Loose too, and at their own size: a key is drawn beside a word, never on a button.

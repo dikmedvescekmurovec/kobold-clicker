@@ -19,10 +19,26 @@
   },
   "sprites": [
     {
-      "name": "ui_panel_white",
+      "name": "ui_panel_headed",
       "col": 0,
       "row": 0,
       "x": 0,
+      "y": 0,
+      "w": 24,
+      "h": 25,
+      "margin": {
+        "left": 5,
+        "top": 3,
+        "right": 5,
+        "bottom": 6
+      },
+      "kind": "panel"
+    },
+    {
+      "name": "ui_panel_white",
+      "col": 1,
+      "row": 0,
+      "x": 48,
       "y": 0,
       "w": 48,
       "h": 40,
@@ -36,9 +52,9 @@
     },
     {
       "name": "ui_panel_wood",
-      "col": 1,
+      "col": 2,
       "row": 0,
-      "x": 48,
+      "x": 96,
       "y": 0,
       "w": 26,
       "h": 37,
@@ -52,9 +68,9 @@
     },
     {
       "name": "ui_bar_green",
-      "col": 2,
+      "col": 3,
       "row": 0,
-      "x": 96,
+      "x": 144,
       "y": 0,
       "w": 26,
       "h": 13,
@@ -68,9 +84,9 @@
     },
     {
       "name": "ui_btn_brown_disabled",
-      "col": 3,
+      "col": 4,
       "row": 0,
-      "x": 144,
+      "x": 192,
       "y": 0,
       "w": 42,
       "h": 16,
@@ -84,9 +100,9 @@
     },
     {
       "name": "ui_btn_brown_hover",
-      "col": 4,
+      "col": 5,
       "row": 0,
-      "x": 192,
+      "x": 240,
       "y": 0,
       "w": 42,
       "h": 16,
@@ -100,10 +116,10 @@
     },
     {
       "name": "ui_btn_brown_normal",
-      "col": 5,
-      "row": 0,
-      "x": 240,
-      "y": 0,
+      "col": 0,
+      "row": 1,
+      "x": 0,
+      "y": 40,
       "w": 42,
       "h": 16,
       "margin": {
@@ -116,9 +132,9 @@
     },
     {
       "name": "ui_btn_brown_pressed",
-      "col": 0,
+      "col": 1,
       "row": 1,
-      "x": 0,
+      "x": 48,
       "y": 40,
       "w": 42,
       "h": 16,
@@ -132,9 +148,9 @@
     },
     {
       "name": "ui_btn_light_danger_disabled",
-      "col": 1,
+      "col": 2,
       "row": 1,
-      "x": 48,
+      "x": 96,
       "y": 40,
       "w": 42,
       "h": 16,
@@ -148,9 +164,9 @@
     },
     {
       "name": "ui_btn_light_danger_hover",
-      "col": 2,
+      "col": 3,
       "row": 1,
-      "x": 96,
+      "x": 144,
       "y": 40,
       "w": 42,
       "h": 16,
@@ -164,9 +180,9 @@
     },
     {
       "name": "ui_btn_light_danger_normal",
-      "col": 3,
+      "col": 4,
       "row": 1,
-      "x": 144,
+      "x": 192,
       "y": 40,
       "w": 42,
       "h": 16,
@@ -180,9 +196,9 @@
     },
     {
       "name": "ui_btn_light_danger_pressed",
-      "col": 4,
+      "col": 5,
       "row": 1,
-      "x": 192,
+      "x": 240,
       "y": 40,
       "w": 42,
       "h": 16,
@@ -196,10 +212,10 @@
     },
     {
       "name": "ui_btn_light_normal_disabled",
-      "col": 5,
-      "row": 1,
-      "x": 240,
-      "y": 40,
+      "col": 0,
+      "row": 2,
+      "x": 0,
+      "y": 80,
       "w": 42,
       "h": 16,
       "margin": {
@@ -212,9 +228,9 @@
     },
     {
       "name": "ui_btn_light_normal_hover",
-      "col": 0,
+      "col": 1,
       "row": 2,
-      "x": 0,
+      "x": 48,
       "y": 80,
       "w": 42,
       "h": 16,
@@ -228,9 +244,9 @@
     },
     {
       "name": "ui_btn_light_normal_normal",
-      "col": 1,
+      "col": 2,
       "row": 2,
-      "x": 48,
+      "x": 96,
       "y": 80,
       "w": 42,
       "h": 16,
@@ -244,9 +260,9 @@
     },
     {
       "name": "ui_btn_light_normal_pressed",
-      "col": 2,
+      "col": 3,
       "row": 2,
-      "x": 96,
+      "x": 144,
       "y": 80,
       "w": 42,
       "h": 16,
@@ -260,9 +276,9 @@
     },
     {
       "name": "ui_btn_wood_danger_disabled",
-      "col": 3,
+      "col": 4,
       "row": 2,
-      "x": 144,
+      "x": 192,
       "y": 80,
       "w": 42,
       "h": 16,
@@ -276,22 +292,6 @@
     },
     {
       "name": "ui_btn_wood_danger_hover",
-      "col": 4,
-      "row": 2,
-      "x": 192,
-      "y": 80,
-      "w": 42,
-      "h": 16,
-      "margin": {
-        "left": 4,
-        "top": 5,
-        "right": 4,
-        "bottom": 4
-      },
-      "kind": "button"
-    },
-    {
-      "name": "ui_btn_wood_danger_normal",
       "col": 5,
       "row": 2,
       "x": 240,
@@ -307,7 +307,7 @@
       "kind": "button"
     },
     {
-      "name": "ui_btn_wood_danger_pressed",
+      "name": "ui_btn_wood_danger_normal",
       "col": 0,
       "row": 3,
       "x": 0,
@@ -323,7 +323,7 @@
       "kind": "button"
     },
     {
-      "name": "ui_btn_wood_normal_disabled",
+      "name": "ui_btn_wood_danger_pressed",
       "col": 1,
       "row": 3,
       "x": 48,
@@ -339,7 +339,7 @@
       "kind": "button"
     },
     {
-      "name": "ui_btn_wood_normal_hover",
+      "name": "ui_btn_wood_normal_disabled",
       "col": 2,
       "row": 3,
       "x": 96,
@@ -355,7 +355,7 @@
       "kind": "button"
     },
     {
-      "name": "ui_btn_wood_normal_normal",
+      "name": "ui_btn_wood_normal_hover",
       "col": 3,
       "row": 3,
       "x": 144,
@@ -371,7 +371,7 @@
       "kind": "button"
     },
     {
-      "name": "ui_btn_wood_normal_pressed",
+      "name": "ui_btn_wood_normal_normal",
       "col": 4,
       "row": 3,
       "x": 192,
@@ -387,23 +387,23 @@
       "kind": "button"
     },
     {
-      "name": "ui_close_disabled",
+      "name": "ui_btn_wood_normal_pressed",
       "col": 5,
       "row": 3,
       "x": 240,
       "y": 120,
-      "w": 9,
-      "h": 10,
+      "w": 42,
+      "h": 16,
       "margin": {
-        "left": 0,
-        "top": 0,
-        "right": 0,
-        "bottom": 0
+        "left": 4,
+        "top": 5,
+        "right": 4,
+        "bottom": 4
       },
-      "kind": "icon"
+      "kind": "button"
     },
     {
-      "name": "ui_close_hover",
+      "name": "ui_close_disabled",
       "col": 0,
       "row": 4,
       "x": 0,
@@ -419,7 +419,7 @@
       "kind": "icon"
     },
     {
-      "name": "ui_close_normal",
+      "name": "ui_close_hover",
       "col": 1,
       "row": 4,
       "x": 48,
@@ -435,10 +435,26 @@
       "kind": "icon"
     },
     {
-      "name": "ui_close_pressed",
+      "name": "ui_close_normal",
       "col": 2,
       "row": 4,
       "x": 96,
+      "y": 160,
+      "w": 9,
+      "h": 10,
+      "margin": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "kind": "icon"
+    },
+    {
+      "name": "ui_close_pressed",
+      "col": 3,
+      "row": 4,
+      "x": 144,
       "y": 160,
       "w": 9,
       "h": 10,

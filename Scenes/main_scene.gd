@@ -761,15 +761,10 @@ func _show_services(cell: Vector2i) -> void:
 	var icons := HBoxContainer.new()
 	icons.add_theme_constant_override("separation", 6)
 	for service: String in TownServices.services_for(tier, view.origin + cell, towns.seed_value):
-		# On the tab's brown face too: the marks are cut pale for it and wash out on the cream panel.
-		var face := PanelContainer.new()
-		face.add_theme_stylebox_override("panel", UITheme.theme().get_stylebox("normal", "BrownIconButton"))
-		face.tooltip_text = TownServices.label(service)
 		var icon := TextureRect.new()
-		icon.texture = load(TownPage.TAB_ICONS[service])
-		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		face.add_child(icon)
-		icons.add_child(face)
+		icon.texture = TownPage.tab_mark(service, false)
+		icon.tooltip_text = TownServices.label(service)
+		icons.add_child(icon)
 	services.body.add_child(icons)
 
 
@@ -786,8 +781,8 @@ func _show_mods(cell: Vector2i) -> void:
 	_mod_rows.add_child(section)
 	for id: String in mods:
 		var mod: Dictionary = TileMods.MODS[id]
-		section.body.add_child(UITheme.label(str(mod["name"]), Palette.INK))
-		section.body.add_child(ItemDetails.line(str(mod["text"]), Palette.INK, MOD_WIDTH, true))
+		section.body.add_child(UITheme.label(str(mod["name"]), Palette.TEXT))
+		section.body.add_child(ItemDetails.line(str(mod["text"]), Palette.TEXT, MOD_WIDTH, true))
 		if not str(mod["reward"]).is_empty():
 			section.body.add_child(ItemDetails.line(str(mod["reward"]), Palette.LEAF, MOD_WIDTH, true))
 
@@ -1258,8 +1253,8 @@ func _update_buttons() -> void:
 func _place_panel() -> void:
 	var view_size := Vector2(get_viewport().get_visible_rect().size)
 	_panel.reset_size()
-	_panel.size.y = view_size.y / ui_scale
-	_panel.position = Vector2(view_size.x - _panel.size.x * ui_scale, 0.0)
+	_panel.size.y = view_size.y / ui_scale - 2 * UITheme.EDGE
+	_panel.position = Vector2(view_size.x - (_panel.size.x + UITheme.EDGE) * ui_scale, UITheme.EDGE * ui_scale)
 
 
 ## A kill left something behind. Whether it goes straight into the bag or waits in the run's pouch is

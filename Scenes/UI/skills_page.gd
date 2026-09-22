@@ -92,7 +92,7 @@ func open() -> void:
 	var times := inventory.skills.transcended
 	if times > 0:
 		_points.text += ", skills +%d" % times
-	_points.add_theme_color_override("font_color", Palette.LEAF if free > 0 else Palette.SLATE)
+	_points.add_theme_color_override("font_color", Palette.LEAF if free > 0 else Palette.TEXT_SOFT)
 	for tree: String in _skill_views:
 		_skill_views[tree].fill(tree, inventory.skills.ranks)
 		var reset: Button = _respec_buttons[tree]
@@ -108,8 +108,9 @@ func open() -> void:
 
 ## Full window height against the left edge.
 func layout() -> void:
-	_panel.size = Vector2(_panel.get_combined_minimum_size().x, get_viewport_rect().size.y / _ui_scale)
-	_panel.position = Vector2.ZERO
+	_panel.size = Vector2(_panel.get_combined_minimum_size().x,
+			get_viewport_rect().size.y / _ui_scale - 2 * UITheme.EDGE)
+	_panel.position = Vector2.ONE * UITheme.EDGE * _ui_scale
 
 
 ## One point into a skill. A refused press does nothing: the card already says why.

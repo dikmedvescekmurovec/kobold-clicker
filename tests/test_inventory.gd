@@ -1142,7 +1142,8 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	main.inventory.tips.erase("level_up")
 	main.inventory.tips.erase("opened_skills")
 	main._on_bag_pressed()
-	_check(is_zero_approx(main.bag_page._panel.position.x), "and sits against the left edge")
+	_check(main.bag_page._panel.position.x == UITheme.EDGE * main.ui_scale,
+			"and stands EDGE off the left edge")
 	_check(not main.bag_page._actions.visible, "with no buttons until a square is clicked")
 	main._on_left_page_closed()
 	_check(not main.bag_page.visible and main._bag_button.visible, "closing it gives the button back")
@@ -3118,7 +3119,7 @@ func _test_locks_and_breaks() -> bool:
 	for number: Label in written.find_children(UITheme.TABLE_VALUE, "Label", true, false):
 		# A table row is its name and then its number; turned round it is the line Item wrote.
 		var text := "%s %s" % [number.text, (number.get_parent().get_child(0) as Label).text]
-		if text in pinned_piece.mod_lines() and number.get_theme_color("font_color") == Palette.INK:
+		if text in pinned_piece.mod_lines() and number.get_theme_color("font_color") == Palette.TEXT:
 			_check(text == pinned_piece.locked_line(), "only the locked modifier is in ink: %s" % text)
 			inked += 1
 	_check(inked == 1, "the block writes the locked modifier in ink")

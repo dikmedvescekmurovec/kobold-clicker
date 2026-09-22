@@ -103,13 +103,14 @@ func open() -> void:
 			BountyList.actions_of(card).add_child(_cancel_button(bounty))
 			_rows.add_child(card)
 	if listed == 0:
-		_rows.add_child(wrapped("No work is out. Accept a bounty at a board.", WIDTH, Palette.SLATE))
+		_rows.add_child(wrapped("No work is out. Accept a bounty at a board.", WIDTH, Palette.TEXT_SOFT))
 
 
 ## Full window height against the left edge, where the other pages stand.
 func layout() -> void:
-	_panel.size = Vector2(_panel.get_combined_minimum_size().x, get_viewport_rect().size.y / _ui_scale)
-	_panel.position = Vector2.ZERO
+	_panel.size = Vector2(_panel.get_combined_minimum_size().x,
+			get_viewport_rect().size.y / _ui_scale - 2 * UITheme.EDGE)
+	_panel.position = Vector2.ONE * UITheme.EDGE * _ui_scale
 
 
 ## One posting as a card, for this page and for the board that posted it: the monster's picture in a
@@ -160,7 +161,7 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 	pay.add_theme_constant_override("separation", 2)
 	pay.add_child(_icon(Coins.icon(), REWARD_COIN))
 	pay.add_child(UITheme.label(BigNumber.format(float(bounty.get(BountyBoard.GOLD, 0))),
-			Palette.SLATE, true))
+			Palette.TEXT_SOFT, true))
 	# The orb as its own picture, the tray's size, and its name for whoever hovers: a word here was
 	# the one reward on the card that had to be read rather than seen.
 	var orb := str(bounty.get(BountyBoard.ORB, ""))
@@ -176,12 +177,12 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 	lines.add_child(details)
 	var depth := int(bounty.get(BountyBoard.LEVEL, 0))
 	if depth > 1:
-		details.add_child(wrapped("On level %d land or deeper." % depth, inner, Palette.SLATE))
+		details.add_child(wrapped("On level %d land or deeper." % depth, inner, Palette.TEXT_SOFT))
 	var near := HexMap.NO_CELL
 	# Where it lives is a fortuneteller's to sell (`BountyBoard.locate`); until she has been paid the
 	# card says who to ask and nothing about the land.
 	if not BountyBoard.located(bounty):
-		details.add_child(wrapped("A fortuneteller could say where it lives.", inner, Palette.SLATE))
+		details.add_child(wrapped("A fortuneteller could say where it lives.", inner, Palette.TEXT_SOFT))
 	elif map_view != null and known:
 		var envs := EnemyRoster.environments_of(enemy)
 		var swatches := HBoxContainer.new()
@@ -191,7 +192,7 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 		details.add_child(swatches)
 		near = map_view.nearest_env(envs, depth)
 		details.add_child(wrapped("Nearest: %s" % (map_view.name_of(near) if near != HexMap.NO_CELL
-				else "none you have seen yet."), inner, Palette.SLATE))
+				else "none you have seen yet."), inner, Palette.TEXT_SOFT))
 	if not note.is_empty():
 		lines.add_child(wrapped(note, inner, Palette.LEAF))
 

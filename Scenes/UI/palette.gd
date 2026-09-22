@@ -8,6 +8,8 @@ const INK := Color("14101e")
 const BONE := Color("f4eedc")
 const GOLD := Color("e9b640")
 const EARTH_DK := Color("3a2521")
+## Only the common step of the rarity ramp below still wears it: on the cream panel the text is the
+## pack's browns (TEXT, TEXT_SOFT), because nothing the pack writes on cream is grey.
 const SLATE := Color("565a6e")
 
 ## The interface's own fills, straight out of the bought UI pack rather than hexlib: the cream a text
@@ -15,6 +17,12 @@ const SLATE := Color("565a6e")
 ## and has to match the panel art it sits on -- the pack draws a slot as one flat square, so a
 ## StyleBoxFlat in these colours is the art itself and not a stand-in for it.
 const PANEL_CREAM := Color("e5d6a1")
+## What is written on the cream: the pack letters its labels in the frame's own second step
+## (TEXT_SOFT, its "FULL SCREEN"), and its outline brown is the darker of the two (TEXT), for a
+## name or a value. Neither is black: on the cream the pack's text is warm, and the grey that
+## headings and counts were in was the one colour it never puts there.
+const TEXT := Color("3e1f1d")
+const TEXT_SOFT := Color("603928")
 const SLOT_TAN := Color("cda677")
 ## The same slot pressed in: the pack's wood face, which is the next step down its brown ramp.
 const SLOT_TAN_DK := Color("825c2f")

@@ -9,6 +9,8 @@ func _run() -> void:
 	_check(_test_buttons(theme) == true, "button tests ran to the end")
 	_check(_test_icon_faces(theme) == true, "icon face tests ran to the end")
 	_check(_test_icon_buttons(theme) == true, "icon button tests ran to the end")
+	_check(_test_bare_buttons(theme) == true, "bare button tests ran to the end")
+	_check(_test_titled_panel() == true, "titled panel tests ran to the end")
 	_check(_test_controls(theme) == true, "live control tests ran to the end")
 	_check(_test_orb_tray() == true, "orb tray tests ran to the end")
 	_check(_test_health_bar() == true, "health bar tests ran to the end")
@@ -157,6 +159,82 @@ func _test_icon_buttons(theme: Theme) -> bool:
 						"%s %s pads nothing" % [variation, state])
 			_check(box.texture.region.size == Vector2(size),
 					"%s %s is the size the pack drew" % [variation, state])
+	return true
+
+
+## A bare button is empty boxes round a mark: no face at all, the pixel of sink every face has when
+## pressed, a lift under the cursor and a fade when dead. And the marks it wears are on disk in the
+## pack's brown -- the cream ones are for the brown faces and wash out on the cream -- with a green
+## for each tab, which is the open one.
+func _test_bare_buttons(theme: Theme) -> bool:
+	var bare := UITheme.BARE_BUTTON
+	_check(theme.get_type_variation_base(bare) == "Button", "a bare button is a Button")
+	for state: String in UITheme.STATES:
+		_check(theme.get_stylebox(state, bare) is StyleBoxEmpty, "a bare button has no %s face" % state)
+	var normal := theme.get_stylebox("normal", bare)
+	var pressed := theme.get_stylebox("pressed", bare)
+	_check(pressed.content_margin_top == normal.content_margin_top + 1
+			and pressed.content_margin_bottom == normal.content_margin_bottom - 1, "it sinks when pressed")
+	_check(theme.get_color("icon_hover_color", bare).r > 1.0, "hover lifts the mark")
+	_check(theme.get_color("icon_disabled_color", bare).a < 1.0, "dead fades it")
+	for service: String in TownPage.COUNTERS:
+		var rest := TownPage.tab_mark(service, false)
+		var lit := TownPage.tab_mark(service, true)
+		_check(rest != null and lit != null and rest != lit, "%s has a brown mark and a green one" % service)
+	for path: String in [BagPage.AUTO_ICON, BagPage.AUTO_ON_ICON, BagPage.CLEAR_ICON, BagPage.SELL_ICON]:
+		_check(ResourceLoader.exists(path), "%s is cut" % path)
+	var button := Button.new()
+	button.theme = theme
+	button.theme_type_variation = bare
+	button.icon = load(BagPage.AUTO_ICON)
+	button.expand_icon = false
+	root.add_child(button)
+	var wanted: Vector2 = button.icon.get_size() + Vector2.ONE * 2 * UITheme.BARE_MARGIN
+	_check(button.get_combined_minimum_size() == wanted,
+			"a bare button is its mark and its margin (%s)" % button.get_combined_minimum_size())
+	button.queue_free()
+	return true
+
+
+## A titled panel's body is the headed cut, which has no top frame under the bar; its title is inked
+## for the green; and the wobbles fall along its left, right and foot, clear of the corners, and
+## never on a card too short to hold one.
+func _test_titled_panel() -> bool:
+	var panel := UITheme.titled_panel("Title", "close", func() -> void: pass)
+	root.add_child(panel)
+	var body: PanelContainer = panel.get_child(1)
+	_check(body.theme_type_variation == "HeadedPanel", "the body under a bar is the headed cut")
+	var headed := UITheme.theme().get_stylebox("panel", "HeadedPanel") as StyleBoxTexture
+	var plain := UITheme.theme().get_stylebox("panel", "TextPanel") as StyleBoxTexture
+	_check(headed.get_texture_margin(SIDE_TOP) < plain.get_texture_margin(SIDE_TOP),
+			"the headed body's top is thinner than a frame: a drop line and a tan row")
+	_check(headed.get_texture_margin(SIDE_LEFT) == plain.get_texture_margin(SIDE_LEFT),
+			"and its sides are the same frame")
+	_check(UITheme.title_of(panel).get_theme_color("font_color") == Palette.INK, "the title is inked")
+	_check(body.draw.get_connections().size() == 1, "the body draws its wobbles")
+	var bar: PanelContainer = panel.get_child(0)
+	_check(bar.draw.get_connections().size() == 1, "and so does the bar")
+	var on_bar := UITheme.notch_places(Vector2(130, 20), true)
+	_check(on_bar.size() == 2 and on_bar.all(func(place: Array) -> bool: return place[1].y == 0.0),
+			"a bar's wobbles run along its top (%d)" % on_bar.size())
+	var size := Vector2(120, 150)
+	var sides := {"left": 0, "right": 0, "bottom": 0}
+	for place: Array in UITheme.notch_places(size):
+		var rect := Rect2(place[1], (place[0] as Texture2D).get_size())
+		_check(Rect2(Vector2.ZERO, size).encloses(rect), "a wobble lies on the panel (%s)" % rect)
+		_check(rect.position.y >= UITheme.NOTCH_START or rect.end.y == size.y, "and clear of the top corners")
+		if rect.position.x == 0.0:
+			sides["left"] += 1
+		elif rect.end.x == size.x:
+			sides["right"] += 1
+		if rect.end.y == size.y:
+			sides["bottom"] += 1
+	_check(sides["left"] >= 2 and sides["right"] >= 2 and sides["bottom"] >= 2,
+			"a tall panel wobbles on all three edges (%s)" % sides)
+	var short := UITheme.notch_places(Vector2(60, 24))
+	_check(short.size() == 1 and short[0][1].y + short[0][0].get_size().y == 24.0,
+			"a short card wobbles only at its foot (%d)" % short.size())
+	panel.queue_free()
 	return true
 
 

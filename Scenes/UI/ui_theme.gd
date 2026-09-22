@@ -37,6 +37,9 @@ const PANELS := {
 	"WoodPanel": "ui_panel_wood",
 	"TextPanel": "ui_panel_white",
 	"HeaderBar": "ui_bar_green",
+	# The cream body as it stands under the bar: no top frame, a drop line and a tan row instead, so
+	# the bar sits on the cream the way the pack draws it rather than over a second dark edge.
+	"HeadedPanel": "ui_panel_headed",
 }
 ## The bar is trim rather than a container, so it pads its title far less than a panel pads its
 ## contents -- enough to keep the text off the bevel and no more.
@@ -66,6 +69,16 @@ const ICON_FACE_MARGIN := 4
 ## no pressed sink: the sprite already holds the pixel the face drops by.
 const ICON_BUTTONS := {"CloseButton": "ui_close"}
 
+## A mark with no face at all, the way the pack lays its marks on the cream body: the button is
+## empty styleboxes round the icon, hover lifts the mark by the step the pack lifts its arrows,
+## pressed sinks it the pixel every face sinks, and dead fades it. The marks it wears are the
+## `_brown` cut of the pack's own ramp (tools/ui_kit.py `BARE`), never the cream ones, which wash
+## out on cream -- and `_green` is the pack's open tab.
+const BARE_BUTTON := "BareIconButton"
+const BARE_MARGIN := 2
+const BARE_HOVER := Color(1.25, 1.25, 1.25)
+const BARE_DISABLED := Color(1, 1, 1, 0.4)
+
 ## One label colour for every button: the faces are the pack's green replayed in the icon buttons'
 ## brown (or red for danger), and the words are the same cream as the icon buttons' marks.
 const FONT_COLOR := Palette.PANEL_CREAM
@@ -73,6 +86,9 @@ const FONT_COLOR := Palette.PANEL_CREAM
 ## plainly switched off, where a dark ink would read as live.
 const DISABLED_FONT_COLOR := Palette.STONE_LT
 const PANEL_MARGIN := 10
+## How far a page's panel stands off the window's edge, in panel pixels: the pack floats its panels,
+## and one flush against the edge read as part of the window rather than as a thing in it.
+const EDGE := 4
 const BUTTON_MARGIN := Vector2i(8, 4)   # x: left and right, y: top and bottom
 
 static var _theme: Theme
@@ -117,11 +133,11 @@ static func build() -> Theme:
 	# Labels default to white, which is invisible on the cream panel. INK also carries the title on
 	# the green bar, which is the colour the pack letters its own bars in.
 	built.set_type_variation("PanelLabel", "Label")
-	built.set_color("font_color", "PanelLabel", Palette.INK)
+	built.set_color("font_color", "PanelLabel", Palette.TEXT)
 	built.set_font_size("font_size", "PanelLabel", FONT_SIZE)
 
 	built.set_type_variation("SmallLabel", "Label")
-	built.set_color("font_color", "SmallLabel", Palette.INK)
+	built.set_color("font_color", "SmallLabel", Palette.TEXT)
 	var small := FontVariation.new()
 	small.base_font = load(SMALL_FONT)
 	small.set_spacing(TextServer.SPACING_TOP, -SMALL_FONT_TRIM.x)
@@ -182,6 +198,18 @@ static func build() -> Theme:
 			var sprite_name: String = "%s_%s" % [ICON_BUTTONS[variation], state]
 			built.set_stylebox(state, variation, _style(sheet, regions[sprite_name], margins[sprite_name]))
 		_icon_sizes[variation] = Vector2i(regions[ICON_BUTTONS[variation] + "_normal"].size)
+
+	built.set_type_variation(BARE_BUTTON, "Button")
+	for state: String in STATES + ["focus"]:
+		var box := StyleBoxEmpty.new()
+		var sink := 1 if state == "pressed" else 0
+		box.content_margin_left = BARE_MARGIN
+		box.content_margin_right = BARE_MARGIN
+		box.content_margin_top = BARE_MARGIN + sink
+		box.content_margin_bottom = BARE_MARGIN - sink
+		built.set_stylebox(state, BARE_BUTTON, box)
+	built.set_color("icon_hover_color", BARE_BUTTON, BARE_HOVER)
+	built.set_color("icon_disabled_color", BARE_BUTTON, BARE_DISABLED)
 	return built
 
 
@@ -340,7 +368,7 @@ static func label(text := "", color: Variant = null, small := false) -> Label:
 
 static func rule(width := 0.0) -> ColorRect:
 	var made := ColorRect.new()
-	made.color = Palette.SLATE
+	made.color = Palette.SLOT_TAN_DK
 	made.custom_minimum_size = Vector2(width, RULE_HEIGHT)
 	return made
 
@@ -388,8 +416,9 @@ static func table_row(text: String, value: String, striped: bool, width := 0.0,
 
 
 ## A green title bar with an X at its right end over a cream body. Two panels stacked rather than the
-## pack's one headered sprite, whose bar is 13 px and too short for Pixellari (see tools/ui_kit.py).
-## Fill the body through `body_of`.
+## pack's one headered sprite, whose bar is 13 px and too short for Pixellari (see tools/ui_kit.py);
+## the body is the `HeadedPanel` cut, which has no top frame, so the two meet as the pack's one
+## sprite does. Fill the body through `body_of`.
 static func titled_panel(title_text: String, tooltip: String, on_close: Callable) -> VBoxContainer:
 	var stack := vbox(0)
 	stack.theme = theme()
@@ -398,7 +427,8 @@ static func titled_panel(title_text: String, tooltip: String, on_close: Callable
 	stack.add_child(bar)
 	var header := HBoxContainer.new()
 	bar.add_child(header)
-	var title := label(title_text)
+	# The pack letters its bars in near-black, and the panel's brown text would sink into the green.
+	var title := label(title_text, Palette.INK)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -409,12 +439,79 @@ static func titled_panel(title_text: String, tooltip: String, on_close: Callable
 	close.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	close.pressed.connect(on_close)
 	header.add_child(close)
+	notched(bar, true)
 	var body := PanelContainer.new()
-	body.theme_type_variation = "TextPanel"
+	body.theme_type_variation = "HeadedPanel"
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	stack.add_child(body)
 	body.add_child(vbox(6))
+	notched(body)
 	return stack
+
+
+## The pack's frames wobble: along every edge the brown shifts a shade for a stretch and swells a
+## pixel or three into the cream, which is what makes its panels look torn rather than drawn. A
+## nine-slice cannot carry that, so the wobbles are patches (tools/ui_kit.py `NOTCHES`, cut off the
+## pack's own composed panel) laid over a cream panel's left, right and bottom edges as it draws --
+## the frame under them is the same art, so only the wobble shows. Left and right alternate their two
+## patches down the edge at `NOTCH_PITCH`, staggered against each other; the bottom cycles its three
+## along; a patch goes only where it fits clear of the corners. Not a cream panel's top, which is
+## its bar or, on a card, too short to wobble -- the bar wobbles on its own (`bar`): its highlight
+## breaks along its top at `NOTCH_BAR_PITCH`.
+const NOTCH := "res://Assets/UI/ui_notch_%s_%s.png"
+const NOTCH_PITCH := 40
+const NOTCH_STAGGER := 20
+const NOTCH_BOTTOM_PITCH := 36
+const NOTCH_BAR_PITCH := 56
+const NOTCH_START := 10
+const NOTCH_CLEAR := 8
+static var _notches := {}
+
+
+static func notched(panel: Control, bar := false) -> void:
+	panel.draw.connect(_draw_notches.bind(panel, bar))
+
+
+static func _draw_notches(panel: Control, bar: bool) -> void:
+	for place: Array in notch_places(panel.size, bar):
+		panel.draw_texture(place[0], place[1])
+
+
+## Where the patches fall on a panel of `size`: [texture, position] each. tools/ui_kit.py
+## `notch_places` is the same arithmetic, so its preview shows what this draws.
+static func notch_places(size: Vector2, bar := false) -> Array:
+	if _notches.is_empty():
+		for side: String in ["left", "right", "bottom", "bar"]:
+			for letter: String in ("abc" if side == "bottom" else "ab" if side != "bar" else "a"):
+				_notches[side + letter] = load(NOTCH % [side, letter])
+	var places := []
+	if bar:
+		var patch: Texture2D = _notches["bara"]
+		var x := NOTCH_START
+		while x + patch.get_width() <= size.x - NOTCH_CLEAR:
+			places.append([patch, Vector2(x, 0)])
+			x += NOTCH_BAR_PITCH
+		return places
+	for side: String in ["left", "right"]:
+		var y := NOTCH_START + (NOTCH_STAGGER if side == "right" else 0)
+		var i := 0
+		while true:
+			var patch: Texture2D = _notches[side + "ab"[i % 2]]
+			if y + patch.get_height() > size.y - NOTCH_CLEAR:
+				break
+			places.append([patch, Vector2(0 if side == "left" else size.x - patch.get_width(), y)])
+			y += NOTCH_PITCH
+			i += 1
+	var x := NOTCH_START
+	var i := 0
+	while true:
+		var patch: Texture2D = _notches["bottom" + "abc"[i % 3]]
+		if x + patch.get_width() > size.x - NOTCH_CLEAR:
+			break
+		places.append([patch, Vector2(x, size.y - patch.get_height())])
+		x += NOTCH_BOTTOM_PITCH
+		i += 1
+	return places
 
 
 static func body_of(panel: VBoxContainer) -> VBoxContainer:
