@@ -453,6 +453,14 @@ static func level_of(cell: Vector2i) -> int:
 	return int((1.0 + sqrt(1.0 + 8.0 * HexGrid.distance(CENTER, cell))) / 2.0)
 
 
+## Which circle of land `cell` is in: 1 inside the first ice wall, 2 out to the second, and so on. A
+## wall's own ring counts with the land its fall opens. Counted by distance in plain `WALL_STEP`s, the
+## way the Ring of Walls goes on counting, so that curse moves no circle. What a circle is for:
+## `LootTable.CIRCLE_MATERIAL_LEVEL`.
+static func circle_of(cell: Vector2i) -> int:
+	return 1 + maxi(0, ceili((HexGrid.distance(CENTER, cell) - START_LAND_RADIUS) / float(WALL_STEP)))
+
+
 ## What the player knows about a cell. Cells outside the map are HIDDEN.
 func state(cell: Vector2i) -> State:
 	return _states.get(cell, State.HIDDEN)

@@ -95,6 +95,14 @@ func open() -> void:
 	if inventory.collection_bonus() > 0:
 		body.add_child(UITheme.table_row("Collection", "+%d%% Damage" % inventory.collection_bonus(),
 				body.get_child_count() % 2 == 1, 0.0, Palette.SLOT_TAN_DK, Palette.TEXT_SOFT))
+	# The attributes' shares the same way: inside the figures above, said here where they come from.
+	for stat: String in ATTRIBUTES:
+		var share := Inventory.attribute_bonus(float(totals.get(stat, 0.0)))
+		if share > 0.0:
+			var gives: String = Inventory.ATTRIBUTE_GIVES[stat]
+			body.add_child(UITheme.table_row(LootTable.STAT_LABELS[stat], "+%.1f%% %s" % [share,
+					"Experience" if gives == "xp_more" else LootTable.STAT_LABELS[gives]],
+					body.get_child_count() % 2 == 1, 0.0, Palette.SLOT_TAN_DK, Palette.TEXT_SOFT))
 
 
 ## A heading that folds what is under it, added to the page; returns what to fill.

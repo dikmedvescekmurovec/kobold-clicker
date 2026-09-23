@@ -417,12 +417,23 @@ static func from_dict(data: Variant) -> Item:
 			if typeof(entry) != TYPE_DICTIONARY:
 				continue
 			var id := str(entry.get("id", ""))
+			var value := int(entry.get("value", 0))
+			# A line saved under an id the table has since folded into another. A piece that already
+			# holds that other keeps its own, since a modifier never appears twice on one piece, and
+			# the folded one was never read by anything. Its number is not the new band's top, so it
+			# is not carried over as perfect.
+			var renamed: Array = ModifierTable.RENAMED.get(id, [])
+			if not renamed.is_empty():
+				id = renamed[0]
+				value *= int(renamed[1])
+				if item.mods.any(func(held: Dictionary) -> bool: return held["id"] == id):
+					continue
 			if not ModifierTable.MODS.has(id):
 				continue
-			var mod := {"id": id, "value": int(entry.get("value", 0))}
+			var mod := {"id": id, "value": value}
 			# Written only where it is true, so a rolled modifier and a saved one are the same
 			# dictionary and nothing has to strip a false out of the comparison.
-			for flag: String in ["locked", "bound", "perfect"]:
+			for flag: String in ["locked", "bound"] + ([] if not renamed.is_empty() else ["perfect"]):
 				if bool(entry.get(flag, false)):
 					mod[flag] = true
 			if entry.has("at"):

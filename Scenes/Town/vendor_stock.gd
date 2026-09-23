@@ -95,7 +95,8 @@ static func roll_item(tier: int, cell: Vector2i, rng: RandomNumberGenerator) -> 
 	var ceiling := maxi(1, MapBuilder.level_of(cell) + int(LootTable.TIER_LEVEL[carried]))
 	var level := maxi(ItemRarity.roll_level(rarity, ceiling, rng),
 			ItemRarity.roll_level(rarity, ceiling, rng))
-	return Item.rolled(LootTable._weighted(rng, level), rarity, rng, level)
+	var material := LootTable.material_level(level, MapBuilder.circle_of(cell))
+	return Item.rolled(LootTable._weighted(rng, material), rarity, rng, level)
 
 
 ## The six pieces on the shelf, with a `null` where one has been bought. Empty for a town that has

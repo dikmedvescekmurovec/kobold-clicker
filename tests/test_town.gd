@@ -1505,7 +1505,7 @@ func _test_fortune() -> bool:
 	_check(odds[0]["weight"] >= odds[-1]["weight"], "commonest first")
 	_check(ModifierTable.band_line("increased_damage", 1) == "+8-20% increased Damage",
 			"a band is written the way its modifier is (%s)" % ModifierTable.band_line("increased_damage", 1))
-	_check(ModifierTable.line({"id": "fight_clock", "value": 3}) == "+3s on the fight clock",
+	_check(ModifierTable.line({"id": "added_fight_clock", "value": 30}) == "+3.0s Fight Clock",
 			"and a rolled line still reads as it did")
 	var relic := Item.rolled_unique(UniqueTable.ids()[0], rng)
 	_check(FortuneTeller.odds(relic).is_empty() and FortuneTeller.why_not_appraise(relic) == FortuneTeller.WRITTEN,

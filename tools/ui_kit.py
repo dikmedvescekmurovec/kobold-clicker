@@ -209,9 +209,43 @@ UNIQUE_EXPORT = True
 #
 # kind -> (slot, [(item name, source[, tint]), ...])
 DRAWN = "drawn"
+# A piece with no art yet: the "!" below, on the square every base stands on, so the game shows the
+# gap rather than hiding it. Swapped for a source as the user's art arrives. The masterworks are
+# made a piece at a time this way (tools/DESIGN.md, *Pixellab prompts*).
+MISSING = "missing"
+MISSING_MARK = """
+    .ooooo.
+    ollccco
+    olcccco
+    olcccco
+    olcccco
+    .olccco
+    .olcco.
+    .olcco.
+    .olcco.
+    .olcco.
+    .olcco.
+    ..olco.
+    ..olco.
+    ..oooo.
+    .......
+    .......
+    ..ooo..
+    .olcco.
+    .occco.
+    ..ooo..
+"""
 # The user's own pixellab bases, one file an item, finished like the pixellab uniques (`_muted`, then
 # `_outlined(own_edge=True)`). They are being made a kind at a time: tools/DESIGN.md, *Pixellab prompts*.
 PIXELLAB_BASES = "Bases/"
+# Pixellab pieces stretched until their longer side fills the square, before they are finished: on the doll a
+# piece that came back small looks lighter than the pieces beside it (the user's call, 2026-09-23). Nearest-neighbour
+# at a small factor (the Wooden Armor is x1.19), so a few rows and columns are doubled; kept to the pieces that need it.
+BASE_FILL = {"Wooden Armor", "Iron Armor", "Steel Plate", "Golden Plate", "Masterwork Plate"}
+# Pixellab sometimes leaves a seam as a see-through slit (the Masterwork Plate had a 2 px and a 3 px one between its
+# shoulder guards and chest, 2026-09-23): an enclosed clear patch this small or smaller is filled (`_plugged`). The
+# holes a drawing means -- the gap between a pair of boots, a ring's middle -- are far bigger.
+BASE_HOLE_MOST = 4
 _RPG_ZIP = "Pixel Art Icon Pack - RPG.zip!"
 BASE_KINDS = {
     # The pack draws an iron sword and a golden one, plain and jewelled, and the wooden one is on
@@ -219,50 +253,55 @@ BASE_KINDS = {
     # Silver Sword is the obvious steel and is left alone: it is metronome, unrecoloured.)
     "sword": ("Weapon", [
         ("Wooden Sword", (_RPG_ZIP + "Weapon & Tool/Wooden Sword", 0, 0, 32, 32, 1)), ("Iron Sword", (_RPG + "Weapon & Tool/Iron Sword", 0, 0, 32, 32, 1)),
-        ("Steel Sword", DRAWN), ("Golden Sword", (_RPG + "Weapon & Tool/Golden Sword", 0, 0, 32, 32, 1))]),
+        ("Steel Sword", DRAWN), ("Golden Sword", (_RPG + "Weapon & Tool/Golden Sword", 0, 0, 32, 32, 1)),
+        ("Masterwork Sword", MISSING)]),
     # All four drawn, and short. The pack's Knife was the iron tier until it stood in the row: it
     # is 28 px corner to corner, the same as the sword above it, and a dagger has to read small
     # before it reads as anything else.
     "dagger": ("Weapon", [
-        ("Bone Knife", DRAWN), ("Iron Dagger", DRAWN), ("Steel Stiletto", DRAWN), ("Golden Kris", DRAWN)]),
+        ("Bone Knife", DRAWN), ("Iron Dagger", DRAWN), ("Steel Stiletto", DRAWN), ("Golden Kris", DRAWN), ("Masterwork Dagger", MISSING)]),
     # Four heads, because the four names promise four weapons. The pack's Hammer is stonebreaker.
     "mace": ("Weapon", [
-        ("Wooden Club", DRAWN), ("Iron Mace", DRAWN), ("Steel Morningstar", DRAWN), ("Golden Sceptre", DRAWN)]),
+        ("Wooden Club", DRAWN), ("Iron Mace", DRAWN), ("Steel Morningstar", DRAWN), ("Golden Sceptre", DRAWN), ("Masterwork Mace", MISSING)]),
     # The pack's swords already run corner to corner, so a two-hander cannot be longer: it is
     # heavier -- half again the blade, a grip for two hands, a guard right across the square.
     "greatsword": ("Weapon", [
         ("Wooden Greatsword", DRAWN), ("Iron Claymore", DRAWN),
-        ("Steel Zweihander", DRAWN), ("Golden Greatsword", DRAWN)]),
+        ("Steel Zweihander", DRAWN), ("Golden Greatsword", DRAWN), ("Masterwork Greatsword", MISSING)]),
 
     "shield": ("Offhand", [
-        ("Wooden Shield", (_RPG_ZIP + "Weapon & Tool/Wooden Shield", 0, 0, 32, 32, 1)), ("Iron Shield", DRAWN), ("Steel Kite Shield", DRAWN), ("Golden Aegis", DRAWN)]),
+        ("Wooden Shield", (_RPG_ZIP + "Weapon & Tool/Wooden Shield", 0, 0, 32, 32, 1)), ("Iron Shield", DRAWN), ("Steel Kite Shield", DRAWN), ("Golden Aegis", DRAWN), ("Masterwork Shield", MISSING)]),
     "buckler": ("Offhand", [
-        ("Hide Buckler", DRAWN), ("Iron Buckler", DRAWN), ("Steel Targe", DRAWN), ("Golden Buckler", DRAWN)]),
+        ("Hide Buckler", DRAWN), ("Iron Buckler", DRAWN), ("Steel Targe", DRAWN), ("Golden Buckler", DRAWN), ("Masterwork Buckler", MISSING)]),
     # Two tiers. The second was the pack torch with its own flame grown by code (`_blaze`), and was
     # turned down twice for still being the first one: it is drawn now, a caged brand with a fire
     # three times the size.
-    "torch": ("Offhand", [("Wooden Torch", (_RPG + "Weapon & Tool/Torch", 0, 0, 32, 32, 1)), ("Blazing Torch", DRAWN)]),
+    "torch": ("Offhand", [("Wooden Torch", (_RPG + "Weapon & Tool/Torch", 0, 0, 32, 32, 1)), ("Blazing Torch", DRAWN), ("Masterwork Torch", MISSING)]),
 
     # The user's own pixellab set (PIXELLAB_BASES): one helmet at four strengths, grown from the
     # leather cap. What it replaced is in BASE_OLD.
     "helm": ("Helmet", [
         ("Leather Helmet", (PIXELLAB_BASES + "Leather Helmet", 0, 0, 32, 32, 1)), ("Iron Helmet", (PIXELLAB_BASES + "Iron Helmet", 0, 0, 32, 32, 1)),
-        ("Steel Helm", (PIXELLAB_BASES + "Steel Helm", 0, 0, 32, 32, 1)), ("Golden Helm", (PIXELLAB_BASES + "Golden Helm", 0, 0, 32, 32, 1))]),
+        ("Steel Helm", (PIXELLAB_BASES + "Steel Helm", 0, 0, 32, 32, 1)), ("Golden Helm", (PIXELLAB_BASES + "Golden Helm", 0, 0, 32, 32, 1)),
+        ("Masterwork Helm", (PIXELLAB_BASES + "Masterwork Helm", 0, 0, 32, 32, 1))]),
     "hood": ("Helmet", [
-        ("Hide Hood", DRAWN), ("Leather Hood", DRAWN), ("Studded Hood", DRAWN), ("Shadow Hood", DRAWN)]),
+        ("Hide Hood", DRAWN), ("Leather Hood", DRAWN), ("Studded Hood", DRAWN), ("Shadow Hood", DRAWN), ("Masterwork Hood", MISSING)]),
 
+    # Pixellab too, each piece matched to the helmet of its tier. What it replaced is in BASE_OLD.
     "plate": ("Body", [
-        ("Wooden Armor", (_RPG + "Equipment/Wooden Armor", 0, 0, 32, 32, 1)), ("Iron Armor", (_RPG + "Equipment/Iron Armor", 0, 0, 32, 32, 1)),
-        ("Steel Plate", DRAWN), ("Golden Plate", DRAWN)]),
+        ("Wooden Armor", (PIXELLAB_BASES + "Wooden Armor", 0, 0, 32, 32, 1)), ("Iron Armor", (PIXELLAB_BASES + "Iron Armor", 0, 0, 32, 32, 1)),
+        ("Steel Plate", (PIXELLAB_BASES + "Steel Plate", 0, 0, 32, 32, 1)), ("Golden Plate", (PIXELLAB_BASES + "Golden Plate", 0, 0, 32, 32, 1)),
+        ("Masterwork Plate", (PIXELLAB_BASES + "Masterwork Plate", 0, 0, 32, 32, 1))]),
     # The pack calls a strapped backpack its leather armour (it is rag_and_bone_sack), so all drawn.
     "jerkin": ("Body", [
-        ("Hide Jerkin", DRAWN), ("Leather Jerkin", DRAWN), ("Studded Jerkin", DRAWN), ("Shadow Leathers", DRAWN)]),
+        ("Hide Jerkin", DRAWN), ("Leather Jerkin", DRAWN), ("Studded Jerkin", DRAWN), ("Shadow Leathers", DRAWN), ("Masterwork Jerkin", MISSING)]),
 
     "boot": ("Boots", [
-        ("Leather Boot", (_RPG + "Equipment/Leather Boot", 0, 0, 32, 32, 1)), ("Studded Boot", DRAWN), ("Ranger's Boot", DRAWN), ("Shadow Boot", DRAWN)]),
+        ("Leather Boot", (PIXELLAB_BASES + "Leather Boot", 0, 0, 32, 32, 1)), ("Studded Boot", DRAWN), ("Ranger's Boot", DRAWN), ("Shadow Boot", DRAWN), ("Masterwork Boot", MISSING)]),
     "greaves": ("Boots", [
-        ("Bronze Greaves", DRAWN), ("Iron Greaves", (_RPG + "Equipment/Iron Boot", 0, 0, 32, 32, 1)),
-        ("Steel Greaves", DRAWN), ("Golden Greaves", DRAWN)]),
+        ("Bronze Greaves", DRAWN), ("Iron Greaves", (PIXELLAB_BASES + "Iron Greaves", 0, 0, 32, 32, 1)),
+        ("Steel Greaves", (PIXELLAB_BASES + "Steel Greaves", 0, 0, 32, 32, 1)), ("Golden Greaves", (PIXELLAB_BASES + "Golden Greaves", 0, 0, 32, 32, 1)),
+        ("Masterwork Greaves", (PIXELLAB_BASES + "Masterwork Greaves", 0, 0, 32, 32, 1))]),
 
     # Untiered, so here the drawing parts one piece from the next rather than one tier from the
     # last: a stone on a gold band, a broad riveted band, a ring cut from jade; three pendants of
@@ -286,12 +325,21 @@ BASE_TINTS = {
 BASES_EXPORT = True
 # What the pixellab bases replaced, still written to Assets/Gear/Old for the settings' dev tick "Show old
 # icons" (`LootTable.icon_path`), finished as they were: the pack's three helmets, which were a ladder as
-# they stood -- a cap, an open-faced helmet, a great helm -- and an earlier pixellab golden helm.
+# they stood -- a cap, an open-faced helmet, a great helm -- and an earlier pixellab golden helm; the pack's
+# wooden and iron armour, and the steel and golden plate the generator drew.
 BASE_OLD = {
     "Leather Helmet": (_RPG + "Equipment/Leather Helmet", 0, 0, 32, 32, 1),
     "Iron Helmet": (_RPG + "Equipment/Iron Helmet", 0, 0, 32, 32, 1),
     "Steel Helm": (_RPG + "Equipment/Helm", 0, 0, 32, 32, 1),
     "Golden Helm": ("golden-helm", 0, 0, 32, 32, 1),
+    "Wooden Armor": (_RPG + "Equipment/Wooden Armor", 0, 0, 32, 32, 1),
+    "Iron Armor": (_RPG + "Equipment/Iron Armor", 0, 0, 32, 32, 1),
+    "Steel Plate": DRAWN,
+    "Golden Plate": DRAWN,
+    "Leather Boot": (_RPG + "Equipment/Leather Boot", 0, 0, 32, 32, 1),
+    "Iron Greaves": (_RPG + "Equipment/Iron Boot", 0, 0, 32, 32, 1),
+    "Steel Greaves": DRAWN,
+    "Golden Greaves": DRAWN,
 }
 BASE_OLD_OUT = GEAR_OUT + "/Old"
 
@@ -326,12 +374,11 @@ ORB_DRAWN = 16
 # Assets/UI for the main scene to load by path -- like the gear icons, and for the same reason: none
 # of it is a nine-slice, so none of it belongs in the theme sheet.
 #
-# The doll is the pack's own silhouette, brown on brown so it reads as the panel rather than as a
-# picture on it; the sockets are laid over it. The other two are the pack's empty-socket marks, and
+# The doll is drawn apart (`doll()`, DOLL_SOURCE), brown on brown so it reads as the panel rather than as
+# a picture on it; the sockets are laid over it. The other two are the pack's empty-socket marks, and
 # it is no accident that it draws exactly these two: which socket is the weapon and which the boots
 # is obvious from where it sits on a body, and which is a ring is not.
 PARTS = {
-    "ui_doll": ("2D Pixel UI/PNG/Equipment", 50, 336, 43, 46, 1),
     "ui_socket_amulet": ("2D Pixel UI/PNG/Equipment", 99, 337, 10, 13, 1),
     "ui_socket_ring": ("2D Pixel UI/PNG/Equipment", 99, 354, 11, 12, 1),
 }
@@ -1238,7 +1285,7 @@ def unique_preview(cut):
 
 
 def base_gear():
-    """All sixty-nine bases, cut or drawn as BASE_KINDS says, every one through `_outlined`.
+    """Every base, cut, drawn or marked missing as BASE_KINDS says, every one through `_outlined`.
 
     Nothing is read out of Assets/Gear, which is where these are written. A doubled icon stops the
     build, and so does one whose edge is not outline ink: see `_doubled` and `outline_share`.
@@ -1250,8 +1297,13 @@ def base_gear():
             name, source = tier[0], tier[1]
             if source == DRAWN:
                 art = _outlined(generator.ICONS[name]())
+            elif source == MISSING:
+                art = _outlined(_drawn(MISSING_MARK), own_edge=True)
             elif source[0].startswith(PIXELLAB_BASES):
-                art = _outlined(_muted(_cut(source)), own_edge=True)
+                art = _plugged(_cut(source), BASE_HOLE_MOST)
+                if name in BASE_FILL:
+                    art = _filled(art)
+                art = _outlined(_muted(art), own_edge=True)
             else:
                 art = _outlined(_cut(source))
             if len(tier) > 2:
@@ -1264,17 +1316,57 @@ def base_gear():
     return out
 
 
+def _plugged(art, most):
+    """`art` with every enclosed clear patch of at most `most` pixels filled with the darkest colour beside it: the
+    shadow of the seam the drawing meant. A patch that reaches the edge of the art is outside it, and left alone."""
+    out = art.copy()
+    px = out.load()
+    w, h = out.size
+    clear = {(x, y) for y in range(h) for x in range(w) if px[x, y][3] < 128}
+    seen = set()
+    for start in sorted(clear):
+        if start in seen:
+            continue
+        patch, todo, open_edge = [start], [start], False
+        seen.add(start)
+        while todo:
+            x, y = todo.pop()
+            if x in (0, w - 1) or y in (0, h - 1):
+                open_edge = True
+            for dx, dy in _FOUR:
+                near = (x + dx, y + dy)
+                if near in clear and near not in seen:
+                    seen.add(near)
+                    patch.append(near)
+                    todo.append(near)
+        if open_edge or len(patch) > most:
+            continue
+        rim = [px[x + dx, y + dy] for x, y in patch for dx, dy in _FOUR
+               if 0 <= x + dx < w and 0 <= y + dy < h and (x + dx, y + dy) not in clear]
+        fill = min(rim, key=lambda c: sum(c[:3]))
+        for spot in patch:
+            px[spot] = fill[:3] + (255,)
+    return out
+
+
+def _filled(art):
+    """`art` stretched, nearest-neighbour, until its longer side is GEAR_SIDE: see BASE_FILL."""
+    art = art.crop(art.getbbox())
+    factor = GEAR_SIDE / max(art.size)
+    return art.resize((round(art.width * factor), round(art.height * factor)), Image.NEAREST)
+
+
 def base_old():
     """The icons the pixellab bases replaced, made as they were: see BASE_OLD."""
     out = {}
     for name, source in BASE_OLD.items():
-        art = _outlined(_cut(source))
+        art = _outlined(_generator().ICONS[name]() if source == DRAWN else _cut(source))
         out[name] = _squared(name, art.crop(art.getbbox()))
     return out
 
 
 def base_preview(cut):
-    """All sixty-nine bases: a row to a kind, a column to a tier, grouped under their slot.
+    """Every base: a row to a kind, a column to a tier, grouped under their slot.
 
     Drawn at this size because the question is whether four tiers of one kind can be told apart at
     the 32 px the bag draws them at, whether a drawn piece can be picked out from a cut one, and
@@ -1316,7 +1408,9 @@ def base_preview(cut):
             out.paste(Image.new("RGBA", (life, life), socket), (lx, ly))
             out.alpha_composite(art, (lx + 4, ly + 4))
             draw.text((x, y + side + 2), name, fill=ink)
-            draw.text((x, y + side + 13), "drawn" if source == DRAWN else "cut from the pack", fill=faint)
+            draw.text((x, y + side + 13), {DRAWN: "drawn", MISSING: "no art yet"}.get(source, "cut from the pack")
+                      if isinstance(source, str) else "pixellab" if source[0].startswith(PIXELLAB_BASES)
+                      else "cut from the pack", fill=faint)
         y += cell_h
     return out
 
@@ -1420,9 +1514,40 @@ def skill_preview(cut):
     return out.resize((out.width * 2, out.height * 2), Image.NEAREST)
 
 
+# The doll behind the sockets: the user's pixellab knight (2026-09-23, 128x128, low detail), which took the place
+# of the pack's 43x46 figure ("2D Pixel UI/PNG/Equipment", 50, 336) so the backdrop has the new gear's shading.
+# It is put onto the old figure's six browns by lightness -- equal shares darkest to lightest, so it keeps its
+# relief and loses its colours and its contrast, which a backdrop behind translucent sockets must -- and stretched
+# to DOLL_SIDE high, nearest-neighbour (x1.13), so its shield, head, body and feet sit under the sockets. It is
+# drawn at 1x (bag_page's DOLL_SCALE), the icons' own pixel size.
+DOLL_SOURCE = "doll-pixellab.png"
+DOLL_SIDE = 128
+DOLL_RAMP = [(0x51, 0x2C, 0x24), (0x58, 0x31, 0x26), (0x60, 0x39, 0x28),
+             (0x67, 0x40, 0x28), (0x70, 0x49, 0x2A), (0x78, 0x51, 0x2C)]
+
+
+def doll():
+    """The doll figure: DOLL_SOURCE in DOLL_RAMP's browns, filling a DOLL_SIDE square top to bottom."""
+    src = Image.open(os.path.join(POTENTIAL, DOLL_SOURCE)).convert("RGBA")
+    px = src.load()
+    spots = sorted(((x, y) for y in range(src.height) for x in range(src.width) if px[x, y][3] >= 128),
+                   key=lambda spot: colorsys.rgb_to_hls(*[v / 255 for v in px[spot][:3]])[1])
+    figure = Image.new("RGBA", src.size, (0, 0, 0, 0))
+    for i, spot in enumerate(spots):
+        figure.putpixel(spot, DOLL_RAMP[i * len(DOLL_RAMP) // len(spots)] + (255,))
+    figure = figure.crop(figure.getbbox())
+    factor = DOLL_SIDE / figure.height
+    figure = figure.resize((round(figure.width * factor), DOLL_SIDE), Image.NEAREST)
+    out = Image.new("RGBA", (DOLL_SIDE, DOLL_SIDE), (0, 0, 0, 0))
+    out.alpha_composite(figure, ((DOLL_SIDE - figure.width) // 2, 0))
+    return out
+
+
 def parts():
     """The equipment screen's furniture, each at its own size -- nothing here sits in a grid."""
-    return {name: _cut(entry) for name, entry in PARTS.items()}
+    out = {name: _cut(entry) for name, entry in PARTS.items()}
+    out["ui_doll"] = doll()
+    return out
 
 
 def _drawn(rows):

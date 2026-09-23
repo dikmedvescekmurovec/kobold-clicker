@@ -79,6 +79,9 @@ const ENEMIES := 10
 const ELITE_EVERY := 10
 ## How long an ordinary tile's fight runs. One clock, from the first spawn and never stopping.
 const SECONDS := 30.0
+## The most the gear's Fight Clock adds to it, in seconds: two top rolls. Beside Heartwood's own cap,
+## not inside it -- the two are different pieces spent on the same thing.
+const CLOCK_MOST := 8.0
 
 ## What a fight is, per what the world put on the tile -- `MapBuilder.area_variant`, which the main
 ## scene already reads to pick the backdrop and now reads to pick the fight. Open land and a road
@@ -893,6 +896,11 @@ func arm(stats: Dictionary) -> void:
 	if "heartwood" in effects and not endless:
 		seconds += minf(floorf(armor / HEARTWOOD_ARMOUR), HEARTWOOD_MOST)
 		time_left = seconds
+	# The Fight Clock on the gear, on the same terms: capped, and nothing on a run.
+	var clock := LootTable.seconds_of("fight_clock", float(stats.get("fight_clock", 0.0)))
+	if clock > 0.0 and not endless:
+		seconds += minf(clock, CLOCK_MOST)
+		time_left = seconds
 	attack_speed = maxf(0.0, float(stats.get("attack_speed", 0.0)))
 	bleed = maxf(0.0, float(stats.get("bleed", 0.0)))
 	drop_rate = maxf(0.0, float(stats.get("drop_rate", 0.0)))
@@ -1099,11 +1107,11 @@ func _kill() -> void:
 		var certain: bool = always_drop or mimic or (roll == 0
 				and ((guarantee_elite and on_elite()) or (big and "trophy" in effects)))
 		var dropped := LootTable.roll(lineup[index], loot_rng, certain, MapBuilder.level_of(cell),
-				gear_rate, item_rarity)
+				gear_rate, item_rarity, MapBuilder.circle_of(cell))
 		# Lucky Wound: a body that took a crit rolls again and leaves the better of the two.
 		if _crit_landed and "lucky_wound" in effects:
 			dropped = _better(dropped, LootTable.roll(lineup[index], loot_rng, certain,
-					MapBuilder.level_of(cell), gear_rate, item_rarity))
+					MapBuilder.level_of(cell), gear_rate, item_rarity, MapBuilder.circle_of(cell)))
 		var found := 0
 		while dropped != null:
 			if first_sword:
@@ -1118,7 +1126,7 @@ func _kill() -> void:
 			# `always_drop`, a mimic, the elite's promise, Trophy Hunter -- does not, because it beat
 			# nothing: the promise is one piece.
 			dropped = null if certain or found >= MOST_DROPS else LootTable.roll(lineup[index],
-					loot_rng, false, MapBuilder.level_of(cell), gear_rate, item_rarity)
+					loot_rng, false, MapBuilder.level_of(cell), gear_rate, item_rarity, MapBuilder.circle_of(cell))
 	# Every body carries one, which is the whole difference between gold and gear: nine kills in
 	# ten leave nothing, and all ten leave this.
 	# Gold find lifts the purse here rather than inside `gold_of`, which is what the body is worth
@@ -1137,7 +1145,7 @@ func _kill() -> void:
 	if "magpie" in effects and not no_gear and loot_rng.randf() < MAGPIE_CHANCE:
 		purse = 0.0
 		loot_dropped.emit(index, _lean(_raw(LootTable.roll(lineup[index], loot_rng, true,
-				MapBuilder.level_of(cell), drop_rate, item_rarity))))
+				MapBuilder.level_of(cell), drop_rate, item_rarity, MapBuilder.circle_of(cell)))))
 	# The Pauper's curse, and a Barren tile, where a body carries nothing at all.
 	if purse > 0.0 and Curses.effect(Curses.PAUPER) in effects:
 		purse = maxf(1.0, roundf(purse * PAUPER_PURSE))

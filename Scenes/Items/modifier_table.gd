@@ -2,16 +2,19 @@ class_name ModifierTable
 extends RefCounted
 ## What an item can carry on top of what it is.
 ##
-## Four shapes of modifier, and each is let onto a piece by a different rule.
+## Three shapes of modifier, and each is let onto a piece by a different rule.
 ##
 ## A PERCENT one scales a stat the item already has, so it needs that *base* stat: a boot has no
 ## damage to increase. A FLAT one adds a stat outright, so it needs only that the piece be allowed to
 ## carry it -- LootTable's `affixes` -- which is how a ring with no crit of its own rolls "+2%
 ## Crit Chance". A GLOBAL one is a percentage of what the *whole set* is worth rather than of anything the
 ## piece has, so it needs neither: LootTable's `globals` says which pieces may carry one, which today
-## is the jewellery and nothing else. A PLAYER one is a buff to the player rather than the item, and
-## can land on anything; the pool of those is deliberately small and every one of them names
-## something this game already has, rather than inventing a currency for a system nobody has written.
+## is the jewellery and nothing else.
+##
+## There was a fourth, PLAYER: a sentence about the player that fitted any piece and that nothing
+## applied. Two of its three said what a FLAT line already said (move speed, item rarity) and went; the
+## third is the fight clock, a FLAT stat any piece may carry (`LootTable.ANY_AFFIXES`). `RENAMED` is
+## what a saved one became.
 ##
 ## Where a modifier is *applied* follows from that. A PERCENT and a FLAT one are folded into the
 ## piece by `Item.effective_stats`, because they are numbers the piece is worth. A GLOBAL one is
@@ -30,12 +33,10 @@ enum Kind {
 	PERCENT,  ## scales a base stat the item has: "+14% increased Damage"
 	FLAT,     ## adds a stat the item is allowed to carry: "+2 Damage"
 	GLOBAL,   ## scales what the whole set is worth, not the piece: a ring's "+14% increased Damage"
-	PLAYER,   ## a buff to the player, and so at home on any item at all: "+4s on the fight clock"
 }
 
 ## id -> what it does, what it touches, the range it rolls in, and how often it is drawn against the
-## others in the same pool. PLAYER modifiers carry their own line because each is a sentence about a
-## different thing; the rest build theirs from the stat's label, so a stat renamed is renamed
+## others in the same pool. Every line is built from the stat's label, so a stat renamed is renamed
 ## everywhere. Percent ranges are wider where the stat is itself a percentage -- a fifth of a 5% crit
 ## chance is a rounding error -- and a flat roll is worth roughly two percent rolls on the same stat.
 const MODS := {
@@ -89,15 +90,20 @@ const MODS := {
 	# this is the whole of what a ring can do to it.
 	"global_increased_damage": {"kind": Kind.GLOBAL, "stat": "damage", "range": [5, 12], "weight": 8},
 	"global_increased_attack_speed": {"kind": Kind.GLOBAL, "stat": "attack_speed", "range": [5, 12], "weight": 8},
-	# The player-wide three, and none of them is read yet. Each points at something that exists:
-	# Encounter.seconds, PlayerToken.SECONDS_PER_TILE and ItemRarity.TIER_WEIGHTS. The clock stops at
-	# four seconds because four on a thirty-second fight is already a noticeably easier one.
-	#
-	# There were four: `item_find` was the player-wide way of saying what `drop_rate` now says as a
-	# stat, and one idea under two names is how the two would come to disagree.
-	"fight_clock": {"kind": Kind.PLAYER, "line": "+%ds on the fight clock", "range": [1, 4], "weight": 4},
-	"walk_speed": {"kind": Kind.PLAYER, "line": "+%d%% walk speed", "range": [3, 8], "weight": 4},
-	"item_rarity": {"kind": Kind.PLAYER, "line": "+%d%% better item rarity", "range": [3, 10], "weight": 2},
+	# Seconds on the fight clock, in tenths (`LootTable.SECONDS_STATS`): 1.0-4.0s, on anything, and the
+	# same at every level -- a clock that grew with the level would delete the only way to lose.
+	# `Encounter.CLOCK_MOST` caps what a whole set adds.
+	"added_fight_clock": {"kind": Kind.FLAT, "stat": "fight_clock", "range": [10, 40], "weight": 4},
+}
+
+## Modifiers the table no longer holds -> [what a saved one became, what its number is multiplied by].
+## Read by `Item.from_dict` alone. One idea under two names is how the two come to disagree, so the
+## player-wide move speed and item rarity went into the FLAT lines that already said them, and the
+## clock counts tenths now.
+const RENAMED := {
+	"walk_speed": ["added_move_speed", 1],
+	"item_rarity": ["added_item_rarity", 1],
+	"fight_clock": ["added_fight_clock", 10],
 }
 
 ## No modifier can be drawn without a stat to hang on, so attack speed has no flat form: "+0.2
@@ -122,8 +128,7 @@ const DORMANT: Array[String] = []
 const UNIQUE_ONLY: Array[String] = []
 
 
-## Every modifier this piece could carry: the player-wide ones, which fit anything, plus the ones
-## that name a stat it actually has. This list is the whole rule -- an impossible modifier is never
+## Every modifier this piece could carry: the ones that name a stat it has or may carry. This list is the whole rule -- an impossible modifier is never
 ## in it, so nothing downstream has to know it was impossible.
 static func pool_for(item_type: String) -> PackedStringArray:
 	var pool := PackedStringArray()
@@ -131,8 +136,6 @@ static func pool_for(item_type: String) -> PackedStringArray:
 		var mod: Dictionary = MODS[id]
 		var fits := false
 		match mod["kind"]:
-			Kind.PLAYER:
-				fits = true
 			Kind.PERCENT:
 				fits = LootTable.has_stat(item_type, mod["stat"])
 			Kind.GLOBAL:
@@ -169,7 +172,7 @@ static func roll(item_type: String, count: int, rng: RandomNumberGenerator,
 const TIER_FALLOFF := 0.9
 
 
-## Whether this modifier's band grows with the level at all. One that does not -- the PLAYER three,
+## Whether this modifier's band grows with the level at all. One that does not -- the fight clock,
 ## and gold find with its `level_flat` of 0 -- is the same band at every tier, so it draws none and
 ## writes none.
 static func tiered(id: String) -> bool:
@@ -255,11 +258,6 @@ static func _level_band(id: String, level: int) -> Array[float]:
 			# is sized for the stat itself rather than for a percentage of it.
 			low *= pow(LootTable.LEVEL_GROWTH, maxi(level - 1, 0))
 			high *= pow(LootTable.LEVEL_GROWTH, maxi(level - 1, 0))
-		_:
-			# PLAYER: a buff to the player rather than a stat on the piece, so LEVEL_FLAT has
-			# nothing to say about it and it keeps the band as written. One of them is seconds on
-			# the fight clock, which scaled would eventually delete the only way to lose.
-			pass
 	return [low, high]
 
 
@@ -352,8 +350,6 @@ static func amount(id: String, value: int) -> String:
 static func _written(id: String, amount: String) -> String:
 	var entry: Dictionary = MODS[id]
 	match entry["kind"]:
-		Kind.PLAYER:
-			return str(entry["line"]).replace("%d", "%s") % amount
 		Kind.PERCENT, Kind.GLOBAL:
 			# The same sentence for both, and honestly so: with one weapon between them, a sword's
 			# increased damage and a ring's are the same claim about the same number.

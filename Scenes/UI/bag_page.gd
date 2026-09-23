@@ -63,24 +63,26 @@ const DRAG_THRESHOLD := 4.0
 const DOLL_TEXTURE := preload("res://Assets/UI/ui_doll.png")
 const SOCKET_RING_TEXTURE := preload("res://Assets/UI/ui_socket_ring.png")
 const SOCKET_AMULET_TEXTURE := preload("res://Assets/UI/ui_socket_amulet.png")
-## The smallest whole number that keeps 40 px sockets on the head, chest and feet from touching.
-const DOLL_SCALE := 3.0
+## The doll is drawn at the item icons' own pixel size: a 128 px figure (`tools/ui_kit.py`'s `doll()`) standing
+## where the pack's 43x46 one stood at 3x.
+const DOLL_SCALE := 1.0
 ## The air between the bag panel and the sheet.
 const WORN_GAP := 6.0
 ## How much of the window's height the bag takes on a transcension's black screen.
 const TRANSCEND_HEIGHT := 0.7
-## Each socket's centre in the doll sprite's own pixels, before DOLL_SCALE. Measured off the sprite:
-## head y 0-16 on x 14-27, chest y 17-33, feet y 34-45, shield hand x 0-8, sword hand x 37-40. The
+## Each socket's centre in the doll sprite's own pixels, before DOLL_SCALE. The places the pack's figure had
+## at 3x, kept when the pixellab doll replaced it (2026-09-23), which was generated and fitted to sit under them:
+## head, chest and feet down the middle, the shield at the left edge and the sword hand at the right. The
 ## jewellery sits in a row below the figure.
 const DOLL_SOCKETS := {
-	Equipment.Socket.HELMET: Vector2(21, 8),
-	Equipment.Socket.OFFHAND: Vector2(4, 26),
-	Equipment.Socket.BODY: Vector2(21, 25),
-	Equipment.Socket.WEAPON: Vector2(38, 25),
-	Equipment.Socket.BOOTS: Vector2(21, 41),
-	Equipment.Socket.RING_LEFT: Vector2(4, 58),
-	Equipment.Socket.AMULET: Vector2(21, 58),
-	Equipment.Socket.RING_RIGHT: Vector2(38, 58),
+	Equipment.Socket.HELMET: Vector2(63, 24),
+	Equipment.Socket.OFFHAND: Vector2(12, 78),
+	Equipment.Socket.BODY: Vector2(63, 75),
+	Equipment.Socket.WEAPON: Vector2(114, 75),
+	Equipment.Socket.BOOTS: Vector2(63, 123),
+	Equipment.Socket.RING_LEFT: Vector2(12, 174),
+	Equipment.Socket.AMULET: Vector2(63, 174),
+	Equipment.Socket.RING_RIGHT: Vector2(114, 174),
 }
 
 ## Whose grid and whose doll this page is: the player's inventory, or -- on the heirlooms' page --

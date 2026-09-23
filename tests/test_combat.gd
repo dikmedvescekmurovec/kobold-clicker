@@ -2271,6 +2271,16 @@ func _test_more_unique_effects() -> bool:
 	oak_run.arm({"armor": 225.0})
 	_check(oak_run.seconds == Encounter.SECONDS, "and a run has no clock to add to")
 
+	# The Fight Clock on gear, in tenths: capped at CLOCK_MOST, and none on a run either.
+	for case: Array in [[25.0, 2.5], [400.0, Encounter.CLOCK_MOST]]:
+		var clocked := Encounter.for_tile(cell, "grass")
+		clocked.arm({"fight_clock": case[0]})
+		_check(clocked.seconds == Encounter.SECONDS + float(case[1]) and clocked.time_left == clocked.seconds,
+				"%s tenths of Fight Clock are %s seconds (%s)" % [case[0], case[1], clocked.seconds])
+	var clocked_run := Encounter.farm(cell, "grass")
+	clocked_run.arm({"fight_clock": 25.0})
+	_check(clocked_run.seconds == Encounter.SECONDS, "and a run's clock is not lengthened")
+
 	# Magpie's Band: some purses are gear instead -- unless a Tithe says there is no gear.
 	for worn: Array in [["magpie"], ["magpie", "tithe"]]:
 		var nest := Encounter.farm(cell, "grass")

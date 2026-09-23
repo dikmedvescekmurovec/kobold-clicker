@@ -222,6 +222,33 @@ func _test_totals() -> bool:
 	_check(not LootTable.has_stat("Wooden Sword", "strength"), "a sword has no strength of its own")
 	_check(is_equal_approx(affixed.effective_stats()["strength"], 5.0), "and carries it anyway")
 
+	# The attributes are a fifth of a percent a point: strength of the set's damage, dexterity of its
+	# swings, intelligence of the experience a kill pays.
+	var bag := Inventory.new()
+	var own := Item.new()
+	own.type = "Wooden Sword"
+	own.stats = Item.scaled_stats("Wooden Sword", 1)
+	bag.equipment.equip(Equipment.Socket.WEAPON, own)
+	var plain := bag.stats()
+	own.mods = [{"id": "added_strength", "value": 10}, {"id": "added_dexterity", "value": 5},
+			{"id": "added_intelligence", "value": 20}]
+	var gifted := bag.stats()
+	_check(is_equal_approx(gifted["damage"], plain["damage"] * 1.02), "ten strength is 2% more damage")
+	_check(is_equal_approx(float(gifted.get("attack_speed", 0.0)), float(plain.get("attack_speed", 0.0)) * 1.01),
+			"five dexterity is 1% more swings")
+	_check(is_equal_approx(float(gifted.get("xp_more", 0.0)), 4.0), "twenty intelligence is 4% more experience")
+
+	# A save's player-wide lines come back as the FLAT ones they were folded into, flags and all but a
+	# perfect one's; a piece already holding that line keeps its own.
+	var saved := Item.rolled("Gold Ring", ItemRarity.Rarity.COMMON, rng).to_dict()
+	saved["mods"] = [{"id": "walk_speed", "value": 5}, {"id": "fight_clock", "value": 3, "locked": true},
+			{"id": "added_item_rarity", "value": 12}, {"id": "item_rarity", "value": 7, "perfect": true}]
+	var back := Item.from_dict(saved)
+	_check(back.mods.map(func(mod: Dictionary) -> String: return mod["id"])
+			== ["added_move_speed", "added_fight_clock", "added_item_rarity"], "the old ids are renamed (%s)" % [back.mods])
+	_check(int(back.mods[0]["value"]) == 5 and int(back.mods[1]["value"]) == 30 and back.mods[1].get("locked", false)
+			and int(back.mods[2]["value"]) == 12, "the clock counts tenths, and the lock holds")
+
 	# A global belongs to the set, not to the piece: the ring carrying it is worth no damage at all,
 	# and what it scales is the sword's. Two of them add before they scale, the way the panel reads.
 	var worn := Equipment.new()
@@ -638,9 +665,6 @@ func _test_modifier_tables() -> bool:
 		var band: Array = mod["range"]
 		_check(int(band[0]) <= int(band[1]), id + " rolls in a real range")
 		_check(int(band[0]) > 0, id + " is worth something")
-		if mod["kind"] == ModifierTable.Kind.PLAYER:
-			_check(not str(mod["line"]).is_empty(), id + " says what it does")
-			continue
 		var stat: String = mod["stat"]
 		_check(LootTable.STAT_LABELS.has(stat), "%s names %s, which has no label" % [id, stat])
 		# A modifier for a stat nothing carries could never be rolled: dead weight in the table. A
@@ -766,12 +790,28 @@ func _test_rolls() -> bool:
 			"deep ground deals the best materials (%s)" % [tiers.keys()])
 	_check(tiers.has(0), "and its shallower rolls still deal the plainest")
 
-	# The one material worth something beyond its numbers: a second tile of sight belongs to the deep
-	# game, so no Blazing Torch may fall where the ground cannot roll a level-10 piece at all.
+	# The circles hold the materials to their walls, whatever the level: a ring's circle, and a boss
+	# on the last ring inside a wall -- two levels over its tile -- never dealing the next circle's.
+	for ring: Array in [[0, 1], [10, 1], [11, 2], [20, 2], [21, 3], [31, 4]]:
+		_check(MapBuilder.circle_of(Vector2i(int(ring[0]), 0)) == int(ring[1]),
+				"ring %d is circle %d (%d)" % [ring[0], ring[1], MapBuilder.circle_of(Vector2i(int(ring[0]), 0))])
+	var boss := ""
+	for body: String in EnemyRoster.ENEMIES:
+		if EnemyRoster.tier_of(body) == EnemyRoster.Tier.BOSS:
+			boss = body
+			break
+	# The circle's last tile level, the one the next circle's first ring shares.
+	var best := [0, 0, 0]
+	for circle: int in [1, 2, 3]:
+		var edge := MapBuilder.level_of(Vector2i(MapBuilder.START_LAND_RADIUS + (circle - 1) * MapBuilder.WALL_STEP, 0))
+		for i in 1000:
+			var piece := LootTable.roll(boss, rng, true, edge, 0.0, 0.0, circle)
+			best[circle - 1] = maxi(best[circle - 1], int(LootTable.ITEMS[piece.type]["tier"]))
+	_check(best == [1, 3, 4], "the best material inside each wall is the second, the fourth, the masterwork (%s)" % [best])
 	var blazing := 0
 	for i in 1000:
-		blazing += 1 if LootTable.roll(enemy, rng, true, 9).type == "Blazing Torch" else 0
-	_check(blazing == 0, "no Blazing Torch off level-9 ground (%d of 1000)" % blazing)
+		blazing += 1 if LootTable.roll(boss, rng, true, 5, 0.0, 0.0, 1).type == "Blazing Torch" else 0
+	_check(blazing == 0, "no Blazing Torch inside the first wall (%d of 1000)" % blazing)
 
 	# The run's first find: a fight told to drop a sword drops one, once, and then goes back to the table.
 	for attempt in 20:
@@ -2173,7 +2213,7 @@ func _test_mod_tiers() -> bool:
 	_check(absf(total / 2000.0 - target_20) < target_20 * 0.05,
 			"two thousand rolls average what they did: %.1f against %.1f" % [total / 2000.0, target_20])
 	_check(tops > 100 and tops < 400, "and the top tier is a tenth of them or so (%d)" % tops)
-	for id: String in ["fight_clock", "added_gold_find"]:
+	for id: String in ["added_fight_clock", "added_gold_find"]:
 		_check(not ModifierTable.tiered(id) and not ModifierTable.rolled_mod(id, rng, 20).has("under"),
 				"%s has one band, and so no tier" % id)
 
@@ -2539,9 +2579,9 @@ func _test_item_levels() -> bool:
 	# A probability may not be multiplied by a level. Every chance stat grows by its flat step alone,
 	# so a deep set of gear cannot add up past certainty and make every hit a crit.
 	for stat: String in LootTable.CHANCE_STATS:
-		# Sight is the one in the list that is not a probability: it is a number of tiles, and it is
-		# there so that a level cannot multiply one of them into twenty-six.
-		_check(stat in LootTable.PERCENT_STATS or stat == "sight",
+		# Sight and the fight clock are the two in the list that are not probabilities: a number of
+		# tiles and a number of seconds, there so that a level cannot multiply either.
+		_check(stat in LootTable.PERCENT_STATS or stat in ["sight", "fight_clock"],
 				"%s is written as a percentage" % stat)
 		for level in [1, 10, 40]:
 			var want := 5.0 + float(LootTable.LEVEL_FLAT[stat]) * float(level - 1)

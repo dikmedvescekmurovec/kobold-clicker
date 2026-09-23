@@ -93,8 +93,12 @@ func _redraw() -> void:
 	# The squares take no mouse of their own (`ItemSlot`), so the row answers for them, as the bag's
 	# grid does; being in `ItemSlot.GROUP` is what gives each one its card under the cursor.
 	var tiers: Array = LootTable.KINDS[_kind_name()]["tiers"]
-	var tier_row := HBoxContainer.new()
-	tier_row.add_theme_constant_override("separation", BagPage.SLOT_GAP)
+	# The bag's own four columns, so a kind's five materials wrap onto a second row rather than widen
+	# the page.
+	var tier_row := GridContainer.new()
+	tier_row.columns = BagPage.GRID_COLS
+	tier_row.add_theme_constant_override("h_separation", BagPage.SLOT_GAP)
+	tier_row.add_theme_constant_override("v_separation", BagPage.SLOT_GAP)
 	tier_row.mouse_filter = Control.MOUSE_FILTER_STOP
 	for type: String in tiers:
 		var shown := item if type == item.type else Item.rolled(type, ItemRarity.Rarity.COMMON, _rng, item.level)
@@ -104,7 +108,8 @@ func _redraw() -> void:
 		var press := event as InputEventMouseButton
 		if press == null or not press.pressed or press.button_index != MOUSE_BUTTON_LEFT:
 			return
-		var at := int(press.position.x / (ItemSlot.SIDE + BagPage.SLOT_GAP))
+		var pitch := ItemSlot.SIDE + BagPage.SLOT_GAP
+		var at := int(press.position.y / pitch) * BagPage.GRID_COLS + int(press.position.x / pitch)
 		if at < tiers.size() and tiers[at] != item.type:
 			pick(_kind_name(), at, item.level))
 	add_child(tier_row)

@@ -68,6 +68,12 @@ const ENCUMBERED_SPEED := 0.5
 ## The Spiked Helm: how much of the set's armour is added to its damage.
 const SPIKES_SHARE := 0.01
 
+## What a point of each attribute is worth, in percent of the stat it names. Minor on purpose: a roll
+## of strength is a slot that could have held damage outright, and a piece carrying none of them is the
+## better piece. Intelligence adds to `xp_more`, a percentage already; the other two multiply.
+const ATTRIBUTE_PERCENT := 0.2
+const ATTRIBUTE_GIVES := {"strength": "damage", "dexterity": "attack_speed", "intelligence": "xp_more"}
+
 ## What is held, in the order it was picked up. The panel does not show it in this order -- `order()`
 ## does that -- and nothing outside here should: an index into this array is how a piece is named,
 ## and it stays the same piece however the bag is sorted. What is *worn* is not in here at all --
@@ -421,6 +427,13 @@ func stats() -> Dictionary:
 	# and skills made rather than adding to either.
 	if out.has("damage"):
 		out["damage"] = float(out["damage"]) * (1.0 + collection_bonus() / 100.0)
+	for attribute: String in ATTRIBUTE_GIVES:
+		var share := attribute_bonus(float(out.get(attribute, 0.0)))
+		var stat: String = ATTRIBUTE_GIVES[attribute]
+		if stat == "xp_more":
+			out[stat] = float(out.get(stat, 0.0)) + share
+		elif out.has(stat):
+			out[stat] = float(out[stat]) * (1.0 + share / 100.0)
 	# Pacifist Hands: the hands swing for themselves, and then everything that swings swings faster.
 	if Curses.PACIFIST_HANDS in curses:
 		out["attack_speed"] = (float(out.get("attack_speed", 0.0)) + PACIFIST_SWINGS) * PACIFIST_FASTER
@@ -430,6 +443,11 @@ func stats() -> Dictionary:
 		for stat: String in pays:
 			out[stat] = float(out.get(stat, 0.0)) + float(pays[stat])
 	return out
+
+
+## The percent `points` of an attribute add to what it gives (`ATTRIBUTE_GIVES`).
+static func attribute_bonus(points: float) -> float:
+	return maxf(0.0, points) * ATTRIBUTE_PERCENT
 
 
 ## What one skill point is worth against what the tree says: double under Hard Lessons. A whole

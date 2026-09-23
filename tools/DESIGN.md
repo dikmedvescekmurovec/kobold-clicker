@@ -17,7 +17,7 @@ The **item bases** (`BASE_KINDS`, `base_gear()`) took five rounds with the user,
 
 **One outline for all of them** (`_outlined`). The pack's border is pure white, one pixel thick, and is every opaque pixel that touches clear on one of its four sides plus the odd diagonal corner fill; it is found from the outside in, never by colour over the whole sprite, because the pack also puts pure white on a blade's glint and in the heart of the torch's flame. Under it there is no outline — the pack lets the white do that job — so stripping it leaves a sprite ending in its own mid-browns. The first version painted a border pixel dark only where what it stood against was lighter than 0.3, to keep the line thin, and was turned down: the pack shades towards its edge in browns that pass that test and are nowhere near ink, so a cut piece ended with 56% of its edge in ink on average (the Leather Boot 1%, the Wooden Sword 0%) against a drawn piece's 88%, and the sheet wore two finishes. Four of the six shipped originals turned out to be the pack's *borderless* variant, with no ring to repaint at all. The rule now is one sentence: **every opaque pixel that touches clear is ink**, the sprite's own darkest twentieth in hue and saturation, lightness capped at `OUTLINE_INK` (0.16); the white ring is repainted where there is one and a ring is added on the four sides of the art where there is not. Measured after: 100% on all 69. `base_gear()` refuses an icon under `OUTLINE_FLOOR` (0.97 — the pack leaves an edge pixel or two out of its border) and `qa.py gear` counts it for cut and drawn separately. A generated icon is handed over wearing the pack's white ring precisely so that one function finishes both kinds. `GREY_CEILING` outlived the border it was written for: it now only keeps a lifted recolour from burning out to paper white.
 
-**It is exported, and the build does not read what it writes.** `BASES_EXPORT` and `UNIQUE_EXPORT` are on, so a run writes all 56 bases and 27 unique icons. (There were 69 until the hat, robe, slippers and Sapphire Amulet went with energy shield on 2026-09-21; their icons are still in `Assets/Gear`, unused, and their drawings still in `gear.py`. `BASE_TINTS`' "silk" dyed the pack's Wizard Hat and has nothing to dye now.) The six shipped originals are cut from the pack again rather than read back out of `Assets/Gear` — a source that is also an output would be outlined again on every run — and two of them, the Wooden Sword and the Wooden Shield, are no longer among the pack's unpacked files, so `_cut` reads them straight out of `Pixel Art Icon Pack - RPG.zip` (`"<zip>!<path>"`). Two runs leave every file under `Assets/` byte for byte the same. The ten unique icons that were doubled `Icons.png` art were drawn by `gear.UNIQUES` until pixellab art replaced them; the drawings are written to `Assets/Gear/Unique/Old/` only (`UNIQUE_OLD_DRAWN`), and the `Icons.png` cuts, `_RING`, `_AMULET` and the drawn-over-cut sheet are gone.
+**It is exported, and the build does not read what it writes.** `BASES_EXPORT` and `UNIQUE_EXPORT` are on, so a run writes all 69 bases and 27 unique icons: 56, and since 2026-09-23 a masterwork on each of 13 kinds, the ones without the user's art yet a `MISSING` "!" (`MISSING_MARK`) so the gap shows in the game. (There were 69 once before, until the hat, robe, slippers and Sapphire Amulet went with energy shield on 2026-09-21; their icons are still in `Assets/Gear`, unused, and their drawings still in `gear.py`. `BASE_TINTS`' "silk" dyed the pack's Wizard Hat and has nothing to dye now.) The six shipped originals are cut from the pack again rather than read back out of `Assets/Gear` — a source that is also an output would be outlined again on every run — and two of them, the Wooden Sword and the Wooden Shield, are no longer among the pack's unpacked files, so `_cut` reads them straight out of `Pixel Art Icon Pack - RPG.zip` (`"<zip>!<path>"`). Two runs leave every file under `Assets/` byte for byte the same. The ten unique icons that were doubled `Icons.png` art were drawn by `gear.UNIQUES` until pixellab art replaced them; the drawings are written to `Assets/Gear/Unique/Old/` only (`UNIQUE_OLD_DRAWN`), and the `Icons.png` cuts, `_RING`, `_AMULET` and the drawn-over-cut sheet are gone.
 
 `Main_tiles.png` is laid out as a family: four colourways (a brown or green header over a cream or a brown body) by three frame weights, plus header-less bodies, a big cream panel, scrollbar rails and thumbs, close buttons and slot tiles. The game takes the header-less brown body, the big cream panel, and the green title bar **cut off its panel rather than taken with it** — the pack draws bar and body as one sprite, which fixes the bar at 13 px, and Pixellari needs 16 to stay legible. Cut on its own the bar is a nine-slice like any other and grows to whatever the title needs, with the body panel stacked under it. That is what `UITheme.titled_panel` builds, and `UITheme.body_of` hands back the VBox to fill.
 
@@ -28,38 +28,185 @@ The close button is the pack's own drawn X, not the letter typed on a green butt
 
 ## Pixellab prompts for gear icons (2026-09-23)
 
-The user draws unique icons in **pixellab** (pixellab.ai, credits are scarce) and hands over 32x32 PNGs; `ui_kit.py` finishes them (`PIXELLAB`: `_muted`, then `_outlined(own_edge=True)`). Eleven were made this way over one session, and the other sixteen on 2026-09-23. What held, so the next prompt is written from it rather than rediscovered:
+The user draws gear icons in **pixellab** (pixellab.ai; credits are scarce) and hands over 32x32 PNGs; `ui_kit.py` finishes them (`_muted`, then `_outlined(own_edge=True)`). On 2026-09-23 all 27 uniques and the strength kits of three slots were made this way: the helmets, the plate bodies and the Leather Boot with the greaves, each at five tiers (the three masterworks included). This section is everything that was learned doing it, so the next prompt is written from it and not rediscovered. **The prompts themselves live in `tools/pixellab_prompts.py`** (`python tools/pixellab_prompts.py` writes them all to `tools/qa/pixellab_item_prompts.md`); write new ones there, in the same shape.
 
-**Settings.** Model *Pixen* (16-768 px; Pro is aimed at larger art). Transparent background on. Direction and View *None*. Detail *Highly detailed*. Outline *Single color outline* (the game's ink is a dark brown, not black; `_outlined` repaints it anyway). Width and height 32. The user does **not** use Init Image, so the words alone set angle and size.
+### Settings
 
-**The prompt is a subject line, then a shared block.** The subject line describes the piece -- never by the unique's name (see below) -- with the one feature that makes it *that* unique rather than its base, and its materials. The shared block holds the look:
+- **Uniques:** model *Pixen*, Detail *Highly detailed*. A unique has one striking feature to hang the drawing on, and Pixen draws that well.
+- **Bases:** the **advanced model**. Pixen could not hold a plain piece's shape at any prompt length or detail level (a leather helmet came back as a lump, a ball, a blob).
+- Always: 32x32, transparent background on, Direction and View *None*, Outline *Single color outline* (the game's ink is dark brown; `_outlined` repaints the edge anyway).
+- **No reference images.** The user cannot give pixellab a style or reference image, so every likeness -- to a kind's first piece, to the same tier of another kind -- has to be written into the prompt.
+- The advanced model returns a sheet of candidates at once; pick from it rather than rerolling.
+
+### How a prompt is built
+
+Top to bottom, each line one job:
+
+1. **Subject** -- what the object is, its materials, and the parts that make its silhouette, in chart colour words. Never the item's name.
+2. **`Look:` line** -- the tier's colour scheme in words, the same in every piece of that tier (`HELM_LOOK`, `STEEL_LOOK`, `BOOT_LOOK`).
+3. **`Shape:` line** -- the kind's silhouette, word for word the same in every material's prompt (`HELM_SHAPE`, `PLATE_SHAPE`, `GREAVES_SHAPE`, `BOOT_SHAPE`).
+4. **Size** -- helmets carry `HELM_SIZE` ("about 26 of the 32 pixels in height, centred, with clear space all round") in place of the shared margin line; everything else takes the margin line.
+5. **Guards** -- "An empty helmet with nothing inside it: the face opening is plain dark shadow. Nothing across the face: no visor, no bars, no strap." (or the nose-guard line), "Only the empty armour: no arms, no head, no person inside it.", "A pair of matching boots: no legs, no feet, no person inside them."
+6. The shared block:
 
 ```
 Single game inventory icon, 32x32 pixel art in the style of a classic fantasy RPG item pack.
-<pose line, below>
-Object fills most of the canvas with a 2-3 pixel margin, centred.
-Muted, dusty, faded colours like an old hand-painted item sheet; warm browns and greys dominate, every colour greyed down, never pure or bright.
-Palette: <three to five of the game's colours, below>, dark brown outline #3c2816, pale cream highlights #faedb1.
-Soft light from the top-left, 3-4 shades per material, small highlight pixels on metal and gems.
-Crisp 1-pixel dark brown outline around the whole silhouette, no anti-aliasing against the background.
+<view line>
+<margin line: "Object fills most of the canvas with a 2-3 pixel margin, centred." -- not on a helmet>
+A plain, common item: simple shapes and a clean readable silhouette, no engraving, no decoration, no gems or trim beyond what is named.
+<colour line>
+Palette: <the tier's measured hex, named in chart words>, pale cream highlights #faedb1.
+<light line>
 No text, no background, no shadow, no frame.
 ```
 
-Pose lines that worked: a **weapon** "lying diagonally, handle at the bottom-left, head or tip at the top-right, seen slightly from the front", and "spans nearly the full canvas corner to corner"; a **ring** "seen from a slight three-quarter angle above, band forming a thick oval, the setting on top", "about 20 pixels wide" (it comes out about 26, which suits); **anything else** (armour, helm, cup, sack) "front view, turned slightly to the right". The game's colours, measured off `Assets/Gear`: dull gold #b2984e / #cba952, brick ruby #923a35, soft periwinkle #9babd8, warm grey #847767, burlap tan #a09080, grey-brown #706050, old ivory #e8ce7b / #c0b0a0, sand #d9ba62.
+- **Colour line.** Ordinary: "Muted, dusty, faded colours like an old hand-painted item sheet; warm browns and greys dominate, every colour greyed down, never pure or bright." Top metal (golden, masterwork): "Muted, dusty colours, but polished: bright highlights and deep shadows, <the parts> clearly catching the light." Top leather: "Muted, dusty colours, but finely made: supple oiled leather with bright highlights and deep shadows, <the parts> clearly catching the light."
+- **Light line.** Ordinary: "Soft light from the top-left, 2-3 shades per material, a single highlight pixel on metal." Top tiers: "3-4 shades per material, a bright highlight along each ridge and rim" (leather: "a soft highlight along each seam and edge").
+- **View lines that held.** Helmet: "Front view, turned slightly to the left: the face opening sits a little left of centre and more of the right side flap shows." Body: "Front view, turned slightly to the left, standing upright as if on an armour stand; more of the right shoulder shows." Boots, a pair laid out like the user's reference: "A pair standing side by side, seen from the front and a little from the left and above: both toes point down and to the lower left; the left boot stands a little lower and in front, the right boot a little higher and behind it, overlapping it by about a third; together the pair runs from the top of the canvas to the bottom and is a little taller than it is wide." Weapon (uniques): "lying diagonally, handle at the bottom-left, head or tip at the top-right, seen slightly from the front". Ring: "seen from a slight three-quarter angle above, band forming a thick oval, the setting on top". Pendant: "hanging straight down, front view: the chain loops across the top, the pendant hangs centred below it".
 
-**What was learned the hard way.**
-- *Leave the unique's name out of the prompt.* A name like "Rimeplate" or "Gambler's Die" pulls the generation towards whatever the words suggest and away from the description; the user ruled it out on 2026-09-23. Describe the object instead ("a breastplate of thick pale blue-white ice").
-- *Change one thing between tries.* A second ring prompt that tightened the angle ("from above", "the hole clearly visible"), the size and the colour at once came back as flat, face-on hoops, worse on every count; the first prompt's shapes were kept and only its colour line fixed.
-- *Name the accent's extent, not just its colour.* "One saturated accent" gave a Berserker's Band red all over; "the band is dull dark iron, red only on the stone" is what holds it.
-- *Nothing smaller than about three pixels survives.* A feather beside a ring, a coin stamped on a signet: asked for, never drawn. Spend the words on shape and colour.
-- *Give every piece its own silhouette.* The collection log draws a missing unique as a black shape (`tools/qa/ui_kit_uniques.png`'s second row), and four plain hoops there are one ring four times. Each prompt names a shape its neighbours lack: knucklebone beads, a square signet, a notched band, a pendulum, a crescent blade, wine running down a cup.
-- *Pixellab paints near-pure accents however the prompt begs.* The game's bases sit at 0.43 mean HSV saturation and 0.68 at the 90th percentile; the first pixellab batch was 0.47 and 0.83, the Berserker 0.98. `_muted` scales each piece (never clamps, so a gem keeps its shades) to `SAT_CEILING` at the 90th percentile, set by eye: 0.68 was measured-correct and still read loud, 0.60 was approved for the first eleven, and once all 27 were pixellab the user lowered it to 0.50 (0.40 went faded, the gold brass and the flames pale, and the pieces sank into the tan socket). What saturation does not fix is contrast -- near-black shadows beside bright highlights -- which is why the palette line stays in the prompt.
+### Colour names come from the charts
 
-**Every unique is pixellab art** as of 2026-09-23. (The Sunscorched Cowl and Gambler's Die were each drawn a second time: a mummy's bandaged head became a hood, and a round pendant became a die.)
+The user generates colour charts in pixellab -- a 64x64 4x4 grid of flat squares, no text, the names given in the prompt in reading order -- and the measured name -> hex table belongs here. **Colour words in a prompt come only from those charts; a colour not on them means asking the user to generate a new chart for it** (the user's rule, 2026-09-23). The first three charts (browns and golds; reds, purples and blues; greys, whites and greens) came back on 2026-09-23 as 4x4 grids in the order asked (the greys' circles touch along each row, so their cells are read by grid position). Many cells are shaded, so a cell is not read at its centre: **Base** is the colour covering most of the cell (the whole cell less its outer two pixels) -- what the word means -- and **Shadow** and **Light** are its 10th and 90th percentile by lightness, the ramp the model shades that colour with (left empty for a flat cell).
 
-**Prompts for the bases, one kind at a time** (2026-09-23). The style is the unique recipe made plainer -- its shared block with a line against decoration and 2-3 shades a material -- on pixellab's advanced model; Pixen lost the shape at every length and detail level. Each kind starts from one piece the user picks (the leather helmet, `Assets/Potential/Bases/Leather Helmet.png`), and its other materials repeat that piece's outline word for word in a `Shape:` line (`HELM_SHAPE`: dome, seam, brow band, long side flaps flaring at the bottom, a dark open face) while the subject line swaps the material and adds one sturdier part a step: leather, then an iron skullcap on leather flaps, then steel with plated flaps and a nose guard, then gold trim, then blued steel and silver with a small crest. Using the chosen piece as the init image is what holds the outline best. What the helmets taught: a plain piece's subject must name the parts that make its outline, or the plainness line reduces it to its simplest reading ("a simple round cap" came back as 64 domes); anything named near the face is drawn across it ("a strap between the flaps" became a visor), so an open face is said outright; and a leather piece called stiff and a helmet drifts to a metal helm. The masterwork (a fifth material past the second wall, `TIER_MIN_LEVEL` level 7) has placeholder names. The helmet line came out right on the first full run (2026-09-23, `Assets/Potential/Bases/`): all five facing left like the chosen cap -- the view line has to say which way the reference faces -- and the user judged them one helmet at five strengths, the scale plain from leather to masterwork. That set is the template for the other kinds: pick the first material, then the shared `Shape:` line. The shared line that greys every colour down and the single highlight pixel on metal left the golden and masterwork helms duller than the steel one, so the top two materials swap those two lines for a polished finish -- "the finest of its line", brighter highlights and deeper shadows, 3-4 shades, a highlight along each ridge and rim -- and keep the palette as it was. For the masterwork's mood the user pointed at a heavy dark helm from another game (2026-09-23) -- the feel, not a copy: dark charcoal plate built of angular faceted pieces, a pale bevelled edge on every plate, dark crimson showing beneath, a crown of spikes, a V-shaped brow, dim red eyes in the dark face. The prompt describes that and never names the game or the item; it keeps the set's `Shape:` line and flaring flaps so the masterwork still reads as the top of its own line. It won (2026-09-23; `Masterwork Helm.png`, with a spikier `Masterwork Helm (alt).png` beside it). Of the four other finishes tried first, pale steel and a blue sheen came back blue and lavender however the palette limited the blue -- the model leans blue whenever a top tier asks for cool steel -- a gold-and-silver one out-golded the Golden Helm, and blackened steel with silver edges was the only one that read as a step above gold. Dark plate with pale edges is the masterwork's look for every kind.
+| Name | Base | Shadow | Light | Note |
+|---|---|---|---|---|
+| rust orange | `#a33814` |  |  | strongly saturated |
+| burnt orange | `#c95429` |  |  |  |
+| bronze | `#8e4e24` |  |  |  |
+| copper | `#c15235` |  |  |  |
+| warm brown | `#a0542a` |  |  | an orange brown, close to bronze |
+| reddish brown | `#a24032` |  |  |  |
+| dark brown | `#4e2d1f` |  |  |  |
+| grey-brown | `#81746a` | `#817369` | `#81746a` |  |
+| burlap tan | `#a77a3e` |  |  |  |
+| sand | `#cca67b` |  |  |  |
+| pale tan | `#e5cfb3` | `#e5cfb3` | `#e6d0b3` |  |
+| old ivory | `#fbefe0` |  |  | near white; barely apart from pale cream and bone white |
+| pale cream | `#f9f4d4` |  |  | near white; see old ivory |
+| dull gold | `#c49e48` | `#9b7227` | `#c49e48` | metallic gradient |
+| bright gold | `#e9bc3d` | `#b17c21` | `#e9bc3d` | metallic gradient |
+| brass | `#b78932` | `#815119` | `#b78932` | metallic gradient |
+| brick red | `#ba3423` | `#982a1e` | `#e24a33` |  |
+| dark crimson | `#5a1122` | `#3f0e1d` | `#7e162e` |  |
+| oxblood | `#7e162e` | `#671227` | `#a11939` |  |
+| wine red | `#8f0d22` | `#6e0c1e` | `#b40f2d` |  |
+| dusty rose | `#cc636b` | `#b14950` | `#e1828f` |  |
+| plum | `#ac5376` | `#933d5d` | `#ca7194` |  |
+| dusty violet | `#7e5374` | `#68425f` | `#9a6e91` |  |
+| lavender | `#8e5581` | `#734068` | `#b076a3` | comes out mauve, not pale: use lavender grey for pale lavender |
+| lavender grey | `#a598b4` | `#776587` | `#c1b5cf` |  |
+| periwinkle | `#7b7db5` | `#57568f` | `#999dd5` |  |
+| dusty blue | `#628ab9` | `#495f88` | `#84addd` |  |
+| steel blue | `#546783` | `#3f4a64` | `#6b809d` |  |
+| blued steel | `#777f85` | `#545b65` | `#777f85` | a plain cool grey, no blue |
+| teal | `#12878a` | `#0e5e62` | `#12878a` | strongly saturated |
+| dark slate teal | `#1f3139` | `#1f3139` | `#2c464d` |  |
+| navy | `#1a2134` | `#171a2a` | `#24334a` |  |
+| bone white | `#f3f3dc` |  |  | near white; see old ivory |
+| silver | `#bdbebf` | `#848585` | `#dadbdc` | metallic gradient; same base as pale steel, deeper shadow |
+| pale steel | `#bdbebf` | `#a6a7a7` | `#dadbdc` | metallic gradient; same base as silver, shallower shadow |
+| light grey | `#d1d1d1` |  |  |  |
+| neutral grey | `#797e80` | `#76777c` | `#797e80` | **same as warm grey** |
+| warm grey | `#797e80` |  |  | **same as neutral grey; not warm** |
+| iron grey | `#41454b` |  |  |  |
+| slate | `#616c79` |  |  |  |
+| gunmetal | `#8e8f8f` | `#555555` | `#8e8f8f` | metallic gradient from #555555 to #8e8f8f, set apart from neutral grey by its shading |
+| charcoal | `#131418` | `#131418` | `#1d1e22` |  |
+| near black | `#000000` | `#000000` | `#1d1e22` | pure black |
+| dark grey | `#2f3236` | `#26272b` | `#2f3236` |  |
+| moss green | `#69903e` | `#608434` | `#69903e` |  |
+| pine green | `#226723` |  |  |  |
+| olive | `#4b6327` |  |  | **same as sage** |
+| sage | `#4a622f` | `#445725` | `#4a622f` | **same as olive; not a pale green** |
+| apricot | `#f5ac5d` |  |  | the Leather Helmet's highlight orange |
+| light orange | `#e68908` |  |  | strongly saturated |
+| peach | `#f7a164` |  |  | close to apricot |
+| tan orange | `#de6c0a` |  |  | strongly saturated |
+| aubergine | `#30324b` |  |  | a dark navy, not purple |
+| dusky plum | `#574175` |  |  | a purple |
+| mulberry | `#56387f` |  |  | a purple, close to dusky plum |
+| plum brown | `#90474a` |  |  | nearest to the Golden Helm's shadow, but lighter |
+| pale periwinkle | `#707aad` |  |  | mid-tone, not pale |
+| lilac grey | `#8f8aad` |  |  |  |
+| cool lavender | `#7b70ad` |  |  |  |
+| pale lilac | `#9d86ba` |  |  | mid-tone, not pale |
+| taupe | `#6d5d38` |  |  | the Steel Helm's khaki bronze |
+| khaki brown | `#85872e` |  |  | **same as olive brown; an olive yellow, not khaki** |
+| olive brown | `#85872e` |  |  | **same as khaki brown** |
+| mushroom grey | `#6f6c69` |  |  |  |
 
-**To bring one in:** save it as `Assets/Potential/Unique/<unique id>.png`, point its `UNIQUE_GEAR` entry at `PIXELLAB + "<id>"`, move the old entry into `UNIQUE_OLD` (the settings' dev tick "Show old icons" wears it), run `python tools/ui_kit.py`, look at `tools/qa/ui_kit_uniques.png`, then the Godot import. A base is the same by its item name: `Assets/Potential/Bases/<Item name>.png`, its `BASE_KINDS` cell pointed at `PIXELLAB_BASES + "<Item name>"`, its old source moved into `BASE_OLD`, and `tools/qa/ui_kit_bases.png` to look at.
+**Names that do not work:** neutral grey and warm grey came back the same grey (#797e80), and olive and sage the same green; silver and pale steel share a base and differ only in shadow; use one name of each pair, or ask for a new chart that tells them apart. Old ivory, pale cream and bone white are three near-whites. "Lavender" is mauve and "blued steel" is not blue -- the word does not mean what it says, which is the whole reason for the charts. A fourth chart (2026-09-23, the last sixteen rows, flat 8 px cells with no gaps) filled the gaps the boots found: apricot for the leather helmet's highlight, taupe for the steel helm's khaki bronze, plum brown as the nearest to the golden helm's shadow. Khaki brown and olive brown came back the same olive yellow, and "pale" does not make a colour pale -- nothing on the charts reaches the golden helm's pale lavender steel (#bcc7e2), so lavender grey stands in for it.
+
+### Lessons
+
+**Words**
+- *Never the item's name.* "Rimeplate" or "Gambler's Die" pulls the drawing toward whatever the words suggest (the user's ruling). The same goes for a game's or another game's item: describe it.
+- *The model draws exactly what the subject says.* "A simple round cap ... no face guard" came back as 64 domes -- a cap is a dome. Name the parts that make the silhouette (ear flaps, a nose guard, a shin plate, a crossguard wider than the blade, a domed boss with a flat rim) and rough proportions where they matter.
+- *A named thing gets drawn -- even in a "no".* "A buckled strap between the flaps" became a visor bar; "an iron skullcap" and "a dome over the skull" came back as skulls. Say what is there ("an empty helmet with nothing inside it: the face opening is plain dark shadow") rather than what must not be, and keep body words (skull, jaw, eyes, head) out of a helmet.
+- *Say what it is not, on both sides* when it has look-alikes: "a padded leather cap, not a metal helm and not a plain dome". One-sided, with "stiff" and "helmet", pulled a leather cap into a closed knight's helm.
+- *Pixellab has no memory.* It sees one prompt and nothing else, so "one step sturdier than an iron one", "like every plainer boot of this line", "finer than a plain steel one" mean nothing (the user's ruling). Describe each piece on its own terms; what ties a line together is wording repeated in every prompt -- the `Shape:` line, the `Look:` line, the palette.
+- *Never the word "outline"* -- anywhere in a prompt it makes pixellab add one, and an outline line put heavy dark lines through the plate armour. The Outline setting draws the edge.
+- *Never straight black* (the user's ruling). "Near black" is pure #000000 on the charts; no black word and no near-black hex. The deepest shadow is dark grey (#2f3236), dark brown (#4e2d1f) or the tier's own dark.
+- *Name an accent's extent, not just its colour:* "red only on the stone", "dull gold only on the gold parts". "One saturated accent" painted a whole ring red.
+- *Nothing under about three pixels survives* (a feather beside a ring, a coin on a signet). Spend the words on shape and colour.
+- *Prompt length is not the lever.* On Pixen the full block lost the helmet's shape, two lines were worse, seven were passable; the fix was the stronger model with the full block and a subject that names the silhouette.
+
+**Shape and view**
+- *The view line matches the reference.* The chosen leather cap faces left, so the whole set faces left; boots copy the layout of a reference the user picked.
+- *The view fits the parts.* Side-view parts (a heel, a shin plate) contradict a front view.
+- *Every unique its own silhouette.* The collection log draws a missing unique as a black shape; four plain hoops there are one ring four times.
+- *Pixellab can leave a seam as a see-through slit.* The Masterwork Plate had a 2 px and a 3 px clear patch between its shoulder guards and chest; stretched and outlined, the tan socket showed through a ringed hole. `_plugged` fills every enclosed clear patch of at most `BASE_HOLE_MOST` (4) pixels in a pixellab base with the darkest colour beside it, before the stretch and the outline. The holes a drawing means (a ring's middle, the gap between a pair of boots, a pendant's loop) are 5 pixels and up. The uniques were left as approved, though a few carry 1-3 px holes.
+- *Anything that must survive gets its own sentence.* A masterwork retry lost the family's flaring flaps until "the side flaps flare outward past the width of the dome at the bottom" said it outright.
+
+**Colour**
+- *Colour words come only from the user's colour charts* (the table above), and a colour the charts lack means asking the user for a new chart. The words do not mean what they say: "lavender" is mauve, "blued steel" plain grey, "pale" pale of nothing.
+- *Measure, don't trust the asked-for palette.* Pieces come back far from their palette lines. A tier's colours are measured off the pieces that came back and exist, and every other piece of that tier is written to them -- and when a set disagrees, the user picks the piece the others follow (the Masterwork Plate for the masterworks, the Steel Helm for the steel set).
+- *A material the tier's metal does not share keeps its own colours:* the Wooden Armor is natural wood browns, with the tier's leather only on its straps.
+- *Pixellab paints near-pure colour however the prompt begs.* `_muted` scales each piece to `SAT_CEILING` (0.50, set by eye: 0.60 read loud, 0.40 faded). What it cannot fix is contrast, which is why the palette line stays.
+- *The plainness lines flatten the top of a scale;* golden and masterwork take the polished lines.
+- *Cool steel drifts blue on a top tier,* however the palette fences it; periwinkle turns a piece purple-blue.
+- *The outline stays dark ink* -- lightening `_outlined`'s ring was tried on the uniques and undone.
+
+**Sets**
+- *One kind at a time, from one piece the user picks.* A list for all 70 bases at once was written three times and generated nothing usable.
+- *A kind is one silhouette at rising strength* -- the `Shape:` line never changes and each material adds one part.
+- *A tier must feel the same in every slot.* Bodies written as their own line had the right builds but not the helmets' feel; tying every piece of a tier to one measured palette and `Look:` line fixed it, in both directions (the helmets were later rewritten from their bodies and greaves).
+- *Judge on the real doll,* muted and at size, never raw files side by side (see *Seeing a piece on the doll*). Faults that hid in a sheet -- a near-white greave under brown steel, a masterwork helm of another colour, pieces lighter than the helmet over them -- were plain there.
+- *Weight, not only colour.* A helmet is one solid dome; bodies have gaps and boots are two shafts, so at the same bounding box they read lighter. Helmets now ask for about 26 of 32 pixels; bodies are stretched to fill (`BASE_FILL`, nearest-neighbour, kept to the pieces that need it since odd factors double some rows).
+- *Borrow a mood, never a design.* The masterwork's feel came from a helm the user likes in another game -- described, never named. **The masterwork look for every kind is the Masterwork Plate's:** navy steel (or leather), slate on the lit faces, navy in the shadows, thin light grey edges, faceted plates and short spikes, no other colour.
+- *Change one line between tries,* and say which line caused a failure before changing it.
+
+### The kits as they stand (2026-09-23)
+
+| Tier | Scheme (`tools/pixellab_prompts.py`) | Helmet | Body | Boots |
+|---|---|---|---|---|
+| Leather | tan orange and bronze leather, apricot highlights (`h1`); the body natural wood browns | Leather Helmet | Wooden Armor (stretched x1.19) | Leather Boot |
+| Iron | iron grey and slate on reddish brown leather (`h2`) | Iron Helmet (22x26, the smallest) | Iron Armor | Iron Greaves |
+| Steel | neutral grey steel, cool pale highlights, bronze straps, pale tan buckles (`s3`, `STEEL_LOOK`) | Steel Helm | Steel Plate | Steel Greaves |
+| Golden | lilac grey steel, dusky plum shadows, tan orange trim shining bright gold (`h4`) | Golden Helm | Golden Plate | Golden Greaves |
+| Masterwork | navy and slate steel, dusty blue, light grey edges (`h5`) | Masterwork Helm | Masterwork Plate | Masterwork Greaves |
+
+Not yet made: the dexterity pieces (hoods, jerkins, leather boots from tier two), weapons, offhands, jewellery, and the masterworks of every other kind (`MISSING` in `BASE_KINDS`).
+
+### The gear shape the art assumes
+
+The user's working assumption, the game design to be settled later: **tier one is one piece a slot** (Leather Helmet, Wooden Armor, Leather Boot, Wooden Sword, Wooden Shield), and **from tier two every slot has a strength piece and a dexterity piece** -- the metal line (armour) and the leather line (dodge). A leather line keeps its tier's colours in leather (`t3_leather`..`t5_leather`). Intelligence is to come (energy shield went on 2026-09-21; the clock was suggested). The game still has the old kinds (Hide Hood, Hide Jerkin, Bronze Greaves, Hide Buckler, Wooden Club, Bone Knife as tier one); a save holding one will need mapping when the kinds change.
+
+### The doll behind the sockets (2026-09-23)
+
+The pack's 43x46 silhouette no longer matched the gear, so the user made a new one: a 128x128 carved-wood knight (the only sizes on offer were 32, 64 and 128; 128 at 1x is the icons' own pixel size and fills the space the old figure took at 3x). What held: *Low detail* (a bolder silhouette, the helmet's flaring flaps, reads as a backdrop where the detailed one turned to noise); "the figure fills the whole 128x128 canvas: the helmet touches the top edge, the boots the bottom edge, the shield the left edge, and the sword's hand and blade the right edge" (without it the figure came back 88-96 wide and sat small between the sockets); and recolouring it in `doll()` onto the old doll's six browns by lightness rather than trusting the prompt's colours (the raw one had a white blade and dark edges that fought the gear). The sockets did not move: `DOLL_SCALE` went to 1 and `DOLL_SOCKETS` to three times their values. "No face details" was ignored every time; recoloured, the face is faint.
+
+### Seeing a piece on the doll
+
+The truest check is the game's own bag page. A one-off script under `tests/` that extends `harness.gd` does it: instance `main_scene.tscn` with scratch `inventory_path` and `map_path`, `_on_bag_pressed()`, `Item.rolled(name, ItemRarity.Rarity.COMMON, rng)` at the default level (a level-7 roll is refused by `equip`), `inventory.add` and `inventory.equip`, then **`bag_page.refresh()`** (equipping alone does not redraw the doll), wait a few frames and `frame_post_draw`, and crop the screenshot to `bag_page._doll.get_global_rect()`. It needs a window, not `--headless`. To try a piece before wiring it, finish it with `ui_kit` into a scratch PNG and put `ImageTexture.create_from_image(Image.load_from_file(path))` into `LootTable._icons[LootTable.icon_path(name)]` -- nothing under `Assets/` changes. Old icons are one line: `Settings.old_icons = true` inside the run. Delete the script and its scratch saves after.
+
+### Uniques redrawn
+
+Every unique is pixellab art. The Sunscorched Cowl and Gambler's Die were each drawn a second time (a mummy's bandaged head became a hood; a round pendant became a die); of two Dominoes tries the shoe tipping against the other was kept.
+
+### To bring one in
+
+A unique: save it as `Assets/Potential/Unique/<unique id>.png`, add the id to `_PIXELLAB_IDS`, move what it replaces into `UNIQUE_OLD`, run `python tools/ui_kit.py`, look at `tools/qa/ui_kit_uniques.png`, then the Godot import. A base: `Assets/Potential/Bases/<Item name>.png`, its `BASE_KINDS` cell pointed at `PIXELLAB_BASES + "<Item name>"` (a masterwork replaces its `MISSING`), its old source moved into `BASE_OLD`, `BASE_FILL` if it came back small, and `tools/qa/ui_kit_bases.png` to look at -- then the doll. What either replaced is written to an `Old/` folder, which the settings' dev tick "Show old icons" wears.
 
 ## Rules and gotchas
 - **A nine-slice margin is only correct if what it leaves over is flat:** a `StyleBoxTexture` repeats the centre and the four edge cells, so every row the top and bottom bands tile horizontally, and every column the side bands tile vertically, has to be one colour or the seams show. `tools/ui_kit.py check()` re-reads each sprite and refuses to export one that is not — which is how the button margins were found (bottom 3 looked right and put one pixel of the corner bevel into a tiled column).

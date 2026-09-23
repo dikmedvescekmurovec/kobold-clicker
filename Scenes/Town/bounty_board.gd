@@ -395,7 +395,8 @@ static func reward_item(bounty: Dictionary, cell: Vector2i, rng: RandomNumberGen
 		var ids := UniqueTable.ids()
 		item = Item.rolled_unique(str(ids[rng.randi_range(0, ids.size() - 1)]), rng, level)
 	else:
-		item = Item.rolled(LootTable._tier_at(str(promise[ITEM_KIND]), level, rng), rarity, rng, level)
+		var material := LootTable.material_level(level, MapBuilder.circle_of(cell))
+		item = Item.rolled(LootTable._tier_at(str(promise[ITEM_KIND]), material, rng), rarity, rng, level)
 	for i in int(promise[ITEM_PLUS]):
 		item.ascend()
 	return item

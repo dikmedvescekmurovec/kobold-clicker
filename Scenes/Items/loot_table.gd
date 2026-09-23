@@ -44,7 +44,7 @@ const OLD_ROOT := ROOT + "Old/"
 ## LEVEL_FLAT adds a whole point of damage a level to every weapon alike: a dagger written as
 ## `damage: 0.6` would be within a tenth of a sword by level 10 and the kinds would level themselves
 ## out. Three more keys are optional: `two_handed` closes the offhand while the piece is worn, and
-## `tier_levels` with `tier_stats` belong to the torch alone, which has two materials instead of four
+## `tier_levels` with `tier_stats` belong to the torch alone, which has three materials instead of five
 ## and states each one's Sight outright rather than multiplying a number.
 ##
 ## Stats span pieces on purpose. Base `damage` lives on the weapons -- a click's damage comes from
@@ -70,26 +70,26 @@ const KINDS := {
 		"slot": "helmet", "weight": 18,
 		"stats": {"armor": 3},
 		"affixes": ["time_on_hit", "strength", "intelligence"],
-		"tiers": ["Leather Helmet", "Iron Helmet", "Steel Helm", "Golden Helm"],
+		"tiers": ["Leather Helmet", "Iron Helmet", "Steel Helm", "Golden Helm", "Masterwork Helm"],
 	},
 	"hood": {
 		"slot": "helmet", "weight": 18,
 		"stats": {"dodge": 3},
 		"affixes": ["armor", "dexterity", "intelligence"],
-		"tiers": ["Hide Hood", "Leather Hood", "Studded Hood", "Shadow Hood"],
+		"tiers": ["Hide Hood", "Leather Hood", "Studded Hood", "Shadow Hood", "Masterwork Hood"],
 	},
 	# --- Boots: every one of them keeps Move Speed, because that is what a boot is for.
 	"boot": {
 		"slot": "boots", "weight": 24,
 		"stats": {"move_speed": 5, "dodge": 2},
 		"affixes": ["armor", "dexterity"],
-		"tiers": ["Leather Boot", "Studded Boot", "Ranger's Boot", "Shadow Boot"],
+		"tiers": ["Leather Boot", "Studded Boot", "Ranger's Boot", "Shadow Boot", "Masterwork Boot"],
 	},
 	"greaves": {
 		"slot": "boots", "weight": 24,
 		"stats": {"move_speed": 4, "armor": 3},
 		"affixes": ["dodge", "strength"],
-		"tiers": ["Bronze Greaves", "Iron Greaves", "Steel Greaves", "Golden Greaves"],
+		"tiers": ["Bronze Greaves", "Iron Greaves", "Steel Greaves", "Golden Greaves", "Masterwork Greaves"],
 	},
 	# --- Weapon: the same base damage on all four, and a factor apiece. On its own swings the dagger,
 	# the sword and the greatsword come out about even; the dagger is the idler's weapon and the
@@ -98,28 +98,28 @@ const KINDS := {
 		"slot": "weapon", "weight": 12,
 		"stats": {"damage": 1, "crit_chance": 5, "crit_damage": 50, "attack_speed": 1.0},
 		"affixes": ["time_on_hit", "strength"],
-		"tiers": ["Wooden Sword", "Iron Sword", "Steel Sword", "Golden Sword"],
+		"tiers": ["Wooden Sword", "Iron Sword", "Steel Sword", "Golden Sword", "Masterwork Sword"],
 	},
 	"dagger": {
 		"slot": "weapon", "weight": 9,
 		"stats": {"damage": 1, "crit_chance": 8, "crit_damage": 50, "attack_speed": 1.8},
 		"affixes": ["time_on_hit", "dexterity"],
 		"power": {"damage": 0.6},
-		"tiers": ["Bone Knife", "Iron Dagger", "Steel Stiletto", "Golden Kris"],
+		"tiers": ["Bone Knife", "Iron Dagger", "Steel Stiletto", "Golden Kris", "Masterwork Dagger"],
 	},
 	"mace": {
 		"slot": "weapon", "weight": 9,
 		"stats": {"damage": 1, "crit_damage": 50, "attack_speed": 0.9, "bleed": 20},
 		"affixes": ["time_on_hit", "strength"],
 		"power": {"damage": 0.9},
-		"tiers": ["Wooden Club", "Iron Mace", "Steel Morningstar", "Golden Sceptre"],
+		"tiers": ["Wooden Club", "Iron Mace", "Steel Morningstar", "Golden Sceptre", "Masterwork Mace"],
 	},
 	"greatsword": {
 		"slot": "weapon", "weight": 6, "two_handed": true,
 		"stats": {"damage": 1, "crit_chance": 5, "crit_damage": 75, "attack_speed": 0.5},
 		"affixes": ["time_on_hit", "strength"],
 		"power": {"damage": 2.2},
-		"tiers": ["Wooden Greatsword", "Iron Claymore", "Steel Zweihander", "Golden Greatsword"],
+		"tiers": ["Wooden Greatsword", "Iron Claymore", "Steel Zweihander", "Golden Greatsword", "Masterwork Greatsword"],
 	},
 	# The player's first find and nothing else's (FIRST_DROP): weight 0, so no roll ever deals one.
 	"broken_sword": {
@@ -135,23 +135,25 @@ const KINDS := {
 		"slot": "offhand", "weight": 30,
 		"stats": {"armor": 3, "block": 2},
 		"affixes": ["strength"],
-		"tiers": ["Wooden Shield", "Iron Shield", "Steel Kite Shield", "Golden Aegis"],
+		"tiers": ["Wooden Shield", "Iron Shield", "Steel Kite Shield", "Golden Aegis", "Masterwork Shield"],
 	},
 	"buckler": {
 		"slot": "offhand", "weight": 24,
 		"stats": {"dodge": 3, "block": 2},
 		"affixes": ["armor", "dexterity"],
-		"tiers": ["Hide Buckler", "Iron Buckler", "Steel Targe", "Golden Buckler"],
+		"tiers": ["Hide Buckler", "Iron Buckler", "Steel Targe", "Golden Buckler", "Masterwork Buckler"],
 	},
-	# Sight is the whole piece and it has only two values, so the torch has two materials rather than
-	# four and names its own unlock levels. Its affixes are all flat: with no base number but Sight,
-	# there is nothing on it for a percent modifier to scale.
+	# Sight is the whole piece and it has only three values, so the torch has three materials rather
+	# than five and names its own unlock levels: the masterwork's is the others', and its third tile is
+	# the whole of what it is. Its affixes are all flat: with no base number but Sight,
+	# there is nothing on it for a percent modifier to scale. Crit chance sits beside the crit damage
+	# it already rolled, and is what makes its pool deep enough for an elite piece.
 	"torch": {
 		"slot": "offhand", "weight": 18,
-		"tier_levels": [1, 10],
-		"tier_stats": [{"sight": 1}, {"sight": 2}],
-		"affixes": ["block", "crit_damage", "intelligence"],
-		"tiers": ["Wooden Torch", "Blazing Torch"],
+		"tier_levels": [1, 5, 7],
+		"tier_stats": [{"sight": 1}, {"sight": 2}, {"sight": 3}],
+		"affixes": ["block", "crit_chance", "crit_damage", "intelligence"],
+		"tiers": ["Wooden Torch", "Blazing Torch", "Masterwork Torch"],
 	},
 	# What a world under the Thick Fog begins with and nothing else hands out (BROKEN_TORCH): weight
 	# 0, like the Broken Sword. A Wooden Torch's Sight and nothing more, so holding it buys back what
@@ -159,7 +161,7 @@ const KINDS := {
 	"broken_torch": {
 		"slot": "offhand", "weight": 0,
 		"stats": {"sight": 1},
-		"affixes": ["block", "crit_damage", "intelligence"],
+		"affixes": ["block", "crit_chance", "crit_damage", "intelligence"],
 		"tiers": ["Broken Torch"],
 		"borrows": "Wooden Torch",
 	},
@@ -168,13 +170,13 @@ const KINDS := {
 		"slot": "body", "weight": 12,
 		"stats": {"armor": 5},
 		"affixes": ["time_on_hit", "dodge", "strength"],
-		"tiers": ["Wooden Armor", "Iron Armor", "Steel Plate", "Golden Plate"],
+		"tiers": ["Wooden Armor", "Iron Armor", "Steel Plate", "Golden Plate", "Masterwork Plate"],
 	},
 	"jerkin": {
 		"slot": "body", "weight": 12,
 		"stats": {"dodge": 5},
 		"affixes": ["armor", "time_on_hit", "dexterity"],
-		"tiers": ["Hide Jerkin", "Leather Jerkin", "Studded Jerkin", "Shadow Leathers"],
+		"tiers": ["Hide Jerkin", "Leather Jerkin", "Studded Jerkin", "Shadow Leathers", "Masterwork Jerkin"],
 	},
 	# --- Jewellery: one material apiece, the way Path of Exile's is. There is one drawing of a ring
 	# and one of an amulet, so the kinds are gem and metal recolours rather than a ladder, and all
@@ -239,11 +241,22 @@ const KINDS := {
 }
 
 ## The item level each material is found from, and what one is worth on top of the kind's own
-## numbers: a fifth more of every quantity for each step up the materials, so the best is worth half
-## again as much as the plainest. Both are dials. A kind may name levels of its own (`tier_levels`),
+## numbers: a fifth more of every quantity for each step up the materials, so the masterwork is worth
+## 1.8 times the plainest. Both are dials. A kind may name levels of its own (`tier_levels`),
 ## which only the torch does.
-const TIER_MIN_LEVEL := [1, 4, 7, 10]
+##
+## The levels are set against the circles (`CIRCLE_MATERIAL_LEVEL`): the second material within the
+## first wall, the third and fourth between the first and second, and the fifth -- the masterwork --
+## from level 7, which begins on the second wall's own ring: past it and nowhere else. A masterwork
+## with no art yet wears `tools/ui_kit.py`'s "!" (`MISSING`).
+const TIER_MIN_LEVEL := [1, 3, 5, 6, 7]
 const TIER_POWER := 0.2
+## The highest item level each circle lets pick a material (`MapBuilder.circle_of`), from the first:
+## inside the first wall a piece is made of the first two materials, out to the second wall of the
+## first four, and past it of anything. The levels alone cannot hold that line -- level 5 spans the
+## first wall, and a boss drops two levels above its tile -- so `material_level` clamps the level the
+## material is drawn at, and the piece keeps its own.
+const CIRCLE_MATERIAL_LEVEL := [3, 6]
 ## The player's first piece of gear, whatever the roll said it was: `Encounter.first_sword` swaps it
 ## in at level 1, keeping the rarity, so it is always 1 Damage and the modifiers that rarity carries.
 const FIRST_DROP := "Broken Sword"
@@ -294,6 +307,9 @@ const STAT_LABELS := {
 	"block": "Block",
 	# What a blow of the player's wins back of the clock the enemies took.
 	"time_on_hit": "Time on Hit",
+	# Seconds a fight's clock starts with on top of its own: the one line any piece may roll against
+	# losing a fight rather than against a blow (`Encounter.CLOCK_MOST`).
+	"fight_clock": "Fight Clock",
 	# Utility.
 	"move_speed": "Move Speed",
 	"drop_rate": "Drop Rate",
@@ -335,10 +351,13 @@ const PERCENT_STATS := ["crit_chance", "crit_damage", "move_speed", "drop_rate",
 ## so what this list does for it is keep a level from multiplying one tile into twenty-six.
 ##
 ## Spawn speed is a share of the walk-in with a hard cap at the whole of it, so it is a chance's shape.
+##
+## The fight clock is here for Sight's reason: seconds on a thirty-second clock that a level multiplied
+## would delete the only way to lose, so no level moves it at all.
 const CHANCE_STATS := ["crit_chance", "drop_rate", "gold_find", "item_rarity", "bleed", "sight",
-	"spawn_speed"]
+	"spawn_speed", "fight_clock"]
 ## The stats any piece at all may roll a FLAT modifier for, without being told so kind by kind.
-const ANY_AFFIXES := ["spawn_speed"]
+const ANY_AFFIXES := ["spawn_speed", "fight_clock"]
 ## Per second: attacks. The one stat that is neither a plain number nor a percentage.
 const RATE_STATS := ["attack_speed"]
 ## Seconds of the fight clock: how much of a blow block takes off, and how much a hit wins back.
@@ -348,7 +367,7 @@ const RATE_STATS := ["attack_speed"]
 ## "+1 Block" a wall against every blow in the first band. `seconds_of` is the conversion, and every
 ## place that writes or reads one goes through it: `stat_value`, `stat_delta`, `ModifierTable.amount`
 ## and `Encounter.arm`.
-const SECONDS_STATS := ["block", "time_on_hit"]
+const SECONDS_STATS := ["block", "time_on_hit", "fight_clock"]
 
 ## How much one level multiplies every scaled number by. The dial for how fast gear answers the
 ## frontier; Encounter.HP_GROWTH is the dial for how fast the frontier pulls away.
@@ -386,6 +405,8 @@ const LEVEL_FLAT := {
 	# Spawn speed reaches its cap by being worn on every socket, not by levelling: a level is worth
 	# nothing to it, so the cap is a set's worth of rolls at any level.
 	"spawn_speed": 0.0,
+	# And the fight clock, whose band is the same at every level (`CHANCE_STATS`).
+	"fight_clock": 0.0,
 }
 
 ## What a body's tier adds to the ceiling on what it drops, over the tile's own level. The elite at
@@ -609,8 +630,10 @@ static func chance_for(enemy_name: String, drop_rate := 0.0) -> float:
 ##
 ## The chance is drawn first and on its own, so a kill that leaves nothing still costs exactly one
 ## draw. That is what keeps the drop rate comparable to before rarities existed.
+##
+## `circle` is the ground's (`MapBuilder.circle_of`); 0, a test's default, holds the material to nothing.
 static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := false,
-		tile_level := 1, drop_rate := 0.0, item_rarity := 0.0) -> Item:
+		tile_level := 1, drop_rate := 0.0, item_rarity := 0.0, circle := 0) -> Item:
 	if not guaranteed and rng.randf() >= chance_for(enemy_name, drop_rate):
 		return null
 	var tier := EnemyRoster.tier_of(enemy_name)
@@ -620,13 +643,22 @@ static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := f
 	# before the type, because what a piece is made of is gated by what the piece itself is worth.
 	var ceiling := maxi(1, tile_level + int(TIER_LEVEL[tier]))
 	var level := ItemRarity.roll_level(rarity, ceiling, rng)
-	return Item.rolled(_weighted(rng, level), rarity, rng, level)
+	return Item.rolled(_weighted(rng, material_level(level, circle)), rarity, rng, level)
+
+
+## The level a piece of level `level` draws its material at on ground of `circle`: its own, held to
+## what the circle allows (`CIRCLE_MATERIAL_LEVEL`). Circle 0 is no ground at all and holds nothing.
+static func material_level(level: int, circle: int) -> int:
+	if circle < 1 or circle > CIRCLE_MATERIAL_LEVEL.size():
+		return level
+	return mini(level, int(CIRCLE_MATERIAL_LEVEL[circle - 1]))
 
 
 ## A piece picked by weight: which kind, and then which of its materials. Integer weights, so walking
 ## the table cannot drift.
 ##
-## `level` is the piece's own, not the tile's, so a poor roll on deep ground is still a wooden sword.
+## `level` is the piece's own, not the tile's, so a poor roll on deep ground is still a wooden sword --
+## held to its circle by the caller (`material_level`).
 static func _weighted(rng: RandomNumberGenerator, level := 1) -> String:
 	return _tier_at(roll_kind(rng), level, rng)
 
