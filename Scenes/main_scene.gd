@@ -557,6 +557,9 @@ func _build_pages(layer: CanvasLayer) -> void:
 		page.hide()
 		page.closed.connect(_on_left_page_closed)
 		layer.add_child(page)
+		# In from its own edge and back out to it, whatever shows or hides it (`Juice.slides`).
+		Juice.slides(page, page != town_page)
+	Juice.slides(_panel, false)
 	# On the character's layer, over the pages and over a fight (layer 2), so a find in the loot
 	# popup or under the verdict gets its card too. It takes no mouse, so it costs no swings.
 	_item_card = ItemCard.new(ui_scale)
@@ -1611,7 +1614,12 @@ func _place_corner() -> void:
 	for button: Button in [_bag_button, _heirloom_button, _skills_button, _bounty_button,
 			_dungeon_button, _settings_button, _collection_button]:
 		if button.visible:
+			# The column glides after a page that comes or goes, rather than jumping.
+			var was := button.position
 			button.position = at
+			# Not from the corner a button is made in, on its first placing.
+			if was != at and was != Vector2.ZERO:
+				Juice.glide(button, was)
 			at.y += step
 
 

@@ -111,7 +111,8 @@ static func centre(panel: Control, view: Vector2) -> void:
 static func pop_in(panel: Control, final: float) -> void:
 	panel.scale = Vector2.ONE * final
 	panel.modulate.a = 1.0
-	panel.remove_meta("leaving")
+	if panel.has_meta("leaving"):
+		panel.remove_meta("leaving")
 	if Settings.animations == Settings.Anim.NONE:
 		return
 	panel.scale = Vector2.ONE * final * POP_FROM
@@ -200,3 +201,135 @@ static func reveal(pieces: Array) -> void:
 			piece.modulate.a = 1.0)
 		tween.tween_property(piece, "scale", Vector2.ONE, REVEAL_TIME) \
 				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+## How the side panels come and go: a page slides in from its edge and back out to it, and the corner
+## buttons glide to wherever they are placed next. **The node itself never moves and never lingers:**
+## a page opened is where it will be to every check, click and test, only its drawing sliding in (the
+## canvas item's transform, on the RenderingServer); a page closed is hidden at once, and what slides
+## out is a picture of it taken off the last frame -- Godot draws nothing of a hidden Control, however
+## its canvas item is told. Driven by `visibility_changed`, so no `show()` or `hide()` anywhere has to
+## know. `NONE` snaps, as it always did, and so does a window with nothing to take a picture of.
+const SLIDE_IN_TIME := 0.22
+const SLIDE_OUT_TIME := 0.16
+const GLIDE_TIME := 0.2
+## The last frame, read back once however many panels close on the same one.
+static var _shot: Image
+static var _shot_frame := -1
+
+
+static func slides(node: Control, from_left: bool) -> void:
+	node.visibility_changed.connect(_slide.bind(node, from_left))
+
+
+static func _slide(node: Control, from_left: bool) -> void:
+	_stop_moving(node)
+	_settle(node)
+	if Settings.animations == Settings.Anim.NONE or not node.is_inside_tree():
+		return
+	var rects := _drawn(node)
+	var reach := 0.0
+	var view := node.get_viewport_rect().size.x
+	for rect in rects:
+		reach = maxf(reach, rect.end.x if from_left else view - rect.position.x)
+	if reach <= 0.0:
+		return
+	var away := Vector2(-reach if from_left else reach, 0.0)
+	if node.visible:
+		_slide_in(node, away)
+	else:
+		_slide_out(node, rects, away)
+
+
+static func _slide_in(node: Control, away: Vector2) -> void:
+	var rid := node.get_canvas_item()
+	var step := func(at: float) -> void:
+		RenderingServer.canvas_item_set_transform(rid, node.get_transform().translated(away * at))
+	# The first frame is set now, so a page never shows at its place before it slides into it.
+	step.call(1.0)
+	var tween := node.create_tween().set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	node.set_meta("moving", tween)
+	tween.tween_method(step, 1.0, 0.0, SLIDE_IN_TIME).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_callback(_settle.bind(node))
+
+
+## The picture of each panel the page drew, cut off the last frame, laid where the page stood and slid
+## off the edge. It takes no mouse and frees itself.
+static func _slide_out(node: Control, rects: Array[Rect2], away: Vector2) -> void:
+	var shot := _last_frame(node)
+	if shot == null:
+		return
+	var ghost := Control.new()
+	ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bounds := Rect2i(Vector2i.ZERO, shot.get_size())
+	for rect in rects:
+		var cut := Rect2i(rect).intersection(bounds)
+		if cut.has_area():
+			var part := TextureRect.new()
+			part.texture = ImageTexture.create_from_image(shot.get_region(cut))
+			part.position = cut.position
+			part.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			ghost.add_child(part)
+	var parent := node.get_parent()
+	parent.add_child(ghost)
+	parent.move_child(ghost, node.get_index() + 1)
+	var tween := ghost.create_tween().set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	tween.tween_property(ghost, "position", away, SLIDE_OUT_TIME) 			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tween.tween_callback(ghost.queue_free)
+
+
+static func _last_frame(node: Control) -> Image:
+	# A headless run renders nothing, and reading its texture back only logs errors.
+	if DisplayServer.get_name() == "headless":
+		return null
+	if _shot_frame != Engine.get_process_frames():
+		_shot = node.get_viewport().get_texture().get_image()
+		_shot_frame = Engine.get_process_frames()
+	return _shot if _shot != null and not _shot.is_empty() else null
+
+
+## From `from` to where the node stands now, drawn only.
+static func glide(node: Control, from: Vector2) -> void:
+	_stop_moving(node)
+	if Settings.animations == Settings.Anim.NONE or not node.is_inside_tree():
+		return
+	var rid := node.get_canvas_item()
+	var step := func(at: float) -> void:
+		RenderingServer.canvas_item_set_transform(rid,
+				node.get_transform().translated((from - node.position) * at))
+	step.call(1.0)
+	var tween := node.create_tween().set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	node.set_meta("moving", tween)
+	tween.tween_method(step, 1.0, 0.0, GLIDE_TIME).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_callback(_settle.bind(node))
+
+
+static func _stop_moving(node: Control) -> void:
+	# `get_meta` with a null default still complains of a missing key, so it is asked first.
+	if not node.has_meta("moving"):
+		return
+	var running: Variant = node.get_meta("moving")
+	if running is Tween and (running as Tween).is_valid():
+		(running as Tween).kill()
+	node.remove_meta("moving")
+
+
+## The canvas item back in step with the node: its own transform, and drawn only if it is shown.
+static func _settle(node: Control) -> void:
+	if node.has_meta("moving"):
+		node.remove_meta("moving")
+	var rid := node.get_canvas_item()
+	RenderingServer.canvas_item_set_transform(rid, node.get_transform())
+	RenderingServer.canvas_item_set_visible(rid, node.visible)
+
+
+## What `node` draws, in window pixels: itself if it has a size, and each shown Control child, which
+## is where a page keeps its panels.
+static func _drawn(node: Control) -> Array[Rect2]:
+	var rects: Array[Rect2] = []
+	if node.size != Vector2.ZERO:
+		rects.append(node.get_global_transform() * Rect2(Vector2.ZERO, node.size))
+	for child: Node in node.get_children():
+		if child is Control and (child as Control).visible:
+			rects.append((child as Control).get_global_transform() * Rect2(Vector2.ZERO, (child as Control).size))
+	return rects

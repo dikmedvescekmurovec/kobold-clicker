@@ -17,11 +17,15 @@ const SCRATCH_MAP := "user://screenshot_ui_map.json"
 
 
 func _run() -> void:
+	# Every shot is of a page where it settles, not of one sliding in (`Juice.slides`).
+	var animations := Settings.animations
+	Settings.animations = Settings.Anim.NONE
 	await _shoot_main_scene()
 	await _shoot_inventory()
 	await _shoot_skills()
 	await _shoot_town()
 	await _shoot_board()
+	Settings.animations = animations
 	quit()
 
 
