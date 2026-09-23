@@ -64,6 +64,9 @@ func _init() -> void:
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	found.add_child(_scroll)
 	_scroll.add_child(_grid)
+	# As wide as the box, so a row of one stands in the middle of it rather than against its left edge:
+	# a scroll child that does not ask to expand is only as wide as it has to be.
+	_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# The orbs the fight turned up, under the squares as the tray is under the bag. A record only:
 	# they take no mouse, because there is nothing here an orb can be pressed to do.
 	_orbs = HBoxContainer.new()
@@ -170,6 +173,16 @@ func _on_grid_input(event: InputEvent) -> void:
 			if slot.get_global_rect().has_point(event.global_position):
 				inspect(slot.get_meta("drop_index", -1))
 				return
+
+
+## Everything on show, orbs first and the finds after them in the order they fell: what a reward
+## panel pops in one at a time (`Juice.reveal`).
+func pieces() -> Array:
+	var shown: Array = _orbs.get_children()
+	for row: Node in _grid.get_children():
+		if row is HBoxContainer:
+			shown.append_array(row.get_children())
+	return shown
 
 
 ## Opens what one drop actually is, in the grid's place, or goes back to the grid with -1.

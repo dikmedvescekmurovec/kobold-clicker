@@ -308,8 +308,12 @@ var _hop: Tween
 var _enemy_bar: HealthBar
 ## The same health as the bar, in numbers, under it.
 var _enemy_hp_label: Label
-var _result: PanelContainer
+var _result: VBoxContainer
+## The air between the clock's column and a verdict that would otherwise reach up over it.
+const RESULT_GAP := 4
 var _result_summary: VBoxContainer
+## The coin beside the verdict's gold, which spins while the figure counts up.
+var _gold_coin: TextureRect
 var _result_label: Label
 var _result_detail: Label
 ## Where the fight's drops are listed, under the verdict.
@@ -406,7 +410,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _loot_panel.visible:
 			_on_loot_closed()
 		elif fight.finished:
-			_on_back_pressed()
+			_leave(_on_back_pressed)
 		elif fight.endless:
 			_on_terminate_pressed()
 		return
@@ -661,25 +665,22 @@ func _build_hud() -> void:
 	_enemy_hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_enemy_panel.add_child(_enemy_hp_label)
 
-	# The verdict, hidden until there is one.
-	_result = PanelContainer.new()
-	_result.theme_type_variation = "WoodPanel"
+	# The verdict, hidden until there is one: the pages' own panel, its word on the green bar and no X
+	# (the way out is the button at its foot, which `_on_finished` picks).
+	_result = UITheme.titled_panel("", "", Callable())
 	_result.scale = Vector2(_ui_scale, _ui_scale)
 	_result.hide()
 	_result.mouse_filter = Control.MOUSE_FILTER_STOP
 	hud.add_child(_result)
-	var verdict := VBoxContainer.new()
+	var verdict := UITheme.body_of(_result)
 	verdict.add_theme_constant_override("separation", 8)
-	_result.add_child(verdict)
 
 	# What happened, and what it left. Swapped out for one item's details when a square is clicked,
 	# rather than growing the panel: a piece with six modifiers is taller than the verdict itself.
 	_result_summary = VBoxContainer.new()
 	_result_summary.add_theme_constant_override("separation", 8)
 	verdict.add_child(_result_summary)
-	_result_label = _label("")
-	_result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_result_summary.add_child(_result_label)
+	_result_label = UITheme.title_of(_result)
 	_result_detail = _label("")
 	_result_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_result_summary.add_child(_result_detail)
@@ -696,11 +697,11 @@ func _build_hud() -> void:
 	_gold_row.add_theme_constant_override("separation", 6)
 	_gold_row.hide()
 	sums.add_child(_gold_row)
-	var coin := TextureRect.new()
-	coin.texture = Coins.icon()
-	coin.custom_minimum_size = Vector2(Coins.SIZE, Coins.SIZE)
-	coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_gold_row.add_child(coin)
+	_gold_coin = TextureRect.new()
+	_gold_coin.texture = Coins.icon()
+	_gold_coin.custom_minimum_size = Vector2(Coins.SIZE, Coins.SIZE)
+	_gold_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_gold_row.add_child(_gold_coin)
 	_gold_label = _label("")
 	_gold_row.add_child(_gold_label)
 	# The experience beside the purse, in the same row: both are sums, and both are never nothing.
@@ -749,18 +750,19 @@ func _build_hud() -> void:
 	# The way out, which `_on_finished` picks by how it went. A won tile and an ended run leave by the
 	# word Collect, which says what the press is for where an arrow only says leave; a lost one has
 	# nothing to collect, so it gets the arrow and, beside it, another go at the same tile.
-	_collect = UITheme.button("Collect", "WoodButton", "Take it all back to the map")
+	# Light buttons: the panel is cream now, and wood buttons are for wood.
+	_collect = UITheme.button("Collect", "LightButton", "Take it all back to the map")
 	_collect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_collect.pressed.connect(_on_back_pressed)
+	_collect.pressed.connect(_leave.bind(_on_back_pressed))
 	_result_summary.add_child(_collect)
 	_lost_row = HBoxContainer.new()
 	_lost_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_result_summary.add_child(_lost_row)
 	var back := UITheme.back_button("Back to the map")
-	back.pressed.connect(_on_back_pressed)
+	back.pressed.connect(_leave.bind(_on_back_pressed))
 	_lost_row.add_child(back)
-	var again := UITheme.button("Retry", "WoodButton", "Fight for this tile again")
-	again.pressed.connect(retry.emit)
+	var again := UITheme.button("Retry", "LightButton", "Fight for this tile again")
+	again.pressed.connect(_leave.bind(retry.emit))
 	_lost_row.add_child(again)
 
 	# The same list again, on its own panel, for the counter in the corner to open mid-run. A farm
@@ -1472,12 +1474,12 @@ func _on_finished(won: bool) -> void:
 	_lost_row.visible = lost
 	_loot_panel.hide()
 	if fight.gold > 0.0:
-		_gold_label.text = BigNumber.format(fight.gold)
 		_gold_row.show()
+		Juice.count_up(_gold_label, fight.gold, _gold_coin)
 	if fight.xp > 0:
-		_xp_label.text = BigNumber.format(fight.xp)
 		_xp_row.show()
-	_kills_label.text = str(fight.kills())
+		Juice.count_up(_xp_label, float(fight.xp))
+	Juice.count_up(_kills_label, float(fight.kills()))
 	if _auto_discarded > 0:
 		_auto_label.text = ("1 find discarded automatically" if _auto_discarded == 1
 				else "%d finds discarded automatically" % _auto_discarded)
@@ -1488,15 +1490,33 @@ func _on_finished(won: bool) -> void:
 		_terminate.hide()
 	_result_drops.fill(_drops, fight.orbs)
 	_result.show()
+	Juice.pop_in(_result, _ui_scale)
+	Juice.reveal(_result_drops.pieces())
 	await _centre_result()
+	# A loss is not celebrated; a win, an ended run and a descent are.
+	if not lost:
+		Juice.celebrate(_hud, _result, _ui_scale, (_result.get_child(0) as Control).size.y)
+
+
+## Shrinks the verdict away, then does what its button was for.
+func _leave(then: Callable) -> void:
+	Juice.pop_out(_result, then)
 
 
 ## The panel is only as big as what it holds, and what it holds changes when a drop is opened, so it
 ## is put back in the middle every time -- after a frame, once it knows its new size.
+## Kept off the clock and the pips, which say how the fight ended: a panel that would reach up over
+## them is put down under them instead -- but never off the foot of the window, so a run's tall
+## verdict still shows its Collect and overlaps the column rather than losing its button.
 func _centre_result() -> void:
 	await get_tree().process_frame
-	var size := _result.get_combined_minimum_size() * _ui_scale
-	_result.position = (_size() - size) / 2.0
+	Juice.centre(_result, _size())
+	var top := _result.position.y + _result.pivot_offset.y * (1.0 - _ui_scale)
+	var bottom := top + _result.get_combined_minimum_size().y * _ui_scale
+	var room := _size().y - RESULT_GAP * _ui_scale - bottom
+	var drop := minf(hud_bottom() + RESULT_GAP * _ui_scale - top, room)
+	if drop > 0.0:
+		_result.position.y += drop
 
 
 ## The loot popup, centred the same way and for the same reason.

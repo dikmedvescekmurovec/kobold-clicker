@@ -1382,7 +1382,8 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 	_check(main._combat != null and main._combat.fight.finished, "Escape ends a farm run")
 	Input.parse_input_event(escape)
 	await process_frame
-	await process_frame
+	# The verdict shrinks away before it goes.
+	await create_timer(Juice.LEAVE_TIME + 0.1).timeout
 	_check(main._combat == null, "again leaves its verdict")
 	_check(main._panel.visible, "with the tile panel still up")
 	# A tip that came due with the run is what Escape closes first, one press each.

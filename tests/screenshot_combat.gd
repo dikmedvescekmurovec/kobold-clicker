@@ -440,7 +440,14 @@ func _shoot_dungeon() -> void:
 	await _save(combat, "combat_dungeon_end.png")
 
 
+## The verdict is shot once it has popped in, counted up and shown its finds.
+const SETTLED := Juice.REVEAL_DELAY + Juice.REVEAL_MOST + Juice.REVEAL_TIME + 0.2
+
+
 func _save(_scene: Node, name: String) -> void:
+	if _scene is CombatScene and (_scene as CombatScene)._result.visible 			and not (_scene as CombatScene)._result.has_meta("settled"):
+		(_scene as CombatScene)._result.set_meta("settled", true)
+		await create_timer(SETTLED).timeout
 	await process_frame
 	await RenderingServer.frame_post_draw
 	var path := "user://" + name

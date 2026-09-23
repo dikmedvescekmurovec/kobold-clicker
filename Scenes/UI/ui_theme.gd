@@ -434,11 +434,13 @@ static func titled_panel(title_text: String, tooltip: String, on_close: Callable
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	header.add_child(title)
 	# A drawn X at the size the pack drew it: a Button with no text has no minimum size of its own.
-	var close := button("", "CloseButton", tooltip)
-	close.custom_minimum_size = Vector2(icon_size("CloseButton"))
-	close.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	close.pressed.connect(on_close)
-	header.add_child(close)
+	# None where `on_close` is empty: a panel left by its own button (a verdict's Collect).
+	if on_close.is_valid():
+		var close := button("", "CloseButton", tooltip)
+		close.custom_minimum_size = Vector2(icon_size("CloseButton"))
+		close.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		close.pressed.connect(on_close)
+		header.add_child(close)
 	notched(bar, true)
 	var body := PanelContainer.new()
 	body.theme_type_variation = "HeadedPanel"

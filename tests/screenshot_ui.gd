@@ -388,6 +388,24 @@ func _shoot_town() -> void:
 	root.get_texture().get_image().save_png("user://ui_town_bounties.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_town_bounties.png"))
 
+	# What the Claim puts up, with that posting's own pay -- raised straight, so nothing is paid and the
+	# shots after this one see the purse and the bag they always did.
+	if board.size() > 1:
+		var paid: Dictionary = board[-1]
+		var orbs := {}
+		for orb: String in BountyBoard.orbs_of(paid):
+			orbs[orb] = int(orbs.get(orb, 0)) + 1
+		var paid_rng := RandomNumberGenerator.new()
+		paid_rng.seed = WORLD_SEED
+		main._show_bounty_paid(str(paid[BountyBoard.ENEMY]), float(paid[BountyBoard.GOLD]),
+				int(paid.get(BountyBoard.XP, 0)), orbs, BountyBoard.reward_item(paid, town, paid_rng))
+		# Once it has popped in, counted up and shown its finds.
+		await create_timer(Juice.REVEAL_DELAY + Juice.REVEAL_MOST + Juice.REVEAL_TIME + 0.2).timeout
+		await RenderingServer.frame_post_draw
+		root.get_texture().get_image().save_png("user://ui_town_claimed.png")
+		print("Saved ", ProjectSettings.globalize_path("user://ui_town_claimed.png"))
+		main._close_bounty_paid()
+
 	# The gear merchant, with a piece open, which is where the Sell button that replaces Discard lives.
 	# So this shot has both halves of the counter at once: what it sells on the right, what it buys on
 	# the left.

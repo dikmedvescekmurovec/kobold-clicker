@@ -151,6 +151,9 @@ var _character: CharacterPanel
 ## held, or a bounty filled. `_banner_head` is the row its heading sits in, which is where the X goes
 ## if one is ever needed.
 var _banner: Control
+## What a bounty handed in paid, up over the town until Collect: a screen-wide catch with the verdict's
+## wood panel in the middle of it.
+var _paid: Control
 var _banner_head: HBoxContainer
 ## The toast over the last counted bounty kill, while it is up. The next one puts it down.
 var _toast: Control
@@ -526,6 +529,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 		_announce_unique(CollectionPage.specimen(id), "Unique Revealed"))
 	town_page.transcend_pressed.connect(_on_transcend_pressed)
 	town_page.xp_claimed.connect(_on_xp_absorbed)
+	town_page.bounty_paid.connect(_show_bounty_paid)
 	# A bounty's piece is announced as a body's would be: only a unique the log has never held.
 	town_page.item_claimed.connect(func(item: Item) -> void:
 		if _is_new_unique(item):
@@ -855,6 +859,101 @@ func _on_banner_held(panel: Control) -> void:
 
 ## Puts it down, from the timer, the X, a swing past the five seconds, another banner, or the fight
 ## ending -- so it is never left standing over a verdict.
+## What a bounty paid, laid out as a fight's verdict is and arriving the way it does: the pages' panel
+## with the word on its green bar, the monster, the sums counting up behind their marks, and the orbs
+## and the piece popping in on the bag's light panel. It is paid already -- Collect only puts the
+## panel away -- so nothing is lost by a game closed under it. A screen-wide catch keeps the town under
+## it from being pressed; the item card and the tooltips are lifted back over it.
+func _show_bounty_paid(enemy: String, gold: float, xp: int, orbs: Dictionary, piece: Item) -> void:
+	_close_bounty_paid()
+	var layer := _character.get_parent()
+	_paid = Control.new()
+	_paid.theme = UITheme.theme()
+	_paid.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_paid.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(_paid)
+	var panel := UITheme.titled_panel("Bounty claimed", "", Callable())
+	# Named, because the win's wash goes in under it and it is no longer the first child.
+	panel.name = "Panel"
+	_paid.add_child(panel)
+	var body := UITheme.body_of(panel)
+	body.add_theme_constant_override("separation", 8)
+	var whom := UITheme.label(enemy)
+	whom.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body.add_child(whom)
+	var sums := HBoxContainer.new()
+	sums.add_theme_constant_override("separation", 10)
+	sums.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	body.add_child(sums)
+	var coin := _paid_mark(Coins.icon(), Vector2.ONE * Coins.SIZE)
+	sums.add_child(_paid_sum(coin, gold))
+	if xp > 0:
+		sums.add_child(_paid_sum(_paid_mark(CombatScene.XP_GEM,
+				CombatScene.XP_GEM.get_size() * CombatScene.XP_GEM_SCALE), float(xp)))
+	var drops := DropsView.new()
+	body.add_child(drops)
+	var found: Array[Item] = []
+	if piece != null:
+		found.append(piece)
+	drops.fill(found, orbs)
+	var collect := UITheme.button("Collect", "LightButton", "Put it all away")
+	collect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	collect.pressed.connect(_leave_bounty_paid)
+	body.add_child(collect)
+	# The cards are on this layer too, and a later child draws over an earlier one.
+	layer.move_child(_item_card, -1)
+	for card: Node in layer.get_children():
+		if card is TipCard:
+			layer.move_child(card, -1)
+	var centre := func() -> void:
+		if is_instance_valid(panel):
+			Juice.centre(panel, get_viewport_rect().size)
+	panel.resized.connect(centre)
+	drops.resized_contents.connect(centre)
+	Juice.pop_in(panel, ui_scale)
+	Juice.reveal(drops.pieces())
+	await get_tree().process_frame
+	if not is_instance_valid(panel):
+		return
+	centre.call()
+	Juice.celebrate(_paid, panel, ui_scale, (panel.get_child(0) as Control).size.y)
+
+
+## A mark for one of the claim's sums, at `side`.
+func _paid_mark(mark: Texture2D, side: Vector2) -> TextureRect:
+	var picture := TextureRect.new()
+	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	picture.texture = mark
+	picture.custom_minimum_size = side
+	return picture
+
+
+## One of the claim's sums: a mark and a bare number, the verdict's way, counted up once it is shown.
+func _paid_sum(mark: TextureRect, amount: float) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.add_child(mark)
+	var figure := UITheme.label()
+	row.add_child(figure)
+	# The coin spins while it counts; the gem is not a coin.
+	figure.ready.connect(func() -> void:
+		Juice.count_up(figure, amount, mark if mark.texture == Coins.icon() else null))
+	return row
+
+
+## Collect and Escape: the panel shrinks away, then goes.
+func _leave_bounty_paid() -> void:
+	if _paid != null:
+		Juice.pop_out(_paid.get_node("Panel"), _close_bounty_paid)
+
+
+func _close_bounty_paid() -> void:
+	if _paid != null:
+		_paid.queue_free()
+		_paid = null
+
+
 func _close_banner() -> void:
 	if _banner == null:
 		return
@@ -1988,6 +2087,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 	if _tip_panel != null:
 		_on_tip_closed()
+	elif _paid != null:
+		_leave_bounty_paid()
 	elif _aim_panel != null:
 		_end_aim()
 	elif _combat == null:

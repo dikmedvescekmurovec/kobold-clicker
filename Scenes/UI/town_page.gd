@@ -36,6 +36,10 @@ signal chest_bought(cell: Vector2i)
 signal item_claimed(item: Item)
 ## A bounty handed in paid this much experience, already banked: the main scene fills the bar with it.
 signal xp_claimed(amount: int)
+## A bounty on `enemy` was handed in and everything it paid is already in the purse, the tray and the
+## bag: `orbs` is name -> count and `piece` null for none. The main scene says so, as a fight's
+## verdict does.
+signal bounty_paid(enemy: String, gold: float, xp: int, orbs: Dictionary, piece: Item)
 ## The roads lifted settlements out of the dark: the map has changed and wants saving.
 signal towns_revealed
 ## The relic reading showed the unique `id`: the main scene raises the collection log's banner over it.
@@ -580,6 +584,10 @@ func _on_claim_pressed(bounty: Dictionary) -> void:
 	BountyBoard.restock(_drawer, _board_land(), _cell, _stock_rng)
 	print("Claimed the bounty on %s for %s gold, %d experience and %s" % [str(bounty.get(BountyBoard.ENEMY, "")),
 			BigNumber.format(reward), xp, orbs])
+	var counted := {}
+	for orb: String in orbs:
+		counted[orb] = int(counted.get(orb, 0)) + 1
+	bounty_paid.emit(str(bounty.get(BountyBoard.ENEMY, "")), reward, xp, counted, piece)
 	inventory.save(_save_path)
 	_fill()
 	layout()

@@ -1228,6 +1228,8 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	_check(main.inventory.gold == fight.gold,
 			"and the purse has it already: %d of %d" % [main.inventory.gold, fight.gold])
 	_check(Inventory.load_from(TEST_PATH).gold == fight.gold, "so does the file on disk")
+	# The verdict's sums count up from nothing; they are read once they have.
+	await create_timer(Juice.COUNT_DELAY + Juice.COUNT_TIME + 0.1).timeout
 	_check(combat._gold_row.visible and combat._gold_label.text == "%d" % fight.gold,
 			"and the verdict says so: %s" % combat._gold_label.text)
 	_check(combat._kills_label.text == str(fight.kills()),
