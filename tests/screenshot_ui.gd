@@ -359,12 +359,21 @@ func _shoot_town() -> void:
 		await process_frame
 
 	# The board as a town opens on it: three cards, each a picture, a name, a reward, Info and Accept.
+	# Two of the postings are made to promise a piece -- an elite sword +1 and a unique -- so the shot
+	# has both reward squares on it whatever the seed rolled.
+	var board := BountyBoard.bounties(main.inventory.towns.visit(main.view.origin + town))
+	if board.size() > 1:
+		board[0][BountyBoard.ITEM] = {"kind": "sword", "rarity": "elite", "plus": 1}
+		board[1][BountyBoard.ITEM] = {"kind": "", "rarity": "unique", "plus": 0}
+		main.town_page._fill()
+		main.town_page.layout()
+		for i in 2:
+			await process_frame
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_town_board.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_town_board.png"))
 
 	# And with one posting taken on and part worked off, which is then the only card it shows.
-	var board := BountyBoard.bounties(main.inventory.towns.visit(main.view.origin + town))
 	if board.size() > 1:
 		# The elite, which is last and the one that pays an orb, so the shot has the orb's picture in it.
 		var taken: Dictionary = board[-1]

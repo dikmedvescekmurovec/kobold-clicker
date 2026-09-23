@@ -500,13 +500,78 @@ func _test_bounties() -> bool:
 		_check(not bool(bounty[BountyBoard.DONE]), "and is not handed in")
 		_check(float(bounty[BountyBoard.GOLD]) == maxf(1.0, roundf(Encounter.gold_of(enemy, TOWN_CELL)
 				* BountyBoard.reward_of(tier))), "%s pays what its bodies are worth" % enemy)
-		_check((not str(bounty[BountyBoard.ORB]).is_empty()) == (tier == EnemyRoster.Tier.ELITE),
-				"only the elite posting carries an orb (%s)" % enemy)
+		_check(int(bounty[BountyBoard.XP]) == Encounter.xp_of(enemy, TOWN_CELL) * BountyBoard.xp_reward_of(tier),
+				"%s pays its bodies' experience" % enemy)
+		_check(BountyBoard.orbs_of(bounty).size() == int(BountyBoard.ORBS[tier]),
+				"%s pays its tier's orbs (%s)" % [enemy, BountyBoard.orbs_of(bounty)])
+		var promise := BountyBoard.item_of(bounty)
+		if not promise.is_empty():
+			var kind := str(promise[BountyBoard.ITEM_KIND])
+			var unique := str(promise[BountyBoard.ITEM_RARITY]) == "unique"
+			_check(unique == kind.is_empty() and (unique or LootTable.KINDS.has(kind)),
+					"a promised piece is a kind the game has, or a unique with none (%s)" % [promise])
+			_check(int(promise[BountyBoard.ITEM_PLUS]) >= 0, "and is ascended no times or more")
 	_check(tiers[EnemyRoster.Tier.COMMON] == BountyBoard.COMMONS
 			and tiers[EnemyRoster.Tier.ELITE] == BountyBoard.ELITES,
 			"two of the rabble and one elite (%s)" % [tiers])
 	_check(str(posted[0][BountyBoard.ENEMY]) != str(posted[1][BountyBoard.ENEMY]),
 			"and the two commons are not the same monster twice")
+
+	# What a board promises over many postings: pieces, uniques among them, and ascended ones.
+	var promised := {"items": 0, "uniques": 0, "plus": 0, "elite_items": 0, "elites": 0}
+	var many := RandomNumberGenerator.new()
+	many.seed = WORLD_SEED
+	for i in 200:
+		var fresh := {}
+		BountyBoard.restock(fresh, envs, TOWN_CELL, many)
+		for bounty: Dictionary in BountyBoard.bounties(fresh):
+			var promise := BountyBoard.item_of(bounty)
+			var elite := EnemyRoster.tier_of(str(bounty[BountyBoard.ENEMY])) == EnemyRoster.Tier.ELITE
+			promised["elites"] += int(elite)
+			if promise.is_empty():
+				continue
+			promised["items"] += 1
+			promised["elite_items"] += int(elite)
+			promised["uniques"] += int(str(promise[BountyBoard.ITEM_RARITY]) == "unique")
+			promised["plus"] += int(promise[BountyBoard.ITEM_PLUS])
+	_check(promised["items"] > 0 and promised["uniques"] > 0 and promised["plus"] > 0,
+			"boards promise pieces, uniques among them, and ascended ones (%s)" % [promised])
+	_check(promised["elite_items"] == promised["elites"], "every elite posting promises a piece (%s)" % [promised])
+	# The ascension ladder: at least +1 a quarter of the time, +2 a twentieth, and a tenth as often past
+	# the list, for ever.
+	_check(BountyBoard.plus_of(0.3) == 0 and BountyBoard.plus_of(0.2) == 1 and BountyBoard.plus_of(0.04) == 2
+			and BountyBoard.plus_of(0.005) == 3 and BountyBoard.plus_of(0.0005) == 4
+			and BountyBoard.plus_of(0.00005) == 5 and BountyBoard.plus_of(0.000005) == 6,
+			"a promised piece climbs the ascension ladder")
+	_check(BountyBoard.plus_of(0.0) > 6, "and a draw of nothing still ends (%d)" % BountyBoard.plus_of(0.0))
+	# An older save's single orb name reads as a list.
+	var old := {BountyBoard.BOUNTIES: [{BountyBoard.ORB: "Orb of Alteration"}, {BountyBoard.ORB: ""}]}
+	var read := BountyBoard.bounties(old)
+	_check(BountyBoard.orbs_of(read[0]) == ["Orb of Transmutation"] and BountyBoard.orbs_of(read[1]).is_empty(),
+			"a saved orb name is read back as a list (%s)" % [read])
+	_check(BountyBoard.item_of({BountyBoard.ITEM: {"kind": "sword", "rarity": "elite", "plus": 1}}).size() == 3
+			and BountyBoard.item_of({BountyBoard.ITEM: {"kind": "hat", "rarity": "elite", "plus": 0}}).is_empty()
+			and BountyBoard.item_of({BountyBoard.ITEM: {"kind": "sword", "rarity": "mythic", "plus": 0}}).is_empty()
+			and BountyBoard.item_of({BountyBoard.ITEM: {"kind": "sword", "rarity": "unique", "plus": 0}}).is_empty()
+			and BountyBoard.item_of({}).is_empty(),
+			"a promise this build cannot keep is no promise")
+	_check(BountyBoard.reward_text({BountyBoard.ITEM: {"kind": "sword", "rarity": "elite", "plus": 1}})
+			== "an elite sword +1" and BountyBoard.reward_text({BountyBoard.ITEM:
+			{"kind": "", "rarity": "unique", "plus": 0}}) == "a unique piece"
+			and BountyBoard.reward_text({}).is_empty(), "and the promise is put into words")
+	# The piece itself, rolled at the hand-in, is what was promised and no more.
+	var sworn := {BountyBoard.ENEMY: "Imp", BountyBoard.ITEM: {"kind": "sword", "rarity": "elite", "plus": 1}}
+	var paid := BountyBoard.reward_item(sworn, TOWN_CELL, rng)
+	_check(paid != null and str(LootTable.ITEMS[paid.type]["kind"]) == "sword"
+			and paid.rarity == ItemRarity.Rarity.ELITE and paid.plus == 1 and paid.unique.is_empty()
+			and paid.level >= 1 and paid.level <= MapBuilder.level_of(TOWN_CELL) + 1,
+			"an elite sword +1 is what the hand-in pays (%s)" % [paid.display_name() if paid else "nothing"])
+	sworn[BountyBoard.ITEM] = {"kind": "", "rarity": "unique", "plus": 0}
+	paid = BountyBoard.reward_item(sworn, TOWN_CELL, rng)
+	_check(paid != null and not paid.unique.is_empty() and paid.rarity == ItemRarity.Rarity.UNIQUE
+			and paid.plus == 0, "a unique promised is a unique paid (%s)" % [paid.display_name() if paid else "nothing"])
+	_check(BountyBoard.reward_item({BountyBoard.ENEMY: "Imp"}, TOWN_CELL, rng) == null,
+			"and a posting that promised none pays none")
 
 	# A board is rolled and so is written down, which means the same seed has to post the same work.
 	var twin := {}
@@ -536,8 +601,12 @@ func _test_bounties() -> bool:
 	var first: Dictionary = BountyBoard.bounties(town)[0]
 	var second: Dictionary = BountyBoard.bounties(town)[1]
 	_check(BountyBoard.active(state).is_empty(), "no work is out")
+	_check(BountyBoard.active_spot(state).is_empty(), "and no town has any out")
 	_check(BountyBoard.accept(state, first), "the first posting is accepted")
 	_check(BountyBoard.active(state) == first, "and is the work that is out")
+	_check(state.towns[BountyBoard.active_spot(state)] == town, "and its town is the one that posted it")
+	_check(BountyBoard.takes(first, target) and not BountyBoard.takes(first, "nobody")
+			and not BountyBoard.takes({}, target), "a posting wants its own monster and nothing else")
 	_check(not BountyBoard.accept(state, second), "a second cannot be taken on beside it")
 	_check(not BountyBoard.is_active(second), "and stays unaccepted")
 	# Only on land as deep as the town that asked: the doorstep does not count towards a deep board.
@@ -628,33 +697,59 @@ func _test_bounty_kills() -> bool:
 	BountyBoard.accept(inventory.towns, BountyBoard.bounties(drawer)[0])
 	var target := str(BountyBoard.bounties(drawer)[0][BountyBoard.ENEMY])
 
+	# What each ledger says of its bodies, gathered in an Array: a lambda captures by value.
+	var said := []
+	var hear := func(ledger: FightLedger) -> void:
+		ledger.bounty_counted.connect(func(enemy: String, have: int, need: int) -> void:
+			said.append([enemy, have, need]))
 	var charting := FightLedger.new(inventory, TEST_PATH)
+	hear.call(charting)
+	charting.add_kill("nobody")
+	_check(said.is_empty(), "a body the bounty does not want is nothing to say")
 	charting.add_kill(target)
 	_check(_have(drawer, 0) == 1, "a charting fight counts a body as it falls (%d)" % _have(drawer, 0))
+	_check(said == [[target, 1, 5]], "and says what the bounty stands at (%s)" % [said])
 	_check(_have(Inventory.load_from(TEST_PATH).towns.visit(spot), 0) == 1, "and writes it down at once")
 
 	# The ledger carries the tile's level to the board, both ways in.
 	BountyBoard.bounties(drawer)[0][BountyBoard.LEVEL] = 5
 	var shallow := FightLedger.new(inventory, TEST_PATH)
+	hear.call(shallow)
 	shallow.tile_level = 4
 	shallow.add_kill(target)
 	_check(_have(drawer, 0) == 1, "a body on land shallower than the town counts for nothing")
 	var shallow_run := FightLedger.new(inventory, TEST_PATH, true)
+	hear.call(shallow_run)
 	shallow_run.tile_level = 4
 	shallow_run.add_kill(target)
 	shallow_run.bank()
 	_check(_have(drawer, 0) == 1, "and neither does a run's")
+	_check(said.size() == 1, "and neither is said (%s)" % [said])
 
 	var run := FightLedger.new(inventory, TEST_PATH, true)
+	hear.call(run)
 	run.tile_level = 5
 	for i in 3:
 		run.add_kill(target)
 	_check(_have(drawer, 0) == 1, "a run's bodies wait in its pouch (%d)" % _have(drawer, 0))
+	_check(said.slice(1) == [[target, 2, 5], [target, 3, 5], [target, 4, 5]],
+			"but each is said as it falls, counted on top of the board's (%s)" % [said])
 	_check(run.bank(), "the run banks")
 	_check(_have(drawer, 0) == 4, "and they all count at once (%d)" % _have(drawer, 0))
+	_check(said.size() == 4, "banking says nothing over again (%s)" % [said])
 	_check(not run.bank(), "a second bank has nothing to do")
 	_check(_have(drawer, 0) == 4, "and counts nothing twice (%d)" % _have(drawer, 0))
 	_check(_have(Inventory.load_from(TEST_PATH).towns.visit(spot), 0) == 4, "the run's kills were saved")
+
+	# The body that fills the job is said with `have == need`; one past it is nothing to say.
+	var last := FightLedger.new(inventory, TEST_PATH, true)
+	hear.call(last)
+	last.tile_level = 5
+	last.add_kill(target)
+	last.add_kill(target)
+	_check(said.slice(4) == [[target, 5, 5]], "the filling body is said and the one past it is not (%s)" % [said])
+	last.bank()
+	_check(_have(drawer, 0) == 5, "and the board stops at the job (%d)" % _have(drawer, 0))
 	return true
 
 
@@ -1101,25 +1196,48 @@ func _test_board() -> void:
 	_check(_deep_button(page._rows, "Claim") == null, "nothing on it can be handed in yet")
 	_check(_deep_button(page._rows, "Show") == null, "and the board carries no Show")
 
-	# Worked off, and handed in: the purse, the orb and the save all move once.
+	# Worked off, and handed in: the purse, the orb, the piece and the save all move once.
 	var reward := int(bounty[BountyBoard.GOLD])
-	var orb := str(bounty[BountyBoard.ORB])
-	_check(not orb.is_empty(), "the elite posting carries an orb (%s)" % orb)
+	var orbs := BountyBoard.orbs_of(bounty)
+	var xp_reward := int(bounty[BountyBoard.XP])
+	var levelled := PlayerLevel.add(inventory.level, inventory.xp, xp_reward)
+	_check(orbs.size() == int(BountyBoard.ORBS[EnemyRoster.Tier.ELITE]) and xp_reward > 0,
+			"the elite posting carries its orbs and experience (%s, %d)" % [orbs, xp_reward])
+	bounty[BountyBoard.ITEM] = {"kind": "sword", "rarity": "elite", "plus": 1}
 	BountyBoard.count_kill(inventory.towns, str(bounty[BountyBoard.ENEMY]),
 			int(bounty[BountyBoard.NEED]))
+	# A promised piece needs room: over a full bag the Claim is grey and a press pays nothing.
+	while not inventory.is_full():
+		inventory.add(Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng))
 	page._fill()
 	var claim := _deep_button(page._rows, "Claim")
-	_check(claim != null and claim.tooltip_text.contains(str(reward)),
+	_check(claim != null and claim.disabled and claim.tooltip_text == "Your bag is full.",
+			"a promised piece cannot be claimed into a full bag (%s)" % [claim.tooltip_text if claim else "no button"])
+	page._on_claim_pressed(bounty)
+	_check(inventory.gold == 0 and not bool(bounty[BountyBoard.DONE]), "and a press pays nothing")
+	inventory.items.clear()
+	page._fill()
+	claim = _deep_button(page._rows, "Claim")
+	_check(claim != null and not claim.disabled and claim.tooltip_text.contains(str(reward))
+			and claim.tooltip_text.ends_with("and an elite sword +1"),
 			"the finished one carries its reward (%s)" % [claim.tooltip_text if claim != null else "no button"])
 	if claim != null:
 		claim.pressed.emit()
 	_check(inventory.gold == reward and reward > 0,
 			"the purse holds the reward (%d, want %d)" % [inventory.gold, reward])
-	_check(inventory.orb_count(orb) == 1, "and the orb came with it")
+	var orbs_paid := orbs.all(func(orb: String) -> bool: return inventory.orb_count(orb) == orbs.count(orb))
+	_check(orbs_paid, "and the orbs came with it")
+	_check(inventory.level == int(levelled["level"]) and inventory.xp == int(levelled["xp"]),
+			"and the experience (%d)" % xp_reward)
+	_check(inventory.items.size() == 1 and inventory.items[0].rarity == ItemRarity.Rarity.ELITE
+			and inventory.items[0].plus == 1 and str(LootTable.ITEMS[inventory.items[0].type]["kind"]) == "sword",
+			"and so did the elite sword +1 (%s)" % [inventory.items[0].display_name() if inventory.items.size() == 1 else inventory.items.size()])
+	_check(Inventory.load_from(TEST_PATH).items.size() == 1, "which was saved with the hand-in")
 	_check(Inventory.load_from(TEST_PATH).gold == reward, "the hand-in was saved")
 	_check(_deep_button(page._rows, "Claim") == null, "the posting is off the board")
 	page._on_claim_pressed(bounty)
-	_check(inventory.gold == reward and inventory.orb_count(orb) == 1, "and pays nothing a second time")
+	_check(inventory.gold == reward and orbs.all(func(orb: String) -> bool:
+			return inventory.orb_count(orb) == orbs.count(orb)), "and pays nothing a second time")
 	page.queue_free()
 	await process_frame
 

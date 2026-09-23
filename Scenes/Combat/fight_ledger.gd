@@ -8,6 +8,12 @@ extends RefCounted
 ## called, by the run ending or by the game closing. Finds, gold, orbs and experience all follow that
 ## one rule; they differ only in that the bag's cap can destroy a find and can refuse nothing else.
 
+## A body the accepted bounty took, and what that bounty stands at with it: `have >= need` is filled.
+## The one thing the screen hears of a bounty mid-fight. A tile fight says it as the board is written;
+## a run says what its pouched bodies will count as at `bank`, which is never wrong, since both ways
+## out of a run bank.
+signal bounty_counted(enemy: String, have: int, need: int)
+
 ## What the fight has turned up, banked or not. Kept after banking, for the report.
 var drops: Array[Item] = []
 ## These four are zeroed by `bank`, so a second call has nothing to repeat. Gold is a whole
@@ -77,9 +83,24 @@ func add_xp(amount: int) -> void:
 func add_kill(enemy: String) -> void:
 	if farming:
 		slain[enemy] = int(slain.get(enemy, 0)) + 1
+		_report(enemy, int(slain[enemy]))
 		return
 	if BountyBoard.count_kill(_inventory.towns, enemy, 1, tile_level):
 		_save()
+		_report(enemy, 0)
+
+
+## Says what the accepted bounty stands at with this fight's bodies counted: the board's own count for
+## a tile fight, the board's plus the pouch's for a run. A run's body past the job is nothing to say.
+func _report(enemy: String, pouched: int) -> void:
+	var bounty := BountyBoard.active(_inventory.towns)
+	if not BountyBoard.takes(bounty, enemy, tile_level):
+		return
+	var need := int(bounty.get(BountyBoard.NEED, 0))
+	var have := int(bounty.get(BountyBoard.HAVE, 0)) + pouched
+	if have > need:
+		return
+	bounty_counted.emit(enemy, have, need)
 
 
 ## A find the player's own rule threw away on sight. It is in neither the pouch nor the bag; all that

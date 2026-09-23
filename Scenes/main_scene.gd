@@ -70,6 +70,20 @@ const BANNER_HOLD := 5.0
 const BANNER_WIDTH := ItemCard.WIDTH * 1.5
 const BANNER_FADE := 0.4
 const BANNER_GAP := 12.0
+## The toast a counted bounty kill raises under the same column: how long it hangs, how far it rises,
+## and how tall the monster's picture stands -- small for a common, the card's own 40 for an elite or a
+## boss, whose picture wears a frame as well.
+const TOAST_TIME := 1.4
+const TOAST_RISE := 24.0
+const TOAST_PORTRAIT := 24
+const TOAST_BIG_PORTRAIT := BountyList.PORTRAIT
+## How an elite's or a boss's bounty toast and banner are set apart: the frame round its picture and
+## the colour its count is written in -- the cream half of the ramp, since `LEAF_LT` and `GOLD` are for
+## the backdrop and cannot be read on a card. The mark beside it is the nameplate's own (`TIER_MARK`).
+const BOUNTY_TIER := {
+	EnemyRoster.Tier.ELITE: {"frame": ItemRarity.Rarity.ELITE, "colour": Palette.LEAF},
+	EnemyRoster.Tier.BOSS: {"frame": ItemRarity.Rarity.UNIQUE, "colour": Palette.SLOT_TAN_DK},
+}
 
 @onready var map: HexMap = $HexMap
 @onready var camera: Camera2D = $Camera2D
@@ -133,10 +147,13 @@ var _heirloom_button: Button
 var _item_card: ItemCard
 ## The player in the top-left corner, over the map and over a fight alike.
 var _character: CharacterPanel
-## The banner over a unique the log has never held, while it is up; null otherwise. `_banner_head` is
-## the row its heading sits in, which is where the X goes if one is ever needed.
-var _unique_banner: Control
+## The banner under the fight's column, while one is up; null otherwise: a unique the log has never
+## held, or a bounty filled. `_banner_head` is the row its heading sits in, which is where the X goes
+## if one is ever needed.
+var _banner: Control
 var _banner_head: HBoxContainer
+## The toast over the last counted bounty kill, while it is up. The next one puts it down.
+var _toast: Control
 ## Whether a left press has landed since it went up, and whether it may now be put down by one.
 var _banner_clicked := false
 var _banner_closable := false
@@ -508,6 +525,11 @@ func _build_pages(layer: CanvasLayer) -> void:
 	town_page.relic_shown.connect(func(id: String) -> void:
 		_announce_unique(CollectionPage.specimen(id), "Unique Revealed"))
 	town_page.transcend_pressed.connect(_on_transcend_pressed)
+	town_page.xp_claimed.connect(_on_xp_absorbed)
+	# A bounty's piece is announced as a body's would be: only a unique the log has never held.
+	town_page.item_claimed.connect(func(item: Item) -> void:
+		if _is_new_unique(item):
+			_announce_unique(item))
 	# A bounty given up on the journal frees the board standing open on the other edge.
 	bounty_page.abandoned.connect(town_page.redraw)
 	# What the counter does goes straight to the bag: a purchase reaches the purse and the grid by the
@@ -602,7 +624,135 @@ func _is_new_unique(item: Item) -> bool:
 ## square has to leave `ItemSlot.GROUP` at once, or the one `ItemCard` finds it under the cursor and
 ## stands its own card over this one.
 func _announce_unique(item: Item, title := "Unique Found") -> void:
-	_close_unique_banner()
+	var slot := ItemSlot.make(item)
+	slot.remove_from_group(ItemSlot.GROUP)
+	# What the piece *is* and the rule it bends, and none of its numbers: a banner is read in a glance
+	# in the middle of a fight, and the stat and modifier tables are what made it a wall of text. They
+	# are two presses away in the bag, and the rule is the thing that cannot be guessed from the icon.
+	var lines: Array[Control] = [
+		ItemDetails.line(item.display_name(), item.text_color(), BANNER_WIDTH),
+		ItemDetails.line("%s · level %d" % [item.rarity_name(), item.level],
+				item.text_color(), BANNER_WIDTH, true),
+		ItemDetails.line(item.effect_text(), Palette.SLOT_TAN_DK, BANNER_WIDTH, true),
+	]
+	if item.is_set():
+		lines.append(ItemDetails.line(item.set_text(), ItemRarity.SET_TEXT, BANNER_WIDTH, true))
+	# The unique's own name colour, which is the half of the ramp picked to be read on cream.
+	_raise_banner(title, item.text_color(), slot, lines)
+	# A beat of slow motion, as an elite find already gets: this is the rarer thing of the two, and the
+	# one banner that gets it -- a bounty is filled every few kills.
+	Juice.hit_stop(get_tree(), 0.12, 0.25)
+
+
+## A bounty filled: the monster's picture beside its name, the count and where to hand the work in, on
+## the same banner a unique gets. An elite's or a boss's picture wears its frame and its count is
+## written large behind the nameplate's mark -- for an elite the one kill that fills the posting is the
+## only kill, so the banner is the whole of what is said about it and carries the toast's weight.
+func _announce_bounty(enemy: String, tier: EnemyRoster.Tier, have: int, need: int) -> void:
+	var colour := _bounty_colour(tier)
+	var lines: Array[Control] = [ItemDetails.line(enemy, colour, BANNER_WIDTH)]
+	var count := "%d of %d" % [have, need]
+	if tier == EnemyRoster.Tier.COMMON:
+		lines.append(ItemDetails.line(count, Palette.TEXT_SOFT, BANNER_WIDTH, true))
+	else:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 4)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(_tier_mark(tier))
+		row.add_child(UITheme.label(count, colour))
+		lines.append(row)
+	var spot := BountyBoard.active_spot(inventory.towns)
+	var town := bounty_page.town_name(TownState.spot(spot)) if not spot.is_empty() else "the town"
+	lines.append(ItemDetails.line("Claim it at %s." % town, Palette.LEAF, BANNER_WIDTH, true))
+	_raise_banner("Bounty Filled", colour, _bounty_face(enemy, tier, true), lines)
+
+
+## A counted kill short of filling the bounty: "+1" beside the monster's picture, under the fight's
+## column, up for a moment and gone. An elite's or a boss's stands taller, framed, its count large.
+## The latest wins -- a run's bodies can fall faster than the toast fades -- and a level of NONE shows
+## none, as the level-up's words are: the journal carries the count.
+func _toast_bounty(enemy: String, tier: EnemyRoster.Tier) -> void:
+	if Settings.animations == Settings.Anim.NONE:
+		return
+	if _toast != null:
+		_toast.queue_free()
+	var panel := PanelContainer.new()
+	panel.theme = UITheme.theme()
+	panel.theme_type_variation = "TextPanel"
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.scale = Vector2(ui_scale, ui_scale)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(row)
+	var big := tier != EnemyRoster.Tier.COMMON
+	row.add_child(_bounty_face(enemy, tier, big))
+	if big:
+		row.add_child(_tier_mark(tier))
+	var count := UITheme.label("+1", _bounty_colour(tier))
+	if big:
+		count.add_theme_font_size_override("font_size", CombatScene.BOSS_FONT)
+	count.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(count)
+	_character.get_parent().add_child(panel)
+	_toast = panel
+	_place_toast()
+	_place_toast.call_deferred()
+	var tween := create_tween().set_parallel(true)
+	if Settings.animations == Settings.Anim.DEFAULT:
+		panel.scale = Vector2(ui_scale, ui_scale) * 1.4
+		tween.tween_property(panel, "scale", Vector2(ui_scale, ui_scale), 0.25).set_trans(
+				Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(panel, "position:y", panel.position.y - TOAST_RISE, TOAST_TIME)
+	tween.tween_property(panel, "modulate:a", 0.0, 0.4).set_delay(TOAST_TIME - 0.4)
+	tween.chain().tween_callback(panel.queue_free)
+
+
+## Centred under the fight's column, or under the banner when one is up, so the two never overlap.
+## Run twice, as the banner is: the labels have not laid out on the first pass.
+func _place_toast() -> void:
+	if _toast == null:
+		return
+	var view_size := get_viewport_rect().size
+	var top: float = (_combat.hud_bottom() if _combat != null else CombatScene.HUD_MARGIN) + BANNER_GAP
+	if _banner != null:
+		top = _banner.position.y + _banner.get_combined_minimum_size().y * ui_scale + BANNER_GAP
+	_toast.size = _toast.get_combined_minimum_size()
+	_toast.pivot_offset = _toast.size / 2.0
+	var corner := Vector2((view_size.x - _toast.size.x * ui_scale) / 2.0, top)
+	_toast.position = corner + _toast.pivot_offset * (ui_scale - 1.0)
+
+
+## The monster's picture for the toast and the banner: small for a common, the card's own size and
+## framed for an elite or a boss.
+func _bounty_face(enemy: String, tier: EnemyRoster.Tier, big: bool) -> Control:
+	var frame: Texture2D = null
+	if BOUNTY_TIER.has(tier):
+		frame = ItemRarity.frame(BOUNTY_TIER[tier]["frame"])
+	return BountyList.portrait_box(enemy, TOAST_BIG_PORTRAIT if big else TOAST_PORTRAIT, frame)
+
+
+func _bounty_colour(tier: EnemyRoster.Tier) -> Color:
+	return BOUNTY_TIER[tier]["colour"] if BOUNTY_TIER.has(tier) else Palette.TEXT
+
+
+## The nameplate's mark for the tier: a bone skull, or a gilded crown at twice the size.
+func _tier_mark(tier: EnemyRoster.Tier) -> TextureRect:
+	var boss := tier == EnemyRoster.Tier.BOSS
+	var texture: Texture2D = CombatScene.TIER_MARK[tier]
+	var mark := BountyList.icon(texture, texture.get_width() * (2 if boss else 1))
+	mark.modulate = Palette.GOLD if boss else Color.WHITE
+	return mark
+
+
+## A banner under the fight's own column: `square` beside `lines` under a heading, on the cards'
+## cream, on the character's layer so it stands over the fight. Up for `BANNER_HOLD` whatever
+## happens, then `_on_banner_held` decides. Raised by a unique new to the log and by a bounty filled.
+func _raise_banner(title: String, colour: Color, square: Control, lines: Array[Control]) -> void:
+	_close_banner()
+	# The banner says more than the toast before it did, and stands where it stood.
+	if _toast != null:
+		_toast.queue_free()
 	var layer := _character.get_parent()
 	if Settings.animations == Settings.Anim.DEFAULT:
 		# Added before the panel, so it washes the fight behind it and not the words.
@@ -626,95 +776,90 @@ func _announce_unique(item: Item, title := "Unique Found") -> void:
 	_banner_head.add_theme_constant_override("separation", 6)
 	_banner_head.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	body.add_child(_banner_head)
-	# The unique's own name colour, which is the half of the ramp picked to be read on cream.
-	var heading := UITheme.label(title, item.text_color())
+	var heading := UITheme.label(title, colour)
 	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_banner_head.add_child(heading)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	body.add_child(row)
-	var slot := ItemSlot.make(item)
-	slot.remove_from_group(ItemSlot.GROUP)
-	slot.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	row.add_child(slot)
-	# What the piece *is* and the rule it bends, and none of its numbers: a banner is read in a glance
-	# in the middle of a fight, and the stat and modifier tables are what made it a wall of text. They
-	# are two presses away in the bag, and the rule is the thing that cannot be guessed from the icon.
+	square.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	row.add_child(square)
 	var rows := UITheme.vbox(2, BANNER_WIDTH)
 	rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(rows)
-	rows.add_child(ItemDetails.line(item.display_name(), item.text_color(), BANNER_WIDTH))
-	rows.add_child(ItemDetails.line("%s · level %d" % [item.rarity_name(), item.level],
-			item.text_color(), BANNER_WIDTH, true))
-	rows.add_child(ItemDetails.line(item.effect_text(), Palette.SLOT_TAN_DK, BANNER_WIDTH, true))
-	if item.is_set():
-		rows.add_child(ItemDetails.line(item.set_text(), ItemRarity.SET_TEXT, BANNER_WIDTH, true))
+	for line: Control in lines:
+		rows.add_child(line)
 	layer.add_child(panel)
-	_unique_banner = panel
+	_banner = panel
 	_banner_clicked = false
 	_banner_closable = false
 	# Placed now, again once the labels have laid out -- with the sparks thrown from where it actually
 	# landed -- and again whenever it settles at another size, which is what the X at five seconds does.
-	panel.resized.connect(_place_unique_banner)
-	_place_unique_banner()
-	_place_unique_banner.call_deferred(Settings.animations == Settings.Anim.DEFAULT)
+	panel.resized.connect(_place_banner)
+	_place_banner()
+	_place_banner.call_deferred(Settings.animations == Settings.Anim.DEFAULT)
 	if Settings.animations != Settings.Anim.NONE:
 		panel.scale = Vector2(ui_scale, ui_scale) * 1.4
 		var spring := create_tween()
 		spring.tween_property(panel, "scale", Vector2(ui_scale, ui_scale), 0.25).set_trans(
 				Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	# A beat of slow motion, as an elite find already gets: this is the rarer thing of the two.
-	Juice.hit_stop(get_tree(), 0.12, 0.25)
-	get_tree().create_timer(BANNER_HOLD).timeout.connect(_on_banner_held.bind(panel))
+	# Through a weak reference, not `bind(panel)`: a banner put down before its five seconds has been
+	# freed by then, and a freed Object handed to a `Control` parameter (or captured by a lambda) is an
+	# error logged; a weak reference to it is null and nothing else.
+	var held: WeakRef = weakref(panel)
+	get_tree().create_timer(BANNER_HOLD).timeout.connect(func() -> void:
+		var alive: Control = held.get_ref()
+		if alive != null:
+			_on_banner_held(alive))
 
 
 ## Centred under the fight's top column, which is the one thing it must not cover. Run again whenever
 ## the panel settles at another size (`resized`), so nothing here depends on the labels having laid
 ## out. `spark` throws the puff of gold, and is only ever passed by the deferred first placement, so
 ## it cannot be thrown twice.
-func _place_unique_banner(spark := false) -> void:
-	if _unique_banner == null:
+func _place_banner(spark := false) -> void:
+	if _banner == null:
 		return
 	var view_size := get_viewport_rect().size
 	var top: float = (_combat.hud_bottom() if _combat != null else CombatScene.HUD_MARGIN) + BANNER_GAP
-	_unique_banner.size = _unique_banner.get_combined_minimum_size()
-	var side := _unique_banner.size * ui_scale
+	_banner.size = _banner.get_combined_minimum_size()
+	var side := _banner.size * ui_scale
 	# It springs in about its middle, so that is where the pivot goes -- and a Control is scaled about
 	# its pivot, which draws its corner `pivot * (scale - 1)` back from wherever `position` puts it.
 	# `corner` is where it actually lands; `position` is what has to be set to land it there.
-	_unique_banner.pivot_offset = _unique_banner.size / 2.0
+	_banner.pivot_offset = _banner.size / 2.0
 	var corner := Vector2((view_size.x - side.x) / 2.0, top)
-	_unique_banner.position = corner + _unique_banner.pivot_offset * (ui_scale - 1.0)
+	_banner.position = corner + _banner.pivot_offset * (ui_scale - 1.0)
 	if spark:
-		Juice.burst(_unique_banner.get_parent(), corner + side / 2.0,
+		Juice.burst(_banner.get_parent(), corner + side / 2.0,
 				Palette.GOLD, 28, 220.0, 3.0, 0.7)
 
 
 ## The five seconds are up. Someone who was swinging through them has read it or does not care, so it
 ## goes; someone who stopped to read gets an X, and from then on the next swing puts it down as well.
 func _on_banner_held(panel: Control) -> void:
-	if _unique_banner != panel:
+	if _banner != panel:
 		return
 	if _banner_clicked:
-		_close_unique_banner()
+		_close_banner()
 		return
 	_banner_closable = true
 	var shut := UITheme.button("", "CloseButton", "Close")
 	shut.custom_minimum_size = Vector2(UITheme.icon_size("CloseButton"))
 	shut.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	shut.pressed.connect(_close_unique_banner)
+	shut.pressed.connect(_close_banner)
 	# The X widens the heading; `resized` is what centres the panel again on its new size.
 	_banner_head.add_child(shut)
 
 
-## Puts it down, from the timer, the X, a swing past the five seconds, a second unique, or the fight
+## Puts it down, from the timer, the X, a swing past the five seconds, another banner, or the fight
 ## ending -- so it is never left standing over a verdict.
-func _close_unique_banner() -> void:
-	if _unique_banner == null:
+func _close_banner() -> void:
+	if _banner == null:
 		return
-	var panel := _unique_banner
-	_unique_banner = null
+	var panel := _banner
+	_banner = null
 	_banner_head = null
 	_banner_clicked = false
 	_banner_closable = false
@@ -987,7 +1132,9 @@ func _break_camp() -> void:
 	map.show()
 	_show_corner(true)
 	# It was placed against the fight's HUD, which has just gone, and the verdict stands where it does.
-	_close_unique_banner()
+	_close_banner()
+	if _toast != null:
+		_toast.queue_free()
 	_sync_character()
 	bag_page.refresh_gold()
 	if levels > 0:
@@ -1017,6 +1164,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# Straight off the fight rather than through the scene: what a body was is the fight's business,
 	# and the boards want the monster's name, not a drop. The ledger decides when it reaches them.
 	fight.enemy_died.connect(_on_enemy_died)
+	ledger.bounty_counted.connect(_on_bounty_counted)
 	_combat = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 	_combat.finished.connect(_on_combat_finished.bind(cell))
 	_combat.retry.connect(_on_combat_retry.bind(cell))
@@ -1323,6 +1471,16 @@ func _refresh_bag_room() -> void:
 func _on_enemy_died(index: int) -> void:
 	if _combat != null and index < _combat.fight.lineup.size():
 		ledger.add_kill(_combat.fight.lineup[index])
+
+
+## The ledger counted a body against the accepted bounty. The kill that fills it is the banner alone;
+## every one before it is the toast.
+func _on_bounty_counted(enemy: String, have: int, need: int) -> void:
+	var tier := EnemyRoster.tier_of(enemy)
+	if have >= need:
+		_announce_bounty(enemy, tier, have, need)
+	else:
+		_toast_bounty(enemy, tier)
 
 
 ## Empties a farm run's pouch into the bag. Called on the way out of a run and on the way out of the
@@ -1807,11 +1965,11 @@ func _input(event: InputEvent) -> void:
 	# A swing decides how the unique banner goes away: one in its first five seconds closes it at the
 	# end of them, one after that closes it there and then. Never marked handled, so the click still
 	# reaches the fight and costs the player nothing.
-	if (_unique_banner != null and event is InputEventMouseButton and event.pressed
+	if (_banner != null and event is InputEventMouseButton and event.pressed
 			and event.button_index == MOUSE_BUTTON_LEFT):
 		_banner_clicked = true
 		if _banner_closable:
-			_close_unique_banner()
+			_close_banner()
 
 
 func _unhandled_input(event: InputEvent) -> void:

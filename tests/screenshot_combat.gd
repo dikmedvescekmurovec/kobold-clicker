@@ -7,7 +7,9 @@ extends "res://tests/harness.gd"
 ## a farm run with its counter, a find in the air, its full-bag warning and its way out, the popup the
 ## counter opens and one find opened inside it, the banner a unique new to the collection log raises
 ## (`combat_unique.png`, and `combat_unique_held.png` with the X the five seconds leave on one nobody
-## clicked through). Also
+## clicked through), the toast a counted bounty kill raises and the banner the kill that fills it
+## raises, for a common and for an elite (`combat_bounty.png`, `combat_bounty_filled.png`,
+## `combat_bounty_elite.png`). Also
 ## saves a contact sheet of every enemy's idle frame at the size the fight draws it, which is what
 ## catches a frame or crop measured wrong in EnemyRoster, and one shot per environment on its own
 ## backdrop (combat_area_<env>_<variant>.png), and the dungeon: a floor of it, its boss and the
@@ -166,11 +168,37 @@ func _shoot_fight() -> void:
 	main._on_loot_dropped(0, Item.rolled_unique("stonebreaker", prize_rng, 8))
 	await create_timer(0.7).timeout
 	await _save(combat, "combat_unique.png")
-	main._on_banner_held(main._unique_banner)
+	main._on_banner_held(main._banner)
 	await _save(combat, "combat_unique_held.png")
-	main._close_unique_banner()
-	main._combat = null
+	main._close_banner()
 	# Let it finish fading, or it hangs over the next shot.
+	await create_timer(0.5).timeout
+
+	# A bounty kill counted: the toast short of the job, the banner that fills it, and an elite's --
+	# which is its one kill and so the banner alone, framed and written large. The posting is put on a
+	# board by hand and the ledger's word given by hand (`_on_bounty_counted`), so no fight is played.
+	var board: Dictionary = main.inventory.towns.visit(Vector2i(130, 128))
+	BountyBoard.restock(board, PackedStringArray([ENVIRONMENT]), CELL, prize_rng)
+	var posting: Dictionary = BountyBoard.bounties(board)[0]
+	posting[BountyBoard.ENEMY] = fight.lineup[0]
+	posting[BountyBoard.NEED] = 5
+	BountyBoard.accept(main.inventory.towns, posting)
+	main._on_bounty_counted(fight.lineup[0], 3, 5)
+	await create_timer(0.3).timeout
+	await _save(combat, "combat_bounty.png")
+	main._on_bounty_counted(fight.lineup[0], 5, 5)
+	await create_timer(0.7).timeout
+	await _save(combat, "combat_bounty_filled.png")
+	main._close_banner()
+	await create_timer(0.5).timeout
+	posting[BountyBoard.ENEMY] = fight.lineup[fight.enemies - 1]
+	posting[BountyBoard.NEED] = 1
+	main._on_bounty_counted(fight.lineup[fight.enemies - 1], 1, 1)
+	await create_timer(0.7).timeout
+	await _save(combat, "combat_bounty_elite.png")
+	main._close_banner()
+	BountyBoard.abandon(posting)
+	main._combat = null
 	await create_timer(0.5).timeout
 
 	# Part way through the first enemy, with a frame between the blows so the numbers floating off

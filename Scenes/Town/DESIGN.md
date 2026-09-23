@@ -128,6 +128,22 @@ the frontier pays frontier money with no second curve to keep in step. Those wer
 well over its bodies' purses: a common one about five and a half tile fights' gold for under one
 fight of work.
 
+**A posting can promise a piece of gear, and says only what kind and how good (2026-09-22).** The
+user asked for bounties that reward an item besides gold -- a unique, an elite piece, a +1 -- with the
+card never saying exactly what: the item's type and its rarity by its border, a generic icon for a
+unique, and "+1" on an ascended one. So a posting carries a *promise* (`item`: kind, rarity, plus) and
+not a piece: the piece is rolled at the hand-in (`reward_item`), which is what keeps the exact reward
+out of the save and off the card at once, and the card's square (`ItemSlot.teaser`) is the kind's
+plainest material's icon in the rarity's frame -- the plainest, because the material is rolled with the
+piece and the icon must not say it. A unique wears the fortuneteller's relic mark and no kind at all:
+its base is one of eight, and "a unique amulet" would narrow twenty-seven to four. The rarity is a
+boss's own draw, the elite posting taking the better of two, the way a vendor's shelf takes the better
+of two levels; the piece's level is the town's ceiling for the posting's tier, as a shelf piece's is,
+so no board hands out gear the ground would not. `ITEM_CHANCE` (a common posting one in two, an elite
+always), `UNIQUE_CHANCE` (one in twenty, one in five) and `PLUS_CHANCE` (one in four) are unplayed
+dials. A promised piece has to fit in the bag, and the Claim greys over a full one by the vendor's
+rule rather than paying the gold and dropping the piece: the two are one reward.
+
 **One bounty at a time, and it has to be accepted.** The first cut had no accept button -- reading
 the board took all three postings on, and a kill counted against every open one anywhere. The user
 turned that down: a bounty is a job taken on, not three tallies that run by themselves, so each

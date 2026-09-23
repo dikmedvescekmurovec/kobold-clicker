@@ -31,6 +31,11 @@ signal tab_changed(service: String)
 signal offer_changed(item: Item)
 ## The fortuneteller was paid to put the star over the chest on `cell`. The star is the main scene's.
 signal chest_bought(cell: Vector2i)
+## A bounty handed in paid this piece, said before the bag or the log hears of it, so the main scene
+## can raise the banner a unique new to the log gets off a body.
+signal item_claimed(item: Item)
+## A bounty handed in paid this much experience, already banked: the main scene fills the bar with it.
+signal xp_claimed(amount: int)
 ## The roads lifted settlements out of the dark: the map has changed and wants saving.
 signal towns_revealed
 ## The relic reading showed the unique `id`: the main scene raises the collection log's banner over it.
@@ -511,9 +516,17 @@ func _fill_board() -> void:
 		# was taken on, so the button is here and nowhere else. The figure is on the card above it and
 		# in the tooltip: beside Info there is no room for a reward that grows with the walk.
 		elif BountyBoard.ready(bounty):
-			action = UITheme.priced_button("Claim", float(bounty.get(BountyBoard.GOLD, 0)), "LightButton",
-					"Hand this in for %s gold" % BigNumber.format(float(bounty.get(BountyBoard.GOLD, 0))),
-					false)
+			var gold := float(bounty.get(BountyBoard.GOLD, 0))
+			var prize := BountyBoard.reward_text(bounty)
+			var xp := int(bounty.get(BountyBoard.XP, 0))
+			action = UITheme.priced_button("Claim", gold, "LightButton", "Hand this in for %s gold%s%s"
+					% [BigNumber.format(gold), "" if xp == 0 else ", %d experience" % xp,
+						"" if prize.is_empty() else " and " + prize], false)
+			# A promised piece has to go in the bag, which the vendor's own rule refuses on a full one.
+			var why := _why_not(0.0, not prize.is_empty())
+			if not why.is_empty():
+				action.disabled = true
+				action.tooltip_text = why
 			action.pressed.connect(_on_claim_pressed.bind(bounty))
 		if action != null:
 			action.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -544,17 +557,29 @@ func _on_accept_pressed(bounty: Dictionary) -> void:
 ## One bounty handed in. It pays exactly once -- `claim` is what refuses the second press -- and the
 ## posting stays on the board, spent, until the restock fills its place.
 func _on_claim_pressed(bounty: Dictionary) -> void:
+	if not BountyBoard.item_of(bounty).is_empty() and inventory.is_full():
+		return
 	if not BountyBoard.claim(bounty):
 		return
 	var reward := float(bounty.get(BountyBoard.GOLD, 0))
-	var orb := str(bounty.get(BountyBoard.ORB, ""))
+	var orbs := BountyBoard.orbs_of(bounty)
+	var xp := int(bounty.get(BountyBoard.XP, 0))
 	inventory.gold += reward
-	if not orb.is_empty():
+	for orb: String in orbs:
 		inventory.add_orb(orb)
+	if xp > 0:
+		inventory.add_xp(xp)
+		xp_claimed.emit(xp)
+	# The promised piece, rolled now: the log hears of a unique as it would off a body.
+	var piece := BountyBoard.reward_item(bounty, _cell, _stock_rng)
+	if piece != null:
+		item_claimed.emit(piece)
+		inventory.note_unique(piece.unique)
+		inventory.add(piece)
 	# The last one handed in is what brings new work, there and then.
 	BountyBoard.restock(_drawer, _board_land(), _cell, _stock_rng)
-	print("Claimed the bounty on %s for %s gold%s" % [str(bounty.get(BountyBoard.ENEMY, "")),
-			BigNumber.format(reward), "" if orb.is_empty() else " and one " + orb])
+	print("Claimed the bounty on %s for %s gold, %d experience and %s" % [str(bounty.get(BountyBoard.ENEMY, "")),
+			BigNumber.format(reward), xp, orbs])
 	inventory.save(_save_path)
 	_fill()
 	layout()

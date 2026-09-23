@@ -621,6 +621,12 @@ static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := f
 ##
 ## `level` is the piece's own, not the tile's, so a poor roll on deep ground is still a wooden sword.
 static func _weighted(rng: RandomNumberGenerator, level := 1) -> String:
+	return _tier_at(roll_kind(rng), level, rng)
+
+
+## One kind by weight, and nothing more: what a bounty's card promises, the material being drawn
+## only when the piece is handed over. Integer weights, so walking the table cannot drift.
+static func roll_kind(rng: RandomNumberGenerator) -> String:
 	var total := 0
 	for kind: String in KINDS:
 		total += int(KINDS[kind]["weight"])
@@ -628,8 +634,8 @@ static func _weighted(rng: RandomNumberGenerator, level := 1) -> String:
 	for kind: String in KINDS:
 		pick -= int(KINDS[kind]["weight"])
 		if pick < 0:
-			return _tier_at(kind, level, rng)
-	return items()[0]
+			return kind
+	return KINDS.keys()[0]
 
 
 ## One of a kind's materials: an even draw between the best `level` has unlocked and the one under

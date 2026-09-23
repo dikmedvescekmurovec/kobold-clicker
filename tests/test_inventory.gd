@@ -3789,29 +3789,29 @@ func _test_collection() -> bool:
 	drop_rng.seed = 7
 	main._on_loot_dropped(0, Item.rolled_unique("stonebreaker", drop_rng, 5))
 	await process_frame
-	_check(main._unique_banner != null, "a unique new to the log raises its banner")
+	_check(main._banner != null, "a unique new to the log raises its banner")
 	_check(not main._banner_closable and main._banner_head.get_child_count() == 1,
 			"with no way to put it down for the first five seconds")
 	# A click inside those five seconds says the player is fighting, so it goes at the end of them.
 	main._banner_clicked = true
-	main._on_banner_held(main._unique_banner)
-	_check(main._unique_banner == null, "a player who was clicking has it taken away at the end of them")
+	main._on_banner_held(main._banner)
+	_check(main._banner == null, "a player who was clicking has it taken away at the end of them")
 	main._on_loot_dropped(0, Item.rolled_unique("stonebreaker", drop_rng, 5))
-	_check(main._unique_banner == null, "a second copy of one already logged raises nothing")
+	_check(main._banner == null, "a second copy of one already logged raises nothing")
 	main._on_loot_dropped(0, LootTable.roll("Baby Dragon", drop_rng, true, 5))
-	_check(main._unique_banner == null, "and an ordinary find raises nothing")
+	_check(main._banner == null, "and an ordinary find raises nothing")
 	# Nobody clicked: it grows an X instead of going, and stays until it is pressed or a swing lands.
 	main._on_loot_dropped(0, Item.rolled_unique("headsman", drop_rng, 5))
 	await process_frame
-	main._on_banner_held(main._unique_banner)
-	_check(main._unique_banner != null and main._banner_closable
+	main._on_banner_held(main._banner)
+	_check(main._banner != null and main._banner_closable
 			and main._banner_head.get_child_count() == 2,
 			"a player who sat still gets an X, and it stays")
 	var swing := InputEventMouseButton.new()
 	swing.button_index = MOUSE_BUTTON_LEFT
 	swing.pressed = true
 	main._input(swing)
-	_check(main._unique_banner == null, "and the next swing puts it down")
+	_check(main._banner == null, "and the next swing puts it down")
 	main.queue_free()
 	_clear_save()
 	return true

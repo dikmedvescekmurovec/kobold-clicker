@@ -36,10 +36,20 @@ const REWARD_COIN := 8
 const BAR_HEIGHT := 8
 const BAR_BORDER := 1
 const COUNT_OVERHANG := 9
+## What stands for a unique on a reward square: the fortuneteller's relic mark, since the piece's own
+## icon would say which unique it is, which is the one thing the card must not.
+const UNIQUE_MARK := preload("res://Assets/Fortune/relic.png")
+## The experience a posting pays, behind the fight's own gem at twice its 6 px, as the verdict draws it.
+const XP_GEM := preload("res://Assets/UI/xp_gem.png")
+const REWARD_GEM := 12
 ## A card: the air inside its frame, how tall the monster's picture stands, and the air around it.
 const CARD_PAD := 4
 const PORTRAIT := 40
 const PORTRAIT_PAD := 2
+## The card's picture: a square as big as an item's, so an elite's frame lies on it at its own pixels.
+const CARD_PORTRAIT := ItemSlot.SIDE - PORTRAIT_PAD * 2
+## The promised piece on a card, at half an item square: the orbs' size, drawn at its own pixels.
+const REWARD_SQUARE := ItemSlot.SIDE / 2
 
 var inventory: Inventory
 var view: MapBuilder
@@ -86,7 +96,7 @@ func open() -> void:
 		var drawer: Dictionary = inventory.towns.towns[at]
 		if not BountyBoard.seen(drawer):
 			continue
-		var town := _town_name(TownState.spot(at))
+		var town := town_name(TownState.spot(at))
 		var posted := 0
 		for bounty: Dictionary in BountyBoard.bounties(drawer):
 			if not BountyBoard.is_active(bounty):
@@ -133,43 +143,31 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 	card.add_child(lines)
 	var enemy := str(bounty.get(BountyBoard.ENEMY, ""))
 	var known := EnemyRoster.ENEMIES.has(enemy)
-	var frame := PanelContainer.new()
-	frame.add_theme_stylebox_override("panel", flat(Palette.SLOT_TAN, PORTRAIT_PAD))
-	var face := TextureRect.new()
-	# Set before the texture and the size: a TextureRect's minimum is its own texture until
-	# `expand_mode` says otherwise, and the packs' frames run to 245 px.
-	face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	face.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	face.texture = EnemyRoster.portrait(enemy) if known else null
-	face.custom_minimum_size = Vector2(0, PORTRAIT)
-	frame.add_child(face)
-	lines.add_child(frame)
+	# An elite's picture wears its frame and its name the nameplate's skull, as the fight's toast does.
+	var elite := known and EnemyRoster.tier_of(enemy) == EnemyRoster.Tier.ELITE
+	var face := portrait_box(enemy, CARD_PORTRAIT,
+			ItemRarity.frame(ItemRarity.Rarity.ELITE) if elite else null)
+	face.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	lines.add_child(face)
 	var need := int(bounty.get(BountyBoard.NEED, 0))
-	# How many is said once: by the bar once the work is taken on, beside the name until then.
+	# How many is said once: by the bar once the work is taken on, beside the name until then -- and
+	# not at all for one body, where "x1" says nothing.
 	var taken := BountyBoard.is_active(bounty)
 	# The one bounty that is out takes the whole column it is given, on the board and the journal alike.
 	if taken:
 		card.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var title := UITheme.label(enemy if taken else "%s x%d" % [enemy, need])
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lines.add_child(title)
+	var heading := HBoxContainer.new()
+	heading.alignment = BoxContainer.ALIGNMENT_CENTER
+	heading.add_theme_constant_override("separation", 3)
+	if elite:
+		var skull: Texture2D = CombatScene.TIER_MARK[EnemyRoster.Tier.ELITE]
+		heading.add_child(icon(skull, skull.get_width()))
+	heading.add_child(UITheme.label(enemy if taken or need <= 1 else "%s x%d" % [enemy, need]))
+	lines.add_child(heading)
 	if taken:
 		lines.add_child(progress_bar(int(bounty.get(BountyBoard.HAVE, 0)), need, inner))
-	var pay := HBoxContainer.new()
-	pay.alignment = BoxContainer.ALIGNMENT_CENTER
-	pay.add_theme_constant_override("separation", 2)
-	pay.add_child(_icon(Coins.icon(), REWARD_COIN))
-	pay.add_child(UITheme.label(BigNumber.format(float(bounty.get(BountyBoard.GOLD, 0))),
-			Palette.TEXT_SOFT, true))
-	# The orb as its own picture, the tray's size, and its name for whoever hovers: a word here was
-	# the one reward on the card that had to be read rather than seen.
-	var orb := str(bounty.get(BountyBoard.ORB, ""))
-	if not orb.is_empty():
-		var gem := _icon(OrbTable.icon(orb), OrbSlot.ICON)
-		gem.tooltip_text = orb
-		pay.add_child(gem)
-	lines.add_child(pay)
+	lines.add_child(_sums(bounty))
+	lines.add_child(_goods(bounty))
 
 	var details := UITheme.vbox(LINE_GAP, inner)
 	# Open on the journal, and on the board once the land has been paid for: that is what was bought.
@@ -214,13 +212,101 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 	return card
 
 
+## What a posting pays that is a figure: the gold behind a coin and the experience behind a gem.
+static func _sums(bounty: Dictionary) -> HBoxContainer:
+	var sums := _reward_row(6)
+	var purse := HBoxContainer.new()
+	purse.add_theme_constant_override("separation", 2)
+	purse.add_child(icon(Coins.icon(), REWARD_COIN))
+	purse.add_child(UITheme.label(BigNumber.format(float(bounty.get(BountyBoard.GOLD, 0))),
+			Palette.TEXT_SOFT, true))
+	sums.add_child(purse)
+	var xp := int(bounty.get(BountyBoard.XP, 0))
+	if xp > 0:
+		var worth := HBoxContainer.new()
+		worth.add_theme_constant_override("separation", 2)
+		worth.add_child(icon(XP_GEM, REWARD_GEM))
+		worth.add_child(UITheme.label(BigNumber.format(float(xp)), Palette.TEXT_SOFT, true))
+		sums.add_child(worth)
+	return sums
+
+
+## What a posting pays that goes in the bag: each orb once, in the tray's order, with how many on its
+## corner as the tray writes it, and its name for whoever hovers -- then the promised piece, its kind's
+## plainest picture in its rarity's frame and no more, since what it is exactly is rolled at the
+## hand-in. A unique shows the relic mark, not a kind.
+static func _goods(bounty: Dictionary) -> HBoxContainer:
+	# Wide enough for a count hanging off an orb's corner (`OrbSlot.COUNT_OVERHANG`).
+	var goods := _reward_row(8)
+	var orbs := BountyBoard.orbs_of(bounty)
+	for orb: String in OrbTable.ORBS:
+		var count := orbs.count(orb)
+		if count == 0:
+			continue
+		var gem := icon(OrbTable.icon(orb), OrbSlot.ICON)
+		gem.tooltip_text = orb if count == 1 else "%d %s" % [count, orb]
+		if count > 1:
+			gem.add_child(OrbSlot.count_label(str(count)))
+		goods.add_child(gem)
+	var promise := BountyBoard.item_of(bounty)
+	if not promise.is_empty():
+		var kind := str(promise[BountyBoard.ITEM_KIND])
+		var mark: Texture2D = UNIQUE_MARK if kind.is_empty() \
+				else LootTable.icon(str(LootTable.KINDS[kind]["tiers"][0]))
+		var square := ItemSlot.teaser(mark, ItemRarity.from_name(str(promise[BountyBoard.ITEM_RARITY])),
+				int(promise[BountyBoard.ITEM_PLUS]), BountyBoard.reward_text(bounty).capitalize(),
+				REWARD_SQUARE)
+		square.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		goods.add_child(square)
+	return goods
+
+
+static func _reward_row(gap: int) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", gap)
+	return row
+
+
+## The monster's picture on a tan socket, `side` panel pixels tall: the card's, and the toast's and the
+## banner's a counted kill raises in a fight. With `frame`, that art (`ItemRarity.frame`) is laid over the
+## socket the way `ItemSlot` frames its icon, which is how an elite's or a boss's is set apart.
+static func portrait_box(enemy: String, side: int, frame: Texture2D = null) -> Panel:
+	# A Panel and anchors rather than a PanelContainer: a container lays every child inside its pad,
+	# and the frame has to reach the socket's edge as it does on an `ItemSlot`.
+	var box := Panel.new()
+	box.add_theme_stylebox_override("panel", flat(Palette.SLOT_TAN, PORTRAIT_PAD))
+	box.custom_minimum_size = Vector2.ONE * (side + PORTRAIT_PAD * 2)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var face := TextureRect.new()
+	# Set before the texture and the size: a TextureRect's minimum is its own texture until
+	# `expand_mode` says otherwise, and the packs' frames run to 245 px.
+	face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	face.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	face.texture = EnemyRoster.portrait(enemy) if EnemyRoster.ENEMIES.has(enemy) else null
+	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	face.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, PORTRAIT_PAD)
+	box.add_child(face)
+	if frame != null:
+		var ring := TextureRect.new()
+		ring.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		ring.stretch_mode = TextureRect.STRETCH_SCALE
+		ring.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		ring.texture = frame
+		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ring.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		box.add_child(ring)
+	return box
+
+
 ## The button row along a card's foot, where the board puts its Accept or its Claim beside Info.
 static func actions_of(card: PanelContainer) -> HBoxContainer:
 	return card.get_child(0).get_child(-1)
 
 
 ## A reward's picture at `side` panel pixels, a whole-number step down from its sprite.
-static func _icon(texture: Texture2D, side: int) -> TextureRect:
+static func icon(texture: Texture2D, side: int) -> TextureRect:
 	var icon := TextureRect.new()
 	# Set before the texture and the size: a TextureRect's minimum is its own texture until
 	# `expand_mode` says otherwise, so a 16 px coin asked for 8 comes back 16.
@@ -285,8 +371,9 @@ static func wrapped(text: String, width: float, color: Variant = null) -> Label:
 
 
 ## What the town on a world spot is called. Read off the map, which is what named it -- the drawers
-## are filed by spot, and a spot is not something to show the player.
-func _town_name(spot: Vector2i) -> String:
+## are filed by spot, and a spot is not something to show the player. The main scene asks it for the
+## banner a filled bounty raises, which says where to hand the work in.
+func town_name(spot: Vector2i) -> String:
 	if view == null:
 		return "Town"
 	var called := view.name_of(spot - view.origin)

@@ -142,6 +142,44 @@ static func shadow(item: Item, says: Callable, known := false) -> ItemSlot:
 	return slot
 
 
+## A piece promised and not yet rolled -- a bounty's reward: `mark` on the socket in `rarity`'s frame,
+## with `+n` on the corner if it is ascended. Not an `ItemSlot` in `GROUP`, since there is no piece
+## for the card to write; `label` is its tooltip. `side` is `SIDE` or half of it: at half, `ui_scale` 2
+## draws the icon and the frame at their own pixels, the way the orb tray draws 32 px orbs at 16.
+static func teaser(mark: Texture2D, rarity: ItemRarity.Rarity, plus: int, label: String,
+		side := SIDE) -> ItemSlot:
+	var icon_side := ICON * side / SIDE
+	var slot := ItemSlot.new()
+	slot.custom_minimum_size = Vector2(side, side)
+	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	slot.add_theme_stylebox_override("panel", ItemRarity.slot_style(rarity))
+	slot.tooltip_text = label
+	var icon := TextureRect.new()
+	# Set before the texture and the size: a 16 px mark is asked to stand at the icon's 32.
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_SCALE
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.texture = mark
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.position = Vector2(side - icon_side, side - icon_side) / 2.0
+	icon.size = Vector2(icon_side, icon_side)
+	slot.add_child(icon)
+	var ring := ItemRarity.frame(rarity)
+	if ring != null:
+		var frame := TextureRect.new()
+		frame.name = FRAME_NAME
+		frame.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		frame.stretch_mode = TextureRect.STRETCH_SCALE
+		frame.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		frame.texture = ring
+		frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		frame.size = Vector2(side, side)
+		slot.add_child(frame)
+	if plus > 0:
+		slot.add_child(OrbSlot.count_label("+%d" % plus))
+	return slot
+
+
 ## An empty socket on the equipment panel: the same square with nothing in it.
 ##
 ## `mark` is the pack's own faint drawing of what belongs there, and only the sockets a body does not
