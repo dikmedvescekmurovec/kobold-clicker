@@ -567,6 +567,18 @@ func move_to(cell: Vector2i) -> Array[Vector2i]:
 	return route
 
 
+## Sends the player onto a tile they are about to fight for: to the charted tile beside it (`chart_from`),
+## then the one step onto it, where `player_cell` stands on uncharted land until the fight is decided.
+## Returns the tiles they will cross, empty if the walk didn't start.
+func walk_onto(cell: Vector2i) -> Array[Vector2i]:
+	if not can_chart(cell):
+		return []
+	var route := route_to(chart_from(cell))
+	route.append(cell)
+	map.player.walk(route)
+	return route
+
+
 ## The settlements a homecoming could put the player down on: charted, and not the one they stand on.
 ## One scan of everything they have seen, so ask it on a press and never per frame.
 func homes() -> Array[Vector2i]:
@@ -690,8 +702,12 @@ func chart(cell: Vector2i, sight := 1) -> int:
 		_break_wall()
 	_show(cell, State.CHARTED)
 	var shown := _reveal_around(cell, maxi(sight, 0))
-	# Looking at the tile next door is the first half of going there, so the walk follows by itself.
-	move_to(cell)
+	# The fight was fought standing on it (`walk_onto`), so that is an arrival. Otherwise -- the dev's
+	# skip -- looking at the tile next door is the first half of going there, and the walk follows.
+	if cell == player_cell:
+		_on_player_arrived(cell)
+	else:
+		move_to(cell)
 	return shown
 
 

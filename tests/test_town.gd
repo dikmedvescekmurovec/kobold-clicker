@@ -1956,6 +1956,7 @@ func _test_curses_the_world_feels() -> void:
 	var target := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
 	main.map.select_cell(target)
 	main._on_chart_pressed()
+	main.map.player.finish_walk()
 	main._combat.fight.give_up()
 	main._combat.retry.emit()
 	await process_frame

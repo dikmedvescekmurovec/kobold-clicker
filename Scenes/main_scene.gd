@@ -105,8 +105,13 @@ var _mod_rows: VBoxContainer
 ## not what the town is.
 var town_page: TownPage
 var _town_cell := HexMap.NO_CELL
-## The tile the player is walking over to chart, NO_CELL when they aren't.
-var _chart_target := HexMap.NO_CELL
+## The tile the player is walking onto to fight on, NO_CELL when they aren't, and whether that fight is a
+## run (Farm) rather than the tile's own (Chart).
+var _fight_target := HexMap.NO_CELL
+var _fight_farms := false
+## Where the player set out from to fight for a tile: a lost fight runs them back there, and a save made
+## while they stand on the uncharted tile puts them there.
+var _retreat_cell := HexMap.NO_CELL
 var _env_rows: VBoxContainer
 var _tile_title: Label
 var _level_label: Label
@@ -311,7 +316,12 @@ func _sync_chest() -> void:
 func _save_map() -> void:
 	if _save_blocked or view == null:
 		return
-	view.to_save().save(map_path)
+	var save := view.to_save()
+	# Standing on a tile only being fought for: a game shut now comes back where the walk set out from,
+	# as a lost fight would have left it.
+	if not view.charted(save.player_cell):
+		save.player_cell = _retreat_cell
+	save.save(map_path)
 
 
 ## A save that cannot be honoured, `what` being "map" or "inventory". Nothing is generated and nothing
@@ -1118,13 +1128,9 @@ func _on_chart_pressed() -> void:
 	var cell := map.selected_cell
 	if not view.can_chart(cell) or inventory.encumbered():
 		return
-	# Not next to it yet: walk to the nearest charted tile beside it, and the fight opens on arrival.
-	var from := view.chart_from(cell)
-	if from != view.player_cell:
-		_chart_target = cell
-		print("Walking to %s to chart %s" % [from, cell])
-		view.move_to(from)
-		_update_buttons()
+	# Not on it yet: walk onto it, and the fight opens on arrival. Already on it is a Retry.
+	if view.player_cell != cell:
+		_walk_to_fight(cell, false)
 		return
 	# Asked of the builder and not of what is drawn: a tile taken blind has nothing drawn on it yet.
 	var env := view.env_at(cell)
@@ -1147,10 +1153,24 @@ func _on_farm_pressed() -> void:
 	var cell := map.selected_cell
 	if not view.can_farm(cell) or inventory.encumbered():
 		return
+	if view.player_cell != cell:
+		_walk_to_fight(cell, true)
+		return
 	var env: String = map.get_tile_info(cell).get("env", "")
 	var variant := view.area_variant(cell)
 	print("Farming %s, %s (%s, %s)" % [view.name_of(cell), cell, env, variant])
 	_open_fight(Encounter.farm(cell, env, variant, _mods_of(cell)), cell, true)
+
+
+## Sends the player onto `cell` -- a charted tile to farm, or the uncharted one to chart, which they
+## step onto from the charted tile beside it -- and the fight opens when they arrive (`_on_player_arrived`).
+func _walk_to_fight(cell: Vector2i, farming: bool) -> void:
+	_fight_target = cell
+	_fight_farms = farming
+	_retreat_cell = view.player_cell
+	var route: Array[Vector2i] = view.move_to(cell) if farming else view.walk_onto(cell)
+	print("Walking onto %s to %s it, %d tile(s) away" % [cell, "farm" if farming else "chart", route.size()])
+	_update_buttons()
 
 
 const CHART_TIP := "Fight for this tile and what lies behind it"
@@ -1341,9 +1361,9 @@ func _bank_depths() -> void:
 		inventory.save(inventory_path)
 
 
-## Back from the fight. The tile is charted only if it was won; either way the map comes back
-## exactly as it was left.
-func _on_combat_finished(won: bool, cell: Vector2i) -> void:
+## Back from the fight. The tile is charted only if it was won, and the player stays on it; a lost one
+## runs them back to where they set out from, unless `retrying` keeps them there for the next go.
+func _on_combat_finished(won: bool, cell: Vector2i, retrying := false) -> void:
 	var kills: int = _combat.fight.kills()
 	# Read before the fight is freed, and before banking, which zeroes the run's own pouch.
 	var earned: float = _combat.fight.gold
@@ -1366,11 +1386,14 @@ func _on_combat_finished(won: bool, cell: Vector2i) -> void:
 		# Nothing about the map moves for a run. The tile was already taken; the loot is the whole of it.
 		print("Farmed %s, %d slain" % [cell, kills])
 	elif won:
-		print("Charted %s, showing %d tile(s) behind it; walking there" % [cell, view.chart(cell, _sight())])
+		print("Charted %s, showing %d tile(s) behind it" % [cell, view.chart(cell, _sight())])
 		_credit_walls()
 	else:
 		print("Lost the fight for %s; it stays uncharted" % cell)
 	var world_lost := not won and not ledger.farming and Curses.NO_SECOND_CHANCES in inventory.curses
+	# Off land that is not theirs. Not onto the black screen, where the world is already gone.
+	if not won and not ledger.farming and not retrying and not world_lost:
+		view.move_to(_retreat_cell)
 	ledger.farming = false
 	if map.selected_cell != HexMap.NO_CELL:
 		_panel.show()
@@ -1425,7 +1448,7 @@ func _mods_of(cell: Vector2i) -> Array[String]:
 ## Retry under a lost verdict. Out through the one door every fight leaves by, so what it earned is
 ## banked and its kills counted, and back in through Chart, so the second go is opened like the first.
 func _on_combat_retry(cell: Vector2i) -> void:
-	_on_combat_finished(false, cell)
+	_on_combat_finished(false, cell, true)
 	# Under No Second Chances the loss just ended the world, and there is no second go.
 	if _transcend_page != null:
 		return
@@ -1449,12 +1472,15 @@ func _on_player_arrived(cell: Vector2i) -> void:
 	_sync_chest()
 	_save_map()
 	_update_buttons()
-	if _chart_target != HexMap.NO_CELL:
-		var target := _chart_target
-		_chart_target = HexMap.NO_CELL
+	if _fight_target != HexMap.NO_CELL:
+		var target := _fight_target
+		_fight_target = HexMap.NO_CELL
 		# Selecting it again is what the fight reads, in case the player clicked elsewhere on the way.
 		map.select_cell(target)
-		_on_chart_pressed()
+		if _fight_farms:
+			_on_farm_pressed()
+		else:
+			_on_chart_pressed()
 	# Where standing on a settlement becomes true: walking to one, and the walk a won settlement fight
 	# sends the player on when it charts the tile. Last, so a walk that ends in a fight has opened it
 	# first and a pop-up holds that fight still rather than letting its clock run under it.

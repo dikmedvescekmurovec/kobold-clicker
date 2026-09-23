@@ -1216,6 +1216,7 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	var target := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
 	main.map.select_cell(target)
 	main._on_chart_pressed()
+	main.map.player.finish_walk()
 	_check(not main._bag_button.visible, "the button is out of the way of the fight")
 	var fight: Encounter = main._combat.fight
 	_check(fight.guarantee_elite, "the first elite is promised a drop")
@@ -1480,13 +1481,11 @@ func _test_the_map_keeps_what_dropped() -> bool:
 				"and the same item %d, modifiers and all" % i)
 	_check(saved.first_sword_taken, "the promise is remembered across a restart")
 
-	# A second fight is on its own merits. Winning the first sent the player walking onto the tile,
-	# and nothing can be fought for while they are on their way, so let them arrive first.
-	main.map.player.finish_walk()
-	await process_frame
+	# A second fight is on its own merits. The player walks onto the tile before it opens.
 	var next_cell := HexGrid.neighbor(target, HexGrid.Edge.E)
 	main.map.select_cell(next_cell)
 	main._on_chart_pressed()
+	main.map.player.finish_walk()
 	_check(main._combat != null, "a second fight starts")
 	if main._combat != null:
 		_check(not main._combat.fight.guarantee_elite, "the second fight promises nothing")

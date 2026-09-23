@@ -1333,7 +1333,10 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 	# Losing changes nothing.
 	main.map.select_cell(target)
 	main._on_chart_pressed()
-	_check(main._combat != null, "pressing Chart starts a fight")
+	_check(main._combat == null and main.view.walking, "pressing Chart walks the player onto the tile first")
+	main.map.player.finish_walk()
+	_check(main.view.player_cell == target, "onto the tile itself")
+	_check(main._combat != null, "and the fight starts there")
 	_check(not main.map.visible and main.map.process_mode == Node.PROCESS_MODE_DISABLED,
 			"the map stops while the fight is on")
 	main._combat._on_terminate_pressed()
@@ -1348,16 +1351,25 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 	_check(main._combat != null and main._combat != first and main._combat.cell == target,
 			"Retry opens the same tile's fight afresh")
 	_check(not main.view.charted(target) and not main.map.visible, "with nothing charted by the loss")
+	_check(main.view.player_cell == target and not main.view.walking, "and the player still on the tile")
+	# Shut mid-fight, the save has the player back where they set out from, as a loss would.
+	main._save_map()
+	_check(MapSave.load_from(SCRATCH_MAP, []).player_cell == MapBuilder.CENTER,
+			"a save made on the tile being fought for puts the player back where they came from")
 	main._combat.fight.give_up()
 	main._combat._on_back_pressed()
 	await process_frame
 	_check(main._combat == null, "the fight is torn down")
 	_check(main.map.visible and main.map.process_mode == Node.PROCESS_MODE_INHERIT, "and the map is back")
 	_check(not main.view.charted(target), "a lost tile stays uncharted")
-	_check(main.view.can_chart(target), "and can be fought for again straight away")
+	_check(main.view.walking, "and the player runs back off it")
+	main.map.player.finish_walk()
+	_check(main.view.player_cell == MapBuilder.CENTER, "to the tile they set out from")
+	_check(main.view.can_chart(target), "and it can be fought for again")
 
-	# Winning charts it, exactly as pressing Chart used to.
+	# Winning charts it, and the player stays on it.
 	main._on_chart_pressed()
+	main.map.player.finish_walk()
 	var fight: Encounter = main._combat.fight
 	_play(fight, 10000)
 	_check(fight.victory, "the rematch is won")
@@ -1367,12 +1379,11 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 	await process_frame
 	_check(main.view.charted(target), "a won tile is charted")
 	_check(main.map.visible, "and the map is back")
+	_check(main.view.player_cell == target and not main.view.walking, "with the player staying on it")
 
 	# Escape: Terminate on a run, Back under its verdict, then the tile panel's X.
-	main.map.player.finish_walk()
 	main._on_farm_pressed()
-	main.map.player.finish_walk()
-	_check(main._combat != null and main._combat.fight.endless, "a run starts on the won tile")
+	_check(main._combat != null and main._combat.fight.endless, "a run starts on the won tile, where they stand")
 	var escape := InputEventAction.new()
 	escape.action = "ui_cancel"
 	escape.pressed = true
@@ -1401,8 +1412,8 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 			"and once more closes the tile panel")
 	main.map.select_cell(target)
 
-	# A tile away from the player: they walk to the charted tile beside it first, and the fight opens there.
-	main.map.player.finish_walk()
+	# A tile away from the player: they walk through the charted tile beside it and onto it, and the fight
+	# opens there.
 	var far_side := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.W)
 	main.map.select_cell(far_side)
 	_check(main._chart_button.visible and not main._chart_button.disabled and not main._move_button.visible and not main._farm_button.visible, "only the buttons that can be pressed show")
@@ -1410,10 +1421,24 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 	_check(main._combat == null and main.view.walking, "charting a tile out of reach walks there first")
 	_check(not main._chart_button.visible, "and hides the buttons on the way")
 	main.map.player.finish_walk()
-	_check(main.view.player_cell == MapBuilder.CENTER and main._combat != null, "the fight opens on arrival")
+	_check(main.view.player_cell == far_side and main._combat != null, "the fight opens on arrival")
 	main._combat.fight.give_up()
 	main._combat._on_back_pressed()
 	await process_frame
+	main.map.player.finish_walk()
+	_check(main.view.player_cell == target, "and a loss runs them all the way back to where they set out from")
+
+	# Farming a tile away from the player walks there too, and they stay when the run ends.
+	main.map.select_cell(MapBuilder.CENTER)
+	main._on_farm_pressed()
+	_check(main._combat == null and main.view.walking, "farming a tile away walks there first")
+	main.map.player.finish_walk()
+	_check(main.view.player_cell == MapBuilder.CENTER and main._combat != null and main._combat.fight.endless,
+			"and the run opens on arrival")
+	main._combat.fight.stop()
+	main._combat._on_back_pressed()
+	await process_frame
+	_check(not main.view.walking and main.view.player_cell == MapBuilder.CENTER, "a run ended leaves them where it was")
 	main.queue_free()
 
 
@@ -2857,10 +2882,9 @@ func _test_a_world_under_the_fog() -> void:
 	var blind := HexGrid.neighbor(rim, HexGrid.Edge.E)
 	main.map.select_cell(rim)
 	main._on_chart_pressed()
+	main.map.player.finish_walk()
 	_play(main._combat.fight, 10000)
 	main._combat._on_back_pressed()
-	await process_frame
-	main.map.player.finish_walk()
 	await process_frame
 	_check(main.view.charted(rim) and not main.view.seen(blind), "a won tile comes out of the fog alone")
 
@@ -2875,11 +2899,13 @@ func _test_a_world_under_the_fog() -> void:
 	_check(main.view.to_save().names.get(blind, "") == "", "and looking at it has not named it")
 	_check(main._chart_button.visible, "Chart is offered on it")
 	main._on_chart_pressed()
+	main.map.player.finish_walk()
 	_check(main._combat != null and main._combat.fight.env == main.view.env_at(blind) and main._combat.fight.env != "",
 			"and the fight is on the land that is really there (%s)" % main._combat.fight.env)
 	main._combat.fight.give_up()
 	main._combat._on_back_pressed()
 	await process_frame
+	main.map.player.finish_walk()
 
 	# The torch: a ring of sight back, read as the tile is charted.
 	var torch := Item.rolled(LootTable.BROKEN_TORCH, ItemRarity.Rarity.COMMON, RandomNumberGenerator.new())
@@ -2887,10 +2913,9 @@ func _test_a_world_under_the_fog() -> void:
 	_check(main.inventory.equip(torch, Equipment.Socket.OFFHAND) and main._sight() == 1, "the Broken Torch in hand is a ring of sight")
 	main.map.select_cell(blind)
 	main._on_chart_pressed()
+	main.map.player.finish_walk()
 	_play(main._combat.fight, 10000)
 	main._combat._on_back_pressed()
-	await process_frame
-	main.map.player.finish_walk()
 	await process_frame
 	_check(main.view.charted(blind) and main.view.seen(HexGrid.neighbor(blind, HexGrid.Edge.E)),
 			"and the tile taken with it shows the ring behind it")
