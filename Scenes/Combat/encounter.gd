@@ -936,7 +936,7 @@ func _glass() -> int:
 
 
 ## Whether the weapon swings on its own at all: it has a speed, and neither the Berserker's Band nor
-## the Berserker's World has stilled it. `Camp.hunts` asks the same question of the same place.
+## the Berserker's World has stilled it.
 func swings() -> bool:
 	return attack_speed > 0.0 and not "berserk" in effects and not _cursed_with(Curses.BERSERKERS_WORLD)
 

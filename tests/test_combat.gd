@@ -2921,8 +2921,7 @@ func _test_more_curses() -> bool:
 	# Berserker's World: no swing of its own, clicks doubled, and the Band's share added to it.
 	var bare: Encounter = one.call([], {"damage": 3.0, "attack_speed": 2.0})
 	var berserk: Encounter = one.call([Curses.effect(Curses.BERSERKERS_WORLD)], {"damage": 3.0, "attack_speed": 2.0})
-	_check(bare.swings() and not berserk.swings() and not Camp.hunts(berserk),
-			"in a Berserker's World the weapon never swings, so nothing holds a camp")
+	_check(bare.swings() and not berserk.swings(), "in a Berserker's World the weapon never swings")
 	var full := berserk.hp
 	berserk.advance(0.9)
 	_check(berserk.hp == full, "a second of standing there costs the enemy nothing")

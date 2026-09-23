@@ -140,13 +140,8 @@ func _test_prices() -> bool:
 	for orb: String in OrbTable.ORBS:
 		var value := TownPrices.orb_value(orb, TOWN_CELL)
 		_check(value > 0, "%s is worth something" % orb)
-		_check(TownPrices.orb_sell_price(orb, TOWN_CELL)
-				== maxf(1.0, roundf(value * TownPrices.SELL_SHARE)), "%s sells at the share" % orb)
-		_check(TownPrices.orb_sell_price(orb, TOWN_CELL) < value,
-				"%s is never bought back for what it fetched" % orb)
 		_check(TownPrices.orb_value(orb, Vector2i(30, 0)) > value, "%s is worth more out deep" % orb)
 	_check(TownPrices.orb_value("Orb of Nothing", TOWN_CELL) == 0, "an orb this build has no weight for is worth nothing")
-	_check(TownPrices.orb_sell_price("Orb of Nothing", TOWN_CELL) == 0, "and fetches nothing")
 	return true
 
 
@@ -795,7 +790,7 @@ func _test_selling() -> void:
 			"and a level is cleared")
 
 	# At the gear merchant the same two buttons buy instead.
-	page.shop(PackedStringArray([TownServices.GEAR]), TOWN_CELL)
+	page.shop(PackedStringArray([TownServices.GEAR]))
 	page._select_item(inventory.items.find(piece))
 	var sell := _deep_button(page._actions, "Sell")
 	_check(sell != null and _deep_button(page._actions, "Discard") == null,
@@ -860,17 +855,17 @@ func _test_selling() -> void:
 	_check(inventory.orb_count("Orb of Chaos") == held and inventory.gold == price,
 			"the gear merchant does not buy orbs")
 
-	# At the orb vendor the tray sells and the gear button is gone.
-	page.shop(PackedStringArray([TownServices.ORBS]), TOWN_CELL)
+	# The orb vendor buys neither gear nor orbs: a press with no piece open picks the orb up.
+	page.shop(PackedStringArray([TownServices.ORBS]))
 	page._select_item(0)
 	_check(_deep_button(page._actions, "Discard") != null and _deep_button(page._actions, "Sell") == null,
 			"the orb vendor does not buy gear")
 	page._select_item(-1)
-	var orb_price := TownPrices.orb_sell_price("Orb of Chaos", TOWN_CELL)
 	page._on_orb_pressed("Orb of Chaos")
-	_check(inventory.orb_count("Orb of Chaos") == held - 1, "one orb left the tray")
-	_check(inventory.gold == price + orb_price and orb_price > 0,
-			"and the purse holds its price (%d, want %d)" % [inventory.gold, price + orb_price])
+	_check(inventory.orb_count("Orb of Chaos") == held and inventory.gold == price,
+			"nor orbs")
+	_check(page._armed == "Orb of Chaos", "the press picked the orb up")
+	page._on_orb_pressed("Orb of Chaos")
 
 	# With a piece open the tray is the crafting tray it has always been, vendor or not.
 	page._select_item(0)
@@ -878,10 +873,10 @@ func _test_selling() -> void:
 	page._on_orb_pressed("Orb of Chaos")
 	_check(inventory.orb_count("Orb of Chaos") == in_hand - 1,
 			"a piece open makes the tray craft rather than sell")
-	_check(inventory.gold == price + orb_price, "and nothing was paid for the orb it spent")
+	_check(inventory.gold == price, "and nothing was paid for the orb it spent")
 
 	# A board is a counter for work, not for goods: nothing is bought or sold over one.
-	page.shop(PackedStringArray([TownServices.BOUNTIES]), TOWN_CELL)
+	page.shop(PackedStringArray([TownServices.BOUNTIES]))
 	page._select_item(0)
 	_check(_deep_button(page._actions, "Discard") != null and _deep_button(page._actions, "Sell") == null,
 			"over a bounty board a piece is thrown away rather than sold")
@@ -914,7 +909,7 @@ func _test_orb_on_a_shelf() -> void:
 	page._stock_rng.seed = WORLD_SEED
 	page.open("Testholm", PackedStringArray([TownServices.GEAR]), TOWN_CELL, Vector2i(140, 128),
 			TownWorld.Tier.MEDIUM)
-	bag.shop(PackedStringArray([TownServices.GEAR]), TOWN_CELL)
+	bag.shop(PackedStringArray([TownServices.GEAR]))
 	var drawer := inventory.towns.visit(Vector2i(140, 128))
 	# A common piece put on the shelf by hand, so transmutation has something to do whatever was rolled.
 	var rng := RandomNumberGenerator.new()
@@ -1058,8 +1053,19 @@ func _test_buying() -> void:
 	_check(inventory.orb_count(orb) == 1 and inventory.gold == 0,
 			"paid for one orb (%d held, %d left)" % [inventory.orb_count(orb), inventory.gold])
 	_check(VendorStock.orbs(drawer)[0].is_empty(), "and its square is empty")
-	_check(TownPrices.orb_sell_price(orb, TOWN_CELL) < orb_price,
-			"what it sells back for is less than it cost")
+
+	# Trading up: three of the orb before it in the tray for one, and nothing short of three.
+	inventory.orbs = {"Orb of Transmutation": 2}
+	page._on_upscale("Orb of Augmentation")
+	_check(inventory.orb_count("Orb of Transmutation") == 2 and inventory.orb_count("Orb of Augmentation") == 0,
+			"two orbs trade up to nothing")
+	inventory.add_orb("Orb of Transmutation", 2)
+	page._on_upscale("Orb of Augmentation")
+	_check(inventory.orb_count("Orb of Transmutation") == 1 and inventory.orb_count("Orb of Augmentation") == 1,
+			"three trade up to one of the next")
+	page._on_upscale("Orb of Transmutation")
+	_check(inventory.orb_count("Orb of Transmutation") == 1, "and nothing trades up to the first")
+	_check(Inventory.load_from(TEST_PATH).orb_count("Orb of Augmentation") == 1, "and the trade was saved")
 	page.queue_free()
 	await process_frame
 

@@ -51,10 +51,7 @@ func _ready() -> void:
 	_panel.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_panel)
 	# Scrolled, like the journal: the uniques run to more rows than a 648 px window holds.
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var scroll := UITheme.scroll()
 	UITheme.body_of(_panel).add_child(scroll)
 	_rows = UITheme.vbox(BountyList.ROW_GAP, BagPage.WIDTH)
 	scroll.add_child(_rows)

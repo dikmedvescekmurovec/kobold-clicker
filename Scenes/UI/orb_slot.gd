@@ -107,8 +107,8 @@ func _gui_input(event: InputEvent) -> void:
 	if not _live:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		accept_event()  # Before the emit, which may redraw this slot out of the tree (SkillSlot's reason).
 		pressed.emit(orb)
-		accept_event()
 
 
 ## The numeral hung off a square's bottom-right corner: an orb's count, and an item's `+n` (`ItemSlot`).

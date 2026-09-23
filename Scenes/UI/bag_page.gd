@@ -103,12 +103,9 @@ var _save_path: String
 var _ui_scale: float
 
 ## What the counter the bag is standing at buys, by `TownServices` name -- the town page's open tab
-## and not everything the town offers, so the gear merchant's Sell button and the orb vendor's tray
-## are never both live at once. Empty everywhere else, which is what leaves Discard as Discard and the
-## tray as crafting alone.
+## and not everything the town offers, so only the gear merchant turns Discard into Sell. Empty
+## everywhere else. Orbs are never bought back: the tray is crafting alone at every counter.
 var _services: PackedStringArray = []
-## That town's cell, which is what an orb is worth there.
-var _town_cell := Vector2i.ZERO
 
 var _panel: VBoxContainer
 var _count: Label
@@ -202,7 +199,7 @@ func _ready() -> void:
 	top.add_child(_gold)
 
 	# Wheel scrolling is the container's, dragging is `_on_grid_input`'s; no bar is drawn.
-	_scroll = _scroll_box()
+	_scroll = UITheme.scroll()
 	_scroll.gui_input.connect(_on_grid_input)
 	# The buttons beside the selected square move with it.
 	_scroll.get_v_scroll_bar().value_changed.connect(func(_at: float) -> void: _place_actions())
@@ -268,9 +265,8 @@ func open() -> void:
 ## Stands the bag at a counter that buys `services`, or takes it away from one with none. The bag is
 ## where a sale happens rather than a second grid on the town page: what the player wants to sell is
 ## already laid out here, and two grids of the same items is two places to hunt through.
-func shop(services: PackedStringArray, town_cell := Vector2i.ZERO) -> void:
+func shop(services: PackedStringArray) -> void:
 	_services = services
-	_town_cell = town_cell
 	open()
 
 
@@ -333,14 +329,6 @@ func column_origin(gap: float, top: float) -> Vector2:
 ## `TranscendPage` stands its way back beside it.
 func panel_corner() -> Vector2:
 	return _panel.position
-
-
-static func _scroll_box() -> ScrollContainer:
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	return scroll
 
 
 ## Everything redrawn from the inventory, reopening whatever was open.
@@ -1066,16 +1054,11 @@ func _on_orb_pressed(orb: String) -> void:
 	var item := _open_piece()
 	if _purse.orb_count(orb) <= 0:
 		return
-	# With a vendor beside the bag and no piece open, the square is a sale; with a piece open it is a
-	# craft, exactly as it always was. So standing in a town never costs the player the crafting tray,
-	# and closing the piece they have open is the whole of how they switch between the two.
-	# Anywhere else a press with no piece open picks the orb up (`_armed`), and a second one puts it down.
+	# A press with no piece open picks the orb up (`_armed`), and a second one puts it down. Orbs are
+	# never sold: a vendor only sells them.
 	if item == null:
-		if _buys(TownServices.ORBS):
-			_sell_orb(orb)
-		else:
-			_armed = "" if orb == _armed else orb
-			refresh()
+		_armed = "" if orb == _armed else orb
+		refresh()
 		return
 	_craft(orb, item)
 
@@ -1149,29 +1132,10 @@ func _dim_for_orb(slot: Control, item: Item) -> void:
 		slot.modulate = OrbSlot.DIM
 
 
-## One orb over the counter. Spent first and paid second, the way crafting applies first and spends
-## second: `spend_orb` is false when there is none to spend, so nothing is ever paid for an orb the
-## player does not have.
-func _sell_orb(orb: String) -> void:
-	var price := TownPrices.orb_sell_price(orb, _town_cell)
-	if not _purse.spend_orb(orb):
-		return
-	_purse.gold += price
-	print("Sold %s for %s gold" % [orb, BigNumber.format(price)])
-	_save()
-	refresh()
-
-
-## What a vendor beside the bag pays for one of these, and 0 where none does -- which is what the card
-## reads to decide whether to quote a price or count what is held.
-func _orb_price(orb: String) -> float:
-	return TownPrices.orb_sell_price(orb, _town_cell) if _buys(TownServices.ORBS) else 0.0
-
-
 ## Placed now and again deferred: the first pass measures labels that have not laid out yet.
 func _on_orb_hovered(orb: String, slot: OrbSlot) -> void:
 	_orb_card.fill(orb, _purse.super_orbs if SuperOrbTable.has(orb) else _purse.orb_count(orb),
-			_open_piece(), _orb_price(orb))
+			_open_piece())
 	_orb_card.show()
 	_place_orb_card(slot.get_global_rect())
 	_place_orb_card.call_deferred(slot.get_global_rect())

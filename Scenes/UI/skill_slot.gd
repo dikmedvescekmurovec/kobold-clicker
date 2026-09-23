@@ -94,8 +94,10 @@ func _draw() -> void:
 ## decide, and a press that does nothing still leaves the card saying why.
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		pressed.emit(id)
+		# Accepted first: the press redraws the tree, and a slot out of the tree cannot accept, which
+		# let the press through to the map under the page.
 		accept_event()
+		pressed.emit(id)
 
 
 static func make(which: String, rank: int, open: bool) -> SkillSlot:

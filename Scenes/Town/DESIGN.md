@@ -202,7 +202,7 @@ The grey is the statement; the reason is for whoever asks, which is what a toolt
 
 ## Making the counter obvious
 
-The first cut of this page was two tabs and a sentence telling the player to go and press something in the bag, and the verdict on it was "I don't understand how to buy orbs". A counter has two halves and only one of them is on this page, so **both have to be said on it**: a **Buy** heading over the six squares, each square's price under it in coin and figures, and under the shelf one line saying where the selling happens -- the bag on the left for gear, the orb tray for orbs. Nothing on the page is a verb the player has to guess at.
+The first cut of this page was two tabs and a sentence telling the player to go and press something in the bag, and the verdict on it was "I don't understand how to buy orbs". A counter has two halves and only one of them is on this page, so **both have to be said on it**: a **Buy** heading over the six squares, each square's price under it in coin and figures, and under the shelf one line saying where the selling happens -- the bag on the left, for gear. (Orbs were once sold from the tray too; see below.) Nothing on the page is a verb the player has to guess at.
 
 The price is on the square rather than behind a click because six squares with no numbers on them are six questions, and a shop that has to be opened six times to be read is a shop nobody reads. It is drawn with the coin at half its 16 px sprite, a clean 2:1 step, because a full-size coin takes a fifth of a square's width and leaves a four-figure price nowhere to go. Deep in the map prices run past four figures and the label clips; the whole number is in the square's tooltip and on the Buy button, and this is the one place the interface admits that gold grows faster than a panel can.
 
@@ -230,7 +230,7 @@ The two pages talk to each other in one line each, and both are wired in the mai
 
 Shop mode is pointed at the town page's **open tab**, not at everything the town offers. The gear merchant's Sell button and the orb vendor's tray are never live at the same time, so a town with both is two counters the player walks between rather than one counter that does everything. Inside the bag it is one rule in one place (`_buys`), which is why there is never a Discard sitting next to a Sell for the player to press by mistake: the same button is one or the other.
 
-The orb tray keeps its second job. With a piece open it crafts, exactly as it always has; with nothing open and a vendor beside it, a press is a sale. So standing in a town never costs the player the crafting tray, and closing the piece they have open is the whole of how they switch between the two. Both paths obey the tray's original rule -- apply first and spend second when crafting, spend first and pay second when selling -- so an orb is never consumed for nothing and never paid for twice.
+**Orbs cannot be sold (2026-09-23, the user's ruling).** The tray used to sell an orb when pressed with no piece open beside the orb vendor. That was taken out: an orb vendor sells orbs and buys none, and the tray only crafts, in town and out. In its place the vendor **trades up** (the user's ask, the same day): under the shelf, every orb but the first for three of the one before it in the tray (`OrbTable.UPSCALE_COST`), no gold, so a pile of Transmutations still has a use.
 
 A **worn** piece cannot be sold, for the reason it cannot be discarded: the cap is the bag's alone, and nothing should push the player into stripping what they are wearing.
 

@@ -60,7 +60,8 @@ func _shoot_camp() -> void:
 			Time.get_unix_time_from_system() - 3.0 * 3600.0)
 	var scene := CampScene.new()
 	main.add_child(scene)
-	scene.begin(camp, ENVIRONMENT, "plain", main.ui_scale)
+	scene.begin(camp, Camp.earned(camp, Time.get_unix_time_from_system()), ENVIRONMENT, "plain",
+			main.ui_scale)
 	await _save(scene, "combat_camp.png")
 	scene.queue_free()
 	await process_frame

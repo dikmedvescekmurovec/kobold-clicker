@@ -53,9 +53,13 @@ func _ready() -> void:
 	_panel = UITheme.titled_panel("Settings", "Close the settings", closed.emit)
 	_panel.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_panel)
+	# Scrolled: a debug build's rows run past a 648 px window's foot. `_rows` is at least as tall as the
+	# scroll, so Reset still sinks to the foot when there is room.
+	var scroll := UITheme.scroll()
+	UITheme.body_of(_panel).add_child(scroll)
 	_rows = UITheme.vbox(ROW_GAP, WIDTH)
 	_rows.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	UITheme.body_of(_panel).add_child(_rows)
+	scroll.add_child(_rows)
 	open()
 
 

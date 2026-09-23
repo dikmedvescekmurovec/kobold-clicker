@@ -366,6 +366,16 @@ static func label(text := "", color: Variant = null, small := false) -> Label:
 	return made
 
 
+## A box for whatever may run past the window's foot: it takes the column's slack and scrolls by the
+## wheel, down only and with no bar drawn. What goes after it in the column stays pinned under it.
+static func scroll() -> ScrollContainer:
+	var made := ScrollContainer.new()
+	made.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	made.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	made.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	return made
+
+
 static func rule(width := 0.0) -> ColorRect:
 	var made := ColorRect.new()
 	made.color = Palette.SLOT_TAN_DK

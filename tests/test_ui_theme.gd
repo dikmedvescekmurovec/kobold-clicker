@@ -19,6 +19,7 @@ func _run() -> void:
 	_check(_test_cursors() == true, "cursor tests ran to the end")
 	_check(_test_tip_card() == true, "tip card tests ran to the end")
 	_check(_test_accordion() == true, "accordion tests ran to the end")
+	_check(await _test_settings_scroll() == true, "settings scroll tests ran to the end")
 	_report("UI theme")
 
 
@@ -591,4 +592,26 @@ func _test_accordion() -> bool:
 	_check(third.is_open(), "until it is opened")
 	for made: Node in [section, again, third]:
 		made.free()
+	return true
+
+
+## A page with more rows than the window holds stays inside it and scrolls: the settings, whose dev
+## rows run past a 648 px window's foot in a debug build.
+func _test_settings_scroll() -> bool:
+	var was := root.size
+	root.size = Vector2i(1152, 648)
+	var page := SettingsPage.new(2.0)
+	root.add_child(page)
+	await process_frame
+	page.layout()
+	await process_frame
+	var scroll: ScrollContainer = page.find_children("*", "ScrollContainer", true, false)[0]
+	_check(page._panel.position.y + page._panel.size.y * 2.0 <= 648.0,
+			"the settings stay inside the window (%s)" % page._panel.size)
+	_check(scroll.is_ancestor_of(page._rows), "and their rows are in a scroll")
+	if OS.is_debug_build():
+		_check(page._rows.size.y > scroll.size.y, "which has more to show than room (%s > %s)"
+				% [page._rows.size.y, scroll.size.y])
+	page.free()
+	root.size = was
 	return true

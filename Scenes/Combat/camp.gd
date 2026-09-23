@@ -1,21 +1,17 @@
 class_name Camp
 extends RefCounted
-## Resting on a tile already taken: the hero holds the ground while the game is away, driving off
-## whatever wanders past. A camp pays gold and experience and nothing else -- no gear, no orbs, no
+## Resting while the game is shut: the hero camps on the best ground taken so far and holds it until
+## the player is back. A camp pays gold and experience and nothing else -- no gear, no orbs, no
 ## bodies for a bounty board. Those are what going in with a sword in your hand is for.
 ##
-## **A camp is not a second economy.** What it pays is the tile's own farm run with nobody clicking:
-## `Encounter.farm` armed from what the player wears, advanced by `advance()` alone, so only the
-## weapon's own swings land. That is played out here for a short sample (`rates`), and what the
-## sample earned a second is what the camp pays a second from then on. So every dial that moves what
-## a tile is worth -- `HP_GROWTH`, `GOLD_GROWTH`, `XP_PER_LEVEL`, a weapon's attack speed -- moves a
-## camp with it, and there is no figure here to keep in step with anything.
+## Nobody sets one up: `main_scene` makes the camp at start-up, from the hour the save was last
+## written, on `MapBuilder.best_farm()`, and pays it there and then.
 ##
-## The rates are worked out **once**, when camp is made, and written into the save beside the hour
-## it was made at. From then on a camp is a sum: `earned()` is the rate times the seconds since.
-## Nothing accrues in memory and there is nothing to bank on the way out, so a game closed while
-## camped needs no exit handling at all -- the next launch reads the same two numbers and finds the
-## same answer the open window would have shown.
+## **A camp is not a second economy.** What it pays is the tile's own farm run played actively --
+## `Encounter.farm` armed from what the player wears, clicked at `CLICK_RATE` -- sampled here
+## (`rates`) and cut to `IDLE_SHARE` of it. So every dial that moves what a tile is worth moves a
+## camp with it, and the one figure here is the share: a full camp (`MAX_SECONDS`, 8 h) pays what an
+## hour of that play pays.
 ##
 ## `ponytail:` sampling rather than playing out the whole night. A night is thousands of kills and
 ## the run's lineup grows one entry per body; the sample keeps the cost flat at a few thousand
@@ -31,12 +27,15 @@ const SAMPLE_MOST := 1800.0
 ## same crumb a drawn fight loses every frame -- so it is small enough that the crumbs stay crumbs.
 const SAMPLE_STEP := 1.0 / 30.0
 
-## How long a hero can hold a camp before rest is needed. The cap is the whole of the overnight
-## promise: a night pays a night, and a fortnight away pays a night as well.
-const MAX_SECONDS := 12.0 * 3600.0
+## How long a hero can hold a camp before rest is needed: a night pays a night, and a fortnight away
+## pays a night as well.
+const MAX_SECONDS := 8.0 * 3600.0
+## The clicks a second the sample plays at: an attentive player, the middle of the balance tables'.
+const CLICK_RATE := 5.0
+## What a camp pays of that active play: a full camp is worth one hour of it.
+const IDLE_SHARE := 3600.0 / MAX_SECONDS
 
-## The keys of the drawer kept in `inventory.camp`, the way `FortuneTeller`'s live in
-## `inventory.fortunes`: `Inventory` never reads what is in one.
+## The keys of the drawer `make` builds.
 ## The Restless curse: a camp that fills in `RESTLESS_SECONDS` and pays `RESTLESS_PAY` times over.
 ## Both are written into the drawer as the camp is made (`MOST`), so a camp is still arithmetic.
 const RESTLESS_SECONDS := 2.0 * 3600.0
@@ -50,27 +49,24 @@ const XP := "xp"
 const KILLS := "kills"
 
 
-## Whether this fight earns anything with nobody clicking. A weapon that does not swing on its own
-## is the one way to camp for nothing, so it is asked before a camp is made rather than found out
-## twelve hours later. The two conditions are `Encounter._swing_weapon`'s own.
-static func hunts(fight: Encounter) -> bool:
-	return fight.swings()
-
-
-## What `fight` earns a second with nobody clicking: gold, experience and bodies. It plays the fight
-## out, so hand it one that is armed and endless and then throw it away.
+## What `fight` earns a second, played actively and cut to `IDLE_SHARE`: gold, experience and bodies.
+## It plays the fight out, so hand it one that is armed and endless and then throw it away.
 static func rates(fight: Encounter) -> Dictionary:
-	if not hunts(fight):
-		return {GOLD: 0.0, XP: 0.0, KILLS: 0.0}
 	var spent := 0.0
+	var click := 0.0
 	while spent < SAMPLE_MOST and (spent < SAMPLE_SECONDS or fight.kills() < SAMPLE_KILLS):
+		click += SAMPLE_STEP * CLICK_RATE
+		while click >= 1.0:
+			fight.hit()
+			click -= 1.0
 		fight.advance(SAMPLE_STEP)
 		spent += SAMPLE_STEP
-	return {GOLD: fight.gold / spent, XP: float(fight.xp) / spent, KILLS: float(fight.kills()) / spent}
+	var share := IDLE_SHARE / spent
+	return {GOLD: fight.gold * share, XP: float(fight.xp) * share, KILLS: float(fight.kills()) * share}
 
 
-## The drawer a camp is saved as: where it stands, what it is called, when it was made and what it
-## earns a second. Everything `earned` needs, so a camp survives any change to the ground under it.
+## The camp: where it stands, what it is called, when it was made and what it earns a second.
+## Everything `earned` needs.
 static func make(cell: Vector2i, place: String, fight: Encounter, at: float) -> Dictionary:
 	var earns := rates(fight)
 	var restless := Curses.effect(Curses.RESTLESS) in fight.effects

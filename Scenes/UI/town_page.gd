@@ -23,7 +23,7 @@ extends Control
 ## The page's X was pressed.
 signal closed
 ## Another counter was opened. The bag beside the page buys what *this* counter buys and nothing else,
-## so the orb vendor's tray and the gear merchant's Sell button are never both live at once.
+## so its Sell button is live only at the gear merchant's.
 signal tab_changed(service: String)
 ## What the page has open off the shelf, or null when it is showing the shelf itself. The bag beside
 ## it redraws around this: what wearing it would replace is the hover card's under Alt, and a purchase
@@ -336,6 +336,9 @@ func _fill() -> void:
 	var body := _scrolled(ROW_GAP)
 	body.add_child(UITheme.label("Buy"))
 	body.add_child(_shelf())
+	if _open_tab == TownServices.ORBS:
+		body.add_child(UITheme.label("Trade up"))
+		body.add_child(_upscales())
 	# New stock now, for gold: pinned at the page's foot, under the scroll, where every counter keeps its buttons -- this shelf only, and dearer every time for good: the town remembers.
 	var price := TownPrices.reroll_price(_cell, VendorStock.rerolls(_drawer, _shelf_key()))
 	var short := _why_not(price, false)
@@ -390,15 +393,53 @@ func _shelf() -> GridContainer:
 	return grid
 
 
+## The orb vendor's trades: every orb but the first, each for `OrbTable.UPSCALE_COST` of the orb
+## before it in the tray, with that orb and the count under it where a price would be. Lit while the
+## player holds enough.
+func _upscales() -> GridContainer:
+	var grid := GridContainer.new()
+	grid.columns = STOCK_COLS
+	grid.add_theme_constant_override("h_separation", STOCK_GAP)
+	grid.add_theme_constant_override("v_separation", STOCK_GAP)
+	for orb: String in OrbTable.orbs():
+		var from := OrbTable.upscale_from(orb)
+		if from.is_empty():
+			continue
+		var held := inventory.orb_count(from)
+		var square := OrbSlot.make(orb, 1, held >= OrbTable.UPSCALE_COST)
+		square.tooltip_text = "Trade %d %s for one %s. You hold %d" % [OrbTable.UPSCALE_COST, from, orb, held]
+		square.pressed.connect(_on_upscale)
+		var cell := UITheme.vbox(2, STOCK_CELL)
+		square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		cell.add_child(square)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 2)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# The same order as `_price_cell`'s coin: set before the texture and the size.
+		var icon := TextureRect.new()
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		icon.texture = OrbTable.icon(from)
+		icon.custom_minimum_size = Vector2(PRICE_COIN, PRICE_COIN)
+		icon.size = Vector2(PRICE_COIN, PRICE_COIN)
+		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(icon)
+		var label := UITheme.label("x%d" % OrbTable.UPSCALE_COST, Palette.TEXT_SOFT)
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(label)
+		cell.add_child(row)
+		grid.add_child(cell)
+	return grid
+
+
 ## A box under the counter's name for whatever is too tall for the page, with `gap` between its rows.
 ## Everything added to it scrolls and everything added to `_rows` after it stays pinned below -- which
 ## is how an open piece's modifiers can run past the foot of the window while its Buy button cannot.
 ## No bar is drawn, the way the bag's own stat block draws none.
 func _scrolled(gap: int) -> VBoxContainer:
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var scroll := UITheme.scroll()
 	_rows.add_child(scroll)
 	var lines := UITheme.vbox(gap, BODY_WIDTH)
 	# At least as tall as the scroll, so a row that asks to expand (an accepted bounty's card) can.
@@ -1074,6 +1115,21 @@ func _on_buy_orb(orb: String, at: int) -> void:
 	layout()
 	# Nothing is open, but the bag still has to hear: the purse it draws and the tray it counts have
 	# both just moved.
+	offer_changed.emit(null)
+
+
+## `OrbTable.UPSCALE_COST` of the orb before this one traded for one of it. No gold changes hands.
+func _on_upscale(orb: String) -> void:
+	var from := OrbTable.upscale_from(orb)
+	if from.is_empty() or inventory.orb_count(from) < OrbTable.UPSCALE_COST:
+		return
+	for i in OrbTable.UPSCALE_COST:
+		inventory.spend_orb(from)
+	inventory.add_orb(orb)
+	print("Traded %d %s for one %s" % [OrbTable.UPSCALE_COST, from, orb])
+	inventory.save(_save_path)
+	_fill()
+	layout()
 	offer_changed.emit(null)
 
 

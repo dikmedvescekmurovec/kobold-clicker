@@ -96,6 +96,9 @@ const RARITY_OF := {
 	"Orb of Exalted": ItemRarity.Rarity.ELITE,
 }
 
+## How many of the orb before it in the tray the orb vendor takes for one orb (`upscale_from`).
+const UPSCALE_COST := 3
+
 static var _icons := {}
 
 
@@ -106,6 +109,13 @@ static func orbs() -> Array:
 
 static func icon_path(orb: String) -> String:
 	return ROOT + str(ORBS[orb]["icon"])
+
+
+## The orb one step before this one in the tray, which the orb vendor trades up to it, or "" for the
+## first, which nothing trades up to.
+static func upscale_from(orb: String) -> String:
+	var at := orbs().find(orb)
+	return orbs()[at - 1] if at > 0 else ""
 
 
 ## The sprite, loaded once. The same cache LootTable keeps, for the same reason: six squares are

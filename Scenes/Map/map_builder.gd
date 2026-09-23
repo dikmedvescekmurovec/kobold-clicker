@@ -500,6 +500,17 @@ func can_farm(cell: Vector2i) -> bool:
 	return not walking and charted(cell) and town_tier(cell) == -1
 
 
+## The best ground taken so far, where the hero camps while the game is shut: the farmable tile
+## farthest out, since a body's worth grows with the distance. NO_CELL before anything is.
+func best_farm() -> Vector2i:
+	var best := HexMap.NO_CELL
+	for cell in _states:
+		if charted(cell) and town_tier(cell) == -1 and (best == HexMap.NO_CELL
+				or HexGrid.distance(CENTER, cell) > HexGrid.distance(CENTER, best)):
+			best = cell
+	return best
+
+
 ## The tier of the settlement on `cell`, or -1 where there is no town. The one place outside this file
 ## a cell is crossed to a world spot for the towns' sake, so nobody else has to know about `origin`.
 func town_tier(cell: Vector2i) -> int:

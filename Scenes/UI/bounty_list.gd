@@ -76,10 +76,7 @@ func _ready() -> void:
 	# Everything on the page scrolls: three postings a board and a board for every town walked into is
 	# more than a 648 px window holds, and a page that cannot be wound down is a page with work hidden
 	# under its own foot.
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var scroll := UITheme.scroll()
 	UITheme.body_of(_panel).add_child(scroll)
 	_rows = UITheme.vbox(ROW_GAP, WIDTH)
 	# At least as tall as the scroll, so the accepted card can take the column.

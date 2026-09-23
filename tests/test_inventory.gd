@@ -1639,7 +1639,7 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 	var extra := _piece(ItemRarity.Rarity.COMMON, 1)
 	main.inventory.items.append(extra)
 	main._update_buttons()
-	_check(main._farm_button.disabled and main._chart_button.disabled and main._camp_button.disabled,
+	_check(main._farm_button.disabled and main._chart_button.disabled,
 			"an overencumbered player cannot fight")
 	_check(main._farm_button.tooltip_text == main.ENCUMBERED_TIP, "and the button says why")
 	main._on_farm_pressed()
@@ -2101,7 +2101,7 @@ func _test_heirlooms() -> bool:
 	await process_frame
 	_check(_by_tooltip(page, "Auto") == null and _by_tooltip(page, "Throw away the") == null,
 			"an heirloom's level has no Auto and no bin")
-	page.shop(PackedStringArray([TownServices.GEAR]), Vector2i(3, 0))
+	page.shop(PackedStringArray([TownServices.GEAR]))
 	page._select_item(0)
 	_check(_deep_button(page, "Sell") == null and _deep_button(page, "Discard") != null,
 			"no counter buys one: Discard stays Discard")

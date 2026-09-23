@@ -93,9 +93,6 @@ var _chart_button: Button
 var _skip_button: Button
 var _move_button: Button
 var _farm_button: Button
-## Rest on the selected tile: the same ground as Farm, held by the weapon alone while the player is
-## away. Greyed rather than hidden where nothing would swing (`_cannot_camp`).
-var _camp_button: Button
 ## What `_update_buttons` last greyed the fights for, so `_process` knows when the bag has crossed the cap.
 var _was_encumbered := false
 var _town_button: Button
@@ -196,9 +193,11 @@ var _tip_queue: Array = []
 var _tip_panel: VBoxContainer
 ## Pulses on corner buttons that have not been pressed yet: the pressed-once id -> its tween.
 var _flashes := {}
-## The camp the player is resting at, while its screen is up; null otherwise. Like a fight, it
-## stands over the hidden map on layer 2 and takes the corner buttons away.
+## What the hero's camp paid for the hours the game was shut, while its screen is up; null otherwise.
+## Like a fight, it stands over the hidden map on layer 2 and takes the corner buttons away.
 var _camp: CampScene
+## The levels that pay brought, celebrated once its screen is gone.
+var _camp_levels := 0
 ## The weather and the day over the map.
 var _ambient: Ambient
 ## The badge pointing at the chest a fortuneteller was paid to find (`_sync_chest`).
@@ -210,6 +209,12 @@ var _aiming := ""
 var _aim_price := 0.0
 var _aim_town := TownWorld.NO_SPOT
 var _aim_panel: VBoxContainer
+
+
+## Closing the window writes the save, so the hour it was shut is the hour a camp pays from.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and inventory != null and not _save_blocked:
+		inventory.save(inventory_path)
 
 
 func _ready() -> void:
@@ -229,6 +234,8 @@ func _ready() -> void:
 	if not problem.is_empty():
 		_refuse_save("inventory", inventory_path, str(problem[0]))
 		return
+	# Before anything below saves over it: the hour the player left is what the camp pays from.
+	var left_at := inventory.saved_at
 	ledger = FightLedger.new(inventory, inventory_path)
 	var save := MapSave.load_from(map_path, problem, MapSave.fingerprint(map.tileset))
 	if not problem.is_empty():
@@ -279,10 +286,8 @@ func _ready() -> void:
 	# The world is decided the moment it is generated, so it is written down then: a first run
 	# killed before the player moves would otherwise come back as somewhere else entirely.
 	_save_map()
-	# Last, over everything the rest of start-up put up: a camp is somewhere the player *is*, so a
-	# game closed at one comes back to it, and the hours it was shut for are the hours it paid for.
-	if not inventory.camp.is_empty():
-		_open_camp()
+	# Last, over everything the rest of start-up put up: the hours the game was shut, paid.
+	_camp_while_away(left_at)
 
 
 ## Points the badge at the chest a fortuneteller was paid to find, for as long as it stands: a chest
@@ -385,23 +390,29 @@ func _build_ui() -> void:
 	_level_label.theme_type_variation = "PanelLabel"
 	rows.add_child(_level_label)
 
+	# The land, the services and the modifiers scroll, the level and the buttons stay pinned: a
+	# fortress past the second wall carries more rows than a 648 px window holds.
+	var scroll := UITheme.scroll()
+	rows.add_child(scroll)
+	var scrolled := UITheme.vbox(6)
+	scroll.add_child(scrolled)
 	_env_rows = VBoxContainer.new()
 	_env_rows.add_theme_constant_override("separation", 4)
 	_env_rows.custom_minimum_size = Vector2(HexTileset.ENV_ICON + 46, 0)
-	rows.add_child(_env_rows)
+	scrolled.add_child(_env_rows)
 
 	# What a settlement on the tile offers, under the land it is built on: the tile says what is there
 	# before the player has walked to it, so the walk can be worth taking for a fortress's smith.
 	_service_rows = VBoxContainer.new()
 	_service_rows.add_theme_constant_override("separation", 4)
-	rows.add_child(_service_rows)
+	scrolled.add_child(_service_rows)
 	_mod_rows = UITheme.vbox(2)
-	rows.add_child(_mod_rows)
+	scrolled.add_child(_mod_rows)
 
-	# Only the buttons that can be pressed are shown (`_update_buttons`), at the column's foot.
+	# Only the buttons that can be pressed are shown (`_update_buttons`), at the column's foot, where
+	# the scroll taking the slack leaves them.
 	var buttons := VBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 4)
-	buttons.size_flags_vertical = Control.SIZE_EXPAND | Control.SIZE_SHRINK_END
 	rows.add_child(buttons)
 	_chart_button = UITheme.button("Chart", "LightButton", CHART_TIP)
 	_chart_button.pressed.connect(_on_chart_pressed)
@@ -425,12 +436,6 @@ func _build_ui() -> void:
 	_farm_button.pressed.connect(_on_farm_pressed)
 	Cursors.wear(_farm_button, Cursors.SWORD)
 	buttons.add_child(_farm_button)
-	# And the same tile left to hold itself: the hours the game is shut are the hours the hero
-	# spends here, and what they drive off pays in coin and experience alone.
-	_camp_button = UITheme.button("Set up camp", "LightButton", CAMP_TIP)
-	_camp_button.pressed.connect(_on_camp_pressed)
-	Cursors.wear(_camp_button, Cursors.BOOT)
-	buttons.add_child(_camp_button)
 	# And a fourth, on the tiles people live on: go inside and trade. It takes standing on the tile
 	# rather than looking at it, because visiting a town is being there.
 	_town_button = UITheme.button("Enter town", "LightButton", "Go inside and see what is traded here")
@@ -1148,38 +1153,35 @@ func _on_farm_pressed() -> void:
 	_open_fight(Encounter.farm(cell, env, variant, _mods_of(cell)), cell, true)
 
 
-## What the Set up camp button says while it can be pressed.
-const CAMP_TIP := "Rest here, and let the hero hold the tile while you are away"
 const CHART_TIP := "Fight for this tile and what lies behind it"
 const FARM_TIP := "Fight here for as long as you like, for the loot"
-## What Chart, Farm and Set up camp say while the bag is over its cap and greys them.
+## What Chart and Farm say while the bag is over its cap and greys them.
 const ENCUMBERED_TIP := "Your bag is too heavy to fight with. Sell or throw away gear until it holds %d or fewer." 		% Inventory.CAPACITY
 
 
-## Why the hero cannot hold a camp, or "" where they can. A camp is fought by the weapon alone --
-## nobody is there to click -- so a weapon that does not swing itself would rest all night for
-## nothing. That is worth saying on the button rather than finding out in the morning. The two
-## conditions are `Camp.hunts`', asked of what is worn rather than of a fight nobody has built yet.
+## Why the hero holds no camp in this world, or "" where they do. Two curses say so in their text.
 func _cannot_camp() -> String:
-	if inventory.encumbered():
-		return ENCUMBERED_TIP
 	if Curses.NO_REST in inventory.curses:
 		return "This world is under No Rest: no camp can be set up in it."
-	if float(inventory.stats().get("attack_speed", 0.0)) <= 0.0:
-		return "Your weapon does not swing on its own, and a camp is held by the weapon alone."
 	if Curses.BERSERKERS_WORLD in inventory.curses:
-		return "This is a Berserker's World: no weapon swings on its own, so nothing would hold a camp."
-	if "berserk" in inventory.effects():
-		return "The Berserker's Band never lets the weapon swing on its own, so nothing would hold this camp."
+		return "This is a Berserker's World: no camp can be set up in it."
 	return ""
 
 
-## Camping the selected tile: the farm run nobody clicks. What it pays an hour is worked out here,
-## once, from the gear the hero stands up in -- and then it is arithmetic (`Camp`), so the hours the
-## game is shut pay exactly what the hours it is open would have.
-func _on_camp_pressed() -> void:
-	var cell := map.selected_cell
-	if not view.can_farm(cell) or not _cannot_camp().is_empty():
+## How long the game has to have been shut for a camp to be worth a screen.
+const CAMP_LEAST := 60.0
+
+
+## The camp nobody sets up: the hours since the save was written at `left_at`, spent on the best
+## ground taken so far (`MapBuilder.best_farm`), paid now and shown over the hidden map the way a
+## fight stands there. Worked out from the gear the hero stands up in, which the shut hours cannot
+## have changed. A camp worth nothing -- a first run, a minute away, a world under No Rest -- is not
+## shown at all.
+func _camp_while_away(left_at: float) -> void:
+	var cell := view.best_farm()
+	var now := Time.get_unix_time_from_system()
+	if left_at <= 0.0 or now - left_at < CAMP_LEAST or cell == HexMap.NO_CELL \
+			or not _cannot_camp().is_empty():
 		return
 	var env: String = map.get_tile_info(cell).get("env", "")
 	# Armed exactly as `_open_fight` arms one, and for the same reason: a camp is that fight. What it
@@ -1187,25 +1189,20 @@ func _on_camp_pressed() -> void:
 	var fight := Encounter.farm(cell, env, view.area_variant(cell), _mods_of(cell))
 	fight.wear(inventory.effects())
 	fight.arm(inventory.stats())
-	inventory.camp = Camp.make(cell, view.name_of(cell), fight, Time.get_unix_time_from_system())
+	var camp := Camp.make(cell, view.name_of(cell), fight, left_at)
+	var earned := Camp.earned(camp, now)
+	if float(earned[Camp.GOLD]) <= 0.0 and int(earned[Camp.XP]) <= 0:
+		return
+	inventory.gold += float(earned[Camp.GOLD])
+	_camp_levels = inventory.add_xp(int(earned[Camp.XP]))
 	inventory.save(inventory_path)
-	print("Camped on %s, %s: %s gold, %d experience and %d bodies an hour"
-			% [view.name_of(cell), cell, BigNumber.format(float(inventory.camp[Camp.GOLD]) * 3600.0),
-				int(float(inventory.camp[Camp.XP]) * 3600.0),
-				int(float(inventory.camp[Camp.KILLS]) * 3600.0)])
-	_open_camp()
-
-
-## Puts the camp on the screen, the way `_open_fight` puts a fight there: the map away behind it,
-## every page and corner button gone, nothing in the top-left to take a press. It is opened both by
-## the button and by start-up, so coming back to a camp and making one look the same.
-func _open_camp() -> void:
-	var cell := Camp.cell_of(inventory.camp)
+	print("Camped %s on %s, %s: %s gold, %d experience, %d driven off"
+			% [Camp.spell_time(float(earned["seconds"])), view.name_of(cell), cell,
+				BigNumber.format(float(earned[Camp.GOLD])), int(earned[Camp.XP]), int(earned[Camp.KILLS])])
 	_camp = CampScene.new()
 	_camp.broke_camp.connect(_break_camp)
 	add_child(_camp)
-	_camp.begin(inventory.camp, str(map.get_tile_info(cell).get("env", "")),
-			view.area_variant(cell), ui_scale)
+	_camp.begin(camp, earned, env, view.area_variant(cell), ui_scale)
 	map.hide()
 	map.process_mode = Node.PROCESS_MODE_DISABLED
 	_close_town()
@@ -1215,18 +1212,11 @@ func _open_camp() -> void:
 	_character.show()
 
 
-## Breaking camp: what the rest earned goes in, the camp is struck, and the map comes back exactly
-## as it was left. The purse and the experience are read from `Camp.earned` -- the same sum the
-## screen has been showing all along -- so what was watched and what is paid cannot differ.
+## Breaking camp: it was paid as it was made, so this takes its screen away and brings the map back
+## exactly as it was left.
 func _break_camp() -> void:
-	var earned := Camp.earned(inventory.camp, Time.get_unix_time_from_system())
-	inventory.camp = {}
-	inventory.gold += float(earned[Camp.GOLD])
-	var levels := inventory.add_xp(int(earned[Camp.XP]))
-	inventory.save(inventory_path)
-	print("Broke camp after %s: %s gold, %d experience, %d driven off"
-			% [Camp.spell_time(float(earned["seconds"])), BigNumber.format(float(earned[Camp.GOLD])),
-				int(earned[Camp.XP]), int(earned[Camp.KILLS])])
+	var levels := _camp_levels
+	_camp_levels = 0
 	_camp.queue_free()
 	_camp = null
 	Input.set_default_cursor_shape(Cursors.ARROW)
@@ -1486,13 +1476,6 @@ func _update_buttons() -> void:
 	_farm_button.disabled = heavy
 	_farm_button.tooltip_text = ENCUMBERED_TIP if heavy else FARM_TIP
 	_was_encumbered = heavy
-	# Camping takes exactly what farming takes -- a tile already won -- because it is that fight
-	# with nobody clicking. Where nothing would swing it is greyed with the reason rather than
-	# taken away: "why can I not camp" is a worse question than the answer.
-	_camp_button.visible = _farm_button.visible
-	var why := _cannot_camp()
-	_camp_button.disabled = not why.is_empty()
-	_camp_button.tooltip_text = why if not why.is_empty() else CAMP_TIP
 	_town_button.visible = view.can_visit(cell)
 	_place_panel()
 
@@ -1991,7 +1974,7 @@ func _on_town_tab_changed(_service: String) -> void:
 ## player walked into, not of the tile they last looked at.
 func _stand_at_counter() -> void:
 	var tab := town_page.open_tab()
-	_counter_page().shop(PackedStringArray() if tab.is_empty() else PackedStringArray([tab]), _town_cell)
+	_counter_page().shop(PackedStringArray() if tab.is_empty() else PackedStringArray([tab]))
 
 
 ## Quitting with a run still on. The pouch goes in rather than evaporating -- a run that is left

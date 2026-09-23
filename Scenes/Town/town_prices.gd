@@ -113,7 +113,7 @@ static func sell_price(item: Item) -> float:
 
 ## What a merchant asks for a piece off its own shelf: what it would pay for one, the other way up.
 ##
-## The same `SELL_SHARE` the orbs are quoted at, and the whole of why there is no loop to stand in at
+## `SELL_SHARE` is the whole of why there is no loop to stand in at
 ## one counter -- buying back what was just sold costs five times what it fetched. Read off
 ## `sell_price` rather than written out again, so the two can never be tuned apart.
 ## What the Rag and Bone Sack pays for a piece thrown away: `SALVAGE_SHARE` of what a trader would
@@ -190,12 +190,6 @@ static func orb_value(orb: String, town_cell: Vector2i) -> float:
 	if weight <= 0.0:
 		return 0.0
 	return maxf(1.0, roundf(gold_at_level(MapBuilder.level_of(town_cell)) * ORB_BODIES * commonest() / weight))
-
-
-## What a vendor pays for one orb: `SELL_SHARE` of what it asks, the same share gear is sold at.
-static func orb_sell_price(orb: String, town_cell: Vector2i) -> float:
-	var value := orb_value(orb, town_cell)
-	return 0.0 if value <= 0.0 else maxf(1.0, roundf(value * SELL_SHARE))
 
 
 ## The weight of the orb that falls most often, which every other orb's price is a multiple of.

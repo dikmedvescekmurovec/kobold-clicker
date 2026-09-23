@@ -109,18 +109,6 @@ static func _gear_value(level: int, tier: int, plain_only := false) -> float:
 	return 0.0 if share <= 0.0 else total / share
 
 
-## What a vendor pays for one orb that fell, averaged over how often each one falls.
-static func _orb_value(level: int) -> float:
-	var cell := _cell(level)
-	var total := 0.0
-	var share := 0.0
-	for orb: String in OrbTable.ORBS:
-		var weight := float(OrbTable.ORBS[orb]["weight"])
-		share += weight
-		total += weight * float(TownPrices.orb_sell_price(orb, cell))
-	return 0.0 if share <= 0.0 else total / share
-
-
 ## What the ground pays, per fight and per run, and what the run's finds fetch on top of it.
 func _income() -> void:
 	print("\n-- What the ground pays --")
@@ -134,12 +122,10 @@ func _income() -> void:
 			return "%.2f" % _run_gear()))
 	_row("  what it sells for", _each(func(level: int) -> String: return _gold(_run_gear_gold(level))))
 	_row("orbs found per run", _each(func(_level: int) -> String: return "%.2f" % _run_orbs()))
-	_row("  what they sell for", _each(func(level: int) -> String: return _gold(_run_orb_gold(level))))
 	_row("selling, share of the purse", _each(func(level: int) -> String:
-			return "%.1f%%" % (100.0 * (_run_gear_gold(level) + _run_orb_gold(level)) / _run_gold(level))))
+			return "%.1f%%" % (100.0 * _run_gear_gold(level) / _run_gold(level))))
 	_row("  keeping rare and better", _each(func(level: int) -> String:
-			return "%.1f%%" % (100.0 * (_run_gear_gold(level, true) + _run_orb_gold(level))
-					/ _run_gold(level))))
+			return "%.1f%%" % (100.0 * _run_gear_gold(level, true) / _run_gold(level))))
 
 
 ## What a town asks, against that.
@@ -185,10 +171,9 @@ func _orbs() -> void:
 		row += ("%.1f" % (TownPrices.ORB_BODIES * TownPrices.commonest()
 				/ float(OrbTable.ORBS[orb]["weight"]))).lpad(9)
 		for level: int in LEVELS:
-			row += ("%s/%s" % [_gold(TownPrices.orb_value(orb, _cell(level))),
-					_gold(TownPrices.orb_sell_price(orb, _cell(level)))]).lpad(CELL_W)
+			row += _gold(TownPrices.orb_value(orb, _cell(level))).lpad(CELL_W)
 		print(row)
-	print("buy/sell. A body at those levels: %s" % [_each(func(level: int) -> String:
+	print("A body at those levels: %s" % [_each(func(level: int) -> String:
 			return _gold(TownPrices.gold_at_level(level)))])
 
 
@@ -225,7 +210,7 @@ func _verdicts() -> void:
 			return "%.1f" % (BountyBoard.NEED_ELITE * _purse(level, EnemyRoster.Tier.ELITE)
 					/ _fight_gold(level))))
 	_row("run's selling, in fights", _each(func(level: int) -> String:
-			return "%.2f" % ((_run_gear_gold(level) + _run_orb_gold(level)) / _fight_gold(level))))
+			return "%.2f" % (_run_gear_gold(level) / _fight_gold(level))))
 
 
 ## One ordinary tile's purse: the rabble and the elite that ends it.
@@ -259,10 +244,6 @@ func _run_orbs() -> float:
 	var elites := float(RUN_KILLS) / float(Encounter.ELITE_EVERY)
 	return (RUN_KILLS - elites) * _orb_chance(EnemyRoster.Tier.COMMON) \
 			+ elites * _orb_chance(EnemyRoster.Tier.ELITE)
-
-
-func _run_orb_gold(level: int) -> float:
-	return _run_orbs() * _orb_value(level)
 
 
 ## What a board pays for `need` of that tier, the way `BountyBoard._posting` prices one.

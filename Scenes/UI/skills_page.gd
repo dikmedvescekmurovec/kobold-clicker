@@ -55,9 +55,17 @@ func _ready() -> void:
 	_transcend.pressed.connect(_on_transcend_pressed)
 	top.add_child(_transcend)
 
+	# Scrolled under the points, which stay pinned: the trees fit a 648 px window and no more.
+	# Padded by what a skill draws past its square (the ring, the count), which the scroll would clip.
+	var scroll := UITheme.scroll()
+	rows.add_child(scroll)
+	var pad := MarginContainer.new()
+	pad.add_theme_constant_override("margin_left", SkillSlot.RING)
+	pad.add_theme_constant_override("margin_right", SkillSlot.COUNT_OVERHANG)
+	scroll.add_child(pad)
 	var trees := HBoxContainer.new()
 	trees.add_theme_constant_override("separation", TREE_GAP)
-	rows.add_child(trees)
+	pad.add_child(trees)
 	for tree: String in SkillTree.trees():
 		var column := UITheme.vbox(4)
 		trees.add_child(column)

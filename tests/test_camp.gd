@@ -1,7 +1,7 @@
 extends "res://tests/harness.gd"
 ## Headless checks for camping (`Scenes/Combat/camp.gd`). Run from the project folder:
 ##   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/test_camp.gd
-## Samples real farm runs and does the arithmetic a night of one comes to, with no scene and no window.
+## Samples real farm runs and does the arithmetic a night of one comes to, then camps through the scene.
 
 const SCRATCH_INVENTORY := "user://test_camp_inventory.json"
 ## The scene test explores and saves, so never the player's own two files.
@@ -21,28 +21,21 @@ func _run() -> void:
 	_report("camp")
 
 
-## A camp is armed from the player's gear and fought by the weapon alone: a hero whose weapon does
-## not swing itself earns nothing at all, and a better weapon earns more.
+## A camp is the farm run played actively, cut to a share: a hero whose weapon does not swing
+## still earns by the clicks, a better weapon earns more, and a full camp is an hour of play.
 func _test_a_camp_is_the_farm_run_nobody_clicks() -> bool:
-	var bare := Camp.rates(_armed(0.0, 1.0))
-	_check(float(bare[Camp.GOLD]) == 0.0, "a weapon that does not swing on its own earns no gold")
-	_check(float(bare[Camp.KILLS]) == 0.0, "and drives nothing off")
-	_check(not Camp.hunts(_armed(0.0, 1.0)), "and cannot hold a camp at all")
+	var bare := Camp.rates(_armed(0.0, 4.0))
+	_check(float(bare[Camp.GOLD]) > 0.0, "clicks alone bring back gold")
+	_check(float(bare[Camp.KILLS]) > 0.0, "and drive monsters off")
 
 	var slow := Camp.rates(_armed(1.0, 4.0))
 	var fast := Camp.rates(_armed(4.0, 4.0))
-	_check(float(slow[Camp.KILLS]) > 0.0, "a weapon that swings drives monsters off")
-	_check(float(slow[Camp.GOLD]) > 0.0, "and brings back gold")
-	_check(float(slow[Camp.XP]) > 0.0, "and experience")
+	_check(float(slow[Camp.XP]) > 0.0, "a camp brings back experience")
 	_check(float(fast[Camp.KILLS]) > float(slow[Camp.KILLS]),
 			"a faster weapon drives more off in the same hour")
 	_check(float(fast[Camp.GOLD]) > float(slow[Camp.GOLD]), "and brings back more gold")
-
-	# The Berserker's Band stops the weapon swinging itself, so it stops a camp dead.
-	var berserk := _armed(4.0, 4.0)
-	berserk.effects = ["berserk"]
-	_check(not Camp.hunts(berserk), "a hero whose weapon never swings itself cannot camp")
-	_check(float(Camp.rates(berserk)[Camp.KILLS]) == 0.0, "and would drive nothing off")
+	_check(is_equal_approx(Camp.IDLE_SHARE * Camp.MAX_SECONDS, 3600.0),
+			"a full camp pays one hour of active play")
 	return true
 
 
@@ -80,73 +73,65 @@ func _test_what_a_camp_pays() -> bool:
 	return true
 
 
-## A camp goes into the save and comes back the same camp, and a save from before there were camps
-## reads as a hero who is not resting anywhere.
+## The hour the save was written goes into it and comes back, and a version 22 save camped by hand
+## counts from that camp's hour.
 func _test_a_camp_survives_the_save() -> bool:
 	_clear()
 	var inventory := Inventory.new()
-	inventory.camp = Camp.make(TILE, "Somewhere", _armed(4.0, 4.0), 1000.0)
-	var owed := Camp.earned(inventory.camp, 1000.0 + 3600.0)
-	_check(inventory.save(SCRATCH_INVENTORY), "an inventory with a camp saves")
-
+	_check(inventory.save(SCRATCH_INVENTORY), "an inventory saves")
 	var problem: Array = []
 	var read := Inventory.load_from(SCRATCH_INVENTORY, problem)
 	_check(problem.is_empty(), "and reads back without complaint")
-	_check(not read.camp.is_empty(), "the camp is still there")
-	_check(Camp.cell_of(read.camp) == TILE, "on the same tile")
-	_check(is_equal_approx(float(Camp.earned(read.camp, 1000.0 + 3600.0)[Camp.GOLD]),
-			float(owed[Camp.GOLD])), "and owing exactly what it owed")
+	_check(absf(read.saved_at - Time.get_unix_time_from_system()) < 5.0, "stamped with the hour it was written")
+	_check(Inventory.new().saved_at == 0.0, "a fresh player has never left")
 
-	_check(Inventory.new().camp.is_empty(), "a fresh player is camped nowhere")
-	# What a version 16 save looks like: every key but this one.
-	var older := Inventory.load_from(SCRATCH_INVENTORY, problem)
-	older.camp = {}
-	older.save(SCRATCH_INVENTORY)
-	_check(Inventory.load_from(SCRATCH_INVENTORY, problem).camp.is_empty(),
-			"and so is a save that was written before camps existed")
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(SCRATCH_INVENTORY))
+	data.erase("saved_at")
+	data["camp"] = {Camp.SINCE: 1000}
+	_write(SCRATCH_INVENTORY, data)
+	_check(Inventory.load_from(SCRATCH_INVENTORY, problem).saved_at == 1000.0,
+			"an old save camped by hand counts from that camp")
+	data.erase("camp")
+	_write(SCRATCH_INVENTORY, data)
+	_check(Inventory.load_from(SCRATCH_INVENTORY, problem).saved_at == 0.0,
+			"and one camped nowhere is owed nothing")
 	_clear()
 	return true
 
 
-## The whole of it through the real scene: the button's gate, the screen standing where a fight
-## stands, what breaking camp pays, and -- the point of the feature -- a game that comes back to the
-## camp it was closed at and pays for the hours it was shut.
+## The whole of it through the real scene: nothing to press, a game opened hours after it was shut
+## camps on the best ground taken, pays at once, and the way back to the map brings the map back.
 func _test_the_map_camps_and_strikes_camp() -> void:
-	for path in [SCRATCH_SCENE_INVENTORY, SCRATCH_SCENE_MAP]:
-		if FileAccess.file_exists(path):
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
-	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
-	main.world_seed = WORLD_SEED
-	main.map_seed = 1
-	main.inventory_path = SCRATCH_SCENE_INVENTORY
-	main.map_path = SCRATCH_SCENE_MAP
-	root.add_child(main)
-	for i in 3:
-		await process_frame
-
-	var cell: Vector2i = main.view.player_cell
-	main.map.select_cell(cell)
-	main._update_buttons()
-	_check(main._camp_button.visible, "the tile under the player offers a camp")
-	_check(main._camp_button.disabled, "greyed while nothing would swing at it")
-	_check(main._cannot_camp() != "", "with the reason on the button")
-
-	# A weapon that swings on its own is the whole of what a camp needs.
-	var sword := Item.rolled("Iron Sword", ItemRarity.Rarity.COMMON, RandomNumberGenerator.new())
-	main.inventory.items.append(sword)
-	main.inventory.equip(sword, main.inventory.equipment.sockets_for(sword)[0])
-	main._update_buttons()
-	_check(not main._camp_button.disabled, "and armed, the button can be pressed")
-
-	main._on_camp_pressed()
+	_clear_scene()
+	var main := await _launch()
+	_check(main._camp == null, "a first run has been nowhere")
+	var best: Vector2i = main.view.best_farm()
+	_check(best != HexMap.NO_CELL, "the start offers ground to camp on")
+	main.inventory.save(SCRATCH_SCENE_INVENTORY)
+	main.free()
 	await process_frame
-	_check(not main.inventory.camp.is_empty(), "pressing it makes camp")
-	_check(main._camp != null, "and stands the camp screen up")
+
+	# Opened again at once: a minute is not worth a camp.
+	main = await _launch()
+	_check(main._camp == null, "a game opened straight back is not camped")
+	var purse: float = main.inventory.gold
+	main.free()
+	await process_frame
+
+	# Three hours shut.
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(SCRATCH_SCENE_INVENTORY))
+	data["saved_at"] = Time.get_unix_time_from_system() - 3.0 * 3600.0
+	_write(SCRATCH_SCENE_INVENTORY, data)
+	main = await _launch()
+	_check(main._camp != null, "a game shut for hours comes back to a camp")
 	_check(not main.map.visible and main.map.process_mode == Node.PROCESS_MODE_DISABLED,
 			"with the map away behind it, as a fight has it")
-	_check(float(main.inventory.camp[Camp.GOLD]) > 0.0, "a camp with a weapon earns")
+	_check(main.inventory.gold > purse, "and it is paid already")
+	_check(main.inventory.level > 1, "experience and all")
+	_check(is_equal_approx(Inventory.load_from(SCRATCH_SCENE_INVENTORY).gold, main.inventory.gold),
+			"and the save says so")
 
-	# Escape does nothing here: a stray press must not end a night's rest.
+	# Escape does nothing here: a stray press must not throw the report away unread.
 	var escape := InputEventAction.new()
 	escape.action = "ui_cancel"
 	escape.pressed = true
@@ -155,41 +140,28 @@ func _test_the_map_camps_and_strikes_camp() -> void:
 	await process_frame
 	_check(main._camp != null, "Escape leaves a camp standing")
 
-	# Closed at a camp and opened again: the same camp, and the hours count.
-	var made: Dictionary = main.inventory.camp.duplicate()
+	var paid: float = main.inventory.gold
+	main._break_camp()
+	await process_frame
+	_check(main._camp == null, "breaking camp takes the screen away")
+	_check(main.map.visible and main.map.process_mode == Node.PROCESS_MODE_INHERIT,
+			"and brings the map back")
+	_check(main.inventory.gold == paid, "without paying twice")
 	main.free()
 	await process_frame
-	var second: Node = load("res://Scenes/main_scene.tscn").instantiate()
-	second.world_seed = WORLD_SEED
-	second.map_seed = 1
-	second.inventory_path = SCRATCH_SCENE_INVENTORY
-	second.map_path = SCRATCH_SCENE_MAP
-	root.add_child(second)
+	_clear_scene()
+
+
+func _launch() -> Node:
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	main.inventory_path = SCRATCH_SCENE_INVENTORY
+	main.map_path = SCRATCH_SCENE_MAP
+	root.add_child(main)
 	for i in 3:
 		await process_frame
-	_check(second._camp != null, "a game closed at a camp comes back to it")
-	_check(Camp.cell_of(second.inventory.camp) == Camp.cell_of(made), "on the same tile")
-
-	# An hour of it, paid out by the way back to the map.
-	second.inventory.camp[Camp.SINCE] = int(Time.get_unix_time_from_system()) - 3600
-	var owed := Camp.earned(second.inventory.camp, Time.get_unix_time_from_system())
-	var purse: float = second.inventory.gold
-	second._break_camp()
-	await process_frame
-	_check(second._camp == null, "breaking camp takes the screen away")
-	_check(second.map.visible and second.map.process_mode == Node.PROCESS_MODE_INHERIT,
-			"and brings the map back")
-	_check(second.inventory.camp.is_empty(), "the camp is struck")
-	_check(is_equal_approx(second.inventory.gold, purse + float(owed[Camp.GOLD])),
-			"the hour's gold is in the purse")
-	_check(second.inventory.level > 1, "and its experience has been spent on levels")
-	_check(Inventory.load_from(SCRATCH_SCENE_INVENTORY).camp.is_empty(),
-			"and the save says so")
-	second.free()
-	await process_frame
-	for path in [SCRATCH_SCENE_INVENTORY, SCRATCH_SCENE_MAP]:
-		if FileAccess.file_exists(path):
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	return main
 
 
 ## A farm run on TILE, armed by hand: `speed` swings a second at `damage` a swing.
@@ -204,6 +176,18 @@ func _armed_on(cell: Vector2i, speed: float, damage: float) -> Encounter:
 	return fight
 
 
+func _write(path: String, data: Dictionary) -> void:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(JSON.stringify(data))
+	file.close()
+
+
 func _clear() -> void:
 	if FileAccess.file_exists(SCRATCH_INVENTORY):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SCRATCH_INVENTORY))
+
+
+func _clear_scene() -> void:
+	for path in [SCRATCH_SCENE_INVENTORY, SCRATCH_SCENE_MAP]:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))

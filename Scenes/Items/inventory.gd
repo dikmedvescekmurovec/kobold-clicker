@@ -53,7 +53,9 @@ const SAVE_PATH := "user://inventory.json"
 ## and `uniques_doubled`, the finds a Forgotten world made count twice; a version 19 save has neither.
 ## 21 adds `skull_budget`; a version 20 save has none, and earns it at its next transcension.
 ## 22 adds `dungeon_depth`; a version 21 save has won no depth of the dungeon.
-const VERSION := 22
+## 23 drops `camp` for `saved_at`, the hour the save was written, which a camp is paid from now; a
+## version 22 save camped somewhere counts from that camp's hour, and one camped nowhere is owed none.
+const VERSION := 23
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -138,11 +140,9 @@ var uniques_new: Array[String] = []
 ## keys are `FortuneTeller`'s, read through its accessors -- this file never names that class.
 var fortunes := {}
 
-## The camp the hero is holding, if any: where it stands, when it was made and what it earns a
-## second, as `Camp.make` built it. A plain dictionary read through `Camp`'s statics, the way
-## `fortunes` is read through `FortuneTeller`'s -- what is in it is the camp's business, not the
-## bag's, and naming `Camp` here is what the cycle checker would bite.
-var camp := {}
+## The unix hour this inventory was last written, stamped by `save` and read back by `load_from`.
+## What the main scene pays a camp from at start-up; 0 is never saved, and owed nothing.
+var saved_at := 0.0
 
 ## The levels the player has told the game to stop bringing. Levels rather than items, because a
 ## level is what a section of the bag is, and rarity is not consulted: a marked level is done with,
@@ -643,6 +643,7 @@ func save(path := SAVE_PATH) -> bool:
 	var kept := []
 	for item in stash().items:
 		kept.append(item.to_dict())
+	saved_at = Time.get_unix_time_from_system()
 	# Indented, so the save can be read and edited by a person.
 	return SafeFile.write(path, JSON.stringify({
 		"version": VERSION,
@@ -665,7 +666,7 @@ func save(path := SAVE_PATH) -> bool:
 		"uniques_found": uniques_found,
 		"uniques_new": uniques_new,
 		"fortunes": fortunes,
-		"camp": camp,
+		"saved_at": saved_at,
 		"heirlooms": {"items": kept, "equipped": stash().equipment.to_dict()},
 		"super_orbs": super_orbs,
 		"walls_credited": walls_credited,
@@ -791,10 +792,12 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var told: Variant = data.get("fortunes", {})
 	if typeof(told) == TYPE_DICTIONARY:
 		inventory.fortunes = told
-	# Version 16 knew nothing about camping: an absent key is a hero who is not resting anywhere.
+	# Version 22 had no `saved_at`: a hero camped by hand counts from that camp, anyone else from never.
 	var resting: Variant = data.get("camp", {})
-	if typeof(resting) == TYPE_DICTIONARY:
-		inventory.camp = resting
+	var since: Variant = resting.get("since", 0.0) if typeof(resting) == TYPE_DICTIONARY else 0.0
+	var stamped: Variant = data.get("saved_at", since)
+	if typeof(stamped) in [TYPE_FLOAT, TYPE_INT]:
+		inventory.saved_at = float(stamped)
 	# Version 13 knew nothing about heirlooms: absent keys are none kept, no pick owed and no wall
 	# paid for -- which is what lets `credit_walls` pay an old save for the walls it has down.
 	var heir: Variant = data.get("heirlooms", {})
