@@ -153,6 +153,11 @@ func _foot(asking: bool) -> VBoxContainer:
 			for part: Control in chests.get_children():
 				part.tooltip_text = "Dev: every chest is drawn on the map, fog or not"
 			foot.add_child(chests)
+			var old := _tick("Show old unique icons", Settings.old_icons,
+					func(on: bool) -> void: Settings.old_icons = on)
+			for part: Control in old.get_children():
+				part.tooltip_text = "Dev: a unique whose icon was replaced wears its old one, from the next time it is drawn"
+			foot.add_child(old)
 			var services := _tick("Show all services", Settings.all_services, func(on: bool) -> void:
 				Settings.all_services = on
 				TownServices.show_all = Settings.show_all_services())

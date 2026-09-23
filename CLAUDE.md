@@ -32,7 +32,7 @@ Each code folder has its own `CLAUDE.md`: a one-line description per file plus t
 
 **Shared** — `Scenes/big_number.gd` (`BigNumber`, how every growing quantity is written) and `Scenes/safe_file.gd` (`SafeFile`, how every save is written); both are covered in `Scenes/CLAUDE.md`.
 
-**Settings** — `Scenes/settings.gd` (`Settings`): static music / sfx / animation level / detailed item lines / what Sell all and the bin do with a unique (`uniques`: Ask / Sell / Keep) / the dev "show all uniques" and "show all chests", kept in `user://settings.cfg`.
+**Settings** — `Scenes/settings.gd` (`Settings`): static music / sfx / animation level / detailed item lines / what Sell all and the bin do with a unique (`uniques`: Ask / Sell / Keep) / the dev "show all uniques", "show all chests" and "show old unique icons", kept in `user://settings.cfg`.
 
 **Main scene** — `Scenes/main_scene.gd`: seeds, zoom, `ui_scale`, start-up and saves, the tile panel and corner buttons, which left-hand page is up, tips, and opening and closing fights. Details and cross-area rules in `Scenes/CLAUDE.md`.
 

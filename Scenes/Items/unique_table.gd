@@ -17,6 +17,8 @@ extends RefCounted
 ## tuned without moving anything else.
 
 const ROOT := "res://Assets/Gear/Unique/"
+## What a replaced icon looked like before (`tools/ui_kit.py`'s `UNIQUE_OLD`), for `Settings.old_icons`.
+const OLD_ROOT := ROOT + "Old/"
 
 ## Lifetime kills before any unique can fall. After that it is chance alone: nothing is promised.
 const FIRST_UNIQUE_KILLS := 100
@@ -278,12 +280,15 @@ static func set_text(id: String) -> String:
 
 
 ## Its own picture, or its base piece's until one has been cut for it (`tools/ui_kit.py`'s
-## `UNIQUE_GEAR`), so a row can be written before its art is.
+## `UNIQUE_GEAR`), so a row can be written before its art is. Under `Settings.show_old_icons()` the
+## picture it had before, where it had another.
 static func icon(id: String) -> Texture2D:
-	if not _icons.has(id):
-		var path := ROOT + id + ".png"
-		_icons[id] = load(path) if ResourceLoader.exists(path) else LootTable.icon(UNIQUES[id]["base"])
-	return _icons[id]
+	var path := ROOT + id + ".png"
+	if Settings.show_old_icons() and ResourceLoader.exists(OLD_ROOT + id + ".png"):
+		path = OLD_ROOT + id + ".png"
+	if not _icons.has(path):
+		_icons[path] = load(path) if ResourceLoader.exists(path) else LootTable.icon(UNIQUES[id]["base"])
+	return _icons[path]
 
 
 ## The uniques a body on `env` can be carrying: the ones that name it, and the ones that name nowhere.

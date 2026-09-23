@@ -30,6 +30,9 @@ static var uniques := Uniques.ASK
 static var all_uniques := false
 ## Dev: every chest on the map is drawn, fog or not. Read through `show_all_chests()`, like the uniques.
 static var all_chests := false
+## Dev: a unique whose icon was replaced wears the one it had before (`UniqueTable.OLD_ROOT`), to
+## compare the two in the bag. Read through `show_old_icons()`, like the uniques.
+static var old_icons := false
 ## Dev: every settlement offers every counter (`TownServices.show_all`). On by default, so read through
 ## `show_all_services()`, which also answers no off the player's own settings file: the tests and the
 ## screenshot scripts still see what a town of each tier really has.
@@ -50,6 +53,7 @@ static func load_settings() -> void:
 	uniques = clampi(int(file.get_value(SECTION, "uniques", uniques)), Uniques.ASK, Uniques.KEEP) as Uniques
 	all_uniques = bool(file.get_value(SECTION, "all_uniques", all_uniques))
 	all_chests = bool(file.get_value(SECTION, "all_chests", all_chests))
+	old_icons = bool(file.get_value(SECTION, "old_icons", old_icons))
 	all_services = bool(file.get_value(SECTION, "all_services", all_services))
 
 
@@ -64,6 +68,7 @@ static func save() -> void:
 	file.set_value(SECTION, "uniques", int(uniques))
 	file.set_value(SECTION, "all_uniques", all_uniques)
 	file.set_value(SECTION, "all_chests", all_chests)
+	file.set_value(SECTION, "old_icons", old_icons)
 	file.set_value(SECTION, "all_services", all_services)
 	if file.save(path) != OK:
 		push_warning("Settings: cannot write %s" % path)
@@ -75,6 +80,10 @@ static func show_all_uniques() -> bool:
 
 static func show_all_chests() -> bool:
 	return all_chests and OS.is_debug_build()
+
+
+static func show_old_icons() -> bool:
+	return old_icons and OS.is_debug_build()
 
 
 static func show_all_services() -> bool:

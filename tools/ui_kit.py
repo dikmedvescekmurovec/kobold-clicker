@@ -132,35 +132,36 @@ _EIGHT = _FOUR + ((1, 1), (1, -1), (-1, 1), (-1, -1))
 _RING = ("2D Pixel UI/PNG/Icons", 82, 130, 12, 12, 2)
 _AMULET = ("2D Pixel UI/PNG/Icons", 3, 146, 10, 12, 2)
 _RPG = "Pixel Art Icon Pack - RPG/"
+# The user's own 32 px pixellab pieces, one file an id. They come with an outline of their own, which
+# `_outlined(own_edge=True)` repaints in ink where it stands: a ring added outside would not fit 32.
+PIXELLAB = "Unique/"
+# Pixellab paints near-pure accents where the packs grey theirs down, so a piece's saturation is scaled
+# (never clamped: a gem's shades stay apart) until 90% of its pixels are at most this -- the bases' own
+# 90th percentile (0.68, measured off Assets/Gear, outline left out) lowered to about the old uniques' (0.63).
+SAT_CEILING = 0.60
 UNIQUE_GEAR = {
-    "metronome": ((_RPG + "Weapon & Tool/Silver Sword", 0, 0, 32, 32, 1), []),
-    "headsman": ((_RPG + "Weapon & Tool/Axe", 0, 0, 32, 32, 1), []),
-    # A band of bone: the gold drained and lifted, the stone left as it is.
-    "knucklebone_ring": (_RING, [(0.0, 0.2, 0.0, 0.25, 1.35)]),
-    # Gold with a ruby in it, where the plain ring carries a sapphire.
-    "the_tithe": (_RING, [(0.5, 0.75, 0.38, 1.0, 1.0)]),
+    "metronome": ((PIXELLAB + "metronome", 0, 0, 32, 32, 1), []),
+    "headsman": ((PIXELLAB + "headsman", 0, 0, 32, 32, 1), []),
+    "knucklebone_ring": ((PIXELLAB + "knucklebone_ring", 0, 0, 32, 32, 1), []),
+    "the_tithe": ((PIXELLAB + "the_tithe", 0, 0, 32, 32, 1), []),
     # Glass and pale sand.
     "hourglass_amulet": (_AMULET, [(0.9, 1.0, 0.5, 0.8, 1.1), (0.0, 0.15, 0.5, 0.8, 1.1)]),
     "meadowstriders": ((_RPG + "Equipment/Iron Boot", 0, 0, 32, 32, 1), []),
     "hunters_lantern": ((_RPG + "Misc/Lantern", 0, 0, 32, 32, 1), []),
-    "sunscorched_cowl": ((_RPG + "Equipment/Helm", 0, 0, 32, 32, 1), []),
+    "sunscorched_cowl": ((PIXELLAB + "sunscorched_cowl", 0, 0, 32, 32, 1), []),
     "rimeplate": ((_RPG + "Equipment/Iron Armor", 0, 0, 32, 32, 1), []),
-    "stonebreaker": ((_RPG + "Weapon & Tool/Hammer", 0, 0, 32, 32, 1), []),
+    "stonebreaker": ((PIXELLAB + "stonebreaker", 0, 0, 32, 32, 1), []),
     # Grave-violet.
     "gravediggers_charm": (_AMULET, [(0.9, 1.0, 0.78, 0.9, 0.85), (0.0, 0.15, 0.78, 0.9, 0.85)]),
     # --- the second batch ---
-    # Blood-red iron, the sapphire left in it.
-    "berserkers_band": (_RING, [(0.0, 0.2, -0.09, 1.2, 0.9)]),
-    # The pack's plain iron sword with its greys turned to pale blue glass: a third element is
-    # (hue, saturation) for the pixels `_shift` otherwise leaves alone.
-    "glass_edge": ((_RPG + "Weapon & Tool/Iron Sword", 0, 0, 32, 32, 1), [], (0.55, 0.5)),
+    "berserkers_band": ((PIXELLAB + "berserkers_band", 0, 0, 32, 32, 1), []),
+    "glass_edge": ((PIXELLAB + "glass_edge", 0, 0, 32, 32, 1), []),
     # No pack draws a die: a green stone, the gambler's colour.
     "gamblers_die": (_AMULET, [(0.9, 1.0, 0.33, 0.9, 1.0), (0.0, 0.15, 0.33, 0.9, 1.0)]),
     "ascetics_cord": ((_RPG + "Material/Rope", 0, 0, 32, 32, 1), []),
     "last_gasp": ((_RPG + "Monster Part/Skull", 0, 0, 32, 32, 1), []),
     "duelists_buckler": ((_RPG + "Weapon & Tool/Iron Shield", 0, 0, 32, 32, 1), []),
-    # The nearest thing to a chalice running over.
-    "overflowing_chalice": ((_RPG + "Food/Beer", 0, 0, 32, 32, 1), []),
+    "overflowing_chalice": ((PIXELLAB + "overflowing_chalice", 0, 0, 32, 32, 1), []),
     # Off Icons.png like the ring and the amulet, measured and doubled: row 7's blue boots, row 6's
     # steel cuirass and row 8's steel shield.
     "dominoes": (("2D Pixel UI/PNG/Icons", 50, 113, 12, 14, 2), []),
@@ -170,20 +171,33 @@ UNIQUE_GEAR = {
     # The base piece's own wood, stained to the red of the heart of the tree.
     "heartwood_plate": ((_RPG + "Equipment/Wooden Armor", 0, 0, 32, 32, 1), [(0.0, 0.2, -0.06, 1.35, 0.8)]),
     "spiked_helm": ((_RPG + "Equipment/Iron Helmet", 0, 0, 32, 32, 1), []),
-    # Black and white, as the bird is: the gold drained and darkened.
-    "magpies_band": (_RING, [(0.0, 0.2, 0.0, 0.15, 0.5)]),
+    "magpies_band": ((PIXELLAB + "magpies_band", 0, 0, 32, 32, 1), []),
     "lucky_wound": ((_RPG + "Misc/Candle", 0, 0, 32, 32, 1), []),
-    # The pack calls this strapped pack its leather armour; it is drawn as a sack.
-    "rag_and_bone_sack": ((_RPG + "Equipment/Leather Armor", 0, 0, 32, 32, 1), []),
+    "rag_and_bone_sack": ((PIXELLAB + "rag_and_bone_sack", 0, 0, 32, 32, 1), []),
 }
 UNIQUE_OUT = "Assets/Gear/Unique"
+# What the pixellab pieces replaced, still written beside them for the settings' dev tick "Show old
+# unique icons" (`UniqueTable.icon`): the RPG pack weapons, and the four rings the generator draws.
+UNIQUE_OLD = {
+    "metronome": ((_RPG + "Weapon & Tool/Silver Sword", 0, 0, 32, 32, 1), []),
+    "headsman": ((_RPG + "Weapon & Tool/Axe", 0, 0, 32, 32, 1), []),
+    "stonebreaker": ((_RPG + "Weapon & Tool/Hammer", 0, 0, 32, 32, 1), []),
+    "glass_edge": ((_RPG + "Weapon & Tool/Iron Sword", 0, 0, 32, 32, 1), [], (0.55, 0.5)),
+    "sunscorched_cowl": ((_RPG + "Equipment/Helm", 0, 0, 32, 32, 1), []),
+    # The nearest thing to a chalice running over.
+    "overflowing_chalice": ((_RPG + "Food/Beer", 0, 0, 32, 32, 1), []),
+    # The pack calls this strapped pack its leather armour.
+    "rag_and_bone_sack": ((_RPG + "Equipment/Leather Armor", 0, 0, 32, 32, 1), []),
+}
+UNIQUE_OLD_DRAWN = ["knucklebone_ring", "the_tithe", "berserkers_band", "magpies_band"]
+UNIQUE_OLD_OUT = UNIQUE_OUT + "/Old"
 # The ten of those that are doubled Icons.png art -- four rings, three amulets, the boots, the
 # cuirass and the shield -- drawn instead by AI-sprites-generator/gear.py (its UNIQUES, by the same
 # ids), the way the base jewels were and for the same reason. They were approved on their own flag,
 # which is on: the drawn ones are what is written, and their ten entries in UNIQUE_GEAR are kept only
 # so tools/qa/ui_kit_uniques_drawn.png can still show what each one replaced.
-UNIQUE_DRAWN = ["knucklebone_ring", "the_tithe", "berserkers_band", "magpies_band", "hourglass_amulet",
-                "gravediggers_charm", "gamblers_die", "dominoes", "snowball", "bulwark"]
+# The four rings were drawn too, until the pixellab ones replaced them.
+UNIQUE_DRAWN = ["hourglass_amulet", "gravediggers_charm", "gamblers_die", "dominoes", "snowball", "bulwark"]
 UNIQUE_DRAWN_EXPORT = True
 # Whether the icons are written into the game or only onto the preview. Off until the preview has been
 # looked at: `UniqueTable.icon` falls back to the base piece's picture while a file is missing.
@@ -1033,7 +1047,7 @@ def _squared(name, art):
     return square
 
 
-def _outlined(art):
+def _outlined(art, own_edge=False):
     """`art` ending in a dark outline one pixel thick, all the way round: the finish every base wears.
 
     Where the outline goes is where the RPG pack puts its white border. Measured off all 105 of its
@@ -1080,7 +1094,10 @@ def _outlined(art):
     ring = {spot for spot in solid if px[spot][:3] == (255, 255, 255)
             and any(clear(near) for near in around(*spot, _EIGHT))}
     edge = [spot for spot in solid if any(clear(near) for near in around(*spot, _FOUR))]
-    if 2 * len(ring) < len(edge):
+    if own_edge:
+        # The art's own outline, recoloured: see PIXELLAB.
+        ring = set(edge)
+    elif 2 * len(ring) < len(edge):
         # No border to repaint, so the ring is added -- on a canvas a pixel bigger each way if the
         # art runs to the edge of this one; the callers centre whatever comes back on the square.
         if any(x in (0, w - 1) or y in (0, h - 1) for x, y in solid):
@@ -1179,17 +1196,43 @@ def unique_gear():
         # The seventeen off the RPG pack take the bases' finish, so the collection log and the bag
         # are one look. The ten doubled off Icons.png carry a dark line of their own, and the drawn
         # ones below are written over them: see UNIQUE_DRAWN.
-        out[name] = _squared(name, _shift(art if _doubled(art) else _outlined(art), *entry[1:]))
+        if entry[0][0].startswith(PIXELLAB):
+            art = _outlined(_muted(art), own_edge=True)
+        elif not _doubled(art):
+            art = _outlined(art)
+        out[name] = _squared(name, _shift(art, *entry[1:]))
     if UNIQUE_DRAWN_EXPORT:
         out.update(unique_drawn())
     return out
 
 
-def unique_drawn():
-    """The ten drawn unique icons, finished the way every base is."""
+def _muted(art):
+    """`art` with its saturation scaled down to SAT_CEILING at the 90th percentile: see PIXELLAB."""
+    out = art.copy()
+    px = out.load()
+    spots = [(x, y) for y in range(out.height) for x in range(out.width) if px[x, y][3]]
+    hsv = {spot: colorsys.rgb_to_hsv(*[v / 255 for v in px[spot][:3]]) for spot in spots}
+    sats = sorted(s for _, s, v in hsv.values() if v >= 0.2)
+    top = sats[len(sats) * 9 // 10] if sats else 0.0
+    if top <= SAT_CEILING:
+        return out
+    for spot, (h, s, v) in hsv.items():
+        px[spot] = tuple(round(c * 255) for c in colorsys.hsv_to_rgb(h, s * SAT_CEILING / top, v)) + (px[spot][3],)
+    return out
+
+
+def unique_old():
+    """The icons the pixellab pieces replaced, made as they were: see UNIQUE_OLD."""
+    out = {name: _squared(name, _shift(_outlined(_cut(entry[0])), *entry[1:])) for name, entry in UNIQUE_OLD.items()}
+    out.update(unique_drawn(UNIQUE_OLD_DRAWN))
+    return out
+
+
+def unique_drawn(names=UNIQUE_DRAWN):
+    """The drawn unique icons, finished the way every base is."""
     draw = _generator().UNIQUES
     out = {}
-    for name in UNIQUE_DRAWN:
+    for name in names:
         art = _outlined(draw[name]())
         if _doubled(art) or outline_share(art) < OUTLINE_FLOOR:
             raise SystemExit("%s: doubled, or its edge is not outline ink" % name)
@@ -1827,6 +1870,9 @@ def main():
         os.makedirs(UNIQUE_OUT, exist_ok=True)
         for name, image in unique.items():
             image.save(os.path.join(UNIQUE_OUT, name + ".png"))
+        os.makedirs(UNIQUE_OLD_OUT, exist_ok=True)
+        for name, image in unique_old().items():
+            image.save(os.path.join(UNIQUE_OLD_OUT, name + ".png"))
 
     unique_drawn_preview(unique_drawn()).save(os.path.join(QA, "ui_kit_uniques_drawn.png"))
 
