@@ -30,8 +30,8 @@ static var uniques := Uniques.ASK
 static var all_uniques := false
 ## Dev: every chest on the map is drawn, fog or not. Read through `show_all_chests()`, like the uniques.
 static var all_chests := false
-## Dev: a unique whose icon was replaced wears the one it had before (`UniqueTable.OLD_ROOT`), to
-## compare the two in the bag. Read through `show_old_icons()`, like the uniques.
+## Dev: a unique or a base whose icon was replaced wears the one it had before (`UniqueTable.OLD_ROOT`,
+## `LootTable.OLD_ROOT`), to compare the two in the bag. Read through `show_old_icons()`, like the uniques.
 static var old_icons := false
 ## Dev: every settlement offers every counter (`TownServices.show_all`). On by default, so read through
 ## `show_all_services()`, which also answers no off the player's own settings file: the tests and the

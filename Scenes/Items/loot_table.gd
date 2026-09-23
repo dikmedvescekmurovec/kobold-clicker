@@ -14,6 +14,8 @@ extends RefCounted
 ## `Equipment.totals`; this file is only what the world hands over.
 
 const ROOT := "res://Assets/Gear/"
+## What a replaced base icon looked like before (`tools/ui_kit.py`'s `BASE_OLD`), for `Settings.old_icons`.
+const OLD_ROOT := ROOT + "Old/"
 
 ## Every kind of gear the world holds, and the materials each kind is found in. Path of Exile's
 ## shape: a slot is not one piece with a level on it but several *kinds* that play differently -- a
@@ -395,7 +397,8 @@ const TIER_LEVEL := {
 }
 
 ## Icons are loaded once and kept, the way UITheme keeps its Theme: the panel rebuilds every square
-## whenever something drops, and reloading four textures each time would be work for nothing.
+## whenever something drops, and reloading four textures each time would be work for nothing. Kept by
+## path, not by item, so the old-icons tick shows from the next time a square is drawn.
 static var _icons := {}
 
 
@@ -410,9 +413,12 @@ static func items() -> PackedStringArray:
 ## Where this piece's picture lives. While a base has no drawing of its own yet it borrows one --
 ## first from the plainest of its kind, then from the first kind written for its slot, which is one of
 ## the eight the game shipped with. The same fallback `UniqueTable.icon` has, and for the same reason:
-## a base is playable the day the table names it, and the art follows when it is approved.
+## a base is playable the day the table names it, and the art follows when it is approved. Under
+## `Settings.show_old_icons()` the picture it had before, where it had another.
 static func icon_path(item: String) -> String:
 	var row: Dictionary = ITEMS[item]
+	if Settings.show_old_icons() and ResourceLoader.exists(OLD_ROOT + str(row["icon"])):
+		return OLD_ROOT + str(row["icon"])
 	var kind: Dictionary = KINDS[row["kind"]]
 	var tiers: Array = kind["tiers"]
 	# `borrows` is a kind saying whose picture it wears until it has one: the Broken Torch the torch's,
@@ -426,9 +432,10 @@ static func icon_path(item: String) -> String:
 
 
 static func icon(item: String) -> Texture2D:
-	if not _icons.has(item):
-		_icons[item] = load(icon_path(item))
-	return _icons[item]
+	var path := icon_path(item)
+	if not _icons.has(path):
+		_icons[path] = load(path)
+	return _icons[path]
 
 
 ## What this piece is worth before anything is rolled on top of it.

@@ -890,7 +890,8 @@ def _unique_amulet(kind):
     return c.icon(kind + " amulet")
 
 
-## UniqueTable id -> its drawing. tools/ui_kit.py names the same ids in UNIQUE_DRAWN.
+## UniqueTable id -> its drawing. Pixellab art has replaced all of them; tools/ui_kit.py still draws
+## them for Assets/Gear/Unique/Old/ (UNIQUE_OLD_DRAWN), which the settings' "show old unique icons" wears.
 UNIQUES = {
     "knucklebone_ring": lambda: _unique_ring("bone"),
     "the_tithe": lambda: _unique_ring("tithe"),

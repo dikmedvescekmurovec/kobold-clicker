@@ -87,6 +87,16 @@ func _clear_save() -> void:
 func _test_items() -> bool:
 	var items := LootTable.items()
 	_check(not items.is_empty(), "there is something to find")
+	# The dev tick puts a replaced base's old picture back and leaves a base that never had another alone.
+	Settings.old_icons = true
+	if Settings.show_old_icons():
+		_check(LootTable.icon_path("Iron Helmet") == LootTable.OLD_ROOT + "Iron Helmet.png",
+				"the old-icons tick shows the Iron Helmet it replaced")
+		_check(LootTable.icon_path("Iron Sword") == LootTable.ROOT + "Iron Sword.png",
+				"a base never replaced keeps its own icon under the tick")
+	Settings.old_icons = false
+	_check(LootTable.icon_path("Iron Helmet") == LootTable.ROOT + "Iron Helmet.png",
+			"without the tick the Iron Helmet is the new one")
 	for item in items:
 		var path := LootTable.icon_path(item)
 		_check(ResourceLoader.exists(path), "missing icon " + path)
