@@ -330,10 +330,227 @@ ITEMS.append(("Amulets", [
    "small silver loop at the top; green only on the stone.\n" + PENDANT_SHAPE),
 ]))
 
+# Swords (2026-09-24): the helmet recipe on a weapon -- one Shape line for all five, each material adding one part
+# (wood; iron adds the groove; steel curves the guard; golden adds the boss and trim; masterwork facets and spikes),
+# each in its tier's palette and look as the helmets, bodies and boots wear them. The wood keeps its own browns, the
+# tier's tan orange leather only on the grip, as the Wooden Armor does.
+POSE["WEAPON"] = ("Lying diagonally, seen flat from the front: the grip at the bottom-left, the tip at the top-right, "
+                  "the sword running from corner to corner.")
+# Written again from the Wooden Sword that came back (Assets/Potential/Bases/Wooden Sword.png, 2026-09-24): a broad
+# blade split lengthwise into a lit and a shaded half, a guard about twice its width, a very short grip, a ball pommel.
+SWORD_SHAPE = ("Shape: one straight one-handed sword: a broad straight blade about six pixels wide, split lengthwise "
+               "into a lit upper-left half and a shaded lower-right half, taking up about two thirds of the length; a "
+               "crossguard about twice as wide as the blade; a very short grip; a small ball pommel at the end.")
+SWORD_ALONE = "A single sword on its own and nothing else."
+PAL["w1"] = ("warm brown wood #80553a and #a6754b, sand highlights #c39a61, dark brown grain and shadows #5c3b2b and "
+             "#3a2521, tan orange leather #d16e2b and #a54919 only on the grip")
+PAL["s3_sword"] = PAL["s3"].replace("on the buckles and rivets", "on the grip's rings")
+SWORD_LOOK = {
+ "w1": ("Look: natural brown wood, never orange: warm brown with sand highlights along the upper-left edge and dark "
+        "brown in the grain and the shadows; only the grip is tan orange leather, its wrap drawn as short dark dashes."),
+ "h2": ("Look: cool iron grey, light grey along the upper-left edge of the blade and slate on the lower-right, set "
+        "against reddish brown leather on the grip."),
+ "s3": ("Look: cool neutral grey steel, pale steel highlights along the upper-left edge of the blade and iron grey in "
+        "the shadows; the grip in bronze leather that turns dark brown in its folds, pale tan on its rings."),
+ "h5": ("Look: dark navy steel, slate and dusty blue on the faces the light reaches, navy in the shadows, a thin light "
+        "grey highlight along every bevelled edge, and no other colour."),
+}
+ITEMS.append(("Swords", [
+  ("Wooden Sword", "WEAPON", "w1",
+   "A practice sword carved from plain brown wood: a flat wooden blade, a plain wooden crossguard, a grip wrapped in "
+   "tan orange leather, and a round wooden pommel.\n"
+   + SWORD_LOOK["w1"] + "\n" + SWORD_SHAPE + "\n" + SWORD_ALONE),
+  ("Iron Sword", "WEAPON", "h2",
+   "An iron sword: a plain iron grey blade with a dark groove down its middle, a plain bar crossguard of iron, a grip "
+   "wrapped in reddish brown leather, and a round iron pommel.\n"
+   + SWORD_LOOK["h2"] + "\n" + SWORD_SHAPE + "\n" + SWORD_ALONE),
+  ("Masterwork Sword", "WEAPON", "h5",
+   "A masterwork sword of dark navy steel, angular and grim: a blade of flat faceted planes with a raised ridge down "
+   "its middle and a sharp angular point, a crossguard of broad angular plates whose ends sweep toward the tip in "
+   "short points and whose middle dips into a sharp V over the blade, a grip wrapped in navy leather, and a faceted "
+   "ball pommel with one short spike. Every plate has a thin bevelled edge.\n"
+   + SWORD_LOOK["h5"] + "\n" + SWORD_SHAPE + "\n" + SWORD_ALONE),
+]))
+
+
+# The other weapons (2026-09-24), written to the swords as they came back rather than to the helmets: every weapon
+# of a tier stands in the same socket as its sword, so each tier's palette (`wp1`..`wp5`) is measured off
+# Assets/Potential/Bases/<tier> Sword.png and named in chart words. Each kind keeps one Shape line for all five,
+# with the sword's lit and shaded halves and its ball pommel, and each material adds one part, as the swords did.
+# The iron is named in the charts' greys (slate, iron grey, dark grey), never "steel blue" or "navy": those words turned
+# the Iron Mace a bright blue that read as the masterwork (2026-09-24). Steel keeps its leather to the grip and loses the
+# warm cream highlight: the Steel Morningstar came back with a brown wooden haft and a yellow glint on its head.
+PAL.update({
+ "wp1": "warm brown wood #864b28 and #b2642e, light orange #df9138, apricot highlights #edbd8c, dark brown shadows #654237",
+ "wp2": ("dull slate iron #616c79 and #566874, iron grey #41454b, blued steel highlights #777f85, dark grey shadows "
+         "#2f3236, reddish brown leather #7f3b2e and #57261b only on the grip"),
+ # The steel of both tiers, measured off the golden pieces the user matches the rest to (2026-09-24): the Golden
+ # Sword's lit half #b5afd9 to near white and its shaded half #6a608f, the Golden Sceptre's #8986ab..#666286. Light all
+ # over. Tried on the way: a neutral grey (too dark); "dusky plum" shadows and grip (the steel came back pink); iron grey
+ # shadows with an aubergine grip and "deep shadows" (the Steel Zweihander's shaded half came back near-black navy
+ # #0c0f29 with a purple edge). The golden tier is the steel tier colour for colour; only its gold parts differ.
+ "wp3": ("lavender grey steel #b5afd9 and #8986ab, silver highlights #eee9f0, lilac grey on the shaded half #77739a "
+         "and #6a608f, iron grey only in the deepest creases #4a495b, iron grey leather #4a495b only on the grip"),
+ "wp4": ("lavender grey steel #b5afd9 and #8986ab, silver highlights #eee9f0, lilac grey on the shaded half #77739a "
+         "and #6a608f, iron grey only in the deepest creases #4a495b, iron grey leather #4a495b only on the grip, tan "
+         "orange #e74408 and bright gold #f59803 and #fdde36 only on the gold parts"),
+ "wp5": ("steel blue steel #2b5476 and #113455, dusty blue #5e80ac on the lit faces, light grey edges #b8cbef and "
+         "#dae7f9, navy only in the deepest shadows #1a2134"),
+ "bone": ("bone white #f3f3dc and pale tan #e5cfb3 with sand shadows #cca67b on the blade, warm brown wood #864b28 "
+          "and #b2642e, apricot highlights #edbd8c and dark brown shadows #654237 on the collar, grip and cap"),
+ "broken": ("dull slate iron #616c79 and #566874, iron grey #41454b, blued steel highlights #777f85, dark grey shadows "
+            "#2f3236, rust orange #a33814 only in small patches on the blade, reddish brown leather #7f3b2e and #57261b "
+            "only on the grip"),
+})
+WEAPON_LOOK = {
+ "wp1": ("Look: warm brown wood with apricot highlights along the upper-left edge and dark brown in the grain and the "
+         "shadows; the grip wrapped in light orange leather, its wrap drawn as short dark dashes."),
+ "wp2": ("Look: dull, plain slate grey iron, unpolished: blued steel along the upper-left edge, iron grey in the "
+         "middle tones and dark grey in the shadows; reddish brown leather only on the grip."),
+ "wp3": ("Look: pale, cool lavender grey steel, light all over: silver along the upper-left edge, lavender grey on "
+         "the lit half, lilac grey on the shaded half, never dark; every part is steel except the grip, which is iron "
+         "grey leather."),
+ "wp4": ("Look: pale, cool lavender grey steel, light all over: silver along the upper-left edge, lavender grey on "
+         "the lit half, lilac grey on the shaded half, never dark; the grip iron grey leather. Only the gold parts are "
+         "gold: tan orange, shining bright gold at their highlights. Every edge of the steel is steel colours only."),
+ "wp5": ("Look: cool steel blue steel, dusty blue on the faces the light reaches, navy only in the deepest shadows, a "
+         "thin light grey highlight along every edge, and no other colour."),
+ "bone": ("Look: pale bone white with sand in the shadows and a pale tan middle tone on the blade; the collar, grip and "
+          "cap warm brown wood with apricot highlights, the grip's wrap drawn as short dark dashes."),
+ "broken": ("Look: old, worn, dull slate grey iron: blued steel along the upper-left edge, iron grey in the middle "
+            "tones and dark grey in the shadows, with a few small rust orange patches; the grip in worn reddish brown "
+            "leather."),
+}
+# Daggers point the other way from swords (the user's call, 2026-09-24); ui_kit's BASE_TRANSPOSE mirrors any that don't.
+POSE["DAGGER"] = "Lying diagonally, seen flat from the front: the grip at the top-right, the tip at the bottom-left."
+POSE["MACE"] = ("Lying diagonally, seen flat from the front: the grip at the bottom-left, the head at the top-right, "
+                "the mace running from corner to corner.")
+# The old dagger row learned that a dagger has to read small before it reads as anything else: the pack's knife at
+# 28 px corner to corner stood as tall as the sword. So the dagger carries its own size line, as a helmet does.
+DAGGER_SIZE = ("The knife is small: about 22 of the 32 pixels from corner to corner, centred in the canvas, with clear "
+               "space all round.")
+# Written again (2026-09-24): the first dagger shape was the sword's word for word -- a crossguard, a ball pommel, the
+# lit and shaded halves -- and read as a small sword (the user's call). A cross is what says sword, so the dagger has
+# none: a triangular blade no longer than its handle, a thin collar, a thick grip and a flat cap.
+DAGGER_SHAPE = ("Shape: one short knife: a blade shaped like a long narrow triangle, widest where it meets the handle "
+                "and tapering all the way to the point, no longer than the handle; "
+                "between them only a thin collar no wider than the blade; a thick grip as long as the "
+                "blade; a flat round cap at the end of the grip.")
+MACE_SHAPE = ("Shape: one one-handed mace: a straight haft about three pixels wide taking up about two thirds of the "
+              "length, a short wrapped grip at its lower end with a small ball pommel, and one heavy head at its "
+              "upper end, about three times as wide as the haft.")
+# The swords already run corner to corner, so a two-hander cannot be longer: it is heavier -- a broader blade, a
+# grip for two hands, a wider guard.
+# Written again from the Masterwork Greatsword that came back (Assets/Potential/Bases/Masterwork Greatsword.png,
+# 2026-09-24), the one the user said looked most like a two-hander "because the tip expands": a blade about 9 px wide
+# at the guard widening to about 12 below a broad slanted tip, a short thick guard, a long grip into the corner.
+GREAT_SHAPE = ("Shape: one huge, heavy two-handed sword filling the whole canvas from corner to corner: a massive "
+               "blade that widens from the crossguard toward the tip, about nine pixels wide at the guard and about "
+               "twelve pixels wide just below the tip, ending in a broad squared-off tip cut at a slant instead of a "
+               "point; the blade takes up about two thirds of the length, split lengthwise into a lit upper-left half "
+               "and a shaded lower-right half; a short, thick crossguard only a little wider than the blade; a long, "
+               "thick grip for two hands running into the bottom-left corner; a small ball pommel at its end.")
+ONE = {"DAGGER": "A single knife on its own and nothing else.", "MACE": "A single mace on its own and nothing else.",
+       "WEAPON": "A single sword on its own and nothing else."}
+
+
+def _weapon(name, pose, pal, subject, shape):
+    extra = [DAGGER_SIZE] if pose == "DAGGER" else []
+    return (name, pose, pal, "\n".join([subject, WEAPON_LOOK[pal], shape] + extra + [ONE[pose]]))
+
+
+ITEMS.append(("Daggers", [
+  _weapon("Bone Knife", "DAGGER", "bone",
+          "A knife with a blade of carved bone: a pale bone blade with a rough chipped edge, a thin wooden collar, a "
+          "thick wooden grip wrapped in light orange leather, and a flat wooden cap.", DAGGER_SHAPE),
+  _weapon("Iron Dagger", "DAGGER", "wp2",
+          "An iron dagger: a plain slate grey iron blade with a dark groove down its middle, a thin iron collar, a "
+          "thick grip wrapped in reddish brown leather, and a flat iron cap.", DAGGER_SHAPE),
+  _weapon("Steel Stiletto", "DAGGER", "wp3",
+          "A steel stiletto: a very slim lavender grey steel blade, square in section, narrowing to a long needle "
+          "point, a thin steel collar, a thick grip wrapped in iron grey leather, and a flat steel cap.",
+          DAGGER_SHAPE),
+  _weapon("Golden Kris", "DAGGER", "wp4",
+          "A steel dagger with a wavy blade and gold fittings: a lavender grey steel blade that bends in three gentle "
+          "waves from the handle to the point, a thin gold collar, a thick grip wrapped in iron grey "
+          "leather, and a flat gold cap. Gold only on the collar and the cap.", DAGGER_SHAPE),
+  _weapon("Masterwork Dagger", "DAGGER", "wp5",
+          "A masterwork dagger of steel blue steel, sharp and angular: a clean blade with a raised ridge down its "
+          "middle, tapering to a sharp point, a thin angular collar that dips into a sharp V over the blade, a thick "
+          "grip wrapped in navy leather, and a flat cap with one short spike. A thin light grey highlight along each "
+          "edge of the blade.", DAGGER_SHAPE),
+]))
+dict(ITEMS)["Swords"][2:2] = [_weapon("Steel Sword", "WEAPON", "wp3",
+    "A steel sword: a lavender grey steel blade with a groove down its middle, a steel crossguard whose two ends curve "
+    "toward the tip, a grip wrapped in iron grey leather, and a round steel pommel.", SWORD_SHAPE)]
+dict(ITEMS)["Swords"].insert(3, _weapon("Golden Sword", "WEAPON", "wp4",
+    "A steel sword with a gold hilt: a lavender grey steel blade with a groove down its middle, a gold "
+    "crossguard whose two ends curve toward the tip, a grip wrapped in iron grey leather, and a round "
+    "gold pommel. Gold only on the crossguard and the pommel.", SWORD_SHAPE))
+ITEMS.append(("Maces", [
+  _weapon("Wooden Club", "MACE", "wp1",
+          "A club carved from one piece of wood: a plain wooden haft that swells into a thick rounded knobbly head, "
+          "a grip wrapped in light orange leather, and a round wooden pommel.", MACE_SHAPE),
+  _weapon("Iron Mace", "MACE", "wp2",
+          "An iron mace: a slate grey iron haft, a round slate grey iron head ringed with four short flat flanges, a "
+          "short grip wrapped in reddish brown leather, and a round iron pommel.", MACE_SHAPE),
+  _weapon("Steel Morningstar", "MACE", "wp3",
+          "A steel morningstar, all steel from the head to the grip: a lavender grey steel haft, a round steel ball head studded all round with short "
+          "pointed spikes, a short grip wrapped in iron grey leather, and a round steel pommel.", MACE_SHAPE),
+  _weapon("Golden Sceptre", "MACE", "wp4",
+          "A steel sceptre with gold fittings: a lavender grey steel haft, a head of six tall lavender grey steel flanges "
+          "standing round the top like a crown, a gold collar under the head, a grip wrapped in "
+          "iron grey leather, and a round gold pommel. Gold only on the collar and the pommel.",
+          MACE_SHAPE),
+  _weapon("Masterwork Mace", "MACE", "wp5",
+          "A masterwork mace of steel blue steel, sharp and angular: a plain steel haft, a head of broad angular "
+          "flanges each ending in a short sharp point with one longer spike on top, a grip wrapped in navy leather, "
+          "and a ball pommel with one short spike. A thin light grey highlight along the edge of each flange.",
+          MACE_SHAPE),
+]))
+ITEMS.append(("Greatswords", [
+  _weapon("Wooden Greatsword", "WEAPON", "wp1",
+          "A massive practice sword carved from plain brown wood: a thick wooden blade that widens toward its broad "
+          "slanted tip, a short thick wooden crossguard, a long grip wrapped in light orange leather, and a round wooden pommel.", GREAT_SHAPE),
+  _weapon("Iron Claymore", "WEAPON", "wp2",
+          "A massive iron two-handed sword: a slate grey iron blade that widens toward its broad slanted tip, with a dark "
+          "groove down its middle, a short thick iron crossguard whose two ends slope toward the tip, a long grip wrapped in reddish brown leather, and a round "
+          "iron pommel.", GREAT_SHAPE),
+  _weapon("Steel Zweihander", "WEAPON", "wp3",
+          "A massive steel two-handed sword: a lavender grey steel blade that widens toward its broad slanted tip, with a groove "
+          "down its middle and two short hooks sticking out from its sides just above the crossguard, a short thick "
+          "crossguard whose two ends curve "
+          "gently toward the tip, a long grip wrapped in iron grey leather, and a round steel pommel.", GREAT_SHAPE),
+  _weapon("Golden Greatsword", "WEAPON", "wp4",
+          "A massive steel two-handed sword with a gold hilt: a lavender grey steel blade that widens toward its broad slanted tip, "
+          "with a groove down its middle, a short thick gold crossguard whose two ends curve toward the tip, a long grip wrapped in iron grey "
+          "leather, and a round gold pommel. Gold only on the crossguard and the pommel.", GREAT_SHAPE),
+  _weapon("Masterwork Greatsword", "WEAPON", "wp5",
+          "A massive masterwork two-handed sword of steel blue steel, sharp and angular: a very wide clean blade "
+          "with a raised ridge down its middle and a sharp angular point, a wide crossguard of broad angular plates "
+          "whose ends sweep toward the tip in short points and whose middle dips into a sharp V over the blade, a "
+          "long grip wrapped in navy leather, and a faceted ball pommel with one short spike. Every plate has a thin "
+          "bevelled edge.", GREAT_SHAPE),
+]))
+# The player's first find (LootTable.FIRST_DROP), which wears the Wooden Sword's picture until it has its own.
+# Its own view and shape: the sword's say the blade runs to the far corner, which a snapped blade cannot.
+POSE["BROKEN"] = ("Lying diagonally, seen flat from the front: the grip at the bottom-left, the jagged end of the "
+                  "blade toward the top-right, with empty space beyond it.")
+ONE["BROKEN"] = ONE["WEAPON"]
+BROKEN_SHAPE = SWORD_SHAPE.replace("taking up about two thirds of the length", "snapped off short, only about as long as "
+                                   "the crossguard, grip and pommel together")
+ITEMS.append(("Broken sword", [
+  _weapon("Broken Sword", "BROKEN", "broken",
+          "An old, snapped iron sword: a slate grey iron blade broken off at about half its length in a jagged "
+          "break, a few small rust orange patches on the blade, a plain bar crossguard of iron, a grip wrapped in "
+          "worn reddish brown leather, and a round iron pommel.", BROKEN_SHAPE),
+]))
+
 
 # The top materials are the finest of their line and should look it: the same dusty set, but polished.
 # Without this the golden and masterwork helms came out duller than the steel one (2026-09-23).
-SHINE = {"h4": "the tan orange and bright gold parts", "h5": "the thin light grey edges",
+SHINE = {"wp3": "the steel's upper-left edges", "wp4": "the gold parts", "wp5": "the thin light grey edges",
+         "h4": "the tan orange and bright gold parts", "h5": "the thin light grey edges",
          "gold": "the gold parts", "master": "the pale bevelled edges", "t4": "the gold parts", "t5": "the thin bone-white edges",
          "b4": "the copper and bright gold parts", "b5": "the thin light grey edges",
          "gold_ring": "the gold band and the stone", "iron_band": "the rivets and the band's rims",
@@ -344,9 +561,16 @@ SHINE = {"h4": "the tan orange and bright gold parts", "h5": "the thin light gre
 SHINE_LEATHER = {"t4_leather": "the copper buckles", "t5_leather": "the light grey stitched edges"}
 
 
+NO_CREAM = {"wp2", "broken"}
+LIGHT_STEEL = {"wp3", "wp4"}
+
+
 def prompt(pose, pal, subject):
     muted = ("Muted, dusty, faded colours like an old hand-painted item sheet; warm browns and greys dominate, "
              "every colour greyed down, never pure or bright.")
+    if pal in NO_CREAM:
+        # Cool metal: "warm browns dominate" helped turn the Steel Morningstar's haft to wood.
+        muted = muted.replace("warm browns and greys dominate", "cool greys dominate")
     light = "Soft light from the top-left, 2-3 shades per material, a single highlight pixel on metal."
     if pal in SHINE_LEATHER:
         muted = ("Muted, dusty colours, but finely made: supple oiled leather with bright highlights and deep shadows, "
@@ -357,15 +581,17 @@ def prompt(pose, pal, subject):
         muted = ("Muted, dusty colours, but polished: bright highlights and deep shadows, "
                  f"{SHINE[pal]} clearly catching the light.")
         light = "Soft light from the top-left, 3-4 shades per material, a bright highlight along each ridge and rim."
+    if pal in LIGHT_STEEL:
+        muted = muted.replace("and deep shadows", "and soft, light shadows")
     # No outline line: pixellab's Outline setting draws its own, and `_outlined` repaints it in ink anyway.
-    # A helmet carries its own size line (HELM_SIZE), which this one would contradict.
-    margin = [] if pose == "HELM" else ["Object fills most of the canvas with a 2-3 pixel margin, centred."]
+    # A helmet and a dagger carry their own size lines (HELM_SIZE, DAGGER_SIZE), which this one would contradict.
+    margin = [] if pose in ("HELM", "DAGGER", "BROKEN") else ["Object fills most of the canvas with a 2-3 pixel margin, centred."]
     return "\n".join([subject,
      "Single game inventory icon, 32x32 pixel art in the style of a classic fantasy RPG item pack.",
      POSE[pose]] + margin + [
      "A plain, common item: simple shapes and a clean readable silhouette, no engraving, no decoration, no gems or trim beyond what is named.",
      muted,
-     f"Palette: {PAL[pal]}, pale cream highlights #faedb1.",
+     f"Palette: {PAL[pal]}" + ("." if pal in NO_CREAM else ", pale cream highlights #faedb1."),
      light,
      "No text, no background, no shadow, no frame."])
 

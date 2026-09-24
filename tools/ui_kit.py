@@ -246,28 +246,43 @@ BASE_FILL = {"Wooden Armor", "Iron Armor", "Steel Plate", "Golden Plate", "Maste
 # shoulder guards and chest, 2026-09-23): an enclosed clear patch this small or smaller is filled (`_plugged`). The
 # holes a drawing means -- the gap between a pair of boots, a ring's middle -- are far bigger.
 BASE_HOLE_MOST = 4
+# Every dagger points its tip to the bottom-left, the other way from every sword, so the two read apart at a glance (the
+# user's call, 2026-09-24). A pixellab piece that came back tip up-right is mirrored across the top-left diagonal, which
+# keeps the light on its upper-left; the source file stays as drawn.
+BASE_TRANSPOSE = {"Bone Knife", "Masterwork Dagger"}
 _RPG_ZIP = "Pixel Art Icon Pack - RPG.zip!"
 BASE_KINDS = {
-    # The pack draws an iron sword and a golden one, plain and jewelled, and the wooden one is on
-    # disk; the steel one between them is drawn -- fullered, wrapped, a knobbed guard. (The pack's
-    # Silver Sword is the obvious steel and is left alone: it is metronome, unrecoloured.)
+    # All five the user's pixellab swords (2026-09-24), one silhouette at five strengths; what they replaced -- the
+    # pack's wooden, iron and golden swords and the generator's steel one -- is in BASE_OLD.
     "sword": ("Weapon", [
-        ("Wooden Sword", (_RPG_ZIP + "Weapon & Tool/Wooden Sword", 0, 0, 32, 32, 1)), ("Iron Sword", (_RPG + "Weapon & Tool/Iron Sword", 0, 0, 32, 32, 1)),
-        ("Steel Sword", DRAWN), ("Golden Sword", (_RPG + "Weapon & Tool/Golden Sword", 0, 0, 32, 32, 1)),
-        ("Masterwork Sword", MISSING)]),
-    # All four drawn, and short. The pack's Knife was the iron tier until it stood in the row: it
-    # is 28 px corner to corner, the same as the sword above it, and a dagger has to read small
-    # before it reads as anything else.
+        ("Wooden Sword", (PIXELLAB_BASES + "Wooden Sword", 0, 0, 32, 32, 1)), ("Iron Sword", (PIXELLAB_BASES + "Iron Sword", 0, 0, 32, 32, 1)),
+        ("Steel Sword", (PIXELLAB_BASES + "Steel Sword", 0, 0, 32, 32, 1)), ("Golden Sword", (PIXELLAB_BASES + "Golden Sword", 0, 0, 32, 32, 1)),
+        ("Masterwork Sword", (PIXELLAB_BASES + "Masterwork Sword", 0, 0, 32, 32, 1))]),
+    # The user's pixellab daggers (2026-09-24), told from the swords by pointing the other way (BASE_TRANSPOSE); the
+    # generator's four they replaced are in BASE_OLD.
     "dagger": ("Weapon", [
-        ("Bone Knife", DRAWN), ("Iron Dagger", DRAWN), ("Steel Stiletto", DRAWN), ("Golden Kris", DRAWN), ("Masterwork Dagger", MISSING)]),
-    # Four heads, because the four names promise four weapons. The pack's Hammer is stonebreaker.
+        ("Bone Knife", (PIXELLAB_BASES + "Bone Knife", 0, 0, 32, 32, 1)), ("Iron Dagger", (PIXELLAB_BASES + "Iron Dagger", 0, 0, 32, 32, 1)),
+        ("Steel Stiletto", (PIXELLAB_BASES + "Steel Stiletto", 0, 0, 32, 32, 1)),
+        ("Golden Kris", (PIXELLAB_BASES + "Golden Kris", 0, 0, 32, 32, 1)),
+        ("Masterwork Dagger", (PIXELLAB_BASES + "Masterwork Dagger", 0, 0, 32, 32, 1))]),
+    # The user's pixellab maces (2026-09-24); the generator's four they replaced are in BASE_OLD. The Iron Mace is a
+    # grey morningstar from the steel tries, picked by the user for the iron.
     "mace": ("Weapon", [
-        ("Wooden Club", DRAWN), ("Iron Mace", DRAWN), ("Steel Morningstar", DRAWN), ("Golden Sceptre", DRAWN), ("Masterwork Mace", MISSING)]),
-    # The pack's swords already run corner to corner, so a two-hander cannot be longer: it is
-    # heavier -- half again the blade, a grip for two hands, a guard right across the square.
+        ("Wooden Club", (PIXELLAB_BASES + "Wooden Club", 0, 0, 32, 32, 1)), ("Iron Mace", (PIXELLAB_BASES + "Iron Mace", 0, 0, 32, 32, 1)),
+        ("Steel Morningstar", (PIXELLAB_BASES + "Steel Morningstar", 0, 0, 32, 32, 1)),
+        ("Golden Sceptre", (PIXELLAB_BASES + "Golden Sceptre", 0, 0, 32, 32, 1)),
+        ("Masterwork Mace", (PIXELLAB_BASES + "Masterwork Mace", 0, 0, 32, 32, 1))]),
+    # The user's pixellab greatsword line (2026-09-24), built on the Masterwork's blade that widens to a broad slanted
+    # tip; the generator's four they replaced are in BASE_OLD.
     "greatsword": ("Weapon", [
-        ("Wooden Greatsword", DRAWN), ("Iron Claymore", DRAWN),
-        ("Steel Zweihander", DRAWN), ("Golden Greatsword", DRAWN), ("Masterwork Greatsword", MISSING)]),
+        ("Wooden Greatsword", (PIXELLAB_BASES + "Wooden Greatsword", 0, 0, 32, 32, 1)),
+        ("Iron Claymore", (PIXELLAB_BASES + "Iron Claymore", 0, 0, 32, 32, 1)),
+        ("Steel Zweihander", (PIXELLAB_BASES + "Steel Zweihander", 0, 0, 32, 32, 1)),
+        ("Golden Greatsword", (PIXELLAB_BASES + "Golden Greatsword", 0, 0, 32, 32, 1)),
+        ("Masterwork Greatsword", (PIXELLAB_BASES + "Masterwork Greatsword", 0, 0, 32, 32, 1))]),
+    # The player's first find (LootTable.FIRST_DROP), which wore the Wooden Sword's picture until the user drew it one
+    # (2026-09-24).
+    "broken_sword": ("Weapon", [("Broken Sword", (PIXELLAB_BASES + "Broken Sword", 0, 0, 32, 32, 1))]),
 
     "shield": ("Offhand", [
         ("Wooden Shield", (_RPG_ZIP + "Weapon & Tool/Wooden Shield", 0, 0, 32, 32, 1)), ("Iron Shield", DRAWN), ("Steel Kite Shield", DRAWN), ("Golden Aegis", DRAWN), ("Masterwork Shield", MISSING)]),
@@ -348,6 +363,22 @@ BASE_OLD = {
     "Ruby Amulet": DRAWN,
     "Gold Amulet": DRAWN,
     "Emerald Amulet": DRAWN,
+    "Wooden Sword": (_RPG_ZIP + "Weapon & Tool/Wooden Sword", 0, 0, 32, 32, 1),
+    "Iron Sword": (_RPG + "Weapon & Tool/Iron Sword", 0, 0, 32, 32, 1),
+    "Steel Sword": DRAWN,
+    "Golden Sword": (_RPG + "Weapon & Tool/Golden Sword", 0, 0, 32, 32, 1),
+    "Wooden Club": DRAWN,
+    "Iron Mace": DRAWN,
+    "Steel Morningstar": DRAWN,
+    "Golden Sceptre": DRAWN,
+    "Bone Knife": DRAWN,
+    "Iron Dagger": DRAWN,
+    "Steel Stiletto": DRAWN,
+    "Golden Kris": DRAWN,
+    "Wooden Greatsword": DRAWN,
+    "Iron Claymore": DRAWN,
+    "Steel Zweihander": DRAWN,
+    "Golden Greatsword": DRAWN,
 }
 BASE_OLD_OUT = GEAR_OUT + "/Old"
 
@@ -1309,6 +1340,8 @@ def base_gear():
                 art = _outlined(_drawn(MISSING_MARK), own_edge=True)
             elif source[0].startswith(PIXELLAB_BASES):
                 art = _plugged(_cut(source), BASE_HOLE_MOST)
+                if name in BASE_TRANSPOSE:
+                    art = art.transpose(Image.TRANSPOSE)
                 if name in BASE_FILL:
                     art = _filled(art)
                 art = _outlined(_muted(art), own_edge=True)
