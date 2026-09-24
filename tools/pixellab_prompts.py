@@ -547,6 +547,155 @@ ITEMS.append(("Broken sword", [
 ]))
 
 
+# Shields (2026-09-24): a heater rather than a round one, so the steel tier's kite is the same outline. The Wooden
+# Shield came back (Assets/Potential/Bases/Wooden Shield.png) straight on, 24x30, with no edge showing, a rim two
+# pixels thick, five planks and a boss dead centre. The user took the boss off (a ball is too much), found the plain faces
+# that followed too boring, and liked the first Iron Shield's double border (a broad riveted rim, an inner border,
+# a sunken face).
+# So the Shape line carries that border, and each material puts one flat device on the face in the boss's place:
+# wood a leather band, iron a strapped cross, steel a chevron, golden a gold sun (and rim), masterwork an arrowhead
+# crest and spikes. Each in its sword's palette (`wp1`..`wp5`), less the grip.
+POSE["SHIELD"] = "Front view, seen straight on, standing upright: only the face of the shield shows."
+ONE["SHIELD"] = "A single shield on its own and nothing else."
+SHIELD_SHAPE = ("Shape: one shield standing upright, about 24 pixels wide and 30 tall: a flat top edge with small "
+                "rounded corners, straight sides for about half its height, then curving in to a point at the bottom; "
+                "a broad rim about three pixels wide studded with small round studs, and just inside it a second, "
+                "narrower raised border following the same outline, so the face sits in a sunken panel; one flat "
+                "device on the face, big enough to read at a glance.")
+WEAPON_LOOK["wp1_shield"] = ("Look: warm brown wood with apricot highlights along the upper-left edge of each plank and "
+                             "dark brown in the grain and in the lines between the planks; the rim bound in light orange "
+                             "leather, its stitching drawn as short dark dashes.")
+PAL["wp1_shield"] = PAL["wp1"]
+# A shield has no grip in view, so its palettes are the swords' less the grip's leather.
+for _t, _grip in (("wp2", ", reddish brown leather #7f3b2e and #57261b only on the grip"),
+                  ("wp3", ", iron grey leather #4a495b only on the grip"), ("wp4", ", iron grey leather #4a495b only on the grip"),
+                  ("wp5", "")):
+    PAL[_t + "_shield"] = PAL[_t].replace(_grip, "")
+WEAPON_LOOK["wp2_shield"] = ("Look: dull, plain slate grey iron, unpolished: blued steel along the upper-left edges, "
+                             "iron grey in the middle tones and dark grey in the shadows; rivets as single light dots.")
+WEAPON_LOOK["wp3_shield"] = ("Look: pale, cool lavender grey steel, light all over: silver along the upper-left edges, "
+                             "lavender grey on the lit half of the face, lilac grey on the shaded half, never dark.")
+WEAPON_LOOK["wp4_shield"] = WEAPON_LOOK["wp3_shield"] + (" Only the gold parts are gold: tan orange, shining bright gold "
+                                                         "at their highlights. Every edge of the steel is steel colours only.")
+WEAPON_LOOK["wp5_shield"] = WEAPON_LOOK["wp5"]
+ITEMS.append(("Shields", [
+  _weapon("Wooden Shield", "SHIELD", "wp1_shield",
+          "A wooden shield: a face of upright planks of warm brown wood, crossed by one broad flat band of light "
+          "orange leather running across the middle from side to side; the broad rim bound in light orange "
+          "leather, the inner border of darker wood.", SHIELD_SHAPE),
+  _weapon("Iron Shield", "SHIELD", "wp2_shield",
+          "An iron shield: a face of slate grey iron crossed by two flat riveted iron straps, one running down the "
+          "middle from the top to the point and one across the upper third, making a cross; the broad rim and the "
+          "inner border of iron.", SHIELD_SHAPE),
+  _weapon("Steel Kite Shield", "SHIELD", "wp3_shield",
+          "A steel shield: a face of lavender grey steel with a raised chevron, a broad upside-down V of steel, "
+          "spanning the face from side to side a little above the middle; the broad rim and the inner border of "
+          "steel. Every part is steel.", SHIELD_SHAPE),
+  _weapon("Golden Aegis", "SHIELD", "wp4_shield",
+          "A steel shield with gold fittings: a face of lavender grey steel with a gold sun in the upper middle, a "
+          "flat disc with eight short straight rays lying flat against the face; the broad rim gold, the inner "
+          "border steel. Gold only on the rim and the sun.", SHIELD_SHAPE),
+  _weapon("Masterwork Shield", "SHIELD", "wp5_shield",
+          "A masterwork shield of steel blue steel, sharp and angular: a face of flat faceted plates meeting in a "
+          "raised ridge down its middle, a raised angular crest in the middle shaped like a downward-pointing "
+          "arrowhead, and the broad rim of angular plates with one short spike rising from each top corner. Every "
+          "plate has a thin bevelled edge.", SHIELD_SHAPE),
+]))
+
+
+# Bucklers (2026-09-24): the dexterity offhand, so a small round shield rather than the heater -- the one shape
+# that tells them apart in the same socket. The shields' recipe otherwise: straight on, a studded border in place
+# of the double border (a buckler is too small for two), a flat face with no raised middle (the user took the
+# shields' boss off as too much), and one flat device a material, none of them a shield's: a laced patch (hide),
+# spokes (iron), rings and a star (steel), a gold crescent (golden), faceted plates and spikes (masterwork). Each
+# in its shield's palette; the hide takes the Leather Helmet's leather (`h1`), since wood is the Wooden Shield's.
+POSE["BUCKLER"] = POSE["SHIELD"]
+ONE["BUCKLER"] = "A single small round shield on its own and nothing else."
+BUCKLER_SHAPE = ("Shape: one small round shield, a perfect circle about 26 pixels across, seen straight on so it is a "
+                 "circle and not an oval: a rim about two pixels wide running all the way round, a ring of small round "
+                 "studs just inside the rim, and a flat face inside the ring of studs; one flat device on the face, "
+                 "big enough to read at a glance.")
+PAL["h1_buckler"] = PAL["h1"]
+WEAPON_LOOK["h1_buckler"] = HELM_LOOK["h1"]
+ITEMS.append(("Bucklers", [
+  _weapon("Hide Buckler", "BUCKLER", "h1_buckler",
+          "A small hide shield: a face of tan orange hide stretched tight over a round frame, a rim of bronze "
+          "leather laced to the face with short stitches all the way round, and in the middle a flat round patch of "
+          "darker bronze leather held down by four small studs.", BUCKLER_SHAPE),
+  _weapon("Iron Buckler", "BUCKLER", "wp2_shield",
+          "A small iron shield: a face of slate grey iron with eight flat iron spokes running straight out from a "
+          "small flat round plate in the middle to the rim, like the spokes of a cartwheel; the rim and its studs "
+          "of iron.", BUCKLER_SHAPE),
+  _weapon("Steel Targe", "BUCKLER", "wp3_shield",
+          "A small steel shield: a face of lavender grey steel with two thin raised rings round the middle, one "
+          "inside the other, and a flat four-pointed star lying flat in the very middle; the rim and its studs of "
+          "steel. Every part is steel.", BUCKLER_SHAPE),
+  _weapon("Golden Buckler", "BUCKLER", "wp4_shield",
+          "A small steel shield with gold fittings: a face of lavender grey steel with a flat gold crescent moon "
+          "lying across the middle, its two horns pointing up; the rim gold, the studs steel. Gold only on the rim "
+          "and the moon.", BUCKLER_SHAPE),
+  _weapon("Masterwork Buckler", "BUCKLER", "wp5_shield",
+          "A small masterwork shield of steel blue steel, sharp and angular: a face of six flat triangular plates "
+          "meeting at a point in the middle like the facets of a cut gem, and six short spikes pointing straight "
+          "out from the rim, evenly spaced round it. Every plate has a thin bevelled edge.", BUCKLER_SHAPE),
+]))
+
+
+# Torches (2026-09-24): three materials, not five (Sight has three values: LootTable's torch), plus the Thick Fog's
+# Broken Torch, which wears the Wooden Torch's picture until it has its own. Laid like the weapons, handle at the
+# bottom-left, but the fire rises straight up rather than along the haft, since fire does. The flame is what the
+# kind is for (Sight), so it grows with the material -- small, roaring, tall -- and is the one bright thing on each,
+# which is why the ordinary colour line's "never bright" is loosened for it. Wood, iron and masterwork take the
+# swords' measured wood (`wp1`), iron (`wp2`) and steel blue (`wp5`); the fire is chart colours only.
+POSE["TORCH"] = ("Lying diagonally, seen flat from the front: the handle at the bottom-left, the burning head toward "
+                 "the top-right; the flame rises straight up from the head, not along the handle.")
+ONE["TORCH"] = "A single torch on its own and nothing else."
+TORCH_SHAPE = ("Shape: one hand torch: a straight haft about three pixels wide running from the bottom-left corner to "
+               "a little past the middle of the canvas, a head at its upper end about twice as wide as the haft, and a "
+               "flame rising straight up from the head into the top-right of the canvas.")
+FIRE = ("fire of bright gold #e9bc3d at its heart, light orange #e68908 and burnt orange #c95429 at its edges, rust "
+        "orange #a33814 at the flickering tips")
+PAL.update({
+ "torch1": ("warm brown wood #864b28 and #b2642e, apricot highlights #edbd8c, dark brown shadows #654237, burlap tan "
+            "cloth #a77a3e, " + FIRE),
+ "torch2": ("warm brown wood #864b28 and #b2642e and dark brown shadows #654237 on the haft, dull slate iron #616c79 "
+            "and #566874, iron grey #41454b and blued steel highlights #777f85 on the bands and the cage, " + FIRE),
+ "torch5": PAL["wp5"] + ", " + FIRE,
+ "torch_broken": ("warm brown wood #864b28 and #b2642e, dark brown #4e2d1f where it is charred, grey-brown ash "
+                  "#81746a, burlap tan cloth #a77a3e, light orange #e68908 and burnt orange #c95429 in the small flame"),
+})
+_GLOW = "the fire the brightest thing on it, gold at its heart and orange at its edges."
+WEAPON_LOOK.update({
+ "torch1": ("Look: warm brown wood with apricot highlights along the upper-left edge and dark brown in the grain and "
+            "the shadows; the cloth wrap burlap tan, its turns drawn as short dark lines; " + _GLOW),
+ "torch2": ("Look: warm brown wood set against dull, plain slate grey iron: blued steel along the upper-left edges of "
+            "the iron, dark brown in the wood's grain and the shadows; " + _GLOW),
+ "torch5": ("Look: cool steel blue steel, dusty blue on the faces the light reaches, navy only in the deepest shadows, "
+            "a thin light grey highlight along every edge; the steel is steel blue and navy only, and " + _GLOW
+            + " The fire is the only warm colour."),
+ "torch_broken": ("Look: old, worn warm brown wood, dark brown where it is charred and grey-brown where the ash sits; "
+                  "the small flame the only bright thing on it."),
+})
+ITEMS.append(("Torches", [
+  _weapon("Wooden Torch", "TORCH", "torch1",
+          "A plain wooden torch: a straight stick of warm brown wood, its upper end wrapped in a few turns of burlap "
+          "tan cloth, and a small steady flame about a quarter of the canvas tall burning on the cloth.", TORCH_SHAPE),
+  _weapon("Blazing Torch", "TORCH", "torch2",
+          "A sturdy torch with an iron head: a straight haft of warm brown wood bound with two slate grey iron bands, "
+          "topped by a small open iron cage of four bars holding the burning end, and a big roaring flame about half "
+          "the canvas tall bursting out of the cage and rising well above it.", TORCH_SHAPE),
+  _weapon("Masterwork Torch", "TORCH", "torch5",
+          "A masterwork torch of steel blue steel, sharp and angular: a faceted steel haft with a raised ridge down "
+          "it and a short spike at its lower end, topped by an angular steel cup of pointed plates opening like a "
+          "crown, and a tall fierce flame about half the canvas tall rising from the cup. Every plate has a thin "
+          "bevelled edge.", TORCH_SHAPE),
+  _weapon("Broken Torch", "TORCH", "torch_broken",
+          "An old, burnt-out torch: a stick of warm brown wood split by a long crack down its length, its head "
+          "charred dark brown with grey-brown ash and a few torn scraps of burlap tan cloth, and a small guttering "
+          "flame about five pixels tall clinging to one side of the head.", TORCH_SHAPE),
+]))
+
+
 # The top materials are the finest of their line and should look it: the same dusty set, but polished.
 # Without this the golden and masterwork helms came out duller than the steel one (2026-09-23).
 SHINE = {"wp3": "the steel's upper-left edges", "wp4": "the gold parts", "wp5": "the thin light grey edges",
@@ -563,6 +712,10 @@ SHINE_LEATHER = {"t4_leather": "the copper buckles", "t5_leather": "the light gr
 
 NO_CREAM = {"wp2", "broken"}
 LIGHT_STEEL = {"wp3", "wp4"}
+# The shields wear their swords' treatment.
+NO_CREAM.add("wp2_shield"); LIGHT_STEEL |= {"wp3_shield", "wp4_shield"}
+SHINE.update({"wp3_shield": SHINE["wp3"], "wp4_shield": SHINE["wp4"], "wp5_shield": SHINE["wp5"]})
+SHINE["torch5"] = "the thin light grey edges and the fire"
 
 
 def prompt(pose, pal, subject):
@@ -581,6 +734,8 @@ def prompt(pose, pal, subject):
         muted = ("Muted, dusty colours, but polished: bright highlights and deep shadows, "
                  f"{SHINE[pal]} clearly catching the light.")
         light = "Soft light from the top-left, 3-4 shades per material, a bright highlight along each ridge and rim."
+    if pal.startswith("torch"):
+        muted = muted.replace("never pure or bright.", "never pure; only the fire glows.")
     if pal in LIGHT_STEEL:
         muted = muted.replace("and deep shadows", "and soft, light shadows")
     # No outline line: pixellab's Outline setting draws its own, and `_outlined` repaints it in ink anyway.

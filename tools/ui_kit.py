@@ -284,10 +284,19 @@ BASE_KINDS = {
     # (2026-09-24).
     "broken_sword": ("Weapon", [("Broken Sword", (PIXELLAB_BASES + "Broken Sword", 0, 0, 32, 32, 1))]),
 
+    # The user's pixellab shields (2026-09-24): one heater at five strengths, each material a device of its own on the
+    # face; the pack's wooden one and the generator's three are in BASE_OLD.
     "shield": ("Offhand", [
-        ("Wooden Shield", (_RPG_ZIP + "Weapon & Tool/Wooden Shield", 0, 0, 32, 32, 1)), ("Iron Shield", DRAWN), ("Steel Kite Shield", DRAWN), ("Golden Aegis", DRAWN), ("Masterwork Shield", MISSING)]),
+        ("Wooden Shield", (PIXELLAB_BASES + "Wooden Shield", 0, 0, 32, 32, 1)), ("Iron Shield", (PIXELLAB_BASES + "Iron Shield", 0, 0, 32, 32, 1)),
+        ("Steel Kite Shield", (PIXELLAB_BASES + "Steel Kite Shield", 0, 0, 32, 32, 1)),
+        ("Golden Aegis", (PIXELLAB_BASES + "Golden Aegis", 0, 0, 32, 32, 1)),
+        ("Masterwork Shield", (PIXELLAB_BASES + "Masterwork Shield", 0, 0, 32, 32, 1))]),
     "buckler": ("Offhand", [
-        ("Hide Buckler", DRAWN), ("Iron Buckler", DRAWN), ("Steel Targe", DRAWN), ("Golden Buckler", DRAWN), ("Masterwork Buckler", MISSING)]),
+        ("Hide Buckler", (PIXELLAB_BASES + "Hide Buckler", 0, 0, 32, 32, 1)),
+        ("Iron Buckler", (PIXELLAB_BASES + "Iron Buckler", 0, 0, 32, 32, 1)),
+        ("Steel Targe", (PIXELLAB_BASES + "Steel Targe", 0, 0, 32, 32, 1)),
+        ("Golden Buckler", (PIXELLAB_BASES + "Golden Buckler", 0, 0, 32, 32, 1)),
+        ("Masterwork Buckler", (PIXELLAB_BASES + "Masterwork Buckler", 0, 0, 32, 32, 1))]),
     # Two tiers. The second was the pack torch with its own flame grown by code (`_blaze`), and was
     # turned down twice for still being the first one: it is drawn now, a caged brand with a fire
     # three times the size.
@@ -379,6 +388,14 @@ BASE_OLD = {
     "Iron Claymore": DRAWN,
     "Steel Zweihander": DRAWN,
     "Golden Greatsword": DRAWN,
+    "Wooden Shield": (_RPG_ZIP + "Weapon & Tool/Wooden Shield", 0, 0, 32, 32, 1),
+    "Iron Shield": DRAWN,
+    "Steel Kite Shield": DRAWN,
+    "Golden Aegis": DRAWN,
+    "Hide Buckler": DRAWN,
+    "Iron Buckler": DRAWN,
+    "Steel Targe": DRAWN,
+    "Golden Buckler": DRAWN,
 }
 BASE_OLD_OUT = GEAR_OUT + "/Old"
 

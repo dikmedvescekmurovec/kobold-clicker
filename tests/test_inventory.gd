@@ -92,7 +92,7 @@ func _test_items() -> bool:
 	if Settings.show_old_icons():
 		_check(LootTable.icon_path("Iron Helmet") == LootTable.OLD_ROOT + "Iron Helmet.png",
 				"the old-icons tick shows the Iron Helmet it replaced")
-		_check(LootTable.icon_path("Iron Shield") == LootTable.ROOT + "Iron Shield.png",
+		_check(LootTable.icon_path("Masterwork Helm") == LootTable.ROOT + "Masterwork Helm.png",
 				"a base never replaced keeps its own icon under the tick")
 	Settings.old_icons = false
 	_check(LootTable.icon_path("Iron Helmet") == LootTable.ROOT + "Iron Helmet.png",
