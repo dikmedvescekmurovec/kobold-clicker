@@ -1767,9 +1767,13 @@ func _pulse(button: Button, id: String, on: bool) -> void:
 	_flashes.erase(id)
 
 
-## Whether a rank can be bought: a point is not always enough, once the trees have been transcended.
+## Whether a rank can be bought anywhere: past a skill's most one point is not always enough.
 func _skill_point_free() -> bool:
-	return inventory.skills.points(inventory.level) >= inventory.skills.rank_cost()
+	for tree: String in SkillTree.trees():
+		for id: String in SkillTree.nodes_of(tree):
+			if inventory.why_not_skill(id).is_empty():
+				return true
+	return false
 
 
 ## A new unique hovered in the log: kept, and the trophy stops pulsing once none are left.

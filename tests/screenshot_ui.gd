@@ -275,23 +275,32 @@ func _shoot_skills() -> void:
 	print("Saved ", ProjectSettings.globalize_path("user://ui_tooltip.png"))
 	root.warp_mouse(Vector2.ZERO)
 
-	# Every tree full, so Transcend trees is up, and pressed once, so it asks.
-	main.inventory.level = 71
+	# Every tree full and a few skills past their most, with the card over Titan, two ranks in.
+	main.inventory.level = 100
 	main.inventory.skills = Skills.new()
 	for tree: String in SkillTree.trees():
 		for row in SkillTree.ROWS:
 			for id: String in SkillTree.nodes_of(tree):
 				if int(SkillTree.node(id)["row"]) == row:
-					while main.inventory.skills.rank_up(id, main.inventory.level):
-						pass
-	main.inventory.skills.transcended = 1
+					while main.inventory.skills.rank_of(id) < int(SkillTree.node(id)["max_rank"]):
+						main.inventory.skills.rank_up(id, main.inventory.level)
+	for id: String in ["titan", "sharpened_edge", "sharpened_edge", "sharpened_edge", "battle_rhythm"]:
+		main.inventory.skills.rank_up(id, main.inventory.level)
 	main.skills_page.open()
-	main.skills_page._on_transcend_pressed()
+	var away := InputEventMouseMotion.new()
+	away.position = Vector2(root.size) - Vector2.ONE
+	away.global_position = away.position
+	root.push_input(away)
+	for i in 2:
+		await process_frame
+	for slot: Node in main.skills_page._skill_views["power"].get_children():
+		if slot is SkillSlot and slot.id == "titan":
+			main.skills_page._on_skill_hovered("titan", slot)
 	for i in 2:
 		await process_frame
 	await RenderingServer.frame_post_draw
-	root.get_texture().get_image().save_png("user://ui_skills_transcend.png")
-	print("Saved ", ProjectSettings.globalize_path("user://ui_skills_transcend.png"))
+	root.get_texture().get_image().save_png("user://ui_skills_overrank.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_skills_overrank.png"))
 	main.queue_free()
 	await process_frame
 

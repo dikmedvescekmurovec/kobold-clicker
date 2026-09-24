@@ -126,9 +126,12 @@ const TREES := {
 	},
 }
 
-## How much stronger every skill's numbers grow each time the trees are transcended: +50% a time, in a
-## straight line, so a player can add it up. The effects do not grow, only the stat lines.
-const TRANSCEND_GAIN := 0.5
+## What a rank past a skill's most costs, by row down: the nth one past it costs the row's weight times
+## n. One past the root adds a fifth of the root, one past a capstone doubles its numbers, so the
+## stronger the step the faster its price climbs -- and spreading points stays cheaper than stacking.
+## Ranks past the most open only once every tree is full (`all_full`). Only the numbers grow: a
+## capstone's effect is a rule, not a number.
+const OVERRANK_WEIGHT := [1, 2, 2, 3, 6]
 
 ## How many rows and columns every tree is laid out on.
 const ROWS := 5
@@ -210,18 +213,19 @@ static func points_in(tree: String, ranks: Dictionary) -> int:
 ## Whether one more point can go into `id`, given what is learned and how many points are free.
 ## `can_rank` and `why_not` are two faces of one rule, the way OrbTable's are, so they are written
 ## side by side and read the same conditions in the same order.
-static func can_rank(id: String, ranks: Dictionary, free_points: int, cost := 1) -> bool:
-	return why_not(id, ranks, free_points, cost).is_empty()
+static func can_rank(id: String, ranks: Dictionary, free_points: int) -> bool:
+	return why_not(id, ranks, free_points).is_empty()
 
 
-## The sentence explaining why a point cannot go into `id`, or "" when it can. A rank costs `cost`
-## points (`Skills.rank_cost`: more after the trees are transcended).
-static func why_not(id: String, ranks: Dictionary, free_points: int, cost := 1) -> String:
+## The sentence explaining why a point cannot go into `id`, or "" when it can. A rank costs
+## `rank_cost` points: one, until it is past the skill's most.
+static func why_not(id: String, ranks: Dictionary, free_points: int) -> String:
 	var entry := node(id)
 	if entry.is_empty():
 		return "No such skill"
-	if int(ranks.get(id, 0)) >= int(entry["max_rank"]):
-		return "Fully learned"
+	var rank := int(ranks.get(id, 0))
+	if rank >= int(entry["max_rank"]) and not all_full(ranks):
+		return FULL
 	if not has_parent(id, ranks):
 		var names := PackedStringArray()
 		for parent: String in entry["parents"]:
@@ -231,34 +235,56 @@ static func why_not(id: String, ranks: Dictionary, free_points: int, cost := 1) 
 		return "Needs %d points in %s" % [points_for_row(id), TREES[tree_of(id)]["label"]]
 	if free_points <= 0:
 		return "No skill points left"
+	var cost := rank_cost(id, rank)
 	if free_points < cost:
 		return "Needs %d skill points" % cost
 	return ""
 
 
-## What one point of a skill worth `value` of a stat is worth after the trees have been transcended
-## `times`: the gain, rounded **up** -- to a whole number, or to the first decimal where the value is a
-## fraction to begin with (Quick Hands' 0.05/s), so no point is ever worth an unreadable figure.
-static func scaled(value: float, times: int) -> float:
-	if times <= 0:
-		return value
-	var grown := value * (1.0 + TRANSCEND_GAIN * times)
-	if absf(value) >= 1.0:
-		return ceilf(grown - 0.0001)
-	return ceilf(grown * 10.0 - 0.0001) / 10.0
+## What `why_not` says of a skill at its most while a tree still has room.
+const FULL := "Fully learned until every tree is full"
 
 
-## What `points` in `id` do, one clause a stat: "+1 Damage", "6% increased Damage", after the trees
-## have been transcended `times`.
-static func describe(id: String, points := 1.0, times := 0) -> String:
+## Skill points the rank after `rank` in `id` costs: one up to the skill's most, then
+## `OVERRANK_WEIGHT` of its row times how far past the most it is.
+static func rank_cost(id: String, rank: int) -> int:
+	var over := rank + 1 - int(node(id)["max_rank"])
+	return 1 if over <= 0 else int(OVERRANK_WEIGHT[int(node(id)["row"])]) * over
+
+
+## Skill points `rank` ranks of `id` cost altogether: the sum of `rank_cost` up to it.
+static func points_for(id: String, rank: int) -> int:
+	var most := int(node(id)["max_rank"])
+	var over := maxi(rank - most, 0)
+	return mini(rank, most) + int(OVERRANK_WEIGHT[int(node(id)["row"])]) * over * (over + 1) / 2
+
+
+## Whether every skill of `tree` holds at least its most.
+static func is_full(tree: String, ranks: Dictionary) -> bool:
+	for id: String in nodes_of(tree):
+		if int(ranks.get(id, 0)) < int(nodes_of(tree)[id]["max_rank"]):
+			return false
+	return true
+
+
+## Whether every tree is full, which is when a skill can go past its most.
+static func all_full(ranks: Dictionary) -> bool:
+	for tree: String in trees():
+		if not is_full(tree, ranks):
+			return false
+	return true
+
+
+## What `points` in `id` do, one clause a stat: "+1 Damage", "6% increased Damage".
+static func describe(id: String, points := 1.0) -> String:
 	var entry := node(id)
 	var parts := PackedStringArray()
 	var flat: Dictionary = entry["flat"]
 	for stat: String in flat:
-		parts.append(_flat_line(stat, scaled(float(flat[stat]), times) * points))
+		parts.append(_flat_line(stat, float(flat[stat]) * points))
 	var percent: Dictionary = entry["percent"]
 	for stat: String in percent:
-		parts.append("%d%% increased %s" % [roundi(scaled(float(percent[stat]), times) * points),
+		parts.append("%d%% increased %s" % [roundi(float(percent[stat]) * points),
 				LootTable.STAT_LABELS.get(stat, stat)])
 	return ", ".join(parts)
 

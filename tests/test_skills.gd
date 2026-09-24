@@ -15,7 +15,8 @@ func _run() -> void:
 	_check(_test_stacking() == true, "stacking tests ran to the end")
 	_check(_test_respec() == true, "reset tests ran to the end")
 	_check(_test_save() == true, "save tests ran to the end")
-	_check(_test_transcend() == true, "tree transcension tests ran to the end")
+	_check(_test_overranks() == true, "overrank tests ran to the end")
+	_check(_test_hold() == true, "held press tests ran to the end")
 	_check(_test_rarity() == true, "rarity tests ran to the end")
 	_check(_test_gold_and_orbs() == true, "gold and orb find tests ran to the end")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_PATH))
@@ -87,7 +88,7 @@ func _test_spending() -> bool:
 	_check(skills.points(20) == 12, "seven spent of nineteen")
 	_check(skills.rank_of("sharpened_edge") == 5, "the root fills to five")
 	_check(not skills.rank_up("sharpened_edge", 20), "and no further")
-	_check(skills.why_not("sharpened_edge", 20) == "Fully learned", "which it says")
+	_check(skills.why_not("sharpened_edge", 20) == SkillTree.FULL, "which it says")
 	_check(skills.spent("power") == 7 and skills.spent("fortune") == 0, "spent is counted per tree")
 
 	# The capstone row wants twelve points in its tree before it.
@@ -210,54 +211,93 @@ func _test_save() -> bool:
 	return true
 
 
-## Every tree full: the points go for good, and every skill's numbers grow half again, rounded up.
-func _test_transcend() -> bool:
+## Every tree full: a skill goes past its most, each rank past it dearer by its row's weight, and the
+## numbers grow while the capstone's effect stays the one rule.
+func _test_overranks() -> bool:
 	var full := SkillTree.capacity("power") + SkillTree.capacity("fortune") + SkillTree.capacity("guard")
 	var level := full + 1
 	var skills := Skills.new()
-	_check(not skills.can_transcend(), "an empty tree cannot be transcended")
-	_check(not skills.transcend(), "and the press is refused")
-	for tree: String in SkillTree.trees():
+	for tree: String in ["power", "fortune"]:
 		_fill(skills, tree, level)
+	_check(skills.why_not("titan", level) == SkillTree.FULL, "no rank past the most while a tree has room")
+	_fill(skills, "guard", level)
 	_check(skills.points(level) == 0, "every tree full takes every point at level %d" % level)
-	_check(skills.can_transcend(), "every tree full can be transcended")
-	var plain_damage := float(skills.flat()["damage"])
-	_check(skills.transcend(), "and is")
-	_check(skills.ranks.is_empty() and skills.transcended == 1, "every skill goes back to nothing")
-	_check(skills.points(level) == 0, "and the points are not handed back")
-	_check(skills.rank_cost() == 2, "a rank now costs two points")
-	_check(not skills.can_rank("sharpened_edge", level + 1), "so one point is not enough")
-	_check(skills.why_not("sharpened_edge", level + 1) == "Needs 2 skill points",
-			"and the card says so (%s)" % skills.why_not("sharpened_edge", level + 1))
-	_check(skills.rank_up("sharpened_edge", level + 2) and skills.points(level + 2) == 0, "two buy it")
-	skills.reset("power")
+	_check(skills.why_not("titan", level) == "No skill points left", "then only the points are missing")
 
-	_check(SkillTree.scaled(1.0, 0) == 1.0, "nothing transcended changes nothing")
-	_check(SkillTree.scaled(1.0, 1) == 2.0, "1.5 is rounded up to 2")
-	_check(SkillTree.scaled(4.0, 1) == 6.0, "4 grows to 6")
-	_check(SkillTree.scaled(0.05, 1) == 0.1, "a fraction is rounded up to the first decimal")
-	_check(SkillTree.scaled(4.0, 2) == 8.0, "twice is +100%")
-	for tree: String in SkillTree.trees():
-		_fill(skills, tree, level * 3)
-	_check(float(skills.flat()["damage"]) > plain_damage,
-			"the same skills add more damage (%s against %s)" % [skills.flat()["damage"], plain_damage])
-	_check(SkillTree.describe("sharpened_edge", 1, 1) == "+2 Damage", "and the card says so (%s)"
-			% SkillTree.describe("sharpened_edge", 1, 1))
+	_check(SkillTree.rank_cost("sharpened_edge", 0) == 1 and SkillTree.rank_cost("titan", 0) == 1,
+			"a rank up to the most is a point")
+	_check(SkillTree.rank_cost("sharpened_edge", 5) == 1 and SkillTree.rank_cost("sharpened_edge", 6) == 2,
+			"past the root's most: 1, then 2")
+	_check(SkillTree.rank_cost("titan", 1) == 6 and SkillTree.rank_cost("titan", 2) == 12,
+			"past a capstone: 6, then 12")
+	_check(SkillTree.points_for("titan", 3) == 1 + 6 + 12, "the costs add up (%d)" % SkillTree.points_for("titan", 3))
+	for id: String in SkillTree.nodes_of("power"):
+		var paid := 0
+		for rank in 8:
+			paid += SkillTree.rank_cost(id, rank)
+		_check(SkillTree.points_for(id, 8) == paid, "%s: points_for is the sum of rank_cost" % id)
 
-	# The save keeps what was taken and how often; a world's transcension keeps only the count.
+	var damage := float(skills.flat()["damage"])
+	var boost := float(skills.percent()["damage"])
+	_check(skills.why_not("titan", level + 5) == "Needs 6 skill points", "five points are not enough (%s)"
+			% skills.why_not("titan", level + 5))
+	_check(skills.rank_up("titan", level + 6) and skills.points(level + 6) == 0, "six buy it")
+	_check(skills.rank_of("titan") == 2, "Titan holds two")
+	_check(float(skills.flat()["damage"]) == damage + 2 and float(skills.percent()["damage"]) == boost + 15,
+			"and adds its numbers again")
+	_check(skills.effects().count("giant_slayer") == 1, "but its effect once")
+	_check(skills.rank_up("sharpened_edge", level + 7) and skills.rank_up("sharpened_edge", level + 9),
+			"the root past its most for 1, then 2")
+
+	# A Reset gives every point back, the overranks' too, and the other trees keep theirs.
 	var inventory := Inventory.new()
-	inventory.level = level
-	for tree: String in SkillTree.trees():
-		_fill(inventory.skills, tree, level)
-	inventory.skills.transcend()
+	inventory.level = level + 9
+	inventory.skills = skills
+	inventory.gold = 1e30
+	_check(inventory.respec("fortune") and skills.points(inventory.level) == SkillTree.capacity("fortune"),
+			"a reset of a plain tree gives its points back")
+	_check(skills.rank_of("titan") == 2 and skills.why_not("titan", 1000) == SkillTree.FULL,
+			"Titan keeps its rank, and no more go past until every tree is full again")
+
+	# The save keeps a full tree's overranks and cuts a rank past the most anywhere else.
 	_check(inventory.save(TEST_PATH), "saved")
 	var back := Inventory.load_from(TEST_PATH)
-	_check(back.skills.sunk == inventory.skills.sunk and back.skills.transcended == 1,
-			"a transcension survives the save (%d, %d)" % [back.skills.sunk, back.skills.transcended])
-	_check(back.skills.points(level) == 0, "and the points stay spent")
-	var next := inventory.transcended()
-	_check(next.skills.transcended == 1 and next.skills.sunk == 0, "a new world keeps the count, not the points")
-	_check(Skills.from_dict({}, 5, 1000, 2).sunk == 4, "more taken than the level earned is cut to it")
+	_check(back.skills.ranks == skills.ranks, "overranks survive the save (%s)" % [back.skills.ranks])
+	_check(Skills.from_dict({"scavenger": 9}, 99).ranks == {"scavenger": 5}, "a tree not full is cut down")
+	var file := FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	file.store_string(JSON.stringify({"version": 23, "level": inventory.level, "xp": 0, "items": [],
+		"skills": inventory.skills.to_dict(), "skill_sunk": 69, "skill_transcends": 1}))
+	file.close()
+	var legacy := Inventory.load_from(TEST_PATH)
+	_check(legacy.skills.points(legacy.level) == skills.points(inventory.level),
+			"a version 23 save's sunk points are free again")
+	return true
+
+
+## A press held on a skill keeps learning it until the skill is full or the press is let go, and the
+## points are saved when it ends.
+func _test_hold() -> bool:
+	var inventory := Inventory.new()
+	inventory.level = 4
+	var page := SkillsPage.new(inventory, TEST_PATH, 1.0)
+	root.add_child(page)
+	page._on_skill_pressed("sharpened_edge")
+	_check(inventory.skills.rank_of("sharpened_edge") == 1 and page._held == "sharpened_edge",
+			"a press learns a point and holds")
+	page._on_hold_tick()
+	_check(inventory.skills.rank_of("sharpened_edge") == 2, "a tick learns another")
+	_check(is_equal_approx(page._hold_timer.wait_time, SkillsPage.HOLD_FIRST)
+			and page._hold_gap < SkillsPage.HOLD_FIRST, "slowly at first, and quicker each point")
+	var release := InputEventMouseButton.new()
+	release.button_index = MOUSE_BUTTON_LEFT
+	page._input(release)
+	_check(page._held.is_empty() and page._hold_timer.is_stopped(), "a release lets go")
+	_check(Inventory.load_from(TEST_PATH).skills.rank_of("sharpened_edge") == 2, "and saves the points")
+	page._on_skill_pressed("sharpened_edge")
+	page._on_hold_tick()
+	_check(inventory.skills.rank_of("sharpened_edge") == 3 and page._held.is_empty(),
+			"a refused point ends the hold on its own")
+	page.free()
 	return true
 
 

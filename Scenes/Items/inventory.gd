@@ -55,7 +55,9 @@ const SAVE_PATH := "user://inventory.json"
 ## 22 adds `dungeon_depth`; a version 21 save has won no depth of the dungeon.
 ## 23 drops `camp` for `saved_at`, the hour the save was written, which a camp is paid from now; a
 ## version 22 save camped somewhere counts from that camp's hour, and one camped nowhere is owed none.
-const VERSION := 23
+## 24 drops `skill_sunk` and `skill_transcends`: the trees are no longer transcended, a skill goes past
+## its most instead (`SkillTree.OVERRANK_WEIGHT`), and a version 23 save's sunk points are free again.
+const VERSION := 24
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -596,8 +598,6 @@ func transcended(lost := false) -> Inventory:
 	next.first_sword_taken = true
 	next.super_orbs = super_orbs
 	next.skull_budget = skulls_earned(lost)
-	# The skill trees' transcensions go with the player; the points they took were this world's level.
-	next.skills.transcended = skills.transcended
 	# What was chosen on the black screen is the new world's, and the old world's curses end with it.
 	next.curses = Curses.known(pending_curses)
 	if Curses.THICK_FOG in next.curses:
@@ -674,8 +674,6 @@ func save(path := SAVE_PATH) -> bool:
 		"level": level,
 		"xp": xp,
 		"skills": skills.to_dict(),
-		"skill_sunk": skills.sunk,
-		"skill_transcends": skills.transcended,
 		"towns": towns.to_dict(),
 		"orbs": orbs,
 		"items": saved,
@@ -774,9 +772,7 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	inventory.add_xp(maxi(0, int(saved_xp)) if typeof(saved_xp) in [TYPE_INT, TYPE_FLOAT] else 0)
 	# Version 8 knew nothing about skills: an absent key is nothing learned. Read after the level,
 	# because what a save may have spent is counted off it.
-	# Version 18 knew nothing about transcending the trees: absent keys are none done.
-	inventory.skills = Skills.from_dict(data.get("skills", {}), inventory.level,
-			_whole(data.get("skill_sunk", 0)), _whole(data.get("skill_transcends", 0)))
+	inventory.skills = Skills.from_dict(data.get("skills", {}), inventory.level)
 	# Version 9 knew nothing about towns, and an absent key reads as no settlement walked into yet --
 	# which is what every save had before there was anything in one to do.
 	inventory.towns = TownState.from_dict(data.get("towns", {}))

@@ -32,20 +32,21 @@ func fill(id: String, skills: Skills, level: int, worth := 1.0, refused: Variant
 	var rank := skills.rank_of(id)
 	var most := int(entry["max_rank"])
 	_rows.add_child(ItemDetails.line(str(entry["name"]), Palette.TEXT, WIDTH))
-	_rows.add_child(ItemDetails.line("Per point: " + SkillTree.describe(id, worth, skills.transcended), Palette.TEXT_SOFT, WIDTH, true))
+	_rows.add_child(ItemDetails.line("Per point: " + SkillTree.describe(id, worth), Palette.TEXT_SOFT, WIDTH, true))
 	if entry.has("effect_text"):
 		_rows.add_child(ItemDetails.line(str(entry["effect_text"]), Palette.SLOT_TAN_DK, WIDTH, true))
 	if rank > 0:
-		_rows.add_child(ItemDetails.line("Now: " + SkillTree.describe(id, rank * worth, skills.transcended), Palette.LEAF, WIDTH, true))
+		_rows.add_child(ItemDetails.line("Now: " + SkillTree.describe(id, rank * worth), Palette.LEAF, WIDTH, true))
 	# `refused` is whoever owns the skills saying why not, where there is more to it than the trees'
 	# own rules (`Inventory.why_not_skill`: the Specialist's one tree).
 	var refusal: String = skills.why_not(id, level) if refused == null else str(refused)
+	var cost := SkillTree.rank_cost(id, rank)
 	var status := "Click to learn (%d/%d)" % [rank, most]
-	if skills.rank_cost() > 1:
-		status = "Click to learn for %d points (%d/%d)" % [skills.rank_cost(), rank, most]
+	if cost > 1:
+		status = "Click to learn for %d points (%d/%d)" % [cost, rank, most]
 	var tone := Palette.LEAF
-	if rank >= most:
-		status = "Fully learned"
+	if refusal == SkillTree.FULL:
+		status = refusal
 		# Not gold: at 10 px on cream it cannot be read, which is why a unique's sentence is this too.
 		tone = Palette.SLOT_TAN_DK
 	elif not refusal.is_empty():

@@ -2,9 +2,8 @@ class_name SkillsPage
 extends Control
 ## The skills page against the left edge: the free points over the three trees side by side, each with
 ## a Reset that buys its points back for gold, and a card beside the skill under the cursor,
-## placed as `ItemCard` is. Once every tree is full, **Transcend trees** beside the points takes every point
-## for good and makes every skill stronger (`Skills.transcend`); it asks by turning into "Sure?", the
-## way the bounty journal's Cancel does. Showing or hiding this node opens or closes the whole page.
+## placed as `ItemCard` is. A press held on a skill keeps putting points in until it is let go or the
+## skill refuses one. Showing or hiding this node opens or closes the whole page.
 
 ## The page's X was pressed.
 signal closed
@@ -13,6 +12,13 @@ signal changed
 
 ## The gap between the trees, in panel pixels.
 const TREE_GAP := 20
+## How long a press on a skill is held before points go in by themselves, and then the gap between
+## them: it starts at `HOLD_FIRST` and shrinks by `HOLD_SPEEDUP` a point down to `HOLD_FASTEST`, so a
+## few points can still be counted out by hand and a long hold runs (twelve a second after about two seconds).
+const HOLD_DELAY := 0.4
+const HOLD_FIRST := 0.3
+const HOLD_SPEEDUP := 0.85
+const HOLD_FASTEST := 0.08
 
 var inventory: Inventory
 var _save_path: String
@@ -22,10 +28,11 @@ var _points: Label
 var _skill_views := {}
 var _respec_buttons := {}
 var _card: SkillCard
-var _transcend: Button
-
-const TRANSCEND := "Transcend trees"
-const SURE := "Sure?"
+## The skill a held press is putting points into, "" while none is. Held here and not on the slot,
+## because every point redraws the tree and frees the slot that was pressed.
+var _held := ""
+var _hold_timer: Timer
+var _hold_gap := HOLD_FIRST
 
 
 func _init(player_inventory: Inventory, save_path: String, ui_scale: float) -> void:
@@ -41,19 +48,9 @@ func _ready() -> void:
 	_panel.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_panel)
 	var rows := UITheme.body_of(_panel)
-	# The points, and beside them the way to transcend the trees: up here, because the page is as tall
-	# as a 648 px window lets it be and there is no room under the resets.
-	var top := HBoxContainer.new()
-	rows.add_child(top)
 	_points = UITheme.label()
 	_points.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_points.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(_points)
-	_transcend = UITheme.button(TRANSCEND, "WoodDangerButton", "Every skill back to nothing and every "
-			+ "point spent for good. Every skill is %d%% stronger from then on, in every world"
-			% roundi(SkillTree.TRANSCEND_GAIN * 100))
-	_transcend.pressed.connect(_on_transcend_pressed)
-	top.add_child(_transcend)
+	rows.add_child(_points)
 
 	# Scrolled under the points, which stay pinned: the trees fit a 648 px window and no more.
 	# Padded by what a skill draws past its square (the ring, the count), which the scroll would clip.
@@ -84,6 +81,11 @@ func _ready() -> void:
 		column.add_child(reset)
 		_respec_buttons[tree] = reset
 
+	_hold_timer = Timer.new()
+	_hold_timer.timeout.connect(_on_hold_tick)
+	add_child(_hold_timer)
+	visibility_changed.connect(_stop_holding)
+
 	# Last, so it draws over the page.
 	_card = SkillCard.new()
 	_card.scale = Vector2(_ui_scale, _ui_scale)
@@ -97,9 +99,6 @@ func open() -> void:
 	changed.emit()
 	var free := inventory.skills.points(inventory.level)
 	_points.text = "%d skill point%s" % [free, "" if free == 1 else "s"]
-	var times := inventory.skills.transcended
-	if times > 0:
-		_points.text += ", skills +%d" % times
 	_points.add_theme_color_override("font_color", Palette.LEAF if free > 0 else Palette.TEXT_SOFT)
 	for tree: String in _skill_views:
 		_skill_views[tree].fill(tree, inventory.skills.ranks)
@@ -108,8 +107,6 @@ func open() -> void:
 		var cost := inventory.respec_cost(tree)
 		UITheme.set_price(reset, cost if spent > 0 else 0.0)
 		reset.disabled = spent <= 0 or inventory.gold < cost
-	_transcend.text = TRANSCEND
-	_transcend.visible = inventory.skills.can_transcend()
 	# Whatever the cursor was over has just been redrawn.
 	_hide_card()
 
@@ -129,18 +126,34 @@ func _on_skill_pressed(id: String) -> void:
 	print("Learned %s (%d/%d)" % [SkillTree.node(id)["name"], inventory.skills.rank_of(id),
 			SkillTree.node(id)["max_rank"]])
 	open()
+	_held = id
+	_hold_gap = HOLD_FIRST
+	_hold_timer.start(HOLD_DELAY)
 
 
-## The first press asks, the second does it.
-func _on_transcend_pressed() -> void:
-	if _transcend.text != SURE:
-		_transcend.text = SURE
+## Another point into the held skill, saved once the press ends rather than every tick.
+func _on_hold_tick() -> void:
+	if not inventory.rank_up_skill(_held):
+		_stop_holding()
 		return
-	if not inventory.skills.transcend():
-		return
-	inventory.save(_save_path)
-	print("Transcended the skill trees (%d)" % inventory.skills.transcended)
+	_hold_timer.start(_hold_gap)
+	_hold_gap = maxf(_hold_gap * HOLD_SPEEDUP, HOLD_FASTEST)
 	open()
+
+
+## A release anywhere ends the hold: the slot pressed is gone, so it cannot be the one to hear it.
+func _input(event: InputEvent) -> void:
+	if not _held.is_empty() and event is InputEventMouseButton 			and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		_stop_holding()
+
+
+func _stop_holding() -> void:
+	_hold_timer.stop()
+	if _held.is_empty():
+		return
+	print("Held %s to %d" % [SkillTree.node(_held)["name"], inventory.skills.rank_of(_held)])
+	_held = ""
+	inventory.save(_save_path)
 
 
 func _on_respec_pressed(tree: String) -> void:
