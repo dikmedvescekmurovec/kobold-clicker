@@ -250,6 +250,13 @@ BASE_HOLE_MOST = 4
 # user's call, 2026-09-24). A pixellab piece that came back tip up-right is mirrored across the top-left diagonal, which
 # keeps the light on its upper-left; the source file stays as drawn.
 BASE_TRANSPOSE = {"Bone Knife", "Masterwork Dagger"}
+# The torches' fire (2026-09-24). `_muted` scales a piece by its most saturated tenth, which on a torch is the flame,
+# so every flame came out pale pink: the flame (`_fire`) is left as drawn and only the rest is muted. And the user
+# asked for a glow round every flame, which pixellab never drew, so `_glowed` adds it after the outline: apricot
+# (the charts' #f5ac5d) at these two alphas on the two pixels outside the flame.
+BASE_FIRE = {"Wooden Torch", "Blazing Torch", "Masterwork Torch", "Broken Torch"}
+FIRE_GLOW = (245, 172, 93)
+FIRE_GLOW_ALPHAS = (150, 70)
 _RPG_ZIP = "Pixel Art Icon Pack - RPG.zip!"
 BASE_KINDS = {
     # All five the user's pixellab swords (2026-09-24), one silhouette at five strengths; what they replaced -- the
@@ -300,7 +307,11 @@ BASE_KINDS = {
     # Two tiers. The second was the pack torch with its own flame grown by code (`_blaze`), and was
     # turned down twice for still being the first one: it is drawn now, a caged brand with a fire
     # three times the size.
-    "torch": ("Offhand", [("Wooden Torch", (_RPG + "Weapon & Tool/Torch", 0, 0, 32, 32, 1)), ("Blazing Torch", DRAWN), ("Masterwork Torch", MISSING)]),
+    "torch": ("Offhand", [
+        ("Wooden Torch", (PIXELLAB_BASES + "Wooden Torch", 0, 0, 32, 32, 1)),
+        ("Blazing Torch", (PIXELLAB_BASES + "Blazing Torch", 0, 0, 32, 32, 1)),
+        ("Masterwork Torch", (PIXELLAB_BASES + "Masterwork Torch", 0, 0, 32, 32, 1))]),
+    "broken_torch": ("Offhand", [("Broken Torch", (PIXELLAB_BASES + "Broken Torch", 0, 0, 32, 32, 1))]),
 
     # The user's own pixellab set (PIXELLAB_BASES): one helmet at four strengths, grown from the
     # leather cap. What it replaced is in BASE_OLD.
@@ -396,6 +407,8 @@ BASE_OLD = {
     "Iron Buckler": DRAWN,
     "Steel Targe": DRAWN,
     "Golden Buckler": DRAWN,
+    "Wooden Torch": (_RPG + "Weapon & Tool/Torch", 0, 0, 32, 32, 1),
+    "Blazing Torch": DRAWN,
 }
 BASE_OLD_OUT = GEAR_OUT + "/Old"
 
@@ -1286,11 +1299,12 @@ def unique_gear():
     return out
 
 
-def _muted(art):
-    """`art` with its saturation scaled down to SAT_CEILING at the 90th percentile: see PIXELLAB."""
+def _muted(art, keep=frozenset()):
+    """`art` with its saturation scaled down to SAT_CEILING at the 90th percentile: see PIXELLAB. The pixels in
+    `keep` (a torch's flame, `_fire`) are left as drawn and not counted."""
     out = art.copy()
     px = out.load()
-    spots = [(x, y) for y in range(out.height) for x in range(out.width) if px[x, y][3]]
+    spots = [(x, y) for y in range(out.height) for x in range(out.width) if px[x, y][3] and (x, y) not in keep]
     hsv = {spot: colorsys.rgb_to_hsv(*[v / 255 for v in px[spot][:3]]) for spot in spots}
     sats = sorted(s for _, s, v in hsv.values() if v >= 0.2)
     top = sats[len(sats) * 9 // 10] if sats else 0.0
@@ -1298,6 +1312,60 @@ def _muted(art):
         return out
     for spot, (h, s, v) in hsv.items():
         px[spot] = tuple(round(c * 255) for c in colorsys.hsv_to_rgb(h, s * SAT_CEILING / top, v)) + (px[spot][3],)
+    return out
+
+
+def _fire(art):
+    """The flame of a torch: its bright warm pixels (value 0.85 up), grown into the orange beside them, and of those
+    only the biggest connected patch, so a lit knot on the haft is not taken for fire. See BASE_FIRE."""
+    px = art.load()
+    w, h = art.size
+
+    def warm(spot, hue_most, sat_least, value_least):
+        if not (0 <= spot[0] < w and 0 <= spot[1] < h) or not px[spot][3]:
+            return False
+        hue, sat, value = colorsys.rgb_to_hsv(*[v / 255 for v in px[spot][:3]])
+        return hue <= hue_most and sat >= sat_least and value >= value_least
+
+    def around(spot):
+        return [(spot[0] + dx, spot[1] + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)]
+
+    grown = {(x, y) for y in range(h) for x in range(w) if warm((x, y), 0.17, 0.3, 0.85)}
+    frontier = list(grown)
+    while frontier:
+        for spot in around(frontier.pop()):
+            if spot not in grown and warm(spot, 0.14, 0.45, 0.6):
+                grown.add(spot)
+                frontier.append(spot)
+    best, seen = set(), set()
+    for start in grown:
+        if start in seen:
+            continue
+        patch, frontier = {start}, [start]
+        seen.add(start)
+        while frontier:
+            for spot in around(frontier.pop()):
+                if spot in grown and spot not in seen:
+                    seen.add(spot)
+                    patch.add(spot)
+                    frontier.append(spot)
+        best = max(best, patch, key=len)
+    return best
+
+
+def _glowed(art, fire):
+    """`art` with FIRE_GLOW on the clear pixels one and two steps outside the flame and its outline, the nearer
+    ring the stronger (FIRE_GLOW_ALPHAS)."""
+    out = art.copy()
+    px = out.load()
+    w, h = out.size
+    body = {(x + dx, y + dy) for x, y in fire for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+            if 0 <= x + dx < w and 0 <= y + dy < h and px[x + dx, y + dy][3] == 255}
+    for step, alpha in enumerate(FIRE_GLOW_ALPHAS, 1):
+        ring = {(x + dx, y + dy) for x, y in body for dx in range(-step, step + 1) for dy in range(-step, step + 1)}
+        for x, y in ring:
+            if 0 <= x < w and 0 <= y < h and px[x, y][3] == 0:
+                px[x, y] = FIRE_GLOW + (alpha,)
     return out
 
 
@@ -1361,7 +1429,8 @@ def base_gear():
                     art = art.transpose(Image.TRANSPOSE)
                 if name in BASE_FILL:
                     art = _filled(art)
-                art = _outlined(_muted(art), own_edge=True)
+                fire = _fire(art) if name in BASE_FIRE else set()
+                art = _outlined(_muted(art, fire), own_edge=True)
             else:
                 art = _outlined(_cut(source))
             if len(tier) > 2:
@@ -1370,6 +1439,9 @@ def base_gear():
                 raise SystemExit("%s is doubled art: every 2x2 block of it is one colour" % name)
             if outline_share(art) < OUTLINE_FLOOR:
                 raise SystemExit("%s: only %d%% of its edge is outline ink" % (name, 100 * outline_share(art)))
+            if name in BASE_FIRE:
+                # After the ink check: the glow is meant to sit outside the outline.
+                art = _glowed(art, fire)
             out[name] = _squared(name, art.crop(art.getbbox()))
     return out
 

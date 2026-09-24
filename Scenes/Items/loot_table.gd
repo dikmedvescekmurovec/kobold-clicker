@@ -165,7 +165,6 @@ const KINDS := {
 		"stats": {"sight": 1},
 		"affixes": ["block", "crit_chance", "crit_damage", "intelligence"],
 		"tiers": ["Broken Torch"],
-		"borrows": "Wooden Torch",
 	},
 	# --- Body: the biggest numbers in the table, and the same two-way split as the head.
 	"plate": {
@@ -465,10 +464,7 @@ static func icon_path(item: String) -> String:
 		return OLD_ROOT + str(row["icon"])
 	var kind: Dictionary = KINDS[row["kind"]]
 	var tiers: Array = kind["tiers"]
-	# `borrows` is a kind saying whose picture it wears until it has one: the Broken Torch the torch's,
-	# where the slot's first would have handed it a shield.
-	for name: String in [item, str(tiers[0]), str(kind.get("borrows", item)),
-			_first_of_slot(str(row["slot"]))]:
+	for name: String in [item, str(tiers[0]), _first_of_slot(str(row["slot"]))]:
 		var path: String = ROOT + str(ITEMS[name]["icon"])
 		if ResourceLoader.exists(path):
 			return path

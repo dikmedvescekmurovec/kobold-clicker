@@ -642,57 +642,57 @@ ITEMS.append(("Bucklers", [
 
 
 # Torches (2026-09-24): three materials, not five (Sight has three values: LootTable's torch), plus the Thick Fog's
-# Broken Torch, which wears the Wooden Torch's picture until it has its own. Laid like the weapons, handle at the
+# Broken Torch. Laid like the weapons, handle at the
 # bottom-left, but the fire rises straight up rather than along the haft, since fire does. The flame is what the
-# kind is for (Sight), so it grows with the material -- small, roaring, tall -- and is the one bright thing on each,
-# which is why the ordinary colour line's "never bright" is loosened for it. Wood, iron and masterwork take the
-# swords' measured wood (`wp1`), iron (`wp2`) and steel blue (`wp5`); the fire is chart colours only.
+# kind is for (Sight), so it is big and grows with the material, and the one bright thing on each, which is why the
+# ordinary colour line's "never bright" is loosened for it. The user's rules (2026-09-24): big flames, a small one
+# only on the Broken Torch; a simple palette (wood in two browns and a dark, fire in two colours and its glow); steel
+# only on the masterwork, so the Blazing Torch is still all wood, set apart by its bundled head and bigger fire; and
+# a soft glow round every flame.
 POSE["TORCH"] = ("Lying diagonally, seen flat from the front: the handle at the bottom-left, the burning head toward "
                  "the top-right; the flame rises straight up from the head, not along the handle.")
 ONE["TORCH"] = "A single torch on its own and nothing else."
 TORCH_SHAPE = ("Shape: one hand torch: a straight haft about three pixels wide running from the bottom-left corner to "
-               "a little past the middle of the canvas, a head at its upper end about twice as wide as the haft, and a "
-               "flame rising straight up from the head into the top-right of the canvas.")
-FIRE = ("fire of bright gold #e9bc3d at its heart, light orange #e68908 and burnt orange #c95429 at its edges, rust "
-        "orange #a33814 at the flickering tips")
+               "about the middle of the canvas, a head at its upper end about twice as wide as the haft, and a flame "
+               "rising straight up from the head into the top-right of the canvas.\n"
+               "A soft glow surrounds the flame: a halo of apricot pixels one to two pixels wide, fading out into the "
+               "empty background all round the fire.")
+FIRE = "bright gold #e9bc3d at the fire's heart, light orange #e68908 at its edges, apricot #f5ac5d in the glow"
+WOOD = "warm brown wood #864b28 and #b2642e, dark brown #654237 in the shadows"
 PAL.update({
- "torch1": ("warm brown wood #864b28 and #b2642e, apricot highlights #edbd8c, dark brown shadows #654237, burlap tan "
-            "cloth #a77a3e, " + FIRE),
- "torch2": ("warm brown wood #864b28 and #b2642e and dark brown shadows #654237 on the haft, dull slate iron #616c79 "
-            "and #566874, iron grey #41454b and blued steel highlights #777f85 on the bands and the cage, " + FIRE),
- "torch5": PAL["wp5"] + ", " + FIRE,
- "torch_broken": ("warm brown wood #864b28 and #b2642e, dark brown #4e2d1f where it is charred, grey-brown ash "
-                  "#81746a, burlap tan cloth #a77a3e, light orange #e68908 and burnt orange #c95429 in the small flame"),
+ "torch1": WOOD + ", " + FIRE,
+ "torch2": WOOD + ", " + FIRE,
+ # Dusty blue is the masterworks' lit colour and was dropped in the first simplification: the torch came back near
+ # black (2026-09-24). It is the main colour now, the steel blues its shade, navy only in the creases.
+ "torch5": ("dusty blue steel #5e80ac on most of it, steel blue #2b5476 in the shade, light grey edges #b8cbef, navy "
+            "only in the deepest creases #1a2134, " + FIRE),
+ "torch_broken": "warm brown wood #864b28, dark brown #4e2d1f where it is charred, " + FIRE,
 })
-_GLOW = "the fire the brightest thing on it, gold at its heart and orange at its edges."
+_GLOW = "the fire the brightest thing on it, gold at its heart and orange at its edges, wrapped in a soft glow."
+_WOOD_LOOK = "Look: warm brown wood, lighter along the upper-left edge and dark brown in the shadows; "
 WEAPON_LOOK.update({
- "torch1": ("Look: warm brown wood with apricot highlights along the upper-left edge and dark brown in the grain and "
-            "the shadows; the cloth wrap burlap tan, its turns drawn as short dark lines; " + _GLOW),
- "torch2": ("Look: warm brown wood set against dull, plain slate grey iron: blued steel along the upper-left edges of "
-            "the iron, dark brown in the wood's grain and the shadows; " + _GLOW),
- "torch5": ("Look: cool steel blue steel, dusty blue on the faces the light reaches, navy only in the deepest shadows, "
-            "a thin light grey highlight along every edge; the steel is steel blue and navy only, and " + _GLOW
-            + " The fire is the only warm colour."),
- "torch_broken": ("Look: old, worn warm brown wood, dark brown where it is charred and grey-brown where the ash sits; "
-                  "the small flame the only bright thing on it."),
+ "torch1": _WOOD_LOOK + _GLOW,
+ "torch2": _WOOD_LOOK + _GLOW,
+ "torch5": ("Look: light, cool dusty blue steel, steel blue in the shade and navy only in the deepest creases, never "
+            "dark, a thin light grey highlight along every edge; " + _GLOW + " The fire is the only warm colour."),
+ "torch_broken": "Look: old, worn warm brown wood, dark brown where it is charred; " + _GLOW,
 })
 ITEMS.append(("Torches", [
   _weapon("Wooden Torch", "TORCH", "torch1",
-          "A plain wooden torch: a straight stick of warm brown wood, its upper end wrapped in a few turns of burlap "
-          "tan cloth, and a small steady flame about a quarter of the canvas tall burning on the cloth.", TORCH_SHAPE),
+          "A plain wooden torch: a straight stick of warm brown wood, its upper end wrapped in a few turns of dark "
+          "brown cloth, and a big flame about half the canvas tall burning on the cloth.", TORCH_SHAPE),
   _weapon("Blazing Torch", "TORCH", "torch2",
-          "A sturdy torch with an iron head: a straight haft of warm brown wood bound with two slate grey iron bands, "
-          "topped by a small open iron cage of four bars holding the burning end, and a big roaring flame about half "
-          "the canvas tall bursting out of the cage and rising well above it.", TORCH_SHAPE),
+          "A thick wooden torch: a sturdy haft of warm brown wood, its head a bundle of split wooden sticks bound "
+          "with two turns of dark brown cord, and a huge roaring flame filling the whole top-right half of the "
+          "canvas.", TORCH_SHAPE),
   _weapon("Masterwork Torch", "TORCH", "torch5",
-          "A masterwork torch of steel blue steel, sharp and angular: a faceted steel haft with a raised ridge down "
-          "it and a short spike at its lower end, topped by an angular steel cup of pointed plates opening like a "
-          "crown, and a tall fierce flame about half the canvas tall rising from the cup. Every plate has a thin "
-          "bevelled edge.", TORCH_SHAPE),
+          "A masterwork torch of dusty blue steel, sharp and angular: a faceted steel haft with a short spike at "
+          "its lower end, topped by an angular steel cup of pointed plates opening like a crown, and a huge fierce "
+          "flame filling the whole top-right half of the canvas. Every plate has a thin bevelled edge.", TORCH_SHAPE),
   _weapon("Broken Torch", "TORCH", "torch_broken",
           "An old, burnt-out torch: a stick of warm brown wood split by a long crack down its length, its head "
-          "charred dark brown with grey-brown ash and a few torn scraps of burlap tan cloth, and a small guttering "
-          "flame about five pixels tall clinging to one side of the head.", TORCH_SHAPE),
+          "charred dark brown, and a small guttering flame about a quarter of the canvas tall clinging to one side "
+          "of the head.", TORCH_SHAPE),
 ]))
 
 
@@ -716,6 +716,7 @@ LIGHT_STEEL = {"wp3", "wp4"}
 NO_CREAM.add("wp2_shield"); LIGHT_STEEL |= {"wp3_shield", "wp4_shield"}
 SHINE.update({"wp3_shield": SHINE["wp3"], "wp4_shield": SHINE["wp4"], "wp5_shield": SHINE["wp5"]})
 SHINE["torch5"] = "the thin light grey edges and the fire"
+LIGHT_STEEL.add("torch5")
 
 
 def prompt(pose, pal, subject):
@@ -746,7 +747,7 @@ def prompt(pose, pal, subject):
      POSE[pose]] + margin + [
      "A plain, common item: simple shapes and a clean readable silhouette, no engraving, no decoration, no gems or trim beyond what is named.",
      muted,
-     f"Palette: {PAL[pal]}" + ("." if pal in NO_CREAM else ", pale cream highlights #faedb1."),
+     f"Palette: {PAL[pal]}" + ("." if pal in NO_CREAM or pal.startswith("torch") else ", pale cream highlights #faedb1."),
      light,
      "No text, no background, no shadow, no frame."])
 
