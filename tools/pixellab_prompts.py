@@ -254,25 +254,111 @@ ITEMS.append(("Boots: strength", [
    "Every plate has a thin bevelled edge.\n"
    + BOOT_LOOK["t5"] + "\n" + GREAVES_SHAPE + "\n" + NO_LEG),
 ]))
+# The dexterity line (2026-09-24): hoods, jerkins and leather boots, one palette a tier shared by all three
+# (`d1`..`d5`), each measured off that tier's strength kit so a hood sits right under its helmet on the doll: the
+# Leather Helmet's tan orange (`h1`), the iron kit's reddish brown leather with iron grey fittings (`h2`), the Steel
+# Helm's bronze leather with neutral grey steel (`s3`), the golden kit's dusky plum shadows as the leather with its
+# gold as the buckles (`h4`), and the Masterwork Helm's navy with slate and dusty blue (`h5`). The dexterity boots were
+# first written on 2026-09-23 to palettes that predate the steel kit's regeneration; they are rewritten here to these.
+PAL.update({
+ "d1": PAL["h1"],
+ "d2": ("reddish brown leather #7f3b2e and #57261b, warm brown #9b6247 where the light falls, dark brown shadows "
+        "#441b14, iron grey #5e5c60 and slate #70747f with light grey highlights #a6a8ae only on the studs and buckles"),
+ "d3": ("bronze leather #93572e and #ad6f48, warm brown #825d4a, dark brown shadows #5a392a and #652a11, neutral grey "
+        "steel #757a76 and #504c4e with pale steel highlights #a6b6ba only on the studs, caps and buckles"),
+ "d4": ("dusky plum leather #5e4473 and #3e2052, lilac grey highlights #a09eb9 and #847d9d along the folds, tan orange "
+        "#e74408 and bright gold #f59803 and #fdde36 only on the buckles and trim"),
+ "d5": ("navy leather #222c4d and #1d1f3f, slate #3f5663 and #567079 on the folds the light reaches, dusty blue "
+        "highlights #839db1, light grey stitched edges #bbc4cc"),
+})
+DEX_LOOK = {
+ "d1": HELM_LOOK["h1"],
+ "d2": ("Look: sturdy reddish brown leather, warm brown where the light falls on the upper-left of each fold and dark "
+        "brown in the shadows; iron grey studs and buckles as small light dots; stitched seams drawn as short dark dashes."),
+ "d3": ("Look: tough bronze leather, lighter along the upper-left of each fold and dark brown in its folds, set with "
+        "neutral grey steel: pale steel highlights on the studs, caps and buckles, which read as small light dots."),
+ "d4": ("Look: supple dusky plum leather, lilac grey along the upper-left of each fold and deep dusky plum in the "
+        "shadows; only the buckles and trim are gold: tan orange, shining bright gold at their highlights."),
+ "d5": ("Look: dark navy leather, slate and dusty blue on the folds the light reaches, navy in the shadows, a thin light "
+        "grey stitched edge along every panel, and no other colour."),
+}
 ITEMS.append(("Boots: dexterity", [
-  ("Studded Boot", "BOOT", "b2",
-   "A pair of studded leather boots: warm brown leather with rows of small "
-   "neutral grey iron studs down the shaft and round the cuff, and an iron-buckled strap at each ankle.\n"
-   + BOOT_LOOK["t2"] + "\n" + BOOT_SHAPE + "\n" + NO_LEG),
-  ("Ranger's Boot", "BOOT", "t3_leather",
-   "A pair of ranger's boots: tough taupe leather laced up the front with a "
-   "leather cord, a wide folded cuff, a pale steel toe cap and a pale steel buckle at each ankle.\n"
-   + BOOT_LOOK["t3_leather"] + "\n" + BOOT_SHAPE + "\n" + NO_LEG),
-  ("Shadow Boot", "BOOT", "t4_leather",
-   "A pair of shadow boots: supple plum brown leather, a soft folded cuff, a "
-   "slightly pointed toe, and two thin straps with copper buckles on each boot.\n"
-   + BOOT_LOOK["t4_leather"] + "\n" + BOOT_SHAPE + "\n" + NO_LEG),
-  ("Masterwork Boot", "BOOT", "t5_leather",
-   "A pair of masterwork leather boots, finely made, heavy and grim: stiff dark navy leather in "
-   "angular panels, small slate plates on the knee and the toe with one short pointed spike each, and a high cuff "
-   "whose edge dips into a sharp V.\n"
-   + BOOT_LOOK["t5_leather"] + "\n" + BOOT_SHAPE + "\n" + NO_LEG),
+  ("Studded Boot", "BOOT", "d2",
+   "A pair of studded leather boots: reddish brown leather with rows of small iron grey studs down the shaft and round "
+   "the cuff, and an iron-buckled strap at each ankle.\n" + DEX_LOOK["d2"] + "\n" + BOOT_SHAPE + "\n" + NO_LEG),
+  ("Ranger's Boot", "BOOT", "d3",
+   "A pair of ranger's boots: tough bronze leather laced up the front with a leather cord, a wide folded cuff, a "
+   "neutral grey steel toe cap and a steel buckle at each ankle.\n" + DEX_LOOK["d3"] + "\n" + BOOT_SHAPE + "\n" + NO_LEG),
+  ("Shadow Boot", "BOOT", "d4",
+   "A pair of shadow boots: supple dusky plum leather, a soft folded cuff, a slightly pointed toe, and two thin "
+   "straps with gold buckles on each boot.\n" + DEX_LOOK["d4"] + "\n" + BOOT_SHAPE + "\n" + NO_LEG),
+  ("Masterwork Boot", "BOOT", "d5",
+   "A pair of masterwork leather boots, finely made and angular: stiff dark navy leather in angular panels, small "
+   "slate plates on the knee and the toe with one short pointed spike each, and a high cuff whose edge dips into a "
+   "sharp V.\n" + DEX_LOOK["d5"] + "\n" + BOOT_SHAPE + "\n" + NO_LEG),
 ]))
+
+# Hoods: the dexterity helmet. The helmet's view and size, so a hood and a helmet stand alike in the socket, but in a
+# hood's words (the helmet's view line names a side flap); its own silhouette, a soft hood falling to a short cape.
+# Body words stay out (a helmet with "skull" in it came back as a skull).
+HOOD_SHAPE = ("Shape: a soft hood with a rounded top that comes to a slight point at the back, falling in folds to a "
+              "short cape at the bottom that spreads wider than the hood; the face is a dark open gap in the front, "
+              "framed by the hood's edge. A soft leather hood, not a metal helmet and not a plain dome.")
+EMPTY_HOOD = "An empty hood with nothing inside it: the face opening is plain dark shadow."
+POSE["HOOD"] = ("Front view, turned slightly to the left: the face opening sits a little left of centre and more of the "
+                "hood's right side shows.")
+HOOD_SIZE = HELM_SIZE.replace("The helmet", "The hood")
+
+
+def _hood(name, pal, subject):
+    return (name, "HOOD", pal, "\n".join([subject, DEX_LOOK[pal], HOOD_SHAPE, HOOD_SIZE, EMPTY_HOOD]))
+
+
+ITEMS.append(("Hoods", [
+  _hood("Hide Hood", "d1", "A simple hide hood: soft tan orange hide, a stitched seam up the middle of the hood, and a "
+        "short hide cape at the bottom with a ragged edge."),
+  _hood("Leather Hood", "d2", "A leather hood: sturdy reddish brown leather, a stitched seam up the middle, a thicker "
+        "leather band framing the face opening, and a short cape with a row of iron grey studs along its hem."),
+  _hood("Studded Hood", "d3", "A studded leather hood: tough bronze leather covered in rows of small neutral grey steel "
+        "studs, a steel-riveted band framing the face opening, and a short cape of overlapping leather flaps."),
+  _hood("Shadow Hood", "d4", "A shadow hood: supple dusky plum leather, a deep drooping hood with a pointed tip at the "
+        "back, a gold clasp at the bottom of the face opening, and a short cape with a gold-trimmed hem."),
+  _hood("Masterwork Hood", "d5", "A masterwork hood of dark navy leather, finely made and angular: stiff navy leather "
+        "panels with a raised ridge up the middle ending in a sharp point, small slate plates framing the face opening "
+        "with one short pointed spike above it, and a cape of angular panels whose hem dips into a sharp V."),
+]))
+
+# Jerkins: the dexterity body. The plate's view and fill; its own outline. The first Shape line was the plate's
+# ("shaped to a chest ... narrowing to the waist ... a short skirt") in soft leather, and the Studded Jerkin came back as
+# a woman's body every time (2026-09-24): on steel those words are armour, in soft leather a fitted top and a skirt. So
+# a jerkin is boxy, stiff and straight-cut, as wide at the hem as at the top, with square flaps rather than a skirt.
+JERKIN_SHAPE = ("Shape: a boxy, straight-cut sleeveless jerkin of stiff, thick leather, flat-fronted and as wide at "
+                "the bottom as at the top, with broad square pads at the two top corners, a round opening at the neck, "
+                "closed down the front, a wide belt, and a straight row of square leather flaps below it; it fills the "
+                "canvas, nearly as wide as it is tall. Stiff leather armour, not metal plate.")
+
+
+def _jerkin(name, pal, subject):
+    return (name, "BODY", pal, "\n".join([subject, DEX_LOOK[pal], JERKIN_SHAPE, NO_BODY]))
+
+
+ITEMS.append(("Jerkins", [
+  _jerkin("Hide Jerkin", "d1", "A simple hide jerkin: thick tan orange hide in a few large stitched panels, laced "
+          "closed down the front with a thin hide cord, a plain hide belt, and a row of ragged hide flaps below it."),
+  _jerkin("Leather Jerkin", "d2", "A leather jerkin: sturdy reddish brown leather panels stitched together, three "
+          "iron-buckled straps closing it down the front, a leather belt with an iron grey buckle, and a row of "
+          "square leather flaps below it."),
+  _jerkin("Studded Jerkin", "d3", "A studded leather jerkin: tough bronze leather covered in rows of small neutral "
+          "grey steel studs, square leather pads at the top corners, a steel-buckled belt, and a row of studded "
+          "leather flaps below it."),
+  _jerkin("Shadow Leathers", "d4", "A shadow jerkin: stiff dusky plum leather, crossed by two thin diagonal straps "
+          "with gold buckles, a high collar, a gold-buckled belt, and a row of long pointed leather flaps below it."),
+  _jerkin("Masterwork Jerkin", "d5", "A masterwork jerkin of dark navy leather, finely made and angular: stiff navy "
+          "leather in angular panels with a raised ridge down the middle, small slate plates on the top corners with "
+          "one short pointed spike each, a slate-buckled belt, and a row of angular flaps whose hem dips into a "
+          "sharp V."),
+]))
+
 
 # Jewellery (2026-09-24): no tiers, one material apiece, so each piece takes its own palette rather than a tier's.
 # Three rings of three builds and three pendants of three shapes; the kind's Shape line is shared. Colour words and
@@ -708,6 +794,7 @@ SHINE = {"wp3": "the steel's upper-left edges", "wp4": "the gold parts", "wp5": 
          "emerald_amulet": "the green stone and the silver frame"}
 # The leather line's top two: finer leather rather than polished metal.
 SHINE_LEATHER = {"t4_leather": "the copper buckles", "t5_leather": "the light grey stitched edges"}
+SHINE_LEATHER.update({"d4": "the gold buckles and trim", "d5": "the light grey stitched edges"})
 
 
 NO_CREAM = {"wp2", "broken"}
@@ -741,7 +828,7 @@ def prompt(pose, pal, subject):
         muted = muted.replace("and deep shadows", "and soft, light shadows")
     # No outline line: pixellab's Outline setting draws its own, and `_outlined` repaints it in ink anyway.
     # A helmet and a dagger carry their own size lines (HELM_SIZE, DAGGER_SIZE), which this one would contradict.
-    margin = [] if pose in ("HELM", "DAGGER", "BROKEN") else ["Object fills most of the canvas with a 2-3 pixel margin, centred."]
+    margin = [] if pose in ("HELM", "HOOD", "DAGGER", "BROKEN") else ["Object fills most of the canvas with a 2-3 pixel margin, centred."]
     return "\n".join([subject,
      "Single game inventory icon, 32x32 pixel art in the style of a classic fantasy RPG item pack.",
      POSE[pose]] + margin + [

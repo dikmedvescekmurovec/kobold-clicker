@@ -43,9 +43,10 @@ const OLD_ROOT := ROOT + "Old/"
 ## work (`power_of`, `Item.scaled_stats`). It is written here rather than into `stats` because
 ## LEVEL_FLAT adds a whole point of damage a level to every weapon alike: a dagger written as
 ## `damage: 0.6` would be within a tenth of a sword by level 10 and the kinds would level themselves
-## out. Three more keys are optional: `two_handed` closes the offhand while the piece is worn, and
-## `tier_levels` with `tier_stats` belong to the torch alone, which has three materials instead of five
-## and states each one's Sight outright rather than multiplying a number.
+## out. Three more keys are optional: `two_handed` closes the offhand while the piece is worn,
+## `tier_levels` names the levels a kind's materials unlock at where it has fewer than five (the torch,
+## and the greaves, which begin at iron), and `tier_stats` is the torch's alone, stating each
+## material's Sight outright rather than multiplying a number.
 ##
 ## Stats span pieces on purpose. Base `damage` lives on the weapons -- a click's damage comes from
 ## what is held, or that stops being the interesting slot -- while armour and dodge roll nearly
@@ -85,11 +86,14 @@ const KINDS := {
 		"affixes": ["armor", "dexterity"],
 		"tiers": ["Leather Boot", "Studded Boot", "Ranger's Boot", "Shadow Boot", "Masterwork Boot"],
 	},
+	# No first material: the Bronze Greaves went (the user's call, 2026-09-24), so the boots' tier one is
+	# the Leather Boot alone, and a greaves roll under level 3 is dealt as one (`_tier_at`).
 	"greaves": {
 		"slot": "boots", "weight": 24,
 		"stats": {"move_speed": 4, "armor": 3},
 		"affixes": ["dodge", "strength"],
-		"tiers": ["Bronze Greaves", "Iron Greaves", "Steel Greaves", "Golden Greaves", "Masterwork Greaves"],
+		"tier_levels": [3, 5, 6, 7],
+		"tiers": ["Iron Greaves", "Steel Greaves", "Golden Greaves", "Masterwork Greaves"],
 	},
 	# --- Weapon: the same base damage on all four, and a factor apiece. On its own swings the dagger,
 	# the sword and the greatsword come out about even; the dagger is the idler's weapon and the
@@ -263,8 +267,9 @@ const KINDS := {
 
 ## The item level each material is found from, and what one is worth on top of the kind's own
 ## numbers: a fifth more of every quantity for each step up the materials, so the masterwork is worth
-## 1.8 times the plainest. Both are dials. A kind may name levels of its own (`tier_levels`),
-## which only the torch does.
+## 1.8 times the plainest. Both are dials. A kind may name levels of its own (`tier_levels`), as
+## the torch and the greaves do. A piece's step (`material`) counts up from the material its kind
+## begins at, so the greaves' first piece takes iron's step, not the plainest's.
 ##
 ## The levels are set against the circles (`CIRCLE_MATERIAL_LEVEL`): the second material within the
 ## first wall, the third and fourth between the first and second, and the fifth -- the masterwork --
@@ -286,7 +291,8 @@ const BROKEN_TORCH := "Broken Torch"
 
 ## Every piece a monster can leave, keyed by name: the row every caller has always read -- `icon`,
 ## `weight`, `slot`, `stats`, `affixes` and the jewellery's `globals` -- plus the `kind` it belongs to
-## and which `tier` of that kind it is, which is all `power_of` needs to know.
+## and which `tier` of that kind it is (its place in the kind's list), and its `material`, the step up
+## the materials it is worth (`tier` plus the material the kind begins at), which is what `power_of` reads.
 ##
 ## Built from KINDS rather than written out, so a kind's numbers are stated once and the four names it
 ## is found under cannot drift apart. In the order the kinds are written, which is the order the
@@ -513,7 +519,7 @@ static func power_of(item: String, stat: String) -> float:
 	var factor := float(power.get(stat, 1.0))
 	if stat in CHANCE_STATS or stat in RATE_STATS:
 		return factor
-	return factor * (1.0 + TIER_POWER * int(row["tier"]))
+	return factor * (1.0 + TIER_POWER * int(row["material"]))
 
 
 ## Whether this piece takes both hands, and so leaves no offhand while it is worn. A property of the
@@ -699,11 +705,15 @@ static func roll_kind(rng: RandomNumberGenerator) -> String:
 ## One of a kind's materials: an even draw between the best `level` has unlocked and the one under
 ## it. Two of them rather than all of them, so deep ground stops dealing the plainest materials
 ## without the best arriving alone -- and while only one is unlocked there is no draw at all, which
-## is what keeps the shallow game costing exactly the rolls it always did.
+## is what keeps the shallow game costing exactly the rolls it always did. A kind whose first
+## material `level` has not reached (the greaves, which begin at iron) is dealt as its slot's
+## plainest piece, so the slot drops as often as ever and never a material under the piece's level.
 static func _tier_at(kind: String, level: int, rng: RandomNumberGenerator) -> String:
 	var row: Dictionary = KINDS[kind]
 	var tiers: Array = row["tiers"]
 	var levels: Array = row.get("tier_levels", TIER_MIN_LEVEL)
+	if level < first_level(kind):
+		return _first_of_slot(str(row["slot"]))
 	var unlocked := 1
 	for tier in tiers.size():
 		if level >= int(levels[tier]):
@@ -724,12 +734,13 @@ static func _build_items() -> Dictionary:
 	for kind: String in KINDS:
 		var row: Dictionary = KINDS[kind]
 		var tiers: Array = row["tiers"]
+		var first := first_material(kind)
 		for tier in tiers.size():
 			var name := str(tiers[tier])
 			var item := {
 				"icon": name + ".png", "weight": int(row["weight"]), "slot": row["slot"],
 				"stats": row["tier_stats"][tier] if row.has("tier_stats") else row["stats"],
-				"affixes": row["affixes"], "kind": kind, "tier": tier,
+				"affixes": row["affixes"], "kind": kind, "tier": tier, "material": first + tier,
 			}
 			if row.has("globals"):
 				item["globals"] = row["globals"]
@@ -737,6 +748,16 @@ static func _build_items() -> Dictionary:
 			out[name] = item
 	out.make_read_only()
 	return out
+
+
+## Which material a kind begins at, counted from the plainest: 0 for most, 1 for the greaves.
+static func first_material(kind: String) -> int:
+	return maxi(TIER_MIN_LEVEL.find(int(KINDS[kind].get("tier_levels", TIER_MIN_LEVEL)[0])), 0)
+
+
+## The item level a kind's first material unlocks at.
+static func first_level(kind: String) -> int:
+	return int(KINDS[kind].get("tier_levels", TIER_MIN_LEVEL)[0])
 
 
 ## The plainest piece of the first kind written for this slot -- the picture every base in the slot

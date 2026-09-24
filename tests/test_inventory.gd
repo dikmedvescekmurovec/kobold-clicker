@@ -767,12 +767,23 @@ func _test_rolls() -> bool:
 		mix[LootTable.ITEMS[item.type]["kind"]] = int(mix.get(LootTable.ITEMS[item.type]["kind"], 0)) + 1
 		rarities[item.rarity] = int(rarities.get(item.rarity, 0)) + 1
 
+	# A kind whose first material a level-1 piece has not reached (the greaves) is dealt as its slot's
+	# plainest piece, so its weight is that kind's here.
 	var total_weight := 0
+	var weight_of := {}
 	for kind: String in LootTable.KINDS:
-		total_weight += int(LootTable.KINDS[kind]["weight"])
+		var weight := int(LootTable.KINDS[kind]["weight"])
+		total_weight += weight
+		var dealt := kind
+		if LootTable.first_level(kind) > 1:
+			dealt = str(LootTable.ITEMS[LootTable._first_of_slot(str(LootTable.KINDS[kind]["slot"]))]["kind"])
+		weight_of[dealt] = int(weight_of.get(dealt, 0)) + weight
+	_check(LootTable._tier_at("greaves", 2, rng) == "Leather Boot" and LootTable._tier_at("greaves", 3, rng) == "Iron Greaves"
+			and int(LootTable.ITEMS["Iron Greaves"]["material"]) == int(LootTable.ITEMS["Iron Helmet"]["material"]),
+			"the greaves begin at iron, worth iron's step, and under it are dealt as a Leather Boot")
 	for kind: String in LootTable.KINDS:
 		var share := float(mix.get(kind, 0)) / SHAPE_ROLLS
-		var want := float(LootTable.KINDS[kind]["weight"]) / total_weight
+		var want := float(weight_of.get(kind, 0)) / total_weight
 		_check(absf(share - want) < _tolerance(want, SHAPE_ROLLS),
 				"%s came up %.3f of the time, not %.3f" % [kind, share, want])
 

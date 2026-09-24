@@ -241,7 +241,8 @@ PIXELLAB_BASES = "Bases/"
 # Pixellab pieces stretched until their longer side fills the square, before they are finished: on the doll a
 # piece that came back small looks lighter than the pieces beside it (the user's call, 2026-09-23). Nearest-neighbour
 # at a small factor (the Wooden Armor is x1.19), so a few rows and columns are doubled; kept to the pieces that need it.
-BASE_FILL = {"Wooden Armor", "Iron Armor", "Steel Plate", "Golden Plate", "Masterwork Plate"}
+BASE_FILL = {"Wooden Armor", "Iron Armor", "Steel Plate", "Golden Plate", "Masterwork Plate",
+             "Hide Jerkin", "Leather Jerkin", "Studded Jerkin", "Shadow Leathers", "Masterwork Jerkin"}
 # Pixellab sometimes leaves a seam as a see-through slit (the Masterwork Plate had a 2 px and a 3 px one between its
 # shoulder guards and chest, 2026-09-23): an enclosed clear patch this small or smaller is filled (`_plugged`). The
 # holes a drawing means -- the gap between a pair of boots, a ring's middle -- are far bigger.
@@ -320,7 +321,11 @@ BASE_KINDS = {
         ("Steel Helm", (PIXELLAB_BASES + "Steel Helm", 0, 0, 32, 32, 1)), ("Golden Helm", (PIXELLAB_BASES + "Golden Helm", 0, 0, 32, 32, 1)),
         ("Masterwork Helm", (PIXELLAB_BASES + "Masterwork Helm", 0, 0, 32, 32, 1))]),
     "hood": ("Helmet", [
-        ("Hide Hood", DRAWN), ("Leather Hood", DRAWN), ("Studded Hood", DRAWN), ("Shadow Hood", DRAWN), ("Masterwork Hood", MISSING)]),
+        ("Hide Hood", (PIXELLAB_BASES + "Hide Hood", 0, 0, 32, 32, 1)),
+        ("Leather Hood", (PIXELLAB_BASES + "Leather Hood", 0, 0, 32, 32, 1)),
+        ("Studded Hood", (PIXELLAB_BASES + "Studded Hood", 0, 0, 32, 32, 1)),
+        ("Shadow Hood", (PIXELLAB_BASES + "Shadow Hood", 0, 0, 32, 32, 1)),
+        ("Masterwork Hood", (PIXELLAB_BASES + "Masterwork Hood", 0, 0, 32, 32, 1))]),
 
     # Pixellab too, each piece matched to the helmet of its tier. What it replaced is in BASE_OLD.
     "plate": ("Body", [
@@ -329,12 +334,20 @@ BASE_KINDS = {
         ("Masterwork Plate", (PIXELLAB_BASES + "Masterwork Plate", 0, 0, 32, 32, 1))]),
     # The pack calls a strapped backpack its leather armour (it is rag_and_bone_sack), so all drawn.
     "jerkin": ("Body", [
-        ("Hide Jerkin", DRAWN), ("Leather Jerkin", DRAWN), ("Studded Jerkin", DRAWN), ("Shadow Leathers", DRAWN), ("Masterwork Jerkin", MISSING)]),
+        ("Hide Jerkin", (PIXELLAB_BASES + "Hide Jerkin", 0, 0, 32, 32, 1)),
+        ("Leather Jerkin", (PIXELLAB_BASES + "Leather Jerkin", 0, 0, 32, 32, 1)),
+        ("Studded Jerkin", (PIXELLAB_BASES + "Studded Jerkin", 0, 0, 32, 32, 1)),
+        ("Shadow Leathers", (PIXELLAB_BASES + "Shadow Leathers", 0, 0, 32, 32, 1)),
+        ("Masterwork Jerkin", (PIXELLAB_BASES + "Masterwork Jerkin", 0, 0, 32, 32, 1))]),
 
     "boot": ("Boots", [
-        ("Leather Boot", (PIXELLAB_BASES + "Leather Boot", 0, 0, 32, 32, 1)), ("Studded Boot", DRAWN), ("Ranger's Boot", DRAWN), ("Shadow Boot", DRAWN), ("Masterwork Boot", MISSING)]),
+        ("Leather Boot", (PIXELLAB_BASES + "Leather Boot", 0, 0, 32, 32, 1)),
+        ("Studded Boot", (PIXELLAB_BASES + "Studded Boot", 0, 0, 32, 32, 1)),
+        ("Ranger's Boot", (PIXELLAB_BASES + "Ranger's Boot", 0, 0, 32, 32, 1)),
+        ("Shadow Boot", (PIXELLAB_BASES + "Shadow Boot", 0, 0, 32, 32, 1)),
+        ("Masterwork Boot", (PIXELLAB_BASES + "Masterwork Boot", 0, 0, 32, 32, 1))]),
     "greaves": ("Boots", [
-        ("Bronze Greaves", DRAWN), ("Iron Greaves", (PIXELLAB_BASES + "Iron Greaves", 0, 0, 32, 32, 1)),
+        ("Iron Greaves", (PIXELLAB_BASES + "Iron Greaves", 0, 0, 32, 32, 1)),
         ("Steel Greaves", (PIXELLAB_BASES + "Steel Greaves", 0, 0, 32, 32, 1)), ("Golden Greaves", (PIXELLAB_BASES + "Golden Greaves", 0, 0, 32, 32, 1)),
         ("Masterwork Greaves", (PIXELLAB_BASES + "Masterwork Greaves", 0, 0, 32, 32, 1))]),
 
@@ -409,6 +422,17 @@ BASE_OLD = {
     "Golden Buckler": DRAWN,
     "Wooden Torch": (_RPG + "Weapon & Tool/Torch", 0, 0, 32, 32, 1),
     "Blazing Torch": DRAWN,
+    "Hide Jerkin": DRAWN,
+    "Leather Jerkin": DRAWN,
+    "Studded Jerkin": DRAWN,
+    "Shadow Leathers": DRAWN,
+    "Hide Hood": DRAWN,
+    "Leather Hood": DRAWN,
+    "Studded Hood": DRAWN,
+    "Shadow Hood": DRAWN,
+    "Studded Boot": DRAWN,
+    "Ranger's Boot": DRAWN,
+    "Shadow Boot": DRAWN,
 }
 BASE_OLD_OUT = GEAR_OUT + "/Old"
 

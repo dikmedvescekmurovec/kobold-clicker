@@ -395,8 +395,12 @@ static func reward_item(bounty: Dictionary, cell: Vector2i, rng: RandomNumberGen
 		var ids := UniqueTable.ids()
 		item = Item.rolled_unique(str(ids[rng.randi_range(0, ids.size() - 1)]), rng, level)
 	else:
+		# The card promised this kind, so it is paid in it: a kind that begins past the plainest material
+		# (the greaves) lifts a low piece to where its first material unlocks.
+		var kind := str(promise[ITEM_KIND])
+		level = maxi(level, LootTable.first_level(kind))
 		var material := LootTable.material_level(level, MapBuilder.circle_of(cell))
-		item = Item.rolled(LootTable._tier_at(str(promise[ITEM_KIND]), material, rng), rarity, rng, level)
+		item = Item.rolled(LootTable._tier_at(kind, material, rng), rarity, rng, level)
 	for i in int(promise[ITEM_PLUS]):
 		item.ascend()
 	return item
