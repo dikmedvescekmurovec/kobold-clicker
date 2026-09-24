@@ -398,6 +398,7 @@ const ASCETIC_MORE := 0.15       ## per bare socket
 const LAST_GASP_MORE := 2.0
 const LAST_GASP_SECONDS := 5.0
 const OVERCRIT := 2.0            ## crit damage a point of crit chance past the cap becomes
+const SERPENT_STEP := 5.0        ## crit chance a blow that did not crit adds, per Serpent's Eye
 const DOMINO_SHARE := 0.2
 const MOMENTUM_MORE := 0.02      ## per kill
 const MOMENTUM_MOST := 1.0
@@ -471,6 +472,9 @@ var _bag_pieces := 0
 ## it has already risen once. Cleared as the next one comes on.
 var _struck := false
 var _crit_landed := false
+## The Serpent's Eye's crit chance, built by every blow that did not crit and spent by the one that
+## does. Kept for the whole fight, across bodies, so a run carries it from one enemy to the next.
+var _serpent := 0.0
 var _has_risen := false
 ## Whether the body going down now was felled by its first blow (Dominoes) and whether it gets back
 ## up (Restless dead), and how many have: a risen body is fought in the slot it died in, so the
@@ -986,12 +990,16 @@ func _lean(item: Item) -> Item:
 func _strike(automatic: bool) -> bool:
 	if finished or phase != Phase.WAITING:
 		return false
-	var crit := crit_chance > 0.0 and crit_rng.randf() * 100.0 < crit_chance
+	var chance := minf(crit_chance + _serpent, CRIT_CAP)
+	var crit := chance > 0.0 and crit_rng.randf() * 100.0 < chance
 	var first := not _struck
 	_struck = true
 	# The Duelist's Buckler: the first blow an enemy takes is a crit, whoever swung it.
 	if first and "opening_strike" in effects:
 		crit = true
+	# The Serpent's Eye: one on each doll builds twice as fast.
+	if "serpent" in effects:
+		_serpent = 0.0 if crit else _serpent + SERPENT_STEP * effects.count("serpent")
 	_crit_landed = _crit_landed or crit
 	# Crit damage is what a crit adds, not what it multiplies to: 50 means half again, the way Path
 	# of Exile's crit multiplier reads once you take its base 100 off.

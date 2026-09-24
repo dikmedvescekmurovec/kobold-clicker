@@ -66,7 +66,7 @@ const MODS := {
 	"added_strength": {"kind": Kind.FLAT, "stat": "strength", "range": [2, 8], "weight": 8},
 	"added_dexterity": {"kind": Kind.FLAT, "stat": "dexterity", "range": [2, 8], "weight": 8},
 	"added_intelligence": {"kind": Kind.FLAT, "stat": "intelligence", "range": [2, 8], "weight": 8},
-	# What a body leaves, which is a stat now rather than a player-wide sentence: the Gold Ring shows
+	# What a body leaves, which is a stat now rather than a player-wide sentence: the Gold Amulet shows
 	# it and anything allowed to carry it rolls this.
 	"added_drop_rate": {"kind": Kind.FLAT, "stat": "drop_rate", "range": [3, 10], "weight": 4},
 	# The jewellery's own finder, drawn as often as drop rate and worth two and a half times as much a
@@ -74,7 +74,7 @@ const MODS := {
 	# rarity only lifts the weights a piece of gear rolls its rarity on, so the narrow one carries the
 	# bigger number.
 	"added_item_rarity": {"kind": Kind.FLAT, "stat": "item_rarity", "range": [10, 25], "weight": 4},
-	# The Gold Amulet's own stat, and the rarest roll in the table. Its band is written flat
+	# The Gold Ring's own stat, and the rarest roll in the table. Its band is written flat
 	# (`level_flat` 0) rather than growing a point a level with the stat: it was sized for The Tithe,
 	# which is a unique and a percentage of a purse that is already exponential in the walk.
 	"added_gold_find": {"kind": Kind.FLAT, "stat": "gold_find", "range": [20, 40], "weight": 1,
@@ -121,7 +121,7 @@ const DORMANT: Array[String] = []
 ## The modifiers no pool holds because only a unique's row may name them (`UniqueTable.UNIQUES`). Named
 ## for the reason the dormant ones are: a test has to tell this from a modifier nothing can reach.
 ##
-## Empty today. `added_gold_find` was the one, and it is in the Gold Amulet's pool now that the amulet
+## Empty today. `added_gold_find` was the one, and it is in the Gold Ring's pool now that the ring
 ## shows gold find as a base stat -- a FLAT modifier is let on by `can_roll`, which asks for a base
 ## stat *or* an affix, and there is no third answer that would hold one back from a piece that has the
 ## stat outright. The list stays for the next row that wants it.

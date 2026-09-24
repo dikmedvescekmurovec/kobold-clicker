@@ -186,7 +186,7 @@ The user generates colour charts in pixellab -- a 64x64 4x4 grid of flat squares
 | Golden | lilac grey steel, dusky plum shadows, tan orange trim shining bright gold (`h4`) | Golden Helm | Golden Plate | Golden Greaves |
 | Masterwork | navy and slate steel, dusty blue, light grey edges (`h5`) | Masterwork Helm | Masterwork Plate | Masterwork Greaves |
 
-Not yet made: the dexterity pieces (hoods, jerkins, leather boots from tier two), weapons, offhands, jewellery, and the masterworks of every other kind (`MISSING` in `BASE_KINDS`).
+The eight jewels were made on 2026-09-24 from the prompts in `tools/pixellab_prompts.py` (one sheet, all kept). Not yet made: the dexterity pieces (hoods, jerkins, leather boots from tier two), weapons, offhands, and the masterworks of every other kind (`MISSING` in `BASE_KINDS`).
 
 ### The gear shape the art assumes
 

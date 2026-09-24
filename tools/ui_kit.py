@@ -140,7 +140,7 @@ _PIXELLAB_IDS = [
     "sunscorched_cowl", "rimeplate", "stonebreaker", "gravediggers_charm", "berserkers_band", "glass_edge",
     "gamblers_die", "ascetics_cord", "last_gasp", "duelists_buckler", "overflowing_chalice", "dominoes",
     "snowball", "packmule", "bulwark", "heartwood_plate", "spiked_helm", "magpies_band", "lucky_wound",
-    "rag_and_bone_sack",
+    "rag_and_bone_sack", "serpents_eye",
 ]
 UNIQUE_GEAR = {name: ((PIXELLAB + name, 0, 0, 32, 32, 1), []) for name in _PIXELLAB_IDS}
 UNIQUE_OUT = "Assets/Gear/Unique"
@@ -304,12 +304,14 @@ BASE_KINDS = {
         ("Masterwork Greaves", (PIXELLAB_BASES + "Masterwork Greaves", 0, 0, 32, 32, 1))]),
 
     # Untiered, so here the drawing parts one piece from the next rather than one tier from the
-    # last: a stone on a gold band, a broad riveted band, a ring cut from jade; three pendants of
-    # three shapes. (The hat, robe, slippers and Sapphire Amulet went with energy shield, 2026-09-21;
-    # their drawings are still in gear.py and their icons still in Assets/Gear, unused.)
-    "ring": ("Ring", [("Gold Ring", DRAWN), ("Iron Band", DRAWN), ("Jade Ring", DRAWN)]),
+    # last: a stone on a gold band, a broad riveted band, a ring cut from jade, a milky stone on
+    # silver, a pearl on a post; three pendants of three shapes. All pixellab (2026-09-24); what the
+    # generator drew is in BASE_OLD. (The hat, robe, slippers and Sapphire Amulet went with energy
+    # shield, 2026-09-21; their drawings are still in gear.py and their icons still in Assets/Gear, unused.)
+    "ring": ("Ring", [("Gold Ring", (PIXELLAB_BASES + "Gold Ring", 0, 0, 32, 32, 1)), ("Iron Band", (PIXELLAB_BASES + "Iron Band", 0, 0, 32, 32, 1)), ("Jade Ring", (PIXELLAB_BASES + "Jade Ring", 0, 0, 32, 32, 1)),
+        ("Opal Ring", (PIXELLAB_BASES + "Opal Ring", 0, 0, 32, 32, 1)), ("Pearl Ring", (PIXELLAB_BASES + "Pearl Ring", 0, 0, 32, 32, 1))]),
     "amulet": ("Amulet", [
-        ("Ruby Amulet", DRAWN), ("Gold Amulet", DRAWN), ("Emerald Amulet", DRAWN)]),
+        ("Ruby Amulet", (PIXELLAB_BASES + "Ruby Amulet", 0, 0, 32, 32, 1)), ("Gold Amulet", (PIXELLAB_BASES + "Gold Amulet", 0, 0, 32, 32, 1)), ("Emerald Amulet", (PIXELLAB_BASES + "Emerald Amulet", 0, 0, 32, 32, 1))]),
 }
 # The one dye a cut piece takes, as `_shift` wants it: the pack's warm band landed on a hue, and the
 # greys given the same. Everything drawn is dyed where it is drawn (gearlib.TINTS).
@@ -340,6 +342,12 @@ BASE_OLD = {
     "Iron Greaves": (_RPG + "Equipment/Iron Boot", 0, 0, 32, 32, 1),
     "Steel Greaves": DRAWN,
     "Golden Greaves": DRAWN,
+    "Gold Ring": DRAWN,
+    "Iron Band": DRAWN,
+    "Jade Ring": DRAWN,
+    "Ruby Amulet": DRAWN,
+    "Gold Amulet": DRAWN,
+    "Emerald Amulet": DRAWN,
 }
 BASE_OLD_OUT = GEAR_OUT + "/Old"
 

@@ -59,7 +59,7 @@ const UNIQUES := {
 		"envs": ["forest", "dirt"],
 	},
 	"knucklebone_ring": {
-		"name": "Knucklebone Ring", "base": "Gold Ring",
+		"name": "Knucklebone Ring", "base": "Jade Ring",
 		"mods": ["added_damage", "added_crit"],
 		"effect": "knucklebone",
 		"effect_text": "Each click within a second of the last adds 2% to your clicks, up to 50%.",
@@ -125,7 +125,7 @@ const UNIQUES := {
 	},
 	# --- Trade-offs ---
 	"berserkers_band": {
-		"name": "Berserker's Band", "base": "Gold Ring",
+		"name": "Berserker's Band", "base": "Iron Band",
 		"mods": ["added_damage", "added_crit_damage"],
 		"effect": "berserk",
 		"effect_text": "Your clicks deal triple damage. Your weapon never swings on its own.",
@@ -139,7 +139,7 @@ const UNIQUES := {
 		"envs": ["ice", "desert"],
 	},
 	"gamblers_die": {
-		"name": "Gambler's Die", "base": "Ruby Amulet",
+		"name": "Gambler's Die", "base": "Emerald Amulet",
 		"mods": ["added_crit", "added_drop_rate"],
 		"effect": "gamble",
 		"effect_text": "Every blow deals anywhere from almost nothing to three times its worth.",
@@ -174,6 +174,15 @@ const UNIQUES := {
 		"effect": "overcrit",
 		"effect_text": "Critical chance past the most you can have becomes critical damage.",
 		"envs": [],
+	},
+	# The crit that never stays away: a miss builds the chance, a crit spends it. One on each doll
+	# builds twice as fast (the user's ruling, 2026-09-24).
+	"serpents_eye": {
+		"name": "Serpent's Eye", "base": "Emerald Amulet",
+		"mods": ["added_crit_damage", "global_increased_attack_speed"],
+		"effect": "serpent",
+		"effect_text": "Every blow that does not crit adds 5% to your crit chance until one does.",
+		"envs": ["grass", "ice"],
 	},
 	"dominoes": {
 		"name": "Dominoes", "base": "Leather Boot",
@@ -220,7 +229,7 @@ const UNIQUES := {
 	},
 	# --- Loot ---
 	"magpies_band": {
-		"name": "Magpie's Band", "base": "Gold Ring",
+		"name": "Magpie's Band", "base": "Opal Ring",
 		"mods": ["added_drop_rate", "added_gold_find"],
 		"effect": "magpie",
 		"effect_text": "One purse in twenty is a piece of gear instead.",

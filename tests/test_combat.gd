@@ -2190,6 +2190,26 @@ func _test_more_unique_effects() -> bool:
 	_check(total / 2000.0 > 1350.0 and total / 2000.0 < 1650.0, "and averages half again (%.0f)" % (total / 2000.0))
 	blows.clear()
 
+	# Serpent's Eye: from no crit chance at all, each blow that misses adds 5% until one crits.
+	var serpent := _standing(["serpent"], {"damage": 9.0})
+	serpent.hit()
+	_check(serpent._serpent == Encounter.SERPENT_STEP, "a blow that did not crit builds the chance (%s)" % serpent._serpent)
+	var crits: Array = []
+	serpent.hit_landed.connect(func(_amount: float, crit: bool, _a: bool) -> void:
+		crits.append([crit, serpent._serpent]))
+	for i in 60:
+		serpent.hit()
+	var first_crit := crits.find_custom(func(blow: Array) -> bool: return blow[0])
+	_check(first_crit >= 0 and first_crit <= 19, "a crit comes by the time the chance is certain (blow %d)" % first_crit)
+	_check(crits.all(func(blow: Array) -> bool: return (blow[1] == 0.0) == blow[0]),
+			"a crit spends what was built, and only a crit does")
+	var twice := _standing(["serpent", "serpent"], {"damage": 9.0})
+	twice.hit()
+	_check(twice._serpent == 2.0 * Encounter.SERPENT_STEP, "one on each doll builds twice as fast (%s)" % twice._serpent)
+	var without := _standing([], {"damage": 9.0})
+	without.hit()
+	_check(without._serpent == 0.0, "and nothing builds without one")
+
 	# Ascetic's Cord and the Packmule's Harness read a count the inventory hands over.
 	var bare := _standing(["ascetic"], {"damage": 9.0, "bare_sockets": 4})
 	bare.hit()

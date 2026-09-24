@@ -6,8 +6,8 @@ extends RefCounted
 ## twenty thousand drops in a loop. And the same philosophy -- the drop chance is not written per
 ## enemy. TIER_CHANCE and SIZE_CHANCE multiply into `chance_for`, so the whole curve is tuned from
 ## two small tables rather than by editing thirty numbers. The one table that is not written out is
-## ITEMS, and it is built from KINDS for the same reason: sixty-nine pieces written by hand are
-## sixty-nine places for a number to go stale.
+## ITEMS, and it is built from KINDS for the same reason: seventy-one pieces written by hand are
+## seventy-one places for a number to go stale.
 ##
 ## A drop is not just a name any more: it rolls a rarity off the enemy that carried it and modifiers
 ## off ItemRarity's band, and every one is its own Item. What a worn set adds up to is
@@ -93,7 +93,9 @@ const KINDS := {
 	},
 	# --- Weapon: the same base damage on all four, and a factor apiece. On its own swings the dagger,
 	# the sword and the greatsword come out about even; the dagger is the idler's weapon and the
-	# greatsword the clicker's, since a click deals `damage` and pays for it with the offhand.
+	# greatsword the clicker's, since a click deals `damage` and pays for it with the offhand. The mace
+	# sits between the sword and the greatsword, idle or clicking, at every level and material -- it
+	# carries crit chance for that, because crits are what grow and bleed only takes a point a level.
 	"sword": {
 		"slot": "weapon", "weight": 12,
 		"stats": {"damage": 1, "crit_chance": 5, "crit_damage": 50, "attack_speed": 1.0},
@@ -109,9 +111,9 @@ const KINDS := {
 	},
 	"mace": {
 		"slot": "weapon", "weight": 9,
-		"stats": {"damage": 1, "crit_damage": 50, "attack_speed": 0.9, "bleed": 20},
+		"stats": {"damage": 1, "crit_chance": 5, "crit_damage": 60, "attack_speed": 0.75, "bleed": 20},
 		"affixes": ["time_on_hit", "strength"],
-		"power": {"damage": 0.9},
+		"power": {"damage": 1.3},
 		"tiers": ["Wooden Club", "Iron Mace", "Steel Morningstar", "Golden Sceptre", "Masterwork Mace"],
 	},
 	"greatsword": {
@@ -178,24 +180,25 @@ const KINDS := {
 		"affixes": ["armor", "time_on_hit", "dexterity"],
 		"tiers": ["Hide Jerkin", "Leather Jerkin", "Studded Jerkin", "Shadow Leathers", "Masterwork Jerkin"],
 	},
-	# --- Jewellery: one material apiece, the way Path of Exile's is. There is one drawing of a ring
-	# and one of an amulet, so the kinds are gem and metal recolours rather than a ladder, and all
-	# six carry the global offence.
+	# --- Jewellery: one material apiece, the way Path of Exile's is. The kinds are gem and metal
+	# pieces rather than a ladder, and all eight carry the global offence.
 	#
-	# The Gold Ring is the drop-rate piece, and the one place a stat of the player's own is a base
-	# stat: a ring is worn for what it finds. What offence it carries is all modifiers -- flat damage
-	# and crit among the affixes, the two increases in `globals` -- so a ring is worth something to a
-	# fight without ever being the thing that swings.
+	# The rings are where a stat of the player's own is a base stat: a ring is worn for what it
+	# finds -- gold on the Gold Ring, rarity on the Opal, orbs on the Pearl -- or for a little defence.
+	# What offence it carries is all modifiers -- flat damage and crit among the affixes, the two
+	# increases in `globals` -- so a ring is worth something to a fight without ever being the thing
+	# that swings. Five rings share the three rings' old weight of 24, so the slot drops as often as it
+	# always did.
 	"gold_ring": {
-		"slot": "ring", "weight": 8,
-		"stats": {"drop_rate": 5},
+		"slot": "ring", "weight": 5,
+		"stats": {"gold_find": 20},
 		"affixes": ["damage", "crit_chance", "crit_damage", "strength", "dexterity", "intelligence",
 			"item_rarity"],
 		"globals": ["damage", "attack_speed"],
 		"tiers": ["Gold Ring"],
 	},
 	"iron_band": {
-		"slot": "ring", "weight": 8,
+		"slot": "ring", "weight": 5,
 		"stats": {"armor": 2},
 		"affixes": ["damage", "crit_chance", "crit_damage", "strength", "dexterity", "intelligence",
 			"item_rarity"],
@@ -203,17 +206,36 @@ const KINDS := {
 		"tiers": ["Iron Band"],
 	},
 	"jade_ring": {
-		"slot": "ring", "weight": 8,
+		"slot": "ring", "weight": 5,
 		"stats": {"dodge": 2},
 		"affixes": ["damage", "crit_chance", "crit_damage", "strength", "dexterity", "intelligence",
 			"item_rarity"],
 		"globals": ["damage", "attack_speed"],
 		"tiers": ["Jade Ring"],
 	},
+	# Item rarity as a base stat, where every other jewel only rolls it: the middle of
+	# `added_item_rarity`'s band, the way the Ruby Amulet's crit damage is the middle of its own.
+	"opal_ring": {
+		"slot": "ring", "weight": 5,
+		"stats": {"item_rarity": 15},
+		"affixes": ["damage", "crit_chance", "crit_damage", "strength", "dexterity", "intelligence"],
+		"globals": ["damage", "attack_speed"],
+		"tiers": ["Opal Ring"],
+	},
+	# The one piece that shows orb find, which only the Fortune tree gave before; a skill's rank is 10.
+	# No modifier rolls it, so this number is all of it.
+	"pearl_ring": {
+		"slot": "ring", "weight": 4,
+		"stats": {"orb_find": 15},
+		"affixes": ["damage", "crit_chance", "crit_damage", "strength", "dexterity", "intelligence",
+			"item_rarity"],
+		"globals": ["damage", "attack_speed"],
+		"tiers": ["Pearl Ring"],
+	},
 	# The catch-all socket, and the rarest: the widest affix pools in the table, so an amulet is the
-	# one piece that can turn up carrying almost anything. The Gold Amulet is the first ordinary piece
-	# to show Gold Find, and it carries the big number of the three finders because it is the narrow
-	# one -- drop rate lifts gear, uniques, orbs and gold alike, and a purse alone is worth less.
+	# one piece that can turn up carrying almost anything. The Gold Amulet shows drop rate, the broad
+	# finder -- it lifts gear, uniques, orbs and gold alike -- and the Emerald crit chance, the middle
+	# of `added_crit`'s band.
 	"ruby_amulet": {
 		"slot": "amulet", "weight": 4,
 		"stats": {"crit_damage": 10},
@@ -224,16 +246,16 @@ const KINDS := {
 	},
 	"gold_amulet": {
 		"slot": "amulet", "weight": 4,
-		"stats": {"gold_find": 20},
-		"affixes": ["crit_chance", "crit_damage", "damage", "drop_rate", "time_on_hit", "strength",
+		"stats": {"drop_rate": 5},
+		"affixes": ["crit_chance", "crit_damage", "damage", "time_on_hit", "strength",
 			"dexterity", "intelligence", "item_rarity"],
 		"globals": ["damage", "attack_speed"],
 		"tiers": ["Gold Amulet"],
 	},
 	"emerald_amulet": {
 		"slot": "amulet", "weight": 4,
-		"stats": {"dodge": 5},
-		"affixes": ["crit_chance", "crit_damage", "damage", "drop_rate", "time_on_hit", "strength",
+		"stats": {"crit_chance": 3},
+		"affixes": ["crit_damage", "damage", "drop_rate", "time_on_hit", "strength",
 			"dexterity", "intelligence", "item_rarity"],
 		"globals": ["damage", "attack_speed"],
 		"tiers": ["Emerald Amulet"],
@@ -320,8 +342,8 @@ const STAT_LABELS := {
 	"strength": "Strength",
 	"dexterity": "Dexterity",
 	"intelligence": "Intelligence",
-	# The other two finders. The Fortune tree carries all three; the jewellery rolls item rarity and
-	# the Gold Amulet shows gold find, so orb find is the only one no piece has ever heard of.
+	# The other two finders. The Fortune tree carries all three; the jewellery rolls item rarity, the
+	# Gold Ring shows gold find, the Opal Ring item rarity and the Pearl Ring orb find.
 	"item_rarity": "Item Rarity",
 	"gold_find": "Gold Find",
 	"orb_find": "Orb Find",
@@ -341,7 +363,8 @@ const PERCENT_STATS := ["crit_chance", "crit_damage", "move_speed", "drop_rate",
 ##
 ## Gold find is here for drop rate's reason and is no more a probability than it is: it multiplies a
 ## purse that is already exponential in the walk, and an exponent on top of that is gold meaning nothing.
-## Item rarity joins them both: it multiplies the weights a drop rolls its rarity on.
+## Item rarity joins them both: it multiplies the weights a drop rolls its rarity on. Orb find too:
+## it multiplies the orb chance the way drop rate does the gear chance.
 ##
 ## Bleed is a share of a blow, and a share that compounds is a share past everything: 20% of a hit
 ## would be 530% of it by level 30. The flat step grows it instead, a point a level.
@@ -354,8 +377,8 @@ const PERCENT_STATS := ["crit_chance", "crit_damage", "move_speed", "drop_rate",
 ##
 ## The fight clock is here for Sight's reason: seconds on a thirty-second clock that a level multiplied
 ## would delete the only way to lose, so no level moves it at all.
-const CHANCE_STATS := ["crit_chance", "drop_rate", "gold_find", "item_rarity", "bleed", "sight",
-	"spawn_speed", "fight_clock"]
+const CHANCE_STATS := ["crit_chance", "drop_rate", "gold_find", "item_rarity", "orb_find", "bleed",
+	"sight", "spawn_speed", "fight_clock"]
 ## The stats any piece at all may roll a FLAT modifier for, without being told so kind by kind.
 const ANY_AFFIXES := ["spawn_speed", "fight_clock"]
 ## Per second: attacks. The one stat that is neither a plain number nor a percentage.
@@ -396,12 +419,12 @@ const LEVEL_FLAT := {
 	"armor": 2.0, "dodge": 2.0, "block": 1.0, "time_on_hit": 1.0,
 	"move_speed": 1.0, "drop_rate": 1.0,
 	"strength": 1.0, "dexterity": 1.0, "intelligence": 1.0,
-	# The two finders a piece can carry now. They take the same point a level drop rate does, which is
-	# all a CHANCE_STAT ever takes.
-	"item_rarity": 1.0, "gold_find": 1.0,
-	# And the two a level is worth nothing to: a torch's Sight is one tile or two and the material is
-	# what says which, and nothing but a skill has ever rolled orb find.
-	"sight": 0.0, "orb_find": 0.0,
+	# The other finders. They take the same point a level drop rate does, which is all a CHANCE_STAT
+	# ever takes.
+	"item_rarity": 1.0, "gold_find": 1.0, "orb_find": 1.0,
+	# And the one a level is worth nothing to: a torch's Sight is one tile or two and the material is
+	# what says which.
+	"sight": 0.0,
 	# Spawn speed reaches its cap by being worn on every socket, not by levelling: a level is worth
 	# nothing to it, so the cap is a set's worth of rolls at any level.
 	"spawn_speed": 0.0,

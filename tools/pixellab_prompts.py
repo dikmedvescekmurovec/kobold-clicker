@@ -274,12 +274,72 @@ ITEMS.append(("Boots: dexterity", [
    + BOOT_LOOK["t5_leather"] + "\n" + BOOT_SHAPE + "\n" + NO_LEG),
 ]))
 
+# Jewellery (2026-09-24): no tiers, one material apiece, so each piece takes its own palette rather than a tier's.
+# Three rings of three builds and three pendants of three shapes; the kind's Shape line is shared. Colour words and
+# hex are the charts' (tools/DESIGN.md), and every piece takes the polished lines (SHINE).
+POSE["RING"] = ("Seen from a slight three-quarter angle above: the band forms a thick oval, its widest part at the "
+                "top, the open middle showing the empty background.")
+POSE["PENDANT"] = ("Hanging straight down, front view: the necklace loops across the top, the pendant hangs centred below "
+                   "it.")
+RING_SHAPE = ("Shape: one thick ring, its open middle about a third of its width, the band thickest at the top where "
+              "its main part sits and thinner at the bottom.")
+PENDANT_SHAPE = ("Shape: a thin necklace dips from near the top corners into a V that meets at a small loop just above "
+                 "the middle; the pendant hangs from that loop and fills the lower half of the canvas.")
+PAL.update({
+ "gold_ring": ("dull gold #c49e48 and #9b7227, bright gold highlights #e9bc3d, a dusty blue stone #628ab9 with steel "
+               "blue shadows #546783, dark brown shadows #4e2d1f"),
+ "iron_band": "iron grey #41454b, slate #616c79, light grey highlights #d1d1d1, dark grey shadows #2f3236",
+ "jade_ring": "moss green #69903e, pine green shadows #226723, dark grey in the deepest shadow #2f3236",
+ "opal_ring": ("a lavender grey stone #a598b4 with #776587 shadows and glints of dusty blue #628ab9 and dusty rose "
+               "#cc636b, silver #bdbebf and #848585 on the band and setting, dark grey shadows #2f3236"),
+ "pearl_ring": ("a bone white pearl #f3f3dc shaded with light grey #d1d1d1 and lavender grey #a598b4, dull gold "
+                "#c49e48 and #9b7227 on the band, dark brown shadows #4e2d1f"),
+ "ruby_amulet": ("a brick red stone #ba3423 with wine red shadows #8f0d22 and a dusty rose highlight #e1828f, dull "
+                 "gold #c49e48 and #9b7227 on the setting and chain"),
+ "gold_amulet": ("bright gold #e9bc3d, brass #b78932 and #815119 in the shadows, a dark brown leather cord #4e2d1f"),
+ "emerald_amulet": ("a pine green stone #226723 with moss green highlights #69903e, silver #bdbebf and #848585 on the "
+                    "setting and chain, dark grey shadows #2f3236"),
+})
+ITEMS.append(("Rings", [
+  ("Gold Ring", "RING", "gold_ring",
+   "A dull gold ring with one small round dusty blue stone set on top in four short gold claws; the stone is "
+   "the only blue, the band plain and smooth.\n" + RING_SHAPE),
+  ("Iron Band", "RING", "iron_band",
+   "A broad, flat iron grey ring, as wide as a finger joint, with a row of small round rivets running round "
+   "the middle of the band; no stone.\n" + RING_SHAPE),
+  ("Jade Ring", "RING", "jade_ring",
+   "A thick ring carved from one piece of moss green jade, no metal at all: a smooth rounded band that swells "
+   "into a flat oval face on top.\n" + RING_SHAPE),
+  ("Opal Ring", "RING", "opal_ring",
+   "A silver ring with one large flat oval lavender grey stone lying across the top of the band in a thick smooth "
+   "silver rim; the stone is milky, with a few glints of dusty blue and dusty rose, and fills the whole top of the "
+   "ring.\n" + RING_SHAPE),
+  ("Pearl Ring", "RING", "pearl_ring",
+   "A dull gold ring with one big round bone white pearl raised high above the band on a short gold stem, "
+   "so the pearl stands clear of the ring like a ball on a post; the pearl is the only white.\n" + RING_SHAPE),
+]))
+ITEMS.append(("Amulets", [
+  ("Ruby Amulet", "PENDANT", "ruby_amulet",
+   "A dull gold chain with a teardrop brick red stone hanging point down, held in a thin dull gold rim with a "
+   "small cap at the top; red only on the stone.\n" + PENDANT_SHAPE),
+  ("Gold Amulet", "PENDANT", "gold_amulet",
+   "A dark brown leather cord with a round bright gold medallion hanging from it: a thick flat disc with a raised "
+   "rim and a smooth raised dome in the middle.\n" + PENDANT_SHAPE),
+  ("Emerald Amulet", "PENDANT", "emerald_amulet",
+   "A silver chain with a pine green stone cut as a tall diamond, point down, held in a thin silver frame with a "
+   "small silver loop at the top; green only on the stone.\n" + PENDANT_SHAPE),
+]))
+
 
 # The top materials are the finest of their line and should look it: the same dusty set, but polished.
 # Without this the golden and masterwork helms came out duller than the steel one (2026-09-23).
 SHINE = {"h4": "the tan orange and bright gold parts", "h5": "the thin light grey edges",
          "gold": "the gold parts", "master": "the pale bevelled edges", "t4": "the gold parts", "t5": "the thin bone-white edges",
-         "b4": "the copper and bright gold parts", "b5": "the thin light grey edges"}
+         "b4": "the copper and bright gold parts", "b5": "the thin light grey edges",
+         "gold_ring": "the gold band and the stone", "iron_band": "the rivets and the band's rims",
+         "jade_ring": "the jade's smooth face",
+         "opal_ring": "the milky stone and its glints", "pearl_ring": "the round pearl", "ruby_amulet": "the red stone", "gold_amulet": "the gold rim and dome",
+         "emerald_amulet": "the green stone and the silver frame"}
 # The leather line's top two: finer leather rather than polished metal.
 SHINE_LEATHER = {"t4_leather": "the copper buckles", "t5_leather": "the light grey stitched edges"}
 

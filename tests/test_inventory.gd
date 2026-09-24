@@ -203,8 +203,8 @@ func _test_totals() -> bool:
 	var two := Equipment.new()
 	two.equip(Equipment.Socket.RING_LEFT, Item.rolled("Gold Ring", ItemRarity.Rarity.COMMON, rng))
 	two.equip(Equipment.Socket.RING_RIGHT, Item.rolled("Gold Ring", ItemRarity.Rarity.COMMON, rng))
-	var one: float = float(LootTable.stats_of("Gold Ring")["drop_rate"])
-	_check(is_equal_approx(two.totals()["drop_rate"], one * 2.0), "two rings are worth two rings")
+	var one: float = float(LootTable.stats_of("Gold Ring")["gold_find"])
+	_check(is_equal_approx(two.totals()["gold_find"], one * 2.0), "two rings are worth two rings")
 
 	# Flat before percent, which is the only order that makes both modifiers worth having.
 	var rolled := Item.new()
@@ -464,6 +464,7 @@ func _test_slot_locks() -> bool:
 		# Base damage is still what is held, but the jewellery carries damage as an affix -- what is
 		# locked is where a click's damage *comes from*, not everything that can add to it.
 		"damage": ["sword", "dagger", "mace", "greatsword", "broken_sword", "gold_ring", "iron_band", "jade_ring",
+			"opal_ring", "pearl_ring",
 			"ruby_amulet", "gold_amulet", "emerald_amulet"],
 		"move_speed": ["boot", "greaves"],
 		"block": ["shield", "buckler", "torch", "broken_torch"],
