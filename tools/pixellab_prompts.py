@@ -851,3 +851,149 @@ for group, items in ITEMS:
         n += 1
 open("tools/qa/pixellab_item_prompts.md", "w", encoding="utf-8").write("\n".join(out))
 print(n, "prompts")
+
+
+# Skill icons (2026-09-24): the user asked for a simpler design than the bought pack's, each icon showing what the skill
+# does rather than copying the pack's picture, and never its name (a named thing gets drawn). The first tries drew the
+# badge and the symbol in one prompt, and every badge came back different (a thin red frame, a thick gold one, a blue
+# one round a letter C), so the two are made apart: one frame, drawn once in neutral greys and tinted per tree in
+# ui_kit, so every badge is the same shape; and each symbol alone on a clear background, sized to sit inside it. The
+# symbols are all one light ink -- the frame's colour says the tree. 32x32, drawn by the game at 1x where the pack's
+# 16 px icons are drawn at 2x, so the square on screen is the same size.
+SKILL_FRAME = "\n".join([
+    "An empty square badge for an ability icon, with nothing on it: a square with slightly rounded corners, a border "
+    "two pixels thick with a small bevel -- lighter along the top and left edges, darker along the bottom and right -- "
+    "and a plain, flat, dark field inside the border.",
+    "Shape: the badge fills the whole 32x32 canvas edge to edge; the field inside the border is completely empty and "
+    "flat, one colour, with no symbol, no pattern and no texture.",
+    "Single game ability icon frame, 32x32 pixel art in the style of a classic fantasy RPG skill tree.",
+    "Front view, flat, seen straight on.",
+    "Simple and clean: straight edges, even thickness all round, the four corners alike.",
+    "Palette: greys only: light grey #d1d1d1 and neutral grey #797e80 on the border, a darker grey #41454b in "
+    "the border's shadow, dark grey #2f3236 for the field. No other colour.",
+    "Soft light from the top-left.",
+    "No text, no letters, no numbers, no symbol, no shadow outside the badge."])
+
+
+def skill_prompt(symbol):
+    return "\n".join([
+        symbol,
+        # No colour word that names a thing (the user, 2026-09-25): "bone white" drew bones into the symbols. Light grey
+        # alone came back cool and blue-grey, not the Power symbols' white; the user's own "muted white #F1F5E7",
+        # shaded with light grey, is the wording that worked.
+        "Look: one flat, simple emblem in muted white, shaded with light grey; two or three shades at most and no "
+        "other colour, no blue.",
+        # Asked for 22 of 32, the first sword came back 25x29 and ran over the frame's border; the user's own wording
+        # (a fraction of the width, not a pixel count) brought the second in at a size that sits inside it.
+        "Size: the symbol fills about 3/4 width, centred, with clear empty space all round it.",
+        "Single game ability icon symbol, 32x32 pixel art in the style of a classic fantasy RPG skill tree.",
+        "Front view, flat and centred, seen straight on.",
+        "Simple and bold: big clear shapes, a clean readable silhouette, no small details, nothing but the one symbol.",
+        "Palette: muted white #F1F5E7, light grey #d1d1d1 in the shading, neutral grey #797e80 only in the darkest "
+        "shading.",
+        "Soft light from the top-left, a single highlight along the symbol's upper-left edge.",
+        "Only the symbol itself on an empty, clear background. No text, no letters, no numbers, no shadow."])
+
+
+# What each skill does, as one symbol: SkillTree.TREES for the numbers. A capstone's symbol is its effect.
+# Footwork, Shield Mastery, Tenacity and Second Wind were made simpler at the user's word (2026-09-25): one plain
+# object each, no motion lines or second parts. Second Wind became wind, so it no longer shares Tenacity's hourglass.
+SKILL_SYMBOLS = [
+ ("Power", "power", [
+  ("sharpened_edge", "+Damage", "A single sword blade tilted upward, a bright glint running along its keen edge."),
+  ("keen_eye", "+Crit chance", "An open eye whose pupil is a small round target with a dot in its centre."),
+  ("quick_hands", "+Attack speed", "A short dagger swinging to the right, trailed by three short curved speed lines."),
+  ("battle_rhythm", "% Damage", "A round war drum seen from the front, with two drumsticks crossed above it."),
+  ("deadly_strikes", "+Crit chance, +Crit damage", "A dagger stabbing downward, a small jagged starburst bursting at its point."),
+  ("flurry", "% Attack speed", "Three curved slash marks side by side, swept in the same direction like a fast flurry of cuts."),
+  ("might", "+Damage", "A heavy war hammer standing upright, its head big and square."),
+  ("assassin", "Execute: a blow that leaves an enemy almost dead kills it",
+   "A dagger driven straight down through a small cracked skull."),
+  ("whirlwind", "Cleave: damage past a kill carries into the next enemy",
+   # The first wording (a slash cutting through two targets) was too much to draw (the user, 2026-09-25).
+   "A single axe with one wide curved sweep line arcing around behind its blade."),
+  ("titan", "Giant Slayer: double damage against elites and bosses",
+   "A small sword standing in front of a huge horned helmet that is split down the middle."),
+ ]),
+ ("Fortune", "fortune", [
+  ("scavenger", "+Drop rate", "An open sack with a small item falling into it from above."),
+  # The user's own wording, which is the one that was drawn (2026-09-25).
+  ("prospector", "+Gold find", "A mining pickaxe and chisel."),
+  ("appraiser", "+Item rarity", "A round magnifying glass held over a faceted gem."),
+  ("fortunes_favour", "+Drop rate, +Item rarity", "A four-leaf clover."),
+  ("treasure_hunter", "+Item rarity", "A rolled-open treasure map marked with a bold X."),
+  ("greed", "+Gold find", "A tall stack of round coins, slightly leaning."),
+  ("orb_seeker", "+Orb find", "A round glowing orb with a small four-pointed sparkle beside it."),
+  ("collector", "Trophy: every elite and boss drops an item", "A trophy cup with two handles on a short stand."),
+  ("midas", "Jackpot: one purse in ten is five times fuller", "A tied coin purse bursting open, coins spilling out of the top."),
+  ("alchemist", "Transmute: an orb sometimes falls twice", "A round flask tipped over, two identical orbs rolling out of its neck."),
+ ]),
+ ("Guard", "guard", [
+  ("toughness", "+Armour", "A chestplate seen from the front: a rounded chest plate with a round neck opening at the "
+   "top and a short plate over each shoulder."),
+  ("footwork", "+Dodge", "Boots, seen from the side."),
+  ("steady_guard", "+Block", "A round shield held upright, facing the front."),
+  ("resolve", "% Armour, % Dodge", "A single mountain peak, tall and pointed, standing firm."),
+  ("evasion", "% Dodge", "An arrow curving around a small round target and missing it, its path drawn as a dotted line."),
+  ("shield_mastery", "+Block", "A single tall kite shield, pointed at the bottom."),
+  ("tenacity", "+Time on hit", "A single hourglass standing upright."),
+  ("phantom", "Afterimage: a dodged blow wins back time",
+   "A boot seen twice side by side: one solid, and one faded and see-through behind it like an afterimage."),
+  ("bastion", "Shield Wall: block counts double against elites and bosses", "A short castle wall with square battlements."),
+  ("undying", "Second Wind: once a fight, running out of time gives back time",
+   "Three curved wind lines blowing from left to right."),
+ ]),
+ # One padlock for all three trees: the frame's tint says which tree is locked.
+ ("Locked", None, [
+  ("locked", "A skill not open yet, in any tree", "A closed padlock."),
+ ]),
+]
+
+out = ["# Pixellab prompts: skill icons", "",
+ "Settings: 32x32, transparent background on, Direction and View None, Single color outline; the Pixen model, "
+ "low detail. Make the frame and one symbol first and check them together before the rest.",
+ "Save the frame as `Assets/Potential/Skills/frame.png` and each symbol as `Assets/Potential/Skills/<its id>.png` (the id "
+ "starts each heading). ui_kit tints the frame per tree and puts each symbol on it.", "",
+ "## Frame (make once)", "", "```", SKILL_FRAME, "```", ""]
+n = 1
+for group, tree, skills in SKILL_SYMBOLS:
+    out += [f"## {group}", ""]
+    for skill_id, does, symbol in skills:
+        out += [f"### {skill_id} -- {does}", "", "```", skill_prompt(symbol), "```", ""]
+        n += 1
+open("tools/qa/pixellab_skill_prompts.md", "w", encoding="utf-8").write("\n".join(out))
+print(n, "skill prompts")
+
+
+# The fortuneteller's seven spells (2026-09-25), in the user's simpler template: the prompt that drew the dark padlock,
+# six lines and no palette, which the user found works better than the longer skill prompts. Each symbol is what the
+# spell does (FortuneTeller's readings), none of them a skill's symbol, in muted white to stand on a frame like the
+# skills'.
+def simple_prompt(symbol, colour="muted white"):
+    return "\n".join([
+        symbol,
+        f"Look: one flat, simple icon in {colour}",
+        "Size: the icon fills about 3/4 width, centred, with clear empty space all round it.",
+        "Single game ability icon symbol, 32x32 pixel art in the style of a classic fantasy RPG skill tree.",
+        "Front view, flat and centred, seen straight on.",
+        "Simple and bold: big clear shapes, a clean readable silhouette, no small details, nothing but the one symbol."])
+
+
+# Her colour is purple, as the pack's placeholders were (the user, 2026-09-25): said plainly, since every purple on the
+# charts names a thing (plum, lavender, lilac, mulberry). Light enough to stand on a dark purple frame.
+FORTUNE_COLOUR = "pale muted purple, shaded with deeper purple"
+FORTUNE_SYMBOLS = [
+ ("roads", "Where the nearest settlements lie", "A signpost with two arrows pointing opposite ways."),
+ ("treasure", "Where a chest is", "A closed treasure chest."),
+ ("quarry", "Where the accepted bounty's monster lives", "A single large paw print."),
+ ("relic", "What one unfound unique is, and where it drops", "A small crown."),
+ ("appraise", "What a piece could still roll", "A pair of balance scales."),
+ ("scour", "A patch of the map lifted out of the dark", "A crystal ball on a small stand."),
+ ("homecoming", "The road home, walked in no time", "A small magical portal."),  # the user's own, which was drawn
+]
+out = ["# Pixellab prompts: fortuneteller spells", "",
+ "Settings: as the skill symbols. Save each as `Assets/Potential/Fortune/<its id>.png` (the id starts each heading).", ""]
+for spell, does, symbol in FORTUNE_SYMBOLS:
+    out += [f"### {spell} -- {does}", "", "```", simple_prompt(symbol, FORTUNE_COLOUR), "```", ""]
+open("tools/qa/pixellab_fortune_prompts.md", "w", encoding="utf-8").write("\n".join(out))
+print(len(FORTUNE_SYMBOLS), "fortune prompts")

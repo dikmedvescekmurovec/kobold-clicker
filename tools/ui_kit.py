@@ -827,6 +827,37 @@ SKILLS = {
     "undying": ("guard", "Blue5"),
 }
 SKILL_LOCKS = {"power_locked": "RedLocked", "fortune_locked": "YellowLocked", "guard_locked": "BlueLocked"}
+# The user's pixellab skill icons (2026-09-25), replacing the pack's a tree at a time: one grey badge
+# (`SKILL_FRAME`, drawn once) with its corners cut, tinted per tree by lightness (`SKILL_TINTS`), and a bone-white
+# symbol of what the skill does centred on it. 32 px: SkillSlot draws every icon into the same 32 px square, the
+# pack's 16 px ones at 2x and these at 1x. A skill not in `SKILL_SYMBOLS` keeps its pack icon.
+SKILL_PIXELLAB = "Skills/"
+SKILL_FRAME = SKILL_PIXELLAB + "frame"
+SKILL_BADGE = 32
+SKILL_SYMBOLS = {"sharpened_edge", "keen_eye", "quick_hands", "battle_rhythm", "deadly_strikes", "flurry", "might",
+                 "assassin", "whirlwind", "titan",
+                 "scavenger", "prospector", "appraiser", "fortunes_favour", "treasure_hunter", "greed", "orb_seeker",
+                 "collector", "midas", "alchemist",
+                 "toughness", "footwork", "steady_guard", "resolve", "evasion", "shield_mastery", "tenacity", "phantom",
+                 "bastion", "undying"}
+# One padlock for every tree's locked mark: the frame's tint says which tree (`Skills/locked.png`).
+SKILL_LOCK_SYMBOL = "locked"
+# The frame's lightness, measured: its outer ring ~0.06, the field ~0.15, the border's shade ~0.45 and light ~0.73.
+# Each tree maps those onto its own chart colours, so the bevel keeps its light and shade and only the hue moves.
+SKILL_TINTS = {
+    "power": [(0.0, "#2f3236"), (0.06, "#3f0e1d"), (0.15, "#5a1122"), (0.45, "#982a1e"), (0.73, "#ba3423"), (1.0, "#e1828f")],
+    "fortune": [(0.0, "#2f3236"), (0.06, "#3a2217"), (0.15, "#4e2d1f"), (0.45, "#9b7227"), (0.73, "#c49e48"), (1.0, "#f9f4d4")],
+    "guard": [(0.0, "#2f3236"), (0.06, "#171a2a"), (0.15, "#1a2134"), (0.45, "#3f4a64"), (0.73, "#546783"), (1.0, "#999dd5")],
+    # The fortuneteller's spells: purple, hers alone (the user, 2026-09-25), as the pack's placeholders were.
+    "teller": [(0.0, "#2f3236"), (0.06, "#221931"), (0.15, "#34264a"), (0.45, "#574175"), (0.73, "#7b70ad"), (1.0, "#c1b5cf")],
+}
+# Her spells' pixellab symbols (`Fortune/<reading>.png`), laid on the same frame in the "teller" tint; a reading not
+# listed keeps its pack icon.
+FORTUNE_PIXELLAB = "Fortune/"
+FORTUNE_SYMBOLS = {"roads", "treasure", "quarry", "relic", "appraise", "scour", "homecoming"}
+# How far from each corner the frame's near-black rounding is cleared, and how dark a pixel must be to go.
+SKILL_CORNER_REACH = 3
+SKILL_CORNER_DARKEST = 0.09
 
 # The fortuneteller's seven spells, off the same pack in the one colourway neither skill tree uses:
 # purple is hers alone, so a spell on her grid is never mistaken for a skill. Placeholder art -- the
@@ -1616,15 +1647,70 @@ def orb_preview(cut):
 
 
 def skills():
-    """Every skill icon and both locked marks, whole files at their own 16 px."""
+    """Every skill icon and the locked marks: the pixellab badge where a symbol has arrived (`SKILL_SYMBOLS`),
+    otherwise the pack's whole file at its own 16 px."""
     out = {}
-    for name, (_tree, src) in SKILLS.items():
-        out[name] = _cut((SKILL_ROOT + src, 0, 0, SKILL_SIDE, SKILL_SIDE, 1), trim=False)
-    for name, src in SKILL_LOCKS.items():
-        out[name] = _cut((SKILL_LOCKED + src, 0, 0, SKILL_SIDE, SKILL_SIDE, 1), trim=False)
+    frame = _corners_cut(_cut((SKILL_FRAME, 0, 0, SKILL_BADGE, SKILL_BADGE, 1), trim=False))
+    for name, (tree, src) in SKILLS.items():
+        if name in SKILL_SYMBOLS:
+            out[name] = _badge(frame, tree, _cut((SKILL_PIXELLAB + name, 0, 0, SKILL_BADGE, SKILL_BADGE, 1)))
+        else:
+            out[name] = _cut((SKILL_ROOT + src, 0, 0, SKILL_SIDE, SKILL_SIDE, 1), trim=False)
+    padlock = _cut((SKILL_PIXELLAB + SKILL_LOCK_SYMBOL, 0, 0, SKILL_BADGE, SKILL_BADGE, 1))
+    for name in SKILL_LOCKS:
+        out[name] = _badge(frame, name.removesuffix("_locked"), padlock)
     for name, image in out.items():
-        if image.size != (SKILL_SIDE, SKILL_SIDE):
-            raise SystemExit("%s is %dx%d, not %d square" % (name, image.width, image.height, SKILL_SIDE))
+        if image.width != image.height or image.width not in (SKILL_SIDE, SKILL_BADGE):
+            raise SystemExit("%s is %dx%d, not %d or %d square" % (name, image.width, image.height, SKILL_SIDE, SKILL_BADGE))
+    return out
+
+
+def _lightness(pixel):
+    return (0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2]) / 255
+
+
+def _corners_cut(frame):
+    """The skill frame with the near-black pixels its rounded corners leave outside the border cleared, flooding
+    in from each corner but no further than SKILL_CORNER_REACH along either edge, so the dark ring down the sides
+    stays as its edge."""
+    out = frame.copy()
+    px = out.load()
+    w, h = out.size
+    for cx, cy in ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)):
+        todo, seen = [(cx, cy)], set()
+        while todo:
+            x, y = todo.pop()
+            if (x, y) in seen or not (0 <= x < w and 0 <= y < h):
+                continue
+            seen.add((x, y))
+            if (abs(x - cx) >= SKILL_CORNER_REACH or abs(y - cy) >= SKILL_CORNER_REACH
+                    or _lightness(px[x, y]) > SKILL_CORNER_DARKEST):
+                continue
+            px[x, y] = (0, 0, 0, 0)
+            todo += [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+    return out
+
+
+def _badge(frame, tree, symbol):
+    """`symbol` (trimmed) centred on the frame tinted for `tree`: every pixel's lightness mapped along
+    SKILL_TINTS[tree], so the bevel keeps its light and shade in the tree's colours."""
+    out = frame.copy()
+    px = out.load()
+    stops = [(at, _rgb(colour)[:3]) for at, colour in SKILL_TINTS[tree]]
+    for y in range(out.height):
+        for x in range(out.width):
+            r, g, b, a = px[x, y]
+            if not a:
+                continue
+            v = _lightness((r, g, b))
+            colour = stops[-1][1]
+            for (l0, c0), (l1, c1) in zip(stops, stops[1:]):
+                if v <= l1:
+                    t = 0.0 if l1 == l0 else min(max((v - l0) / (l1 - l0), 0.0), 1.0)
+                    colour = tuple(round(c0[i] + (c1[i] - c0[i]) * t) for i in range(3))
+                    break
+            px[x, y] = colour + (a,)
+    out.alpha_composite(symbol, ((out.width - symbol.width) // 2, (out.height - symbol.height) // 2))
     return out
 
 
@@ -1660,9 +1746,11 @@ def skill_preview(cut):
         for name, row, col, parents in nodes:
             open_ = not parents or any(p in ranked for p in parents)
             icon = cut[name] if open_ else cut[tree + "_locked"]
-            if open_ and name not in ranked:
+            if name not in ranked:
+                # Greyed like the game's SkillSlot: locked and open alike, until a point goes in.
+                shape = icon.getchannel("A")
                 icon = Image.blend(icon, Image.new("RGBA", icon.size, (0x60, 0x60, 0x60, 0xFF)), 0.45)
-                icon.putalpha(cut[name].getchannel("A"))
+                icon.putalpha(shape)
             x, y = centre(ox, row, col)
             out.alpha_composite(icon.resize((side, side), Image.NEAREST), (x - side // 2, y - side // 2))
     return out.resize((out.width * 2, out.height * 2), Image.NEAREST)
@@ -2166,9 +2254,13 @@ def main():
     # Hers, in their own folder for the same reason: TownPage loads them by path, and a reading is
     # neither a skill nor an orb. Cut like the skills -- whole files, their own frame, nothing trimmed.
     os.makedirs(FORTUNE_OUT, exist_ok=True)
+    frame = _corners_cut(_cut((SKILL_FRAME, 0, 0, SKILL_BADGE, SKILL_BADGE, 1), trim=False))
     for name, src in FORTUNE.items():
-        _cut((SKILL_ROOT + src, 0, 0, SKILL_SIDE, SKILL_SIDE, 1), trim=False).save(
-                os.path.join(FORTUNE_OUT, name + ".png"))
+        if name in FORTUNE_SYMBOLS:
+            spell = _badge(frame, "teller", _cut((FORTUNE_PIXELLAB + name, 0, 0, SKILL_BADGE, SKILL_BADGE, 1)))
+        else:
+            spell = _cut((SKILL_ROOT + src, 0, 0, SKILL_SIDE, SKILL_SIDE, 1), trim=False)
+        spell.save(os.path.join(FORTUNE_OUT, name + ".png"))
 
     # Loose, like the parts: a pip is drawn at its own size and never stretched, so it has no
     # nine-slice and no business in the theme sheet.

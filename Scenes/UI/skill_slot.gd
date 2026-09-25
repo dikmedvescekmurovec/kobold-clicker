@@ -7,7 +7,7 @@ extends Control
 ##
 ## Four states, each read at a glance across a tree of ten:
 ##
-##   locked     -- the tree's own Locked mark from the pack: nothing leads here yet
+##   locked     -- the tree's locked mark, a padlock on its frame, greyed: nothing leads here yet
 ##   open       -- the icon, greyed: it can be learned, and has not been
 ##   learning   -- the icon in full colour, with its count
 ##   maxed      -- the same, ringed in gold: nothing more to put in it
@@ -58,7 +58,9 @@ func setup(which: String, rank: int, open: bool) -> void:
 	_icon.custom_minimum_size = Vector2(SIDE, SIDE)
 	_icon.size = Vector2(SIDE, SIDE)
 	_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if open and rank <= 0:
+	# Locked and open alike: only a skill with a point in it is lit, so learning one is what brings it up in colour
+	# (the user's call, 2026-09-25; a locked badge left bright outshone the skills that could be taken).
+	if not open or rank <= 0:
 		_icon.modulate = DIM
 	add_child(_icon)
 
