@@ -50,7 +50,13 @@ func setup(held: Item, open := false, translucent := false) -> void:
 	add_to_group(GROUP)
 	custom_minimum_size = Vector2(SIDE, SIDE)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_theme_stylebox_override("panel", ItemRarity.slot_style(item.rarity, selected, translucent))
+	var socket := ItemRarity.slot_style(item.rarity, selected, translucent)
+	# A frameless piece gets a one-pixel edge, or a common reads as an empty socket beside the framed ones.
+	if item.frame() == null:
+		socket = socket.duplicate()
+		socket.set_border_width_all(1)
+		socket.border_color = Palette.SLOT_TAN_DK
+	add_theme_stylebox_override("panel", socket)
 	tooltip_text = "%s (%s, level %d)" % [item.display_name(), item.rarity_name(), item.level]
 	var icon := TextureRect.new()
 	icon.texture = item.icon()

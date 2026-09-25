@@ -27,13 +27,14 @@ const GRID_COLS := 4
 const SLOT_GAP := ItemSlot.SIDE / 7
 ## Fixed, so the panel keeps its width as the bag fills.
 ## The marks on a level's two buttons, and how far Auto's face is darkened while it is held down.
-## Bare on the cream, so the pack's own brown cut of each mark; the funnel turns green while Auto
+## Bare on the cream, so the pack's own brown cut of each mark; Auto's struck-through chest turns green while it
 ## is on, as the pack turns its open tab green.
-const AUTO_ICON := "res://Assets/UI/ui_icon_filter_brown.png"
-const AUTO_ON_ICON := "res://Assets/UI/ui_icon_filter_green.png"
+const AUTO_ICON := "res://Assets/UI/ui_icon_auto_brown.png"
+const AUTO_ON_ICON := "res://Assets/UI/ui_icon_auto_green.png"
 const CLEAR_ICON := "res://Assets/UI/ui_icon_trash_brown.png"
 const SELL_ICON := "res://Assets/UI/ui_icon_coins_brown.png"
-const SWAP_ICON := "res://Assets/UI/ui_icon_swap.png"
+const COUNT_ICON := "res://Assets/UI/ui_icon_chest_brown.png"
+const SWAP_ICON :="res://Assets/UI/ui_icon_swap.png"
 ## Hide points back at the bag the doll folds into, Show out to where it opens.
 const HIDE_ICON := "res://Assets/UI/ui_icon_caret_left.png"
 const SHOW_ICON := "res://Assets/UI/ui_icon_caret_right.png"
@@ -55,6 +56,21 @@ const TICK: Array[String] = [
 	".###...",
 	"..#....",
 ]
+## A square's upgrade arrow (`is_upgrade`): leaf over an ink outline, so it reads on any frame; and
+## the child's name, which is how a test finds it.
+const UPGRADE: Array[String] = [
+	"...o...",
+	"..o#o..",
+	".o###o.",
+	"o#####o",
+	"oo###oo",
+	".o###o.",
+	".ooooo.",
+]
+const UPGRADE_NAME := "Upgrade"
+static var _upgrade_texture: ImageTexture
+## How many squares short of the cap the count turns rust.
+const NEARLY_FULL := 4
 const WIDTH := GRID_COLS * ItemSlot.SIDE + (GRID_COLS - 1) * SLOT_GAP
 ## All six orbs in one row across WIDTH; the whole-pixel gap leaves under a gap's worth of slack,
 ## which the centred tray splits (test_ui_theme holds the arithmetic).
@@ -191,6 +207,12 @@ func _ready() -> void:
 	top.add_theme_constant_override("separation", SLOT_GAP)
 	top.custom_minimum_size = Vector2(WIDTH, 0)
 	rows.add_child(top)
+	# The corner button's chest in front of the count, so "12 / 40" says what it counts.
+	if not _heirlooms:
+		var chest := TextureRect.new()
+		chest.texture = load(COUNT_ICON)
+		chest.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+		top.add_child(chest)
 	_count = UITheme.label()
 	_count.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(_count)
@@ -345,7 +367,6 @@ func refresh() -> void:
 		by_level.get_or_add(inventory.items[i].level, []).append(i)
 	for level: int in inventory.levels():
 		_sections.add_child(_section_heading(level))
-		_sections.add_child(UITheme.rule())
 		# A level with a rule and no items keeps its heading, the only place the rule can be undone.
 		if not by_level.has(level):
 			continue
@@ -362,11 +383,17 @@ func refresh() -> void:
 			if i == _selected:
 				slot.set_meta(ItemCard.BESIDE, _actions)
 			_dim_for_orb(slot, inventory.items[i])
+			# Not on the way out of a world: there the bag is only being chosen from.
+			if not _transcending and is_upgrade(inventory.items[i], inventory.equipment):
+				slot.add_child(_upgrade_mark())
 			grid.add_child(slot)
 	_count.text = ("%d to spend" % _purse.super_orbs if _heirlooms and _transcending
 			else str(inventory.total()) if _heirlooms
 			else "%d / %d" % [inventory.total(), Inventory.CAPACITY])
-	_count.add_theme_color_override("font_color", Palette.RUST if inventory.is_full() else Palette.TEXT_SOFT)
+	# Rust a few squares early: a full bag is a fight throwing finds away, and that should be seen coming.
+	_count.add_theme_color_override("font_color", Palette.RUST
+			if not _heirlooms and inventory.total() >= Inventory.CAPACITY - NEARLY_FULL
+			else Palette.TEXT_SOFT)
 	refresh_gold()
 	refresh_orbs()
 	_refresh_make()
@@ -380,26 +407,28 @@ func refresh() -> void:
 	_place_actions.call_deferred()
 
 
-## A level's heading: its name, Auto (a funnel that stays down while the level is being thrown away
-## as it drops) and Clear (a bin: drop what is held).
+## A level's heading, one line: its name in the body font, the rule running on from it, Auto (a chest struck through,
+## which stays down while the level is being thrown away as it drops) and Clear (a bin: drop what is
+## held). The name used to be Pixellari over a rule of its own, which cost three levels most of a row.
 func _section_heading(level: int) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", SLOT_GAP)
-	# The rule is said in words and colour: the toggle's pressed face is too quiet to read a state off.
+	# The rule is said in red: the toggle's pressed face is too quiet to read a state off.
 	var ruled := inventory.autodiscards(level)
-	var title := UITheme.label("Level %d auto" % level if ruled else "Level %d" % level,
-			Palette.RUST if ruled else Palette.TEXT_SOFT)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var title := UITheme.label("Level %d" % level, Palette.BRICK if ruled else Palette.TEXT_SOFT, true)
+	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(title)
+	var line := UITheme.rule()
+	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(line)
 	# An heirloom never arrives by dropping and is never thrown away by the handful: no marks. Nor on
 	# the way out of a world, where the bag is only being chosen from.
 	if _heirlooms or _transcending:
 		return row
 
 	var auto := UITheme.button("", UITheme.BARE_BUTTON,
-			"Auto is on: what is found at level %d is thrown away. Press to stop" % level if ruled
-			else "Auto: throw away everything found at level %d from now on" % level)
+			("Continue" if ruled else "Stop") + " collecting level %d loot" % level)
 	# Held down is a pixel lower -- and green as well, because that pixel alone is a press being
 	# watched and not a state being read off a column of headings.
 	auto.icon = load(AUTO_ON_ICON if ruled else AUTO_ICON)
@@ -1135,6 +1164,37 @@ func _craft(orb: String, item: Item, written := Callable()) -> void:
 	refresh()
 	if _open_piece() == null:
 		crafted.emit()
+
+
+## Whether wearing `item` loses nothing and gains something: against what Equip would take off (the
+## emptiest socket it fits, both hands for a two-hander), and against nothing on a bare socket. A swap
+## that trades one stat for another gets no mark -- that is the Alt card's to weigh, and most swaps are.
+static func is_upgrade(item: Item, equipment: Equipment) -> bool:
+	if item in equipment.worn.values():
+		return false
+	var sockets := equipment.sockets_for(item)
+	if sockets.is_empty():
+		return false
+	var changes := ItemDetails.deltas(item, equipment.displaced_by(sockets[0], item)).values()
+	return not changes.is_empty() and changes.all(func(change: float) -> bool: return change >= 0.0)
+
+
+## The green arrow in a square's top-right corner that says `is_upgrade`, drawn from `UPGRADE`.
+static func _upgrade_mark() -> TextureRect:
+	if _upgrade_texture == null:
+		var image := Image.create(UPGRADE[0].length(), UPGRADE.size(), false, Image.FORMAT_RGBA8)
+		for y in UPGRADE.size():
+			for x in UPGRADE[y].length():
+				match UPGRADE[y][x]:
+					"#": image.set_pixel(x, y, Palette.LEAF_LT)
+					"o": image.set_pixel(x, y, Palette.INK)
+		_upgrade_texture = ImageTexture.create_from_image(image)
+	var mark := TextureRect.new()
+	mark.name = UPGRADE_NAME
+	mark.texture = _upgrade_texture
+	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mark.position = Vector2(ItemSlot.SIDE - UPGRADE[0].length() - 1, 1)
+	return mark
 
 
 ## A square the held orb can do nothing to goes as grey as an orb with nothing to do (`OrbSlot.DIM`).

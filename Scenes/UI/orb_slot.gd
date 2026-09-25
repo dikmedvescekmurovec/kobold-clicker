@@ -26,9 +26,8 @@ const SIDE := 24
 ## Half the 32 px the icon is cut at. A 2:1 step, so a source pixel stays a square pair of pixels on
 ## screen; every other scale in this game is a whole number for the same reason `zoom` is.
 const ICON := 16
-## How far the count hangs off the square's bottom-right corner. It overhangs rather than sitting
-## inside because 16 px is the smallest Pixellari draws cleanly and a 16 px numeral is two thirds of
-## a 24 px square -- a count laid inside would bury the very gem it is counting.
+## How far the count hangs off the square's bottom-right corner, so the numeral stands on the gutter
+## rather than on the gem it is counting.
 const COUNT_OVERHANG := 3
 ## What a held orb with nothing to do is dimmed to. Grey rather than faint: "not for this piece" is a
 ## different statement from "not found", and two alphas of the same icon would say the same thing
@@ -89,8 +88,8 @@ func setup(which: String, count: int, usable: bool, armed := false, side := SIDE
 	add_child(_icon)
 
 	# Only past one: a single orb needs no "1" on it, and seven squares wearing a 1 is seven numbers
-	# saying nothing. Pixellari at its own 16 -- it breaks up below that -- with an ink outline, which
-	# is what makes a light numeral readable over a gem of any colour.
+	# saying nothing. The body font at its own 10, with an ink outline, which is what makes a light
+	# numeral readable over a gem of any colour. Pixellari's 16 covered half the gem.
 	if count > 1:
 		add_child(count_label(str(count)))
 
@@ -121,7 +120,7 @@ func _gui_input(event: InputEvent) -> void:
 ## so a two-digit count has somewhere to go.
 static func count_label(text: String) -> Label:
 	var tally := Label.new()
-	tally.theme_type_variation = "PanelLabel"
+	tally.theme_type_variation = "SmallLabel"
 	tally.text = text
 	tally.add_theme_color_override("font_color", Palette.BONE)
 	tally.add_theme_color_override("font_outline_color", Palette.INK)

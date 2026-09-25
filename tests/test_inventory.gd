@@ -54,6 +54,7 @@ func _run() -> void:
 	_check(_test_capacity() == true, "capacity tests ran to the end")
 	_check(_test_autodiscard() == true, "autodiscard tests ran to the end")
 	_check(_test_deltas() == true, "delta tests ran to the end")
+	_check(_test_upgrade_mark() == true, "upgrade mark tests ran to the end")
 	_check(await _test_comparing() == true, "comparison tests ran to the end")
 	# Checked the same way as the rest: a script error aborts the function and returns null, which
 	# would otherwise be a suite that quietly stopped halfway and still said it passed.
@@ -1438,9 +1439,9 @@ func _test_the_map_keeps_what_dropped() -> bool:
 		if not (section is HBoxContainer):
 			continue
 		for label: Node in section.get_children():
-			# "Level 9 auto" while the rule is on: the heading says the rule in a word, because the
-			# toggle's pressed face is far too quiet to read a state off.
-			if label is Label and (label as Label).text == "Level 9 auto":
+			# "Level 9" in red while the rule is on, because the toggle's pressed face is far too
+			# quiet to read a state off.
+			if label is Label and (label as Label).text == "Level 9" 					and (label as Label).get_theme_color("font_color") == Palette.BRICK:
 				empty_heading = true
 	_check(empty_heading, "a level with a rule and no items still has its heading")
 	# The bin asks first, and Cancel leaves the level alone.
@@ -2400,6 +2401,20 @@ func _piece(rarity: ItemRarity.Rarity, level: int) -> Item:
 	item.level = level
 	item.stats = Item.scaled_stats(item.type, level)
 	return item
+
+
+## The bag's green arrow: something gained and nothing lost against what Equip would take off.
+func _test_upgrade_mark() -> bool:
+	var worn := Equipment.new()
+	var low := _piece(ItemRarity.Rarity.COMMON, 3)
+	_check(BagPage.is_upgrade(low, worn), "anything beats a bare socket")
+	var mid := _piece(ItemRarity.Rarity.COMMON, 5)
+	worn.equip(Equipment.Socket.WEAPON, mid)
+	_check(not BagPage.is_upgrade(low, worn), "a weaker sword is no upgrade")
+	_check(BagPage.is_upgrade(_piece(ItemRarity.Rarity.COMMON, 7), worn), "a stronger one is")
+	_check(not BagPage.is_upgrade(_piece(ItemRarity.Rarity.COMMON, 5), worn), "an equal one gains nothing")
+	_check(not BagPage.is_upgrade(mid, worn), "and the worn piece is never its own upgrade")
+	return true
 
 
 ## The bag is read level-major, for the player looking for a piece.

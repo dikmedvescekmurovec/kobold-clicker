@@ -22,14 +22,19 @@ func _test_whole_numbers() -> bool:
 	return true
 
 
-## And over it, three significant digits -- with the whole number decided first, so a purse that
-## rounds up over the line goes over it.
+## And over it, three significant digits under the short scale's name -- with the whole number decided
+## first, so a purse that rounds up over the line goes over it.
 func _test_exponent() -> bool:
-	_check(BigNumber.format(1e6) == "1.00e6", "a million turns over: %s" % BigNumber.format(1e6))
-	_check(BigNumber.format(1234567.0) == "1.23e6", "three digits and no more: %s" % BigNumber.format(1234567.0))
-	_check(BigNumber.format(999999.6) == "1.00e6", "what rounds to a million is written as one: %s" % BigNumber.format(999999.6))
+	_check(BigNumber.format(1e6) == "1.00M", "a million turns over: %s" % BigNumber.format(1e6))
+	_check(BigNumber.format(1234567.0) == "1.23M", "three digits and no more: %s" % BigNumber.format(1234567.0))
+	_check(BigNumber.format(999999.6) == "1.00M", "what rounds to a million is written as one: %s" % BigNumber.format(999999.6))
 	# The mantissa carry: "%.2f" of 9.999 is "10.00", which is two digits in a one-digit slot.
-	_check(BigNumber.format(9.999e8) == "1.00e9", "a mantissa never reaches ten: %s" % BigNumber.format(9.999e8))
+	_check(BigNumber.format(9.999e8) == "1.00B", "a mantissa never reaches a thousand: %s" % BigNumber.format(9.999e8))
+	_check(BigNumber.format(12345678.0) == "12.3M", "tens keep three digits: %s" % BigNumber.format(12345678.0))
+	_check(BigNumber.format(123456789.0) == "123M", "and hundreds too: %s" % BigNumber.format(123456789.0))
+	_check(BigNumber.format(2.86e12) == "2.86T", "a trillion is T: %s" % BigNumber.format(2.86e12))
+	_check(BigNumber.format(9.99e35) == "999Dc", "the last name runs to its thousand: %s" % BigNumber.format(9.99e35))
+	_check(BigNumber.format(1e36) == "1.00e36", "and past it is e: %s" % BigNumber.format(1e36))
 	return true
 
 
@@ -38,19 +43,22 @@ func _test_exponent() -> bool:
 func _test_every_decade() -> bool:
 	for n: int in range(6, 301):
 		var written := BigNumber.format(pow(10.0, n))
-		_check(written == "1.00e%d" % n, "1e%d lands on its own decade: %s" % [n, written])
+		var named := n / 3 - 2
+		var expected := ("1" + "0".repeat(n % 3) + ("." + "0".repeat(2 - n % 3) if n % 3 < 2 else "")
+				+ BigNumber.SUFFIXES[named]) if named < BigNumber.SUFFIXES.size() else "1.00e%d" % n
+		_check(written == expected, "1e%d lands on its own decade: %s" % [n, written])
 	return true
 
 
 ## Signs: the minus is always there, the plus only when it is asked for, and never on nothing.
 func _test_signs() -> bool:
 	_check(BigNumber.format(-42.0) == "-42", "a small debt keeps its minus: %s" % BigNumber.format(-42.0))
-	_check(BigNumber.format(-1234567.0) == "-1.23e6", "and so does a large one: %s" % BigNumber.format(-1234567.0))
+	_check(BigNumber.format(-1234567.0) == "-1.23M", "and so does a large one: %s" % BigNumber.format(-1234567.0))
 	_check(BigNumber.format(5.0, true) == "+5", "a gain is marked: %s" % BigNumber.format(5.0, true))
 	_check(BigNumber.format(-5.0, true) == "-5", "a loss is not marked twice: %s" % BigNumber.format(-5.0, true))
 	_check(BigNumber.format(0.0, true) == "0", "no change wears no sign: %s" % BigNumber.format(0.0, true))
-	_check(BigNumber.format(1e6, true) == "+1.00e6", "a large gain is marked: %s" % BigNumber.format(1e6, true))
-	_check(BigNumber.format(-1e6, true) == "-1.00e6", "a large loss too: %s" % BigNumber.format(-1e6, true))
+	_check(BigNumber.format(1e6, true) == "+1.00M", "a large gain is marked: %s" % BigNumber.format(1e6, true))
+	_check(BigNumber.format(-1e6, true) == "-1.00M", "a large loss too: %s" % BigNumber.format(-1e6, true))
 	return true
 
 

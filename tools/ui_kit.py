@@ -537,6 +537,25 @@ ICON_KEY = {"o": "#3e1f1d", "1": "#603928", "2": "#70492a", "3": "#825c2f", "4":
             # face, the light along that face's top left, and the black of its X. For ui_icon_info.
             "t": "#38605b", "c": "#e5d6a1", "l": "#fbf5bd", "k": "#151419"}
 ICONS_DRAWN = {
+    # Auto (a level's autodiscard): the count's chest struck through -- what drops at this level is not
+    # kept. The user's pick of seven candidates (2026-09-25). The pack's chest, whose one 583126 is
+    # taken to 1.
+    "ui_icon_auto": """
+        44o...........
+        o44ooooooo....
+        .o44o44443o...
+        ..o44o44333o..
+        .o2o44o33332o.
+        .o22o44o3322o.
+        .o122o44o221o.
+        .o1111o44o11o.
+        .o23313o44o2o.
+        .o223111o44oo.
+        .o1222332o44o.
+        ..ooooooooo44o
+        ...........o44
+        ............o4
+    """,
     # Terminate: a flag on its pole -- leave the field and keep the haul.
     "ui_icon_flag": """
         ooo..........
@@ -925,9 +944,9 @@ BONE_RAMP = {
 # changes nothing else. GREEN_KEY is measured off Icons.png, which draws its T, its pot and its
 # scissors in both colourways: 603928 -> 2c4645, 70492a -> 3f7168, 88682d -> 50a978, a07f2d ->
 # 57c767 -- the outline to the close button's teal family and the ramp to the bar's green.
-BARE = ["ui_icon_filter", "ui_icon_trash", "ui_icon_coins", "ui_icon_scroll", "ui_icon_sword",
+BARE = ["ui_icon_auto", "ui_icon_filter", "ui_icon_trash", "ui_icon_coins", "ui_icon_scroll", "ui_icon_sword", "ui_icon_chest",
         "ui_icon_gem", "ui_icon_anvil", "ui_icon_help"]
-GREEN_TABS = ["ui_icon_filter", "ui_icon_scroll", "ui_icon_sword", "ui_icon_gem", "ui_icon_anvil",
+GREEN_TABS = ["ui_icon_auto", "ui_icon_filter", "ui_icon_scroll", "ui_icon_sword", "ui_icon_gem", "ui_icon_anvil",
               "ui_icon_help"]
 GREEN_KEY = {"#3e1f1d": "#2c4645", "#603928": "#3f7168", "#70492a": "#478773", "#825c2f": "#50a978",
              "#88682d": "#57c767"}

@@ -585,7 +585,7 @@ static func stat_value(stat: String, value: float) -> String:
 	if stat in RATE_STATS:
 		return "%.1f/s" % value
 	# A quantity, which grows with the walk: written through the one formatter, so a late stat is
-	# "1.23e6" rather than twenty digits across a panel (`BigNumber`).
+	# "1.23M" rather than twenty digits across a panel (`BigNumber`).
 	if stat in SECONDS_STATS:
 		return seconds_text(value)
 	return BigNumber.format(value)
@@ -614,7 +614,7 @@ static func seconds_of(stat: String, value: float) -> float:
 	return value / 10.0 if stat in SECONDS_STATS else value
 
 
-## Tenths of a second written as seconds: "0.3s", "+1.2s", and "1.23e6s" once it is past the point
+## Tenths of a second written as seconds: "0.3s", "+1.2s", and "1.23Ms" once it is past the point
 ## where a tenth means anything.
 static func seconds_text(tenths: float, signed := false) -> String:
 	var seconds := tenths / 10.0

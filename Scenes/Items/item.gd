@@ -326,9 +326,9 @@ func _mod_line(mod: Dictionary, detailed: bool) -> String:
 	var line := ModifierTable.line(mod)
 	if detailed and not line.is_empty():
 		# Every modifier's line opens with its number, so the band goes hard against it and ahead
-		# of its unit: "+4(1-4)s", "+0.3(0.1-0.3)s". The number may be `BigNumber`'s "1.23e6". The
+		# of its unit: "+4(1-4)s", "+0.3(0.1-0.3)s". The number may be `BigNumber`'s "1.23M" or "1.23e36". The
 		# band is written the way the number is (`ModifierTable.amount`), less the unit that follows.
-		var number := RegEx.create_from_string("^\\+[0-9.e]+").search(line)
+		var number := RegEx.create_from_string("^\\+[0-9.]+(e[0-9]+|[A-Z][a-z]?)?").search(line)
 		if number != null:
 			var id := str(mod["id"])
 			var band := ModifierTable.band_for(id, tier_of(mod))
