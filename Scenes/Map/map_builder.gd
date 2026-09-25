@@ -348,9 +348,10 @@ func has_chest(cell: Vector2i) -> bool:
 ## way `has_chest` is, so nothing is saved. `wild` is the Wild Tiles curse, which the builder cannot
 ## know: whoever asks passes it.
 func mods_of(cell: Vector2i, wild := false) -> Array[String]:
-	if not _envs.has(cell) or not is_land(cell) or towns.has_town(_spot(cell)) or has_chest(cell):
+	if not _envs.has(cell) or not is_land(cell) or towns.has_town(_spot(cell)) or has_chest(cell) \
+			or on_wall_ring(cell):
 		return []
-	return TileMods.for_cell(env_seed, cell, Encounter.walls_inside(cell), wild)
+	return TileMods.for_cell(env_seed, cell, ring_of(cell), wild)
 
 
 ## The closest chest to the player anywhere on the generated map, fog or not; NO_CELL when there is none.
@@ -738,6 +739,12 @@ func _reveal_around(center: Vector2i, radius: int) -> int:
 			_show(cell, State.UNCHARTED)
 			shown += 1
 	return shown
+
+
+## Whether `cell` is on a ring where a wall stands or stood, counted in `wall_step`s.
+func on_wall_ring(cell: Vector2i) -> bool:
+	var past := HexGrid.distance(CENTER, cell) - START_LAND_RADIUS - 1
+	return past >= 0 and past % wall_step == 0
 
 
 ## Which ring of land `cell` stands in: 0 inside where the first wall stood, n between the nth wall

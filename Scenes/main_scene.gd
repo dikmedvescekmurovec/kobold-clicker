@@ -1041,12 +1041,16 @@ func _show_mods(cell: Vector2i) -> void:
 	_mod_rows.add_child(UITheme.rule())
 	var section := Accordion.new("Modifiers", "tile:modifiers")
 	_mod_rows.add_child(section)
+	var shown := {}
 	for id: String in mods:
-		var mod: Dictionary = TileMods.MODS[id]
-		section.body.add_child(UITheme.label(str(mod["name"]), Palette.TEXT))
-		section.body.add_child(ItemDetails.line(str(mod["text"]), Palette.TEXT, MOD_WIDTH, true))
-		if not str(mod["reward"]).is_empty():
-			section.body.add_child(ItemDetails.line(str(mod["reward"]), Palette.LEAF, MOD_WIDTH, true))
+		if shown.has(id):
+			continue
+		shown[id] = true
+		var lines := TileMods.describe(id, mods.count(id))
+		section.body.add_child(UITheme.label(lines[0], Palette.TEXT))
+		section.body.add_child(ItemDetails.line(lines[1], Palette.TEXT, MOD_WIDTH, true))
+		if not lines[2].is_empty():
+			section.body.add_child(ItemDetails.line(lines[2], Palette.LEAF, MOD_WIDTH, true))
 
 
 ## The tile panel is a full-height column against the right edge, its buttons at its foot. The

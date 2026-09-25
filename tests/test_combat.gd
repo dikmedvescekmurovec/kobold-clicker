@@ -2568,34 +2568,31 @@ func _test_drop_rate_finds_everything() -> bool:
 ## each dial moving what it says it moves, what it pays, and which of them a farm run keeps.
 func _test_tile_mods() -> bool:
 	var here := Vector2i(4, 6)
-	# Where they are: nowhere short of two walls, then one, one or two, two or three; Wild Tiles a wall
-	# sooner and one more. The same seed and cell always the same ones, and another seed others.
+	# Where they are: nowhere short of the second wall, then one more every ring of land; Wild Tiles a
+	# wall sooner and one more. The same seed and cell always the same ones, and another seed others.
 	var counts := {}
 	var differs := false
 	for x in 40:
 		var cell := Vector2i(x, 3)
-		for walls in 5:
-			var mods := TileMods.for_cell(1, cell, walls)
-			_check(mods == TileMods.for_cell(1, cell, walls), "a tile's modifiers are its seed's and its cell's")
-			differs = differs or mods != TileMods.for_cell(2, cell, walls)
-			var seen: Dictionary = counts.get(walls, {})
+		for ring in 6:
+			var mods := TileMods.for_cell(1, cell, ring)
+			_check(mods == TileMods.for_cell(1, cell, ring), "a tile's modifiers are its seed's and its cell's")
+			differs = differs or mods != TileMods.for_cell(2, cell, ring)
+			var seen: Dictionary = counts.get(ring, {})
 			seen[mods.size()] = true
-			counts[walls] = seen
-			var wild := TileMods.for_cell(1, cell, walls, true)
-			_check(wild.is_empty() == (walls == 0), "Wild Tiles starts a wall sooner (%d walls: %s)" % [walls, wild])
-			if walls >= TileMods.FROM_WALLS:
-				_check(wild.size() > 1, "and carries one more (%s)" % [wild])
+			counts[ring] = seen
+			var wild := TileMods.for_cell(1, cell, ring, true)
+			_check(wild.is_empty() == (ring == 0), "Wild Tiles starts a wall sooner (ring %d: %s)" % [ring, wild])
+			if ring >= TileMods.FROM_WALLS:
+				_check(wild.size() == mods.size() + 2, "a ring's worth sooner and one more (%s)" % [wild])
 			for id: String in mods:
 				for other: String in TileMods.MODS[id].get("not_with", []):
 					_check(not other in mods, "%s never stands with %s" % [id, other])
 	_check(differs, "another world's tiles carry other modifiers")
 	_check(counts[0].keys() == [0] and counts[1].keys() == [0], "none short of the second wall %s" % counts)
-	_check(counts[2].keys() == [1], "one in the first band past it %s" % [counts[2].keys()])
-	var two: Array = counts[3].keys()
-	two.sort()
-	var three: Array = counts[4].keys()
-	three.sort()
-	_check(two == [1, 2] and three == [2, 3], "then one or two, then two or three (%s, %s)" % [two, three])
+	for ring in range(TileMods.FROM_WALLS, 6):
+		var want := ring - TileMods.FROM_WALLS + 1
+		_check(counts[ring].keys() == [want], "%d in ring %d, one more each ring %s" % [want, ring, counts[ring].keys()])
 	for id: String in TileMods.MODS:
 		for other: String in TileMods.MODS[id].get("not_with", []):
 			_check(TileMods.MODS.has(other), "%s names a modifier there is (%s)" % [id, other])
@@ -2616,6 +2613,26 @@ func _test_tile_mods() -> bool:
 	var elites := Encounter.for_tile(here, "grass", "plain", false, ["elite_ground"])
 	_check(Encounter.tier_in(elites, 4) == EnemyRoster.Tier.ELITE
 			and Encounter.tier_in(elites, 9) == EnemyRoster.Tier.ELITE, "Elite Ground fields one every fifth")
+	# A modifier drawn twice is its second tier: tougher and paying more, and written so.
+	var hordes := Encounter.for_tile(here, "grass", "plain", false, ["horde", "horde"])
+	_check(hordes.enemies == 20 and Encounter.tier_in(hordes, 19) == EnemyRoster.Tier.ELITE
+			and Encounter.tier_in(hordes, 14) == EnemyRoster.Tier.COMMON, "Horde II is twenty, still ending on its elite")
+	var more_elites := Encounter.for_tile(here, "grass", "plain", false, ["elite_ground", "elite_ground"])
+	_check(more_elites.elite_every == 3, "Elite Ground II fields one every third (%d)" % more_elites.elite_every)
+	_check(TileMods.describe("savage", 2) == PackedStringArray(["Savage II", "Enemies hit 100% harder.", "+40% drop rate"]),
+			"Savage II reads its own numbers (%s)" % [TileMods.describe("savage", 2)])
+	_check(TileMods.describe("piercing", 2)[1] == "Your armour counts for 25% of itself.", "a factor tier compounds")
+	_check(TileMods.describe("sparse", 1)[1] == "4 fewer enemies on the same clock." and TileMods.describe("sparse", 1)[2] == "",
+			"Sparse reads as the boon it is")
+	var repeats := false
+	for x in 40:
+		var deep := TileMods.for_cell(1, Vector2i(x, 3), 12)
+		_check(deep.size() == 11, "every draw is kept (%d)" % deep.size())
+		for id: String in deep:
+			repeats = repeats or deep.count(id) > 1
+			if TileMods.MODS[id].get("once", false):
+				_check(deep.count(id) == 1, "%s never climbs a tier" % id)
+	_check(repeats, "deep land draws the same modifier again")
 	var thick := Encounter.for_tile(here, "grass", "plain", false, ["thick_skinned"])
 	_check(thick.lineup == plain.lineup, "a modifier that leaves the count alone leaves the lineup alone")
 	_check(is_equal_approx(thick.health[0], roundf(plain.health[0] * 1.5)),
@@ -2647,7 +2664,7 @@ func _test_tile_mods() -> bool:
 		fight.arm(stats)
 		var paid := fight.drop_rate + fight.item_rarity + fight.gold_find + fight.xp_more \
 				- bare.drop_rate - bare.item_rarity - bare.gold_find - bare.xp_more
-		_check((paid > 0.0) == (not str(TileMods.MODS[id]["reward"]).is_empty()),
+		_check((paid > 0.0) == (not TileMods.describe(id, 1)[2].is_empty()),
 				"%s pays exactly when its row says so (%s)" % [id, paid])
 	var wild_pay := Encounter.for_tile(here, "grass", "plain", false, ["savage"])
 	wild_pay.wear([Curses.effect(Curses.WILD_TILES)])

@@ -584,10 +584,15 @@ func _take_profile(profile: Dictionary) -> void:
 ## the numbers that shape it. What they do to the player's numbers, and what they pay, waits for `arm`.
 func _take_mods(carried: Array) -> void:
 	mods = carried
+	var last := false
 	for id: String in mods:
 		var mod: Dictionary = TileMods.MODS[id]
 		enemies += int(mod.get("enemies", 0))
-		elite_every = int(mod.get("elite_every", elite_every))
+		if mod.has("elite_every"):
+			elite_every = int(TileMods.value(id, "elite_every", mods.count(id)))
+		last = last or bool(mod.get("elite_last", false))
+	if last:
+		elite_every = enemies
 	seconds = maxf(1.0, seconds + TileMods.total(mods, "seconds"))
 	time_left = seconds
 	_hp_more += TileMods.total(mods, "hp")

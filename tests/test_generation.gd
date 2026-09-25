@@ -648,6 +648,16 @@ func _test_blind_charting() -> bool:
 			_check(wild.size() == 2, "open land at %s carries its one and Wild Tiles' one (%s)" % [cell, wild])
 			carried += 1
 	_check(carried > 0, "some land past the wall was looked at")
+	# A ring a wall stood on carries none, even once it has fallen and even though it counts with the
+	# land outside it: under the Ring of Walls the edge of this land is where its second wall stood.
+	view.wall_step = MapBuilder.RING_OF_WALLS_STEP
+	var walled := 0
+	for cell: Vector2i in _cells_within(MapBuilder.CENTER, view.land_radius):
+		if view.on_wall_ring(cell) and view.ring_of(cell) == 2:
+			_check(view.mods_of(cell, true).is_empty(), "the ring a wall stood on at %s carries none" % cell)
+			walled += 1
+	_check(walled > 0, "the Ring of Walls' second wall ring was looked at")
+	view.wall_step = MapBuilder.WALL_STEP
 	map.queue_free()
 	return true
 
