@@ -76,8 +76,26 @@ PALETTE = [
     ("brick", "#c0443a"), ("brick_dk", "#7a2a36"), ("amber", "#e9b640"),
     ("rust", "#d57a39"), ("lilac", "#a77fcf"), ("olive", "#8a8f3e"),
     ("bone", "#f4eedc"),
+    # Terrain ramps, appended so the 32 above keep their indices. Each runs dark to light and
+    # shifts hue as it goes: shadows cool and deepen, lights warm, which is what makes ground read
+    # as lit rather than as a flat texture.
+    ("gr0", "#1d3a36"), ("gr1", "#2b573d"), ("gr2", "#3f7643"), ("gr3", "#5a9147"),
+    ("gr4", "#7eab4f"), ("gr5", "#b3c865"),                                          # meadow
+    ("fo0", "#0d1a20"), ("fo1", "#15302b"),                                          # forest shade
+    ("co1", "#1a3a3a"), ("co2", "#265348"), ("co3", "#386f55"), ("co4", "#5b9066"),   # conifer
+    ("di0", "#34211e"), ("di1", "#553628"), ("di2", "#754e33"), ("di3", "#94693f"),
+    ("di4", "#b3874f"), ("di5", "#cfa86d"),                                          # dry earth
+    ("st1", "#8e7a3c"), ("st2", "#c0a45c"),                                          # straw
+    ("de0", "#8c5438"), ("de1", "#b37649"), ("de2", "#d19a5a"), ("de3", "#e5b970"),
+    ("de4", "#f2d492"), ("de5", "#fbeac0"),                                          # sand
+    ("sn0", "#3b4c7c"), ("sn1", "#5a73a8"), ("sn2", "#84a0cb"), ("sn3", "#b0c7e2"),
+    ("sn4", "#d8e5f2"), ("sn5", "#f6faff"),                                          # snow
+    ("ro0", "#23263a"), ("ro1", "#363b50"), ("ro2", "#4f5568"), ("ro3", "#6c7283"),
+    ("ro4", "#8e939d"), ("ro5", "#b9bbbd"),                                          # rock
+    ("sc1", "#4a4442"), ("sc2", "#645c55"), ("sc3", "#80776a"),                      # scree
+    ("wa0", "#1c3158"), ("wa1", "#2a5586"), ("wa2", "#3f7fb2"), ("wa3", "#8fcbe6"),   # water
 ]
-assert len(PALETTE) == 32
+assert len(PALETTE) <= 256
 C = {name: i for i, (name, _) in enumerate(PALETTE)}
 
 _DARKER = {
@@ -89,8 +107,18 @@ _DARKER = {
     "snow": "ice_lt", "ice_lt": "ice", "ice": "ice_dk", "ice_dk": "abyss", "abyss": "ink",
     "bone": "mist", "amber": "rust", "rust": "brick", "brick": "brick_dk",
     "brick_dk": "earth_dk", "lilac": "slate", "olive": "earth", "ink": "ink",
+    "st1": "di2", "st2": "st1", "sc1": "ro0", "sc2": "sc1", "sc3": "sc2",
+    "gr0": "fo0", "fo0": "ink", "fo1": "fo0", "co1": "fo0", "wa0": "ink",
 }
-DARKER = [0] * 32
+for _ramp in ("gr", "co", "di", "de", "sn", "ro", "wa"):
+    _steps = [n for n, _ in PALETTE if n[:2] == _ramp and n[2:].isdigit()]
+    for _lo, _hi in zip(_steps, _steps[1:]):
+        _DARKER[_hi] = _lo
+_DARKER.setdefault("di0", "ink")
+_DARKER.setdefault("de0", "di1")
+_DARKER.setdefault("sn0", "ro0")
+_DARKER.setdefault("ro0", "ink")
+DARKER = [0] * len(PALETTE)
 for _n, _d in _DARKER.items():
     DARKER[C[_n]] = C[_d]
 

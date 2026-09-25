@@ -101,7 +101,7 @@ def road_network(rows, cols, valid, seed, density, blocked=()):
 
 
 def phase1(tag):
-    from terrain import ENV_CHAIN, ENV_ORDER, VARIANTS, all_environments
+    from terrain import ACCENTS, ENV_CHAIN, ENV_ORDER, VARIANTS, all_environments
     t0 = time.time()
     tiles = all_environments()
     by = {t.name: t for t in tiles}
@@ -119,7 +119,7 @@ def phase1(tag):
     print("  illegal borders on map:", illegal_borders(band, 6, 18))
 
     def layer(r, c, rng):
-        v = "accent" if rng.random() < 0.1 else rng.choice(VARIANTS[:3])
+        v = rng.choice(ACCENTS) if rng.random() < 0.1 else rng.choice(VARIANTS[:3])
         return [by[f"env_{band(r, c)}_{v}"]]
     tiled_map([layer], f"qa/p1_map_{tag}.png", cols=18, rows=6, scale=1, seed=7)
 
@@ -166,7 +166,7 @@ def phase3(tag):
 
 def showcase(tag):
     from roads import MATERIAL_ENVS, MATERIALS, all_roads
-    from terrain import ENVS, VARIANTS
+    from terrain import ACCENTS, ENVS, VARIANTS
     from towns import all_towns
     rows, cols = 7, 12
     rng = random.Random(11)
@@ -191,7 +191,7 @@ def showcase(tag):
         if (r, c) in towns_at:
             return [towns[f"town_{env}_{towns_at[(r, c)]}"]]
         es = edges_of(r, c)
-        variant = "accent" if rng.random() < 0.1 else rng.choice(VARIANTS[:3])
+        variant = rng.choice(ACCENTS) if rng.random() < 0.1 else rng.choice(VARIANTS[:3])
         return [envs[env]["v1" if es else variant]] + ([lut[mat[env]][es]] if es else [])
     tiled_map([cell], f"qa/showcase_{tag}.png", cols=cols, rows=rows, scale=2)
 
@@ -200,7 +200,7 @@ def blends(tag):
     from PIL import Image
     from blends import RANK, all_blends, blend_tile, edge_dist
     from preview import tiled_image
-    from terrain import ENV_CHAIN, ENV_ORDER, ENVS, VARIANTS
+    from terrain import ACCENTS, ENV_CHAIN, ENV_ORDER, ENVS, VARIANTS
     t0 = time.time()
     tiles = all_blends()
     print(f"blends: {len(tiles)} in {time.time() - t0:.1f}s, spill:", containment(tiles, solid=False)[0])
@@ -217,7 +217,7 @@ def blends(tag):
     def layers(env_at, rows, cols, blended):
         def cell(r, c, rng):
             own = env_at(r, c)
-            v = "accent" if rng.random() < 0.1 else rng.choice(VARIANTS[:3])
+            v = rng.choice(ACCENTS) if rng.random() < 0.1 else rng.choice(VARIANTS[:3])
             if not blended:
                 return [envs[own][v]]
             near = {}

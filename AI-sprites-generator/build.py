@@ -1,5 +1,6 @@
 """Final build: generate all tiles, export indexed PNGs + spritesheet through Aseprite,
 write spritesheet JSON metadata, then verify every exported file against the source data."""
+import json
 import os
 from collections import Counter
 

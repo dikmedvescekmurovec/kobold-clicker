@@ -35,8 +35,11 @@ const WALL_NAME := "The Ice Wall"
 const WASTE_NAME := "Frozen Wasteland"
 ## Cell the map is centered on, and the only one visible together with its neighbors at the start.
 const CENTER := Vector2i.ZERO
-## About 1 in 10 environment tiles use the accent sprite (JSON meta accent_frequency: 1 in 8-12).
-const ACCENT_CHANCE := 0.1
+## About 1 in 10 environment tiles use an accent sprite (JSON meta accent_frequency: 1 in 8-12). The
+## roll is a little over that because a cell beside a lower roll gives its accent up (`_tile_name`).
+const ACCENT_CHANCE := 0.12
+## The accent sprites every environment has, one picked per accent cell.
+const ACCENT_KINDS: Array[String] = ["accent", "accent2", "accent3"]
 ## The first town sits exactly this many steps from the center cell, and no town is closer.
 const START_TOWN_DISTANCE := 5
 ## How many open tiles hold a treasure chest, and how close to the start the nearest may be. The mimic
@@ -706,10 +709,21 @@ func _tile_name(cell: Vector2i) -> String:
 	var tier := towns.tier_at(_spot(cell))
 	if tier != -1:
 		return "town_%s_%s" % [env, TownWorld.TIER_NAMES[tier]]
+	var roll := _accent_roll(cell)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([env_seed, "variant_kind", cell])
+	var variant := "v%d" % rng.randi_range(1, 3)
+	if roll < ACCENT_CHANCE and HexGrid.neighbors(cell).all(func(n: Vector2i) -> bool: return _accent_roll(n) > roll):
+		variant = ACCENT_KINDS[rng.randi() % ACCENT_KINDS.size()]
+	return "env_%s_%s" % [env, variant]
+
+
+## A cell's accent roll. A cell takes an accent only when its roll is under ACCENT_CHANCE and lower
+## than every neighbour's, so two accents never touch whatever order cells are reached in.
+func _accent_roll(cell: Vector2i) -> float:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([env_seed, "variant", cell])
-	var variant := "accent" if rng.randf() < ACCENT_CHANCE else "v%d" % rng.randi_range(1, 3)
-	return "env_%s_%s" % [env, variant]
+	return rng.randf()
 
 
 ## Charts a tile the player can see next to them: its grey veil comes off, the land within `sight` steps of

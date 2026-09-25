@@ -12,10 +12,9 @@ Which environments may meet at all is terrain.ADJACENT.
 from functools import lru_cache
 from itertools import combinations
 
-import town_parts as tp
 from hexlib import C, EDGE_NAMES, HEX_PIXELS, LATTICE_SHIFTS, Tile, bayer, periodic_noise
-from stamps import boulder, pebble, scatter, seg_dist, tuft
-from terrain import ENV_SEED, ENVS, forest_shared_trees, forest_tree, hashf
+from stamps import pebble, scatter, seg_dist, tuft
+from terrain import CONIFER, ENV_SEED, ENVS, FOREST_LEAF, canopy, forest_shared_trees, forest_tree, hashf, pine, rock
 
 PRIORITY = ["dirt", "grass", "desert", "ice", "forest", "mountains"]   # low -> high, higher draws over lower
 RANK = {env: i for i, env in enumerate(PRIORITY)}
@@ -126,49 +125,52 @@ def _put_all(t, x, y, cells):
 
 def _grass_fringe(t, d):
     for x, y in _fringe("grass", d, 1, 140, 3, 3.0):
-        tuft(t, x, y, C["leaf_hi"], C["leaf_lt"], C["leaf_dk"], big=hashf(x, y, 7) < 0.45)
+        tuft(t, x, y, C["gr4"], C["gr3"], C["gr1"], big=hashf(x, y, 7) < 0.45)
     for x, y in _fringe("grass", d, 2, 40, 5, 3.0):               # small grass clumps
-        _put_all(t, x, y, ((0, 0, "leaf_lt"), (1, 0, "leaf"), (-1, 1, "leaf"), (0, 1, "leaf"), (1, 1, "leaf_dk"),
-                           (2, 1, "leaf_dk"), (0, 2, "leaf_dk")))
+        _put_all(t, x, y, ((0, 0, "gr4"), (1, 0, "gr3"), (-1, 1, "gr3"), (0, 1, "gr3"), (1, 1, "gr2"),
+                           (2, 1, "gr2"), (0, 2, "gr1")))
     for x, y in _fringe("grass", d, 3, 100, 3, 1.0):
-        t.put(x, y, C["leaf_hi"] if hashf(x, y, 4) < 0.5 else C["leaf_lt"])
+        t.put(x, y, C["gr4"] if hashf(x, y, 4) < 0.5 else C["gr3"])
 
 
 def _desert_fringe(t, d):
     for x, y in _fringe("desert", d, 1, 60, 5, 3.0):             # sand patches, lit top-left
-        cells = [(0, 0, "sand_lt"), (1, 0, "sand"), (0, 1, "sand"), (1, 1, "sand_dk")]
+        cells = [(0, 0, "de4"), (1, 0, "de3"), (0, 1, "de3"), (1, 1, "de2")]
         if hashf(x, y, 7) < 0.5:
-            cells += [(-1, 1, "sand_lt"), (2, 1, "sand"), (0, 2, "sand_dk"), (1, 2, "sand_dk")]
+            cells += [(-1, 1, "de4"), (2, 1, "de3"), (0, 2, "de2"), (1, 2, "de2")]
         _put_all(t, x, y, cells)
     for x, y in _fringe("desert", d, 2, 60, 4, 3.0):
-        pebble(t, x, y, C["sand_lt"], C["sand"], C["sand_dk"], big=hashf(x, y, 7) < 0.35)
+        pebble(t, x, y, C["de4"], C["de3"], C["de1"], big=hashf(x, y, 7) < 0.35)
     for x, y in _fringe("desert", d, 3, 120, 2, 1.0):
-        t.put(x, y, C["sand"])
+        t.put(x, y, C["de3"])
 
 
 def _ice_fringe(t, d):
     for x, y in _fringe("ice", d, 1, 110, 3, 2.0):
-        t.put(x, y, C["snow"])
-        t.put(x + 1, y, C["ice_lt"])
+        t.put(x, y, C["sn5"])
+        t.put(x + 1, y, C["sn3"])
     for x, y in _fringe("ice", d, 2, 30, 7, 4.0):                # frozen puddles with a snow rim
-        _put_all(t, x, y, ((0, 0, "snow"), (1, 0, "snow"), (2, 0, "snow"),
-                           (-1, 1, "snow"), (0, 1, "ice_lt"), (1, 1, "ice_lt"), (2, 1, "ice"), (3, 1, "ice_dk"),
-                           (0, 2, "ice"), (1, 2, "ice"), (2, 2, "ice_dk")))
+        _put_all(t, x, y, ((0, 0, "sn5"), (1, 0, "sn5"), (2, 0, "sn4"),
+                           (-1, 1, "sn4"), (0, 1, "sn3"), (1, 1, "sn3"), (2, 1, "sn2"), (3, 1, "sn3"),
+                           (0, 2, "sn3"), (1, 2, "sn2"), (2, 2, "sn3")))
 
 
 def _forest_fringe(t, d):
     for x, y in _fringe("forest", d, 1, 120, 3, 3.0):
-        tuft(t, x, y, C["leaf_dk"], C["pine"], C["pine_dk"], big=hashf(x, y, 7) < 0.45)
-    for x, y in _fringe("forest", d, 2, 24, 7, 8.0, cap=0.7):
-        tp.small_tree(t, x, y, "pine" if hashf(x, y, 8) < 0.5 else "leaf")
+        tuft(t, x, y, C["gr2"], C["gr1"], C["fo1"], big=hashf(x, y, 7) < 0.45)
+    for x, y in _fringe("forest", d, 2, 24, 7, 8.0, cap=0.7):              # saplings running ahead of the trees
+        if hashf(x, y, 8) < 0.5:
+            pine(t, x, y + 3, 7, CONIFER, wrapped=False)
+        else:
+            canopy(t, x, y, 2.8, FOREST_LEAF[0], seed=x * 31 + y, wrapped=False)
 
 
 def _mountains_fringe(t, d):
     for x, y in _fringe("mountains", d, 1, 100, 4, 3.0):
-        pebble(t, x, y, C["stone_lt"], C["stone"], C["slate"], big=hashf(x, y, 7) < 0.45)
+        pebble(t, x, y, C["sc3"], C["sc2"], C["ro1"], big=hashf(x, y, 7) < 0.45)
     for x, y in _fringe("mountains", d, 2, 24, 7, 7.0, cap=0.7):
         r = 2.2 + hashf(x, y, 9)
-        boulder(t, x + 0.5, y + 0.5, r, r * 0.78, seed=x * 31 + y, wrapped=False)
+        rock(t, x + 0.5, y + 0.5, r, r * 0.78, seed=x * 31 + y, wrapped=False)
 
 
 FRINGE = {"grass": _grass_fringe, "desert": _desert_fringe, "ice": _ice_fringe,

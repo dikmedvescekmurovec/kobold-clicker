@@ -1,6 +1,6 @@
 # AI-sprites generator
 
-Rebuilds the 420-sprite hex tileset in `../AI-sprites/` (24 environments, 63 roads, 18 towns, 315 blend overlays, plus the spritesheet and JSON),
+Rebuilds the 432-sprite hex tileset in `../AI-sprites/` (36 environments, 63 roads, 18 towns, 315 blend overlays, plus the spritesheet and JSON),
 the 120 battle backdrops in `../Assets/Area/`,
 the six per-environment slimes in `../Assets/Enemies/` (21 frames each, recoloured from the blue slime pack),
 the combat nameplate's health-bar parts in `../Assets/UI/`,
@@ -41,9 +41,9 @@ Godot skips this folder because of `.gdignore`.
 ## Files
 | File | Contents |
 |---|---|
-| `hexlib.py` | Hex geometry, locked 32-color palette, dithering, lattice-periodic noise, `Tile` |
+| `hexlib.py` | Hex geometry, the palette (the original 32 plus the terrain ramps), dithering, lattice-periodic noise, `Tile` |
 | `stamps.py` | Scatter placement, shaded domes, boulders, tufts, pebbles, lines, `seg_dist` |
-| `terrain.py` | The six environments and their 4 variants (`objects=False` gives bare ground for towns), the `"base"` pseudo-variant, and the adjacency rules (`ADJACENT`, `can_border`, `ENV_CHAIN`) |
+| `terrain.py` | The six environments and their six variants (`v1`-`v3`, `accent`-`accent3`; `objects=False` gives bare ground for towns), the lighting kit (`relief`, `raised`, `canopy`, `pine`, `rock`, `pond`), the `"base"` pseudo-variant, and the adjacency rules (`ADJACENT`, `can_border`, `ENV_CHAIN`) |
 | `roads.py` | Road overlays for dirt, stone and snow, with every rotation |
 | `town_parts.py` | Building and prop primitives (roofs, front walls, towers, walls, gatehouse, wells, stalls...) |
 | `towns.py` | Small, medium and fortress layouts, plus per-environment materials and landmarks |
@@ -70,10 +70,17 @@ Godot skips this folder because of `.gdignore`.
 - **`"base"` pseudo-variant:** `ENVS[env]("base")` renders only the shared data, so it equals every variant's border band. Blends depend on this. Route any new per-variant data through `mix()` / `details()` so `"base"` skips it.
 - **Roads:** centerlines run through edge midpoints on the center-to-center line, so they meet exactly. Rotation `_rK` means the canonical edges turned clockwise by K×60°.
 - **Atlas layout:** groups are laid out in `build.GROUPS` order (environments, roads, towns, blends). Append new groups at the end so existing atlas coordinates don't move.
-- **Palette:** all art uses the 32 entries in `hexlib.PALETTE` (index 0 transparent). Adding colors breaks the locked palette.
-- **Look:** light from the top-left, 1 px ink outline on objects only, no outline on terrain edges. Buildings use roofs from above plus a thin south-facing front wall.
+- **Palette:** all art uses `hexlib.PALETTE` (index 0 transparent). The first 32 entries are the original set and never move -- towns, roads, slimes and the UI index them. The terrain ramps (`gr` meadow, `fo`/`co` forest, `di` earth, `st` straw, `de` sand, `sn` snow, `ro` rock, `sc` scree, `wa` water) are appended after them; each runs dark to light and shifts hue as it goes, shadows cooler, lights warmer. Append, never insert.
+- **Look:** light from the top-left, a dark outline (the ramp's darkest step, not ink) on the shaded side of objects only, no outline on terrain edges. Buildings use roofs from above plus a thin south-facing front wall.
 - **Aseprite quirk:** in Lua, `json.decode` returns floats, and `Image:drawPixel` silently writes palette index 1 for a float. `emit.lua` converts with `math.tointeger` and reads every pixel back.
 - **Build hiccup:** if `build.py` prints `Cannot save file ... in the given location` and reports a `sheet mismatch`, the spritesheet PNG was briefly locked (typically by the open Godot editor reimporting the new PNGs), and the JSON no longer matches the old sheet. Rerun `build.py` until `problems` are all zero.
+
+### Environment tiles
+- **Ground is lit, not painted.** Every environment builds a small lattice-periodic height field and `relief` shades it from the top-left, so tone comes from the light rather than from noise. Keep the relief shallow -- about one ramp step either side of the base tone. The first pass ran it at three steps and grass read as melted camouflage, dune slip faces as cracks and snow as crumpled paper.
+- **Tall things are raised.** Peaks and mesas are height fields drawn by `raised`: each ground pixel is lifted by its height and drawn near-to-far per column, so the front hides the back. They are lit by `RAISED_LIGHT`, from the front-left, not by the ground's top-left `LIGHT`: a raised shape shows its south faces most, and a top-left light leaves every face the viewer sees in shade. `raised` never touches pixels within 6.5 of the border, so the shared band holds.
+- **A feature must stand off its ground.** A rock, mesa or bush in its own environment's ramp disappears -- the first sandstone mesa and the grass bushes did. Give it a ramp at least a step darker, or another hue.
+- **The shared band repeats on every tile,** so anything in it reads as a pattern across a region: the snow's wind streaks did at 3x until most of them moved into the variants' own interiors.
+- **Known limit:** peaks can only live inside the band, so a big range still shows one massif per hex.
 
 ### 9-slice UI
 - **Geometry:** 24x24 sprites made of nine 8x8 cells, so a `StyleBoxTexture` with an 8 px texture margin stretches them to any size down to 16x16. The four corner pixels are transparent, which rounds every panel and button the same way.
