@@ -854,7 +854,7 @@ SKILL_TINTS = {
 # Her spells' pixellab symbols (`Fortune/<reading>.png`), laid on the same frame in the "teller" tint; a reading not
 # listed keeps its pack icon.
 FORTUNE_PIXELLAB = "Fortune/"
-FORTUNE_SYMBOLS = {"roads", "treasure", "quarry", "relic", "appraise", "scour", "homecoming"}
+FORTUNE_SYMBOLS = {"roads", "treasure", "quarry", "relic", "appraise", "scour", "homecoming", "transcend"}
 # How far from each corner the frame's near-black rounding is cleared, and how dark a pixel must be to go.
 SKILL_CORNER_REACH = 3
 SKILL_CORNER_DARKEST = 0.09
@@ -874,6 +874,8 @@ FORTUNE = {
     "scour": "Purple8",
     # An arch to walk back through, which is the nearest thing in the pack to a road home.
     "homecoming": "Purple11",
+    # The way out: the user's own cracked orb (2026-09-25), a pixellab symbol with no pack stand-in.
+    "transcend": None,
 }
 # The sketch's shape, row by row: which node stands in which of three columns, and its parents. Written
 # here only so the preview can draw a tree; SkillTree in the game is where it is actually decided.
@@ -1017,6 +1019,10 @@ VARIANTS = {
     "normal": BROWN,
     "danger": _recolor(DANGER_HUE, DANGER_SAT),
 }
+# The pack's own green, unrecoloured, for the one press a counter is there for (Buy, Accept, Claim,
+# Upgrade): brown says "a thing you can do", green says "the thing to do here". Cream surface only --
+# no wood panel carries one.
+GO_SURFACES = ("light",)
 DISABLED = _recolor(DISABLED_HUE, DISABLED_SAT, DISABLED_DIM)
 # The order a button's four states are read in, which is the order the previews lay them out in.
 STATE_ORDER = ["normal", "hover", "pressed", "disabled"]
@@ -1135,6 +1141,15 @@ def build():
             name = "ui_btn_%s_%s_disabled" % (surface, variant)
             sprites[name] = _map_colors(sheet("Buttons").crop((x, row, x + w, row + h)), DISABLED)
             margins[name] = BUTTON_MARGIN
+        if surface in GO_SURFACES:
+            for state, x in BUTTON_STATE_X.items():
+                name = "ui_btn_%s_go_%s" % (surface, state)
+                sprites[name] = sheet("Buttons").crop((x, row, x + w, row + h))
+                margins[name] = BUTTON_MARGIN
+            x = BUTTON_STATE_X["normal"]
+            sprites["ui_btn_%s_go_disabled" % surface] = _map_colors(
+                    sheet("Buttons").crop((x, row, x + w, row + h)), DISABLED)
+            margins["ui_btn_%s_go_disabled" % surface] = BUTTON_MARGIN
 
     # The brown face, which is the same rectangle in another key. It has no surface of its own: it
     # stands on the map rather than on a panel, so it takes the wood row's drop shadow and stops

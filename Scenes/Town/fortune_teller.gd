@@ -67,73 +67,11 @@ const PEEKED := "peeked"
 ## reading -> how many times it has been asked in this world, which is what doubles a reading's price.
 const CAST := "cast"
 
-## One tile is an hour on foot, and a day's walking is eight of them.
-const HOURS_PER_DAY := 8
-const DAYS_PER_WEEK := 7
 ## How far round the chosen tile the scour reaches: the tile and two rings, nineteen in all.
 const SCOUR_RADIUS := 2
 
-## The eight winds, clockwise from east, the way `atan2` turns with y pointing down the map.
-const WINDS := ["east", "south east", "south", "south west", "west", "north west", "north", "north east"]
-## What each `TownWorld.Tier` is called in a sentence, in the enum's own order.
-const TIER_WORDS := ["village", "town", "fortress"]
-
 ## What she says about a piece whose modifiers are its row's and nothing else's.
 const WRITTEN := "Its lines are already written."
-
-
-## Which wind `to` lies on from `from`, both world spots. Offset rows are put on a plane first (odd
-## rows stand half a tile right, rows are 0.866 of a tile apart), or due north would lean.
-static func bearing(from: Vector2i, to: Vector2i) -> String:
-	var a := Vector2(from.x + 0.5 * (from.y & 1), from.y * 0.866)
-	var b := Vector2(to.x + 0.5 * (to.y & 1), to.y * 0.866)
-	return WINDS[posmod(roundi((b - a).angle() / (PI / 4.0)), WINDS.size())]
-
-
-## How long `steps` tiles take on foot, in the largest unit that fits, rounded: "5 hours", "1 day",
-## "3 weeks". Rounded before it is compared, so 55 hours is a week and never "7 days".
-static func walk_time(steps: int) -> String:
-	var hours := maxi(steps, 1)
-	if hours < HOURS_PER_DAY:
-		return _count(hours, "hour")
-	var days := roundi(float(hours) / HOURS_PER_DAY)
-	if days < DAYS_PER_WEEK:
-		return _count(days, "day")
-	return _count(roundi(float(days) / DAYS_PER_WEEK), "week")
-
-
-static func _count(amount: int, unit: String) -> String:
-	return "%d %s%s" % [amount, unit, "" if amount == 1 else "s"]
-
-
-## The nearest town of each tier to `from`, as tier -> spot, never `from` itself. A tier the world has
-## none of is absent. One scan of every town in the world, so ask it on a press and never per frame.
-static func nearest_towns(towns: TownWorld, from: Vector2i) -> Dictionary:
-	var best := {}
-	var best_steps := {}
-	for spot in towns.towns():
-		if spot == from:
-			continue
-		var tier := towns.tier_at(spot)
-		var steps := HexGrid.distance(from, spot)
-		if not best.has(tier) or steps < int(best_steps[tier]):
-			best[tier] = spot
-			best_steps[tier] = steps
-	return best
-
-
-## The roads reading: one sentence a tier, in the tiers' own order.
-static func road_lines(towns: TownWorld, from: Vector2i) -> PackedStringArray:
-	var lines := PackedStringArray()
-	var nearest := nearest_towns(towns, from)
-	for tier in TIER_WORDS.size():
-		if not nearest.has(tier):
-			lines.append("No other %s stands anywhere." % TIER_WORDS[tier])
-			continue
-		var spot: Vector2i = nearest[tier]
-		lines.append("The nearest %s lies to the %s, about %s on foot." % [TIER_WORDS[tier],
-				bearing(from, spot), walk_time(HexGrid.distance(from, spot))])
-	return lines
 
 
 ## The uniques she could still show: neither found nor shown already.

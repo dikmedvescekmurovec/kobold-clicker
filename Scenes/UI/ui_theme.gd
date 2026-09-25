@@ -51,7 +51,22 @@ const BUTTONS := {
 	"WoodDangerButton": ["wood", "danger"],
 	"LightButton": ["light", "normal"],
 	"LightDangerButton": ["light", "danger"],
+	# The pack's own green, for the one press a counter is there for: Buy, Accept, Claim, Upgrade.
+	"LightGoButton": ["light", "go"],
 }
+## The green face is lettered in ink, as the pack letters its green bar: cream on that green is too pale.
+const GO_BUTTON := "LightGoButton"
+const GO_FONT_COLOR := Palette.INK
+## The same faces lettered in the body font, for a row of buttons inside a card (a bounty's Info and
+## Accept) where Pixellari's 16 px made the buttons outweigh what they act on. Each is the face it
+## names, its padding cut to `SMALL_BUTTON_MARGIN`; a priced one carries a half-size coin.
+const SMALL_BUTTONS := {
+	"SmallButton": "LightButton",
+	"SmallGoButton": "LightGoButton",
+	"SmallDangerButton": "LightDangerButton",
+}
+const SMALL_BUTTON_MARGIN := Vector2i(6, 3)   # x: left and right, y: top and bottom
+const SMALL_COIN := 8
 const STATES := ["normal", "hover", "pressed", "disabled"]
 
 ## Buttons that frame an icon instead of a label -> the sprite family they are built from. A face
@@ -173,10 +188,27 @@ static func build() -> Theme:
 			box.content_margin_bottom = BUTTON_MARGIN.y - sink
 			built.set_stylebox(state, variation, box)
 		for item: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
-			built.set_color(item, variation, FONT_COLOR)
+			built.set_color(item, variation, GO_FONT_COLOR if variation == GO_BUTTON else FONT_COLOR)
 		built.set_color("font_disabled_color", variation, DISABLED_FONT_COLOR)
 		built.set_font("font", variation, font)
 		built.set_font_size("font_size", variation, FONT_SIZE)
+
+	for variation: String in SMALL_BUTTONS:
+		var big: String = SMALL_BUTTONS[variation]
+		built.set_type_variation(variation, "Button")
+		for state: String in STATES:
+			var box: StyleBoxTexture = built.get_stylebox(state, big).duplicate()
+			var sink := 1 if state == "pressed" else 0
+			box.content_margin_left = SMALL_BUTTON_MARGIN.x
+			box.content_margin_right = SMALL_BUTTON_MARGIN.x
+			box.content_margin_top = SMALL_BUTTON_MARGIN.y + sink
+			box.content_margin_bottom = SMALL_BUTTON_MARGIN.y - sink
+			built.set_stylebox(state, variation, box)
+		for item: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color",
+				"font_disabled_color"]:
+			built.set_color(item, variation, built.get_color(item, big))
+		built.set_font("font", variation, small)
+		built.set_font_size("font_size", variation, SMALL_FONT_SIZE)
 
 	for variation: String in ICON_FACES:
 		built.set_type_variation(variation, "Button")
@@ -277,13 +309,20 @@ static func set_price(made: Button, price: float, figure := true) -> void:
 	tail.alignment = BoxContainer.ALIGNMENT_END
 	tail.add_theme_constant_override("separation", 2)
 	tail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var small := SMALL_BUTTONS.has(made.theme_type_variation)
 	if figure:
-		var amount := label(BigNumber.format(price))
+		var amount := label(BigNumber.format(price), null, small)
 		amount.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		tail.add_child(amount)
 	var coin := TextureRect.new()
+	if small:
+		# Mode before texture and size, as every stepped-down icon: a 16 px coin asked for 8 comes back 16.
+		coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		coin.custom_minimum_size = Vector2(SMALL_COIN, SMALL_COIN)
+		coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	coin.texture = Coins.icon()
-	coin.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED if small else TextureRect.STRETCH_KEEP_CENTERED
 	coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tail.add_child(coin)
 	made.add_child(tail)
@@ -320,17 +359,18 @@ static func _place_price(made: Button, sink: int) -> void:
 	var tail: Control = made.get_node_or_null(PRICE_NAME)
 	if tail == null:
 		return
-	tail.offset_left = BUTTON_MARGIN.x
-	tail.offset_right = -BUTTON_MARGIN.x
-	tail.offset_top = BUTTON_MARGIN.y + sink
-	tail.offset_bottom = -BUTTON_MARGIN.y + sink
+	var pad := SMALL_BUTTON_MARGIN if SMALL_BUTTONS.has(made.theme_type_variation) else BUTTON_MARGIN
+	tail.offset_left = pad.x
+	tail.offset_right = -pad.x
+	tail.offset_top = pad.y + sink
+	tail.offset_bottom = -pad.y + sink
 
 
 static func _tint_price(made: Button) -> void:
 	var tail := made.get_node_or_null(PRICE_NAME)
 	if tail == null:
 		return
-	var color := DISABLED_FONT_COLOR if made.disabled else FONT_COLOR
+	var color := made.get_theme_color("font_disabled_color" if made.disabled else "font_color")
 	if tail.get_child(0) is Label:
 		(tail.get_child(0) as Label).add_theme_color_override("font_color", color)
 	tail.get_child(-1).modulate = Color(1, 1, 1, 0.5) if made.disabled else Color.WHITE

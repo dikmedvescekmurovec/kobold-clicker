@@ -139,6 +139,26 @@ static func pop_out(panel: Control, then: Callable) -> void:
 	tween.chain().tween_callback(then)
 
 
+## Every popup comes up the way the rewards do (a bounty's pay, a fight's verdict): `panel` -- a titled
+## panel with no X, its one way out a button at its foot -- swells in about its middle and is kept in
+## the middle of the window as its contents settle, and with `win`, for something gained, the warm wash
+## and the sparks go under it once it stands still. `holder` is the full-window Control it stands in,
+## which eats the clicks under it (only `win` needs one). It leaves by `pop_out`.
+static func popup(holder: Control, panel: Control, final: float, win := false) -> void:
+	var settle := func() -> void:
+		if is_instance_valid(panel) and panel.is_inside_tree():
+			centre(panel, panel.get_viewport_rect().size)
+	panel.resized.connect(settle)
+	pop_in(panel, final)
+	settle.call()
+	await panel.get_tree().process_frame
+	if not is_instance_valid(panel) or panel.has_meta("leaving"):
+		return
+	settle.call()
+	if win and holder != null:
+		celebrate(holder, panel, final, (panel.get_child(0) as Control).size.y)
+
+
 ## A win's wash and sparks, for a panel already centred in `parent` (a full-window Control): the wash
 ## goes under the panel, the sparks fly off both ends of its bar (`bar_height` panel pixels tall).
 static func celebrate(parent: Control, panel: Control, final: float, bar_height: float) -> void:

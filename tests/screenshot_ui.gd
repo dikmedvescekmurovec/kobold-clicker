@@ -567,14 +567,15 @@ func _shoot_town() -> void:
 	root.get_texture().get_image().save_png("user://ui_town_fortune.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_town_fortune.png"))
 	for shot: Array in [[FortuneTeller.ROADS, "ui_town_roads"], [FortuneTeller.APPRAISE, "ui_town_appraise"],
-			[FortuneTeller.RELIC, "ui_town_relic"]]:
+			[FortuneTeller.RELIC, "ui_town_relic"], [FortuneTeller.QUARRY, "ui_town_quarry"]]:
 		main.town_page._on_reading_pressed(shot[0])
 		for i in 2:
 			await process_frame
 		await RenderingServer.frame_post_draw
 		root.get_texture().get_image().save_png("user://%s.png" % shot[1])
 		print("Saved ", ProjectSettings.globalize_path("user://%s.png" % shot[1]))
-		main.town_page._on_reading_closed()
+		main.town_page._close_told()
+		main._close_banner()
 	BountyBoard.locate(BountyBoard.active(main.inventory.towns))
 
 	# A wall down: the way out joins her list, and asked for it is a question before it is a deed.
@@ -593,7 +594,7 @@ func _shoot_town() -> void:
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_town_transcend.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_town_transcend.png"))
-	main.town_page._on_reading_closed()
+	main.town_page._close_told()
 
 	# Two heirlooms out of a world that has ended, one of them worn on the heirlooms' own doll, and the
 	# other held up to the smith from the heirlooms' page, which the crown swaps in at the counter: the

@@ -540,8 +540,10 @@ func _build_pages(layer: CanvasLayer) -> void:
 	town_page.chest_bought.connect(func(_cell: Vector2i) -> void: _sync_chest())
 	town_page.spell_aimed.connect(_on_spell_aimed)
 	town_page.towns_revealed.connect(_save_map)
+	# A relic is shown on the unique's own banner, with its X up at once: it was paid for in a town, where
+	# there is no fight to swing through it, and it must never be left waiting five seconds to be put away.
 	town_page.relic_shown.connect(func(id: String) -> void:
-		_announce_unique(CollectionPage.specimen(id), "Unique Revealed"))
+		_announce_unique(CollectionPage.specimen(id), "Unique Revealed", true))
 	town_page.transcend_pressed.connect(_on_transcend_pressed)
 	town_page.xp_claimed.connect(_on_xp_absorbed)
 	town_page.bounty_paid.connect(_show_bounty_paid)
@@ -645,7 +647,7 @@ func _is_new_unique(item: Item) -> bool:
 ## an `ItemSlot`, so the gold frame and its glint come for nothing. What that costs is one line -- the
 ## square has to leave `ItemSlot.GROUP` at once, or the one `ItemCard` finds it under the cursor and
 ## stands its own card over this one.
-func _announce_unique(item: Item, title := "Unique Found") -> void:
+func _announce_unique(item: Item, title := "Unique Found", closable := false) -> void:
 	var slot := ItemSlot.make(item)
 	slot.remove_from_group(ItemSlot.GROUP)
 	# What the piece *is* and the rule it bends, and none of its numbers: a banner is read in a glance
@@ -661,6 +663,8 @@ func _announce_unique(item: Item, title := "Unique Found") -> void:
 		lines.append(ItemDetails.line(item.set_text(), ItemRarity.SET_TEXT, BANNER_WIDTH, true))
 	# The unique's own name colour, which is the half of the ramp picked to be read on cream.
 	_raise_banner(title, item.text_color(), slot, lines)
+	if closable:
+		_banner_x()
 	# A beat of slow motion, as an elite find already gets: this is the rarer thing of the two, and the
 	# one banner that gets it -- a bounty is filled every few kills.
 	Juice.hit_stop(get_tree(), 0.12, 0.25)
@@ -861,11 +865,16 @@ func _place_banner(spark := false) -> void:
 ## The five seconds are up. Someone who was swinging through them has read it or does not care, so it
 ## goes; someone who stopped to read gets an X, and from then on the next swing puts it down as well.
 func _on_banner_held(panel: Control) -> void:
-	if _banner != panel:
+	if _banner != panel or _banner_closable:
 		return
 	if _banner_clicked:
 		_close_banner()
 		return
+	_banner_x()
+
+
+## The banner's X, and from then on the next click anywhere puts it down as well.
+func _banner_x() -> void:
 	_banner_closable = true
 	var shut := UITheme.button("", "CloseButton", "Close")
 	shut.custom_minimum_size = Vector2(UITheme.icon_size("CloseButton"))
@@ -1716,8 +1725,8 @@ func _show_next_tip() -> void:
 	if _tip_queue.is_empty():
 		return
 	var tip: Array = _tip_queue.pop_front()
-	_tip_panel = UITheme.titled_panel(tip[1], "Close", _on_tip_closed)
-	_tip_panel.scale = Vector2(ui_scale, ui_scale)
+	# No X: like a reward's panel, its one way out is the button at its foot (and Escape).
+	_tip_panel = UITheme.titled_panel(tip[1], "", Callable())
 	# A fight holds still under a tip: a charting fight's clock must not run while the player reads.
 	if _combat != null:
 		_combat.process_mode = Node.PROCESS_MODE_DISABLED
@@ -1729,13 +1738,20 @@ func _show_next_tip() -> void:
 	label.custom_minimum_size.x = minf(get_viewport().get_visible_rect().size.x / ui_scale - REFUSAL_MARGIN, REFUSAL_WIDTH)
 	label.text = tip[2]
 	UITheme.body_of(_tip_panel).add_child(label)
-	# Deferred: a wrapped label only knows how tall it is once it has been laid out once.
-	_center_panel.call_deferred(_tip_panel)
+	var close := UITheme.button("Got it", "LightButton", "")
+	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	close.pressed.connect(_on_tip_closed)
+	UITheme.body_of(_tip_panel).add_child(close)
+	Juice.popup(null, _tip_panel, ui_scale)
 
 
+## Got it and Escape: the tip shrinks away while the next one, if any, comes up.
 func _on_tip_closed() -> void:
-	_tip_panel.queue_free()
+	if _tip_panel == null:
+		return
+	var leaving := _tip_panel
 	_tip_panel = null
+	Juice.pop_out(leaving, leaving.queue_free)
 	_show_next_tip()
 	if _tip_panel == null and _combat != null:
 		_combat.process_mode = Node.PROCESS_MODE_INHERIT

@@ -25,8 +25,8 @@ signal abandoned
 ## is standing beside a bag: a tile's name and the line it sits on are what set it.
 const WIDTH := 170.0
 ## The air between one posting and the next, and between the rows inside one.
-const ROW_GAP := 6
-const LINE_GAP := 2
+const ROW_GAP := 8
+const LINE_GAP := 4
 ## The coin beside a reward, at half the sprite's own 16 -- the same whole-number step the shelf's
 ## prices take.
 const REWARD_COIN := 8
@@ -43,7 +43,7 @@ const UNIQUE_MARK := preload("res://Assets/Fortune/relic.png")
 const XP_GEM := preload("res://Assets/UI/xp_gem.png")
 const REWARD_GEM := 12
 ## A card: the air inside its frame, how tall the monster's picture stands, and the air around it.
-const CARD_PAD := 4
+const CARD_PAD := 6
 const PORTRAIT := 40
 const PORTRAIT_PAD := 2
 ## The card's picture: a square as big as an item's, so an elite's frame lies on it at its own pixels.
@@ -144,8 +144,7 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 	var elite := known and EnemyRoster.tier_of(enemy) == EnemyRoster.Tier.ELITE
 	var face := portrait_box(enemy, CARD_PORTRAIT,
 			ItemRarity.frame(ItemRarity.Rarity.ELITE) if elite else null)
-	face.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	lines.add_child(face)
+	face.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var need := int(bounty.get(BountyBoard.NEED, 0))
 	# How many is said once: by the bar once the work is taken on, beside the name until then -- and
 	# not at all for one body, where "x1" says nothing.
@@ -154,17 +153,26 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 	if taken:
 		card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var heading := HBoxContainer.new()
-	heading.alignment = BoxContainer.ALIGNMENT_CENTER
 	heading.add_theme_constant_override("separation", 3)
 	if elite:
 		var skull: Texture2D = CombatScene.TIER_MARK[EnemyRoster.Tier.ELITE]
 		heading.add_child(icon(skull, skull.get_width()))
 	heading.add_child(UITheme.label(enemy if taken or need <= 1 else "%s x%d" % [enemy, need]))
 	lines.add_child(heading)
+	# The picture beside what it pays rather than over it: three postings share one column, and a
+	# poster stacked picture, name, gold, goods was two of them to a window.
+	var poster := HBoxContainer.new()
+	poster.add_theme_constant_override("separation", CARD_PAD)
+	poster.add_child(face)
+	var pays := UITheme.vbox(LINE_GAP)
+	pays.alignment = BoxContainer.ALIGNMENT_CENTER
+	pays.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pays.add_child(_sums(bounty))
+	pays.add_child(_goods(bounty))
+	poster.add_child(pays)
+	lines.add_child(poster)
 	if taken:
 		lines.add_child(progress_bar(int(bounty.get(BountyBoard.HAVE, 0)), need, inner))
-	lines.add_child(_sums(bounty))
-	lines.add_child(_goods(bounty))
 
 	var details := UITheme.vbox(LINE_GAP, inner)
 	# Open on the journal, and on the board once the land has been paid for: that is what was bought.
@@ -192,17 +200,17 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 		lines.add_child(wrapped(note, inner, Palette.LEAF))
 
 	var actions := HBoxContainer.new()
-	actions.add_theme_constant_override("separation", LINE_GAP)
+	actions.add_theme_constant_override("separation", CARD_PAD)
 	# At the card's foot however tall the card has been stretched.
 	actions.size_flags_vertical = Control.SIZE_EXPAND | Control.SIZE_SHRINK_END
 	lines.add_child(actions)
-	var info := UITheme.button("Info", "LightButton", "Where it lives")
+	var info := UITheme.button("Info", "SmallButton", "Where it lives")
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.pressed.connect(func() -> void: details.visible = not details.visible)
 	actions.add_child(info)
 	# The board passes no callable: it offers Accept instead, and Show is the journal's.
 	if on_show.is_valid() and near != HexMap.NO_CELL:
-		var button := UITheme.button("Show", "LightButton", "Put the map on %s" % map_view.name_of(near))
+		var button := UITheme.button("Show", "SmallButton", "Put the map on %s" % map_view.name_of(near))
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.pressed.connect(on_show.bind(near))
 		actions.add_child(button)
@@ -260,7 +268,6 @@ static func _goods(bounty: Dictionary) -> HBoxContainer:
 
 static func _reward_row(gap: int) -> HBoxContainer:
 	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", gap)
 	return row
 
@@ -380,7 +387,7 @@ func town_name(spot: Vector2i) -> String:
 ## Cancel gives the work up, and asks first on the button itself: a second press is the answer, since
 ## what it throws away is every kill counted so far.
 func _cancel_button(bounty: Dictionary) -> Button:
-	var button := UITheme.button("Cancel", "LightDangerButton", "Give this bounty up")
+	var button := UITheme.button("Cancel", "SmallDangerButton", "Give this bounty up")
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.pressed.connect(func() -> void:
 		if button.text != "Sure?":

@@ -1427,8 +1427,10 @@ func _test_entering() -> void:
 	_check(BountyBoard.located(BountyBoard.active(main.inventory.towns)), "which is written on the posting")
 	_check(BountyBoard.located(BountyBoard.active(Inventory.load_from(TEST_PATH).towns)), "and saved")
 	_check(main.inventory.gold < 1.0e9, "and paid for")
-	_check(main.town_page.open_tab() == TownServices.BOUNTIES, "and read off the card on the board")
-	main.town_page._on_tab_pressed(TownServices.FORTUNE)
+	var quarry: String = BountyBoard.active(main.inventory.towns)[BountyBoard.ENEMY]
+	_check(main.town_page.open_tab() == TownServices.FORTUNE and main.town_page._told != null
+			and _said(main.town_page._told).contains(quarry), "and told in a popup, over her own counter")
+	main.town_page._close_told()
 	await process_frame
 	_check(_dead(main, FortuneTeller.QUARRY), "and is not sold twice")
 	main.town_page.closed.emit()
@@ -1447,40 +1449,8 @@ func _test_entering() -> void:
 	await process_frame
 
 
-## The fortuneteller's rules, with no interface: the winds, the walk, the nearest towns, the peek,
-## the odds, the prices and the patch a scour takes.
+## The fortuneteller's rules, with no interface: the peek, the odds, the prices and the patch a scour takes.
 func _test_fortune() -> bool:
-	# Spots on an even row, so the plane and the grid agree about due east and west.
-	var from := Vector2i(10, 10)
-	var winds := {
-		Vector2i(14, 10): "east", Vector2i(6, 10): "west", Vector2i(10, 4): "north",
-		Vector2i(10, 16): "south", Vector2i(14, 6): "north east", Vector2i(6, 6): "north west",
-		Vector2i(14, 14): "south east", Vector2i(6, 14): "south west",
-	}
-	for to: Vector2i in winds:
-		_check(FortuneTeller.bearing(from, to) == winds[to],
-				"%s lies to the %s (%s)" % [to, winds[to], FortuneTeller.bearing(from, to)])
-	var walks := {1: "1 hour", 7: "7 hours", 8: "1 day", 12: "2 days", 55: "1 week", 56: "1 week",
-			200: "4 weeks"}
-	for steps: int in walks:
-		_check(FortuneTeller.walk_time(steps) == walks[steps],
-				"%d tiles is %s on foot (%s)" % [steps, walks[steps], FortuneTeller.walk_time(steps)])
-
-	var world := TownWorld.generate(WORLD_SEED)
-	var here: Vector2i = world.towns()[0]
-	var nearest := FortuneTeller.nearest_towns(world, here)
-	_check(nearest.size() == 3, "the world has a nearest town of every tier (%s)" % [nearest])
-	for tier: int in nearest:
-		var spot: Vector2i = nearest[tier]
-		_check(spot != here and world.tier_at(spot) == tier, "the nearest %d is one, and not this town" % tier)
-		for other in world.towns():
-			if other != here and world.tier_at(other) == tier:
-				_check(HexGrid.distance(here, other) >= HexGrid.distance(here, spot),
-						"and none of its tier is nearer")
-	var lines := FortuneTeller.road_lines(world, here)
-	_check(lines.size() == 3 and lines[2].contains("fortress") and lines[2].contains("on foot"),
-			"the roads are three sentences (%s)" % [lines])
-
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
 	var found := [UniqueTable.ids()[0]]
@@ -1608,8 +1578,7 @@ func _test_fortune_page() -> void:
 	for reading: String in FortuneTeller.READINGS:
 		# Her squares on the two grids; the way out is on neither while every wall still stands.
 		if reading == FortuneTeller.TRANSCEND:
-			_check(_deep_button(main.town_page._rows, FortuneTeller.LABELS[reading]) == null,
-					"the way out is not offered yet")
+			_check(_spell(main, reading) == null, "the way out is not offered yet")
 			continue
 		_check(_spell(main, reading) != null, "she offers %s" % reading)
 	_check(_dead(main, FortuneTeller.QUARRY), "no bounty is out, so there is none to find")
@@ -1620,14 +1589,21 @@ func _test_fortune_page() -> void:
 	_ask(main, FortuneTeller.ROADS)
 	await process_frame
 	_check(main.inventory.gold < purse, "the roads are paid for")
-	_check(_said(main.town_page._rows).contains("fortress"), "and told (%s)" % _said(main.town_page._rows))
-	main.town_page._on_reading_closed()
+	_check(main.town_page._told != null and _said(main.town_page._told).contains("on your map"),
+			"and told in a popup (%s)" % (_said(main.town_page._told) if main.town_page._told != null else "none"))
+	_check(_deep_button(main.town_page._told, "Dismiss") != null, "with its Dismiss in reach")
+	# Dismissed with its tick: that reading's answer is one line on the page from then on.
+	main.town_page._told.find_child(BagPage.TICK_NAME, true, false).button_pressed = true
+	_deep_button(main.town_page._told, "Dismiss").pressed.emit()
 	await process_frame
+	_check(main.town_page._told == null, "a Dismiss puts it away")
 	purse = main.inventory.gold
 	_ask(main, FortuneTeller.ROADS)
 	await process_frame
 	_check(main.inventory.gold == purse, "and told again for nothing")
-	main.town_page._on_reading_closed()
+	_check(main.town_page._told == null and _said(main.town_page._rows).contains("You cast Roads"),
+			"and, not to be shown again, said in one line (%s)" % _said(main.town_page._rows))
+	_check(TownPage.SKIP_TOLD + FortuneTeller.ROADS in Inventory.load_from(TEST_PATH).tips, "and saved")
 
 	# The star.
 	var chest: Vector2i = main.view.nearest_chest(true)
@@ -1657,8 +1633,10 @@ func _test_fortune_page() -> void:
 	var peeked := FortuneTeller.peeked(main.inventory.fortunes)
 	_check(peeked.size() == 1, "one relic is shown")
 	var named: String = UniqueTable.UNIQUES[peeked[0]]["name"]
-	_check(_said(main.town_page._rows).contains(named), "by name (%s)" % named)
-	main.town_page._on_reading_closed()
+	_check(main.town_page._told == null and main._banner != null and _said(main._banner).contains(named),
+			"by name, on the unique's banner rather than a popup (%s)" % named)
+	_check(main._banner_closable and _deep_button(main._banner, "") != null, "with its X up at once")
+	main._close_banner()
 	await process_frame
 	# A reading is sold as often as it is paid for, and every telling doubles the next one's price.
 	_check(not _dead(main, FortuneTeller.RELIC), "a second relic can be asked for")
@@ -1672,10 +1650,14 @@ func _test_fortune_page() -> void:
 	await process_frame
 	_ask(main, FortuneTeller.APPRAISE)
 	await process_frame
-	_check(_said(main.town_page._rows).contains("increased Damage"), "a sword's odds are read out")
+	_check(main.town_page._told != null and _said(main.town_page._told).contains("increased Damage"),
+			"a sword's odds are read out")
+	_check(not main.town_page._told.find_child(BagPage.TICK_NAME, true, false).get_parent().visible,
+			"and the appraisal can never be put out of sight")
+	main.town_page._close_told()
 	main.town_page.bag_changed(null)
 	await process_frame
-	_check(_dead(main, FortuneTeller.APPRAISE), "and her reading is put away with the piece")
+	_check(_dead(main, FortuneTeller.APPRAISE), "and with no piece open there is nothing to read")
 	main.town_page.bag_changed(sword)
 	await process_frame
 	_check(not _dead(main, FortuneTeller.APPRAISE)
@@ -1764,29 +1746,36 @@ func _test_fortune_page() -> void:
 	main.inventory.kills = 321
 	main.town_page.redraw()
 	await process_frame
-	var way_out := _deep_button(main.town_page._rows, "Transcend")
-	_check(way_out != null and not way_out.disabled, "she offers the way out once a wall has fallen")
-	_check(UITheme.price_of(way_out).is_empty(), "with a coin and no figure, which would widen the page")
-	way_out.pressed.emit()
+	_check(_spell(main, FortuneTeller.TRANSCEND) != null and not _dead(main, FortuneTeller.TRANSCEND),
+			"she offers the way out once a wall has fallen, as a square among the great spells")
+	_check(_deep_button(main.town_page._rows, "Transcend") == null, "and no button of its own")
+	_ask(main, FortuneTeller.TRANSCEND)
 	await process_frame
 	_check(FileAccess.file_exists(TEST_MAP_PATH) and main.inventory.gold > 0.0,
 			"the first press only asks")
-	_check("lost" in _said(main.town_page._rows) and not "heirloom" in _said(main.town_page._rows)
-			and BigNumber.format(TownPrices.fortune_price(FortuneTeller.TRANSCEND, town))
-			in _said(main.town_page._rows), "and warns of what is lost and what it costs, not of what is won")
+	var asked: Node = main.town_page._told
+	_check(asked != null and "lost" in _said(asked) and not "heirloom" in _said(asked)
+			and BigNumber.format(TownPrices.fortune_price(FortuneTeller.TRANSCEND, town)) in _said(asked),
+			"in a popup that warns of what is lost and what it costs, not of what is won")
+	_check(UITheme.price_of(_deep_button(asked, "Transcend")).is_empty(), "its Transcend a coin and no figure")
+	main.town_page._close_told()
 	var full_purse: float = main.inventory.gold
 	main.inventory.gold = 1.0
 	main.town_page.redraw()
 	await process_frame
-	_check(_deep_button(main.town_page._rows, "Transcend").disabled, "a short purse greys the deed, not the asking")
+	_check(not _dead(main, FortuneTeller.TRANSCEND), "a short purse does not grey the asking")
+	_ask(main, FortuneTeller.TRANSCEND)
+	await process_frame
+	_check(_deep_button(main.town_page._told, "Transcend").disabled, "only the deed")
+	main.town_page._close_told()
 	main.inventory.gold = full_purse
-	main.town_page.redraw()
+	_ask(main, FortuneTeller.TRANSCEND)
 	await process_frame
 	# Five skulls to spend on the black screen, more than the one wall down earns: the budget is read as
 	# the screen opens.
 	main.inventory.skull_budget = 5
 	var written := FileAccess.get_file_as_string(TEST_PATH)
-	_deep_button(main.town_page._rows, "Transcend").pressed.emit()
+	_deep_button(main.town_page._told, "Transcend").pressed.emit()
 	await process_frame
 	var black: TranscendPage = main._transcend_page
 	_check(black != null and not main.town_page.visible and FileAccess.file_exists(TEST_MAP_PATH),

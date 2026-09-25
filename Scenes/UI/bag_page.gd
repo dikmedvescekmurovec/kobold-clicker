@@ -44,6 +44,9 @@ const SKIP_CONFIRM := "skip_confirm_"
 const UNIQUES := "uniques"
 const CONFIRM_WIDTH := 150.0
 const TICK_NAME := "Tick"
+## What a question's panel is called inside its holder, which the win's wash would otherwise push off
+## child 0 -- and which is how `_place_confirm` and the shrink find it.
+const CONFIRM_PANEL := "Panel"
 const TICK: Array[String] = [
 	"......#",
 	".....##",
@@ -444,8 +447,9 @@ func _ask(id: String, title: String, question: String, verb: String, variation: 
 	_confirm = Control.new()
 	_confirm.size = get_viewport_rect().size
 	add_child(_confirm)
-	var panel := UITheme.titled_panel(title, "Cancel", _close_confirm)
-	panel.scale = Vector2(_ui_scale, _ui_scale)
+	# No X, as a reward's panel has none: its buttons and Escape are the way out.
+	var panel := UITheme.titled_panel(title, "", Callable())
+	panel.name = CONFIRM_PANEL
 	_confirm.add_child(panel)
 	var body := UITheme.body_of(panel)
 	var asked := UITheme.label(question, null, true)
@@ -471,9 +475,7 @@ func _ask(id: String, title: String, question: String, verb: String, variation: 
 	# Built either way, so the Yes above has a tick to read; only shown where it may be ticked.
 	skip.visible = can_skip
 	body.add_child(skip)
-	# Twice: a wrapped label only knows how tall it is once it has been laid out once.
-	_place_confirm()
-	_place_confirm.call_deferred()
+	Juice.popup(_confirm, panel, _ui_scale)
 
 
 ## A ticked "Don't show this again". The uniques' question keeps the answer given -- Sell or Keep --
@@ -489,13 +491,13 @@ func _remember(id: String, ticked: bool, yes: bool) -> void:
 		_purse.tips.append(SKIP_CONFIRM + id)
 
 
+## The window was resized under a question: the holder is made to cover it again and the question put
+## back in its middle. `Juice.popup` keeps it there as its contents settle.
 func _place_confirm() -> void:
 	if _confirm == null:
 		return
 	_confirm.size = get_viewport_rect().size
-	var panel: Control = _confirm.get_child(0)
-	panel.size = panel.get_combined_minimum_size()
-	panel.position = ((_confirm.size - panel.size * _ui_scale) / 2.0).floor()
+	Juice.centre(_confirm.get_node(CONFIRM_PANEL), _confirm.size)
 
 
 ## Escape on a question is its Cancel, and the press stops here: the page under it stays up. With no
@@ -527,11 +529,14 @@ func _input(event: InputEvent) -> void:
 		refresh()
 
 
+## The question shrinks away, as a reward's panel does, then goes. It is let go of at once, so a deed
+## that follows an answer -- or the next question -- never finds the old one in its way.
 func _close_confirm() -> void:
-	if _confirm != null:
-		remove_child(_confirm)
-		_confirm.queue_free()
-		_confirm = null
+	if _confirm == null:
+		return
+	var holder := _confirm
+	_confirm = null
+	Juice.pop_out(holder.get_node(CONFIRM_PANEL), holder.queue_free)
 
 
 ## A tick box as the rest of the interface would draw one: the brown button face, small, held down
@@ -1077,9 +1082,10 @@ func _on_super_orb_pressed(orb: String) -> void:
 		return
 	_close_confirm()
 	_confirm = Control.new()
+	_confirm.size = get_viewport_rect().size
 	add_child(_confirm)
-	var panel := UITheme.titled_panel(orb, "Cancel", _close_confirm)
-	panel.scale = Vector2(_ui_scale, _ui_scale)
+	var panel := UITheme.titled_panel(orb, "", Callable())
+	panel.name = CONFIRM_PANEL
 	_confirm.add_child(panel)
 	var body := UITheme.body_of(panel)
 	body.add_child(UITheme.label("Which modifier?", null, true))
@@ -1091,8 +1097,11 @@ func _on_super_orb_pressed(orb: String) -> void:
 			_close_confirm()
 			_super_craft(orb, item, i))
 		body.add_child(line)
-	_place_confirm()
-	_place_confirm.call_deferred()
+	# With no X the way back out is a button of its own, as every other question's Cancel is.
+	var cancel := UITheme.button("Cancel", "LightButton", "")
+	cancel.pressed.connect(_close_confirm)
+	body.add_child(cancel)
+	Juice.popup(_confirm, panel, _ui_scale)
 
 
 ## Applied first and spent second, as every orb is. Not saved: see `_save`.

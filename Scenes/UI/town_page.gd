@@ -42,7 +42,8 @@ signal xp_claimed(amount: int)
 signal bounty_paid(enemy: String, gold: float, xp: int, orbs: Dictionary, piece: Item)
 ## The roads lifted settlements out of the dark: the map has changed and wants saving.
 signal towns_revealed
-## The relic reading showed the unique `id`: the main scene raises the collection log's banner over it.
+## The relic reading showed the unique `id`: the main scene raises the collection log's banner over it,
+## which is the reading's whole answer.
 signal relic_shown(id: String)
 ## A spell that is aimed at the map was asked for, at `price`, in the town on `spot`. Nothing has been
 ## charged and nothing is written down: choosing the land happens on the map, which is the main
@@ -58,21 +59,31 @@ signal transcend_pressed
 ## -- and it is settled by the shelf: three squares across and the gutters between them, which is
 ## what makes a price readable under each one. See `Scenes/Town/DESIGN.md`.
 const STOCK_COLS := 3
-const STOCK_GAP := 4
+const STOCK_GAP := 8
 ## A shelf square and the price under it. Four panel pixels wider than `ItemSlot.SIDE`, because what
 ## sets this is the price and not the square: a coin and four figures at Pixellari's 16 px come to
 ## just over forty, and a price is no use to anybody cut off after three.
 const STOCK_CELL := ItemSlot.SIDE + 4
 const BODY_WIDTH := STOCK_COLS * STOCK_CELL + (STOCK_COLS - 1) * STOCK_GAP
-const TAB_GAP := 4
+const TAB_GAP := 2
+## A tab's width and the open one's height. Every mark stands centred on one, so a small mark (the
+## fortuneteller's) takes as much of the row as a wide one. A shut tab stands `TAB_RISE` lower, which
+## is what puts the open one in front of the rest; `TAB_CORNER` rounds a tab's two top corners.
+const TAB_SIDE := 22
+const TAB_RISE := 3
+const TAB_CORNER := 2
+## A shut tab's face and the same under the cursor: the tan every socket is, washed out, so the row
+## reads as cards standing behind the page and the open one as the page itself.
+const TAB_SHUT := Color(Palette.SLOT_TAN, 0.45)
+const TAB_SHUT_HOVER := Color(Palette.SLOT_TAN, 0.8)
 ## The coin beside a price on a square, at half the sprite's own 16 -- a whole-number step, the way
 ## the orb tray halves its icons. Full size it would take a fifth of the shelf's width and leave a
 ## four-figure price nowhere to go.
 const PRICE_COIN := 8
-## How far apart the page's own rows sit. Tighter than the 6 the pages on the other edge use: a
-## counter is a full column -- tabs, name, heading, shelf, prices and two lines under it -- and all of
-## it has to reach the foot of a 648 px window without going past it.
-const ROW_GAP := 4
+## How far apart the page's own rows sit. Everything under the tabs scrolls and the buttons are pinned,
+## so the column's height is no longer what sets this: 8 is air, where the 4 it was made the counter
+## read as one block.
+const ROW_GAP := 8
 
 ## What each counter wears on its tab. A mark rather than a word, so a fortress's five stand in one
 ## row: in words they took two, and the second row was what pushed the gear tab past the window's
@@ -107,6 +118,7 @@ const FORTUNE_ICONS := {
 	FortuneTeller.APPRAISE: "res://Assets/Fortune/appraise.png",
 	FortuneTeller.SCOUR: "res://Assets/Fortune/scour.png",
 	FortuneTeller.HOMECOMING: "res://Assets/Fortune/homecoming.png",
+	FortuneTeller.TRANSCEND: "res://Assets/Fortune/transcend.png",
 }
 ## A spell's mark, at the 16 px it is drawn at doubled -- a whole-number step, as a skill's is.
 const SPELL_SIDE := 32
@@ -118,16 +130,17 @@ const HOVER_GLOW := 3
 const HOVER_GLOW_COLOR := Color(Palette.GOLD, 0.85)
 const HOVER_LIFT := Color(1.2, 1.2, 1.2)
 
-## What each of the fortuneteller's squares says when hovered.
+## What each of the fortuneteller's squares says when hovered, after its name: what the spell does,
+## as an outcome -- never how it is asked for (the user's rule, 2026-09-25).
 const FORTUNE_TIPS := {
-	FortuneTeller.ROADS: "Where the nearest village, town and fortress lie, and every settlement in this ring of land",
-	FortuneTeller.TREASURE: "A star that points at the nearest chest until it is opened",
-	FortuneTeller.QUARRY: "Where the monster of your bounty lives",
-	FortuneTeller.RELIC: "One unique you have not found, and where it is carried",
-	FortuneTeller.APPRAISE: "What the piece open in your bag can roll, and how often",
-	FortuneTeller.SCOUR: "Uncover a patch of the map you choose",
-	FortuneTeller.HOMECOMING: "Stand again in a town you have already walked to",
-	FortuneTeller.TRANSCEND: "Leave this world for a new one",
+	FortuneTeller.ROADS: "Brings every settlement between the ice walls around you out of the fog",
+	FortuneTeller.TREASURE: "Puts a star over the nearest chest you have not seen. It stays until that chest is opened",
+	FortuneTeller.QUARRY: "Shows the lands your bounty's monster lives on, and the nearest tile of them you have seen",
+	FortuneTeller.RELIC: "Shows one unique you have not found. It stays shown in your collection log, with the monsters that carry it",
+	FortuneTeller.APPRAISE: "Lists every modifier the open piece can roll, the range it rolls in at the piece's level, and how often it comes up",
+	FortuneTeller.SCOUR: "Brings a tile and the two rings of land around it, nineteen tiles, out of the fog",
+	FortuneTeller.HOMECOMING: "Moves you to a settlement you have already charted",
+	FortuneTeller.TRANSCEND: "Ends this world and starts you in a new one, worth far more. Everything you made here is lost",
 }
 ## What stands over each half of her list. A reading is asked again and again at a climbing price; a
 ## great spell is one a settlement. Two words each: the rule itself is in every square's tooltip, and
@@ -136,6 +149,15 @@ const FORTUNE_HEADINGS := {
 	"common": "Readings",
 	"great": "Great spells",
 }
+
+## What goes in front of a reading's id in `inventory.tips` once its answer's "Don't show this again"
+## has been ticked, and how wide her answer is set.
+const SKIP_TOLD := "skip_told_"
+const TOLD_WIDTH := 180.0
+## What stands round her answer inside the window: its title bar, its padding, and the Dismiss and the
+## tick under it. The answer scrolls in what the window has left after these.
+const TOLD_CHROME := 100.0
+const TOLD_PANEL := "Panel"
 
 ## What she says before the way out is taken, in the list's place, over the button that takes it.
 const TRANSCEND_LINES := [
@@ -183,13 +205,15 @@ var craft_held: Callable
 ## What the last blow of the hammer did, when it is worth saying out loud. A break is the one thing
 ## that happens on this page the player did not ask for, so it is said rather than left to be noticed.
 var _smith_note := ""
-## Which of the fortuneteller's readings is written on the page in the list's place ("" for the
-## list), and the unique she showed when it is the relic.
-var _said := ""
+## The unique she showed, while the relic's answer is being written.
 var _relic := ""
-## How many settlements the last telling of the roads lifted out of the dark.
-var _revealed := 0
-## The town's world spot, which the roads are measured from, and the nearest unseen chest as the town was
+## Her answer, over the whole window while it is up (null otherwise), and the scroll it is written in.
+var _told: Control
+var _told_scroll: ScrollContainer
+## The last reading cast whose answer is not shown any more (ticked "Don't show this again"): the page
+## says it in one line under her grids instead, until another counter is opened.
+var _cast := ""
+## The town's world spot, which a spell aimed at the map is cast from, and the nearest unseen chest as the town was
 ## walked into -- the player does not move while the page is up, and finding it scans the whole map.
 var _spot := Vector2i.ZERO
 var _near_chest := HexMap.NO_CELL
@@ -229,7 +253,8 @@ func open(town_name: String, services: PackedStringArray, cell: Vector2i, spot: 
 	_cell = cell
 	_spot = spot
 	_tier = tier
-	_said = ""
+	_cast = ""
+	_close_told()
 	_near_chest = view.nearest_chest(true) if view != null else HexMap.NO_CELL
 	_title.text = town_name if not town_name.is_empty() else "Town"
 	_drawer = inventory.towns.visit(spot)
@@ -266,9 +291,6 @@ func bag_changed(open_piece: Item) -> void:
 	_bag_piece = open_piece
 	# What the hammer did belongs to the piece it did it to, and that piece is no longer the one up.
 	_smith_note = ""
-	# And so does what she read off it.
-	if _said == FortuneTeller.APPRAISE:
-		_said = ""
 	_fill()
 	layout()
 
@@ -298,19 +320,28 @@ func layout() -> void:
 
 func _fill() -> void:
 	UITheme.clear(_rows)
+	# Folder tabs standing on a line: the line runs under every shut tab, through the gaps and out to
+	# the page's edge, and breaks under the open one, which is drawn in the page's own cream -- so the
+	# counter below reads as that tab's page. No gap between the tabs and the line: they are one thing.
 	var tabs := HBoxContainer.new()
-	tabs.add_theme_constant_override("separation", TAB_GAP)
+	tabs.add_theme_constant_override("separation", 0)
+	tabs.custom_minimum_size.x = BODY_WIDTH
 	_rows.add_child(tabs)
 	var group := ButtonGroup.new()
 	for service: String in _tabs:
+		if tabs.get_child_count() > 0:
+			tabs.add_child(_tab_line(TAB_GAP))
 		var tab := UITheme.button("", UITheme.BARE_BUTTON, TownServices.label(service))
 		tab.icon = tab_mark(service, service == _open_tab)
+		_tab_faces(tab, service == _open_tab)
 		tab.toggle_mode = true
 		tab.button_group = group
 		tab.button_pressed = service == _open_tab
 		tab.pressed.connect(_on_tab_pressed.bind(service))
 		tabs.add_child(tab)
-	_rows.add_child(UITheme.rule(BODY_WIDTH))
+	var rest := _tab_line(0)
+	rest.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tabs.add_child(rest)
 	if _open_tab.is_empty():
 		_rows.add_child(_sign("Nobody here is trading yet."))
 		return
@@ -334,10 +365,9 @@ func _fill() -> void:
 	# and an open piece's lines are more than a 648 px window has room for. The tabs and the
 	# counter's name stay pinned above, so what moves is the counter's own contents.
 	var body := _scrolled(ROW_GAP)
-	body.add_child(UITheme.label("Buy"))
 	body.add_child(_shelf())
 	if _open_tab == TownServices.ORBS:
-		body.add_child(UITheme.label("Trade up"))
+		body.add_child(_section("Trade up"))
 		body.add_child(_upscales())
 	# New stock now, for gold: pinned at the page's foot, under the scroll, where every counter keeps its buttons -- this shelf only, and dearer every time for good: the town remembers.
 	var price := TownPrices.reroll_price(_cell, VendorStock.rerolls(_drawer, _shelf_key()))
@@ -362,13 +392,13 @@ func _shelf() -> GridContainer:
 		for at in orbs.size():
 			var orb := orbs[at]
 			if orb.is_empty():
-				grid.add_child(_sold_square(OrbSlot.SIDE))
+				grid.add_child(_sold_square(ItemSlot.SIDE))
 				continue
 			var price := TownPrices.orb_value(orb, _cell)
 			# The tray's own square, so an orb is the same square wherever it is: lit when the purse
 			# can cover it and grey when it cannot, which is the state it already draws for "held but
 			# no use to you". A grey one still takes the cursor and says why in its tooltip.
-			var square := OrbSlot.make(orb, 1, inventory.gold >= price)
+			var square := OrbSlot.make(orb, 1, inventory.gold >= price, false, ItemSlot.SIDE)
 			square.tooltip_text = "%s, %s gold%s" % [orb, BigNumber.format(price),
 					"" if inventory.gold >= price else ". " + _why_not(price, false)]
 			square.pressed.connect(_on_buy_orb.bind(at))
@@ -406,31 +436,13 @@ func _upscales() -> GridContainer:
 		if from.is_empty():
 			continue
 		var held := inventory.orb_count(from)
-		var square := OrbSlot.make(orb, 1, held >= OrbTable.UPSCALE_COST)
+		var enough := held >= OrbTable.UPSCALE_COST
+		var square := OrbSlot.make(orb, 1, enough, false, ItemSlot.SIDE)
 		square.tooltip_text = "Trade %d %s for one %s. You hold %d" % [OrbTable.UPSCALE_COST, from, orb, held]
 		square.pressed.connect(_on_upscale)
-		var cell := UITheme.vbox(2, STOCK_CELL)
-		square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		cell.add_child(square)
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 2)
-		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		# The same order as `_price_cell`'s coin: set before the texture and the size.
-		var icon := TextureRect.new()
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		icon.texture = OrbTable.icon(from)
-		icon.custom_minimum_size = Vector2(PRICE_COIN, PRICE_COIN)
-		icon.size = Vector2(PRICE_COIN, PRICE_COIN)
-		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(icon)
-		var label := UITheme.label("x%d" % OrbTable.UPSCALE_COST, Palette.TEXT_SOFT)
-		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(label)
-		cell.add_child(row)
-		grid.add_child(cell)
+		# Priced the way gold is, with the orb it costs standing in the coin's place.
+		grid.add_child(_cost_cell(square, str(OrbTable.UPSCALE_COST), OrbTable.icon(from), enough,
+				OrbSlot.ICON))
 	return grid
 
 
@@ -452,43 +464,114 @@ func _scrolled(gap: int) -> VBoxContainer:
 ## because six squares with no numbers on them are six questions, and a shop that has to be opened
 ## six times to be read is a shop nobody reads.
 func _price_cell(square: Control, price: float) -> VBoxContainer:
+	# Nothing to pay carries no coin, the way a priced button with no price does: the roads, once
+	# bought in a town, are told again for nothing, and a coin beside a nought reads as a price of zero
+	# gold rather than as no price at all.
+	if price <= 0.0:
+		return _cost_cell(square, "Free", null, true)
+	return _cost_cell(square, BigNumber.format(price), Coins.icon(), inventory.gold >= price)
+
+
+## A square with a cost under it: `mark` (a coin at `PRICE_COIN`, or the orb a trade takes at the
+## tray's size, since an orb at 8 is a speck of colour and not an orb) and the
+## figure beside it, the pair centred under the square in the body font -- so every counter's cells
+## are the one cell, and a four-figure price sits inside its column instead of running into the next.
+## The figure is brick while `ok` is false: what the purse cannot cover is read off the shelf at a
+## glance, not only off a tooltip.
+func _cost_cell(square: Control, figure: String, mark: Texture2D, ok: bool,
+		mark_side := PRICE_COIN) -> VBoxContainer:
 	var cell := UITheme.vbox(2, STOCK_CELL)
 	square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	cell.add_child(square)
 	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 2)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Nothing to pay carries no coin, the way a priced button with no price does: the roads, once
-	# bought in a town, are told again for free, and a coin beside a nought reads as a price of zero
-	# gold rather than as no price at all.
-	if price <= 0.0:
-		var free := UITheme.label("Free", Palette.TEXT_SOFT)
-		free.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(free)
-		cell.add_child(row)
-		return cell
-	var coin := TextureRect.new()
-	# Set before the texture and the size: a TextureRect's minimum is its own texture until
-	# `expand_mode` says otherwise, so a 16 px coin asked for 8 comes back 16.
-	coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	coin.texture = Coins.icon()
-	coin.custom_minimum_size = Vector2(PRICE_COIN, PRICE_COIN)
-	coin.size = Vector2(PRICE_COIN, PRICE_COIN)
-	coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(coin)
-	# Clipped rather than allowed to push: gold grows with the walk, and a six-figure price out at the
-	# frontier would widen the shelf into the panel beside it. The whole number is in the square's
+	var room := float(STOCK_CELL)
+	if mark != null:
+		var icon := BountyList.icon(mark, mark_side)
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(icon)
+		room -= mark_side + 2
+	var label := UITheme.label(figure, Palette.TEXT_SOFT if ok else Palette.BRICK, true)
+	# Clipped rather than allowed to push: gold grows with the walk, and a seven-figure price out at the
+	# frontier would widen the shelf into the panel beside it. A clipped Label has no width of its own,
+	# so it is given the figure's, up to what the cell has left. The whole number is in the square's
 	# tooltip and on the Buy button.
-	var label := UITheme.label(BigNumber.format(price), Palette.TEXT_SOFT)
 	label.clip_text = true
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var wide := UITheme.theme().get_font("font", "SmallLabel").get_string_size(figure,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, UITheme.SMALL_FONT_SIZE).x
+	label.custom_minimum_size.x = minf(ceilf(wide), room)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(label)
 	cell.add_child(row)
 	return cell
+
+
+## A heading inside a counter (Trade up, her Readings and Great spells): a small word and a rule run
+## out to the page's edge. Small, because the counter's own name above it is the heading; these only
+## say where one half of the grid ends.
+static func _section(text: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	row.add_child(UITheme.label(text, Palette.TEXT_SOFT, true))
+	var line := UITheme.rule()
+	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(line)
+	return row
+
+
+## A counter's tab as a folder tab: framed on three sides in the socket's dark brown with its top
+## corners rounded. A shut one stands lower, washed in tan, with the line it stands on for a bottom
+## edge; the open one stands full height in the page's own cream with no bottom edge, so it runs on
+## into the counter under it -- a state read off the row at a glance, where the green mark alone was
+## a colour change on twelve pixels.
+static func _tab_faces(tab: Button, lit: bool) -> void:
+	tab.custom_minimum_size = Vector2(TAB_SIDE, TAB_SIDE if lit else TAB_SIDE - TAB_RISE)
+	tab.size_flags_vertical = Control.SIZE_SHRINK_END
+	tab.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if lit:
+		var face := _tab_face(Color.TRANSPARENT, false)
+		for state: String in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
+			tab.add_theme_stylebox_override(state, face)
+		return
+	var shut := _tab_face(TAB_SHUT, true)
+	for state: String in ["normal", "pressed", "hover_pressed", "disabled"]:
+		tab.add_theme_stylebox_override(state, shut)
+	tab.add_theme_stylebox_override("hover", _tab_face(TAB_SHUT_HOVER, true))
+	tab.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+
+## One tab's face. Square pixels: no anti-aliasing on the rounded corners, which at `ui_scale` 2 would
+## blur them into the cream. The mark sits a pixel off the top so it is centred on what shows of the
+## tab rather than on the line under it.
+static func _tab_face(fill: Color, floor_line: bool) -> StyleBoxFlat:
+	var face := StyleBoxFlat.new()
+	face.bg_color = fill
+	face.border_color = Palette.SLOT_TAN_DK
+	face.border_width_left = 1
+	face.border_width_top = 1
+	face.border_width_right = 1
+	face.border_width_bottom = 1 if floor_line else 0
+	face.corner_radius_top_left = TAB_CORNER
+	face.corner_radius_top_right = TAB_CORNER
+	face.anti_aliasing = false
+	face.set_content_margin_all(2)
+	return face
+
+
+## A stretch of the line the tabs stand on: between two tabs (`width`) or out to the page's edge.
+static func _tab_line(width: float) -> Panel:
+	var line := Panel.new()
+	var edge := StyleBoxFlat.new()
+	edge.bg_color = Color.TRANSPARENT
+	edge.border_color = Palette.SLOT_TAN_DK
+	edge.border_width_bottom = 1
+	line.add_theme_stylebox_override("panel", edge)
+	line.custom_minimum_size.x = width
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return line
 
 
 ## A square whose thing has been bought: the socket it stood on, at that shelf's own size, with
@@ -514,7 +597,7 @@ func _fill_offer() -> void:
 
 	var price := TownPrices.buy_price(_offer)
 	var refused := _why_not(price, true)
-	var buy := UITheme.priced_button("Buy", price, "LightButton",
+	var buy := UITheme.priced_button("Buy", price, UITheme.GO_BUTTON,
 			refused if not refused.is_empty()
 			else "Buy this and put it in your bag for %s gold" % BigNumber.format(price))
 	buy.disabled = not refused.is_empty()
@@ -555,7 +638,7 @@ func _fill_board() -> void:
 				"Accepted." if taken and not BountyBoard.ready(bounty) else "")
 		var action: Button
 		if not taken:
-			action = UITheme.button("Accept", "LightButton", "Take this work on")
+			action = UITheme.button("Accept", "SmallGoButton", "Take this work on")
 			action.pressed.connect(_on_accept_pressed.bind(bounty))
 		# The one thing this board can do that the journal cannot: pay. A bounty is handed in where it
 		# was taken on, so the button is here and nowhere else. The figure is on the card above it and
@@ -564,7 +647,7 @@ func _fill_board() -> void:
 			var gold := float(bounty.get(BountyBoard.GOLD, 0))
 			var prize := BountyBoard.reward_text(bounty)
 			var xp := int(bounty.get(BountyBoard.XP, 0))
-			action = UITheme.priced_button("Claim", gold, "LightButton", "Hand this in for %s gold%s%s"
+			action = UITheme.priced_button("Claim", gold, "SmallGoButton", "Hand this in for %s gold%s%s"
 					% [BigNumber.format(gold), "" if xp == 0 else ", %d experience" % xp,
 						"" if prize.is_empty() else " and " + prize], false)
 			# A promised piece has to go in the bag, which the vendor's own rule refuses on a full one.
@@ -664,27 +747,38 @@ func _on_reroll_pressed() -> void:
 ## grey is in that button's tooltip and nowhere else on the page.
 func _fill_smith() -> void:
 	if not _smith_note.is_empty():
-		_rows.add_child(_sign(_smith_note, Palette.RUST))
+		_rows.add_child(_sign(_smith_note, Palette.BRICK))
 	if _bag_piece == null:
 		_rows.add_child(_sign("Open a piece you are carrying or wearing and he will work on it."))
 		return
-	_rows.add_child(ItemDetails.line(_bag_piece.display_name(), _bag_piece.text_color(), BODY_WIDTH))
-	# Air that takes the slack, so the buttons stand at the page's foot as every counter's do.
-	var slack := Control.new()
-	slack.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_rows.add_child(slack)
+	# The piece on the anvil, written out as an offer is: what an upgrade rolls again is its modifiers,
+	# so they are what is worth reading while the hammer is up -- and watching them change after a blow
+	# is the whole of what the blow bought. It scrolls; the buttons stay pinned at the foot.
+	var body := _scrolled(ROW_GAP)
+	var square := ItemSlot.make(_bag_piece)
+	square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	body.add_child(square)
+	var details := UITheme.vbox(2, BODY_WIDTH)
+	body.add_child(details)
+	ItemDetails.fill(details, _bag_piece, BODY_WIDTH)
 	var cap := _upgrade_cap()
 	var up_price := TownPrices.upgrade_price(_bag_piece)
 	var up_why := _smith_why_not(Blacksmith.why_not_upgrade(_bag_piece, cap), up_price)
+	# What the press would buy and what it risks, over the button, and only while it can be pressed:
+	# the level it goes from and to on the left, the risk on the right in the colour a loss is.
+	if up_why.is_empty():
+		var odds := HBoxContainer.new()
+		var step := UITheme.label("Level %d → %d of %d" % [_bag_piece.level, _bag_piece.level + 1, cap],
+				Palette.TEXT_SOFT, true)
+		step.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		odds.add_child(step)
+		var risk := Blacksmith.break_chance(_bag_piece)
+		odds.add_child(UITheme.label("Break %d%%" % roundi(risk * 100.0), Palette.BRICK, true) if risk > 0.0
+				else UITheme.label("Safe", Palette.LEAF, true))
+		_rows.add_child(odds)
 	_rows.add_child(_smith_button("Upgrade", up_price, up_why,
 			"Take this to level %d for %s gold. Its modifiers are rolled again at that level, except any he has locked"
-			% [_bag_piece.level + 1, BigNumber.format(up_price)], _on_upgrade_pressed))
-	# What the press would buy and what it risks, and only while it can be pressed.
-	if up_why.is_empty():
-		var risk := Blacksmith.break_chance(_bag_piece)
-		_rows.add_child(_sign("Level %d of %d. %s" % [_bag_piece.level + 1, cap,
-				"%d%% to break." % roundi(risk * 100.0) if risk > 0.0
-				else "Cannot break until level %d." % _bag_piece.safe_level], Palette.TEXT_SOFT))
+			% [_bag_piece.level + 1, BigNumber.format(up_price)], _on_upgrade_pressed, UITheme.GO_BUTTON))
 	var lock_price := TownPrices.lock_price(_bag_piece)
 	var lock_why := _smith_why_not(Blacksmith.why_not_lock(_bag_piece), lock_price)
 	_rows.add_child(_smith_button("Lock", lock_price, lock_why,
@@ -695,95 +789,217 @@ func _fill_smith() -> void:
 ## One of the smith's two, with the coin and the price on it the way a Buy carries them, and the
 ## reason in its tooltip when it is dead.
 func _smith_button(text: String, price: float, refused: String, tooltip: String,
-		action: Callable) -> Button:
-	var button := _priced_button(text, price, refused, tooltip, action)
+		action: Callable, variation := "LightButton") -> Button:
+	var button := UITheme.priced_button(text, price, variation,
+			refused if not refused.is_empty() else tooltip)
+	button.disabled = not refused.is_empty()
+	button.pressed.connect(action)
 	if refused.is_empty():
 		Cursors.wear(button, Cursors.HAMMER)
 	return button
 
 
-## `UITheme.priced_button` wired up: dead with the reason in its tooltip when `refused` says one.
-func _priced_button(text: String, price: float, refused: String, tooltip: String,
-		action: Callable, figure := true) -> Button:
-	var button := UITheme.priced_button(text, price, "LightButton",
-			refused if not refused.is_empty() else tooltip, figure)
-	button.disabled = not refused.is_empty()
-	button.pressed.connect(action)
-	return button
-
-
-## The fortuneteller's table: what she can be asked, each with its price -- or, once one has been
-## paid for, what she said, with the arrow back to the list under it the way an open shelf piece has.
-## The star and the bounty's land are not said here: one is on the map and the other on the card.
+## The fortuneteller's table: what she can be asked, each with its price, and under it one line naming
+## the last spell cast whose answer the player said not to show again. Her answers are popups (`_tell`),
+## and so is the way out's question (`_ask_way_out`).
 func _fill_fortune() -> void:
 	var body := _scrolled(ROW_GAP)
-	if _said.is_empty():
-		# Her spells on the shelf's own grid, each with its price under it: what she sells is bought
-		# the way everything else in a town is, and words in a column read as a menu rather than a shop.
-		# Two grids, because her list is in two halves and which half a spell is in is its whole rule:
-		# a reading is asked again for double, a great spell is one a settlement. The heading says
-		# which is which; why a square is dead is still only ever in its tooltip.
-		body.add_child(_spell_grid(FORTUNE_HEADINGS["common"], FortuneTeller.COMMON))
-		body.add_child(_spell_grid(FORTUNE_HEADINGS["great"], FortuneTeller.GREAT))
-		# The way out is not on her grid until a wall has fallen: there is nothing yet to take along.
-		# It keeps its word and the full width under the six -- it is not a spell, and a square beside
-		# them would read as one. The coin and no figure, as Claim has it: six figures beside that word
-		# widen the page into the panel beside it. She says the price when asked.
-		if view != null and view.walls_fallen() > 0:
-			var out_of_here := _priced_button(FortuneTeller.LABELS[FortuneTeller.TRANSCEND],
-					_fortune_price(FortuneTeller.TRANSCEND), _fortune_why_not(FortuneTeller.TRANSCEND),
-					FORTUNE_TIPS[FortuneTeller.TRANSCEND],
-					_on_reading_pressed.bind(FortuneTeller.TRANSCEND), false)
-			out_of_here.custom_minimum_size.x = BODY_WIDTH
-			body.add_child(out_of_here)
+	# Her spells on the shelf's own grid, each with its price under it: what she sells is bought the way
+	# everything else in a town is, and words in a column read as a menu rather than a shop. Two grids,
+	# because her list is in two halves and which half a spell is in is its whole rule: a reading is
+	# asked again for double, a great spell is one a settlement. Why a square is dead is only ever in
+	# its tooltip.
+	body.add_child(_spell_grid(FORTUNE_HEADINGS["common"], FortuneTeller.COMMON))
+	# The way out stands with the great spells, as a square of its own, once a wall has fallen: before
+	# that there is nothing yet to take along (the user, 2026-09-25, in place of a full-width button).
+	var great: Array = FortuneTeller.GREAT.duplicate()
+	if view != null and view.walls_fallen() > 0:
+		great.append(FortuneTeller.TRANSCEND)
+	body.add_child(_spell_grid(FORTUNE_HEADINGS["great"], great))
+	if not _cast.is_empty():
+		_rows.add_child(_sign("You cast %s." % FortuneTeller.LABELS[_cast], Palette.TEXT_SOFT))
+
+
+## What she said, over the whole window as the bag's questions are (`BagPage._ask`): a titled panel
+## with the reading's name on its bar, the answer in a scroll, and Dismiss and "Don't show this again"
+## under it, in reach from the moment it opens however long the answer is. A ticked Dismiss writes
+## `SKIP_TOLD + reading` into `inventory.tips`, and from then on that reading answers with one line on
+## the page instead (`_cast`). The appraisal offers no tick: its table is the whole of what was bought.
+func _tell(reading: String) -> void:
+	_close_told()
+	# The relic has no popup: it is shown on the unique's own banner (`relic_shown`).
+	if reading == FortuneTeller.RELIC:
+		relic_shown.emit(_relic)
 		return
-	match _said:
-		FortuneTeller.ROADS:
-			for line in FortuneTeller.road_lines(view.towns, _spot):
-				body.add_child(_sign(line))
-			body.add_child(_sign("%d more settlements in this ring come out of the dark." % _revealed
-					if _revealed > 0 else "Every settlement in this ring is already known."))
-		FortuneTeller.RELIC:
-			CollectionPage.write_hint(body, BODY_WIDTH, _relic, view, CollectionPage.specimen(_relic))
-		FortuneTeller.APPRAISE:
-			body.add_child(ItemDetails.line(_bag_piece.display_name(), _bag_piece.text_color(), BODY_WIDTH))
-			body.add_child(UITheme.rule(BODY_WIDTH))
-			# Its own box: the scroll's row gap would pull the table's stripes apart.
-			var table := UITheme.vbox(0)
-			body.add_child(table)
-			for row in FortuneTeller.odds(_bag_piece):
-				table.add_child(_odds_row(row, table.get_child_count() % 2 == 1))
-		FortuneTeller.TRANSCEND:
-			for line: String in TRANSCEND_LINES:
-				body.add_child(_sign(line))
-			body.add_child(_sign("She asks %s gold." % BigNumber.format(_fortune_price(_said)), Palette.TEXT_SOFT))
-	var back := UITheme.back_button("Back to what she can be asked")
-	back.pressed.connect(_on_reading_closed)
-	if _said != FortuneTeller.TRANSCEND:
-		_rows.add_child(back)
+	var can_skip := reading != FortuneTeller.APPRAISE
+	if can_skip and SKIP_TOLD + reading in inventory.tips:
+		_cast = reading
 		return
-	# The question's two answers in one row at the foot, the way an open shelf piece has Back and Buy.
+	_cast = ""
+	var body := _open_told(FortuneTeller.LABELS[reading])
+	_answer(reading, _told_scroll.get_child(0))
+
+	var dismiss := UITheme.button("Dismiss", "LightButton", "")
+	dismiss.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	body.add_child(dismiss)
+	var skip := BagPage.check_box("Don't show this again")
+	skip.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	skip.visible = can_skip
+	body.add_child(skip)
+	dismiss.pressed.connect(func() -> void:
+		if (skip.get_node(BagPage.TICK_NAME) as Button).button_pressed:
+			inventory.tips.append(SKIP_TOLD + reading)
+			inventory.save(_save_path)
+		_leave_told())
+	# A reading is something bought, so it comes up as a reward does: the wash and the sparks.
+	_show_told(true)
+
+
+## One of her popups, empty: a holder over the whole window, a titled panel with no X -- like a reward's,
+## its way out is at its foot (and Escape) -- and a scroll in `_told_scroll` for what she says. Returns
+## the body, for the buttons that go under the scroll.
+func _open_told(title: String) -> VBoxContainer:
+	_close_told()
+	_told = Control.new()
+	_told.size = get_viewport_rect().size
+	add_child(_told)
+	var panel := UITheme.titled_panel(title, "", Callable())
+	panel.name = TOLD_PANEL
+	_told.add_child(panel)
+	var body := UITheme.body_of(panel)
+	_told_scroll = UITheme.scroll()
+	body.add_child(_told_scroll)
+	_told_scroll.add_child(UITheme.vbox(ROW_GAP, TOLD_WIDTH))
+	return body
+
+
+## Brings the popup `_open_told` built up, the rewards' way.
+func _show_told(win: bool) -> void:
+	Juice.popup(_told, _told.get_node(TOLD_PANEL), _ui_scale, win)
+	# Twice: a wrapped label only knows how tall it is once it has been laid out once.
+	_place_told()
+	_place_told.call_deferred()
+
+
+## The way out, asked before it is done: what is lost and what it costs, over Cancel and Transcend. The
+## price is only on the square that brought the player here and in the sentence; the button carries the
+## coin and no figure, as Claim does. A short purse greys the deed, never the asking.
+func _ask_way_out() -> void:
+	var body := _open_told(FortuneTeller.LABELS[FortuneTeller.TRANSCEND])
+	var lines: VBoxContainer = _told_scroll.get_child(0)
+	for line: String in TRANSCEND_LINES:
+		lines.add_child(BountyList.wrapped(line, TOLD_WIDTH))
+	var price := _fortune_price(FortuneTeller.TRANSCEND)
+	lines.add_child(BountyList.wrapped("She asks %s gold." % BigNumber.format(price), TOLD_WIDTH,
+			Palette.TEXT_SOFT))
 	var answers := HBoxContainer.new()
-	answers.add_child(back)
-	# The coin and no figure, as Claim has it: the price was on the button that brought the player
-	# here, and six figures beside the arrow would widen the page into the panel beside it.
-	var price := _fortune_price(_said)
+	answers.add_theme_constant_override("separation", ROW_GAP)
+	body.add_child(answers)
+	var cancel := UITheme.button("Cancel", "LightButton", "Stay in this world")
+	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cancel.pressed.connect(_leave_told)
+	answers.add_child(cancel)
 	var refused := _why_not(price, false)
 	var leave := UITheme.priced_button("Transcend", price, "LightButton", refused if not refused.is_empty()
 			else "Leave this world for %s gold" % BigNumber.format(price), false)
 	leave.disabled = not refused.is_empty()
-	leave.pressed.connect(transcend_pressed.emit)
 	leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	leave.pressed.connect(func() -> void:
+		_close_told()
+		transcend_pressed.emit())
 	answers.add_child(leave)
-	_rows.add_child(answers)
+	_show_told(false)
+
+
+## Her answer to `reading`, written into `lines`.
+func _answer(reading: String, lines: VBoxContainer) -> void:
+	match reading:
+		FortuneTeller.ROADS:
+			# That they are all on the map, and no more: where each one lies is the map's to show.
+			lines.add_child(BountyList.wrapped("Every settlement between these walls is now on your map.",
+					TOLD_WIDTH))
+		FortuneTeller.TREASURE:
+			lines.add_child(BountyList.wrapped("A star now stands over the nearest chest you have not seen.",
+					TOLD_WIDTH))
+			lines.add_child(BountyList.wrapped("It stays until that chest is opened.", TOLD_WIDTH,
+					Palette.TEXT_SOFT))
+		FortuneTeller.QUARRY:
+			# The monster as its card draws it, the land it lives on as the tile panel's swatches and
+			# the nearest piece of that land seen so far: what the bounty card says from now on.
+			var bounty := BountyBoard.active(inventory.towns)
+			var enemy := str(bounty.get(BountyBoard.ENEMY, ""))
+			var elite := EnemyRoster.ENEMIES.has(enemy) and EnemyRoster.tier_of(enemy) == EnemyRoster.Tier.ELITE
+			var face := BountyList.portrait_box(enemy, BountyList.CARD_PORTRAIT,
+					ItemRarity.frame(ItemRarity.Rarity.ELITE) if elite else null)
+			face.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			lines.add_child(face)
+			lines.add_child(BountyList.wrapped("The %s lives on:" % enemy, TOLD_WIDTH))
+			var envs := EnemyRoster.environments_of(enemy)
+			var swatches := HBoxContainer.new()
+			swatches.add_theme_constant_override("separation", 2)
+			swatches.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			for env: String in envs:
+				swatches.add_child(view.map.tileset.env_icon(env))
+			lines.add_child(swatches)
+			var near := view.nearest_env(envs, int(bounty.get(BountyBoard.LEVEL, 0)))
+			lines.add_child(BountyList.wrapped("Nearest: %s" % (view.name_of(near) if near != HexMap.NO_CELL
+					else "none you have seen yet."), TOLD_WIDTH, Palette.TEXT_SOFT))
+		FortuneTeller.APPRAISE:
+			lines.add_child(ItemDetails.line(_bag_piece.display_name(), _bag_piece.text_color(), TOLD_WIDTH))
+			# What the table is, since a column of lines and percentages says nothing on its own: the
+			# base's whole pool, not what this piece has.
+			lines.add_child(BountyList.wrapped("Every modifier a %s can roll" % _bag_piece.type, TOLD_WIDTH,
+					Palette.TEXT_SOFT))
+			lines.add_child(UITheme.rule(TOLD_WIDTH))
+			# Its own box: the answer's row gap would pull the table's stripes apart.
+			var table := UITheme.vbox(0)
+			lines.add_child(table)
+			for row in FortuneTeller.odds(_bag_piece):
+				table.add_child(_odds_row(row, table.get_child_count() % 2 == 1, TOLD_WIDTH))
+
+
+## Her answer's scroll, as tall as the answer or as what the window leaves; `Juice.popup` keeps it centred.
+func _place_told() -> void:
+	if _told == null:
+		return
+	var view_size := get_viewport_rect().size
+	_told.size = view_size
+	var lines: Control = _told_scroll.get_child(0)
+	_told_scroll.custom_minimum_size.y = minf(lines.get_combined_minimum_size().y,
+			view_size.y / _ui_scale - TOLD_CHROME)
+
+
+## Dismiss and Escape: the answer shrinks away, then goes. It is let go of at once, so the page under
+## it can be pressed again the moment it starts to leave.
+func _leave_told() -> void:
+	if _told == null:
+		return
+	var holder := _told
+	_told = null
+	_told_scroll = null
+	Juice.pop_out(holder.get_node(TOLD_PANEL), holder.queue_free)
+
+
+## Gone at once, with no shrink: a new town, another counter, or another answer taking its place.
+func _close_told() -> void:
+	if _told != null:
+		remove_child(_told)
+		_told.queue_free()
+		_told = null
+		_told_scroll = null
+
+
+## Escape on her answer is its Dismiss, reading no tick, and the press stops here: the town stays up.
+func _unhandled_input(event: InputEvent) -> void:
+	if _told != null and is_visible_in_tree() and event.is_action_pressed("ui_cancel"):
+		get_viewport().set_input_as_handled()
+		_leave_told()
 
 
 ## One half of her list: a heading, a rule under it and that half's squares on the shelf's own grid.
 func _spell_grid(heading: String, readings: Array) -> VBoxContainer:
 	var box := UITheme.vbox(ROW_GAP, BODY_WIDTH)
-	# A bare heading, the way a vendor's "Buy" is: a rule under each of the two would cost the page
-	# the row its second grid's prices need.
-	box.add_child(UITheme.label(heading))
+	box.add_child(_section(heading))
 	var grid := GridContainer.new()
 	grid.columns = STOCK_COLS
 	grid.add_theme_constant_override("h_separation", STOCK_GAP)
@@ -794,25 +1010,12 @@ func _spell_grid(heading: String, readings: Array) -> VBoxContainer:
 	return box
 
 
-## One reading on her grid: its name over its mark, lit by a halo while the cursor is on it, and what
-## she will not read greyed and dead with the reason in its tooltip -- the shelf's rule, where a piece
-## the purse cannot cover greys where it stands. `_price_cell` puts the price under what this returns.
+## One reading on her grid: its mark, lit by a halo while the cursor is on it, and what she will not
+## read greyed and dead with the reason in its tooltip -- the shelf's rule, where a piece the purse
+## cannot cover greys where it stands. `_price_cell` puts the price under what this returns. No name
+## over it (the user's call, 2026-09-25): the badges carry the spell, and the name leads the tooltip.
 func _spell_square(reading: String) -> Control:
 	var refused := _fortune_why_not(reading)
-	var cell := UITheme.vbox(2, STOCK_CELL)
-	# The name over the mark, in the body font so the longest of them fits a shelf square's width:
-	# the art is a placeholder and says nothing on its own, and six pictures whose words are only in
-	# their tooltips are six questions -- which is the shelf's own reason for writing its prices out.
-	# A refused reading keeps its name in full: what it is has not changed, only whether she will read it.
-	var title := UITheme.label(FortuneTeller.LABELS[reading], null, true)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	# Clipped rather than allowed to push, as a shelf price is: a name wider than its square would
-	# widen the whole column, and through the grid the page, into the panel beside it.
-	title.clip_text = true
-	title.custom_minimum_size.x = STOCK_CELL
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	cell.add_child(title)
-
 	# A Panel rather than the mark itself, because what the hover lights is a stylebox: the mark is
 	# its child and fills it.
 	var square := Panel.new()
@@ -821,13 +1024,10 @@ func _spell_square(reading: String) -> Control:
 	square.custom_minimum_size = Vector2(SPELL_SIDE, SPELL_SIDE)
 	square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	square.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
-	# What a reading is, and -- once it has been asked for -- how often, which is the whole of why the
-	# price under it is not the one the player remembers paying.
-	var tip: String = FORTUNE_TIPS[reading]
-	var times := FortuneTeller.cast(inventory.fortunes, reading)
-	if times > 0:
-		tip += ". Asked %d time%s" % [times, "" if times == 1 else "s"]
-	square.tooltip_text = refused if not refused.is_empty() else tip
+	# What a reading is, under its name. Not how often it has been asked (the user's call, 2026-09-25):
+	# the price under it already says it has climbed.
+	square.tooltip_text = "%s: %s" % [FortuneTeller.LABELS[reading],
+			refused if not refused.is_empty() else FORTUNE_TIPS[reading]]
 	var icon := TextureRect.new()
 	# Mode before texture and size, for the reason `_price_cell`'s coin gives: a TextureRect's minimum
 	# is its own texture until `expand_mode` says otherwise.
@@ -838,13 +1038,10 @@ func _spell_square(reading: String) -> Control:
 	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	square.add_child(icon)
-	cell.add_child(square)
 	if not refused.is_empty():
-		# OrbSlot's grey, so "you could, and cannot now" reads the same here as on the orb tray. On
-		# the square alone: the name above it stays lit, since a spell nobody can cast is still a
-		# spell the player is reading about.
+		# OrbSlot's grey, so "you could, and cannot now" reads the same here as on the orb tray.
 		square.modulate = OrbSlot.DIM
-		return cell
+		return square
 	Cursors.wear(square, Cursors.HAND)
 	var glow := StyleBoxFlat.new()
 	glow.bg_color = HOVER_GLOW_COLOR
@@ -859,13 +1056,13 @@ func _spell_square(reading: String) -> Control:
 		if (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT
 				and event.pressed):
 			_on_reading_pressed(reading))
-	return cell
+	return square
 
 
 ## One modifier she read off a piece: the line with its band on the left, how often it comes up on the right.
-func _odds_row(row: Dictionary, striped: bool) -> PanelContainer:
+func _odds_row(row: Dictionary, striped: bool, width: float) -> PanelContainer:
 	var line := UITheme.table_row(str(row["line"]), "%.1f%%" % float(row["share"]), striped,
-			BODY_WIDTH, null, Palette.TEXT_SOFT)
+			width, null, Palette.TEXT_SOFT)
 	var share: Label = line.find_child(UITheme.TABLE_VALUE, true, false)
 	share.tooltip_text = "Weight %d" % int(row["weight"])
 	share.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -914,8 +1111,8 @@ func _fortune_why_not(reading: String) -> String:
 			if view.homes().is_empty():
 				return "You have found nowhere else to stand."
 		FortuneTeller.TRANSCEND:
-			# Asking is free and is where the price is said; the button under her answer is what a
-			# short purse greys.
+			# Asking is free and is where the price is said; the Transcend in her question is what a
+			# short purse greys, and the price under the square is brick.
 			return ""
 	return _why_not(_fortune_price(reading), false)
 
@@ -931,9 +1128,7 @@ func _on_reading_pressed(reading: String) -> void:
 		return
 	# Asked for, not done: she says what it costs the player first, and the button under that is the deed.
 	if reading == FortuneTeller.TRANSCEND:
-		_said = reading
-		_fill()
-		layout()
+		_ask_way_out()
 		return
 	inventory.gold -= price
 	# A reading's count is what doubles its price, and only a paid telling moves it: the roads told
@@ -945,10 +1140,8 @@ func _on_reading_pressed(reading: String) -> void:
 			# The one drawer key a reading still writes, and it means the opposite of a great spell's:
 			# this town has paid for the roads, so it tells them again for nothing from now on.
 			_drawer[FortuneTeller.ASKED + reading] = true
-			_revealed = view.reveal_ring_towns(_cell)
-			if _revealed > 0:
+			if view.reveal_ring_towns(_cell) > 0:
 				towns_revealed.emit()
-			_said = reading
 		FortuneTeller.TREASURE:
 			var spot := view.origin + _near_chest
 			inventory.fortunes[FortuneTeller.CHEST] = [spot.x, spot.y]
@@ -960,26 +1153,13 @@ func _on_reading_pressed(reading: String) -> void:
 			_relic = FortuneTeller.peek(inventory.uniques_found, shown, _stock_rng)
 			shown.append(_relic)
 			inventory.fortunes[FortuneTeller.PEEKED] = shown
-			relic_shown.emit(_relic)
-			_said = reading
-		FortuneTeller.APPRAISE:
-			_said = reading
 	print("The fortuneteller read %s for %s gold" % [reading, BigNumber.format(price)])
 	inventory.save(_save_path)
-	# The land is said on the bounty's own card, so that is where the player is taken to read it.
-	if reading == FortuneTeller.QUARRY:
-		_on_tab_pressed(TownServices.BOUNTIES)
-		return
+	_tell(reading)
 	_fill()
 	layout()
 	# Nothing is open, but the bag still has to hear: the purse it draws has just moved.
 	offer_changed.emit(null)
-
-
-func _on_reading_closed() -> void:
-	_said = ""
-	_fill()
-	layout()
 
 
 ## The smith's own refusal, or the one the page owns: a purse that cannot pay. Carried or worn is all
@@ -1136,7 +1316,8 @@ func _on_upscale(orb: String) -> void:
 func _on_tab_pressed(service: String) -> void:
 	_open_tab = service
 	_smith_note = ""
-	_said = ""
+	_cast = ""
+	_close_told()
 	_close_offer(true)
 	tab_changed.emit(service)
 

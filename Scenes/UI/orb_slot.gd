@@ -50,11 +50,13 @@ var _live := false
 ## Draws this orb held `count` times. `usable` is whether it can do anything to whatever the bag has
 ## open -- with nothing open every held orb is usable, which is the tray at rest.
 ## `armed` is the orb the bag is holding over the grid: its socket stays as dark as an open square's.
-func setup(which: String, count: int, usable: bool, armed := false) -> void:
+## `side` is the square's: `SIDE` in the tray, `ItemSlot.SIDE` on a vendor's shelf, where the orb stands
+## among pieces -- the icon keeps the tray's margin, so at 40 it is drawn at its own 32.
+func setup(which: String, count: int, usable: bool, armed := false, side := SIDE) -> void:
 	orb = which
 	_live = count > 0 and usable
 	Cursors.wear(self, Cursors.HAND if _live else Cursors.ARROW)
-	custom_minimum_size = Vector2(SIDE, SIDE)
+	custom_minimum_size = Vector2(side, side)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	# The socket an item square uses, so the tray reads as part of the same bag rather than as a
 	# second interface pinned under it. No rarity ring: an orb has no rarity, and borrowing common's
@@ -75,10 +77,11 @@ func setup(which: String, count: int, usable: bool, armed := false) -> void:
 	_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_icon.texture = SuperOrbTable.icon(which) if SuperOrbTable.has(which) else OrbTable.icon(which)
-	_icon.custom_minimum_size = Vector2(ICON, ICON)
-	_icon.size = Vector2(ICON, ICON)
+	var icon := side - (SIDE - ICON)
+	_icon.custom_minimum_size = Vector2(icon, icon)
+	_icon.size = Vector2(icon, icon)
 	_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_icon.position = Vector2(SIDE - ICON, SIDE - ICON) / 2.0
+	_icon.position = Vector2(side - icon, side - icon) / 2.0
 	if count <= 0:
 		_icon.modulate = Color(1, 1, 1, ItemSlot.EMPTY_MARK_ALPHA)
 	elif not usable:
@@ -133,7 +136,7 @@ static func count_label(text: String) -> Label:
 	return tally
 
 
-static func make(which: String, count: int, usable: bool, armed := false) -> OrbSlot:
+static func make(which: String, count: int, usable: bool, armed := false, side := SIDE) -> OrbSlot:
 	var slot := OrbSlot.new()
-	slot.setup(which, count, usable, armed)
+	slot.setup(which, count, usable, armed, side)
 	return slot
