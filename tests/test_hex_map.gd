@@ -19,6 +19,7 @@ func _run() -> void:
 	_check(_test_mouse(map) == true, "mouse tests ran to the end")
 	_check(_test_player(map) == true, "player token tests ran to the end")
 	_check(_test_fog(map) == true, "fog tests ran to the end")
+	_check(_test_ice_sheets(map.tileset) == true, "ice sheet tests ran to the end")
 	# The idle animation runs on its own; give it long enough to leave the frame it started on.
 	map.set_player_cell(Vector2i.ZERO)
 	var first_frame := map.player.frame
@@ -26,6 +27,35 @@ func _run() -> void:
 	_check(map.player.frame != first_frame, "the idle animation advances by itself")
 
 	_report("hex map")
+
+
+## IceOverlay's constants against the sheets build_ice.py wrote: a mismatch draws the wrong cell, not an error.
+func _test_ice_sheets(tileset: HexTileset) -> bool:
+	var size := tileset.tile_size
+	var waste := IceOverlay.WASTE.get_image()
+	_check(waste.get_size() == size * Vector2i(IceOverlay.WASTE_COLS, IceOverlay.WASTE_ROWS),
+			"the snow sheet is WASTE_COLS x WASTE_ROWS tiles")
+	_check(IceOverlay.ACCENTS.get_size() == Vector2(size * Vector2i(IceOverlay.ACCENT_KINDS, IceOverlay.ACCENT_VERSIONS)),
+			"the accent sheet is ACCENT_KINDS x ACCENT_VERSIONS tiles")
+	_check(IceOverlay.BAND.get_size() == Vector2(size * Vector2i(8 * IceOverlay.BAND_VERSIONS, 8)),
+			"the band sheet is 8 masks x 8, BAND_VERSIONS times over")
+	# The middle of a tile: every cell the overlay can ask for must have something drawn there.
+	var middle := size / 2
+	for col in IceOverlay.WASTE_COLS:
+		for row in IceOverlay.WASTE_ROWS:
+			_check(waste.get_pixelv(Vector2i(col, row) * size + middle).a > 0, "snow tile %d,%d is drawn" % [col, row])
+	var spill := IceOverlay.SPILL.get_image()
+	for mask in range(1, 64):
+		var cell := Vector2i(mask % 8, mask / 8) * size
+		var edge: int = HexGrid.mask_edges(mask)[0]
+		var at_edge := Vector2(cell + middle) + (EDGE_OFFSETS[edge] as Vector2) * 0.45
+		_check(spill.get_pixelv(Vector2i(at_edge)).a > 0, "the spill for mask %d covers its seam" % mask)
+	var band := IceOverlay.BAND.get_image()
+	for version in IceOverlay.BAND_VERSIONS:
+		for mask in [9, 18, 36, 5, 10, 20, 40, 17, 34]:  # opposite edges, and two apart: a ring's turns
+			var cell := Vector2i(mask % 8 + 8 * version, mask / 8) * size
+			_check(band.get_pixelv(cell + middle).a > 0, "band %d version %d is drawn" % [mask, version])
+	return true
 
 
 func _test_tileset(tileset: HexTileset) -> bool:

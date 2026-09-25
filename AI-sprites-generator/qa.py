@@ -902,8 +902,42 @@ def audit(*_):
     print("piece problems:", bad)
 
 
+def icewall(tag):
+    """The wall ring round a patch of land with wasteland past it, and the wasteland block on its own."""
+    from ice_wall import ACCENT_CHANCE, ACCENTS, VARIANTS as IV, WASTE_COLS, WASTE_ROWS, accent, snow_spill, wall_band, waste
+    from terrain import ENVS, VARIANTS
+    wastes = {(c, r): waste(c, r) for c in range(WASTE_COLS) for r in range(WASTE_ROWS)}
+    accents = [accent(a) for a in ACCENTS]
+    print("spill/holes:", containment(list(wastes.values())), containment(accents, solid=False))
+    envs = {e: [ENVS[e](v) for v in VARIANTS[:3]] for e in ("grass", "mountains", "ice")}
+    rows, cols, centre = 13, 15, (6, 7)
+
+    def ring(r, c):
+        q = lambda r, c: (c - (r - (r & 1)) // 2, r)
+        (q1, r1), (q0, r0) = q(r, c), q(*centre)
+        dq, dr = q1 - q0, r1 - r0
+        return (abs(dq) + abs(dr) + abs(dq + dr)) // 2
+
+    def cell(r, c, rng):
+        d = ring(r, c)
+        if d < 4:
+            env = "mountains" if c < 6 and r < 7 else "ice" if c > 8 else "grass"
+            touching = tuple(e for e in range(6) if ring(*neighbor(r, c, e)) >= 4)
+            return [rng.choice(envs[env])] + ([snow_spill(touching)] if touching else [])
+        out = [wastes[(c % WASTE_COLS, r % WASTE_ROWS)]]
+        if d == 4:
+            out.append(wall_band(tuple(e for e in range(6) if ring(*neighbor(r, c, e)) == 4), rng.choice(IV)))
+        elif rng.random() < ACCENT_CHANCE:
+            out.append(rng.choice(accents))
+        return out
+    tiled_map([cell], f"qa/icewall_band_{tag}.png", cols=cols, rows=rows, scale=2, seed=3)
+    tiled_map([lambda r, c, _: [wastes[(c % WASTE_COLS, r % WASTE_ROWS)]]], f"qa/icewall_waste_{tag}.png",
+              cols=WASTE_COLS * 2, rows=WASTE_ROWS * 2, scale=2)
+    contact_sheet(accents,
+                  f"qa/icewall_sheet_{tag}.png", cols=7, scale=3, bg=(232, 245, 251, 255))
+
 if __name__ == "__main__":
     {"phase1": phase1, "phase2": phase2, "phase3": phase3, "showcase": showcase,
      "blends": blends, "ui": ui, "slimes": slimes, "hpbar": hpbar, "gear": gear,
-     "areas": areas,
+     "areas": areas, "icewall": icewall,
      "frozen": frozen, "audit": audit}[sys.argv[1]](*sys.argv[2:])

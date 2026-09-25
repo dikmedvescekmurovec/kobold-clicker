@@ -222,7 +222,7 @@ func _draw_saved() -> void:
 		map.place_ground(cell, _tiles[cell])
 		_draw_road(cell)
 		if is_wall(cell):
-			_ice.set_cell(cell, IceOverlay.Kind.WALL)
+			_ice.set_cell(cell, IceOverlay.Kind.WALL, _ring_edges(cell))
 		if _states[cell] == State.UNCHARTED:
 			map.fog.add_cell(cell)
 		_draw_chest(cell)
@@ -264,6 +264,15 @@ func _add_ice() -> void:
 ## Whether `cell` is on the ice wall, the ring just outside the land.
 func is_wall(cell: Vector2i) -> bool:
 	return HexGrid.distance(CENTER, cell) == land_radius + 1
+
+
+## A wall cell's two neighbours on its own ring, as `HexGrid.edge_mask`: where the wall's band runs.
+func _ring_edges(cell: Vector2i) -> int:
+	var mask := 0
+	for edge in HexGrid.EDGES:
+		if is_wall(HexGrid.neighbor(cell, edge)):
+			mask |= 1 << edge
+	return mask
 
 
 ## How many walls have come down in this world. What heirloom picks are paid against
@@ -661,7 +670,7 @@ func _break_wall() -> void:
 			_draw_road(cell)
 			map.fog.add_cell(cell)
 			if is_wall(cell):
-				_ice.set_cell(cell, IceOverlay.Kind.WALL)
+				_ice.set_cell(cell, IceOverlay.Kind.WALL, _ring_edges(cell))
 			_draw_chest(cell)
 
 
@@ -805,7 +814,9 @@ func _show(cell: Vector2i, to: State) -> void:
 		map.set_ground(cell, _tiles[cell])
 		_draw_road(cell)
 		if is_wall(cell):
-			_ice.set_cell(cell, IceOverlay.Kind.WALL)
+			_ice.set_cell(cell, IceOverlay.Kind.WALL, _ring_edges(cell))
+		else:
+			_ice.queue_redraw()  # land beside the ice takes the snow's drift
 	_states[cell] = to
 	if to == State.UNCHARTED:
 		map.fog.add_cell(cell)
