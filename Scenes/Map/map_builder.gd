@@ -83,6 +83,7 @@ var _states: Dictionary[Vector2i, State] = {}
 var _drawn_roads: Dictionary[Vector2i, int] = {}  # road mask each drawn cell shows, to spot the ones that change
 var _chest_sprites: Dictionary[Vector2i, Sprite2D] = {}
 var _ice: IceOverlay
+var _edge_fog: EdgeFog
 
 
 ## Generates the window and shows the starting tiles. `origin` is the world spot at the center cell (0, 0); its
@@ -213,6 +214,8 @@ func _draw_saved() -> void:
 	for cell in _states:
 		if not _tiles.has(cell):
 			continue
+		if _states[cell] != State.HIDDEN:
+			_edge_fog.add_cell(cell)
 		if is_wasteland(cell):
 			_ice.set_cell(cell, IceOverlay.Kind.WASTE)
 			continue
@@ -247,11 +250,15 @@ static func migrated_radius(states: Dictionary) -> int:
 	return START_LAND_RADIUS + WALL_STEP * falls
 
 
-## The ice over the land's edge. Made after `clear_map`, which frees whatever stands under `chests`.
+## The ice over the land's edge, and the fog lapping onto it. Made after `clear_map`, which frees
+## whatever stands under `chests`.
 func _add_ice() -> void:
 	_ice = IceOverlay.new(map)
 	_ice.name = "Ice"
 	map.chests.add_child(_ice)
+	_edge_fog = EdgeFog.new(map)
+	_edge_fog.name = "EdgeFog"
+	map.chests.add_child(_edge_fog)
 
 
 ## Whether `cell` is on the ice wall, the ring just outside the land.
@@ -788,6 +795,7 @@ func _show(cell: Vector2i, to: State) -> void:
 	# Named the moment it is first drawn, uncharted or not: seeing a place is meeting it, and a
 	# tile the player has been looking at for an hour should not be nameless when they walk in.
 	name_of(cell)
+	_edge_fog.add_cell(cell)
 	if is_wasteland(cell):
 		# Snow and nothing under it: the land out there is not the player's to see until the wall falls.
 		_states[cell] = to

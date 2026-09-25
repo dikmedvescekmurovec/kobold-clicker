@@ -14,6 +14,9 @@ signal cell_aimed(cell: Vector2i)
 const NO_CELL := Vector2i(-99999, -99999)
 ## A press that travels further than this many pixels drags the map instead of selecting a tile.
 const DRAG_THRESHOLD := 6.0
+const BACKDROP_SHADER := preload("res://Scenes/Map/backdrop.gdshader")
+## How far the backdrop reaches from cell (0, 0) each way, in world pixels: past anywhere the camera can go.
+const BACKDROP_REACH := 50000.0
 
 var tileset: HexTileset
 var hovered_cell := NO_CELL
@@ -66,6 +69,16 @@ func _ready() -> void:
 		move_child(layer, road_layer.get_index())
 		blend_layers[env] = layer
 	highlight.setup(self)
+	# The dark under everything, where nothing is drawn yet: drifting cloud, far wider than any map.
+	var backdrop := Polygon2D.new()
+	backdrop.name = "Backdrop"
+	backdrop.polygon = PackedVector2Array([Vector2(-BACKDROP_REACH, -BACKDROP_REACH),
+			Vector2(BACKDROP_REACH, -BACKDROP_REACH), Vector2(BACKDROP_REACH, BACKDROP_REACH),
+			Vector2(-BACKDROP_REACH, BACKDROP_REACH)])
+	backdrop.material = ShaderMaterial.new()
+	backdrop.material.shader = BACKDROP_SHADER
+	add_child(backdrop)
+	move_child(backdrop, 0)
 	fog = FogOverlay.new()
 	fog.name = "Fog"
 	add_child(fog)
