@@ -1,6 +1,7 @@
 """QA for each phase. Usage: python qa.py <phase1|phase2|phase3|showcase|blends|ui|slimes|hpbar|gear> <tag>
 Images are written to qa/<name>_<tag>.png so every run can be viewed under a fresh filename."""
 import hashlib
+import math
 import os
 import random
 import sys
@@ -936,8 +937,133 @@ def icewall(tag):
     contact_sheet(accents,
                   f"qa/icewall_sheet_{tag}.png", cols=7, scale=3, bg=(232, 245, 251, 255))
 
+
+def towns(tag):
+    """Each settlement as the map shows it: its ground tile among its own land with the building sprite
+    over it, then the same under the fog's veil with the sprite dimmed the way HexMap draws it."""
+    from PIL import Image
+    import towns as T
+    from hexlib import H, W, in_hex
+    from preview import tile_image
+    from terrain import ENVS
+    fog, tint = (38, 33, 48, 140), (0.78, 0.76, 0.84)
+    veil = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    veil.putdata([fog if in_hex(i % W, i // W) else (0, 0, 0, 0) for i in range(W * H)])
+    spots = [(56, 0), (-56, 0), (28, 48), (-28, 48), (28, -48), (-28, -48)]
+
+    def scene(env, tile, sprite, fogged):
+        img = Image.new("RGBA", (W * 3, H + 96), (20, 20, 24, 255))
+        for (dx, dy), v in zip(spots, ("v1", "v2", "v3", "v1", "v2", "v3")):
+            img.alpha_composite(tile_image(ENVS[env](v)), (W + dx, 48 + dy))
+            if fogged:
+                img.alpha_composite(veil, (W + dx, 48 + dy))
+        img.alpha_composite(tile_image(tile), (W, 48))
+        if fogged:
+            img.alpha_composite(veil, (W, 48))
+            sprite = sprite.copy()
+            sprite.putdata([(int(r * tint[0]), int(g * tint[1]), int(b * tint[2]), a)
+                            for r, g, b, a in sprite.get_flattened_data()])
+        img.alpha_composite(sprite, (W - T.SHIFT[0], 48 - T.SHIFT[1]))
+        return img.crop((W // 2, 24, W * 5 // 2, H + 72))
+
+    shots = []
+    for env in T.ENV_ORDER:
+        for tier in T.TIERS:
+            tile, cv = T.build(env, tier)
+            sprite = Image.new("RGBA", (T.SPRITE_W, T.SPRITE_H))
+            sprite.putdata([RGBA_OF(c) for row in cv.px for c in row])
+            shots += [scene(env, tile, sprite, False), scene(env, tile, sprite, True)]
+    cw, ch = shots[0].size
+    sheet = Image.new("RGBA", ((cw + 4) * 6, (ch + 4) * 6), (20, 20, 24, 255))
+    for i, im in enumerate(shots):
+        sheet.alpha_composite(im, ((i % 6) * (cw + 4), (i // 6) * (ch + 4)))
+    sheet.resize((sheet.width * 2, sheet.height * 2), Image.NEAREST).save(f"qa/towns_{tag}.png")
+    print(f"  wrote qa/towns_{tag}.png (each settlement clear, then fogged; three tiers a row pair)")
+
+
+def caves(tag):
+    """Each ground's cave as the map shows it, on a plain tile among its own land: bare, lit by its
+    glow, lit under the fog's veil, and that ground's village beside it for scale. One ground a row.
+    The glow is `Scenes/Map/cave_glow.gdshader`'s arithmetic done here at one moment, mid-breath: the
+    game's breathes and flickers, which a still cannot."""
+    from PIL import Image
+    import caves as CV
+    import towns as T
+    from hexlib import H, W, in_hex
+    from preview import tile_image
+    from terrain import ENVS
+    fog, tint = (38, 33, 48, 140), (0.78, 0.76, 0.84)
+    veil = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    veil.putdata([fog if in_hex(i % W, i // W) else (0, 0, 0, 0) for i in range(W * H)])
+    spots = [(56, 0), (-56, 0), (28, 48), (-28, 48), (28, -48), (-28, -48)]
+    glow_rgb, pool, heart, rise, plume_w, steps = (0.62, 0.07, 0.05), (24.0, 13.0), 3.0, 32.0, 15.0, 4.0
+    bayer4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
+
+    def lit(img, ox, oy, dim):
+        """Adds the glow over `img`, its origin at (ox, oy) in `img`'s pixels, as the shader does."""
+        px = img.load()
+        for ly in range(-34, 20):
+            for lx in range(-32, 32):
+                x, y = lx + 0.5, ly + 0.5
+                held = 1 - math.hypot(x / pool[0], (y - heart) / pool[1])
+                up = min(max(-y / rise, 0), 1)
+                wide = plume_w * (1 - up * 0.7)
+                plume = (1 - up) * (1 - abs(x) / wide) * 0.85 if y < 0 else 0
+                light = min(max(max(held, plume), 0), 1)
+                b = bayer4[(ly % 4) * 4 + (lx % 4)] / 16 - 0.5
+                level = min(max(math.floor(light * 0.85 * 0.96 * steps + b), 0), steps)
+                if level < 0.5:
+                    continue
+                gx, gy = ox + lx, oy + ly
+                if 0 <= gx < img.width and 0 <= gy < img.height:
+                    r, g, bl, a = px[gx, gy]
+                    add = [int(255 * c * level / steps * dim) for c in glow_rgb]
+                    px[gx, gy] = (min(r + add[0], 255), min(g + add[1], 255), min(bl + add[2], 255), a)
+
+    def scene(env, tile, sprite, fogged, glow):
+        img = Image.new("RGBA", (W * 3, H + 96), (20, 20, 24, 255))
+        for (dx, dy), v in zip(spots, ("v1", "v2", "v3", "v1", "v2", "v3")):
+            img.alpha_composite(tile_image(ENVS[env](v)), (W + dx, 48 + dy))
+            if fogged:
+                img.alpha_composite(veil, (W + dx, 48 + dy))
+        img.alpha_composite(tile_image(tile), (W, 48))
+        if fogged:
+            img.alpha_composite(veil, (W, 48))
+            sprite = sprite.copy()
+            sprite.putdata([(int(r * tint[0]), int(g * tint[1]), int(b * tint[2]), a)
+                            for r, g, b, a in sprite.get_flattened_data()])
+        at = (W - T.SHIFT[0], 48 - T.SHIFT[1])
+        img.alpha_composite(sprite, at)
+        if glow:
+            lit(img, at[0] + CV.HOLE[0], at[1] + CV.HOLE[1], tint[0] if fogged else 1.0)
+        return img.crop((W // 2, 24, W * 5 // 2, H + 72))
+
+    def image(cv):
+        sprite = Image.new("RGBA", (T.SPRITE_W, T.SPRITE_H))
+        sprite.putdata([RGBA_OF(c) for row in cv.px for c in row])
+        return sprite
+
+    shots = []
+    for env in T.ENV_ORDER:
+        cave = image(CV.build(env))
+        tile, town = T.build(env, "small")
+        ground = ENVS[env]("v2")
+        shots += [scene(env, ground, cave, False, False), scene(env, ground, cave, False, True),
+                  scene(env, ground, cave, True, True), scene(env, tile, image(town), False, False)]
+    cw, ch = shots[0].size
+    sheet = Image.new("RGBA", ((cw + 4) * 4, (ch + 4) * 6), (20, 20, 24, 255))
+    for i, im in enumerate(shots):
+        sheet.alpha_composite(im, ((i % 4) * (cw + 4), (i // 4) * (ch + 4)))
+    sheet.resize((sheet.width * 2, sheet.height * 2), Image.NEAREST).save(f"qa/caves_{tag}.png")
+    print(f"  wrote qa/caves_{tag}.png (a ground a row: bare, lit, lit under the fog, and its village)")
+
+
+def RGBA_OF(c):
+    from preview import RGBA
+    return RGBA[c] if c else (0, 0, 0, 0)
+
 if __name__ == "__main__":
     {"phase1": phase1, "phase2": phase2, "phase3": phase3, "showcase": showcase,
      "blends": blends, "ui": ui, "slimes": slimes, "hpbar": hpbar, "gear": gear,
-     "areas": areas, "icewall": icewall,
+     "areas": areas, "icewall": icewall, "towns": towns, "caves": caves,
      "frozen": frozen, "audit": audit}[sys.argv[1]](*sys.argv[2:])

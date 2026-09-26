@@ -21,6 +21,7 @@ Godot skips this folder because of `.gdignore`.
 | `python qa.py phase1 <tag>` | Environments: border-match check between variants, illegal-border check, plus `qa/p1_sheet_<tag>.png` and `qa/p1_map_<tag>.png` |
 | `python qa.py phase2 <tag>` | Roads: edge-zone match check, plus sheet and random road-network map |
 | `python qa.py phase3 <tag>` | Towns: containment and border match vs `v1`, plus sheet |
+| `python qa.py towns <tag>` | Settlements as the map shows them: each ground tile among its own land with its building sprite over it, clear and under the fog, in `qa/towns_<tag>.png` |
 | `python qa.py showcase <tag>` | One map mixing all terrain, variants, roads and towns (illegal-border check included) |
 | `python qa.py blends <tag>` | Blend overlays: spill, seam coverage and seam match vs `v1`, illegal borders, plus `qa/blend_pairs_<tag>.png` (before/after for each allowed pair), `qa/blend_map_<tag>.png` and 3× zooms `qa/blend_<hi>_<lo>_<tag>.png` |
 | `python qa.py slimes <tag>` | Slimes: silhouette, palette and ramp checks, plus `qa/slimes_<tag>.png` (the baseline above all six, every frame) and `qa/slimes_ground_<tag>.png` |
@@ -33,6 +34,7 @@ Godot skips this folder because of `.gdignore`.
 | `python build.py` | Exports every hex PNG through Aseprite into `../AI-sprites/`, writes the spritesheet and JSON, then verifies each file pixel by pixel |
 | `python build_ui.py` | The same for the UI sprites, into `../AI-sprites/ui/` with its own `ui_sheet.json` |
 | `python build_areas.py` | Writes the 120 backdrops into `../Assets/Area/<env>_<variant>_<n>.png` at 4x, prunes names it no longer writes, and reads every file back to check it |
+| `python build_towns.py` | Writes the 18 settlement building sprites (84x96, RGBA) into `../Assets/Towns/` and reads every file back. No Aseprite. Run `build.py` too: the ground tiles under them are in the atlas |
 | `python build_hpbar.py` | Writes the health bar's parts loose into `../Assets/UI/` and reads every file back. No Aseprite |
 | `python build_slimes.py` | Writes the six slimes into `../Assets/Enemies/<Env> Slime/` and reads every file back to check it. No Aseprite: the source is already a PNG pack and these ship as ordinary RGBA sprites, not as part of an indexed atlas |
 
@@ -45,8 +47,8 @@ Godot skips this folder because of `.gdignore`.
 | `stamps.py` | Scatter placement, shaded domes, boulders, tufts, pebbles, lines, `seg_dist` |
 | `terrain.py` | The six environments and their six variants (`v1`-`v3`, `accent`-`accent3`; `objects=False` gives bare ground for towns), the lighting kit (`relief`, `raised`, `canopy`, `pine`, `rock`, `pond`), the `"base"` pseudo-variant, and the adjacency rules (`ADJACENT`, `can_border`, `ENV_CHAIN`) |
 | `roads.py` | Road overlays for dirt, stone and snow, with every rotation |
-| `town_parts.py` | Building and prop primitives (roofs, front walls, towers, walls, gatehouse, wells, stalls...) |
-| `towns.py` | Small, medium and fortress layouts, plus per-environment materials and landmarks |
+| `town_parts.py` | The old building and prop primitives; no hex tile uses them any more, only the backdrops' `areaplan.py` |
+| `towns.py`, `build_towns.py` | The settlements: a 3/4 building renderer (`render`, `box`, `round_part`, `curtain`, `tiered`), each environment's looks and its village, town and fortress. `build(env, tier)` gives the ground tile (atlas) and the building sprite (`sprites()`, written by `build_towns.py`) |
 | `blends.py` | Blend overlays: priority, coverage mask, fringe details per environment |
 | `preview.py`, `qa.py` | Preview images and checks |
 | `slimes.py` | The per-environment slimes: the baseline's eight colours, and the five-step `hexlib.PALETTE` body ramp each environment swaps in |
@@ -70,7 +72,7 @@ Godot skips this folder because of `.gdignore`.
 - **`"base"` pseudo-variant:** `ENVS[env]("base")` renders only the shared data, so it equals every variant's border band. Blends depend on this. Route any new per-variant data through `mix()` / `details()` so `"base"` skips it.
 - **Roads:** centerlines run through edge midpoints on the center-to-center line, so they meet exactly. Rotation `_rK` means the canonical edges turned clockwise by K×60°.
 - **Atlas layout:** groups are laid out in `build.GROUPS` order (environments, roads, towns, blends). Append new groups at the end so existing atlas coordinates don't move.
-- **Palette:** all art uses `hexlib.PALETTE` (index 0 transparent). The first 32 entries are the original set and never move -- towns, roads, slimes and the UI index them. The terrain ramps (`gr` meadow, `fo`/`co` forest, `di` earth, `st` straw, `de` sand, `sn` snow, `ro` rock, `sc` scree, `wa` water) are appended after them; each runs dark to light and shifts hue as it goes, shadows cooler, lights warmer. Append, never insert.
+- **Palette:** all art uses `hexlib.PALETTE` (index 0 transparent). The first 32 entries are the original set and never move -- towns, roads, slimes and the UI index them. The terrain ramps (`gr` meadow, `fo`/`co` forest, `di` earth, `st` straw, `de` sand, `sn` snow, `ro` rock, `sc` scree, `wa` water, and for buildings `rf` terracotta and `pl` plaster) are appended after them; each runs dark to light and shifts hue as it goes, shadows cooler, lights warmer. Append, never insert.
 - **Look:** light from the top-left, a dark outline (the ramp's darkest step, not ink) on the shaded side of objects only, no outline on terrain edges. Buildings use roofs from above plus a thin south-facing front wall.
 - **Aseprite quirk:** in Lua, `json.decode` returns floats, and `Image:drawPixel` silently writes palette index 1 for a float. `emit.lua` converts with `math.tointeger` and reads every pixel back.
 - **Build hiccup:** if `build.py` prints `Cannot save file ... in the given location` and reports a `sheet mismatch`, the spritesheet PNG was briefly locked (typically by the open Godot editor reimporting the new PNGs), and the JSON no longer matches the old sheet. Rerun `build.py` until `problems` are all zero.
@@ -81,6 +83,15 @@ Godot skips this folder because of `.gdignore`.
 - **A feature must stand off its ground.** A rock, mesa or bush in its own environment's ramp disappears -- the first sandstone mesa and the grass bushes did. Give it a ramp at least a step darker, or another hue.
 - **The shared band repeats on every tile,** so anything in it reads as a pattern across a region: the snow's wind streaks did at 3x until most of them moved into the variants' own interiors.
 - **Known limit:** peaks can only live inside the band, so a big range still shows one massif per hex.
+
+### Settlements
+- **An icon, not a street plan.** One tight cluster in the middle, a few big shapes, two tones a surface. The first pass drew lanes, fields, stalls, windows and roof courses, and on the map it read as clutter; the user asked for "less detailed and more iconic".
+- **Each environment keeps only its people's signature** from the backdrops: red gables, thatch cones under crossed poles, rammed-earth cubes with teeth, snow roofs over a warm light, tiered roofs under a gold finial, plaster blocks under a red spire.
+- **Colours come from the terrain's ramps** (plus `rf` and `pl`), never the original 32: `bone`, `brick` and `rust` are brighter and more saturated than anything on the new ground and made every settlement look pasted on.
+- **No ink outline.** An edge is the surface's own colour a step darker, on the shaded sides (right and below) and where a nearer part stands in front of a farther one; a lit side gets one only where the building would melt into the ground (a snow roof on snow). The black ring round every building was the other half of why they looked pasted on.
+- **The buildings are a sprite, not part of the tile.** Inside the tile a town could only be about 35 px wide and sat under the fog's veil, and on the map it hid (the user: "a bit hidden, make them pop"). The tile now holds only the ground -- clearing, plate, shadows, halo -- and the buildings are an 84x96 sprite, laid out in tile units and scaled by `K` (1.35), which Godot draws over the fog and past the hex. A tile pixel and a sprite pixel are the same size, so the tile's shadows line up under the sprite through `SHIFT`.
+- **A settlement must differ from its ground in value, not only hue.** Grass towns measured the same brightness as their meadow and vanished; the plate is a clear step lighter or darker than the land, and the buildings a clear step off the plate.
+- **The ground round a town is calmed** (a majority filter on the clearing), so the buildings are the busiest thing there.
 
 ### 9-slice UI
 - **Geometry:** 24x24 sprites made of nine 8x8 cells, so a `StyleBoxTexture` with an 8 px texture margin stretches them to any size down to 16x16. The four corner pixels are transparent, which rounds every panel and button the same way.

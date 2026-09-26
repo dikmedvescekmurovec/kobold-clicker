@@ -21,6 +21,7 @@ func _run() -> void:
 	var animations := Settings.animations
 	Settings.animations = Settings.Anim.NONE
 	await _shoot_main_scene()
+	await _shoot_cave()
 	await _shoot_inventory()
 	await _shoot_skills()
 	await _shoot_town()
@@ -58,6 +59,63 @@ func _shoot_main_scene() -> void:
 	print("Saved ", ProjectSettings.globalize_path("user://ui_panel_crop.png"))
 	main.queue_free()
 	await process_frame
+
+
+## The Gollux cave: the Seeing Stone answering a few steps from a cave still in the dark
+## (`ui_seeing_stone.png`), then the cave itself, lit, with its tile panel and Enter cave (`ui_cave.png`),
+## and the pit on its own with the hero beside it (`ui_cave_map.png`).
+func _shoot_cave() -> void:
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = MAP_SEED
+	main.inventory_path = SCRATCH_SAVE
+	main.map_path = SCRATCH_MAP
+	root.add_child(main)
+	for i in 3:
+		await process_frame
+	var view: MapBuilder = main.view
+	main.inventory.farthest_land = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
+	main._credit_walls()
+	var cave: Vector2i = view.cave
+	main.inventory.seeing_stone = true
+	main._show_corner(true)
+	var near := cave
+	for step in 4:
+		near = HexGrid.neighbor(near, HexGrid.Edge.W)
+	view.player_cell = near
+	main._on_stone_pressed()
+	for i in 2:
+		await process_frame
+	await _save_window("ui_seeing_stone.png")
+
+	view.land_radius = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
+	view._cover()
+	view.reveal_all()
+	view.player_cell = cave
+	main.map.set_player_cell(cave)
+	main.map.select_cell(cave)
+	main._on_tile_clicked(cave, main.map.get_tile_info(cave))
+	main.camera.position = main.map.ground_layer.map_to_local(cave)
+	main._sync_stone()
+	for i in 3:
+		await process_frame
+	await _save_window("ui_cave.png")
+	# And the pit itself, the hero a step off it and nothing selected over it.
+	main._on_close_pressed()
+	var beside := HexGrid.neighbor(cave, HexGrid.Edge.SW)
+	view.player_cell = beside
+	main.map.set_player_cell(beside)
+	for i in 3:
+		await process_frame
+	await _save_window("ui_cave_map.png")
+	main.queue_free()
+	await process_frame
+
+
+func _save_window(file: String) -> void:
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://" + file)
+	print("Saved ", ProjectSettings.globalize_path("user://" + file))
 
 
 ## The collection log open over the map, with some of it found and some of it still to find.
@@ -566,6 +624,25 @@ func _shoot_town() -> void:
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_town_fortune.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_town_fortune.png"))
+	# What she says the first time her tab opens: that tip unseen again, and the tab opened afresh.
+	main.inventory.tips.erase("first_fortune")
+	main.town_page._on_tab_pressed(TownServices.FORTUNE)
+	await create_timer(Juice.POP_TIME + 0.1).timeout
+	# Animations are off for these shots, so her first page is already all there.
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_fortune_dialogue.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_fortune_dialogue.png"))
+	main._on_tip_closed()
+	await create_timer(Juice.LEAVE_TIME + 0.1).timeout
+	# And the hero, whose portrait stands on the left: the tip about the first find, unseen again.
+	main.inventory.tips.erase("first_item")
+	main._check_tips()
+	await create_timer(Juice.POP_TIME + 0.1).timeout
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_player_dialogue.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_player_dialogue.png"))
+	main._on_tip_closed()
+	await create_timer(Juice.LEAVE_TIME + 0.1).timeout
 	for shot: Array in [[FortuneTeller.ROADS, "ui_town_roads"], [FortuneTeller.APPRAISE, "ui_town_appraise"],
 			[FortuneTeller.RELIC, "ui_town_relic"], [FortuneTeller.QUARRY, "ui_town_quarry"]]:
 		main.town_page._on_reading_pressed(shot[0])

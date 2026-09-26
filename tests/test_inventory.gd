@@ -1140,6 +1140,22 @@ func _test_saving() -> bool:
 	played.save(TEST_PATH)
 	_check(Inventory.load_from(TEST_PATH).dungeon_depth == 37, "the depths won in the dungeon come back")
 	_check(played.transcended().dungeon_depth == 37, "and a transcension carries it over")
+	# So is how far the land has ever reached, which bounds every world's cave, and the Seeing Stone.
+	_check(played.farthest_land == MapBuilder.START_LAND_RADIUS and not played.reach(MapBuilder.START_LAND_RADIUS),
+			"no land further than the start's before a wall falls")
+	_check(played.reach(30) and not played.reach(20) and played.farthest_land == 30, "the furthest reach only rises")
+	played.seeing_stone = true
+	played.save(TEST_PATH)
+	var kept := Inventory.load_from(TEST_PATH)
+	_check(kept.farthest_land == 30 and kept.seeing_stone, "both come back off the save")
+	_check(played.transcended().farthest_land == 30 and played.transcended().seeing_stone,
+			"and a transcension carries both over")
+	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	file.store_string('{"version": 24, "items": []}')
+	file.close()
+	kept = Inventory.load_from(TEST_PATH)
+	_check(kept.farthest_land == MapBuilder.START_LAND_RADIUS and not kept.seeing_stone,
+			"a save from before them has been no further than the start's land, and holds no stone")
 	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
 	file.store_string('{"version": 15, "items": []}')
 	file.close()
@@ -1743,8 +1759,8 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 	# None of them touched anything the player can see.
 	_check(main.ledger.drops.is_empty(), "none of them reached the pouch")
 	_check(combat._drops.is_empty(), "or the fight's own list")
-	_check(combat._loot_button.text == "0" and combat._loot_button.disabled,
-			"the counter never moved")
+	_check(combat._loot_button.text == "0" and not combat._loot_button.disabled,
+			"the counter never moved, and still opens")
 	_check(combat._loot_drops.count() == 0 and combat._result_drops.count() == 0,
 			"and neither list has a square in it")
 	_check(combat._finds_shown == orbs.size(),
@@ -3819,8 +3835,10 @@ func _test_collection() -> bool:
 		var icon: TextureRect = square.get_child(0)
 		_check((icon.modulate == Color.BLACK) == (not found and not told),
 				"%s: a black outline only while nobody has shown it" % id)
-		_check((square.get_node_or_null(ItemSlot.FRAME_NAME) == null) == (not found and not told),
-				"%s: and no ring to give its rarity away" % id)
+		_check((square.get_node_or_null(ItemSlot.FRAME_NAME) == null) == (not found),
+				"%s: a missing one is the sprite alone, with no ring" % id)
+		_check((square.get_theme_stylebox("panel") is StyleBoxEmpty) == (not found),
+				"%s: and no socket" % id)
 	_check(shown == 1, "the found one is drawn as itself")
 	# The hint says nothing of the piece or its ground until a fortuneteller has shown it, and both
 	# after -- and where it is carried stays on the card once the piece is found, which is the one
@@ -4173,6 +4191,7 @@ func _test_more_curses() -> bool:
 	# nothing at all from a world lost to No Second Chances.
 	var climber := Inventory.new()
 	climber.walls_credited = 3
+	climber.skull_budget = 3
 	climber.curses = [Curses.BLOODTHIRST, Curses.IRON_FOES]
 	_check(climber.skulls_earned() == 6 and climber.transcended().skull_budget == 6,
 			"three walls carrying three skulls earn six (%d)" % climber.skulls_earned())
@@ -4183,8 +4202,21 @@ func _test_more_curses() -> bool:
 			"a lost world raises nothing")
 	var ringed := Inventory.new()
 	ringed.walls_credited = 6
+	ringed.skull_budget = Curses.skulls_of([Curses.RING_OF_WALLS])
 	ringed.curses = [Curses.RING_OF_WALLS]
-	_check(ringed.skulls_earned() == 6, "six walls five rings apart are three deep: 3 + 3 (%d)" % ringed.skulls_earned())
+	_check(ringed.skulls_earned() == 3 + ringed.skull_budget,
+			"six walls five rings apart are three deep, plus the skulls carried (%d)" % ringed.skulls_earned())
+	# The dungeon: depth n is n skulls and every depth won adds up, on top of the budget and never carried into it.
+	var delver := Inventory.new()
+	delver.walls_credited = 1
+	delver.dungeon_depth = 4
+	_check(delver.skull_allowance() == 11 and delver.skull_allowance(true) == 10,
+			"four depths won are 1 + 2 + 3 + 4 skulls beside the one wall's (%d)" % delver.skull_allowance())
+	delver.skull_budget = 1
+	delver.curses = [Curses.BLOODTHIRST, Curses.IRON_FOES, Curses.LONG_WINTER]
+	_check(delver.skulls_earned() == 2 and delver.transcended().skull_allowance() == 12,
+			"skulls the dungeon paid for are not carried: 1 wall + 1 of the budget, then the 10 again (%d)"
+			% delver.skulls_earned())
 	climber.skull_budget = 7
 	climber.save(TEST_PATH)
 	_check(Inventory.load_from(TEST_PATH).skull_budget == 7, "and the budget comes back off the save")

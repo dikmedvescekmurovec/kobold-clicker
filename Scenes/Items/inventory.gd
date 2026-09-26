@@ -57,7 +57,9 @@ const SAVE_PATH := "user://inventory.json"
 ## version 22 save camped somewhere counts from that camp's hour, and one camped nowhere is owed none.
 ## 24 drops `skill_sunk` and `skill_transcends`: the trees are no longer transcended, a skill goes past
 ## its most instead (`SkillTree.OVERRANK_WEIGHT`), and a version 23 save's sunk points are free again.
-const VERSION := 24
+## 25 adds `farthest_land` and `seeing_stone`; a version 24 save has been no further than the land it
+## stands in now (the main scene reads it off the map at start-up) and holds no stone.
+const VERSION := 25
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -114,6 +116,13 @@ var play_seconds := 0.0
 ## (`Encounter.cleared`) -- which is where the next descent begins. It only ever rises, and it is the
 ## player's and not the world's, like the kills and the clock: every transcension carries it over.
 var dungeon_depth := 0
+## How far the land has ever reached, in steps from the middle, in any world: the land radius the last
+## wall ever broken opened. The Gollux cave of every world after is put down no further out than this
+## (`MapBuilder.place_cave`). It only rises (`reach`), and every transcension carries it over.
+var farthest_land := MapBuilder.START_LAND_RADIUS
+## Whether the fortuneteller has sold the player the Seeing Stone, which feels for the Gollux cave. Bought
+## once and kept through every transcension.
+var seeing_stone := false
 
 ## What currency the player is holding: orb name -> how many. Counts rather than objects, because an
 ## orb has nothing to tell apart -- two Orbs of Chaos are the same orb, which is exactly what gear
@@ -539,16 +548,34 @@ func credit_walls(fallen: int) -> bool:
 	return true
 
 
+## The land has reached `radius` in this world: remembered if it is the furthest it has reached in any.
+## Whether that was news.
+func reach(radius: int) -> bool:
+	if radius <= farthest_land:
+		return false
+	farthest_land = radius
+	return true
+
+
 ## The budget the next world is given: this world's depth -- walls broken, counted in ordinary walls
 ## of `MapBuilder.WALL_STEP` rings, so the Ring of Walls' twice as many count as many as they reach --
 ## plus the skulls carried into it, or the budget as it was if that is more. **A world lost to No
-## Second Chances raises nothing** (`lost`): the gamble is all or nothing, the user's ruling.
+## Second Chances raises nothing** (`lost`): the gamble is all or nothing, the user's ruling. Only the
+## skulls this world's own budget paid for are carried: any past it were the dungeon's (`skull_allowance`),
+## which is handed out again whole at every transcension and so must never compound into the budget.
 func skulls_earned(lost := false) -> int:
 	if lost:
 		return skull_budget
 	var step := MapBuilder.RING_OF_WALLS_STEP if Curses.RING_OF_WALLS in curses else MapBuilder.WALL_STEP
 	var depth := walls_credited * step / MapBuilder.WALL_STEP
-	return maxi(skull_budget, depth + Curses.skulls_of(curses))
+	return maxi(skull_budget, depth + mini(Curses.skulls_of(curses), skull_budget))
+
+
+## The skulls the black screen may spend on the next world: the budget earned, plus the dungeon's --
+## depth n won is n skulls and every depth down to the deepest adds up, so depth 4 is 1 + 2 + 3 + 4 = 10
+## (the user's ruling). Won once, not once a descent.
+func skull_allowance(lost := false) -> int:
+	return skulls_earned(lost) + dungeon_depth * (dungeon_depth + 1) / 2
 
 
 ## Where `item` is worn on the ordinary doll, or -1.
@@ -585,7 +612,8 @@ func make_heirloom(item: Item) -> bool:
 ## `Item.transcend`, the super orbs not yet spent, and what the player *knows* -- the collection log, the
 ## tips already read, and the kills, which with `first_sword_taken` is what keeps a second world from
 ## handing out the first one's helping hands again, and the skull budget, raised by this world unless it
-## was `lost` (`skulls_earned`). Everything else is a fresh start.
+## was `lost` (`skulls_earned`) -- and what the dungeon asks to be kept: the depth won, how far the land
+## has ever reached, and the Seeing Stone. Everything else is a fresh start.
 func transcended(lost := false) -> Inventory:
 	var next := Inventory.new()
 	next.tips = tips.duplicate()
@@ -595,6 +623,8 @@ func transcended(lost := false) -> Inventory:
 	next.kills = kills
 	next.play_seconds = play_seconds
 	next.dungeon_depth = dungeon_depth
+	next.farthest_land = farthest_land
+	next.seeing_stone = seeing_stone
 	next.first_sword_taken = true
 	next.super_orbs = super_orbs
 	next.skull_budget = skulls_earned(lost)
@@ -671,6 +701,8 @@ func save(path := SAVE_PATH) -> bool:
 		"kills": kills,
 		"play_seconds": play_seconds,
 		"dungeon_depth": dungeon_depth,
+		"farthest_land": farthest_land,
+		"seeing_stone": seeing_stone,
 		"level": level,
 		"xp": xp,
 		"skills": skills.to_dict(),
@@ -763,6 +795,11 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var deepest: Variant = data.get("dungeon_depth", 0)
 	if typeof(deepest) in [TYPE_INT, TYPE_FLOAT]:
 		inventory.dungeon_depth = maxi(0, int(deepest))
+	# Version 24 knew nothing of either: no further than the start's land, and no stone.
+	var farthest: Variant = data.get("farthest_land", MapBuilder.START_LAND_RADIUS)
+	if typeof(farthest) in [TYPE_INT, TYPE_FLOAT]:
+		inventory.farthest_land = maxi(MapBuilder.START_LAND_RADIUS, int(farthest))
+	inventory.seeing_stone = data.get("seeing_stone", false) == true
 	# Version 7 knew nothing about levels: an absent key reads as a fresh level 1. A level below 1 or
 	# experience below nothing in a hand-edited file is clamped rather than guessed at, and experience
 	# already worth a level is paid out, so the file comes back obeying the curve.

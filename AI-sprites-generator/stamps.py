@@ -83,10 +83,13 @@ def shade_dome(tile, blob, ramp, wrapped=True, outline=None, shadow_offset=(1, 1
         tile.put(hx + 2, hy + 1, highlight, wrapped=wrapped)
 
 
-def boulder(tile, cx, cy, rx, ry, seed, wrapped=True):
+def boulder(tile, cx, cy, rx, ry, seed, wrapped=True, ramp=None, outline=None, moss=None):
+    """A shaded rock. `ramp`/`outline` recolour it (stone by default); `moss` is a list of colours
+    sprinkled over its lit top-left half."""
+    ramp = ramp or [C["slate"], C["stone"], C["stone_lt"], C["mist"]]
     blob = dome(cx, cy, rx, ry, seed=seed, lump=0.18)
-    shade_dome(tile, blob, [C["slate"], C["stone"], C["stone_lt"], C["mist"]],
-               wrapped=wrapped, outline=C["slate_dk"], shadow_offset=(2, 2), shadow_steps=1)
+    shade_dome(tile, blob, ramp, wrapped=wrapped, outline=C["slate_dk"] if outline is None else outline,
+               shadow_offset=(2, 2), shadow_steps=1)
     # a crack line across bigger rocks
     if rx >= 3.5:
         rng = random.Random(seed + 99)
@@ -94,9 +97,14 @@ def boulder(tile, cx, cy, rx, ry, seed, wrapped=True):
         y = int(cy - ry * 0.2)
         for _ in range(int(rx)):
             if (x, y) in blob:
-                tile.put(x, y, C["slate"], wrapped=wrapped)
+                tile.put(x, y, ramp[0], wrapped=wrapped)
             x += 1
             y += rng.choice((0, 0, 1))
+    if moss:
+        rng = random.Random(seed + 7)
+        for (x, y), (h, nx, ny) in sorted(blob.items()):
+            if nx + ny < -0.2 and h > 0.25 and rng.random() < 0.55:
+                tile.put(x, y, moss[(x + y) % len(moss)], wrapped=wrapped)
 
 
 def tuft(tile, x, y, hi, mid, lo, big=False):

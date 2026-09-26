@@ -5,7 +5,7 @@ extends VBoxContainer
 ## open. Fill `body`, never the accordion itself.
 ##
 ## Which sections are shut is kept by `id` for the session (`_shut`, not saved), so a page that is
-## built again at every redraw -- the character page, the tile panel -- keeps what was folded.
+## built again at every redraw -- the character page -- keeps what was folded.
 
 ## The caret: a solid triangle in the brown buttons' face, drawn here pixel by pixel -- `CARET_LONG`
 ## down its long side and half that (rounded up) out to its point.

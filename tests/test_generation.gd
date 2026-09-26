@@ -22,6 +22,7 @@ func _run() -> void:
 	_check(_test_ring_towns() == true, "ring town tests ran to the end")
 	_check(_test_tile_levels() == true, "tile level tests ran to the end")
 	_check(_test_map_saving() == true, "map save tests ran to the end")
+	_check(_test_the_cave() == true, "cave tests ran to the end")
 	_check(await _test_the_map_comes_back() == true, "map reload tests ran to the end")
 	_report("generation")
 
@@ -838,9 +839,14 @@ func _test_ring_towns() -> bool:
 			ring.append(spot - view.origin)
 	var hidden := ring.filter(func(cell: Vector2i) -> bool: return not view.seen(cell))
 	_check(not hidden.is_empty(), "some of the ring's settlements start in the dark (%d of %d)" % [hidden.size(), ring.size()])
+	_check(not hidden.any(func(cell: Vector2i) -> bool: return map.has_town(cell)), "a hidden settlement has no buildings drawn")
 	_check(view.reveal_ring_towns(MapBuilder.CENTER) == hidden.size(), "the roads show every one still hidden")
 	_check(hidden.all(func(cell: Vector2i) -> bool: return view.state(cell) == MapBuilder.State.UNCHARTED),
 			"each comes out uncharted")
+	_check(hidden.all(func(cell: Vector2i) -> bool: return map.has_town(cell)), "and its buildings are drawn over the fog")
+	var dimmed := hidden.all(func(cell: Vector2i) -> bool:
+		return (map.towns.get_node(map._town_node(cell)) as Sprite2D).modulate == HexMap.TOWN_UNCHARTED)
+	_check(dimmed, "dimmed while uncharted")
 	_check(view.reveal_ring_towns(MapBuilder.CENTER) == 0, "a second telling shows nothing new")
 	map.queue_free()
 	return true
@@ -1059,6 +1065,71 @@ func _weights_for(cell: Vector2i, layout: Dictionary[Vector2i, String]) -> Dicti
 ## change -- not the land, not the roads, not the settlements, not the fog -- so the round trip is
 ## checked cell by cell rather than by spot checks, and every refusal is checked to leave the file
 ## alone.
+## The Gollux cave: none before any wall has ever fallen, then one a world, between the ring past the
+## first wall's and the furthest the land has ever reached -- never on a wall's ring or a settlement --
+## and a set piece: no chest, no modifiers, no farming, no road through it, named for the cave, entered
+## only stood on, and saved with the map.
+func _test_the_cave() -> bool:
+	_clear_map_save()
+	var map: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
+	root.add_child(map)
+	var view := MapBuilder.create(map, TownWorld.generate(WORLD_SEED), Vector2i(128, 128), 99)
+	_check(not view.place_cave(MapBuilder.START_LAND_RADIUS) and not view.place_cave(MapBuilder.CAVE_FIRST_RING - 1)
+			and view.cave == HexMap.NO_CELL, "no cave while no wall has ever fallen")
+	var reach := MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
+	_check(view.place_cave(reach), "one goes down once the first wall ever falls")
+	var cave := view.cave
+	var steps := HexGrid.distance(MapBuilder.CENTER, cave)
+	_check(steps >= MapBuilder.CAVE_FIRST_RING and steps <= reach and not view.on_wall_ring(cave)
+			and not view.towns.has_town(view.origin + cave),
+			"behind the first wall and inside the furthest reach, off the walls and the settlements (%s, %d steps)"
+			% [cave, steps])
+	_check(not view.place_cave(reach + 30) and view.cave == cave, "and only one a world")
+
+	# The wall down, so the cave's land is the player's, and all of it charted.
+	view.land_radius = reach
+	view._cover()
+	view.reveal_all()
+	_check(not view.can_farm(cave) and not view.has_chest(cave) and view.mods_of(cave).is_empty()
+			and view.road_at(cave) == 0 and view.best_farm() != cave,
+			"a set piece: no run, no chest, no modifiers, no road through it")
+	_check(view.name_of(cave).get_slice(" ", 1) in TileNames.CAVE_FEATURES,
+			"named for the cave (%s)" % view.name_of(cave))
+	_check(not view.can_enter_cave(cave), "entered only by the player standing on it")
+	view.player_cell = cave
+	_check(view.can_enter_cave(cave) and not view.can_enter_cave(MapBuilder.CENTER), "and then only there")
+	if ResourceLoader.exists(HexMap.CAVE_ART % view.env_at(cave)):
+		_check(map.towns.has_node(HexMap.CAVE_NODE), "its mouth is drawn over its tile")
+
+	_check(view.to_save().save(TEST_MAP_PATH), "the map with a cave writes itself")
+	var problem: Array = []
+	var save := MapSave.load_from(TEST_MAP_PATH, problem, MapSave.fingerprint(map.tileset))
+	_check(save != null and save.cave == cave, "and the cave comes back off the save")
+	if save != null:
+		var other: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
+		root.add_child(other)
+		_check(MapBuilder.restore(other, TownWorld.from_dict(save.towns), save).cave == cave,
+				"where the restored map puts it")
+		other.queue_free()
+		save.cave = HexMap.NO_CELL
+		save.save(TEST_MAP_PATH)
+		_check(MapSave.load_from(TEST_MAP_PATH, problem).cave == HexMap.NO_CELL, "and a world with none has none")
+
+	# Wherever the seed puts it, it keeps to the same bounds, out to a reach three walls deep.
+	var strays := 0
+	for seed_value in 8:
+		var world := MapBuilder.create(map, TownWorld.generate(WORLD_SEED), Vector2i(128, 128), 1000 + seed_value)
+		world.place_cave(40)
+		var out := HexGrid.distance(MapBuilder.CENTER, world.cave)
+		if out < MapBuilder.CAVE_FIRST_RING or out > 40 or world.on_wall_ring(world.cave) \
+				or world.towns.has_town(world.origin + world.cave):
+			strays += 1
+	_check(strays == 0, "every seed keeps it in bounds (%d strays)" % strays)
+	map.queue_free()
+	_clear_map_save()
+	return true
+
+
 func _test_map_saving() -> bool:
 	_clear_map_save()
 	var map: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()

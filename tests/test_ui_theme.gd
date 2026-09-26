@@ -18,6 +18,7 @@ func _run() -> void:
 	_check(await _test_item_card() == true, "item card tests ran to the end")
 	_check(_test_cursors() == true, "cursor tests ran to the end")
 	_check(_test_tip_card() == true, "tip card tests ran to the end")
+	_check(_test_dialogue_box() == true, "dialogue box tests ran to the end")
 	_check(_test_accordion() == true, "accordion tests ran to the end")
 	_check(await _test_settings_scroll() == true, "settings scroll tests ran to the end")
 	_report("UI theme")
@@ -576,6 +577,22 @@ func _test_tip_card() -> bool:
 	_check(float(ProjectSettings.get_setting("gui/timers/tooltip_delay_sec")) > 1000.0,
 			"Godot's own tooltip is out of reach, so nothing is said twice")
 	row.queue_free()
+	return true
+
+
+## The hero's portrait stands on the left of his words, everyone else's on the right, and every
+## speaker has a portrait cut.
+func _test_dialogue_box() -> bool:
+	for speaker: String in ["fortuneteller", DialogueBox.PLAYER]:
+		var art: Texture2D = load(DialogueBox.PORTRAITS % speaker)
+		_check(art != null and art.get_width() % art.get_height() == 0,
+				"%s's portrait is a strip of square frames" % speaker)
+		var box := DialogueBox.new(speaker, ["words"], art, speaker == DialogueBox.PLAYER)
+		var row: HBoxContainer = box._panel.get_child(0)
+		var first_is_face := row.get_child(0) is PanelContainer
+		_check(first_is_face == (speaker == DialogueBox.PLAYER),
+				"%s's portrait stands on the %s" % [speaker, "left" if first_is_face else "right"])
+		box.free()
 	return true
 
 

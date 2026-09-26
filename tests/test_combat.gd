@@ -2844,7 +2844,8 @@ func _test_curses() -> bool:
 	return true
 
 
-## The dungeon from the main scene: the corner's skull comes on with the bag, a descent pays nothing
+## The dungeon from the main scene: no way down until a wall has fallen in some world, then the world's
+## cave, entered stood on; the Seeing Stone says how warm the ground is from it; a descent pays nothing
 ## and counts no kill, and a depth is written down only once its Gollux is dead.
 func _test_the_way_down() -> void:
 	_clear_saves()
@@ -2856,16 +2857,50 @@ func _test_the_way_down() -> void:
 	root.add_child(main)
 	for i in 3:
 		await process_frame
+	var view: MapBuilder = main.view
+	_check(view.cave == HexMap.NO_CELL, "no cave while no wall has fallen in any world")
+	# A wall once broken in some world: this one's cave goes down behind its first wall, and is saved.
+	main.inventory.farthest_land = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
+	main._credit_walls()
+	var cave: Vector2i = view.cave
+	_check(cave != HexMap.NO_CELL and MapSave.load_from(SCRATCH_MAP).cave == cave,
+			"the furthest land ever reached puts the world's cave down, and the map is saved with it (%s)" % cave)
+
+	# The Seeing Stone, bought: top right, and a game of hot and cold with the cave.
+	_check(not main._stone.visible, "no stone before it is bought")
+	main.inventory.seeing_stone = true
 	main._show_corner(true)
-	_check(not main._dungeon_button.visible, "there is no way down before there is a bag")
-	main.inventory.tips.append("first_item")
-	main._show_corner(true)
-	_check(main._dungeon_button.visible and "depth 1" in main._dungeon_button.tooltip_text,
-			"it comes on with the bag (%s)" % main._dungeon_button.tooltip_text)
-	main._on_dungeon_pressed()
+	_check(main._stone.visible, "bought, it stands on the map")
+	var far := FortuneTeller.warmth(HexGrid.distance(view.player_cell, cave))
+	_check(main._on_stone_pressed() == FortuneTeller.WARMTH[far], "it says how warm the ground underfoot is (%s)"
+			% FortuneTeller.WARMTH[far])
+	var near := cave
+	for step in 4:
+		near = HexGrid.neighbor(near, HexGrid.Edge.W)
+	var home := view.player_cell
+	view.player_cell = near
+	_check(main._on_stone_pressed() == "Hot\nWarmer", "four steps off it is hot, and warmer than before")
+	view.player_cell = home
+	_check(main._on_stone_pressed() == FortuneTeller.WARMTH[far] + "\nColder", "and colder again walking away")
+
+	# The wall down and the land charted, stood on the cave: Enter cave, and nowhere else.
+	view.land_radius = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
+	view._cover()
+	view.reveal_all()
+	main.map.select_cell(MapBuilder.CENTER)
+	main._update_buttons()
+	_check(not main._cave_button.visible, "no way down from anywhere but the cave")
+	view.player_cell = cave
+	main.map.select_cell(cave)
+	main._on_tile_clicked(cave, main.map.get_tile_info(cave))
+	_check(main._cave_button.visible and "depth 1" in main._cave_button.tooltip_text
+			and main._level_label.text.begins_with("Cave"),
+			"stood on the cave, Enter cave goes down to depth 1 (%s)" % main._cave_button.tooltip_text)
+	_check(main._on_stone_pressed() == "Still", "and the stone has nothing left to feel for")
+	main._on_cave_pressed()
 	var fight: Encounter = main._combat.fight if main._combat != null else null
 	_check(fight != null and fight.dungeon and main._combat.place == main.DUNGEON_NAME and not main.map.visible
-			and not main._dungeon_button.visible, "it opens the dungeon over the map, the corner out of its way")
+			and not main._stone.visible, "it opens the dungeon over the map, the stone out of its way")
 	if fight == null:
 		return
 	var kills_before: int = main.inventory.kills
@@ -2881,7 +2916,7 @@ func _test_the_way_down() -> void:
 	_check(main.inventory.kills == kills_before and is_equal_approx(main.inventory.gold, gold_before),
 			"with no kill counted and nothing paid")
 	# A Gollux killed is a depth won, written down, and where the next descent begins.
-	main._on_dungeon_pressed()
+	main._on_cave_pressed()
 	fight = main._combat.fight
 	fight.damage = 1e9
 	while fight.cleared() < 2:
@@ -2893,9 +2928,9 @@ func _test_the_way_down() -> void:
 	await process_frame
 	_check(main.inventory.dungeon_depth == 2 and Inventory.load_from(SCRATCH_INVENTORY).dungeon_depth == 2,
 			"two Golluxes dead is two depths won, and saved")
-	_check("depth 3" in main._dungeon_button.tooltip_text, "the skull says where that leaves the player (%s)"
-			% main._dungeon_button.tooltip_text)
-	main._on_dungeon_pressed()
+	_check("depth 3" in main._cave_button.tooltip_text, "Enter cave says where that leaves the player (%s)"
+			% main._cave_button.tooltip_text)
+	main._on_cave_pressed()
 	_check(main._combat.fight.depth() == 3 and main._combat.fight.first_floor == 30,
 			"and the next descent begins under them")
 	main._combat.fight.stop()

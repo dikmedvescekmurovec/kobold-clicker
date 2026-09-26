@@ -53,6 +53,8 @@ signal spell_aimed(reading: String, price: float, spot: Vector2i)
 ## The way out of the world was asked for, and the question under it answered yes. Nothing has been
 ## charged and nothing need be: the purse is one of the things left behind. The main scene does it.
 signal transcend_pressed
+## The Seeing Stone has been bought, and is the player's in every world from now on.
+signal stone_bought
 
 ## How wide the page's contents run before they wrap, in panel pixels. It shares a 1152 px window
 ## with the bag and the doll beside it, so this is a width budget rather than a matter of taste
@@ -118,6 +120,7 @@ const FORTUNE_ICONS := {
 	FortuneTeller.APPRAISE: "res://Assets/Fortune/appraise.png",
 	FortuneTeller.SCOUR: "res://Assets/Fortune/scour.png",
 	FortuneTeller.HOMECOMING: "res://Assets/Fortune/homecoming.png",
+	FortuneTeller.STONE: "res://Assets/Fortune/stone.png",
 	FortuneTeller.TRANSCEND: "res://Assets/Fortune/transcend.png",
 }
 ## A spell's mark, at the 16 px it is drawn at doubled -- a whole-number step, as a skill's is.
@@ -140,6 +143,7 @@ const FORTUNE_TIPS := {
 	FortuneTeller.APPRAISE: "Lists every modifier the open piece can roll, the range it rolls in at the piece's level, and how often it comes up",
 	FortuneTeller.SCOUR: "Brings a tile and the two rings of land around it, nineteen tiles, out of the fog",
 	FortuneTeller.HOMECOMING: "Moves you to a settlement you have already charted",
+	FortuneTeller.STONE: "A stone that grows warm the nearer you stand to the Gollux cave. Yours in every world from now on",
 	FortuneTeller.TRANSCEND: "Ends this world and starts you in a new one, worth far more. Everything you made here is lost",
 }
 ## What stands over each half of her list. A reading is asked again and again at a climbing price; a
@@ -367,7 +371,7 @@ func _fill() -> void:
 	var body := _scrolled(ROW_GAP)
 	body.add_child(_shelf())
 	if _open_tab == TownServices.ORBS:
-		body.add_child(_section("Trade up"))
+		body.add_child(UITheme.section("Trade up"))
 		body.add_child(_upscales())
 	# New stock now, for gold: pinned at the page's foot, under the scroll, where every counter keeps its buttons -- this shelf only, and dearer every time for good: the town remembers.
 	var price := TownPrices.reroll_price(_cell, VendorStock.rerolls(_drawer, _shelf_key()))
@@ -506,20 +510,6 @@ func _cost_cell(square: Control, figure: String, mark: Texture2D, ok: bool,
 	row.add_child(label)
 	cell.add_child(row)
 	return cell
-
-
-## A heading inside a counter (Trade up, her Readings and Great spells): a small word and a rule run
-## out to the page's edge. Small, because the counter's own name above it is the heading; these only
-## say where one half of the grid ends.
-static func _section(text: String) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 4)
-	row.add_child(UITheme.label(text, Palette.TEXT_SOFT, true))
-	var line := UITheme.rule()
-	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(line)
-	return row
 
 
 ## A counter's tab as a folder tab: framed on three sides in the socket's dark brown with its top
@@ -813,6 +803,9 @@ func _fill_fortune() -> void:
 	# The way out stands with the great spells, as a square of its own, once a wall has fallen: before
 	# that there is nothing yet to take along (the user, 2026-09-25, in place of a full-width button).
 	var great: Array = FortuneTeller.GREAT.duplicate()
+	# The stone once there is a cave in this world to feel for, and never again once it is held.
+	if view != null and view.cave != HexMap.NO_CELL and not inventory.seeing_stone:
+		great.append(FortuneTeller.STONE)
 	if view != null and view.walls_fallen() > 0:
 		great.append(FortuneTeller.TRANSCEND)
 	body.add_child(_spell_grid(FORTUNE_HEADINGS["great"], great))
@@ -944,6 +937,11 @@ func _answer(reading: String, lines: VBoxContainer) -> void:
 			var near := view.nearest_env(envs, int(bounty.get(BountyBoard.LEVEL, 0)))
 			lines.add_child(BountyList.wrapped("Nearest: %s" % (view.name_of(near) if near != HexMap.NO_CELL
 					else "none you have seen yet."), TOLD_WIDTH, Palette.TEXT_SOFT))
+		FortuneTeller.STONE:
+			lines.add_child(BountyList.wrapped("The Seeing Stone is yours, in this world and every one after it.",
+					TOLD_WIDTH))
+			lines.add_child(BountyList.wrapped("Press it on the map and it grows warm or cold with the way down to Gollux.",
+					TOLD_WIDTH, Palette.TEXT_SOFT))
 		FortuneTeller.APPRAISE:
 			lines.add_child(ItemDetails.line(_bag_piece.display_name(), _bag_piece.text_color(), TOLD_WIDTH))
 			# What the table is, since a column of lines and percentages says nothing on its own: the
@@ -999,7 +997,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## One half of her list: a heading, a rule under it and that half's squares on the shelf's own grid.
 func _spell_grid(heading: String, readings: Array) -> VBoxContainer:
 	var box := UITheme.vbox(ROW_GAP, BODY_WIDTH)
-	box.add_child(_section(heading))
+	box.add_child(UITheme.section(heading))
 	var grid := GridContainer.new()
 	grid.columns = STOCK_COLS
 	grid.add_theme_constant_override("h_separation", STOCK_GAP)
@@ -1013,7 +1011,7 @@ func _spell_grid(heading: String, readings: Array) -> VBoxContainer:
 ## One reading on her grid: its mark, lit by a halo while the cursor is on it, and what she will not
 ## read greyed and dead with the reason in its tooltip -- the shelf's rule, where a piece the purse
 ## cannot cover greys where it stands. `_price_cell` puts the price under what this returns. No name
-## over it (the user's call, 2026-09-25): the badges carry the spell, and the name leads the tooltip.
+## over it (the user's call, 2026-09-25): the badges carry the spell, and the tooltip says what it does.
 func _spell_square(reading: String) -> Control:
 	var refused := _fortune_why_not(reading)
 	# A Panel rather than the mark itself, because what the hover lights is a stylebox: the mark is
@@ -1024,10 +1022,9 @@ func _spell_square(reading: String) -> Control:
 	square.custom_minimum_size = Vector2(SPELL_SIDE, SPELL_SIDE)
 	square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	square.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
-	# What a reading is, under its name. Not how often it has been asked (the user's call, 2026-09-25):
-	# the price under it already says it has climbed.
-	square.tooltip_text = "%s: %s" % [FortuneTeller.LABELS[reading],
-			refused if not refused.is_empty() else FORTUNE_TIPS[reading]]
+	# What a reading does, with no name before it (the user's call, 2026-09-25). Not how often it has
+	# been asked: the price under it already says it has climbed.
+	square.tooltip_text = refused if not refused.is_empty() else FORTUNE_TIPS[reading]
 	var icon := TextureRect.new()
 	# Mode before texture and size, for the reason `_price_cell`'s coin gives: a TextureRect's minimum
 	# is its own texture until `expand_mode` says otherwise.
@@ -1133,7 +1130,7 @@ func _on_reading_pressed(reading: String) -> void:
 	inventory.gold -= price
 	# A reading's count is what doubles its price, and only a paid telling moves it: the roads told
 	# again for nothing in a town that has already bought them are the same sentence, not a casting.
-	if price > 0.0:
+	if price > 0.0 and reading in FortuneTeller.COMMON:
 		FortuneTeller.note_cast(inventory.fortunes, reading)
 	match reading:
 		FortuneTeller.ROADS:
@@ -1153,6 +1150,9 @@ func _on_reading_pressed(reading: String) -> void:
 			_relic = FortuneTeller.peek(inventory.uniques_found, shown, _stock_rng)
 			shown.append(_relic)
 			inventory.fortunes[FortuneTeller.PEEKED] = shown
+		FortuneTeller.STONE:
+			inventory.seeing_stone = true
+			stone_bought.emit()
 	print("The fortuneteller read %s for %s gold" % [reading, BigNumber.format(price)])
 	inventory.save(_save_path)
 	_tell(reading)

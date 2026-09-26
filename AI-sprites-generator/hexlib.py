@@ -94,6 +94,8 @@ PALETTE = [
     ("ro4", "#8e939d"), ("ro5", "#b9bbbd"),                                          # rock
     ("sc1", "#4a4442"), ("sc2", "#645c55"), ("sc3", "#80776a"),                      # scree
     ("wa0", "#1c3158"), ("wa1", "#2a5586"), ("wa2", "#3f7fb2"), ("wa3", "#8fcbe6"),   # water
+    ("rf0", "#5a2a33"), ("rf1", "#86393a"), ("rf2", "#a8513f"), ("rf3", "#c47352"),   # terracotta
+    ("pl0", "#8a7662"), ("pl1", "#b29e81"), ("pl2", "#d2c19c"), ("pl3", "#e8dbb8"),   # plaster
 ]
 assert len(PALETTE) <= 256
 C = {name: i for i, (name, _) in enumerate(PALETTE)}
@@ -110,7 +112,7 @@ _DARKER = {
     "st1": "di2", "st2": "st1", "sc1": "ro0", "sc2": "sc1", "sc3": "sc2",
     "gr0": "fo0", "fo0": "ink", "fo1": "fo0", "co1": "fo0", "wa0": "ink",
 }
-for _ramp in ("gr", "co", "di", "de", "sn", "ro", "wa"):
+for _ramp in ("gr", "co", "di", "de", "sn", "ro", "wa", "rf", "pl"):
     _steps = [n for n, _ in PALETTE if n[:2] == _ramp and n[2:].isdigit()]
     for _lo, _hi in zip(_steps, _steps[1:]):
         _DARKER[_hi] = _lo
@@ -118,6 +120,8 @@ _DARKER.setdefault("di0", "ink")
 _DARKER.setdefault("de0", "di1")
 _DARKER.setdefault("sn0", "ro0")
 _DARKER.setdefault("ro0", "ink")
+_DARKER.setdefault("rf0", "di0")
+_DARKER.setdefault("pl0", "di1")
 DARKER = [0] * len(PALETTE)
 for _n, _d in _DARKER.items():
     DARKER[C[_n]] = C[_d]

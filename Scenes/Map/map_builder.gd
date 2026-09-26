@@ -46,6 +46,9 @@ const START_TOWN_DISTANCE := 5
 ## waits in it: charting the tile fights it alone, and winning the tile takes the chest off the map.
 const CHEST_CHANCE := 0.03
 const CHEST_MIN_DISTANCE := 3
+## The Gollux cave, the one way down into the dungeon: one a world, never inside the first wall. The
+## nearest ring it may stand on is one past the first wall's own, so it is always behind the ice.
+const CAVE_FIRST_RING := START_LAND_RADIUS + 2
 ## The closed brown chest, top-left of the pack's sheet.
 const CHEST_TEXTURE := "res://Assets/Chests/Chests.png"
 const CHEST_REGION := Rect2(2, 12, 28, 20)
@@ -69,6 +72,10 @@ var env_seed: int
 var origin: Vector2i
 ## The small town START_TOWN_DISTANCE steps out, which a road connects to the center cell.
 var start_town: Vector2i
+## Where this world's Gollux cave stands, or `HexMap.NO_CELL` while there is none -- before any wall
+## has fallen in any world (`place_cave`). Saved: the land it is chosen on is generated as the walls
+## fall, and generation is never repeated.
+var cave := HexMap.NO_CELL
 ## The cell the player stands on, which only changes once they have walked there.
 var player_cell := CENTER
 ## Whether the player is on their way somewhere, and so can't be sent anywhere else.
@@ -150,6 +157,7 @@ func to_save() -> MapSave:
 	save.rect = rect
 	save.land_radius = land_radius
 	save.start_town = start_town
+	save.cave = cave
 	save.player_cell = player_cell
 	save.towns = towns.to_dict()
 	save.envs = _envs
@@ -175,6 +183,7 @@ static func restore(map: HexMap, towns: TownWorld, save: MapSave) -> MapBuilder:
 	builder.env_seed = save.map_seed
 	builder.rect = save.rect
 	builder.start_town = save.start_town
+	builder.cave = save.cave
 	builder._envs = save.envs
 	builder._names = save.names
 	builder._roads = save.roads
@@ -229,6 +238,8 @@ func _draw_saved() -> void:
 		if _states[cell] == State.UNCHARTED:
 			map.fog.add_cell(cell)
 		_draw_chest(cell)
+		_draw_town(cell)
+		_draw_cave(cell)
 	for cell in _states:
 		if _tiles.has(cell):
 			map.refresh_blends(cell)
@@ -324,13 +335,14 @@ func name_of(cell: Vector2i) -> String:
 		return ""
 	var tier := towns.tier_at(_spot(cell))
 	_names[cell] = TileNames.generate(cell, _envs[cell], env_seed,
-			TownWorld.TIER_NAMES[tier] if tier != -1 else "")
+			TownWorld.TIER_NAMES[tier] if tier != -1 else TileNames.CAVE if cell == cave else "")
 	return _names[cell]
 
 
-## The road edges on a cell, as a mask, and 0 where there is no road. Towns carry none: roads stop at their edge.
+## The road edges on a cell, as a mask, and 0 where there is no road. Towns carry none, and nor does the
+## cave: roads stop at their edge.
 func road_at(cell: Vector2i) -> int:
-	if towns.has_town(_spot(cell)):
+	if towns.has_town(_spot(cell)) or cell == cave:
 		return 0
 	return _roads.get(_spot(cell), 0)
 
@@ -355,7 +367,8 @@ func area_variant(cell: Vector2i) -> String:
 ## per-cell roll, until the tile is charted. Derived from the seed rather than saved, the way `_tile_name`
 ## is, and a won tile is charted, so nothing about an opened chest needs writing down.
 func has_chest(cell: Vector2i) -> bool:
-	if not _envs.has(cell) or not is_land(cell) or charted(cell) or towns.has_town(_spot(cell)) 			or HexGrid.distance(CENTER, cell) < CHEST_MIN_DISTANCE:
+	if not _envs.has(cell) or not is_land(cell) or charted(cell) or towns.has_town(_spot(cell)) \
+			or cell == cave or HexGrid.distance(CENTER, cell) < CHEST_MIN_DISTANCE:
 		return false
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([env_seed, "chest", cell])
@@ -363,12 +376,12 @@ func has_chest(cell: Vector2i) -> bool:
 
 
 ## What the land on `cell` does to its own fight (`TileMods`): open land past the second wall, and
-## nothing where the fight is a set piece -- a settlement, a chest, the wall. Derived from the seed the
+## nothing where the fight is a set piece -- a settlement, a chest, the wall, the cave. Derived from the seed the
 ## way `has_chest` is, so nothing is saved. `wild` is the Wild Tiles curse, which the builder cannot
 ## know: whoever asks passes it.
 func mods_of(cell: Vector2i, wild := false) -> Array[String]:
 	if not _envs.has(cell) or not is_land(cell) or towns.has_town(_spot(cell)) or has_chest(cell) \
-			or on_wall_ring(cell):
+			or on_wall_ring(cell) or cell == cave:
 		return []
 	return TileMods.for_cell(env_seed, cell, ring_of(cell), wild)
 
@@ -522,10 +535,10 @@ func chart_from(cell: Vector2i) -> Vector2i:
 
 ## Whether the player can farm this cell: a tile already taken, which the player can go back to and
 ## fight on for as long as they like. Unlike charting, it asks nothing about where they stand --
-## a run is a thing you choose to do, not a step you take. Never a settlement: a town is taken once
-## and then visited, not hunted.
+## a run is a thing you choose to do, not a step you take. Never a settlement or the cave: those are
+## taken once and then visited, not hunted.
 func can_farm(cell: Vector2i) -> bool:
-	return not walking and charted(cell) and town_tier(cell) == -1
+	return not walking and can_farm_ground(cell)
 
 
 ## The best ground taken so far, where the hero camps while the game is shut: the farmable tile
@@ -533,7 +546,7 @@ func can_farm(cell: Vector2i) -> bool:
 func best_farm() -> Vector2i:
 	var best := HexMap.NO_CELL
 	for cell in _states:
-		if charted(cell) and town_tier(cell) == -1 and (best == HexMap.NO_CELL
+		if can_farm_ground(cell) and (best == HexMap.NO_CELL
 				or HexGrid.distance(CENTER, cell) > HexGrid.distance(CENTER, best)):
 			best = cell
 	return best
@@ -544,6 +557,46 @@ func best_farm() -> Vector2i:
 func town_tier(cell: Vector2i) -> int:
 	# A town under the ice is not there yet as far as anyone can tell.
 	return towns.tier_at(_spot(cell)) if is_land(cell) else -1
+
+
+## Whether `cell` is taken ground a run could be fought on: charted, and neither a settlement nor the cave.
+func can_farm_ground(cell: Vector2i) -> bool:
+	return charted(cell) and town_tier(cell) == -1 and cell != cave
+
+
+## Whether the player can go down into the cave on `cell`: the cave, charted, stood on, and no walk
+## under way -- Enter town's rule, because going down is being there.
+func can_enter_cave(cell: Vector2i) -> bool:
+	return not walking and cave != HexMap.NO_CELL and cell == cave and charted(cell) and cell == player_cell
+
+
+## Puts this world's cave down, once: on a cell from `CAVE_FIRST_RING` out to `reach` -- how far the
+## land has ever reached, in any world (`Inventory.farthest_land`) -- never on a ring a wall stands or
+## stood on, and never on a settlement. Nothing while `reach` is short of the first ring it may stand
+## on, which is every world before the first wall ever falls. Chosen off the map seed, so a world
+## reloaded before its first save chooses the same. Returns whether it was put down now.
+##
+## The land out there need not be generated yet: the cell is chosen by where it lies and nothing else,
+## and it is drawn in its ground's picture once the wall over it has fallen and it has been seen.
+func place_cave(reach: int) -> bool:
+	if cave != HexMap.NO_CELL or reach < CAVE_FIRST_RING:
+		return false
+	var cells: Array[Vector2i] = []
+	for cell in FortuneTeller.scour_cells(CENTER, reach):
+		if HexGrid.distance(CENTER, cell) >= CAVE_FIRST_RING and not on_wall_ring(cell) \
+				and not towns.has_town(_spot(cell)):
+			cells.append(cell)
+	if cells.is_empty():
+		return false
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([env_seed, "cave"])
+	cave = cells[rng.randi() % cells.size()]
+	# A road already drawn over it or into it is taken up at its edge, and a cell already seen shows it.
+	for cell: Vector2i in [cave] + HexGrid.neighbors(cave):
+		if _drawn_roads.has(cell):
+			_draw_road(cell)
+	_draw_cave(cave)
+	return true
 
 
 ## Whether the player can walk into the town on `cell`: a charted settlement they are already standing
@@ -667,6 +720,8 @@ func _break_wall() -> void:
 	for cell in _states:
 		if HexGrid.distance(CENTER, cell) == old_wall:
 			_ice.remove_cell(cell)
+			_draw_town(cell)
+			_draw_cave(cell)
 		elif _ice.kind_at(cell) == IceOverlay.Kind.WASTE and not is_wasteland(cell):
 			_ice.remove_cell(cell)
 			map.set_ground(cell, _tiles[cell])
@@ -675,6 +730,8 @@ func _break_wall() -> void:
 			if is_wall(cell):
 				_ice.set_cell(cell, IceOverlay.Kind.WALL, _ring_edges(cell))
 			_draw_chest(cell)
+			_draw_town(cell)
+			_draw_cave(cell)
 
 
 ## Fills in everything the map needs for `area`: the environments of the cells it doesn't have yet, the tile
@@ -739,7 +796,7 @@ func chart(cell: Vector2i, sight := 1) -> int:
 		return -1
 	if is_wall(cell):
 		_break_wall()
-	_show(cell, State.CHARTED)
+	_show(cell, State.CHARTED, true)
 	var shown := _reveal_around(cell, maxi(sight, 0))
 	# The fight was fought standing on it (`walk_onto`), so that is an arrival. Otherwise -- the dev's
 	# skip -- looking at the tile next door is the first half of going there, and the walk follows.
@@ -766,7 +823,7 @@ func _reveal_around(center: Vector2i, radius: int) -> int:
 	var shown := 0
 	for cell in FortuneTeller.scour_cells(center, radius):
 		if _tiles.has(cell) and not seen(cell):
-			_show(cell, State.UNCHARTED)
+			_show(cell, State.UNCHARTED, true)
 			shown += 1
 	return shown
 
@@ -791,7 +848,7 @@ func reveal_ring_towns(cell: Vector2i) -> int:
 	for spot in towns.towns():
 		var town := spot - origin
 		if is_land(town) and ring_of(town) == ring and _tiles.has(town) and not seen(town):
-			_show(town, State.UNCHARTED)
+			_show(town, State.UNCHARTED, true)
 			shown += 1
 	return shown
 
@@ -811,14 +868,15 @@ static func start_town_cells() -> Array[Vector2i]:
 	return cells
 
 
-## Draws a cell, or just changes what the player knows about one that is already drawn.
-func _show(cell: Vector2i, to: State) -> void:
+## Draws a cell, or just changes what the player knows about one that is already drawn. `lift` slides
+## the fog off a newly seen cell away from the player rather than taking it off at once.
+func _show(cell: Vector2i, to: State, lift := false) -> void:
 	if not _tiles.has(cell) or state(cell) == to:
 		return
 	# Named the moment it is first drawn, uncharted or not: seeing a place is meeting it, and a
 	# tile the player has been looking at for an hour should not be nameless when they walk in.
 	name_of(cell)
-	_edge_fog.add_cell(cell)
+	_edge_fog.add_cell(cell, map.player.position if lift else null)
 	if is_wasteland(cell):
 		# Snow and nothing under it: the land out there is not the player's to see until the wall falls.
 		_states[cell] = to
@@ -837,3 +895,19 @@ func _show(cell: Vector2i, to: State) -> void:
 	else:
 		map.fog.remove_cell(cell)
 	_draw_chest(cell)
+	_draw_town(cell)
+	_draw_cave(cell)
+
+
+## A settlement's buildings, over the fog (`HexMap.set_town`), on land the player has seen. None on the
+## wall or past it: the ice is over whatever stands there until the wall falls.
+func _draw_town(cell: Vector2i) -> void:
+	if town_tier(cell) != -1 and seen(cell):
+		map.set_town(cell, _tiles[cell], state(cell) == State.CHARTED)
+
+
+## The cave's mouth, in the picture of the ground it stands on, over the fog the way a settlement's
+## buildings are -- on land the player has seen, and never under the ice.
+func _draw_cave(cell: Vector2i) -> void:
+	if cell == cave and is_land(cell) and seen(cell) and _envs.has(cell):
+		map.set_cave(cell, _envs[cell], charted(cell))

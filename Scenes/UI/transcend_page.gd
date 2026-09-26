@@ -5,8 +5,8 @@ extends Control
 ## orb (`SuperOrbTable`) for every wall they broke**, spent on the heirlooms they hold.
 ##
 ## Four faces, one up at a time: the choice (Create an heirloom / Upgrade an heirloom / Take on a
-## curse, and the way on under them), the curses (`Curses`: as many skulls as the budget this world earned,
-## `Inventory.skulls_earned`, for the world to come,
+## curse, and the way on under them), the curses (`Curses`: as many skulls as the budget this world earned
+## and the dungeon's depth, `Inventory.skull_allowance`, for the world to come,
 ## kept in `Inventory.pending_curses` and nowhere else until `transcended()` reads them), and behind
 ## each of the first two cards a `BagPage` built for it (`transcending` true) -- over the bag
 ## and the ordinary doll to choose the piece to keep, over the heirlooms with the super orbs for its
@@ -46,7 +46,8 @@ var _made := false
 ## Whether the world was lost rather than left (No Second Chances): then nothing of it may be kept,
 ## and it raises no skulls. Read by the main scene, which hands it to `Inventory.transcended`.
 var lost := false
-## The skulls the curses may add up to: the budget this world leaves the player (`skulls_earned`).
+## The skulls the curses may add up to: the budget this world leaves the player and the dungeon's depth
+## (`skull_allowance`).
 var _budget := 0
 ## The way on has been pressed once with the heirloom still unmade, and asked if that was meant.
 var _warned := false
@@ -66,7 +67,7 @@ var _curse_table: Control
 func _init(inventory: Inventory, ui_scale: float, world_lost := false) -> void:
 	_inventory = inventory
 	lost = world_lost
-	_budget = inventory.skulls_earned(world_lost)
+	_budget = inventory.skull_allowance(world_lost)
 	_ui_scale = ui_scale
 	theme = UITheme.theme()
 	# The whole window, and it stops the mouse: the world under it is over.
@@ -141,7 +142,7 @@ func _show_choice() -> void:
 		taken.append(str(Curses.CURSES[id]["name"]))
 	var spent := Curses.skulls_of(_inventory.pending_curses)
 	cards.add_child(_card("Take on a curse", load(SKULL_ICON), _budget > 0,
-			"No skulls to spend. Break walls under curses to earn them." if _budget == 0
+			"No skulls to spend. Break walls under curses or go deeper in the dungeon to earn them." if _budget == 0
 			else "A harder world that pays for it, up to %d skulls. None taken." % _budget if taken.is_empty()
 			else "The new world is under %s: %d of %d skulls." % [", ".join(taken), spent, _budget],
 			_show_curses))

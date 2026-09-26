@@ -28,8 +28,12 @@ const HOMECOMING := "homecoming"
 ## (`Inventory.transcended`). She offers it only once a wall has fallen, and it is priced against the
 ## ground behind the first wall rather than the town's (`TownPrices.fortune_price`).
 const TRANSCEND := "transcend"
-## The order her buttons stand in: the readings first, then the great spells, then the way out.
-const READINGS := [ROADS, TREASURE, QUARRY, RELIC, APPRAISE, SCOUR, HOMECOMING, TRANSCEND]
+## Not a reading either but a thing she sells, once and for good: the Seeing Stone, which feels for the
+## Gollux cave (`warmth`) and is kept through every transcension (`Inventory.seeing_stone`). She has it
+## once this world has a cave, and it is priced like the way out, the same in every town.
+const STONE := "stone"
+## The order her buttons stand in: the readings first, then the great spells, the stone and the way out.
+const READINGS := [ROADS, TREASURE, QUARRY, RELIC, APPRAISE, SCOUR, HOMECOMING, STONE, TRANSCEND]
 
 ## Her list is in two halves, and which half a spell is in is the whole of its rule.
 ##
@@ -54,6 +58,7 @@ const LABELS := {
 	# "Homecoming" is two letters wider than a shelf square, and a name on her grid is clipped rather
 	# than allowed to widen the page.
 	HOMECOMING: "Return",
+	STONE: "Seeing Stone",
 	TRANSCEND: "Transcend",
 }
 
@@ -67,11 +72,26 @@ const PEEKED := "peeked"
 ## reading -> how many times it has been asked in this world, which is what doubles a reading's price.
 const CAST := "cast"
 
+## What the stone says, coldest first, and the most steps from the cave each warmer word is said
+## within: Burning at two or fewer, Hot at five, Warm at ten, Cool at sixteen, Cold past that. Bands
+## rather than the distance, so the stone is a game of hot and cold and never a compass.
+const WARMTH := ["Cold", "Cool", "Warm", "Hot", "Burning"]
+const WARMTH_STEPS := [16, 10, 5, 2]
+
 ## How far round the chosen tile the scour reaches: the tile and two rings, nineteen in all.
 const SCOUR_RADIUS := 2
 
 ## What she says about a piece whose modifiers are its row's and nothing else's.
 const WRITTEN := "Its lines are already written."
+
+
+## How warm the stone is `steps` from the cave: an index into `WARMTH`, 0 the coldest.
+static func warmth(steps: int) -> int:
+	var band := 0
+	for most: int in WARMTH_STEPS:
+		if steps <= most:
+			band += 1
+	return band
 
 
 ## The uniques she could still show: neither found nor shown already.

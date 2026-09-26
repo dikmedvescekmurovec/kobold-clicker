@@ -65,6 +65,7 @@ const FORTUNE_BODIES := {
 	"appraise": 5.0,
 	"scour": 1000.0,
 	"homecoming": 200.0,
+	"stone": 1000.0,
 	"transcend": 2000.0,
 }
 
@@ -156,7 +157,8 @@ static func reroll_price(town_cell: Vector2i, rerolls: int) -> float:
 static func fortune_price(reading: String, town_cell: Vector2i, cast := 0) -> float:
 	if not FORTUNE_BODIES.has(reading):
 		return 0.0
-	if reading == "transcend":
+	# The way out and the stone are the same everywhere: bodies on the ground behind the first wall.
+	if reading == "transcend" or reading == "stone":
 		return maxf(1.0, roundf(Encounter.gold_at_steps(transcend_steps()) * float(FORTUNE_BODIES[reading])))
 	return maxf(1.0, roundf(gold_at_level(MapBuilder.level_of(town_cell)) * float(FORTUNE_BODIES[reading])
 			* pow(FORTUNE_GROWTH, maxi(cast, 0))))

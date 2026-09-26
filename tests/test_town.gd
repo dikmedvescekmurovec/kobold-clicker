@@ -1316,10 +1316,14 @@ func _test_entering() -> void:
 	main._update_buttons()
 	_check(main.view.can_visit(town), "standing on a charted town, it can be entered")
 	_check(main._town_button.visible, "and the button is there")
-	var marks: Node = main._service_rows.get_child(main._service_rows.get_child_count() - 1).body.get_child(0)
-	_check(marks.get_child_count() > 0, "the tile panel shows a mark for what is traded here")
-	for mark: Control in marks.get_children():
-		_check(mark.tooltip_text != "", "and each mark says what it is when pointed at")
+	# A heading, then a row per counter: its mark and its name.
+	var rows: Array[Node] = main._service_rows.get_children().slice(1)
+	_check(rows.size() > 0, "the tile panel shows a row for what is traded here")
+	for row: Node in rows:
+		_check(row.get_child(0) is TextureRect and (row.get_child(1) as Label).text != "",
+				"and each row names its counter beside its mark")
+	_check(main._level_label.text.begins_with(main.SETTLEMENT_KINDS[main.view.town_tier(town)] + " · "),
+			"and the line under the name says what kind of place it is (%s)" % main._level_label.text)
 
 	# A settlement is never where a monster lives, not even the one the player is standing in: the
 	# board would otherwise answer "where does it live" with the ground under their own feet. The town
@@ -1421,6 +1425,38 @@ func _test_entering() -> void:
 	main._on_town_pressed()
 	main.town_page._on_tab_pressed(TownServices.FORTUNE)
 	await process_frame
+	# Her tab opened for the first time, she explains herself, a page a click -- after any tip the
+	# fights on the way here earned, which come first.
+	var hers: Array = []
+	for tip: Array in main.TIPS:
+		if tip[0] == "first_fortune":
+			hers = tip[2]
+	while main._tip_panel != null and not (main._tip_panel is DialogueBox and main._tip_panel._pages == hers):
+		main._on_tip_closed()
+	_check(main._tip_panel is DialogueBox and "first_fortune" in main.inventory.tips,
+			"the first time her tab opens, the fortuneteller speaks")
+	var box := main._tip_panel as DialogueBox
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	_check(box.typing() and box._words.visible_characters < box._words.text.length(),
+			"her words come in a letter at a time")
+	box._gui_input(click)
+	_check(not box.typing() and box._words.visible_characters == -1 and box._page == 0,
+			"a click finishes the page without turning it")
+	box._gui_input(click)
+	_check(box._page == 1 and box.typing(), "and the next click turns it")
+	var pages: int = box._pages.size()
+	while box._page < pages - 1 or box.typing():
+		box._gui_input(click)
+	_check(main._tip_panel == box and box._words.text == box._pages[pages - 1],
+			"she is still there on the last page")
+	box._gui_input(click)
+	_check(main._tip_panel == null, "and the click after it lets her go")
+	main.town_page._on_tab_pressed(TownServices.BOUNTIES)
+	main.town_page._on_tab_pressed(TownServices.FORTUNE)
+	_check(main._tip_panel == null, "and she says it only once")
+	await process_frame
 	_check(not _dead(main, FortuneTeller.QUARRY), "the fortuneteller will say where a bounty's monster lives")
 	_ask(main, FortuneTeller.QUARRY)
 	await process_frame
@@ -1484,19 +1520,25 @@ func _test_fortune() -> bool:
 
 	# Her list is in two halves and every spell is in exactly one of them -- the lists are written out
 	# separately, so this is what holds them together.
-	var halves := (FortuneTeller.COMMON + FortuneTeller.GREAT + [FortuneTeller.TRANSCEND]).duplicate()
+	var halves := (FortuneTeller.COMMON + FortuneTeller.GREAT + [FortuneTeller.STONE, FortuneTeller.TRANSCEND]).duplicate()
 	halves.sort()
 	var every := FortuneTeller.READINGS.duplicate()
 	every.sort()
 	_check(halves == every, "every spell is a reading or a great spell and never both (%s)" % [halves])
 
+	# The stone's hot and cold: its bands, coldest first, by the steps to the cave.
+	var bands := []
+	for steps in [0, 2, 3, 5, 6, 10, 11, 16, 17, 60]:
+		bands.append(FortuneTeller.warmth(steps))
+	_check(bands == [4, 4, 3, 3, 2, 2, 1, 1, 0, 0], "the stone burns within two steps and is cold past sixteen (%s)" % [bands])
+
 	for reading: String in FortuneTeller.READINGS:
 		_check(TownPrices.FORTUNE_BODIES.has(reading) and FortuneTeller.LABELS.has(reading),
 				"%s has a price and a name" % reading)
-		# The way out is priced on the ground behind the first wall, wherever it is asked for.
-		if reading == FortuneTeller.TRANSCEND:
+		# The way out and the stone are priced on the ground behind the first wall, wherever they are asked for.
+		if reading == FortuneTeller.TRANSCEND or reading == FortuneTeller.STONE:
 			_check(TownPrices.fortune_price(reading, TOWN_CELL) == TownPrices.fortune_price(reading, Vector2i(1, 0)),
-					"transcending costs the same in every town")
+					"%s costs the same in every town" % reading)
 			_check(TownPrices.fortune_price(reading, TOWN_CELL) == roundf(TownPrices.FORTUNE_BODIES[reading]
 					* Encounter.gold_at_steps(MapBuilder.START_LAND_RADIUS + 2)),
 					"and is bodies on the second ring of the land behind the first wall")
@@ -1579,6 +1621,9 @@ func _test_fortune_page() -> void:
 		# Her squares on the two grids; the way out is on neither while every wall still stands.
 		if reading == FortuneTeller.TRANSCEND:
 			_check(_spell(main, reading) == null, "the way out is not offered yet")
+			continue
+		if reading == FortuneTeller.STONE:
+			_check(_spell(main, reading) == null, "nor the stone, with no cave in this world to feel for")
 			continue
 		_check(_spell(main, reading) != null, "she offers %s" % reading)
 	_check(_dead(main, FortuneTeller.QUARRY), "no bounty is out, so there is none to find")
@@ -1666,15 +1711,39 @@ func _test_fortune_page() -> void:
 	main.town_page.bag_changed(null)
 	await process_frame
 
+	# The Seeing Stone: sold once this world has a cave, once and for good.
+	main.inventory.farthest_land = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
+	main._credit_walls()
+	main.town_page.redraw()
+	await process_frame
+	var stone_price := TownPrices.fortune_price(FortuneTeller.STONE, town)
+	_check(_spell(main, FortuneTeller.STONE) != null and not _dead(main, FortuneTeller.STONE)
+			and _price(main, FortuneTeller.STONE) == stone_price, "with a cave in the world, she sells the stone")
+	purse = main.inventory.gold
+	_ask(main, FortuneTeller.STONE)
+	await process_frame
+	_check(main.inventory.seeing_stone and main.inventory.gold == purse - stone_price
+			and Inventory.load_from(TEST_PATH).seeing_stone, "bought, paid for and saved")
+	_check(main.town_page._told != null and _said(main.town_page._told).contains("Seeing Stone is yours"),
+			"and she says it is the player's for good")
+	_check(FortuneTeller.cast(main.inventory.fortunes, FortuneTeller.STONE) == 0, "a thing sold, not a reading cast")
+	main.town_page._close_told()
+	main.town_page.redraw()
+	await process_frame
+	_check(_spell(main, FortuneTeller.STONE) == null, "and never sold again")
+
 	# The scour: the town closes, the map is aimed at, Escape costs nothing, a click pays once.
 	_ask(main, FortuneTeller.SCOUR)
 	await process_frame
 	_check(not main.town_page.visible and main.map.aim_radius == FortuneTeller.SCOUR_RADIUS,
 			"the scour closes the town and aims at the map")
 	purse = main.inventory.gold
-	main._end_aim()
+	var right := InputEventMouseButton.new()
+	right.button_index = MOUSE_BUTTON_RIGHT
+	right.pressed = true
+	main._unhandled_input(right)
 	_check(main.map.aim_radius == -1 and main.inventory.gold == purse
-			and not _spent(main, main.view.start_town, FortuneTeller.SCOUR), "put away, it costs nothing")
+			and not _spent(main, main.view.start_town, FortuneTeller.SCOUR), "put away by a right click, it costs nothing")
 	main._on_spell_aimed(FortuneTeller.SCOUR, TownPrices.fortune_price(FortuneTeller.SCOUR, town),
 			main.view.start_town)
 	main._on_cell_aimed(Vector2i(9000, 9000))

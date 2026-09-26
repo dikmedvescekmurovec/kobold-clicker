@@ -54,6 +54,26 @@ var player: PlayerToken
 var fog: FogOverlay
 ## Where MapBuilder puts the treasure chest sprites: over the fog, so a chest reads on uncharted land.
 var chests: Node2D
+## A settlement's buildings, one sprite a town from `Assets/Towns/` (`AI-sprites-generator/build_towns.py`),
+## over the fog, the ice and the chests: bigger than their hex, so a town reads from across the map, and
+## only dimmed while uncharted, so a town the player has heard of stands out before the land round it.
+## The ground under them is the town tile on GroundLayer.
+var towns: Node2D
+## The sprite pixel that sits on a town's cell centre (`towns.ANCHOR` in the generator).
+const TOWN_ANCHOR := Vector2(42, 56)
+## An uncharted town's buildings: over the fog rather than under it, a little dimmed.
+const TOWN_UNCHARTED := Color(0.78, 0.76, 0.84)
+## The Gollux cave's mouth, one picture a ground (`AI-sprites-generator/caves.py`), and the one node
+## it is drawn as: there is one cave a world.
+const CAVE_ART := "res://Assets/Caves/cave_%s.png"
+const CAVE_NODE := "Cave"
+## The dark red light out of the pit, its own shader over the picture (which leaves it out), with its
+## origin on the middle of the hole: `caves.HOLE`, in the sprite's pixels. The polygon is the most of the
+## map it may light, round that point.
+const CAVE_GLOW := preload("res://Scenes/Map/cave_glow.gdshader")
+const CAVE_GLOW_AT := Vector2(42, 58)
+const CAVE_GLOW_REACH := Rect2(-32, -34, 64, 54)
+var _town_art: Dictionary[String, Texture2D] = {}
 
 
 func _ready() -> void:
@@ -88,6 +108,10 @@ func _ready() -> void:
 	chests.name = "Chests"
 	add_child(chests)
 	move_child(chests, highlight.get_index())
+	towns = Node2D.new()
+	towns.name = "Towns"
+	add_child(towns)
+	move_child(towns, highlight.get_index())
 	player = PlayerToken.new()
 	player.name = "Player"
 	add_child(player)  # Last, so the token draws over the highlight.
@@ -158,6 +182,68 @@ func set_road(cell: Vector2i, tile_name: String) -> void:
 		road_layer.set_cell(cell, HexTileset.SOURCE_ID, tileset.atlas_coords(tile_name))
 
 
+## Draws a settlement's buildings on `cell` (its tile name, e.g. "town_grass_small"), full colour once
+## charted and dimmed before. Called again for the same cell, it only changes that.
+func set_town(cell: Vector2i, tile_name: String, charted: bool) -> void:
+	var sprite := towns.get_node_or_null(_town_node(cell)) as Sprite2D
+	if sprite == null:
+		if not _town_art.has(tile_name):
+			_town_art[tile_name] = load("res://Assets/Towns/%s.png" % tile_name)
+		sprite = Sprite2D.new()
+		sprite.name = _town_node(cell)
+		sprite.texture = _town_art[tile_name]
+		sprite.centered = false
+		sprite.position = ground_layer.map_to_local(cell) - TOWN_ANCHOR
+		towns.add_child(sprite)
+	sprite.modulate = Color.WHITE if charted else TOWN_UNCHARTED
+
+
+## Draws the Gollux cave's mouth on `cell`, in `env`'s picture, on the settlements' layer and at their
+## anchor (`caves.py` draws it to their size), dimmed until charted as a settlement is. Nothing where
+## the picture has not been built: the art is exported only once it has been approved.
+func set_cave(cell: Vector2i, env: String, charted: bool) -> void:
+	var sprite := towns.get_node_or_null(CAVE_NODE) as Sprite2D
+	if sprite == null:
+		var path := CAVE_ART % env
+		if not ResourceLoader.exists(path):
+			return
+		sprite = Sprite2D.new()
+		sprite.name = CAVE_NODE
+		sprite.texture = load(path)
+		sprite.centered = false
+		sprite.position = ground_layer.map_to_local(cell) - TOWN_ANCHOR
+		towns.add_child(sprite)
+		sprite.add_child(_cave_glow())
+	sprite.modulate = Color.WHITE if charted else TOWN_UNCHARTED
+
+
+## The light out of the pit: a rectangle over the hole drawn by `cave_glow.gdshader`, added onto what is
+## under it. A child of the picture, so the fog's dimming of an uncharted cave dims it too. It is only for
+## show, so with animations off it holds still.
+func _cave_glow() -> Polygon2D:
+	var glow := Polygon2D.new()
+	glow.name = "Glow"
+	var r := CAVE_GLOW_REACH
+	glow.polygon = PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end,
+			Vector2(r.position.x, r.end.y)])
+	glow.position = CAVE_GLOW_AT
+	var material := ShaderMaterial.new()
+	material.shader = CAVE_GLOW
+	if Settings.animations == Settings.Anim.NONE:
+		for still: String in ["breath", "depth", "flicker"]:
+			material.set_shader_parameter(still, 0.0)
+	glow.material = material
+	return glow
+
+
+func has_town(cell: Vector2i) -> bool:
+	return towns.has_node(_town_node(cell))
+
+
+func _town_node(cell: Vector2i) -> String:
+	return "Town_%d_%d" % [cell.x, cell.y]
+
+
 ## Puts the player token on a cell, or on NO_CELL to take it off the map.
 func set_player_cell(cell: Vector2i) -> void:
 	player.set_cell(cell)
@@ -174,6 +260,8 @@ func clear_map() -> void:
 	fog.clear()
 	for chest in chests.get_children():
 		chest.free()
+	for town in towns.get_children():
+		town.free()
 	highlight.queue_redraw()
 
 

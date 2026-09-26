@@ -320,8 +320,12 @@ var _result_detail: Label
 var _result_drops: DropsView
 ## The bag in the corner: what the run has turned up so far, and the popup it opens.
 var _loot_button: Button
-var _loot_panel: PanelContainer
+var _loot_panel: VBoxContainer
 var _loot_drops: DropsView
+## The popup's sums, kept current while it is open.
+var _loot_gold: Label
+var _loot_xp: Label
+var _loot_kills: Label
 ## How many finds this fight has thrown into the arena -- gear and orbs both. Nothing is drawn from
 ## it: the sprites free themselves, and what anybody wants to know is whether something was announced
 ## at all, which is what `test_inventory` asks of an autodiscarded find.
@@ -689,47 +693,17 @@ func _build_hud() -> void:
 	# spending it here would put one colour on a currency and on an item's name in the same panel.
 	# Centred by the row shrinking to its contents: HORIZONTAL_ALIGNMENT_CENTER centres text inside a
 	# label and says nothing about where the label itself sits in the column.
-	var sums := HBoxContainer.new()
-	sums.add_theme_constant_override("separation", 10)
-	sums.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_result_summary.add_child(sums)
-	_gold_row = HBoxContainer.new()
-	_gold_row.add_theme_constant_override("separation", 6)
+	var sums := _sums_row(_result_summary)
+	_gold_label = _sum(sums, Coins.icon(), Vector2(Coins.SIZE, Coins.SIZE))
+	_gold_row = _gold_label.get_parent()
 	_gold_row.hide()
-	sums.add_child(_gold_row)
-	_gold_coin = TextureRect.new()
-	_gold_coin.texture = Coins.icon()
-	_gold_coin.custom_minimum_size = Vector2(Coins.SIZE, Coins.SIZE)
-	_gold_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_gold_row.add_child(_gold_coin)
-	_gold_label = _label("")
-	_gold_row.add_child(_gold_label)
+	_gold_coin = _gold_row.get_child(0)
 	# The experience beside the purse, in the same row: both are sums, and both are never nothing.
-	_xp_row = HBoxContainer.new()
-	_xp_row.add_theme_constant_override("separation", 6)
+	_xp_label = _sum(sums, XP_GEM, Vector2(XP_GEM.get_width(), XP_GEM.get_height()) * XP_GEM_SCALE)
+	_xp_row = _xp_label.get_parent()
 	_xp_row.hide()
-	sums.add_child(_xp_row)
-	var gem := TextureRect.new()
-	gem.texture = XP_GEM
-	gem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	gem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	gem.custom_minimum_size = Vector2(XP_GEM.get_width(), XP_GEM.get_height()) * XP_GEM_SCALE
-	_xp_row.add_child(gem)
-	_xp_label = _label("")
-	_xp_row.add_child(_xp_label)
-	# The bodies, as a count behind a skull. The pack's 32 px skull at half size, the orb tray's 2:1;
-	# the mode goes on before the texture, or the minimum stays 32 (see OrbSlot).
-	var kills_row := HBoxContainer.new()
-	kills_row.add_theme_constant_override("separation", 6)
-	sums.add_child(kills_row)
-	var skull := TextureRect.new()
-	skull.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	skull.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	skull.texture = SKULL
-	skull.custom_minimum_size = Vector2(Coins.SIZE, Coins.SIZE)
-	kills_row.add_child(skull)
-	_kills_label = _label("")
-	kills_row.add_child(_kills_label)
+	# The bodies, as a count behind a skull. The pack's 32 px skull at half size, the orb tray's 2:1.
+	_kills_label = _sum(sums, SKULL, Vector2(Coins.SIZE, Coins.SIZE))
 	# What the fight left behind, under the sums: the finds on the bag's light panel and the orbs in a
 	# row under them. Kept even when it was lost, so this is where that promise is visibly kept.
 	_result_drops = DropsView.new()
@@ -767,18 +741,21 @@ func _build_hud() -> void:
 
 	# The same list again, on its own panel, for the counter in the corner to open mid-run. A farm
 	# run has no verdict to wait for, so this is the only way to see what it has found.
-	_loot_panel = PanelContainer.new()
-	_loot_panel.theme_type_variation = "WoodPanel"
+	# Built as the verdict is -- the word on the green bar, the sums, the finds and orbs, the way out
+	# at the foot -- so the haul mid-fight and the haul at the end read as the same panel.
+	_loot_panel = UITheme.titled_panel("Loot", "", Callable())
 	_loot_panel.scale = Vector2(_ui_scale, _ui_scale)
 	_loot_panel.hide()
 	_loot_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	hud.add_child(_loot_panel)
-	var found := VBoxContainer.new()
+	var found := UITheme.body_of(_loot_panel)
 	found.add_theme_constant_override("separation", 8)
-	_loot_panel.add_child(found)
-	var found_title := _label("Found")
-	found_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	found.add_child(found_title)
+	# The sums so far, every one shown even at nothing: a fight that has found no gear yet still has
+	# a purse, experience and bodies to show for itself, and that row is the whole panel then.
+	var so_far := _sums_row(found)
+	_loot_gold = _sum(so_far, Coins.icon(), Vector2(Coins.SIZE, Coins.SIZE))
+	_loot_xp = _sum(so_far, XP_GEM, Vector2(XP_GEM.get_width(), XP_GEM.get_height()) * XP_GEM_SCALE)
+	_loot_kills = _sum(so_far, SKULL, Vector2(Coins.SIZE, Coins.SIZE))
 	# What the counter's reddening face means, in words, in the one place the player has already
 	# asked what the run is carrying -- and over the list rather than under it, because it is about
 	# the whole of it. Here rather than out in the arena because this is where something can be done
@@ -792,11 +769,37 @@ func _build_hud() -> void:
 	_loot_drops.discarded.connect(_on_drop_discarded)
 	_loot_drops.resized_contents.connect(_centre_loot)
 	found.add_child(_loot_drops)
-	var close := Button.new()
-	close.text = "Close"
-	close.theme_type_variation = "WoodButton"
+	var close := UITheme.button("Close", "LightButton", "Back to the fight")
+	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	close.pressed.connect(_on_loot_closed)
 	found.add_child(close)
+
+
+## One row of a fight's earnings, centred by shrinking to what it holds: HORIZONTAL_ALIGNMENT_CENTER
+## centres text inside a label and says nothing about where the label itself sits in the column.
+func _sums_row(into: Container) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	into.add_child(row)
+	return row
+
+
+## One sum in that row: a bare number behind its mark. The mode goes on before the texture, or the
+## minimum stays the texture's (see OrbSlot).
+func _sum(row: HBoxContainer, icon: Texture2D, size: Vector2) -> Label:
+	var pair := HBoxContainer.new()
+	pair.add_theme_constant_override("separation", 6)
+	row.add_child(pair)
+	var mark := TextureRect.new()
+	mark.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	mark.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	mark.texture = icon
+	mark.custom_minimum_size = size
+	pair.add_child(mark)
+	var label := _label("")
+	pair.add_child(label)
+	return label
 
 
 ## A brown square with a cream mark, the same button as the map's bag and skills. The loot counter
@@ -1249,6 +1252,8 @@ func _refresh() -> void:
 		_level_label.text = "Depth %d" % fight.depth()
 	_pips.show_fight(fight)
 	_place_corners(view)
+	if _loot_panel.visible:
+		_refresh_loot_sums()
 
 	if fight.index >= fight.lineup.size() or fight.finished:
 		_enemy_panel.hide()
@@ -1310,7 +1315,7 @@ func _on_loot_dropped(index: int, item: Item) -> void:
 	_drops.append(item)
 	_refresh_loot_button()
 	if _loot_panel.visible:
-		_loot_drops.fill(_drops)
+		_fill_loot()
 	# Common is thrown plain, the way an ItemSlot rings nothing at common: a glow means "this one is
 	# worth stopping for", and one on everything would mean nothing.
 	#
@@ -1346,7 +1351,7 @@ func _on_xp_dropped(_index: int, amount: int) -> void:
 func _on_drop_discarded(item: Item) -> void:
 	_drops.erase(item)
 	_refresh_loot_button()
-	_loot_drops.fill(_drops)
+	_fill_loot()
 	_result_drops.fill(_drops, fight.orbs)
 	drop_discarded.emit(item)
 
@@ -1377,11 +1382,16 @@ func _show_warning(showing: bool) -> void:
 		_centre_loot()
 
 
-## The counter in the corner: the sack and how many finds there are. With nothing found it is a
-## dead button reading 0.
+## The counter in the corner: the sack and how many finds there are. Always live, even at 0: the
+## popup also says the purse, experience and bodies so far.
 func _refresh_loot_button() -> void:
 	_loot_button.text = str(_drops.size())
-	_loot_button.disabled = _drops.is_empty()
+
+
+## The popup's finds and orbs, and no panel for them at all while there are neither.
+func _fill_loot() -> void:
+	_loot_drops.fill(_drops, fight.orbs)
+	_loot_drops.visible = not (_drops.is_empty() and fight.orbs.is_empty())
 
 
 ## The bottom of the top-centre column -- place, pips and clock -- in screen pixels. For anything the
@@ -1421,13 +1431,23 @@ func _place_corners(view: Vector2) -> void:
 ## and borrowing a colour from that ramp would say it did.
 func _on_orb_dropped(_index: int, orb: String) -> void:
 	_show_find(OrbTable.icon(orb), Color.TRANSPARENT)
+	if _loot_panel.visible:
+		_fill_loot()
 	orb_gained.emit(orb)
 
 
 func _on_loot_pressed() -> void:
-	_loot_drops.fill(_drops)
+	_fill_loot()
+	_refresh_loot_sums()
 	_loot_panel.show()
+	Juice.pop_in(_loot_panel, _ui_scale)
 	_centre_loot()
+
+
+func _refresh_loot_sums() -> void:
+	_loot_gold.text = BigNumber.format(fight.gold)
+	_loot_xp.text = BigNumber.format(fight.xp)
+	_loot_kills.text = str(fight.kills())
 
 
 func _on_loot_closed() -> void:
@@ -1522,8 +1542,7 @@ func _centre_result() -> void:
 ## The loot popup, centred the same way and for the same reason.
 func _centre_loot() -> void:
 	await get_tree().process_frame
-	var size := _loot_panel.get_combined_minimum_size() * _ui_scale
-	_loot_panel.position = (_size() - size) / 2.0
+	Juice.centre(_loot_panel, _size())
 
 
 func _on_back_pressed() -> void:

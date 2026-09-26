@@ -23,7 +23,8 @@ const SAVE_PATH := "user://map.json"
 ## 1 is the first shape there has been. 2 added the names of the tiles the player has seen; a
 ## version 1 save simply has none, and its tiles are named again as they are asked about. 3 added
 ## `land_radius`, the ice wall's place; an older save has none and MapBuilder puts the wall past it.
-const VERSION := 3
+## 4 added `cave`, the Gollux cave's cell; an older save has none, and the main scene puts one down.
+const VERSION := 4
 
 ## MapBuilder.State by name, lowest value first. Written into every save as the legend its state
 ## rows index, so reordering the enum can never quietly reinterpret a file already on disk.
@@ -46,6 +47,8 @@ var rect: Rect2i
 ## How far the land reaches before the ice wall; 0 in a save written before there was one.
 var land_radius := 0
 var start_town: Vector2i
+## The Gollux cave's cell, `HexMap.NO_CELL` for a world that has none yet.
+var cave := HexMap.NO_CELL
 var player_cell: Vector2i
 ## The whole town world, as TownWorld.to_dict wrote it.
 var towns: Dictionary = {}
@@ -104,6 +107,7 @@ func save(path := SAVE_PATH) -> bool:
 		"rect": [rect.position.x, rect.position.y, rect.size.x, rect.size.y],
 		"land_radius": land_radius,
 		"start_town": [start_town.x, start_town.y],
+		"cave": [cave.x, cave.y] if cave != HexMap.NO_CELL else [],
 		"player_cell": [player_cell.x, player_cell.y],
 		"towns": towns,
 		"environments": env_names,
@@ -160,6 +164,9 @@ static func load_from(path := SAVE_PATH, problem: Array = [], expect_sheet := ""
 	save.map_seed = int(data.get("map_seed", 0))
 	save.origin = _to_vector(data.get("origin", []))
 	save.start_town = _to_vector(data.get("start_town", []))
+	var saved_cave: Variant = data.get("cave", [])
+	if typeof(saved_cave) == TYPE_ARRAY and (saved_cave as Array).size() == 2:
+		save.cave = _to_vector(saved_cave)
 	save.player_cell = _to_vector(data.get("player_cell", []))
 	var saved_rect: Variant = data.get("rect", [])
 	if typeof(saved_rect) != TYPE_ARRAY or saved_rect.size() != 4:

@@ -416,6 +416,20 @@ static func scroll() -> ScrollContainer:
 	return made
 
 
+## A small heading: a word in the body font and a rule run out to the edge (a counter's Trade up, her
+## Readings and Great spells, the tile panel's Services). Small, because something above it is already
+## the heading; these only say where one part ends and the next begins.
+static func section(text: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	row.add_child(label(text, Palette.TEXT_SOFT, true))
+	var line := rule()
+	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(line)
+	return row
+
+
 static func rule(width := 0.0) -> ColorRect:
 	var made := ColorRect.new()
 	made.color = Palette.SLOT_TAN_DK
@@ -483,6 +497,8 @@ static func titled_panel(title_text: String, tooltip: String, on_close: Callable
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	header.add_child(title)
+	# Air between a long name and the X, which otherwise runs the one into the other.
+	header.add_theme_constant_override("separation", 6)
 	# A drawn X at the size the pack drew it: a Button with no text has no minimum size of its own.
 	# None where `on_close` is empty: a panel left by its own button (a verdict's Collect).
 	if on_close.is_valid():

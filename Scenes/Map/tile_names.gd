@@ -48,6 +48,10 @@ const TOWN_FEATURES := {
 	"medium": ["Town", "Market", "Quarter", "Gate"],
 	"fortress": ["Keep", "Hold", "Bastion", "Citadel"],
 }
+## What the Gollux cave's tile is called, whatever ground it opens in: passed as `generate`'s `tier`,
+## the way a settlement's tier is, since the cave is a place with a thing in it too.
+const CAVE := "cave"
+const CAVE_FEATURES := ["Cave", "Hollow", "Deep", "Maw"]
 ## What a tile falls back to when its environment has no list -- a sheet grown a seventh terrain
 ## names its tiles plainly rather than leaving them nameless.
 const PLAIN_FEATURES := ["Reach", "Bounds", "Country", "March"]
@@ -68,6 +72,8 @@ static func generate(cell: Vector2i, env: String, map_seed: int, tier := "") -> 
 ## The words a tile of this kind can take for its second half. A settlement's own list wins over the
 ## ground it stands on.
 static func features_for(env: String, tier := "") -> Array:
+	if tier == CAVE:
+		return CAVE_FEATURES
 	if tier != "" and TOWN_FEATURES.has(tier):
 		return TOWN_FEATURES[tier]
 	return FEATURES.get(env, PLAIN_FEATURES)

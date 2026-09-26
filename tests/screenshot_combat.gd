@@ -365,6 +365,7 @@ func _shoot_farm() -> void:
 	# The popup the counter opens, which for a run is the only way to see what it has turned up --
 	# and, the bag being full, where the warning about that is now said.
 	combat._on_loot_pressed()
+	await create_timer(Juice.POP_TIME + 0.1).timeout
 	await _save(combat, "combat_farm_loot.png")
 	# One of them opened, which is where a find can be thrown away by hand -- the way out of a run
 	# that has turned up more than the bag will hold.

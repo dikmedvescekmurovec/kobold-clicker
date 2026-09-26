@@ -2,7 +2,8 @@ class_name CollectionPage
 extends Control
 ## The collection log, as a page against the left edge: every unique the game has, one square each in
 ## `UniqueTable`'s order. One the player has found is drawn as the piece it is; one a fortuneteller
-## has shown them (`FortuneTeller.peek`) is the same piece darkened; any other is its outline in black,
+## has shown them (`FortuneTeller.peek`) is the same piece darkened; any other is its outline in black --
+## either with no socket or ring, the sprite alone --
 ## and its card says nothing but that.
 ##
 ## **Where a piece is carried is written on a found square as well as a shown one** (`write_hint`): a

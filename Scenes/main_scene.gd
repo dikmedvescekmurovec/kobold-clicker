@@ -31,9 +31,28 @@ const STAR_ICON := "res://Assets/UI/ui_icon_star.png"
 const SCROLL_ICON := "res://Assets/UI/ui_icon_scroll.png"
 ## And a fourth that is about the game rather than the player: the settings, behind a cog.
 const COG_ICON := "res://Assets/UI/ui_icon_cog.png"
-const SKULL_ICON := "res://Assets/UI/ui_icon_skull.png"
-## What the dungeon is called over its fight, and on its corner button.
+## What the dungeon is called over its fight and on the cave's tile.
 const DUNGEON_NAME := "The Descent"
+## The Seeing Stone (`tools/seeing_stone.py`): the stone at rest, and the light inside it the temperature
+## tints. Both SIDE square, drawn at `ui_scale`, twice a corner button, which is what makes it the thing
+## on the map to press rather than a menu's tab.
+const STONE_ART := "res://Assets/UI/seeing_stone.png"
+const STONE_GLOW := "res://Assets/UI/seeing_stone_glow.png"
+const STONE_SIDE := 32.0
+## The air between the stone and the tile panel, or the window's edge, in panel pixels: room for its
+## word to be wider than it.
+const STONE_GAP := 12.0
+## What the light inside it is, by `FortuneTeller.WARMTH`, coldest first: the preview's colours.
+const STONE_COLOURS: Array[Color] = [Color("#7fb8ff"), Color("#9fd8e8"), Color("#f2c96b"), Color("#f08a3c"),
+		Color("#e8452c")]
+## How long an answer burns before it settles, and how much of the light it keeps: the stone goes on
+## showing its last answer, dimly, rather than being a live compass.
+const STONE_FADE := 4.0
+const STONE_REST := 0.35
+## The stone once this world's cave has been found, when it has nothing left to feel for.
+const STONE_ASLEEP := Color(0.55, 0.55, 0.6)
+const STONE_TIP := "The Seeing Stone. Press it to feel how near the Gollux cave is"
+const STONE_ASLEEP_TIP := "The Seeing Stone sleeps: the way down in this world is found"
 const TROPHY_ICON := "res://Assets/UI/ui_icon_trophy.png"
 ## The heirlooms'. A stand-in from the pack until they have a mark of their own.
 const CROWN_ICON := "res://Assets/UI/ui_icon_crown.png"
@@ -44,13 +63,15 @@ const CORNER_GAP := 4.0
 const REFUSAL_WIDTH := 300.0
 const REFUSAL_MARGIN := 32.0
 ## What a tile modifier's sentences wrap at on the tile panel, so a long one never widens the column.
-const MOD_WIDTH := 130.0
-
-## What the panel over an aimed spell says to do with the map behind it, by the spell's own name.
-const AIM_LINES := {
-	FortuneTeller.SCOUR: "Choose the land to uncover.",
-	FortuneTeller.HOMECOMING: "Choose the settlement to stand in.",
-}
+const MOD_WIDTH := 150.0
+## The tile panel's air: `TILE_PAD` more padding round its body than a titled panel has, `TILE_GAP`
+## between rows and twice that between its parts (the land, the services, the modifiers).
+const TILE_PAD := 4
+const TILE_GAP := 8
+## What the tile panel calls a settlement, by `TownWorld.Tier`, ahead of the tile's level.
+const SETTLEMENT_KINDS: Array[String] = ["Village", "Town", "Fortress"]
+## A terrain's name on the tile panel where its key capitalised is not a word for land.
+const TERRAIN_NAMES := {"grass": "Grassland", "dirt": "Barrens"}
 
 var towns: TownWorld
 var view: MapBuilder
@@ -96,6 +117,8 @@ var _farm_button: Button
 ## What `_update_buttons` last greyed the fights for, so `_process` knows when the bag has crossed the cap.
 var _was_encumbered := false
 var _town_button: Button
+## Down into the cave, on the cave's own tile: green, as Enter town is.
+var _cave_button: Button
 ## What a town on the selected tile offers, listed under the land it stands on.
 var _service_rows: VBoxContainer
 ## What the land does to its own fight (`TileMods`), one row a modifier, under the services.
@@ -138,8 +161,14 @@ var _bag_button: Button
 var _skills_button: Button
 var _bounty_button: Button
 var _settings_button: Button
-## The way down the dungeon, which comes on with the bag: it is gear that it measures.
-var _dungeon_button: Button
+## The Seeing Stone, top right, once it is bought: the stone, the light in it and the word it says.
+var _stone: TextureButton
+var _stone_glow: TextureRect
+var _stone_word: Label
+var _stone_tween: Tween
+## Its last answer, as an index into `FortuneTeller.WARMTH`, -1 before the first: what "Warmer" and
+## "Colder" are said against. Not saved -- a new session asks afresh.
+var _stone_band := -1
 var _collection_button: Button
 ## There while an heirloom is held, and the one corner button a
 ## town leaves standing: pressed there it swaps the bag and the heirlooms at the counter.
@@ -172,18 +201,58 @@ var _combat: CombatScene
 ## written over: overwriting is how a save gets eaten, and the build that wrote it can still read it.
 var _save_blocked := false
 
+## The hero's name on his box, a stand-in until he has one.
+const HERO := "Adventurer"
+
 ## First-time pop-ups, in the order they are shown: id, title, what it says. Each is shown once for the
 ## player, after the fight that earned it, and the corner button it is about only appears with it.
+## One with a fourth entry is spoken instead: the title is the speaker, what it says is its pages, and
+## the fourth is their portrait's name under `DialogueBox.PORTRAITS` (`DialogueBox.PLAYER` for the hero,
+## whose portrait stands on the left).
 const TIPS := [
-	["first_item", "Spoils of Battle", "The fallen leave treasure behind! Open your bag with the chest in the top-left corner, then look over what you found and gear up for the fights ahead."],
-	["first_orb", "A Spark of Power", "This orb hums with raw magic, and it can reshape your gear. Open a piece in your bag, and the orbs that answer its call glow. Pick one and see what happens."],
-	["level_up", "Power Grows Within", "Battle has hardened you. A skill point awaits, so open the skills page with the star in the top-left corner and choose your path."],
-	["first_farm", "The Endless Hunt", "The enemies here will never stop coming, but there is no clock to beat. Fight as long as you like and gather their spoils. When you have had your fill, raise the flag in the top-right corner to head home with everything you found."],
-	["first_chart", "Claim the Land", "Foes stand between you and this land, and the clock at the top of the screen is ticking. Strike them all down before it runs out and the tile is yours. Fall short and nothing is lost, so catch your breath and try again."],
-	["first_town", "Gates Stand Open", "People live here, and they will deal with a wanderer. Press Enter town on the panel at the right to step inside, where traders buy what you have gathered and sell what they have found. A board by the gate posts work for anyone willing to hunt, and a fortuneteller sells what she sees."],
-	["first_unique", "A Legend Found", "This is no ordinary find. A unique piece bends the rules of a fight, so read what it does before you wear it. The trophy in the top-left corner keeps count of every one you have found. A fortuneteller can say what the rest are and where they hide."],
-	["first_heirloom", "A Way Out", "The wall is down, and something of it has stayed with you. A fortuneteller can now show you the way out of this world. It costs everything you have here, and it is worth it."],
-	["first_bounty", "Names on the Board", "The board names creatures the town wants gone. Press Accept on a notice and every such creature you strike down counts towards it, one notice at a time. The scroll in the top-left corner keeps it wherever you go, and the fortuneteller in town can say where that creature lives."],
+	["first_item", HERO, [
+		"That one dropped something. Mine now.",
+		"Let's see if it fits.",
+	], "player"],
+	["first_orb", HERO, [
+		"It's warm, and it's glowing. My gear would look good glowing.",
+	], "player"],
+	["level_up", HERO, [
+		"I feel stronger. Taller, even.",
+		"well ...",
+		"... probably not taller.",
+	], "player"],
+	["first_farm", HERO, [
+		"They just keep coming! Good. No rush, then.",
+	], "player"],
+	["first_chart", HERO, [
+		"Right, clock's ticking. I love it when the clock's ticking.",
+	], "player"],
+	["first_town", HERO, [
+		"Oh, it's a proper town. With a gate and everything.",
+		"Right. Plan. Sell the sticky stuff, keep the sharp stuff.",
+	], "player"],
+	["first_unique", HERO, [
+		"Now this is something. I wonder how many more are out there.",
+	], "player"],
+	["first_heirloom", "Fortuneteller", [
+		"The wall's down, then. Took you long enough.",
+		"Come see me when you want out. It'll cost you everything, but you'll thank me.",
+	], "fortuneteller"],
+	["first_cave", HERO, [
+		"Something big lives at the bottom. I can hear it breathing.",
+	], "player"],
+	["first_stone", HERO, [
+		"This stone is humming. I think it wants to show me something.",
+	], "player"],
+	["first_bounty", HERO, [
+		"Someone wants a thing dead, and they're paying. My favourite kind of notice.",
+	], "player"],
+	["first_fortune", "Fortuneteller", [
+		"You'll want the chest. They always want the chest.",
+		"Then you'll want it again and again and again. And it'll cost you twice as much every time, and you'll look at me like I did something.",
+		"Choose other spells too if you like. The great ones I can only manage once though. I'm not young anymore.",
+	], "fortuneteller"],
 ]
 const FLASH_BRIGHT := Color(1.6, 1.6, 1.6)
 const FLASH_SECONDS := 0.5
@@ -195,7 +264,7 @@ var _resetting := false
 var _transcend_page: TranscendPage
 ## Tips earned but not shown yet, and the one that is up.
 var _tip_queue: Array = []
-var _tip_panel: VBoxContainer
+var _tip_panel: Control
 ## Pulses on corner buttons that have not been pressed yet: the pressed-once id -> its tween.
 var _flashes := {}
 ## What the hero's camp paid for the hours the game was shut, while its screen is up; null otherwise.
@@ -208,12 +277,12 @@ var _ambient: Ambient
 ## The badge pointing at the chest a fortuneteller was paid to find (`_sync_chest`).
 var _chest_pointer: ChestPointer
 ## The fortuneteller's aimed spell while its land is being chosen: which one it is ("" when nobody is
-## choosing), what the click will cost, the town whose drawer it is spent out of, and the panel saying
-## what to do.
+## choosing), what the click will cost, and the town whose drawer it is spent out of. Nothing is put up
+## to say what to do: the spell's own tooltip and the outline under the cursor are enough (the user's
+## call, 2026-09-26).
 var _aiming := ""
 var _aim_price := 0.0
 var _aim_town := TownWorld.NO_SPOT
-var _aim_panel: VBoxContainer
 
 
 ## Closing the window writes the save, so the hour it was shut is the hour a camp pays from.
@@ -372,6 +441,8 @@ func _process(delta: float) -> void:
 		_update_buttons()
 	if view != null and view.walking:
 		camera.position = _clamp_to_map(map.player.position)
+	if _stone != null and _stone.visible:
+		_place_stone()
 
 
 ## Built in code so the scene file stays untouched while the Godot editor has it open.
@@ -394,35 +465,43 @@ func _build_ui() -> void:
 	layer.add_child(_panel)
 	_tile_title = UITheme.title_of(_panel)
 	var rows := UITheme.body_of(_panel)
+	# More air than a titled panel's default, round the edge and between the parts (the user: "give it
+	# more white space").
+	var body := _panel.get_child(1) as PanelContainer
+	var padded := body.get_theme_stylebox("panel").duplicate() as StyleBox
+	for side: Side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+		padded.set_content_margin(side, padded.get_content_margin(side) + TILE_PAD)
+	body.add_theme_stylebox_override("panel", padded)
+	rows.add_theme_constant_override("separation", TILE_GAP)
 
-	# How far out this tile is, which is both how hard it fights and the ceiling on what drops here.
-	_level_label = Label.new()
-	_level_label.theme_type_variation = "PanelLabel"
+	# What the place is and how far out, which is both how hard it fights and the ceiling on what drops
+	# here: "Village · Level 4". Small, under the name in the bar, which is the heading.
+	_level_label = UITheme.label("", Palette.TEXT_SOFT, true)
 	rows.add_child(_level_label)
 
 	# The land, the services and the modifiers scroll, the level and the buttons stay pinned: a
 	# fortress past the second wall carries more rows than a 648 px window holds.
 	var scroll := UITheme.scroll()
 	rows.add_child(scroll)
-	var scrolled := UITheme.vbox(6)
+	# One width for every tile, so the column does not jump as a name or a row comes and goes.
+	var scrolled := UITheme.vbox(TILE_GAP * 2, MOD_WIDTH)
 	scroll.add_child(scrolled)
 	_env_rows = VBoxContainer.new()
-	_env_rows.add_theme_constant_override("separation", 4)
-	_env_rows.custom_minimum_size = Vector2(HexTileset.ENV_ICON + 46, 0)
+	_env_rows.add_theme_constant_override("separation", TILE_GAP)
 	scrolled.add_child(_env_rows)
 
 	# What a settlement on the tile offers, under the land it is built on: the tile says what is there
 	# before the player has walked to it, so the walk can be worth taking for a fortress's smith.
 	_service_rows = VBoxContainer.new()
-	_service_rows.add_theme_constant_override("separation", 4)
+	_service_rows.add_theme_constant_override("separation", TILE_GAP)
 	scrolled.add_child(_service_rows)
-	_mod_rows = UITheme.vbox(2)
+	_mod_rows = UITheme.vbox(TILE_GAP)
 	scrolled.add_child(_mod_rows)
 
 	# Only the buttons that can be pressed are shown (`_update_buttons`), at the column's foot, where
 	# the scroll taking the slack leaves them.
 	var buttons := VBoxContainer.new()
-	buttons.add_theme_constant_override("separation", 4)
+	buttons.add_theme_constant_override("separation", TILE_GAP)
 	rows.add_child(buttons)
 	_chart_button = UITheme.button("Chart", "LightButton", CHART_TIP)
 	_chart_button.pressed.connect(_on_chart_pressed)
@@ -448,10 +527,15 @@ func _build_ui() -> void:
 	buttons.add_child(_farm_button)
 	# And a fourth, on the tiles people live on: go inside and trade. It takes standing on the tile
 	# rather than looking at it, because visiting a town is being there.
-	_town_button = UITheme.button("Enter town", "LightButton", "Go inside and see what is traded here")
+	# Green: of the panel's presses, the one a settlement is for (`UITheme.GO_BUTTON`, as in town).
+	_town_button = UITheme.button("Enter town", UITheme.GO_BUTTON, "Go inside and see what is traded here")
 	_town_button.pressed.connect(_on_town_pressed)
 	buttons.add_child(_town_button)
+	_cave_button = UITheme.button("Enter cave", UITheme.GO_BUTTON, "")
+	_cave_button.pressed.connect(_on_cave_pressed)
+	buttons.add_child(_cave_button)
 
+	_build_stone(layer)
 	_build_character()
 	_build_pages(layer)
 
@@ -482,6 +566,103 @@ func _sync_character() -> void:
 	_character.set_state(shown["level"], shown["xp"])
 
 
+## The Seeing Stone, top right: the stone, the light inside it, and the word it says under it. Hidden
+## until bought (`_show_corner`). Nothing is drawn while the art is not built, and a press still answers.
+func _build_stone(layer: CanvasLayer) -> void:
+	_stone = TextureButton.new()
+	_stone.name = "SeeingStone"
+	if ResourceLoader.exists(STONE_ART):
+		_stone.texture_normal = load(STONE_ART)
+	_stone.custom_minimum_size = Vector2(STONE_SIDE, STONE_SIDE)
+	_stone.scale = Vector2(ui_scale, ui_scale)
+	_stone.pressed.connect(_on_stone_pressed)
+	Cursors.wear(_stone, Cursors.HAND)
+	_stone.hide()
+	layer.add_child(_stone)
+	_stone_glow = TextureRect.new()
+	if ResourceLoader.exists(STONE_GLOW):
+		_stone_glow.texture = load(STONE_GLOW)
+	_stone_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stone_glow.modulate = Color.TRANSPARENT
+	_stone.add_child(_stone_glow)
+	_stone_word = UITheme.label("", Palette.BONE)
+	_stone_word.add_theme_color_override("font_outline_color", Palette.INK)
+	_stone_word.add_theme_constant_override("outline_size", 4)
+	_stone_word.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_stone_word.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stone.add_child(_stone_word)
+
+
+## The stone against the tile panel's left edge while it is up, else against the window's; top of the
+## window either way. It glides when the panel comes or goes, as the corner column does after a page.
+func _place_stone() -> void:
+	var right := _panel.position.x if _panel.visible else get_viewport().get_visible_rect().size.x
+	var at := Vector2(right - (STONE_SIDE + STONE_GAP) * ui_scale, UITheme.EDGE * ui_scale).floor()
+	if _stone.position != at:
+		var was := _stone.position
+		_stone.position = at
+		if was != Vector2.ZERO:
+			Juice.glide(_stone, was)
+
+
+## The stone's face: awake while this world's cave is still unfound, asleep once it is.
+func _sync_stone() -> void:
+	if _stone == null:
+		return
+	var asleep := view.cave == HexMap.NO_CELL or view.seen(view.cave)
+	_stone.modulate = STONE_ASLEEP if asleep else Color.WHITE
+	_stone.tooltip_text = STONE_ASLEEP_TIP if asleep else STONE_TIP
+	# Asleep, it has nothing left to say: whatever it last said goes out with its light.
+	if asleep and _stone_word.text != "":
+		if _stone_tween != null:
+			_stone_tween.kill()
+		_stone_word.text = ""
+		_stone_glow.modulate = Color.TRANSPARENT
+	# Bought in town, where it is hidden: shown once the town is left, by `_show_corner`.
+	if inventory.seeing_stone and _stone.visible:
+		_place_stone()
+
+
+## A press on the stone: how warm the tile underfoot is from the cave, in `FortuneTeller.WARMTH`'s bands,
+## and "Warmer" or "Colder" when the band has moved since the last press. The distance itself is never
+## said: it is a game of hot and cold, not a compass. Returns what it said, for the tests.
+func _on_stone_pressed() -> String:
+	if view.cave == HexMap.NO_CELL or view.seen(view.cave):
+		_stone_say("Still", STONE_ASLEEP)
+		return "Still"
+	var band := FortuneTeller.warmth(HexGrid.distance(view.player_cell, view.cave))
+	var said: String = FortuneTeller.WARMTH[band]
+	if _stone_band != -1 and band != _stone_band:
+		said += "\n" + ("Warmer" if band > _stone_band else "Colder")
+	_stone_band = band
+	_stone_say(said, STONE_COLOURS[band])
+	print("The stone says %s, %d step(s) from the cave" % [said.replace("\n", ", "),
+			HexGrid.distance(view.player_cell, view.cave)])
+	return said
+
+
+## The stone's answer: the light flares in `colour` and settles to a glow, and the word under it fades.
+## At no animation both simply stay.
+func _stone_say(said: String, colour: Color) -> void:
+	_stone_word.text = said
+	_stone_word.modulate = colour.lightened(0.3)
+	_stone_word.reset_size()
+	_stone_word.position = Vector2((STONE_SIDE - _stone_word.size.x) / 2.0, STONE_SIDE)
+	if _stone_tween != null:
+		_stone_tween.kill()
+	_stone_glow.modulate = colour
+	if Settings.animations == Settings.Anim.NONE:
+		return
+	_stone_tween = create_tween().set_parallel()
+	_stone_tween.tween_property(_stone_glow, "modulate:a", STONE_REST, STONE_FADE)
+	_stone_tween.tween_property(_stone_word, "modulate:a", 0.0, STONE_FADE).set_delay(STONE_FADE / 2.0)
+
+
+## Whether `cell` is this world's cave, as far as the player can tell: seen, and not under the ice.
+func _is_cave(cell: Vector2i) -> bool:
+	return cell == view.cave and view.seen(cell) and view.is_land(cell)
+
+
 ## The left-hand pages and the square buttons that open them. The pages are built before the first
 ## `_layout_ui`, which places all of them.
 func _build_pages(layer: CanvasLayer) -> void:
@@ -494,9 +675,6 @@ func _build_pages(layer: CanvasLayer) -> void:
 	_bounty_button = UITheme.icon_button(load(SCROLL_ICON), "The work you have taken on", ui_scale)
 	_bounty_button.pressed.connect(_on_bounty_pressed)
 	layer.add_child(_bounty_button)
-	_dungeon_button = UITheme.icon_button(load(SKULL_ICON), DUNGEON_NAME, ui_scale)
-	_dungeon_button.pressed.connect(_on_dungeon_pressed)
-	layer.add_child(_dungeon_button)
 	_settings_button = UITheme.icon_button(load(COG_ICON), "Settings", ui_scale)
 	_settings_button.pressed.connect(_on_settings_pressed)
 	layer.add_child(_settings_button)
@@ -545,6 +723,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 	town_page.relic_shown.connect(func(id: String) -> void:
 		_announce_unique(CollectionPage.specimen(id), "Unique Revealed", true))
 	town_page.transcend_pressed.connect(_on_transcend_pressed)
+	town_page.stone_bought.connect(_sync_stone)
 	town_page.xp_claimed.connect(_on_xp_absorbed)
 	town_page.bounty_paid.connect(_show_bounty_paid)
 	# A bounty's piece is announced as a body's would be: only a unique the log has never held.
@@ -997,46 +1176,54 @@ func _close_banner() -> void:
 	tween.tween_callback(panel.queue_free)
 
 
-## One row per environment on the tile: a swatch of that terrain, then its share of the tile.
+## One row per environment on the tile: a swatch of that terrain and its name, and its share of the
+## tile only where it has to share it -- a lone "100%" says nothing.
 func _show_environments(weights: Dictionary) -> void:
-	for child: Node in _env_rows.get_children():
-		child.queue_free()
+	UITheme.clear(_env_rows)
 	var envs := weights.keys()
 	envs.sort_custom(func(a: String, b: String) -> bool: return weights[a] > weights[b])
 	for env: String in envs:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 6)
 		row.add_child(map.tileset.env_icon(env))
-		var percent := Label.new()
-		percent.theme_type_variation = "PanelLabel"
-		percent.text = "%d%%" % round(weights[env] * 100.0)
-		percent.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		row.add_child(percent)
+		var terrain := UITheme.label(str(TERRAIN_NAMES.get(env, env.capitalize())), Palette.TEXT, true)
+		if envs.size() > 1:
+			terrain.text += " %d%%" % round(weights[env] * 100.0)
+		terrain.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(terrain)
 		_env_rows.add_child(row)
 
 
-## What the settlement on a tile trades in, one mark per counter, and nothing at all where there is no
+## What the settlement on a tile trades in, one named row per counter, and nothing at all where there is no
 ## settlement. Shown for any town tile the player can see rather than only the ones they have taken:
 ## which town has a blacksmith is exactly the sort of thing that decides where to walk next.
 func _show_services(cell: Vector2i) -> void:
 	UITheme.clear(_service_rows)
+	# The cave has one thing in it, and says how far down the player has been.
+	if _is_cave(cell):
+		_service_rows.add_child(UITheme.section(DUNGEON_NAME))
+		_service_rows.add_child(UITheme.label("Depth %d won" % inventory.dungeon_depth
+				if inventory.dungeon_depth > 0 else "No depth won yet", Palette.TEXT, true))
+		return
 	# Nothing about a tile still under the fog, which one taken blind is when it is clicked.
 	var tier := view.town_tier(cell) if view.seen(cell) else -1
 	if tier == -1:
 		return
-	_service_rows.add_child(UITheme.rule())
-	var services := Accordion.new("Services", "tile:services", 4)
-	_service_rows.add_child(services)
-	# The marks the town page's tabs wear, so a counter looks the same from the road as from inside;
-	# the name is the tooltip, as it is on the tab.
-	var icons := HBoxContainer.new()
-	icons.add_theme_constant_override("separation", 6)
+	# A small heading and not a fold: a fold over three rows cost as much as it hid.
+	_service_rows.add_child(UITheme.section("Services"))
+	# The marks the town page's tabs wear, so a counter looks the same from the road as from inside,
+	# each with its name beside it: the marks alone had to be pointed at one by one.
 	for service: String in TownServices.services_for(tier, view.origin + cell, towns.seed_value):
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
 		var icon := TextureRect.new()
 		icon.texture = TownPage.tab_mark(service, false)
-		icon.tooltip_text = TownServices.label(service)
-		icons.add_child(icon)
-	services.body.add_child(icons)
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+		row.add_child(icon)
+		var named := UITheme.label(TownServices.label(service), Palette.TEXT, true)
+		named.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(named)
+		_service_rows.add_child(row)
 
 
 ## What the land on a tile does to the fight for it: each modifier's name, then what it does and what
@@ -1047,19 +1234,21 @@ func _show_mods(cell: Vector2i) -> void:
 	var mods: Array = _mods_of(cell) if view.seen(cell) else []
 	if mods.is_empty():
 		return
-	_mod_rows.add_child(UITheme.rule())
-	var section := Accordion.new("Modifiers", "tile:modifiers")
-	_mod_rows.add_child(section)
+	# The same small heading as Services, and no fold: the column scrolls when it runs long.
+	_mod_rows.add_child(UITheme.section("Modifiers"))
 	var shown := {}
 	for id: String in mods:
 		if shown.has(id):
 			continue
 		shown[id] = true
 		var lines := TileMods.describe(id, mods.count(id))
-		section.body.add_child(UITheme.label(lines[0], Palette.TEXT))
-		section.body.add_child(ItemDetails.line(lines[1], Palette.TEXT, MOD_WIDTH, true))
+		# Each modifier its own tight block, with the column's gap between one and the next.
+		var block := UITheme.vbox(2)
+		_mod_rows.add_child(block)
+		block.add_child(UITheme.label(lines[0], Palette.TEXT))
+		block.add_child(ItemDetails.line(lines[1], Palette.TEXT, MOD_WIDTH, true))
 		if not lines[2].is_empty():
-			section.body.add_child(ItemDetails.line(lines[2], Palette.LEAF, MOD_WIDTH, true))
+			block.add_child(ItemDetails.line(lines[2], Palette.LEAF, MOD_WIDTH, true))
 
 
 ## The tile panel is a full-height column against the right edge, its buttons at its foot. The
@@ -1101,10 +1290,15 @@ func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
 	# Not named either: a tile is named as it comes out of the fog, and asking would name it now.
 	var tile_name := view.name_of(cell) if view.seen(cell) else "Unknown land"
 	_tile_title.text = tile_name if tile_name != "" else "Tile"
-	_level_label.text = "Level %d" % view.level_of(cell)
+	var tier := view.town_tier(cell) if view.seen(cell) else -1
+	var kind := SETTLEMENT_KINDS[tier] if tier != -1 else "Cave" if _is_cave(cell) else ""
+	_level_label.text = ("%s · " % kind if kind != "" else "") + "Level %d" % view.level_of(cell)
 	_show_environments(weights)
 	_show_services(cell)
 	_show_mods(cell)
+	# An empty section would still take its gap in the column.
+	for part: Control in [_env_rows, _service_rows, _mod_rows]:
+		part.visible = part.get_child_count() > 0
 	# The rows are filled after _layout_ui ran, and the level line can be wider than the environment
 	# rows that pin the panel's width, so the panel is measured again now that it holds everything.
 	_layout_ui()
@@ -1328,6 +1522,12 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	_check_tips()
 
 
+## Enter cave: down the dungeon from the cave's own tile, stood on.
+func _on_cave_pressed() -> void:
+	if view.can_enter_cave(map.selected_cell):
+		_on_dungeon_pressed()
+
+
 ## Down the dungeon: a fight on the screen as `_open_fight` puts one there, and nothing else of what
 ## that does -- it pays nothing, so there is no ledger, no drop to promise and no body for a board.
 ## It begins under the depths already won, whichever world they were won in.
@@ -1421,12 +1621,19 @@ func _on_combat_finished(won: bool, cell: Vector2i, retrying := false) -> void:
 
 
 ## Every wall down in this world that has not yet paid its super orb pays it, and the save says
-## so. Asked wherever a wall can have fallen -- a tile charted -- and once at start-up, which is what
+## so; the land's furthest reach is written down, and the world's cave is put down if it is due. Asked wherever a wall can have fallen -- a tile charted -- and once at start-up, which is what
 ## pays a save from before there were heirlooms for the walls it already has down.
 func _credit_walls() -> void:
-	if inventory.credit_walls(view.walls_fallen()):
+	var paid := inventory.credit_walls(view.walls_fallen())
+	if paid:
 		print("A wall is down: %d super orb(s) to spend at a transcension" % inventory.super_orbs)
+	# How far the land has ever reached is the cave's bound in every world after this one.
+	if inventory.reach(view.land_radius) or paid:
 		inventory.save(inventory_path)
+	# One cave a world, once any wall in any world has fallen: now, or the moment the first one does.
+	if view.place_cave(inventory.farthest_land):
+		print("The Gollux cave is at %s" % view.cave)
+		_save_map()
 
 
 ## How far the player sees from a tile they have just taken: their own ring behind it, plus whatever a
@@ -1483,6 +1690,7 @@ func _on_player_arrived(cell: Vector2i) -> void:
 	print("Arrived at %s" % cell)
 	_update_weather()
 	_sync_chest()
+	_sync_stone()
 	_save_map()
 	_update_buttons()
 	if _fight_target != HexMap.NO_CELL:
@@ -1516,6 +1724,8 @@ func _update_buttons() -> void:
 	_farm_button.tooltip_text = ENCUMBERED_TIP if heavy else FARM_TIP
 	_was_encumbered = heavy
 	_town_button.visible = view.can_visit(cell)
+	_cave_button.visible = view.can_enter_cave(cell)
+	_cave_button.tooltip_text = "Go down to depth %d. Kill Gollux to go deeper: each depth won is as many skulls for your curses as its number" % (inventory.dungeon_depth + 1)
 	_place_panel()
 
 
@@ -1634,7 +1844,7 @@ func _place_corner() -> void:
 						_character.position.y))
 	var step := (_bag_button.get_combined_minimum_size().y + CORNER_GAP) * ui_scale
 	for button: Button in [_bag_button, _heirloom_button, _skills_button, _bounty_button,
-			_dungeon_button, _settings_button, _collection_button]:
+			_settings_button, _collection_button]:
 		if button.visible:
 			# The column glides after a page that comes or goes, rather than jumping.
 			var was := button.position
@@ -1662,10 +1872,9 @@ func _show_corner(shown: bool) -> void:
 	# The journal has nothing in it until the player has stood at a board, which is also when their
 	# kills start counting towards one.
 	_bounty_button.visible = shown and BountyBoard.any_seen(inventory.towns)
-	# The dungeon measures what is worn, so it comes on when the bag does.
-	_dungeon_button.visible = _bag_button.visible
-	_dungeon_button.tooltip_text = "%s, depth %d: kill Gollux to go deeper" % [DUNGEON_NAME,
-			inventory.dungeon_depth + 1]
+	# Not a corner button: it stands top right, but it comes and goes with them, for their reasons.
+	_stone.visible = shown and inventory.seeing_stone
+	_sync_stone()
 	# Nothing earns the settings: they are there from the first step.
 	_settings_button.visible = shown
 	_character_button.visible = shown and _left_page() == null
@@ -1700,6 +1909,14 @@ func _tip_due(id: String) -> bool:
 			return not inventory.uniques_found.is_empty()
 		"first_heirloom":
 			return inventory.super_orbs > 0
+		"first_fortune":
+			return town_page.visible and town_page.open_tab() == TownServices.FORTUNE
+		"first_cave":
+			return view != null and view.cave != HexMap.NO_CELL and view.seen(view.cave) and view.is_land(view.cave)
+		"first_stone":
+			# On the first arrival after the town it was bought in: it is on the map that the stone stands.
+			# Not as the town closes, which is also the way onto the black screen, where nothing may save.
+			return inventory.seeing_stone and not town_page.visible
 	return false
 
 
@@ -1725,23 +1942,32 @@ func _show_next_tip() -> void:
 	if _tip_queue.is_empty():
 		return
 	var tip: Array = _tip_queue.pop_front()
-	# No X: like a reward's panel, its one way out is the button at its foot (and Escape).
-	_tip_panel = UITheme.titled_panel(tip[1], "", Callable())
 	# A fight holds still under a tip: a charting fight's clock must not run while the player reads.
 	if _combat != null:
 		_combat.process_mode = Node.PROCESS_MODE_DISABLED
+	if tip.size() > 3:
+		var box := DialogueBox.new(tip[1], tip[2], load(DialogueBox.PORTRAITS % tip[3]),
+				tip[3] == DialogueBox.PLAYER)
+		box.finished.connect(_on_tip_closed)
+		_tip_panel = box
+		_character.get_parent().add_child(box)
+		box.pop_up(ui_scale)
+		return
+	# No X: like a reward's panel, its one way out is the button at its foot (and Escape).
+	var panel := UITheme.titled_panel(tip[1], "", Callable())
+	_tip_panel = panel
 	# The character panel's layer, which stands over the fight's, so a tip can come up mid-run.
-	_character.get_parent().add_child(_tip_panel)
+	_character.get_parent().add_child(panel)
 	var label := Label.new()
 	label.theme_type_variation = "PanelLabel"
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.custom_minimum_size.x = minf(get_viewport().get_visible_rect().size.x / ui_scale - REFUSAL_MARGIN, REFUSAL_WIDTH)
 	label.text = tip[2]
-	UITheme.body_of(_tip_panel).add_child(label)
+	UITheme.body_of(panel).add_child(label)
 	var close := UITheme.button("Got it", "LightButton", "")
 	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	close.pressed.connect(_on_tip_closed)
-	UITheme.body_of(_tip_panel).add_child(close)
+	UITheme.body_of(panel).add_child(close)
 	Juice.popup(null, _tip_panel, ui_scale)
 
 
@@ -1751,7 +1977,11 @@ func _on_tip_closed() -> void:
 		return
 	var leaving := _tip_panel
 	_tip_panel = null
-	Juice.pop_out(leaving, leaving.queue_free)
+	# Someone speaking stands over a shade of their own, which fades rather than shrinks.
+	if leaving is DialogueBox:
+		(leaving as DialogueBox).leave()
+	else:
+		Juice.pop_out(leaving, leaving.queue_free)
 	_show_next_tip()
 	if _tip_panel == null and _combat != null:
 		_combat.process_mode = Node.PROCESS_MODE_INHERIT
@@ -1957,8 +2187,8 @@ func _on_town_pressed() -> void:
 
 ## One of the fortuneteller's aimed spells, asked for and not yet paid: the town and the tile panel
 ## get out of the way and the map is aimed at, an outline under the cursor -- a patch of them for the
-## scour, one tile for the road home. The click is what pays (`_on_cell_aimed`); the panel's X and
-## Escape put the spell away for nothing.
+## scour, one tile for the road home. The click is what pays (`_on_cell_aimed`); a right click or
+## Escape puts the spell away for nothing.
 func _on_spell_aimed(reading: String, price: float, spot: Vector2i) -> void:
 	_on_left_page_closed()
 	_on_close_pressed()
@@ -1966,12 +2196,6 @@ func _on_spell_aimed(reading: String, price: float, spot: Vector2i) -> void:
 	_aim_price = price
 	_aim_town = spot
 	map.aim_radius = FortuneTeller.SCOUR_RADIUS if reading == FortuneTeller.SCOUR else 0
-	_aim_panel = UITheme.titled_panel(FortuneTeller.LABELS[reading], "Keep the spell for later", _end_aim)
-	_aim_panel.scale = Vector2(ui_scale, ui_scale)
-	_ui_layer.add_child(_aim_panel)
-	UITheme.body_of(_aim_panel).add_child(UITheme.label(AIM_LINES[reading], null, true))
-	_aim_panel.position = Vector2(
-			(get_viewport().get_visible_rect().size.x - _aim_panel.get_combined_minimum_size().x * ui_scale) / 2.0, 0.0)
 
 
 ## Land chosen. A spell that could do nothing with it -- a patch with nothing left to show, all seen
@@ -2004,9 +2228,6 @@ func _end_aim() -> void:
 	_aim_price = 0.0
 	_aim_town = TownWorld.NO_SPOT
 	map.aim_radius = -1
-	if _aim_panel != null:
-		_aim_panel.queue_free()
-		_aim_panel = null
 
 
 ## Another counter opened: the bag buys what that counter buys and nothing else. A page of its own
@@ -2017,6 +2238,8 @@ func _on_town_tab_changed(_service: String) -> void:
 		_open_left_page(bag_page)
 		_layout_ui()
 	_stand_at_counter()
+	# Her tab opened for the first time is where the fortuneteller explains herself.
+	_check_tips()
 
 
 ## Points the bag at the town page's open tab. The town's own cell rather than whatever is selected:
@@ -2121,6 +2344,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		_zoom_at(event.position, 1.0 if event.button_index == MOUSE_BUTTON_WHEEL_UP else -1.0)
 		get_viewport().set_input_as_handled()
 		return
+	# A right click puts an aimed spell away, the way it puts a held orb down in the bag.
+	if (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT
+			and not _aiming.is_empty()):
+		_end_aim()
+		get_viewport().set_input_as_handled()
+		return
 	# A camp answers for itself: its X and its Break camp are the ways out, so a stray Escape cannot
 	# quietly end a night's rest. The black screen of a transcension is the same.
 	if not event.is_action_pressed("ui_cancel") or _transcend_page != null or _camp != null:
@@ -2130,7 +2359,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_on_tip_closed()
 	elif _paid != null:
 		_leave_bounty_paid()
-	elif _aim_panel != null:
+	elif not _aiming.is_empty():
 		_end_aim()
 	elif _combat == null:
 		if _left_page_up() or town_page.visible:
