@@ -207,16 +207,20 @@ const FLAG_ICON := preload("res://Assets/UI/ui_icon_flag.png")
 ## How far to either side a find may land. Narrower than the coins' spread, because one sprite has
 ## nothing to be told apart from and a find belongs by the body that dropped it.
 const FIND_SPREAD := 40.0
-## The beam standing over a find: the pack's own little flame, turned upright and drawn in the
-## rarity's colour, so what came off the body is read without a word on it. A child of the sprite, so
-## the arc carries it. Common gets none, the way an ItemSlot rings nothing at common, and neither
-## does an orb -- it has no rarity, and borrowing one would say it did.
-##
-## How big it is drawn against the 16 px the sheet is cut at, how solid, and how far up the icon it
-## stands: a beam rises *off* a thing, so its foot is at the piece and its head is over it.
-const BEAM_SCALE := 3.0
-const BEAM_ALPHA := 0.9
-const BEAM_LIFT := 9.0
+## The beam standing over a find (`LootBeam`): a pillar of light in the rarity's colour, so what came
+## off the body is read without a word on it, and taller the rarer it is. A child of the sprite, so the
+## arc carries it; it shoots up once the find has landed, its foot at the bottom of the icon.
+## How big a find is drawn by rarity, so the rarer it is the more it shows; a good orb is drawn at the
+## rarity its beam borrows, and a plain one (`-1`) as uncommon. The rarer is also drawn over the
+## commoner where they land on each other (`z_index` climbs with the rarity).
+const FIND_SIZE := {
+	-1: 1.0,
+	ItemRarity.Rarity.COMMON: 0.85,
+	ItemRarity.Rarity.UNCOMMON: 1.0,
+	ItemRarity.Rarity.RARE: 1.2,
+	ItemRarity.Rarity.ELITE: 1.4,
+	ItemRarity.Rarity.UNIQUE: 1.75,
+}
 ## What a landed blow does to the body it lands on: a white flash (modulate over 1 brightens), a
 ## squash on its feet, and how long both take to come back.
 const HIT_FLASH := Color(2.5, 2.5, 2.5)
@@ -242,6 +246,11 @@ const DEATH_PIXELS := 28
 ## A find at ELITE or better slows the fight to STOP_RARE_SPEED for STOP_RARE real seconds, so the
 ## beam coming up is watched rather than glimpsed.
 const STOP_RARE := 0.6
+## A unique slows it much further and for longer, then eases back over STOP_UNIQUE_EASE: the drop the
+## whole game is about, watched land and shoot its beam up in slow motion.
+const STOP_UNIQUE := 1.6
+const STOP_UNIQUE_SPEED := 0.1
+const STOP_UNIQUE_EASE := 0.8
 const STOP_RARE_SPEED := 0.25
 ## A damage number arrives this much larger than it settles, over DAMAGE_POP, and drifts sideways by
 ## up to DAMAGE_DRIFT as it climbs.
@@ -1096,23 +1105,30 @@ func _show_xp(amount: int) -> void:
 		tween.tween_callback(gem.queue_free)
 
 
-## A find coming off a body: its own icon, thrown the way the purse is, with the rarity's beam
-## standing over it. A transparent `glow` means no beam -- a common piece and an orb are drawn plain.
+## A find coming off a body: its own icon, thrown the way the purse is and drawn at `rarity`'s
+## `FIND_SIZE`, with that rarity's `LootBeam` standing over it in `glow`. A `rarity` that stands none
+## (`LootBeam.has`) is drawn plain.
 ##
 ## No name on it. What a find *is* is read in the counter and its list, where there is room for the
 ## word and time to read it; what the arena has to say is that the body left something, and the
 ## picture says that the moment it lands.
-func _show_find(picture: Texture2D, glow: Color) -> void:
+func _show_find(picture: Texture2D, rarity: int = -1, glow := Color.WHITE) -> void:
 	if Settings.animations == Settings.Anim.NONE:
 		return
 	_finds_shown += 1
 	var find := Sprite2D.new()
 	find.texture = picture
-	if glow.a > 0.0:
-		var beam := LootBeam.make(glow, BEAM_ALPHA, BEAM_SCALE)
-		beam.position = Vector2(0, -BEAM_LIFT)
-		find.add_child(beam)
+	var size: float = FIND_SIZE[rarity]
+	if LootBeam.has(rarity):
+		# The beam is sized on its own, so the find's size is taken back off it -- and handed over as
+		# the piece it has to cover instead.
+		var pillar := LootBeam.make(rarity, glow, THROW_TIME, picture.get_size() * Vector2(0.5, 1.0) * size)
+		pillar.position = Vector2(0, picture.get_height() / 2.0)
+		pillar.scale = Vector2.ONE / size
+		find.add_child(pillar)
 	_throw(find, 0, _drop_origin(), FIND_SPREAD, FIND_REST)
+	find.scale *= size
+	find.z_index = 1 + maxi(rarity, 0)
 
 
 ## A track with a fill inside it. The fill is the first child, and its width is set as things change.
@@ -1316,17 +1332,18 @@ func _on_loot_dropped(index: int, item: Item) -> void:
 	_refresh_loot_button()
 	if _loot_panel.visible:
 		_fill_loot()
-	# Common is thrown plain, the way an ItemSlot rings nothing at common: a glow means "this one is
-	# worth stopping for", and one on everything would mean nothing.
+	# Below rare is thrown plain (`LootBeam.LOOKS`): a beam means "this one is worth stopping for",
+	# and one on everything would mean nothing.
 	#
 	# The ring's colour rather than the text's. They are the two halves of the same ramp and the
 	# choice between them is what is behind the colour: the text half was picked to be read on the
 	# bone panel, and a find is thrown against a snowfield or a noon desert, which is exactly what the
 	# square's border colour was picked for.
-	_show_find(item.icon(), Color.TRANSPARENT if item.rarity == ItemRarity.Rarity.COMMON
-			else item.border_color())
+	_show_find(item.icon(), item.rarity, item.border_color())
 	# The best finds slow the fight, so the beam coming up is watched rather than glimpsed.
-	if item.rarity >= ItemRarity.Rarity.ELITE:
+	if item.rarity == ItemRarity.Rarity.UNIQUE:
+		Juice.hit_stop(get_tree(), STOP_UNIQUE, STOP_UNIQUE_SPEED, STOP_UNIQUE_EASE)
+	elif item.rarity == ItemRarity.Rarity.ELITE:
 		Juice.hit_stop(get_tree(), STOP_RARE, STOP_RARE_SPEED)
 	loot_kept.emit(index, item)
 
@@ -1427,10 +1444,11 @@ func _place_corners(view: Vector2) -> void:
 		_terminate.position = Vector2(view.x - leave.x - HUD_MARGIN, HUD_MARGIN)
 
 
-## An orb off a body, thrown out of it the way a find is. Plain, with no glow: an orb has no rarity,
-## and borrowing a colour from that ramp would say it did.
+## An orb off a body, thrown out of it the way a find is. Plain, but for a good orb, which stands the
+## beam of the rarity `OrbTable` names for it.
 func _on_orb_dropped(_index: int, orb: String) -> void:
-	_show_find(OrbTable.icon(orb), Color.TRANSPARENT)
+	var beam: int = OrbTable.ORBS[orb].get("beam", -1)
+	_show_find(OrbTable.icon(orb), beam, ItemRarity.BORDER_COLORS.get(beam, Color.WHITE))
 	if _loot_panel.visible:
 		_fill_loot()
 	orb_gained.emit(orb)

@@ -1,6 +1,6 @@
 <!-- Loaded automatically when a file in this folder is read. Rules only: the measurements and the reasoning are in tools/DESIGN.md, which is read on demand. The project overview is in the root CLAUDE.md. -->
 
-## Sprites cut from bought packs (`tools/ui_kit.py`, `tools/loot_beam.py`)
+## Sprites cut from bought packs (`tools/ui_kit.py`)
 The interface is **cut, not generated**, from packs under `Assets/Potential/`. `tools/ui_kit.py` is the one place that says which rectangle of which pack sheet is which sprite and where its nine-slice margins fall; Python with Pillow and numpy, no Godot. The one thing it assembles that is mostly *drawn* is the gear: see the item bases' row. **Read `DESIGN.md` here before adding or re-cutting a sprite** -- it holds the pack layouts, the measured grids and what was tried and turned down.
 
 | What (table in `ui_kit.py`) | Source | Output | Preview in `tools/qa/` |
@@ -18,7 +18,6 @@ The interface is **cut, not generated**, from packs under `Assets/Potential/`. `
 | The fortuneteller's eight spells (`FORTUNE`, the way out's cracked orb included): the user's pixellab symbols (`FORTUNE_SYMBOLS`, `Fortune/<reading>.png`) on the skills' frame in its purple "teller" tint (`SKILL_TINTS`), 32 px; a reading not listed falls back to the pack's purple 16 px icon | `Ability Icons/` | `Assets/Fortune/<reading>.png` | `ui_town_fortune.png` (the page itself) |
 | Character panel frame, bars, portrait, xp gem (`CHAR_*`, `XP_GEM`) | `2D Pixel UI/PNG/character_panel` | `Assets/UI/ui_char_*.png` | `ui_kit_character.png` |
 | Item frames (`tools/item_frames.py`, **drawn, not cut**: `RAMPS`, a `CORNERS` and `EDGES` letter block per rarity, mirrored and turned round the square). No arguments writes the preview only; `--export` writes the sprites | `hexlib.py` hexes; the rare's light and dark lilac and the elite's light brick are its own | `Assets/UI/item_frame_<rarity>.png` (40x40, clear middle), and `item_frame_set.png`: the unique's drawing in the leaf ramp (`SHAPES`) | `item_frames.png` (old ring beside new, on cream and on wood) |
-| Loot beam (`tools/loot_beam.py`) | `Effects`, "Mini Falem", white colourway only | `Assets/Effects/loot_beam.png`, a 15-frame strip | |
 | Pixellab prompts for the item bases (`tools/pixellab_prompts.py`, **text, not sprites**: `ITEMS` by kind and tier, the tier palettes and `Look:` lines, the `Shape:` lines) | the user's colour charts; colours measured off the pieces that came back | `tools/qa/pixellab_item_prompts.md` (every prompt, ready to paste) | |
 
 Two things are generated rather than cut, because no pack draws them: the nameplate's health bar (`AI-sprites-generator/hpbar.py`, `build_hpbar.py`), and most of the gear icons (`AI-sprites-generator/gearlib.py`, `gear.py`), which `ui_kit.py` imports and writes itself.

@@ -53,18 +53,21 @@ const ORBS := {
 		"does": "Makes a piece rare with fresh modifiers, or rerolls a rare one's.",
 	},
 	"Orb of Divine": {
-		"icon": "Orb of Divine.png", "weight": 7,
+		"icon": "Orb of Divine.png", "weight": 7, "beam": ItemRarity.Rarity.RARE,
 		"does": "Rerolls the value of every modifier, keeping the modifiers and their tiers.",
 	},
 	"Orb of Chaos": {
-		"icon": "Orb of Chaos.png", "weight": 4,
+		"icon": "Orb of Chaos.png", "weight": 4, "beam": ItemRarity.Rarity.RARE,
 		"does": "Rerolls the tier and value of every modifier, keeping the modifiers themselves.",
 	},
 	"Orb of Exalted": {
-		"icon": "Orb of Exalted.png", "weight": 3,
+		"icon": "Orb of Exalted.png", "weight": 3, "beam": ItemRarity.Rarity.ELITE,
 		"does": "Makes a piece elite with fresh modifiers, or rerolls an elite one's.",
 	},
 }
+
+## `beam` is the rarity whose `LootBeam` a good orb stands in the arena when it drops; the cheap ones
+## drop plain.
 
 ## Kills the player makes, across every fight, before the first orb can fall. Orbs change gear, so
 ## they wait until the player has had time to find some.

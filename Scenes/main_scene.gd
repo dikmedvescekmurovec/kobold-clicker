@@ -844,9 +844,6 @@ func _announce_unique(item: Item, title := "Unique Found", closable := false) ->
 	_raise_banner(title, item.text_color(), slot, lines)
 	if closable:
 		_banner_x()
-	# A beat of slow motion, as an elite find already gets: this is the rarer thing of the two, and the
-	# one banner that gets it -- a bounty is filled every few kills.
-	Juice.hit_stop(get_tree(), 0.12, 0.25)
 
 
 ## A bounty filled: the monster's picture beside its name, the count and where to hand the work in, on
@@ -1483,6 +1480,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# Straight off the fight rather than through the scene: what a body was is the fight's business,
 	# and the boards want the monster's name, not a drop. The ledger decides when it reaches them.
 	fight.enemy_died.connect(_on_enemy_died)
+	fight.even_loot = Settings.even_loot_on()
 	ledger.bounty_counted.connect(_on_bounty_counted)
 	_combat = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 	_combat.finished.connect(_on_combat_finished.bind(cell))

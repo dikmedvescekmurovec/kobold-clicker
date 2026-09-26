@@ -37,6 +37,9 @@ static var old_icons := false
 ## `show_all_services()`, which also answers no off the player's own settings file: the tests and the
 ## screenshot scripts still see what a town of each tier really has.
 static var all_services := true
+## Dev: a body drops one find a time in three, every rarity from common to unique as likely
+## (`Encounter.even_loot`). Read through `even_loot_on()`, like the uniques.
+static var even_loot := false
 ## Where the file is. Empty means nowhere: nothing is read and nothing written, which is what every
 ## test and screenshot script gets, because the main scene only sets it on the player's own save.
 static var path := ""
@@ -55,6 +58,7 @@ static func load_settings() -> void:
 	all_chests = bool(file.get_value(SECTION, "all_chests", all_chests))
 	old_icons = bool(file.get_value(SECTION, "old_icons", old_icons))
 	all_services = bool(file.get_value(SECTION, "all_services", all_services))
+	even_loot = bool(file.get_value(SECTION, "even_loot", even_loot))
 
 
 static func save() -> void:
@@ -70,6 +74,7 @@ static func save() -> void:
 	file.set_value(SECTION, "all_chests", all_chests)
 	file.set_value(SECTION, "old_icons", old_icons)
 	file.set_value(SECTION, "all_services", all_services)
+	file.set_value(SECTION, "even_loot", even_loot)
 	if file.save(path) != OK:
 		push_warning("Settings: cannot write %s" % path)
 
@@ -84,6 +89,10 @@ static func show_all_chests() -> bool:
 
 static func show_old_icons() -> bool:
 	return old_icons and OS.is_debug_build()
+
+
+static func even_loot_on() -> bool:
+	return even_loot and OS.is_debug_build()
 
 
 static func show_all_services() -> bool:

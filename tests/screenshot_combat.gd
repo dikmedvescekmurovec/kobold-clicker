@@ -355,12 +355,20 @@ func _shoot_farm() -> void:
 	showpiece.rarity = ItemRarity.Rarity.RARE
 	showpiece.level = 6
 	showpiece.stats = Item.scaled_stats(showpiece.type, showpiece.level)
-	combat._show_find(showpiece.icon(), ItemRarity.BORDER_COLORS[showpiece.rarity])
-	combat._show_find(OrbTable.icon(OrbTable.ORBS.keys()[0]), Color.TRANSPARENT)
+	combat._show_find(showpiece.icon(), showpiece.rarity, showpiece.border_color())
+	combat._show_find(OrbTable.icon(OrbTable.ORBS.keys()[0]))
+	# The rest of the beams, one a rarity and a good orb's, so all of them stand in one shot.
+	for rarity in [ItemRarity.Rarity.ELITE, ItemRarity.Rarity.UNIQUE]:
+		combat._show_find(showpiece.icon(), rarity, ItemRarity.BORDER_COLORS[rarity])
+	combat._show_find(OrbTable.icon("Orb of Exalted"), ItemRarity.Rarity.ELITE,
+			ItemRarity.BORDER_COLORS[ItemRarity.Rarity.ELITE])
 	# Part way through the arc, which is where a thrown thing is most obviously thrown.
 	for i in 12:
 		await process_frame
 	await _save(combat, "combat_farm.png")
+	# Landed, and the beams shot up over them.
+	await create_timer(0.6).timeout
+	await _save(combat, "combat_beams.png")
 
 	# The popup the counter opens, which for a run is the only way to see what it has turned up --
 	# and, the bag being full, where the warning about that is now said.

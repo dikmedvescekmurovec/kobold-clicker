@@ -43,10 +43,12 @@ func _run() -> void:
 	_check(_test_coins() == true, "coin tests ran to the end")
 	_check(_test_orb_drops() == true, "orb drop tests ran to the end")
 	_check(_test_drop_rate_finds_everything() == true, "drop rate tests ran to the end")
+	_check(_test_even_loot() == true, "even loot tests ran to the end")
 	_check(_test_tile_mods() == true, "tile modifier tests ran to the end")
 	_check(_test_curses() == true, "curse tests ran to the end")
 	_check(_test_more_curses() == true, "second batch curse tests ran to the end")
 	await _test_thrown_finds()
+	await _test_the_longest_stop_wins()
 	await _test_settings()
 	await _test_the_nameplate_wears_the_tier()
 	await _test_the_map_hands_over_and_takes_back()
@@ -737,51 +739,81 @@ func _test_thrown_finds() -> void:
 	combat._on_loot_dropped(0, _thrown_piece(ItemRarity.Rarity.COMMON))
 	_check(combat._finds_shown == 1, "a kept find is thrown")
 	_check(combat.get_child_count() == before + 1, "and it is a node in the arena")
-	var plain := combat.get_child(combat.get_child_count() - 1)
+	var plain := combat.get_child(combat.get_child_count() - 1) as Node2D
 	_check(plain is Sprite2D, "drawn as a sprite, like a coin")
 	_check(plain.get_child_count() == 0, "with no beam over a common piece")
 
-	# A rare one carries the wash of its own colour behind it.
-	var rare := _thrown_piece(ItemRarity.Rarity.RARE)
-	combat._on_loot_dropped(1, rare)
-	_check(combat._finds_shown == 2, "and so is the next")
-	var lit := combat.get_child(combat.get_child_count() - 1)
-	_check(lit.get_child_count() == 1, "a rare piece is thrown with a beam over it")
-	if lit.get_child_count() == 1:
-		var beam := lit.get_child(0) as AnimatedSprite2D
-		_check(beam != null, "the pack's own flame, playing")
-		if beam != null:
-			# The white colourway tinted, which is the whole reason one sheet serves the ramp: white
-			# times a colour is that colour, and any other colourway would come back muddied.
-			var want: Color = ItemRarity.BORDER_COLORS[rare.rarity]
-			_check(is_equal_approx(beam.modulate.r, want.r) and is_equal_approx(beam.modulate.g, want.g)
-					and is_equal_approx(beam.modulate.b, want.b), "in the rarity's own colour")
-			_check(beam.is_playing() and beam.animation == "burn", "and it burns")
-			_check(is_equal_approx(beam.rotation, LootBeam.RISE), "stood up out of the pack's comet")
-			_check(beam.z_index < 0 and beam.position.y < 0.0, "behind the piece and over it")
-
-	# The sheet's geometry, measured rather than guessed, the way the coin's is.
-	var burn := LootBeam.frames()
-	_check(burn.has_animation("burn"), "the beam has a burn")
-	_check(burn.get_frame_count("burn") == LootBeam.FRAMES,
-			"of %d frames, not %d" % [LootBeam.FRAMES, burn.get_frame_count("burn")])
-	_check(burn.get_animation_loop("burn"), "and it loops")
-	_check(LootBeam.SHEET.get_width() == LootBeam.FRAMES * LootBeam.SIZE
-			and LootBeam.SHEET.get_height() == LootBeam.SIZE,
-			"one row of %d square frames: %dx%d" % [LootBeam.FRAMES,
-					LootBeam.SHEET.get_width(), LootBeam.SHEET.get_height()])
-	_check(LootBeam.frames() == LootBeam.frames(), "and it is built once")
-
-	# An orb is thrown the same way and plain: it has no rarity to borrow.
-	combat._on_orb_dropped(2, OrbTable.ORBS.keys()[0])
-	_check(combat._finds_shown == 3, "an orb is thrown too")
+	# Uncommon is thrown plain too: a beam is for rare and better.
+	combat._on_loot_dropped(1, _thrown_piece(ItemRarity.Rarity.UNCOMMON))
 	_check(combat.get_child(combat.get_child_count() - 1).get_child_count() == 0,
-			"and never carries a beam")
+			"with no beam over an uncommon piece")
+
+	# A rare one carries a beam of its own colour behind it.
+	var rare := _thrown_piece(ItemRarity.Rarity.RARE)
+	combat._on_loot_dropped(2, rare)
+	_check(combat._finds_shown == 3, "and so is the next")
+	var lit := combat.get_child(combat.get_child_count() - 1) as Node2D
+	_check(lit.scale.x > plain.scale.x and lit.z_index > plain.z_index,
+			"drawn bigger than a common one, and over it")
+	_check(lit.get_child_count() == 1, "a rare piece is thrown with a beam over it")
+	var heights := []
+	if lit.get_child_count() == 1:
+		var beam := lit.get_child(0)
+		var back := beam.get_node_or_null("Back") as Polygon2D
+		var front := beam.get_node_or_null("Front") as Polygon2D
+		_check(back != null and front != null and back.material is ShaderMaterial
+				and front.material is ShaderMaterial, "drawn by the beam's shader, in two layers")
+		if back != null and front != null:
+			var want: Color = ItemRarity.BORDER_COLORS[rare.rarity]
+			var got: Color = back.material.get_shader_parameter("colour")
+			_check(got.is_equal_approx(want), "in the rarity's own colour")
+			_check(back.z_index < 0 and front.z_index >= 0, "one behind the piece and one in front of it")
+			_check(back.material.get_shader_parameter("cover").x >= 16.0,
+					"wide enough at the foot to cover the piece")
+			heights.append(back.material.get_shader_parameter("height"))
+
+	# Each step up stands a taller beam, and a unique's dwarfs the rest.
+	for rarity in [ItemRarity.Rarity.ELITE, ItemRarity.Rarity.UNIQUE]:
+		var loose := LootBeam.make(rarity, Color.WHITE, 0.0, Vector2(16, 32))
+		heights.append(loose.get_node("Back").material.get_shader_parameter("height"))
+		loose.free()
+	_check(heights.size() == 3 and heights[0] < heights[1] and heights[1] < heights[2],
+			"rarer finds stand taller beams: %s" % [heights])
+	_check(heights.size() == 3 and heights[2] >= 2.0 * heights[1], "and a unique's dwarfs the rest")
+
+	# A cheap orb is thrown plain; a good one stands the beam its table names.
+	combat._on_orb_dropped(3, "Orb of Transmutation")
+	_check(combat._finds_shown == 4, "an orb is thrown too")
+	_check(combat.get_child(combat.get_child_count() - 1).get_child_count() == 0,
+			"and a cheap one carries no beam")
+	combat._on_orb_dropped(4, "Orb of Exalted")
+	_check(combat.get_child(combat.get_child_count() - 1).get_child_count() == 1,
+			"but a good one does")
 
 	# The toasts are gone, so nothing may still be reaching for them.
 	_check(not ("_toasts" in combat), "there is no toast left to raise")
 	combat.queue_free()
 	await process_frame
+
+
+## A unique's long slow motion is not cut short by the kill freezes that land inside it, and it eases
+## back to full speed rather than snapping.
+func _test_the_longest_stop_wins() -> void:
+	Juice.hit_stop(self, 0.3, 0.1, 0.2)
+	Juice.hit_stop(self, 0.05)
+	_check(is_equal_approx(Engine.time_scale, 0.1), "a short freeze inside a long slow is dropped")
+	await create_timer(0.15, true, false, true).timeout
+	_check(is_equal_approx(Engine.time_scale, 0.1), "and the slow outlasts it")
+	# Watched a frame at a time rather than sampled at set moments, which a slow frame would skip past.
+	var between := false
+	var guard := 0
+	while Engine.time_scale < 1.0 and guard < 600:
+		between = between or (Engine.time_scale > 0.1 and Engine.time_scale < 1.0)
+		guard += 1
+		await process_frame
+	_check(between, "then eases back through the speeds between")
+	_check(is_equal_approx(Engine.time_scale, 1.0), "to full speed")
+	Engine.time_scale = 1.0
 
 
 ## A piece to throw. The type is any real one -- what is being checked is the throw, not the roll.
@@ -2561,6 +2593,30 @@ func _test_drop_rate_finds_everything() -> bool:
 			"%d orbs off %d bodies, where the summed rate wants %.1f" % [runs["split"].size(),
 					bodies.size(), wanted])
 	_check(wanted > bare * 1.5, "which is well past what the bare rate would have paid (%.1f)" % bare)
+	return true
+
+
+## The dev's even loot: about one body in three leaves one find, and each rarity from common to unique
+## is about a fifth of them. Seeded, so this is a measurement and not a coin toss.
+func _test_even_loot() -> bool:
+	var run := Encounter.farm(Vector2i(12, 0), "grass")
+	run.roster_rng.seed = WORLD_SEED
+	run.loot_rng.seed = WORLD_SEED
+	run.unique_rng.seed = WORLD_SEED
+	run.even_loot = true
+	run.arm({"damage": 1.0e9})
+	var found: Array = []
+	var bodies: Array = []
+	run.loot_dropped.connect(func(_i: int, item: Item) -> void: found.append(item.rarity))
+	run.enemy_died.connect(func(i: int) -> void: bodies.append(i))
+	run.start()
+	_play(run, 1500)
+	var share := float(found.size()) / maxf(bodies.size(), 1.0)
+	_check(absf(share - Encounter.EVEN_LOOT_CHANCE) < 0.06,
+			"one body in three leaves a find (%d off %d)" % [found.size(), bodies.size()])
+	for rarity in ItemRarity.Rarity.values():
+		var part := found.count(rarity) / maxf(found.size(), 1.0)
+		_check(absf(part - 0.2) < 0.07, "%s is a fifth of them (%.2f)" % [ItemRarity.NAMES[rarity], part])
 	return true
 
 

@@ -168,6 +168,11 @@ func _foot(asking: bool) -> VBoxContainer:
 			for part: Control in services.get_children():
 				part.tooltip_text = "Dev: every settlement offers every counter, from the next time one is entered"
 			foot.add_child(services)
+			var even := _tick("Even loot", Settings.even_loot,
+					func(on: bool) -> void: Settings.even_loot = on)
+			for part: Control in even.get_children():
+				part.tooltip_text = "Dev: a body drops loot one time in three, every rarity from common to unique as likely, from the next fight"
+			foot.add_child(even)
 			var cash := UITheme.button("Gold x10", "LightButton", "Dev: multiply the purse by ten")
 			cash.pressed.connect(cash_pressed.emit)
 			foot.add_child(cash)

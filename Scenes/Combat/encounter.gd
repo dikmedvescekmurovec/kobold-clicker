@@ -371,6 +371,11 @@ var unique_rng := RandomNumberGenerator.new()
 ## that counts what a body leaves counts what it always counted.
 const NO_UNIQUES := -1
 var uniques_after := NO_UNIQUES
+## Dev (`Settings.even_loot`, handed over by the main scene): every body but a chest has one chance in
+## three of one find, and common, uncommon, rare, elite and unique are all as likely -- in place of the
+## real gear and unique rolls, so every rarity's drop can be looked at without farming for it.
+const EVEN_LOOT_CHANCE := 1.0 / 3.0
+var even_loot := false
 
 ## The Knucklebone Ring's streak: clicks made within `KNUCKLE_WINDOW` of the one before, and how long
 ## ago the last one was. A click counts whether or not it lands, or every walk-in would break it.
@@ -972,6 +977,19 @@ static func _lifted(rate: float, factor: float) -> float:
 	return (100.0 + rate) * factor - 100.0
 
 
+## The dev's even loot: one find at a rarity drawn evenly from common to unique. A ground with no
+## unique pool gives an elite in the unique's place.
+func _even_find() -> Item:
+	var level := MapBuilder.level_of(cell)
+	var step := loot_rng.randi_range(ItemRarity.Rarity.COMMON, ItemRarity.Rarity.UNIQUE)
+	if step == ItemRarity.Rarity.UNIQUE:
+		var found := UniqueTable.roll(lineup[index], env, unique_rng, level, 0.0, true)
+		if found != null:
+			return found
+		step = ItemRarity.Rarity.ELITE
+	return LootTable.roll(lineup[index], loot_rng, true, level, 0.0, 0.0, MapBuilder.circle_of(cell), step)
+
+
 ## The drop rate a gear roll is handed: the player's, or half the finished chance under Lean Pickings.
 func _gear_rate() -> float:
 	return _lifted(drop_rate, LEAN_LESS) if Curses.effect(Curses.LEAN_PICKINGS) in effects else drop_rate
@@ -1115,6 +1133,10 @@ func _kill() -> void:
 	var no_gear := "tithe" in effects or "gilded" in mods or abroad
 	if no_gear or chest_unique != null:
 		rolls = 0
+	if even_loot and not mimic:
+		rolls = 0
+		if loot_rng.randf() < EVEN_LOOT_CHANCE:
+			loot_dropped.emit(index, _even_find())
 	var gear_rate := _gear_rate()
 	for roll in rolls:
 		var certain: bool = always_drop or mimic or (roll == 0
@@ -1180,7 +1202,7 @@ func _kill() -> void:
 	# A mimic's unique chance is its coin toss above, and nothing on top of it.
 	if chest_unique != null:
 		loot_dropped.emit(index, _lean(chest_unique))
-	elif not mimic and uniques_after != NO_UNIQUES and index >= uniques_after:
+	elif not mimic and not even_loot and uniques_after != NO_UNIQUES and index >= uniques_after:
 		# Thick Fog's pay, and the Homeland's on its own two lands: factors on the finished chance,
 		# whatever the drop rate already made of it.
 		var lucky := (FOG_UNIQUES if _cursed_with(Curses.THICK_FOG) else 1.0) \

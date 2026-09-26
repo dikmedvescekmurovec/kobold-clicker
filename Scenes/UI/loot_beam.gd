@@ -1,62 +1,59 @@
 class_name LootBeam
-## The beam that stands over a find lying in the arena: a small flame in the rarity's own colour.
+## The beam that stands over a find lying in the arena: a pillar of light in the rarity's own colour over
+## a ring on the ground, the find standing inside it, drawn by `loot_beam.gdshader` on rectangles rather
+## than cut from a sheet, so that one piece of code can stand a modest beam over a rare and a towering
+## one wound with ribbons over a unique.
 ##
-## Its own class beside `Coins` and for the same reason -- the sheet's geometry is measured rather
-## than guessed, it is built once and shared, and a fight throws a great many of them.
-##
-## The art is the "Mini Falem" effect out of the bought pack under `Assets/Potential/Effects`, cut by
-## `tools/loot_beam.py`. The pack ships nine colourways and this takes the **white** one, which is
-## what lets one sheet serve the whole rarity ramp: `modulate` multiplies, so white times a rarity
-## colour is exactly that colour, where any other colourway would come back muddied. The same reason
-## the game keeps no second table of rarity colours anywhere else.
-##
-## The pack draws it as a comet flying to the right -- a bright head with its trail behind it -- so it
-## is turned a quarter turn to stand up, and then the head is the top of the beam and the trail is
-## what licks up off the ground. That is a rotation rather than a re-export: turning the pixels would
-## put the sheet out of step with the pack it came from, and nothing else about it needs changing.
+## Rare and better only, and a good orb (`OrbTable` names the rarity its beam borrows): a beam means
+## "this one is worth stopping for", and one over every uncommon ring would mean nothing.
 
-const SHEET := preload("res://Assets/Effects/loot_beam.png")
+const SHADER := preload("res://Scenes/UI/loot_beam.gdshader")
 
-## One frame, square, and how many of them. Measured off the cut: fifteen 16 px frames in one row.
-## Re-cut at another size or another length, this is what `test_combat` fails on.
-const SIZE := 16
-const FRAMES := 15
-## Frames a second. Fast: it is a flame rather than a turning coin, and a slow one reads as a
-## flicker in a lamp instead of as something burning.
-const FPS := 15.0
-## The quarter turn that stands the comet up. Anticlockwise, so the bright head ends up at the top.
-const RISE := -PI / 2.0
-
-static var _frames: SpriteFrames
+## What each rarity stands, in the find's own pixels (the find is scaled by `ui_scale`, and the beam
+## with it, less the find's own `CombatScene.FIND_SIZE`): how tall and how wide the pillar is, how many
+## rings lie round the foot (a second pulses out), how many ribbons wind up it, and whether sparks rise.
+## Each step up adds something rather than only growing, so a unique is told from an elite at a glance.
+const LOOKS := {
+	ItemRarity.Rarity.RARE: {"height": 80.0, "width": 2.0, "rings": 1, "ribbons": 0, "sparks": false},
+	ItemRarity.Rarity.ELITE: {"height": 140.0, "width": 2.5, "rings": 1, "ribbons": 1, "sparks": true},
+	ItemRarity.Rarity.UNIQUE: {"height": 300.0, "width": 3.5, "rings": 2, "ribbons": 2, "sparks": true},
+}
+## Seconds the beam takes to shoot up to its height once the find has landed.
+const RISE := 0.3
 
 
-## The flame, looping.
-static func frames() -> SpriteFrames:
-	if _frames == null:
-		var built := SpriteFrames.new()
-		built.rename_animation("default", "burn")
-		built.set_animation_speed("burn", FPS)
-		built.set_animation_loop("burn", true)
-		for i in FRAMES:
-			var atlas := AtlasTexture.new()
-			atlas.atlas = SHEET
-			atlas.region = Rect2(i * SIZE, 0, SIZE, SIZE)
-			built.add_frame("burn", atlas)
-		_frames = built
-	return _frames
+## Whether `rarity` stands a beam at all.
+static func has(rarity: int) -> bool:
+	return LOOKS.has(rarity)
 
 
-## A beam standing in `colour`, ready to be hung behind whatever it is burning off. `alpha` is how
-## solid it is drawn; the caller owns that, because how loud a beam should be is a question about the
-## arena it stands in rather than about the sheet.
-static func make(colour: Color, alpha: float, scale: float) -> AnimatedSprite2D:
-	var beam := AnimatedSprite2D.new()
-	beam.sprite_frames = frames()
-	beam.rotation = RISE
-	beam.scale = Vector2(scale, scale)
-	beam.modulate = Color(colour.r, colour.g, colour.b, alpha)
-	# Behind the thing it burns off, so the piece stays the picture and the beam is what says it is
-	# worth picking up.
-	beam.z_index = -1
-	beam.play("burn")
+## A beam of `rarity`'s look in `colour`, its foot at its origin, its rings round a find of `cover`
+## (half-width, height) standing on it, shooting up once `landed` seconds have passed. Two layers:
+## `Back` drawn under the find it is a child of and `Front` over it, so the find stands inside the light.
+static func make(rarity: int, colour: Color, landed: float, cover: Vector2) -> Node2D:
+	var beam := Node2D.new()
+	var look: Dictionary = LOOKS[rarity]
+	# Wide enough for the second ring at its widest, tall enough for the pillar.
+	var half := cover.x * 1.1 * 1.6 + 2.0
+	var top: float = -look.height - 2.0
+	var bottom := half * 0.3 + 2.0
+	for front in [false, true]:
+		var material := ShaderMaterial.new()
+		material.shader = SHADER
+		material.set_shader_parameter("colour", colour)
+		material.set_shader_parameter("cover", cover)
+		material.set_shader_parameter("front", front)
+		for key: String in look:
+			material.set_shader_parameter(key, look[key])
+		material.set_shader_parameter("speed", 1.0 if Settings.animations == Settings.Anim.DEFAULT else 0.0)
+		material.set_shader_parameter("grow", 0.0)
+		var layer := Polygon2D.new()
+		layer.name = "Front" if front else "Back"
+		layer.polygon = PackedVector2Array([Vector2(-half, top), Vector2(half, top),
+				Vector2(half, bottom), Vector2(-half, bottom)])
+		layer.material = material
+		layer.z_index = 0 if front else -1
+		beam.add_child(layer)
+		layer.tree_entered.connect(func() -> void:
+			layer.create_tween().tween_property(material, "shader_parameter/grow", 1.0, RISE) 					.set_delay(landed).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT), CONNECT_ONE_SHOT)
 	return beam

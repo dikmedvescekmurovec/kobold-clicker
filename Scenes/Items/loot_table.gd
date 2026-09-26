@@ -657,12 +657,14 @@ static func chance_for(enemy_name: String, drop_rate := 0.0) -> float:
 ## draw. That is what keeps the drop rate comparable to before rarities existed.
 ##
 ## `circle` is the ground's (`MapBuilder.circle_of`); 0, a test's default, holds the material to nothing.
+##
+## `forced` is a rarity to roll the piece at instead of drawing one (the dev's even loot, `Encounter`).
 static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := false,
-		tile_level := 1, drop_rate := 0.0, item_rarity := 0.0, circle := 0) -> Item:
+		tile_level := 1, drop_rate := 0.0, item_rarity := 0.0, circle := 0, forced := -1) -> Item:
 	if not guaranteed and rng.randf() >= chance_for(enemy_name, drop_rate):
 		return null
 	var tier := EnemyRoster.tier_of(enemy_name)
-	var rarity := ItemRarity.roll(tier, rng, item_rarity)
+	var rarity := ItemRarity.roll(tier, rng, item_rarity) if forced < 0 else forced as ItemRarity.Rarity
 	# The tile's level and the body's tier give a ceiling; the piece rolls its own level under it,
 	# so a deep tile is a better place to fight rather than a guaranteed prize. Both are settled
 	# before the type, because what a piece is made of is gated by what the piece itself is worth.

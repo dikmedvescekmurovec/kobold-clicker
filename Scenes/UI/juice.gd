@@ -40,23 +40,33 @@ static func fade_ramp() -> Gradient:
 	return ramp
 
 
-## Freezes the game for `seconds` of real time -- or slows it to `slow` -- then lets it go. Everything
-## driven by the frame's delta stops with it, the fight's clock included, so a freeze never costs the
-## player time. The latest call wins: one landing during another replaces it, so a kill's short
-## freeze cannot cut short the slow-motion a rare find it dropped has just asked for.
-static func hit_stop(tree: SceneTree, seconds: float, slow := 0.0) -> void:
+## Freezes the game for `seconds` of real time -- or slows it to `slow` -- then lets it go, easing
+## back to full speed over `recover` real seconds. Everything driven by the frame's delta stops with
+## it, the fight's clock included, so a freeze never costs the player time. The one that ends last
+## wins: a call that would end sooner than the one running is dropped, so a kill's short freeze
+## cannot cut short the slow-motion a rare find has just asked for.
+static func hit_stop(tree: SceneTree, seconds: float, slow := 0.0, recover := 0.0) -> void:
 	# The one guard for every caller: a freeze and a shake are the first things a lower level gives up.
 	if Settings.animations != Settings.Anim.DEFAULT:
 		return
-	_stops += 1
-	var mine := _stops
+	var until := Time.get_ticks_msec() + int((seconds + recover) * 1000.0)
+	if until <= _until:
+		return
+	_until = until
 	Engine.time_scale = slow
 	await tree.create_timer(seconds, true, false, true).timeout
-	if mine == _stops:
-		Engine.time_scale = 1.0
+	var eased := Time.get_ticks_msec()
+	while _until == until:
+		var share := 1.0 if recover <= 0.0 else (Time.get_ticks_msec() - eased) / (recover * 1000.0)
+		if share >= 1.0:
+			Engine.time_scale = 1.0
+			return
+		Engine.time_scale = lerpf(slow, 1.0, share * share)
+		await tree.process_frame
 
 
-static var _stops := 0
+## When the running stop ends, in `Time.get_ticks_msec`.
+static var _until := 0
 
 
 ## Rattles `node` about where it stands, dying away over `time`. Offsets are whole pixels so the art
