@@ -2,15 +2,16 @@ class_name BigNumber
 ## The one way a growing quantity is written down. Gold, monster HP, damage and prices all climb
 ## exponentially, so a late figure is twenty digits in a page three squares wide. Under a million the
 ## whole number is spelled out; above it, three significant digits and the short scale's name --
-## `1.23M`, `45.6B`, `789T` -- for as far as `SUFFIXES` has names, and `1.23e36` past the last one
+## `123K`, `1.23M`, `45.6B`, `789T` -- for as far as `SUFFIXES` has names, and `1.23e36` past the last one
 ## (the user, 2026-09-25: "use big number until you can"). There is no mantissa class underneath -- the quantities are plain doubles and plain
 ## arithmetic, and this is the only place they are turned into text.
 
-## Where the whole number gives up the page. Seven digits is already wider than a price box.
-const PLAIN_BELOW := 1e6
-## The short scale's names, one a thousandfold from a million (1e6) to a decillion (1e33). Past the
+## Where the whole number gives up the page. Six digits was already too wide for an item card's
+## detailed line, "+607047(415583-997400)%", which broke its name into a letter a row (2026-09-26).
+const PLAIN_BELOW := 1e5
+## The short scale's names, one a thousandfold from a thousand (1e3) to a decillion (1e33). Past the
 ## last, the compound names (UDc, DDc...) stop reading as numbers at all, so it is `e` from there.
-const SUFFIXES: Array[String] = ["M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"]
+const SUFFIXES: Array[String] = ["K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"]
 
 
 ## `value` as text; `signed` writes the leading `+` a stat delta needs.
@@ -25,8 +26,8 @@ static func format(value: float, signed := false) -> String:
 	var sign_text := "-" if value < 0.0 else ("+" if signed else "")
 	if is_inf(value):
 		return sign_text + "inf"
-	# Rounded before it is measured: 999999.6 is under a million but its whole number is not, and
-	# writing "1000000" there would leak the one shape this exists to keep off the page.
+	# Rounded before it is measured: 99999.6 is under the line but its whole number is not, and
+	# writing "100000" there would leak the one shape this exists to keep off the page.
 	var rounded := roundf(value)
 	if absf(rounded) < PLAIN_BELOW:
 		# roundi carries its own minus, so `signed` is all that is left to add.
@@ -47,7 +48,7 @@ static func format(value: float, signed := false) -> String:
 			decade += 1
 	# Named: the mantissa moved to its thousand, keeping three significant digits ("1.23M", "12.3M",
 	# "123M"). Worked from the carried decade, so 999.6M is already "1.00B" here.
-	var named := decade / 3 - 2
+	var named := decade / 3 - 1
 	if named < SUFFIXES.size():
 		var shift := decade % 3
 		return sign_text + ("%%.%df" % (2 - shift)) % (mant * pow(10.0, shift)) + SUFFIXES[named]

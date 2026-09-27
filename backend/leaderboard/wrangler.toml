@@ -1,0 +1,25 @@
+# The Gollux leaderboard Worker. Deploy and set-up steps: README.md.
+name = "gollux-leaderboard"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "gollux-leaderboard"
+# From `npx wrangler d1 create gollux-leaderboard` (README step 3). Local dev and the tests need no real one.
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# Per IP address. A period is 10 or 60 seconds; namespace_id is any number unique in the account.
+[[ratelimits]]
+name = "REQUEST_LIMIT"
+namespace_id = "1001"
+simple = { limit = 60, period = 60 }
+
+[[ratelimits]]
+name = "REGISTER_LIMIT"
+namespace_id = "1002"
+simple = { limit = 3, period = 60 }
+
+[observability]
+enabled = true

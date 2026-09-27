@@ -151,6 +151,8 @@ var skills_page: SkillsPage
 var bounty_page: BountyList
 ## Sound, animations, what an item says, and Reset. A left-hand page like the rest, always on offer.
 var settings_page: SettingsPage
+var leaderboard: Leaderboard
+var leaderboard_page: LeaderboardPage
 var collection_page: CollectionPage
 ## What the player adds up to, opened by a press anywhere on the character panel.
 var character_page: CharacterPage
@@ -253,6 +255,11 @@ const TIPS := [
 		"Then you'll want it again and again and again. And it'll cost you twice as much every time, and you'll look at me like I did something.",
 		"Choose other spells too if you like. The great ones I can only manage once though. I'm not young anymore.",
 	], "fortuneteller"],
+	["first_smith", "Blacksmith", [
+		"Put it on the anvil. Don't touch anything else.",
+		"I can make it better quality, but the item is reforged. It might need some polish after.",
+		"Now and then the metal gives. That's the metal's fault, not mine. You still pay.",
+	], "blacksmith"],
 ]
 const FLASH_BRIGHT := Color(1.6, 1.6, 1.6)
 const FLASH_SECONDS := 0.5
@@ -311,6 +318,12 @@ func _ready() -> void:
 	# Before anything below saves over it: the hour the player left is what the camp pays from.
 	var left_at := inventory.saved_at
 	ledger = FightLedger.new(inventory, inventory_path)
+	# The Gollux board, on the player's own save only, as the settings are. A best the server never
+	# acknowledged (the game was offline) goes again now.
+	leaderboard = Leaderboard.new()
+	leaderboard.path = Leaderboard.save_path() if inventory_path == Inventory.SAVE_PATH else ""
+	add_child(leaderboard)
+	leaderboard.submit(inventory.dungeon_floors)
 	var save := MapSave.load_from(map_path, problem, MapSave.fingerprint(map.tileset))
 	if not problem.is_empty():
 		_refuse_save("map", map_path, str(problem[0]))
@@ -748,8 +761,10 @@ func _build_pages(layer: CanvasLayer) -> void:
 		page.held_changed.connect(town_page.orb_held)
 		page.laid_out.connect(_place_corner)
 	settings_page.laid_out.connect(_place_corner)
+	leaderboard_page = LeaderboardPage.new(leaderboard, func() -> int: return inventory.dungeon_floors,
+			ui_scale)
 	for page: Control in [skills_page, bag_page, heirloom_page, bounty_page, settings_page,
-			collection_page, character_page, town_page]:
+			collection_page, character_page, leaderboard_page, town_page]:
 		page.hide()
 		page.closed.connect(_on_left_page_closed)
 		layer.add_child(page)
@@ -1201,6 +1216,9 @@ func _show_services(cell: Vector2i) -> void:
 		_service_rows.add_child(UITheme.section(DUNGEON_NAME))
 		_service_rows.add_child(UITheme.label("Depth %d won" % inventory.dungeon_depth
 				if inventory.dungeon_depth > 0 else "No depth won yet", Palette.TEXT, true))
+		var board := UITheme.button("Leaderboard", "LightButton", "The deepest descents of every player")
+		board.pressed.connect(_toggle_left_page.bind(leaderboard_page))
+		_service_rows.add_child(board)
 		return
 	# Nothing about a tile still under the fog, which one taken blind is when it is clicked.
 	var tier := view.town_tier(cell) if view.seen(cell) else -1
@@ -1259,6 +1277,7 @@ func _layout_ui() -> void:
 	settings_page.layout()
 	collection_page.layout()
 	character_page.layout()
+	leaderboard_page.layout()
 	town_page.layout()
 	_character_button.position = _character.position
 	_character_button.size = _character.size * ui_scale
@@ -1475,12 +1494,12 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	fight.orbs_after = maxi(0, OrbTable.FIRST_ORB_KILLS - inventory.kills)
 	fight.uniques_after = maxi(0, UniqueTable.FIRST_UNIQUE_KILLS - inventory.kills)
 	fight.strikes = true
+	fight.even_loot = Settings.even_loot_on()
 	ledger = FightLedger.new(inventory, inventory_path, farming)
 	ledger.tile_level = view.level_of(cell)
 	# Straight off the fight rather than through the scene: what a body was is the fight's business,
 	# and the boards want the monster's name, not a drop. The ledger decides when it reaches them.
 	fight.enemy_died.connect(_on_enemy_died)
-	fight.even_loot = Settings.even_loot_on()
 	ledger.bounty_counted.connect(_on_bounty_counted)
 	_combat = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 	_combat.finished.connect(_on_combat_finished.bind(cell))
@@ -1566,10 +1585,14 @@ func _on_dungeon_finished(_won: bool) -> void:
 func _bank_depths() -> void:
 	var fight: Encounter = _combat.fight
 	var won := fight.first_floor / fight.enemies + fight.cleared()
-	print("Left the dungeon at depth %d, %d won" % [fight.depth(), fight.cleared()])
-	if won > inventory.dungeon_depth:
-		inventory.dungeon_depth = won
+	var floors := fight.first_floor + fight.index
+	print("Left the dungeon at depth %d, %d won, %s on the board" % [fight.depth(), fight.cleared(),
+			Leaderboard.score_text(floors)])
+	if won > inventory.dungeon_depth or floors > inventory.dungeon_floors:
+		inventory.dungeon_depth = maxi(inventory.dungeon_depth, won)
+		inventory.dungeon_floors = maxi(inventory.dungeon_floors, floors)
 		inventory.save(inventory_path)
+	leaderboard.submit(inventory.dungeon_floors)
 
 
 ## Back from the fight. The tile is charted only if it was won, and the player stays on it; a lost one
@@ -1909,6 +1932,8 @@ func _tip_due(id: String) -> bool:
 			return inventory.super_orbs > 0
 		"first_fortune":
 			return town_page.visible and town_page.open_tab() == TownServices.FORTUNE
+		"first_smith":
+			return town_page.visible and town_page.open_tab() == TownServices.SMITH
 		"first_cave":
 			return view != null and view.cave != HexMap.NO_CELL and view.seen(view.cave) and view.is_land(view.cave)
 		"first_stone":
@@ -2034,7 +2059,7 @@ func _on_unique_seen() -> void:
 ## there is one place that knows which those are.
 func _left_pages() -> Array[Control]:
 	return [bag_page, heirloom_page, skills_page, bounty_page, settings_page, collection_page,
-			character_page]
+			character_page, leaderboard_page]
 
 
 func _close_left_pages() -> void:
@@ -2236,7 +2261,7 @@ func _on_town_tab_changed(_service: String) -> void:
 		_open_left_page(bag_page)
 		_layout_ui()
 	_stand_at_counter()
-	# Her tab opened for the first time is where the fortuneteller explains herself.
+	# Her tab or his opened for the first time is where the fortuneteller or the smith speaks.
 	_check_tips()
 
 

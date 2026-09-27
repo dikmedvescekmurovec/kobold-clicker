@@ -581,7 +581,7 @@ static func stat_line(stat: String, value: float) -> String:
 ## The number alone, for a table that puts the name in a column of its own: "5", "5%", "1.0/s".
 static func stat_value(stat: String, value: float) -> String:
 	if stat in PERCENT_STATS:
-		return "%d%%" % roundi(value)
+		return BigNumber.format(value) + "%"
 	if stat in RATE_STATS:
 		return "%.1f/s" % value
 	# A quantity, which grows with the walk: written through the one formatter, so a late stat is
@@ -600,7 +600,7 @@ static func stat_value(stat: String, value: float) -> String:
 static func stat_delta(stat: String, delta: float) -> String:
 	var label: String = STAT_LABELS.get(stat, stat)
 	if stat in PERCENT_STATS:
-		return "%+d%% %s" % [roundi(delta), label]
+		return "%s%% %s" % [BigNumber.format(delta, true), label]
 	if stat in RATE_STATS:
 		return "%+.1f/s %s" % [delta, label]
 	# `signed` is what keeps the sign on a gain, which is the whole of what a delta line means.

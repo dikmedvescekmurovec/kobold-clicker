@@ -615,12 +615,21 @@ func _fill_board() -> void:
 		inventory.save(_save_path)
 	var body := _scrolled(ROW_GAP)
 	var posted := 0
-	# With work out, the board shows that and nothing else: the rest cannot be taken, so they are
-	# noise until it is handed in -- and when it was taken in another town, this board says so.
-	var busy := not BountyBoard.active(inventory.towns).is_empty()
-	for bounty: Dictionary in BountyBoard.bounties(_drawer):
-		if bool(bounty.get(BountyBoard.DONE, false)) or (busy and not BountyBoard.is_active(bounty)):
-			continue
+	var active_at := BountyBoard.active_spot(inventory.towns)
+	var busy := not active_at.is_empty()
+	# Work taken on at another board heads this one: which bounty is out, and where it is handed in --
+	# a board that only said "no" left the player to go and find out both.
+	if busy and active_at != TownState.key(_spot):
+		var away := BountyList.row(BountyBoard.active(inventory.towns), view, BODY_WIDTH, Callable(),
+				"Taken at %s. Claim it there." % _town_at(active_at))
+		body.add_child(away)
+	# The one taken on here first, then the rest -- still shown while work is out, dimmed and with Accept
+	# grey, so the player can see what is waiting for them to come back.
+	var postings := BountyBoard.bounties(_drawer).filter(func(b: Dictionary) -> bool:
+			return BountyBoard.is_active(b))
+	postings.append_array(BountyBoard.bounties(_drawer).filter(func(b: Dictionary) -> bool:
+			return not BountyBoard.is_active(b) and not bool(b.get(BountyBoard.DONE, false))))
+	for bounty: Dictionary in postings:
 		posted += 1
 		# No Show here: the board is where work is taken on, and the journal is where it is followed.
 		var taken := BountyBoard.is_active(bounty)
@@ -628,7 +637,11 @@ func _fill_board() -> void:
 				"Accepted." if taken and not BountyBoard.ready(bounty) else "")
 		var action: Button
 		if not taken:
-			action = UITheme.button("Accept", "SmallGoButton", "Take this work on")
+			action = UITheme.button("Accept", "SmallGoButton",
+					"Hand in the bounty you have taken first" if busy else "Take this work on")
+			action.disabled = busy
+			if busy:
+				row.modulate = TAB_REST
 			action.pressed.connect(_on_accept_pressed.bind(bounty))
 		# The one thing this board can do that the journal cannot: pay. A bounty is handed in where it
 		# was taken on, so the button is here and nowhere else. The figure is on the card above it and
@@ -650,9 +663,14 @@ func _fill_board() -> void:
 			action.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			BountyList.actions_of(row).add_child(action)
 		body.add_child(row)
-	if posted == 0:
-		body.add_child(_sign("Hand in the bounty you have taken first." if busy
-				else "Nothing is posted here now."))
+	if posted == 0 and not busy:
+		body.add_child(_sign("Nothing is posted here now."))
+
+
+## What the town whose drawer is filed under `at` is called, off the map that named it.
+func _town_at(at: String) -> String:
+	var called := "" if view == null else view.name_of(TownState.spot(at) - view.origin)
+	return called if not called.is_empty() else "another town"
 
 
 ## The land around the town, which is every monster a board may post: a target has to live somewhere
@@ -739,7 +757,7 @@ func _fill_smith() -> void:
 	if not _smith_note.is_empty():
 		_rows.add_child(_sign(_smith_note, Palette.BRICK))
 	if _bag_piece == null:
-		_rows.add_child(_sign("Open a piece you are carrying or wearing and he will work on it."))
+		_fill_idle_smith()
 		return
 	# The piece on the anvil, written out as an offer is: what an upgrade rolls again is its modifiers,
 	# so they are what is worth reading while the hammer is up -- and watching them change after a blow
@@ -774,6 +792,65 @@ func _fill_smith() -> void:
 	_rows.add_child(_smith_button("Lock", lock_price, lock_why,
 			"Pin one of its modifiers for good, for %s gold" % BigNumber.format(lock_price),
 			_on_lock_pressed))
+
+
+## The smith with nothing held up to him: himself at his anvil beside the empty square a piece would
+## stand on, and his two services with what each does and the least it costs on anything the player
+## has -- so the tab says what he is for before a piece is picked, rather than one line sending the
+## player off to the bag to find out.
+func _fill_idle_smith() -> void:
+	var body := _scrolled(ROW_GAP)
+	var bench := HBoxContainer.new()
+	bench.add_theme_constant_override("separation", ROW_GAP)
+	bench.alignment = BoxContainer.ALIGNMENT_CENTER
+	var socket := PanelContainer.new()
+	var style := BountyList.flat(Palette.SLOT_TAN, 0)
+	style.content_margin_left = DialogueBox.SOCKET_PAD.x
+	style.content_margin_top = DialogueBox.SOCKET_PAD.y
+	style.content_margin_right = DialogueBox.SOCKET_PAD.z
+	style.content_margin_bottom = DialogueBox.SOCKET_PAD.w
+	socket.add_theme_stylebox_override("panel", style)
+	var strip: Texture2D = load(DialogueBox.PORTRAITS % "blacksmith")
+	var face := AtlasTexture.new()
+	face.atlas = strip
+	face.region = Rect2(0, 0, strip.get_width(), DialogueBox.PORTRAIT_HEIGHT)
+	var picture := TextureRect.new()
+	picture.texture = face
+	picture.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	socket.add_child(picture)
+	bench.add_child(socket)
+	var anvil := ItemSlot.empty("Open a piece in your bag or on your doll", tab_mark(TownServices.SMITH, false))
+	anvil.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bench.add_child(anvil)
+	body.add_child(bench)
+	body.add_child(_sign("Open a piece in your bag or on your doll.", Palette.TEXT_SOFT))
+	body.add_child(UITheme.rule(BODY_WIDTH))
+	var cap := _upgrade_cap()
+	var pieces := inventory.items + inventory.equipment.items()
+	_smith_service(body, "Upgrade", "One level up, its modifiers rolled again. It can break.",
+			pieces.filter(func(p: Item) -> bool: return Blacksmith.can_upgrade(p, cap))
+				.map(func(p: Item) -> float: return TownPrices.upgrade_price(p)))
+	_smith_service(body, "Lock", "Pins one modifier for good.",
+			pieces.filter(func(p: Item) -> bool: return Blacksmith.can_lock(p))
+				.map(func(p: Item) -> float: return TownPrices.lock_price(p)))
+
+
+## One of the smith's services on his idle counter: its name, the least it costs on any piece in
+## `prices` (none when nothing the player has can take it), and what it does.
+func _smith_service(body: VBoxContainer, title: String, does: String, prices: Array) -> void:
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 2)
+	var name_label := UITheme.label(title)
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(name_label)
+	if not prices.is_empty():
+		var least: float = prices.min()
+		head.add_child(UITheme.label("from", Palette.TEXT_SOFT, true))
+		head.add_child(BountyList.icon(Coins.icon(), PRICE_COIN))
+		head.add_child(UITheme.label(BigNumber.format(least),
+				Palette.TEXT_SOFT if inventory.gold >= least else Palette.BRICK, true))
+	body.add_child(head)
+	body.add_child(_sign(does, Palette.TEXT_SOFT))
 
 
 ## One of the smith's two, with the coin and the price on it the way a Buy carries them, and the

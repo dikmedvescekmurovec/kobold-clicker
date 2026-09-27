@@ -67,6 +67,7 @@ func _run() -> void:
 	_check(_test_unique_table() == true, "unique table tests ran to the end")
 	_check(_test_unique_items() == true, "unique item tests ran to the end")
 	_check(await _test_unique_stats() == true, "unique stat tests ran to the end")
+	_check(_test_attribute_uniques() == true, "attribute unique tests ran to the end")
 	_check(await _test_collection() == true, "collection log tests ran to the end")
 	_check(await _test_character_page() == true, "character page tests ran to the end")
 	_check(await _test_item_generator() == true, "item generator tests ran to the end")
@@ -1140,6 +1141,14 @@ func _test_saving() -> bool:
 	played.save(TEST_PATH)
 	_check(Inventory.load_from(TEST_PATH).dungeon_depth == 37, "the depths won in the dungeon come back")
 	_check(played.transcended().dungeon_depth == 37, "and a transcension carries it over")
+	# Before the leaderboard a save counted depths alone: its floors are theirs, Golluxes and all.
+	_check(Inventory.load_from(TEST_PATH).dungeon_floors == 37 * Encounter.DUNGEON.enemies,
+			"a save with no floors has beaten its depths' floors")
+	played.dungeon_floors = 37 * Encounter.DUNGEON.enemies + 14
+	played.save(TEST_PATH)
+	_check(Inventory.load_from(TEST_PATH).dungeon_floors == played.dungeon_floors
+			and played.transcended().dungeon_floors == played.dungeon_floors,
+			"the floors beaten come back and are carried over")
 	# So is how far the land has ever reached, which bounds every world's cave, and the Seeing Stone.
 	_check(played.farthest_land == MapBuilder.START_LAND_RADIUS and not played.reach(MapBuilder.START_LAND_RADIUS),
 			"no land further than the start's before a wall falls")
@@ -3211,8 +3220,9 @@ func _test_locks_and_breaks() -> bool:
 	ItemDetails.fill(written, pinned_piece, 150.0)
 	var inked := 0
 	for number: Label in written.find_children(UITheme.TABLE_VALUE, "Label", true, false):
-		# A table row is its name and then its number; turned round it is the line Item wrote.
-		var text := "%s %s" % [number.text, (number.get_parent().get_child(0) as Label).text]
+		# A modifier's row is its name over its number; turned round it is the line Item wrote.
+		var named := number.get_parent().get_child(0)
+		var text := "%s %s" % [number.text, (named.get_child(0) if named is HBoxContainer else named).text]
 		if text in pinned_piece.mod_lines() and number.get_theme_color("font_color") == Palette.TEXT:
 			_check(text == pinned_piece.locked_line(), "only the locked modifier is in ink: %s" % text)
 			inked += 1
@@ -3681,6 +3691,98 @@ func _test_unique_items() -> bool:
 	run.bank()
 	_check(run_bag.uniques_found == ["stonebreaker"], "and logs it at the bank")
 	_clear_save()
+	return true
+
+
+## The attribute uniques: the points added up over both dolls, the Echo, the Crown and the Brand, and
+## what each of the others turns them into. The blows the Patchwork Coat, the Purist's Seal and the
+## Brawler's Wraps change are `test_combat`'s.
+func _test_attribute_uniques() -> bool:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var wear := func(bag: Inventory, piece: Item) -> void:
+		bag.items.append(piece)
+		_check(bag.equip(piece, bag.equipment.sockets_for(piece)[0]), "%s goes on" % piece.display_name())
+	var lined := func(piece: Item, lines: Dictionary) -> Item:
+		piece.mods = []
+		for id: String in lines:
+			piece.mods.append({"id": id, "value": lines[id]})
+		return piece
+	var unique := func(id: String, lines := {}) -> Item:
+		return lined.call(Item.rolled_unique(id, rng, 1), lines)
+	var ring := func(lines: Dictionary) -> Item:
+		var piece := Item.new()
+		piece.type = "Iron Band"
+		piece.stats = Item.scaled_stats(piece.type, 1)
+		return lined.call(piece, lines)
+	var armed := func(rings: Array) -> Inventory:
+		var bag := Inventory.new()
+		wear.call(bag, _piece(ItemRarity.Rarity.COMMON, 5))
+		for lines: Dictionary in rings:
+			wear.call(bag, ring.call(lines))
+		return bag
+
+	# Both dolls add up, and the Echo counts the heirlooms' doll again.
+	var bag: Inventory = armed.call([{"added_strength": 30, "added_intelligence": 10}])
+	var heir := bag.stash()
+	wear.call(heir, ring.call({"added_strength": 20, "added_dexterity": 40}))
+	_check(bag.attributes() == {"strength": 50.0, "dexterity": 40.0, "intelligence": 10.0},
+			"both dolls' attributes add up (%s)" % bag.attributes())
+	_check(bag.stats()["strength"] == 50.0, "and the stats carry the sum")
+	wear.call(bag, unique.call("heirlooms_echo"))
+	_check(bag.attributes() == {"strength": 70.0, "dexterity": 80.0, "intelligence": 10.0},
+			"the Echo counts the heirlooms' doll twice (%s)" % bag.attributes())
+
+	# The two counts, over all sixteen pieces: the Echo carries lines of its own no longer.
+	_check(bag.stats()["attribute_lines"] == 4 and bag.stats()["pure_pieces"] == 2,
+			"four attribute lines, and the sword and the Echo without one (%s, %s)"
+			% [bag.stats()["attribute_lines"], bag.stats()["pure_pieces"]])
+
+	# The Crown of Accord: five times over while the lowest is within a tenth of the highest.
+	var even: Inventory = armed.call([{"added_strength": 100, "added_dexterity": 95, "added_intelligence": 91}])
+	wear.call(even, unique.call("crown_of_accord"))
+	_check(even.attributes() == {"strength": 500.0, "dexterity": 475.0, "intelligence": 455.0},
+			"the Crown counts balanced attributes five times (%s)" % even.attributes())
+	var uneven: Inventory = armed.call([{"added_strength": 100, "added_dexterity": 95, "added_intelligence": 89}])
+	wear.call(uneven, unique.call("crown_of_accord"))
+	_check(uneven.attributes()["strength"] == 100.0, "and nothing once one falls behind")
+
+	# The Zealot's Brand: the highest four times, the rest nothing.
+	var zeal: Inventory = armed.call([{"added_strength": 30, "added_dexterity": 60, "added_intelligence": 10}])
+	wear.call(zeal, unique.call("zealots_brand"))
+	_check(zeal.attributes() == {"strength": 0.0, "dexterity": 240.0, "intelligence": 0.0},
+			"the Brand keeps the highest, four times over (%s)" % zeal.attributes())
+	_check(not zeal.stats().has("strength") and zeal.stats()["dexterity"] == 240.0, "and so do the stats")
+
+	# The Scholar's Circlet: intelligence gives damage at five times the rate, and no experience.
+	var reader: Inventory = armed.call([{"added_intelligence": 50}])
+	var plain: float = reader.stats()["damage"]
+	_check(reader.stats()["xp_more"] == 10.0, "fifty intelligence is 10%% experience (%s)" % reader.stats()["xp_more"])
+	wear.call(reader, unique.call("scholars_circlet"))
+	_check(is_equal_approx(reader.stats()["damage"], plain * 1.5) and not reader.stats().has("xp_more"),
+			"and under the Circlet 50%% damage instead (%s from %s)" % [reader.stats()["damage"], plain])
+	_check(reader.attribute_gift("intelligence", 50.0) == ["damage", 50.0], "which the character page is told")
+
+	# The Sage's Abacus: a percent more of every skill for every five intelligence.
+	var sage: Inventory = armed.call([{"added_intelligence": 50}])
+	wear.call(sage, unique.call("sages_abacus"))
+	_check(is_equal_approx(sage.skill_worth(), 1.1), "fifty intelligence, skills 10%% stronger (%s)" % sage.skill_worth())
+
+	# The four that turn points into another stat.
+	var ogre: Inventory = armed.call([{"added_strength": 100}])
+	var weak: float = ogre.stats()["damage"]
+	wear.call(ogre, unique.call("ogres_knuckle"))
+	_check(is_equal_approx(ogre.stats()["damage"] - weak, 10.0 * 1.2),
+			"the Knuckle adds a tenth of the strength as flat damage (%s)" % (ogre.stats()["damage"] - weak))
+	var fencer: Inventory = armed.call([{"added_dexterity": 50}])
+	wear.call(fencer, unique.call("fencers_signet"))
+	_check(fencer.stats()["time_on_hit"] == 5.0, "fifty dexterity is half a second of time on hit")
+	var butcher: Inventory = armed.call([{"added_strength": 100}])
+	wear.call(butcher, unique.call("butchers_cleaver"))
+	_check(butcher.stats()["bleed"] == 5.0, "a hundred strength is 5%% bleed on the Cleaver (%s)" % butcher.stats().get("bleed"))
+	var quick: Inventory = armed.call([{"added_dexterity": 50}])
+	wear.call(quick, unique.call("quickdraw_boots"))
+	_check(quick.stats()["spawn_speed"] == 50.0, "and fifty dexterity is 50%% spawn speed on the boots")
 	return true
 
 

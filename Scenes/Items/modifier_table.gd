@@ -334,15 +334,12 @@ static func band_line(id: String, level: int) -> String:
 	return _written(id, low if low == high else "%s-%s" % [low, high])
 
 
-## A modifier's number as it is written. A flat one is the one number here that grows with the
-## level, so it is written the way every other growing quantity is (`BigNumber`) rather than spelled
-## out to twenty digits.
+## A modifier's number as it is written. Flat and percent alike grow with the level, so it is
+## written the way every other growing quantity is (`BigNumber`) rather than spelled out to twenty digits.
 static func amount(id: String, value: int) -> String:
 	var entry: Dictionary = MODS[id]
-	if entry["kind"] != Kind.FLAT:
-		return str(value)
 	# Tenths of a second, written as seconds with the unit on: the "s" is the number's, not the line's.
-	if entry["stat"] in LootTable.SECONDS_STATS:
+	if entry["kind"] == Kind.FLAT and entry["stat"] in LootTable.SECONDS_STATS:
 		return LootTable.seconds_text(value)
 	return BigNumber.format(value)
 

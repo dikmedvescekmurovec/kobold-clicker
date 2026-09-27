@@ -10,8 +10,11 @@ extends Control
 
 signal finished
 
-## A speaker's portrait: a strip of square frames, their idle, cut by `tools/npc_portraits.py`.
+## A speaker's portrait: their idle's frames stacked top to bottom, cut by `tools/npc_portraits.py`.
 const PORTRAITS := "res://Assets/NPC/%s.png"
+## How tall every portrait frame is (the cutter's `HEIGHT`), so every box stands the same height. How
+## wide one is, is the strip's own width: the smith's is wider, to keep his anvil.
+const PORTRAIT_HEIGHT := 52
 ## The hero's portrait's name under `PORTRAITS`: the one speaker whose portrait stands on the left.
 const PLAYER := "player"
 ## How wide the words wrap, in panel pixels.
@@ -86,11 +89,10 @@ func _init(speaker: String, pages: Array, portrait: Texture2D, left := false) ->
 	socket.add_theme_stylebox_override("panel", style)
 	socket.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	row.add_child(socket)
-	var side := portrait.get_height()
-	_frames = maxi(1, portrait.get_width() / side)
+	_frames = maxi(1, portrait.get_height() / PORTRAIT_HEIGHT)
 	_face = AtlasTexture.new()
 	_face.atlas = portrait
-	_face.region = Rect2(0, 0, side, side)
+	_face.region = Rect2(0, 0, portrait.get_width(), PORTRAIT_HEIGHT)
 	var face := TextureRect.new()
 	face.texture = _face
 	face.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -183,4 +185,4 @@ func _process(delta: float) -> void:
 		return
 	_clock += delta
 	var frame := int(_clock / FRAME_TIME) % _frames
-	_face.region.position.x = frame * _face.region.size.x
+	_face.region.position.y = frame * PORTRAIT_HEIGHT

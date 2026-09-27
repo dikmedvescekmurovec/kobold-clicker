@@ -249,6 +249,92 @@ const UNIQUES := {
 		"effect_text": "Gear you throw away pays a quarter of what a trader would give.",
 		"envs": ["dirt"],
 	},
+	# --- The attributes, made worth building for: every point is counted over both dolls
+	# (`Inventory.attributes`), and the Crown, the Brand and the Echo change what every other one reads.
+	"ogres_knuckle": {
+		"name": "Ogre's Knuckle", "base": "Iron Band",
+		"mods": ["added_strength", "added_damage"],
+		"effect": "ogre",
+		"effect_text": "A tenth of your strength is added to your damage.",
+		"envs": ["mountains", "dirt"],
+	},
+	"fencers_signet": {
+		"name": "Fencer's Signet", "base": "Jade Ring",
+		"mods": ["added_dexterity", "added_time_on_hit"],
+		"effect": "fencer",
+		"effect_text": "Every ten dexterity is a tenth of a second of Time on Hit.",
+		"envs": ["forest", "grass"],
+	},
+	"scholars_circlet": {
+		"name": "Scholar's Circlet", "base": "Leather Helmet",
+		"mods": ["added_intelligence", "increased_armor"],
+		"effect": "scholar",
+		"effect_text": "Your intelligence gives damage instead of experience, at five times the rate.",
+		"envs": ["ice", "forest"],
+	},
+	"sages_abacus": {
+		"name": "Sage's Abacus", "base": "Gold Amulet",
+		"mods": ["added_intelligence", "added_crit"],
+		"effect": "abacus",
+		"effect_text": "Your skills are 1% stronger for every five intelligence.",
+		"envs": ["desert", "ice"],
+	},
+	"crown_of_accord": {
+		"name": "Crown of Accord", "base": "Hide Hood",
+		"mods": ["added_strength", "added_dexterity", "added_intelligence"],
+		"effect": "accord",
+		"effect_text": "While your three attributes are within a tenth of each other, each counts five times over.",
+		"envs": [],
+	},
+	"zealots_brand": {
+		"name": "Zealot's Brand", "base": "Ruby Amulet",
+		"mods": ["global_increased_damage", "added_crit_damage"],
+		"effect": "zealot",
+		"effect_text": "Your highest attribute counts four times over. The other two count for nothing.",
+		"envs": ["desert", "mountains"],
+	},
+	"patchwork_coat": {
+		"name": "Patchwork Coat", "base": "Hide Jerkin",
+		"mods": ["added_strength", "added_dexterity", "added_intelligence"],
+		"effect": "patchwork",
+		"effect_text": "2% more damage for every attribute line you wear.",
+		"envs": ["grass", "dirt"],
+	},
+	"purists_seal": {
+		"name": "Purist's Seal", "base": "Pearl Ring",
+		"mods": ["added_damage", "global_increased_damage"],
+		"effect": "purist",
+		"effect_text": "10% more damage for every piece you wear without an attribute line.",
+		"envs": ["ice", "mountains"],
+	},
+	"brawlers_wraps": {
+		"name": "Brawler's Wraps", "base": "Opal Ring",
+		"mods": ["added_strength", "added_dexterity"],
+		"effect": "brawler",
+		"effect_text": "1% more damage for every point of strength on your clicks, and of dexterity on your weapon's swings.",
+		"envs": ["grass", "desert"],
+	},
+	"butchers_cleaver": {
+		"name": "Butcher's Cleaver", "base": "Wooden Sword",
+		"mods": ["added_strength", "increased_damage"],
+		"effect": "butcher",
+		"effect_text": "Every twenty strength is 1% Bleed.",
+		"envs": ["dirt", "forest"],
+	},
+	"quickdraw_boots": {
+		"name": "Quickdraw Boots", "base": "Leather Boot",
+		"mods": ["added_dexterity", "increased_move_speed"],
+		"effect": "quickdraw",
+		"effect_text": "Your dexterity is added to your Spawn Speed.",
+		"envs": ["desert", "grass"],
+	},
+	"heirlooms_echo": {
+		"name": "Heirloom's Echo", "base": "Emerald Amulet",
+		"mods": ["added_intelligence", "added_crit"],
+		"effect": "echo",
+		"effect_text": "The attributes on your heirlooms' doll count twice.",
+		"envs": [],
+	},
 }
 
 ## What every home piece's card says under its own sentences: the Pilgrim's set (`Equipment.effects`).

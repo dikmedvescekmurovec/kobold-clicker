@@ -451,18 +451,22 @@ static func vbox(separation: int, width := 0.0) -> VBoxContainer:
 ## `width` is for a table standing in something that sizes itself round its contents (a floating
 ## card): the name then wraps in what the value leaves of it, measured here because a wrapping Label
 ## has to be told its width before it can say its height. At 0 the name takes what the parent gives.
+## Where the name and the value will not share one line, the value drops under the name, against the
+## right edge: a long value ("+607K(416K-997K)%") squeezed the name into a word a line, four lines tall.
 ## The value's Label is named `TABLE_VALUE`, for a caller with a tooltip to hang on it.
 static func table_row(text: String, value: String, striped: bool, width := 0.0,
 		text_color: Variant = null, value_color: Variant = null) -> PanelContainer:
-	var row := PanelContainer.new()
-	var box := StyleBoxFlat.new()
-	box.bg_color = TABLE_STRIPE if striped else Color.TRANSPARENT
-	box.set_content_margin_all(TABLE_PAD.y)
-	box.content_margin_left = TABLE_PAD.x
-	box.content_margin_right = TABLE_PAD.x
-	row.add_theme_stylebox_override("panel", box)
-	var cells := HBoxContainer.new()
-	cells.add_theme_constant_override("separation", TABLE_GAP)
+	var row := _row_panel(striped)
+	var room := width - 2 * TABLE_PAD.x
+	var taken := 0.0
+	var stacked := false
+	if width > 0.0:
+		var font := theme().get_font("font", "SmallLabel")
+		taken = ceilf(font.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, SMALL_FONT_SIZE).x)
+		stacked = ceilf(font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, SMALL_FONT_SIZE).x) \
+				+ TABLE_GAP + taken > room
+	var cells: BoxContainer = VBoxContainer.new() if stacked else HBoxContainer.new()
+	cells.add_theme_constant_override("separation", 0 if stacked else TABLE_GAP)
 	row.add_child(cells)
 	var name_cell := label(text, text_color, true)
 	name_cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -471,11 +475,51 @@ static func table_row(text: String, value: String, striped: bool, width := 0.0,
 	var value_cell := label(value, value_color, true)
 	value_cell.name = TABLE_VALUE
 	value_cell.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	value_cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	cells.add_child(value_cell)
 	if width > 0.0:
-		var taken := theme().get_font("font", "SmallLabel").get_string_size(value,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, SMALL_FONT_SIZE).x
-		name_cell.custom_minimum_size.x = maxf(width - 2 * TABLE_PAD.x - TABLE_GAP - ceilf(taken), 0.0)
+		name_cell.custom_minimum_size.x = maxf(room if stacked else room - TABLE_GAP - taken, 0.0)
+	return row
+
+
+## A row of `table_row`'s table for a modifier: the name on the first line with `tag` (the tier,
+## "T95") against the right edge, and the value always on the line under it, against the left. A
+## modifier's value carries its band and runs long; beside the name it left the name no room.
+static func stacked_row(text: String, tag: String, value: String, striped: bool, width := 0.0,
+		color: Variant = null) -> PanelContainer:
+	var row := _row_panel(striped)
+	var cells := vbox(0)
+	row.add_child(cells)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", TABLE_GAP)
+	cells.add_child(top)
+	var name_cell := label(text, color, true)
+	name_cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_cell.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	top.add_child(name_cell)
+	if not tag.is_empty():
+		var tag_cell := label(tag, color, true)
+		tag_cell.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		top.add_child(tag_cell)
+	var value_cell := label(value, color, true)
+	value_cell.name = TABLE_VALUE
+	cells.add_child(value_cell)
+	if width > 0.0:
+		var taken := 0.0 if tag.is_empty() else TABLE_GAP + ceilf(theme().get_font("font", "SmallLabel")
+				.get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, SMALL_FONT_SIZE).x)
+		name_cell.custom_minimum_size.x = maxf(width - 2 * TABLE_PAD.x - taken, 0.0)
+	return row
+
+
+## The padded, maybe washed box every table row stands in.
+static func _row_panel(striped: bool) -> PanelContainer:
+	var row := PanelContainer.new()
+	var box := StyleBoxFlat.new()
+	box.bg_color = TABLE_STRIPE if striped else Color.TRANSPARENT
+	box.set_content_margin_all(TABLE_PAD.y)
+	box.content_margin_left = TABLE_PAD.x
+	box.content_margin_right = TABLE_PAD.x
+	row.add_theme_stylebox_override("panel", box)
 	return row
 
 

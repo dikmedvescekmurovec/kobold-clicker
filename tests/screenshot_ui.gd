@@ -444,7 +444,7 @@ func _shoot_town() -> void:
 	root.get_texture().get_image().save_png("user://ui_town_board.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_town_board.png"))
 
-	# And with one posting taken on and part worked off, which is then the only card it shows.
+	# And with one posting taken on and part worked off: its card first, the rest dimmed under it.
 	if board.size() > 1:
 		# The elite, which is last and the one that pays an orb, so the shot has the orb's picture in it.
 		var taken: Dictionary = board[-1]
@@ -476,6 +476,35 @@ func _shoot_town() -> void:
 		root.get_texture().get_image().save_png("user://ui_town_claimed.png")
 		print("Saved ", ProjectSettings.globalize_path("user://ui_town_claimed.png"))
 		main._close_bounty_paid()
+
+	# The same board with the work out taken at another town instead: that bounty's card first, saying
+	# where it is handed in, and this board's own postings under it, dimmed. Put back after, so the
+	# journal's shots below see the work they always did.
+	var away_spot := Vector2i.MAX
+	for spot: Vector2i in main.towns._tiers:
+		if spot != main.view.start_town:
+			away_spot = spot
+			break
+	if board.size() > 1 and away_spot != Vector2i.MAX:
+		var here: Dictionary = board[-1]
+		var have := int(here.get(BountyBoard.HAVE, 0))
+		BountyBoard.abandon(here)
+		var away_drawer: Dictionary = main.inventory.towns.visit(away_spot)
+		BountyBoard.restock(away_drawer, main.view.envs_within(away_spot - main.view.origin,
+				BountyBoard.BOUNTY_RANGE), away_spot - main.view.origin, rng)
+		var away: Dictionary = BountyBoard.bounties(away_drawer)[0]
+		BountyBoard.accept(main.inventory.towns, away)
+		BountyBoard.count_kill(main.inventory.towns, str(away[BountyBoard.ENEMY]), 1)
+		main.town_page._fill()
+		main.town_page.layout()
+		for i in 2:
+			await process_frame
+		await RenderingServer.frame_post_draw
+		root.get_texture().get_image().save_png("user://ui_town_board_away.png")
+		print("Saved ", ProjectSettings.globalize_path("user://ui_town_board_away.png"))
+		BountyBoard.abandon(away)
+		BountyBoard.accept(main.inventory.towns, here)
+		BountyBoard.count_kill(main.inventory.towns, str(here[BountyBoard.ENEMY]), have)
 
 	# The gear merchant, with a piece open, which is where the Sell button that replaces Discard lives.
 	# So this shot has both halves of the counter at once: what it sells on the right, what it buys on
@@ -579,12 +608,29 @@ func _shoot_town() -> void:
 	# allows level 5 and the deeper pieces photograph the cap's refusal instead of a live hammer.
 	main.bag_page._hide_orb_card()
 	main.town_page._on_tab_pressed(TownServices.SMITH)
+	# First with nothing held up to him: himself at the anvil, the empty square, and his two services.
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_town_smith_idle.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_town_smith_idle.png"))
 	main.bag_page._select_item(6)
 	for i in 2:
 		await process_frame
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_town_smith.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_town_smith.png"))
+	# What he says the first time his tab opens, his anvil beside him: that tip unseen again.
+	main.inventory.tips.erase("first_smith")
+	main.town_page._on_tab_pressed(TownServices.SMITH)
+	await create_timer(Juice.POP_TIME + 0.1).timeout
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_smith_dialogue.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_smith_dialogue.png"))
+	main._on_tip_closed()
+	await create_timer(Juice.LEAVE_TIME + 0.1).timeout
+	main.bag_page._select_item(6)
+	await process_frame
 
 	# And the doll beside the bag, which is how a worn piece is handed to him: he works on
 	# one as readily as on a carried piece, so the sheet at his counter is the figure rather than the

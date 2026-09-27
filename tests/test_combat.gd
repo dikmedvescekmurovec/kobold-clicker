@@ -2249,6 +2249,21 @@ func _test_more_unique_effects() -> bool:
 	var mule := _standing(["packmule"], {"damage": 9.0, "bag_pieces": 40})
 	mule.hit()
 	_check(mule.hp == 1.0e9 - 14.0, "1%% a piece in the bag (%s)" % (1.0e9 - mule.hp))
+	# And the Patchwork Coat and the Purist's Seal, theirs.
+	var patch := _standing(["patchwork"], {"damage": 9.0, "attribute_lines": 10})
+	patch.hit()
+	_check(patch.hp == 1.0e9 - 12.0, "2%% an attribute line (%s)" % (1.0e9 - patch.hp))
+	var pure := _standing(["purist"], {"damage": 9.0, "pure_pieces": 5})
+	pure.hit()
+	_check(pure.hp == 1.0e9 - 15.0, "10%% a piece without one (%s)" % (1.0e9 - pure.hp))
+
+	# Brawler's Wraps: strength on the hand, dexterity on the weapon's own swing.
+	var brawl := _standing(["brawler"], {"damage": 9.0, "attack_speed": 1.0, "strength": 50.0, "dexterity": 100.0})
+	listen.call(brawl)
+	brawl.hit()
+	brawl.advance(1.0)
+	_check(blows == [15.0, 20.0], "a click takes the strength, a swing the dexterity (%s)" % [blows])
+	blows.clear()
 
 	# Last Gasp: the last five seconds and not a moment before.
 	var gasp := _standing(["last_gasp"], {"damage": 9.0})
@@ -2969,6 +2984,9 @@ func _test_the_way_down() -> void:
 	await process_frame
 	_check(main._combat == null and main.map.visible, "leaving brings the map back")
 	_check(main.inventory.dungeon_depth == 0, "floors short of Gollux win no depth")
+	_check(main.inventory.dungeon_floors == fight.index,
+			"but the floors beaten are the leaderboard's score (%d)" % main.inventory.dungeon_floors)
+	_check(not main.leaderboard.enabled(), "and a test's main scene never calls the leaderboard")
 	_check(main.inventory.kills == kills_before and is_equal_approx(main.inventory.gold, gold_before),
 			"with no kill counted and nothing paid")
 	# A Gollux killed is a depth won, written down, and where the next descent begins.
@@ -2984,6 +3002,9 @@ func _test_the_way_down() -> void:
 	await process_frame
 	_check(main.inventory.dungeon_depth == 2 and Inventory.load_from(SCRATCH_INVENTORY).dungeon_depth == 2,
 			"two Golluxes dead is two depths won, and saved")
+	_check(main.inventory.dungeon_floors == 30 and Leaderboard.score_text(30) == "3.00"
+			and Leaderboard.score_text(44) == "3.14" and Leaderboard.score_text(5) == "1.05",
+			"a score is the depth and the floors of it beaten (%d)" % main.inventory.dungeon_floors)
 	_check("depth 3" in main._cave_button.tooltip_text, "Enter cave says where that leaves the player (%s)"
 			% main._cave_button.tooltip_text)
 	main._on_cave_pressed()
@@ -2992,7 +3013,8 @@ func _test_the_way_down() -> void:
 	main._combat.fight.stop()
 	main._combat._on_back_pressed()
 	await process_frame
-	_check(main.inventory.dungeon_depth == 2, "a descent that wins nothing moves nothing")
+	_check(main.inventory.dungeon_depth == 2 and main.inventory.dungeon_floors == 30,
+			"a descent that wins nothing moves nothing")
 	_check(main.inventory.transcended().dungeon_depth == 2, "and a transcension carries the depths over")
 	main.queue_free()
 	await process_frame

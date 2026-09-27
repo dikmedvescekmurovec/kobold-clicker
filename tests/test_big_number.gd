@@ -13,12 +13,15 @@ func _run() -> void:
 	_report("big number")
 
 
-## Under a million nothing changes: it is the string that is on screen today.
+## Under a hundred thousand the whole number is spelled out.
 func _test_whole_numbers() -> bool:
 	_check(BigNumber.format(0.0) == "0", "nothing is nothing: %s" % BigNumber.format(0.0))
 	_check(BigNumber.format(7.0) == "7", "seven is seven: %s" % BigNumber.format(7.0))
 	_check(BigNumber.format(1000.0) == "1000", "a thousand is spelled out: %s" % BigNumber.format(1000.0))
-	_check(BigNumber.format(999999.0) == "999999", "and so is the last six-digit purse: %s" % BigNumber.format(999999.0))
+	_check(BigNumber.format(99999.0) == "99999", "and so is the last five-digit purse: %s" % BigNumber.format(99999.0))
+	_check(BigNumber.format(100000.0) == "100K", "six digits are K: %s" % BigNumber.format(100000.0))
+	_check(BigNumber.format(607047.0) == "607K", "three digits of them: %s" % BigNumber.format(607047.0))
+	_check(BigNumber.format(999999.0) == "1.00M", "and the last carries: %s" % BigNumber.format(999999.0))
 	return true
 
 
@@ -41,9 +44,9 @@ func _test_exponent() -> bool:
 ## The one that matters: `log(v) / log(10)` is off by one either way in doubles, so every decade up to
 ## the float ceiling is asked for by hand.
 func _test_every_decade() -> bool:
-	for n: int in range(6, 301):
+	for n: int in range(5, 301):
 		var written := BigNumber.format(pow(10.0, n))
-		var named := n / 3 - 2
+		var named := n / 3 - 1
 		var expected := ("1" + "0".repeat(n % 3) + ("." + "0".repeat(2 - n % 3) if n % 3 < 2 else "")
 				+ BigNumber.SUFFIXES[named]) if named < BigNumber.SUFFIXES.size() else "1.00e%d" % n
 		_check(written == expected, "1e%d lands on its own decade: %s" % [n, written])

@@ -1,0 +1,14 @@
+{
+  "name": "gollux-leaderboard",
+  "description": "The Gollux leaderboard: a Cloudflare Worker and a D1 database",
+  "scripts": {
+    "dev": "wrangler dev",
+    "test": "node --test test.mjs",
+    "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy"
+  },
+  "type": "module",
+  "devDependencies": {
+    "wrangler": "^4.141.0"
+  },
+  "private": true
+}

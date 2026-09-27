@@ -294,7 +294,8 @@ var roster_rng := RandomNumberGenerator.new()
 ## What the player is worth in a fight -- gear and skills together, `Inventory.stats()` -- read once by
 ## `arm()` rather than looked up per swing. Five decide what a blow does to the body in front of the
 ## player, the defence further down decides what the body's blows do to the clock, and the rest decide
-## what it leaves when it goes down. The attributes are the one thing an item carries that none reads.
+## what it leaves when it goes down. The attributes are read by `Inventory.stats()`, and here only by
+## the Brawler's Wraps.
 ## The ceiling on crit chance: crits stay something that happens sometimes, however much gear is
 ## piled up. A chance over certainty is every hit critting, which is a crit meaning nothing.
 const CRIT_CAP := 100.0
@@ -408,6 +409,9 @@ const DOMINO_SHARE := 0.2
 const MOMENTUM_MORE := 0.02      ## per kill
 const MOMENTUM_MOST := 1.0
 const PACKMULE_MORE := 0.01      ## per piece in the bag
+const PATCHWORK_MORE := 0.02     ## per attribute line worn
+const PURIST_MORE := 0.10        ## per piece worn without one
+const BRAWLER_MORE := 0.01       ## per point of strength on a click, of dexterity on a swing
 const HEARTWOOD_ARMOUR := 50.0   ## armour a second on the clock
 const HEARTWOOD_MOST := 10.0
 const AFTERIMAGE_SECONDS := 1.0  ## the most a dodge wins back, of what blows have taken
@@ -473,6 +477,12 @@ var strikes := false
 ## (`Inventory.stats()` puts them in).
 var _bare_sockets := 0
 var _bag_pieces := 0
+## And what the attribute uniques read: the counted strength and dexterity (Brawler's Wraps), the
+## attribute lines worn (Patchwork Coat) and the pieces worn without one (Purist's Seal).
+var _strength := 0.0
+var _dexterity := 0.0
+var _attribute_lines := 0
+var _pure_pieces := 0
 ## About the enemy that is out: whether it has taken a blow, whether one of them was a crit, whether
 ## it has already risen once. Cleared as the next one comes on.
 var _struck := false
@@ -905,6 +915,10 @@ func arm(stats: Dictionary) -> void:
 	time_on_hit = maxf(0.0, LootTable.seconds_of("time_on_hit", float(stats.get("time_on_hit", 0.0))))
 	_bare_sockets = maxi(0, int(stats.get("bare_sockets", 0)))
 	_bag_pieces = maxi(0, int(stats.get("bag_pieces", 0)))
+	_strength = maxf(0.0, float(stats.get("strength", 0.0)))
+	_dexterity = maxf(0.0, float(stats.get("dexterity", 0.0)))
+	_attribute_lines = maxi(0, int(stats.get("attribute_lines", 0)))
+	_pure_pieces = maxi(0, int(stats.get("pure_pieces", 0)))
 	# Heartwood Plate: armour buys clock, and stops buying it at HEARTWOOD_MOST -- armour grows with
 	# every level, and a clock that grew with it would be no clock. A run has none to add to.
 	if "heartwood" in effects and not endless:
@@ -1094,6 +1108,9 @@ func _unique_more(automatic: bool) -> float:
 		more += minf(MOMENTUM_MORE * kills(), MOMENTUM_MOST)
 	if "packmule" in effects:
 		more += PACKMULE_MORE * _bag_pieces
+	more += PATCHWORK_MORE * _attribute_lines * effects.count("patchwork")
+	more += PURIST_MORE * _pure_pieces * effects.count("purist")
+	more += BRAWLER_MORE * (_dexterity if automatic else _strength) * effects.count("brawler")
 	return more
 
 

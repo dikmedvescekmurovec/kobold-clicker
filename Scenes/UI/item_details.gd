@@ -69,7 +69,10 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 	for text in item.mod_lines(Settings.item_details):
 		blocks[2].append([text, Palette.TEXT if text in pinned
 				else Palette.SLOT_TAN_DK if text in perfect else Palette.RUST])
-	for block in blocks:
+	# A detailed modifier line ends on its tier ("T95"), which stands apart at the row's right end.
+	var tier := RegEx.create_from_string(" (T[0-9]+)$")
+	for index in blocks.size():
+		var block: Array = blocks[index]
 		if block.is_empty():
 			continue
 		rows.add_child(UITheme.rule())
@@ -81,8 +84,16 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 			# `ModifierTable.line`): the first word is the row's value and the rest is its name.
 			var text: String = entry[0]
 			var number := text.get_slice(" ", 0)
-			table.add_child(UITheme.table_row(text.substr(number.length() + 1), number,
-					table.get_child_count() % 2 == 1, width, entry[1], entry[1]))
+			var named := text.substr(number.length() + 1)
+			var striped := table.get_child_count() % 2 == 1
+			if index < 2:
+				table.add_child(UITheme.table_row(named, number, striped, width, entry[1], entry[1]))
+				continue
+			# A modifier's value carries its band and runs long, so it always goes under the name.
+			var found := tier.search(named)
+			var tag := "" if found == null else found.get_string(1)
+			table.add_child(UITheme.stacked_row(named if found == null else named.substr(0, found.get_start()),
+					tag, number, striped, width, entry[1]))
 
 
 ## What wearing `item` instead of `against` would change: stat -> the signed difference.

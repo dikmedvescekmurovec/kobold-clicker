@@ -1409,8 +1409,10 @@ func _test_entering() -> void:
 	await process_frame
 	_check(not BountyBoard.active(main.inventory.towns).is_empty(), "which takes it on")
 	_check(not BountyBoard.active(Inventory.load_from(TEST_PATH).towns).is_empty(), "and is saved")
-	_check(_deep_button(main.town_page._rows, "Accept") == null,
-			"and the others leave the board until it is handed in")
+	var others: Array = main.town_page._rows.find_children("", "Button", true, false).filter(
+			func(b: Button) -> bool: return b.text == "Accept")
+	_check(not others.is_empty() and others.all(func(b: Button) -> bool: return b.disabled),
+			"and the others stay on the board, refused until it is handed in")
 	main.town_page.closed.emit()
 	await process_frame
 	main._on_bounty_pressed()

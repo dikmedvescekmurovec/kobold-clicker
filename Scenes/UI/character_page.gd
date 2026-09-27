@@ -102,9 +102,10 @@ func open() -> void:
 				body.get_child_count() % 2 == 1, 0.0, Palette.SLOT_TAN_DK, Palette.TEXT_SOFT))
 	# The attributes' shares the same way: inside the figures above, said here where they come from.
 	for stat: String in ATTRIBUTES:
-		var share := Inventory.attribute_bonus(float(totals.get(stat, 0.0)))
+		var gift := inventory.attribute_gift(stat, float(totals.get(stat, 0.0)))
+		var share: float = gift[1]
 		if share > 0.0:
-			var gives: String = Inventory.ATTRIBUTE_GIVES[stat]
+			var gives: String = gift[0]
 			body.add_child(UITheme.table_row(LootTable.STAT_LABELS[stat], "+%.1f%% %s" % [share,
 					"Experience" if gives == "xp_more" else LootTable.STAT_LABELS[gives]],
 					body.get_child_count() % 2 == 1, 0.0, Palette.SLOT_TAN_DK, Palette.TEXT_SOFT))

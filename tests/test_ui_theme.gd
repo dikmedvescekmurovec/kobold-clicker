@@ -21,7 +21,26 @@ func _run() -> void:
 	_check(_test_dialogue_box() == true, "dialogue box tests ran to the end")
 	_check(_test_accordion() == true, "accordion tests ran to the end")
 	_check(await _test_settings_scroll() == true, "settings scroll tests ran to the end")
+	_check(_test_table_rows() == true, "table row tests ran to the end")
 	_report("UI theme")
+
+
+## A value too long to share a line with its name drops under it rather than squeezing the name
+## into a word a line; one that fits stays beside it.
+func _test_table_rows() -> bool:
+	var fits := UITheme.table_row("Damage", "14", false, 200.0)
+	var long := UITheme.table_row("increased Attack Speed T95", "+607K(416K-997K)%", false, 200.0)
+	_check(fits.get_child(0) is HBoxContainer, "a short value sits beside its name")
+	_check(long.get_child(0) is VBoxContainer, "a long one drops under it")
+	# A modifier's row: name and tier on one line, the value always under them.
+	var mod := UITheme.stacked_row("increased Attack Speed", "T95", "+607K(416K-997K)%", false, 200.0)
+	var top := mod.get_child(0).get_child(0)
+	_check(top.get_child_count() == 2 and top.get_child(1).text == "T95", "the tier stands beside the name")
+	_check(mod.get_child(0).get_child(1).name == UITheme.TABLE_VALUE, "and the value under them")
+	fits.free()
+	long.free()
+	mod.free()
+	return true
 
 
 func _test_sheet() -> bool:
@@ -583,10 +602,11 @@ func _test_tip_card() -> bool:
 ## The hero's portrait stands on the left of his words, everyone else's on the right, and every
 ## speaker has a portrait cut.
 func _test_dialogue_box() -> bool:
-	for speaker: String in ["fortuneteller", DialogueBox.PLAYER]:
+	for speaker: String in ["fortuneteller", "blacksmith", DialogueBox.PLAYER]:
 		var art: Texture2D = load(DialogueBox.PORTRAITS % speaker)
-		_check(art != null and art.get_width() % art.get_height() == 0,
-				"%s's portrait is a strip of square frames" % speaker)
+		_check(art != null and art.get_height() % DialogueBox.PORTRAIT_HEIGHT == 0
+				and art.get_height() > DialogueBox.PORTRAIT_HEIGHT,
+				"%s's portrait is frames of one height, stacked" % speaker)
 		var box := DialogueBox.new(speaker, ["words"], art, speaker == DialogueBox.PLAYER)
 		var row: HBoxContainer = box._panel.get_child(0)
 		var first_is_face := row.get_child(0) is PanelContainer

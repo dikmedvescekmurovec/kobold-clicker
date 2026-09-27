@@ -59,7 +59,9 @@ const SAVE_PATH := "user://inventory.json"
 ## its most instead (`SkillTree.OVERRANK_WEIGHT`), and a version 23 save's sunk points are free again.
 ## 25 adds `farthest_land` and `seeing_stone`; a version 24 save has been no further than the land it
 ## stands in now (the main scene reads it off the map at start-up) and holds no stone.
-const VERSION := 25
+## 26 adds `dungeon_floors`, the leaderboard's score; a version 25 save has beaten the floors of the
+## depths it won and none past them.
+const VERSION := 26
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -77,6 +79,16 @@ const SPIKES_SHARE := 0.01
 ## better piece. Intelligence adds to `xp_more`, a percentage already; the other two multiply.
 const ATTRIBUTE_PERCENT := 0.2
 const ATTRIBUTE_GIVES := {"strength": "damage", "dexterity": "attack_speed", "intelligence": "xp_more"}
+
+## What the attribute uniques are tuned by (`UniqueTable`, which writes the same figures in words).
+const OGRE_SHARE := 0.1          ## of strength, added to the flat damage
+const FENCER_DEXTERITY := 10.0   ## dexterity a tenth of a second of time on hit
+const BUTCHER_STRENGTH := 20.0   ## strength a point of bleed; uncapped (the user's ruling)
+const SCHOLAR_TIMES := 5.0       ## intelligence's share, given to damage in place of experience
+const ABACUS_POINTS := 5.0       ## intelligence a percent more of every skill
+const ACCORD_WITHIN := 0.9       ## the lowest attribute against the highest
+const ACCORD_TIMES := 5.0
+const ZEALOT_TIMES := 4.0
 
 ## What is held, in the order it was picked up. The panel does not show it in this order -- `order()`
 ## does that -- and nothing outside here should: an index into this array is how a piece is named,
@@ -116,6 +128,9 @@ var play_seconds := 0.0
 ## (`Encounter.cleared`) -- which is where the next descent begins. It only ever rises, and it is the
 ## player's and not the world's, like the kills and the clock: every transcension carries it over.
 var dungeon_depth := 0
+## Every floor of the dungeon ever beaten in one go, counted from the top: the leaderboard's score
+## (`Leaderboard.score_text` writes 44 as "3.14"). Only rises, and is carried like `dungeon_depth`.
+var dungeon_floors := 0
 ## How far the land has ever reached, in steps from the middle, in any world: the land radius the last
 ## wall ever broken opened. The Gollux cave of every world after is put down no further out than this
 ## (`MapBuilder.place_cave`). It only rises (`reach`), and every transcension carries it over.
@@ -423,28 +438,58 @@ func add_xp(amount: int) -> int:
 ## side's:** the Ascetic's Cord counts the bare places on the doll it hangs from, and the Packmule's
 ## Harness the loose pieces beside the doll it is strapped to, so one on each doll counts both and
 ## one on the heirlooms' says nothing of the ordinary bag.
+##
+## **The attributes are the exception to a count being its side's** (the user's ruling, 2026-09-27):
+## they are added over both dolls (`attributes`), and so are the attribute lines the Patchwork Coat
+## counts and the pieces without one the Purist's Seal does. The attributes written into the result
+## are the counted ones, Crown, Brand and Echo done, so the fight and the character page read those.
 func stats() -> Dictionary:
+	var worn := effects()
+	var points := attributes()
 	var flat := _skills_worth(skills.flat())
 	var percent := _skills_worth(skills.percent())
 	var other := stash().equipment
-	if "spikes" in effects():
+	if "spikes" in worn:
 		var armour := float(equipment.totals(flat, percent, other).get("armor", 0.0))
 		flat["damage"] = float(flat.get("damage", 0.0)) + armour * SPIKES_SHARE
+	# The attribute uniques that turn points into another stat's flat, in with the skills' so the
+	# percents scale them like any other point. One on each doll counts twice.
+	var turned := {
+		"damage": points["strength"] * OGRE_SHARE * worn.count("ogre"),
+		"time_on_hit": points["dexterity"] / FENCER_DEXTERITY * worn.count("fencer"),
+		"bleed": points["strength"] / BUTCHER_STRENGTH * worn.count("butcher"),
+		"spawn_speed": points["dexterity"] * worn.count("quickdraw"),
+	}
+	for stat: String in turned:
+		if turned[stat] > 0.0:
+			flat[stat] = float(flat.get(stat, 0.0)) + turned[stat]
 	var out := equipment.totals(flat, percent, other)
 	out["bare_sockets"] = _side_count("ascetic",
 			func(side: Inventory) -> int: return Equipment.NAMES.size() - side.equipment.worn.size())
 	out["bag_pieces"] = _side_count("packmule", func(side: Inventory) -> int: return side.items.size())
+	# The Patchwork Coat's count and the Purist's Seal's, over all sixteen pieces.
+	out["attribute_lines"] = 0
+	out["pure_pieces"] = 0
+	for piece: Item in equipment.items() + other.items():
+		var lines := piece.mods.filter(func(mod: Dictionary) -> bool:
+				return ATTRIBUTE_GIVES.has(ModifierTable.MODS.get(mod["id"], {}).get("stat", "")))
+		out["attribute_lines"] += lines.size()
+		out["pure_pieces"] += int(lines.is_empty())
 	# The collection log's share, on its own the way the skills' percent is: it multiplies what gear
 	# and skills made rather than adding to either.
 	if out.has("damage"):
 		out["damage"] = float(out["damage"]) * (1.0 + collection_bonus() / 100.0)
 	for attribute: String in ATTRIBUTE_GIVES:
-		var share := attribute_bonus(float(out.get(attribute, 0.0)))
-		var stat: String = ATTRIBUTE_GIVES[attribute]
+		if points[attribute] <= 0.0:
+			out.erase(attribute)
+			continue
+		out[attribute] = points[attribute]
+		var gift := attribute_gift(attribute, points[attribute])
+		var stat: String = gift[0]
 		if stat == "xp_more":
-			out[stat] = float(out.get(stat, 0.0)) + share
+			out[stat] = float(out.get(stat, 0.0)) + gift[1]
 		elif out.has(stat):
-			out[stat] = float(out[stat]) * (1.0 + share / 100.0)
+			out[stat] = float(out[stat]) * (1.0 + gift[1] / 100.0)
 	# Pacifist Hands: the hands swing for themselves, and then everything that swings swings faster.
 	if Curses.PACIFIST_HANDS in curses:
 		out["attack_speed"] = (float(out.get("attack_speed", 0.0)) + PACIFIST_SWINGS) * PACIFIST_FASTER
@@ -461,11 +506,48 @@ static func attribute_bonus(points: float) -> float:
 	return maxf(0.0, points) * ATTRIBUTE_PERCENT
 
 
-## What one skill point is worth against what the tree says: double under Hard Lessons. A whole
-## number, because a skill's card writes it by describing that many points (`SkillCard.fill`).
+## What `points` of `attribute` add, as [the stat, the percent]: `ATTRIBUTE_GIVES`' stat at
+## `attribute_bonus`, but intelligence gives damage at `SCHOLAR_TIMES` under the Scholar's Circlet.
+func attribute_gift(attribute: String, points: float) -> Array:
+	if attribute == "intelligence" and "scholar" in effects():
+		return ["damage", attribute_bonus(points) * SCHOLAR_TIMES]
+	return [ATTRIBUTE_GIVES[attribute], attribute_bonus(points)]
+
+
+## The three attributes as everything that reads one counts them. **Added up over both dolls**, like
+## any stat (the user's ruling), then the heirlooms' doll's once more for every Heirloom's Echo worn;
+## the Crown of Accord's test is of those sums, and the Zealot's Brand comes last, so it can take what
+## the Crown gave. Nothing but gear carries an attribute, so the skills are not asked.
+func attributes() -> Dictionary:
+	var worn := effects()
+	var sums := equipment.totals({}, {}, stash().equipment)
+	var echo := stash().equipment.totals()
+	var out := {}
+	for attribute: String in ATTRIBUTE_GIVES:
+		out[attribute] = maxf(0.0, float(sums.get(attribute, 0.0))
+				+ float(echo.get(attribute, 0.0)) * worn.count("echo"))
+	var high: float = out.values().max()
+	if "accord" in worn and high > 0.0 and out.values().min() >= high * ACCORD_WITHIN:
+		for attribute: String in out:
+			out[attribute] *= 1.0 + (ACCORD_TIMES - 1.0) * worn.count("accord")
+	if "zealot" in worn:
+		var top: String = out.find_key(out.values().max())
+		for attribute: String in out:
+			out[attribute] = out[attribute] * (1.0 + (ZEALOT_TIMES - 1.0) * worn.count("zealot")) \
+					if attribute == top else 0.0
+	return out
+
+
+## What one skill point is worth against what the tree says: double under Hard Lessons, and a percent
+## more for every `ABACUS_POINTS` intelligence under each Sage's Abacus. A skill's card writes it by
+## describing that many points (`SkillCard.fill`), so the card says what the fight gets.
 func skill_worth() -> float:
-	return 1.0 + (1.0 if Curses.HARD_LESSONS in curses else 0.0) \
+	var worth := 1.0 + (1.0 if Curses.HARD_LESSONS in curses else 0.0) \
 			+ (0.5 if Curses.SPECIALIST in curses else 0.0)
+	var abaci := effects().count("abacus")
+	if abaci > 0:
+		worth *= 1.0 + abaci * float(attributes()["intelligence"]) / ABACUS_POINTS / 100.0
+	return worth
 
 
 ## Why a point cannot go into skill `id`, or "" where it can: the trees' own rules, and before them
@@ -486,8 +568,9 @@ func rank_up_skill(id: String) -> bool:
 ## numbers and are not doubled.
 func _skills_worth(sums: Dictionary) -> Dictionary:
 	var out := {}
+	var worth := skill_worth()
 	for stat: String in sums:
-		out[stat] = float(sums[stat]) * skill_worth()
+		out[stat] = float(sums[stat]) * worth
 	return out
 
 
@@ -623,6 +706,7 @@ func transcended(lost := false) -> Inventory:
 	next.kills = kills
 	next.play_seconds = play_seconds
 	next.dungeon_depth = dungeon_depth
+	next.dungeon_floors = dungeon_floors
 	next.farthest_land = farthest_land
 	next.seeing_stone = seeing_stone
 	next.first_sword_taken = true
@@ -701,6 +785,7 @@ func save(path := SAVE_PATH) -> bool:
 		"kills": kills,
 		"play_seconds": play_seconds,
 		"dungeon_depth": dungeon_depth,
+		"dungeon_floors": dungeon_floors,
 		"farthest_land": farthest_land,
 		"seeing_stone": seeing_stone,
 		"level": level,
@@ -795,6 +880,10 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var deepest: Variant = data.get("dungeon_depth", 0)
 	if typeof(deepest) in [TYPE_INT, TYPE_FLOAT]:
 		inventory.dungeon_depth = maxi(0, int(deepest))
+	# Version 25 counted only depths: its floors are theirs, the Golluxes included.
+	var floors: Variant = data.get("dungeon_floors", 0)
+	inventory.dungeon_floors = maxi(inventory.dungeon_depth * Encounter.DUNGEON.enemies,
+			int(floors) if typeof(floors) in [TYPE_INT, TYPE_FLOAT] else 0)
 	# Version 24 knew nothing of either: no further than the start's land, and no stone.
 	var farthest: Variant = data.get("farthest_land", MapBuilder.START_LAND_RADIUS)
 	if typeof(farthest) in [TYPE_INT, TYPE_FLOAT]:
