@@ -210,7 +210,7 @@ The user asked for simpler skill icons that show what a skill does, never the pa
 
 ### Uniques redrawn
 
-Every unique is pixellab art. The Sunscorched Cowl and Gambler's Die were each drawn a second time (a mummy's bandaged head became a hood; a round pendant became a die); of two Dominoes tries the shoe tipping against the other was kept.
+Every unique is pixellab art. The Sunscorched Cowl and Gambler's Die were each drawn a second time (a mummy's bandaged head became a hood; a round pendant became a die); of two Dominoes tries the shoe tipping against the other was kept. The twelve attribute uniques (2026-09-28) came from `UNIQUE_PROMPTS` in `tools/pixellab_prompts.py`, one draw each, matched to their ids by the download's file name. Two missed their prompt: the Zealot's Brand's glowing flame mutes to a pale peach (`_muted` scales by the brightest colour, as it did the torches' fire), and the Heirloom's Echo drew one locket, not two, so its outline is the Serpent's Eye's.
 
 ### To bring one in
 

@@ -141,6 +141,9 @@ _PIXELLAB_IDS = [
     "gamblers_die", "ascetics_cord", "last_gasp", "duelists_buckler", "overflowing_chalice", "dominoes",
     "snowball", "packmule", "bulwark", "heartwood_plate", "spiked_helm", "magpies_band", "lucky_wound",
     "rag_and_bone_sack", "serpents_eye",
+    # The attribute uniques (2026-09-28).
+    "ogres_knuckle", "fencers_signet", "scholars_circlet", "sages_abacus", "crown_of_accord", "zealots_brand",
+    "patchwork_coat", "purists_seal", "brawlers_wraps", "butchers_cleaver", "quickdraw_boots", "heirlooms_echo",
 ]
 UNIQUE_GEAR = {name: ((PIXELLAB + name, 0, 0, 32, 32, 1), []) for name in _PIXELLAB_IDS}
 UNIQUE_OUT = "Assets/Gear/Unique"

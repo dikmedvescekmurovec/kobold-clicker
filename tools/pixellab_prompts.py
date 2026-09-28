@@ -997,3 +997,107 @@ for spell, does, symbol in FORTUNE_SYMBOLS:
     out += [f"### {spell} -- {does}", "", "```", simple_prompt(symbol, FORTUNE_COLOUR), "```", ""]
 open("tools/qa/pixellab_fortune_prompts.md", "w", encoding="utf-8").write("\n".join(out))
 print(len(FORTUNE_SYMBOLS), "fortune prompts")
+
+
+# The twelve attribute uniques (2026-09-27), for the Pixen model at Highly detailed like every unique before them
+# (tools/DESIGN.md, *Settings*). Each one striking feature on its own silhouette -- the collection log draws a missing
+# unique as a black shape, so none repeats another unique's outline (tools/qa/ui_kit_uniques.png) -- and never the
+# item's name. Colour words from the charts only, and none that names a thing (no bone white, silver, iron grey,
+# slate, pale cream): whites are the user's "muted white #F1F5E7". Where a piece stands for the three attributes it
+# wears the character page's three colours, brick red / moss green / dusty blue.
+POSE["CROWN"] = ("Front view, seen a little from above, standing upright: the back of the band shows as a thin curve "
+                 "above the front.")
+POSE["FLAT"] = "Lying flat, seen straight on from the front."
+
+
+def unique_prompt(pose, subject, palette, shine, guard=""):
+    return "\n".join([subject] + ([guard] if guard else []) + [
+        "Single game inventory icon, 32x32 pixel art in the style of a classic fantasy RPG item pack.",
+        POSE[pose],
+        "Object fills most of the canvas with a 2-3 pixel margin, centred.",
+        "A rare, remarkable item: one bold feature that sets it apart from any ordinary piece, a clean readable "
+        "silhouette, no text, no runes, no engraving.",
+        f"Muted, dusty colours, but polished: bright highlights and deep shadows, {shine} clearly catching the light.",
+        f"Palette: {palette}.",
+        "Soft light from the top-left, 3-4 shades per material, a bright highlight along each ridge and rim.",
+        "No text, no background, no shadow, no frame."])
+
+
+EMPTY_BAND = "An empty band with nothing inside it: the middle shows only the clear background."
+UNIQUE_PROMPTS = [
+ ("ogres_knuckle", "Ogre's Knuckle -- a tenth of strength is added to damage", "RING",
+  "A huge, crude, heavy ring hammered out of rough dark metal, far too thick for its size: the band is as wide as "
+  "its open middle, and three big blunt knobs stand in a row along its top.\n" + RING_SHAPE,
+  "neutral grey #797e80 and dark grey #2f3236 on the rough metal, light grey highlights #d1d1d1 on the knobs, "
+  "dark brown #4e2d1f in the deepest shadows", "the three knobs"),
+ ("fencers_signet", "Fencer's Signet -- ten dexterity is a tenth of a second of time on hit", "RING",
+  "An elegant ring with one long, thin, needle-straight spike rising from its top and slanting up to the "
+  "top-right corner, much longer than the ring is wide.\n" + RING_SHAPE,
+  "steel blue #546783 and dusty blue #628ab9 on the band, light grey highlights #d1d1d1 along the spike, dark grey "
+  "shadows #2f3236", "the long spike"),
+ ("scholars_circlet", "Scholar's Circlet -- intelligence gives damage instead of experience", "CROWN",
+  "A thin, delicate circlet: a narrow band of dull gold rising to a small point at the front, where one large round "
+  "dusty blue stone is set; a tiny swept-back wing on each side of the stone.",
+  "dull gold #c49e48 and #9b7227, bright gold highlights #e9bc3d, a dusty blue stone #628ab9 with steel blue shadows "
+  "#546783, dark brown shadows #4e2d1f", "the blue stone",
+  EMPTY_BAND),
+ ("sages_abacus", "Sage's Abacus -- skills 1% stronger for every five intelligence", "PENDANT",
+  "A small square abacus hanging as a pendant from a dark brown cord: a warm brown wooden frame holding three "
+  "straight rods, each threaded with round teal beads pushed to different sides.\n" + PENDANT_SHAPE,
+  "warm brown #a0542a and dark brown #4e2d1f on the frame and cord, teal beads #12878a with dark slate teal shadows "
+  "#1f3139, dull gold #c49e48 on the rods", "the teal beads"),
+ ("crown_of_accord", "Crown of Accord -- balanced attributes each count five times over", "CROWN",
+  "A dull gold crown with exactly three tall points of the same height, evenly spaced; each point is tipped with one "
+  "round stone: brick red on the left, moss green in the middle, dusty blue on the right.",
+  "dull gold #c49e48 and #9b7227, bright gold highlights #e9bc3d, one brick red stone #ba3423, one moss green stone "
+  "#69903e, one dusty blue stone #628ab9, dark brown shadows #4e2d1f", "the three stones",
+  EMPTY_BAND),
+ ("zealots_brand", "Zealot's Brand -- the highest attribute four times over, the other two nothing", "PENDANT",
+  "A dark brown cord with a pendant shaped like one tall, single flame, point up, cut from dark metal whose inside "
+  "glows tan orange like a branding iron fresh from the fire.\n" + PENDANT_SHAPE,
+  "dark grey #2f3236 on the metal rim, tan orange #de6c0a and light orange #e68908 in the glowing middle, brick red "
+  "#ba3423 at the glow's edges, dark brown cord #4e2d1f", "the glowing flame"),
+ ("patchwork_coat", "Patchwork Coat -- 2% more damage for every attribute line worn", "BODY",
+  "A sleeveless coat sewn from many mismatched square patches of leather and cloth in three colours -- brick red, "
+  "moss green and dusty blue -- joined by big, clearly visible cross stitches.\n" + JERKIN_SHAPE,
+  "brick red #ba3423, moss green #69903e and dusty blue #628ab9 patches, sand stitches #cca67b, dark brown shadows "
+  "#4e2d1f", "the bright patches",
+  NO_BODY),
+ ("purists_seal", "Purist's Seal -- 10% more damage for every piece worn without an attribute line", "RING",
+  "A perfectly smooth, plain ring of muted white with no marks at all, crowned by a flat round disc standing upright "
+  "on its top, the disc as wide as the ring, with one small dull gold dot at its centre.\n" + RING_SHAPE,
+  "muted white #F1F5E7 shaded with light grey #d1d1d1, neutral grey #797e80 only in the darkest shading, one dull "
+  "gold dot #c49e48; no blue", "the smooth white disc"),
+ ("brawlers_wraps", "Brawler's Wraps -- strength on clicks, dexterity on swings", "FLAT",
+  "A fighter's hand wrap: a long strip of sand-coloured cloth wound into a thick, loose round coil, with one brick red "
+  "stripe along its length and a loose end trailing off to the lower right.",
+  "sand #cca67b and burlap tan #a77a3e on the cloth, one brick red stripe #ba3423, dark brown shadows #4e2d1f",
+  "the red stripe"),
+ ("butchers_cleaver", "Butcher's Cleaver -- every twenty strength is 1% Bleed", "WEAPON",
+  "A butcher's meat cleaver: a big, broad, flat rectangular blade much wider than the handle, one round hole near "
+  "its top corner, a short warm brown wooden handle; a few drips of brick red along the cutting edge.",
+  "neutral grey #797e80 on the blade, light grey #d1d1d1 along the cutting edge, dark grey #2f3236 in the shadows, "
+  "warm brown #a0542a and dark brown #4e2d1f on the handle, brick red drips #ba3423", "the cutting edge",
+  "A single cleaver on its own and nothing else."),
+ ("quickdraw_boots", "Quickdraw Boots -- dexterity is added to spawn speed", "BOOT",
+  "A pair of light tan orange leather boots, each with one small swept-back wing of muted white feathers springing "
+  "from its heel.\n" + BOOT_SHAPE,
+  "tan orange #de6c0a and warm brown #a0542a leather, apricot highlights #f5ac5d, muted white wings #F1F5E7 shaded "
+  "with light grey #d1d1d1, dark brown shadows #4e2d1f", "the white wings",
+  NO_LEG),
+ ("heirlooms_echo", "Heirloom's Echo -- the heirlooms' attributes count twice", "PENDANT",
+  "One dull gold chain with two identical round lockets hanging side by side from it: the left one solid, the right "
+  "one faded and see-through like its echo.\n" + PENDANT_SHAPE,
+  "dull gold #c49e48 and #9b7227, bright gold highlights #e9bc3d, lavender grey #a598b4 on the faded locket, dark "
+  "brown shadows #4e2d1f", "the solid locket"),
+]
+
+out = ["# Pixellab prompts: the attribute uniques", "",
+ "Settings: 32x32, transparent background on, Direction and View None, Single color outline; the Pixen model, "
+ "Highly detailed.",
+ "Save each as `Assets/Potential/Unique/<its id>.png` (the id starts each heading), then follow tools/DESIGN.md, "
+ "*To bring one in*.", ""]
+for unique_id, heading, pose, subject, palette, shine, *guard in UNIQUE_PROMPTS:
+    out += [f"### {unique_id} -- {heading}", "", "```", unique_prompt(pose, subject, palette, shine, *guard), "```", ""]
+open("tools/qa/pixellab_unique_prompts.md", "w", encoding="utf-8").write("\n".join(out))
+print(len(UNIQUE_PROMPTS), "unique prompts")
