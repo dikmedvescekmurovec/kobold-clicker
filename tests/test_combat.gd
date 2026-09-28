@@ -1329,19 +1329,21 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 	main._combat._on_back_pressed()
 	await process_frame
 	main.map.player.finish_walk()
-	_check(main.view.player_cell == target, "and a loss runs them all the way back to where they set out from")
+	# Back to the charted tile they stepped onto it from, not to where the walk began.
+	_check(main.view.player_cell == MapBuilder.CENTER and not main.view.walking,
+			"and a loss runs them back to the charted tile they stepped onto it from")
 
 	# Farming a tile away from the player walks there too, and they stay when the run ends.
-	main.map.select_cell(MapBuilder.CENTER)
+	main.map.select_cell(target)
 	main._on_farm_pressed()
 	_check(main._combat == null and main.view.walking, "farming a tile away walks there first")
 	main.map.player.finish_walk()
-	_check(main.view.player_cell == MapBuilder.CENTER and main._combat != null and main._combat.fight.endless,
+	_check(main.view.player_cell == target and main._combat != null and main._combat.fight.endless,
 			"and the run opens on arrival")
 	main._combat.fight.stop()
 	main._combat._on_back_pressed()
 	await process_frame
-	_check(not main.view.walking and main.view.player_cell == MapBuilder.CENTER, "a run ended leaves them where it was")
+	_check(not main.view.walking and main.view.player_cell == target, "a run ended leaves them where it was")
 	main.queue_free()
 
 
