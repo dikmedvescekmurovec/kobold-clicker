@@ -102,7 +102,7 @@ const CURSES := {
 	LONG_WINTER: {"name": "Long Winter", "skulls": 3,
 		"text": "The ice wall has twice the health.", "reward": "Every ice wall pays two super orbs, not one."},
 	RING_OF_WALLS: {"name": "Ring of Walls", "skulls": 3,
-		"text": "An ice wall stands every 5 rings, not every 10.",
+		"text": "An ice wall stands every 6 rings, not every 12.",
 		"reward": "Every wall still pays its super orb, so there are twice as many to earn."},
 	LONE_HEIR: {"name": "Lone Heir", "skulls": 3,
 		"text": "Only one heirloom may be worn. The rest come off as the world begins.",

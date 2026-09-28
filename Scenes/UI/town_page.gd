@@ -205,6 +205,8 @@ var _bag_piece: Item
 ## outside: a press on a shelf piece spends that orb on it instead of opening it. The orb, the purse
 ## and the save stay the bag's.
 var _held := ""
+## The bag's orb card, for the orb vendor's squares (`_card_for`).
+var _orb_card: OrbCard
 var craft_held: Callable
 ## What the last blow of the hammer did, when it is worth saying out loud. A break is the one thing
 ## that happens on this page the player did not ask for, so it is said rather than left to be noticed.
@@ -243,6 +245,11 @@ func _ready() -> void:
 	_title = UITheme.title_of(_panel)
 	_rows = UITheme.body_of(_panel)
 	_rows.add_theme_constant_override("separation", ROW_GAP)
+	# After the panel, so it is drawn over it.
+	_orb_card = OrbCard.new()
+	_orb_card.scale = Vector2(_ui_scale, _ui_scale)
+	_orb_card.hide()
+	add_child(_orb_card)
 
 
 ## Redraws the page for the town at `cell`, whose world spot is `spot` and whose tier is a
@@ -403,8 +410,10 @@ func _shelf() -> GridContainer:
 			# can cover it and grey when it cannot, which is the state it already draws for "held but
 			# no use to you". A grey one still takes the cursor and says why in its tooltip.
 			var square := OrbSlot.make(orb, 1, inventory.gold >= price, false, ItemSlot.SIDE)
-			square.tooltip_text = "%s, %s gold%s" % [orb, BigNumber.format(price),
-					"" if inventory.gold >= price else ". " + _why_not(price, false)]
+			# The bag's own card for it, with the price where the bag says how to use one.
+			_card_for(square, "%s gold%s" % [BigNumber.format(price),
+					"" if inventory.gold >= price else ". " + _why_not(price, false)],
+					Palette.TEXT_SOFT if inventory.gold >= price else Palette.RUST)
 			square.pressed.connect(_on_buy_orb.bind(at))
 			grid.add_child(_price_cell(square, price))
 		return grid
@@ -442,7 +451,8 @@ func _upscales() -> GridContainer:
 		var held := inventory.orb_count(from)
 		var enough := held >= OrbTable.UPSCALE_COST
 		var square := OrbSlot.make(orb, 1, enough, false, ItemSlot.SIDE)
-		square.tooltip_text = "Trade %d %s for one %s. You hold %d" % [OrbTable.UPSCALE_COST, from, orb, held]
+		_card_for(square, "Trade %d %s for one" % [OrbTable.UPSCALE_COST, from],
+				Palette.TEXT_SOFT if enough else Palette.RUST)
 		square.pressed.connect(_on_upscale)
 		# Priced the way gold is, with the orb it costs standing in the coin's place.
 		grid.add_child(_cost_cell(square, str(OrbTable.UPSCALE_COST), OrbTable.icon(from), enough,
@@ -1248,11 +1258,11 @@ func _smith_why_not(rule: String, price: float) -> String:
 	return _why_not(price, false)
 
 
-## The deepest level the smith here may take a piece to: what a boss on this ground could drop, which
-## is the ceiling a vendor's shelf already rolls under. So no counter in a town walks a piece past the
-## frontier the player has actually fought their way to.
+## The deepest level the smith here may take a piece to: what a boss on the deepest land of this
+## town's wall circle could drop (`MapBuilder.circle_level`). Gated by the circle, not the town's own
+## tile, so every fortress between the same two walls works to the same ceiling.
 func _upgrade_cap() -> int:
-	return maxi(1, MapBuilder.level_of(_cell) + int(LootTable.TIER_LEVEL[EnemyRoster.Tier.BOSS]))
+	return maxi(1, MapBuilder.circle_level(_cell) + int(LootTable.TIER_LEVEL[EnemyRoster.Tier.BOSS]))
 
 
 ## One blow of the hammer. The gold goes whichever way it falls -- that is what the break chance is --
@@ -1295,6 +1305,28 @@ func _smith_done() -> void:
 	_fill()
 	layout()
 	offer_changed.emit(null)
+
+
+## The bag's orb card on `square` while the cursor is over it, with `note` as its last line where the
+## bag says how to use one. Beside the square, as `TipCard` stands; placed again deferred, since the
+## first pass measures labels that have not laid out yet. A square freed under the cursor (the tab
+## redrawn by a purchase) takes the card with it.
+func _card_for(square: OrbSlot, note: String, tone: Color) -> void:
+	square.hovered.connect(func(orb: String) -> void:
+		_orb_card.fill(orb, inventory.orb_count(orb), null, note, tone)
+		_orb_card.show()
+		_place_orb_card(square)
+		_place_orb_card.call_deferred(square))
+	square.unhovered.connect(_orb_card.hide)
+	square.tree_exiting.connect(_orb_card.hide)
+
+
+func _place_orb_card(square: OrbSlot) -> void:
+	if not _orb_card.visible or not is_instance_valid(square) or not square.is_inside_tree():
+		return
+	_orb_card.reset_size()
+	_orb_card.position = ItemCard.beside(square.get_global_rect(),
+			_orb_card.get_combined_minimum_size() * _ui_scale, get_viewport_rect().size, ItemCard.GAP * _ui_scale)
 
 
 ## Why this cannot be bought, or "" when it can. The bag's refusal is not a nicety: `Inventory.add`

@@ -5,8 +5,7 @@ extends RefCounted
 ## One file, because a price the player pays and a price the player is paid have to be read against
 ## each other or a town turns into a loop that prints money. Everything here is built on
 ## `gold_at_level`, which is what a body on the first tile of that level band carries
-## (`Encounter.gold_at_steps`, and level `n` starts at the nth triangular number of steps -- see
-## `MapBuilder.level_of`). So every number below is "this many bodies", and the dials are the
+## (`Encounter.gold_at_steps` at `MapBuilder.first_step`). So every number below is "this many bodies", and the dials are the
 ## multipliers rather than the gold, which means retuning the purse retunes the shops with it.
 ##
 ## Static and node-free like `OrbTable`, so the tests need no interface to read a price off.
@@ -30,11 +29,11 @@ const SELL_SHARE := 0.20
 ## already want, and never worth doing to one you would otherwise sell.
 const UPGRADE_BODIES := 20.0
 
-## And what a lock costs. The largest dial in the game by a distance: a locked modifier is the only
-## thing in it that cannot be rolled away, so paying for one has to be a season's farming rather than
-## an afternoon's, or every piece ends up carrying one and the orbs stop meaning anything. Two and a
-## half thousand bodies is about 250 ordinary tile fights at any depth (`tests/balance_town.gd`).
-const LOCK_BODIES := 2500.0
+## And what a lock costs. Still far dearer than an upgrade: a locked modifier is the only thing in the
+## game that cannot be rolled away, so if it were cheap every piece would carry one and the orbs would
+## stop meaning anything. Cut tenfold from 2500 by the user (2026-09-28): 250 bodies is about 25
+## ordinary tile fights at any depth.
+const LOCK_BODIES := 250.0
 
 ## What the commonest orb is worth, in bodies, at the town it is sold in. The rarer orbs climb off it
 ## by `orb_value`, so the whole table is this one number and `OrbTable`'s own weights.
@@ -92,10 +91,7 @@ static var _commonest := 0.0
 
 ## What a body on the first tile of level `level` carries. The unit every price in a town is quoted in.
 static func gold_at_level(level: int) -> float:
-	var at := maxi(level, 1)
-	@warning_ignore("integer_division")  # n(n - 1) is always even, so the triangular number is whole
-	var steps := at * (at - 1) / 2
-	return Encounter.gold_at_steps(steps)
+	return Encounter.gold_at_steps(MapBuilder.first_step(level))
 
 
 ## What a merchant pays for a piece: its own level's body worth, times its rarity, times the dial.

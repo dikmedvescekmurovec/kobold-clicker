@@ -16,9 +16,8 @@ extends RefCounted
 ## or an Orb of Binding holds fast is not rerolled, which is what a lock is bought for. A **lock**
 ## pins one modifier to the piece, and every orb then works around it.
 ##
-## The cap an upgrade stops at is handed in rather than worked out here: it belongs to the ground the
-## town stands on, the same ceiling a vendor's shelf rolls under, and this file has no business
-## knowing what a map is.
+## The cap an upgrade stops at is handed in rather than worked out here: it belongs to the wall circle
+## the town stands in, and this file has no business knowing what a map is.
 
 ## How often the hammer ruins a piece rather than improving it. The upgrade fails, the gold is spent
 ## all the same, the level and the stats are untouched, and the piece is marked `broken`.
@@ -35,8 +34,8 @@ const BREAK_CHANCE := 0.05
 const BROKEN := "This piece is broken."
 
 
-## Whether this piece can be taken one level higher here. `cap` is the deepest level this ground
-## allows, which is what keeps a smith from walking gear past the frontier the player has reached.
+## Whether this piece can be taken one level higher here. `cap` is the deepest level this town's
+## wall circle allows, which is what keeps a smith from walking gear past the next wall.
 static func can_upgrade(item: Item, cap: int) -> bool:
 	return item != null and not item.broken and item.level < cap
 

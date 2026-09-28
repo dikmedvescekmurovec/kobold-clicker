@@ -596,6 +596,16 @@ func _test_tip_card() -> bool:
 	_check(float(ProjectSettings.get_setting("gui/timers/tooltip_delay_sec")) > 1000.0,
 			"Godot's own tooltip is out of reach, so nothing is said twice")
 	row.queue_free()
+
+	# The character page's attribute discs say what a point does, under the cursor on the disc itself.
+	var worn := Inventory.new()
+	var page := CharacterPage.new(worn, 1.0)
+	root.add_child(page)
+	for stat: String in CharacterPage.ATTRIBUTES:
+		var disc := page.find_child(stat, true, false).get_parent() as Control
+		var said := TipCard.text_of(disc, disc.get_global_rect().get_center())
+		_check(LootTable.STAT_LABELS[stat] in said and "Yours add" in said, "the %s disc says what it does: %s" % [stat, said])
+	page.queue_free()
 	return true
 
 

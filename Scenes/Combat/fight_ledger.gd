@@ -34,6 +34,7 @@ var _inventory: Inventory
 var _path: String
 ## Whether anything at all has dropped, which spends the Broken Sword and the elite's promise of it.
 var _gear_dropped := false
+var _first_orb_dropped := false
 var _banked := false
 
 
@@ -62,6 +63,7 @@ func add_gold(amount: float) -> void:
 
 func add_orb(orb: String) -> void:
 	orbs[orb] = int(orbs.get(orb, 0)) + 1
+	_first_orb_dropped = _first_orb_dropped or orb == OrbTable.FIRST_ORB
 	if farming:
 		return
 	_inventory.add_orb(orb)
@@ -181,4 +183,6 @@ func _add_xp(amount: int) -> void:
 func _save() -> void:
 	if _gear_dropped:
 		_inventory.first_sword_taken = true
+	if _first_orb_dropped:
+		_inventory.first_orb_taken = true
 	_inventory.save(_path)

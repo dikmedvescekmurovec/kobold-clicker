@@ -45,12 +45,10 @@ func fill(id: String, skills: Skills, level: int, worth := 1.0, refused: Variant
 	if cost > 1:
 		status = "Click to learn for %d points (%d/%d)" % [cost, rank, most]
 	var tone := Palette.LEAF
-	if refusal == SkillTree.FULL:
-		status = refusal
-		# Not gold: at 10 px on cream it cannot be read, which is why a unique's sentence is this too.
-		tone = Palette.SLOT_TAN_DK
-	elif not refusal.is_empty():
+	if not refusal.is_empty():
 		status = refusal
 		tone = Palette.RUST
-	_rows.add_child(ItemDetails.line(status, tone, WIDTH, true))
+	# A skill at its most says nothing more: the gold ring and "5/5" already say it.
+	if refusal != SkillTree.FULL:
+		_rows.add_child(ItemDetails.line(status, tone, WIDTH, true))
 	reset_size()

@@ -1445,10 +1445,10 @@ func _place_corners(view: Vector2) -> void:
 
 
 ## An orb off a body, thrown out of it the way a find is. Plain, but for a good orb, which stands the
-## beam of the rarity `OrbTable` names for it.
+## beam of the rarity `OrbTable` names for it, in the orb's own colour.
 func _on_orb_dropped(_index: int, orb: String) -> void:
 	var beam: int = OrbTable.ORBS[orb].get("beam", -1)
-	_show_find(OrbTable.icon(orb), beam, ItemRarity.BORDER_COLORS.get(beam, Color.WHITE))
+	_show_find(OrbTable.icon(orb), beam, OrbTable.ORBS[orb].get("glow", Color.WHITE))
 	if _loot_panel.visible:
 		_fill_loot()
 	orb_gained.emit(orb)

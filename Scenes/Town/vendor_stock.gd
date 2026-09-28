@@ -87,16 +87,14 @@ static func _fill(drawer: Dictionary, key: String, tier: int, cell: Vector2i,
 ## tier could drop here, which lifts the middle of the band without ever passing the ceiling the
 ## ground itself sets.
 ##
-## The level is settled first and handed to the draw, so a shelf is gated by what it deals the way
-## the ground is: no vendor offers a material the piece's own level has not unlocked.
+## What it is made of is the town's tile level's, the way a drop's is its tile's.
 static func roll_item(tier: int, cell: Vector2i, rng: RandomNumberGenerator) -> Item:
 	var carried := EnemyRoster.Tier.ELITE if tier == TownWorld.Tier.SMALL else EnemyRoster.Tier.BOSS
 	var rarity := ItemRarity.roll(carried, rng)
 	var ceiling := maxi(1, MapBuilder.level_of(cell) + int(LootTable.TIER_LEVEL[carried]))
 	var level := maxi(ItemRarity.roll_level(rarity, ceiling, rng),
 			ItemRarity.roll_level(rarity, ceiling, rng))
-	var material := LootTable.material_level(level, MapBuilder.circle_of(cell))
-	return Item.rolled(LootTable._weighted(rng, material), rarity, rng, level)
+	return Item.rolled(LootTable._weighted(rng, MapBuilder.level_of(cell)), rarity, rng, level)
 
 
 ## The six pieces on the shelf, with a `null` where one has been bought. Empty for a town that has

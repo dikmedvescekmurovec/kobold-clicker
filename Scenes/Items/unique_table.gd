@@ -396,11 +396,14 @@ static func pool_for(env: String) -> Array:
 	return pool
 
 
-## How often this enemy is carrying one: `LootTable.chance_for`'s shape on this file's own tier line.
-static func chance_for(enemy_name: String, drop_rate := 0.0) -> float:
+## How often this enemy is carrying one: `LootTable.chance_for`'s shape on this file's own tier line,
+## lifted by the drop rate and then by item rarity at unique's `ItemRarity.RARITY_STEP`.
+static func chance_for(enemy_name: String, drop_rate := 0.0, item_rarity := 0.0) -> float:
 	var tier: float = TIER_CHANCE[EnemyRoster.tier_of(enemy_name)]
 	var size: float = LootTable.SIZE_CHANCE[EnemyRoster.size_of(enemy_name)]
-	return minf(tier * size * (1.0 + maxf(drop_rate, 0.0) / 100.0), 1.0)
+	var rarity := 1.0 + maxf(item_rarity, 0.0) / 100.0 \
+			* int(ItemRarity.RARITY_STEP[ItemRarity.Rarity.UNIQUE])
+	return minf(tier * size * (1.0 + maxf(drop_rate, 0.0) / 100.0) * rarity, 1.0)
 
 
 ## One kill's worth: null almost always, or a unique off `env`'s pool. The chance is drawn first and
@@ -408,8 +411,8 @@ static func chance_for(enemy_name: String, drop_rate := 0.0) -> float:
 ## is -- with UNIQUE's high floor, so one is never found worthless. `guaranteed` skips the chance: the
 ## chest's half that holds a unique (`Encounter.MIMIC_UNIQUE`) and nothing else.
 static func roll(enemy_name: String, env: String, rng: RandomNumberGenerator, tile_level := 1,
-		drop_rate := 0.0, guaranteed := false) -> Item:
-	if not guaranteed and rng.randf() >= chance_for(enemy_name, drop_rate):
+		drop_rate := 0.0, guaranteed := false, item_rarity := 0.0) -> Item:
+	if not guaranteed and rng.randf() >= chance_for(enemy_name, drop_rate, item_rarity):
 		return null
 	var pool := pool_for(env)
 	if pool.is_empty():

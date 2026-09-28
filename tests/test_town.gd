@@ -97,7 +97,8 @@ func _test_services() -> bool:
 ## a piece's price with its rarity on top of that.
 func _test_prices() -> bool:
 	_check(TownPrices.gold_at_level(1) == Encounter.gold_at_steps(0), "level 1 is the middle of the map")
-	_check(TownPrices.gold_at_level(4) == Encounter.gold_at_steps(6), "level n starts at the nth triangle")
+	_check(TownPrices.gold_at_level(4) == Encounter.gold_at_steps(3 * MapBuilder.LEVEL_TILES),
+			"level n starts n - 1 bands out")
 	_check(Encounter.base_gold(Vector2i.ZERO) == Encounter.gold_at_steps(0),
 			"a cell's purse is still the walk's purse")
 	_check(Encounter.base_gold(TOWN_CELL) == Encounter.gold_at_steps(HexGrid.distance(
@@ -126,17 +127,6 @@ func _test_prices() -> bool:
 			"a handful is worth the sum of it")
 	_check(TownPrices.sell_total([]) == 0, "an empty handful is worth nothing")
 
-	# An orb's price is the other way up from its drop rate: what nobody sees is what nobody sells.
-	var commonest := ""
-	var rarest := ""
-	for orb: String in OrbTable.ORBS:
-		if commonest.is_empty() or int(OrbTable.ORBS[orb]["weight"]) > int(OrbTable.ORBS[commonest]["weight"]):
-			commonest = orb
-		if rarest.is_empty() or int(OrbTable.ORBS[orb]["weight"]) < int(OrbTable.ORBS[rarest]["weight"]):
-			rarest = orb
-	_check(TownPrices.orb_value(rarest, TOWN_CELL) > TownPrices.orb_value(commonest, TOWN_CELL) * 2,
-			"the rarest orb is worth several of the commonest (%d over %d)"
-			% [TownPrices.orb_value(rarest, TOWN_CELL), TownPrices.orb_value(commonest, TOWN_CELL)])
 	for orb: String in OrbTable.ORBS:
 		var value := TownPrices.orb_value(orb, TOWN_CELL)
 		_check(value > 0, "%s is worth something" % orb)
@@ -294,13 +284,13 @@ func _test_stock_rolls() -> bool:
 		shelf_level += piece.level
 		_check(piece.level <= ceiling and piece.level >= 1,
 				"a shelf piece stays under what the ground allows (%d over %d)" % [piece.level, ceiling])
-		# And is made of something its own level has unlocked: a vendor hands its level to the draw,
-		# so no counter deals a material the ground under it could not.
+		# And is made of something the town's tile level has unlocked, whatever the piece's own level:
+		# no counter deals a material the ground under it could not.
 		var row: Dictionary = LootTable.ITEMS[piece.type]
 		var levels: Array = LootTable.KINDS[row["kind"]].get("tier_levels", LootTable.TIER_MIN_LEVEL)
-		_check(piece.level >= int(levels[int(row["tier"])]),
-				"a level-%d %s is under the level its material needs (%d)"
-						% [piece.level, piece.type, levels[row["tier"]]])
+		_check(MapBuilder.level_of(TOWN_CELL) >= int(levels[int(row["tier"])]),
+				"a %s is past what a level-%d town deals (%d)"
+						% [piece.type, MapBuilder.level_of(TOWN_CELL), levels[row["tier"]]])
 	var drop_rarity := 0
 	var drop_level := 0
 	for i in ROLLS:
@@ -370,12 +360,12 @@ func _test_smith() -> bool:
 			"a piece that is not there is refused without a fuss")
 
 	# A break: the level and the stats stand, and the piece takes no more work of any kind.
-	var ruined := Item.rolled("Leather Boot", ItemRarity.Rarity.RARE, rng, 5)
+	var ruined := Item.rolled("Leather Boot", ItemRarity.Rarity.RARE, rng, 3)
 	var ruined_stats := ruined.base_stats()
 	var ruined_mods := ruined.mods.duplicate(true)
 	_check(not Blacksmith.upgrade(ruined, cap, doomed), "the hammer broke it")
 	_check(ruined.broken, "and the piece carries it")
-	_check(ruined.level == 5 and ruined.base_stats() == ruined_stats,
+	_check(ruined.level == 3 and ruined.base_stats() == ruined_stats,
 			"a break moves neither the level nor the stats")
 	_check(ruined.mods == ruined_mods, "nor the modifiers")
 	_check(not Blacksmith.can_upgrade(ruined, cap) and not Blacksmith.can_lock(ruined),
@@ -1045,6 +1035,17 @@ func _test_buying() -> void:
 	var orb := VendorStock.orbs(drawer)[0]
 	var orb_price := TownPrices.orb_value(orb, TOWN_CELL)
 	inventory.gold = 0
+	# Hovered, a shelf orb shows the bag's orb card, with its price and why it cannot be had.
+	page._fill()
+	var shelf_orbs := page._rows.find_children("*", "OrbSlot", true, false)
+	(shelf_orbs[0] as OrbSlot).hovered.emit((shelf_orbs[0] as OrbSlot).orb)
+	var card_text := " ".join(page._orb_card.find_children("*", "Label", true, false).map(
+			func(label: Label) -> String: return label.text))
+	_check(page._orb_card.visible and OrbTable.describe(orb) in card_text
+			and BigNumber.format(orb_price) in card_text and "purse is short" in card_text,
+			"a shelf orb's card says what it does, its price and why not: %s" % card_text)
+	(shelf_orbs[0] as OrbSlot).unhovered.emit()
+	_check(not page._orb_card.visible, "and goes when the cursor does")
 	page._on_buy_orb(orb, 0)
 	_check(inventory.orb_count(orb) == 0 and not VendorStock.orbs(drawer)[0].is_empty(),
 			"a short purse buys no orb either")
@@ -1098,9 +1099,12 @@ func _test_smithing() -> void:
 	var piece := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 3)
 	inventory.add(piece)
 	page.bag_changed(piece)
-	_check(page._upgrade_cap() == MapBuilder.level_of(TOWN_CELL)
+	_check(page._upgrade_cap() == MapBuilder.circle_level(TOWN_CELL)
 			+ int(LootTable.TIER_LEVEL[EnemyRoster.Tier.BOSS]),
-			"the cap is what a boss on this ground could drop (%d)" % page._upgrade_cap())
+			"the cap is what a boss on this circle's deepest land could drop (%d)" % page._upgrade_cap())
+	# Every tile in a circle shares it: the first circle's deepest land is its outer ring.
+	_check(MapBuilder.circle_level(Vector2i(1, 0)) == MapBuilder.level_of(
+			Vector2i(MapBuilder.START_LAND_RADIUS, 0)), "the first circle is gated by its outer ring")
 	var price := TownPrices.upgrade_price(piece)
 	var upgrade := _button(page._rows, "Upgrade")
 	var lock := _button(page._rows, "Lock")

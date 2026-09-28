@@ -41,7 +41,7 @@ const OLD_ROOT := ROOT + "Old/"
 ##
 ## `power` is a per-stat factor on top of all that, and it is applied *after* the level has done its
 ## work (`power_of`, `Item.scaled_stats`). It is written here rather than into `stats` because
-## LEVEL_FLAT adds a whole point of damage a level to every weapon alike: a dagger written as
+## LEVEL_FLAT adds the same damage a level to every weapon alike: a dagger written as
 ## `damage: 0.6` would be within a tenth of a sword by level 10 and the kinds would level themselves
 ## out. Three more keys are optional: `two_handed` closes the offhand while the piece is worn,
 ## `tier_levels` names the levels a kind's materials unlock at where it has fewer than five (the torch,
@@ -92,7 +92,7 @@ const KINDS := {
 		"slot": "boots", "weight": 24,
 		"stats": {"move_speed": 4, "armor": 3},
 		"affixes": ["dodge", "strength"],
-		"tier_levels": [3, 5, 6, 7],
+		"tier_levels": [3, 5, 7, 9],
 		"tiers": ["Iron Greaves", "Steel Greaves", "Golden Greaves", "Masterwork Greaves"],
 	},
 	# --- Weapon: the same base damage on all four, and a factor apiece. On its own swings the dagger,
@@ -156,7 +156,7 @@ const KINDS := {
 	# it already rolled, and is what makes its pool deep enough for an elite piece.
 	"torch": {
 		"slot": "offhand", "weight": 18,
-		"tier_levels": [1, 5, 7],
+		"tier_levels": [1, 5, 9],
 		"tier_stats": [{"sight": 1}, {"sight": 2}, {"sight": 3}],
 		"affixes": ["block", "crit_chance", "crit_damage", "intelligence"],
 		"tiers": ["Wooden Torch", "Blazing Torch", "Masterwork Torch"],
@@ -271,18 +271,12 @@ const KINDS := {
 ## the torch and the greaves do. A piece's step (`material`) counts up from the material its kind
 ## begins at, so the greaves' first piece takes iron's step, not the plainest's.
 ##
-## The levels are set against the circles (`CIRCLE_MATERIAL_LEVEL`): the second material within the
-## first wall, the third and fourth between the first and second, and the fifth -- the masterwork --
-## from level 7, which begins on the second wall's own ring: past it and nowhere else. A masterwork
-## with no art yet wears `tools/ui_kit.py`'s "!" (`MISSING`).
-const TIER_MIN_LEVEL := [1, 3, 5, 6, 7]
+## A material every two levels **of the tile the piece drops on**, never of the piece itself (the
+## user's, 2026-09-28): tiles of level 1-2 deal wood alone, 3-4 wood and iron, 5-6 wood, iron and
+## steel, and on to the masterwork from 9 (`_tier_at` draws evenly among everything unlocked). A
+## masterwork with no art yet wears `tools/ui_kit.py`'s "!" (`MISSING`).
+const TIER_MIN_LEVEL := [1, 3, 5, 7, 9]
 const TIER_POWER := 0.2
-## The highest item level each circle lets pick a material (`MapBuilder.circle_of`), from the first:
-## inside the first wall a piece is made of the first two materials, out to the second wall of the
-## first four, and past it of anything. The levels alone cannot hold that line -- level 5 spans the
-## first wall, and a boss drops two levels above its tile -- so `material_level` clamps the level the
-## material is drawn at, and the piece keeps its own.
-const CIRCLE_MATERIAL_LEVEL := [3, 6]
 ## The player's first piece of gear, whatever the roll said it was: `Encounter.first_sword` swaps it
 ## in at level 1, keeping the rarity, so it is always 1 Damage and the modifiers that rarity carries.
 const FIRST_DROP := "Broken Sword"
@@ -408,16 +402,18 @@ const LEVEL_GROWTH := 1.12
 ## damage, which starts at 50. A multiplier alone would leave a sword reading "Damage 1" for four
 ## levels; a flat step alone would do nothing to the large stats. Both together carry the range.
 ##
-## Damage is a whole point, so a sword gains a visible point a level. The flat-damage modifier the
-## jewellery rolls takes a quarter instead (`added_damage`'s `level_flat` in ModifierTable): four
-## sockets roll it, and handing all four the whole step put the far edge inside a third of a click a
-## second, which is the frontier stopping being one -- see test_combat's edge-fight line, which is
-## where that number is actually read off.
+## Damage takes 0.4, so a sword gains a visible point about every two and a half levels. It was a
+## whole point, and on a base of 1 that made a level-3 weapon three times a level-1 one while the
+## first rings' health had grown a fifth: the first drop off an elite one-shot the commons around the
+## start (2026-09-27, the user's ruling: a fresh first-circle weapon should want 3-5 clicks a common).
+## The flat-damage modifier the jewellery rolls takes a quarter of it (`added_damage`'s `level_flat`
+## in ModifierTable): four sockets roll it, and handing all four the whole step put the far edge
+## inside a third of a click a second, which is the frontier stopping being one.
 ##
 ## Every key of STAT_LABELS has an entry here and test_inventory holds that, so a new stat cannot be
 ## added without saying what a level is worth to it.
 const LEVEL_FLAT := {
-	"damage": 1.0,
+	"damage": 0.4,
 	"crit_chance": 1.0, "crit_damage": 5.0, "attack_speed": 0.05, "bleed": 1.0,
 	# Armour and dodge are the same kind of number -- a rating set against the size of the hit -- so
 	# they grow alike. Block and time on hit are tenths of a second (SECONDS_STATS), a tenth a level.
@@ -506,7 +502,7 @@ static func slot_of(item: String) -> String:
 ## plainest.
 ##
 ## Applied by `Item.scaled_stats` after `scale` and nowhere else, which is what lets the smith's
-## upgrade follow it for nothing. *After*, because LEVEL_FLAT adds the same point of damage a level to
+## upgrade follow it for nothing. *After*, because LEVEL_FLAT adds the same damage a level to
 ## every weapon alike: a dagger written weaker in the table would be a sword again by level 10.
 ##
 ## The material's share skips the chances and the rates -- a steel shield holds more armour than a
@@ -656,36 +652,26 @@ static func chance_for(enemy_name: String, drop_rate := 0.0) -> float:
 ## The chance is drawn first and on its own, so a kill that leaves nothing still costs exactly one
 ## draw. That is what keeps the drop rate comparable to before rarities existed.
 ##
-## `circle` is the ground's (`MapBuilder.circle_of`); 0, a test's default, holds the material to nothing.
-##
 ## `forced` is a rarity to roll the piece at instead of drawing one (the dev's even loot, `Encounter`).
 static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := false,
-		tile_level := 1, drop_rate := 0.0, item_rarity := 0.0, circle := 0, forced := -1) -> Item:
+		tile_level := 1, drop_rate := 0.0, item_rarity := 0.0, forced := -1) -> Item:
 	if not guaranteed and rng.randf() >= chance_for(enemy_name, drop_rate):
 		return null
 	var tier := EnemyRoster.tier_of(enemy_name)
 	var rarity := ItemRarity.roll(tier, rng, item_rarity) if forced < 0 else forced as ItemRarity.Rarity
 	# The tile's level and the body's tier give a ceiling; the piece rolls its own level under it,
-	# so a deep tile is a better place to fight rather than a guaranteed prize. Both are settled
-	# before the type, because what a piece is made of is gated by what the piece itself is worth.
+	# so a deep tile is a better place to fight rather than a guaranteed prize. What it is made of is
+	# the tile's alone.
 	var ceiling := maxi(1, tile_level + int(TIER_LEVEL[tier]))
 	var level := ItemRarity.roll_level(rarity, ceiling, rng)
-	return Item.rolled(_weighted(rng, material_level(level, circle)), rarity, rng, level)
-
-
-## The level a piece of level `level` draws its material at on ground of `circle`: its own, held to
-## what the circle allows (`CIRCLE_MATERIAL_LEVEL`). Circle 0 is no ground at all and holds nothing.
-static func material_level(level: int, circle: int) -> int:
-	if circle < 1 or circle > CIRCLE_MATERIAL_LEVEL.size():
-		return level
-	return mini(level, int(CIRCLE_MATERIAL_LEVEL[circle - 1]))
+	return Item.rolled(_weighted(rng, tile_level), rarity, rng, level)
 
 
 ## A piece picked by weight: which kind, and then which of its materials. Integer weights, so walking
 ## the table cannot drift.
 ##
-## `level` is the piece's own, not the tile's, so a poor roll on deep ground is still a wooden sword --
-## held to its circle by the caller (`material_level`).
+## `level` is the tile's, not the piece's own: a poor roll on deep ground is a low piece of a good
+## material.
 static func _weighted(rng: RandomNumberGenerator, level := 1) -> String:
 	return _tier_at(roll_kind(rng), level, rng)
 
@@ -704,9 +690,8 @@ static func roll_kind(rng: RandomNumberGenerator) -> String:
 	return KINDS.keys()[0]
 
 
-## One of a kind's materials: an even draw between the best `level` has unlocked and the one under
-## it. Two of them rather than all of them, so deep ground stops dealing the plainest materials
-## without the best arriving alone -- and while only one is unlocked there is no draw at all, which
+## One of a kind's materials: an even draw among every one `level` has unlocked, the plainest
+## included (the user's, 2026-09-28) -- and while only one is unlocked there is no draw at all, which
 ## is what keeps the shallow game costing exactly the rolls it always did. A kind whose first
 ## material `level` has not reached (the greaves, which begin at iron) is dealt as its slot's
 ## plainest piece, so the slot drops as often as ever and never a material under the piece's level.
@@ -722,7 +707,7 @@ static func _tier_at(kind: String, level: int, rng: RandomNumberGenerator) -> St
 			unlocked = tier + 1
 	if unlocked == 1:
 		return str(tiers[0])
-	return str(tiers[unlocked - 1 - rng.randi_range(0, 1)])
+	return str(tiers[rng.randi_range(0, unlocked - 1)])
 
 
 ## Every kind's materials written out as the rows the rest of the game reads. A tier's own `stats`

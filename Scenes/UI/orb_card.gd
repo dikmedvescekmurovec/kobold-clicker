@@ -12,7 +12,7 @@ extends PanelContainer
 ## own CanvasLayer, scaled by `ui_scale` and placed by the scene, exactly as CombatScene's full-bag
 ## warning is placed, and for exactly the same reason.
 ##
-## Three lines, and the third is the one worth having. A player who can see that an orb is grey does
+## Up to three lines, and the third is the one worth having. A player who can see that an orb is grey does
 ## not need to be told it is grey; they need to be told what would have to be true for it not to be,
 ## and OrbTable.why_not is where that sentence lives.
 
@@ -38,11 +38,12 @@ func _init() -> void:
 
 ## Fills the card for one orb. `held` is how many the player has, and `against` is the piece the bag
 ## has open -- null when none is, which is the tray at rest and the case where there is nothing to
-## refuse.
+## refuse. `note`, where given, is the third line instead: a vendor's price, or why it cannot be had,
+## where the bag's "press it, then the piece" would be wrong (`TownPage`).
 ##
 ## Ink for the name and slate for the sentence: the card stands on the item card's cream page, which
 ## the darker half of the palette was picked to be read on.
-func fill(orb: String, held: int, against: Item) -> void:
+func fill(orb: String, held: int, against: Item, note := "", note_tone := Palette.TEXT_SOFT) -> void:
 	for child: Node in _rows.get_children():
 		_rows.remove_child(child)
 		child.queue_free()
@@ -52,6 +53,10 @@ func fill(orb: String, held: int, against: Item) -> void:
 	var is_super := SuperOrbTable.has(orb)
 	_rows.add_child(ItemDetails.line(SuperOrbTable.describe(orb) if is_super else OrbTable.describe(orb),
 			Palette.TEXT_SOFT, WIDTH, true))
+	if not note.is_empty():
+		_rows.add_child(ItemDetails.line(note, note_tone, WIDTH, true))
+		reset_size()
+		return
 	var status := ""
 	var tone := Palette.TEXT_SOFT
 	if held <= 0:
@@ -65,14 +70,15 @@ func fill(orb: String, held: int, against: Item) -> void:
 				else "Use on %s" % against.display_name() if fits else SuperOrbTable.why_not(orb, against))
 		tone = Palette.TEXT_SOFT if against == null else Palette.LEAF if fits else Palette.RUST
 	elif against == null:
-		# And how it is used from here, since nothing else on the page says a held orb can be picked up.
-		status = "You hold %d. Press it, then the piece to use it on" % held
+		# Nothing to add: the count is on the square, and that a square is pressed goes without saying.
+		pass
 	elif OrbTable.can_apply(orb, against):
 		status = "Use on %s" % against.display_name()
 		tone = Palette.LEAF
 	else:
 		status = OrbTable.why_not(orb, against)
 		tone = Palette.RUST
-	_rows.add_child(ItemDetails.line(status, tone, WIDTH, true))
+	if not status.is_empty():
+		_rows.add_child(ItemDetails.line(status, tone, WIDTH, true))
 	# The card is measured the frame after it is filled, so whoever places it has a size to place.
 	reset_size()

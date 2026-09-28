@@ -61,7 +61,8 @@ const SAVE_PATH := "user://inventory.json"
 ## stands in now (the main scene reads it off the map at start-up) and holds no stone.
 ## 26 adds `dungeon_floors`, the leaderboard's score; a version 25 save has beaten the floors of the
 ## depths it won and none past them.
-const VERSION := 26
+## 27 adds `first_orb_taken`; a version 26 save is already under way, so it reads as taken.
+const VERSION := 27
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -103,6 +104,10 @@ var equipment := Equipment.new()
 ## Whether the Broken Sword, the player's first piece of gear, has dropped. Until it has, the first
 ## elite is promised a drop. It lives in the save, so it is once for the player.
 var first_sword_taken := false
+
+## Whether the promised first orb (`OrbTable.FIRST_ORB`) has dropped. Until it has, the first body of
+## every fight after the player's first is promised it. Once for the player, like the sword.
+var first_orb_taken := false
 
 ## The first-time pop-ups already shown, and the buttons already pressed once, by id. The main scene
 ## decides what they mean; this only keeps them, so each is once for the player rather than per launch.
@@ -710,6 +715,7 @@ func transcended(lost := false) -> Inventory:
 	next.farthest_land = farthest_land
 	next.seeing_stone = seeing_stone
 	next.first_sword_taken = true
+	next.first_orb_taken = true
 	next.super_orbs = super_orbs
 	next.skull_budget = skulls_earned(lost)
 	# What was chosen on the black screen is the new world's, and the old world's curses end with it.
@@ -780,6 +786,7 @@ func save(path := SAVE_PATH) -> bool:
 	return SafeFile.write(path, JSON.stringify({
 		"version": VERSION,
 		"first_sword_taken": first_sword_taken,
+		"first_orb_taken": first_orb_taken,
 		"tips": tips,
 		"gold": gold,
 		"kills": kills,
@@ -831,6 +838,7 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 		return inventory
 	var data: Dictionary = reader.data
 	inventory.first_sword_taken = bool(data.get("first_sword_taken", true))
+	inventory.first_orb_taken = bool(data.get("first_orb_taken", true))
 	var seen: Variant = data.get("tips", [])
 	if typeof(seen) == TYPE_ARRAY:
 		for tip: Variant in seen:

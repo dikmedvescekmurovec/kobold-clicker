@@ -10,10 +10,12 @@ const TIER_NAMES := ["small", "medium", "fortress"]
 const SIZE := Vector2i(256, 256)
 ## The share of a ring's spots that hold a town of each tier, rounded per ring.
 const TIER_CHANCES := {Tier.FORTRESS: 0.001, Tier.MEDIUM: 0.005, Tier.SMALL: 0.01}
-## The width of a ring of land: `MapBuilder.START_LAND_RADIUS` and `WALL_STEP`, both 10, which TownWorld may
-## not name (MapBuilder names it). `test_generation` holds them together. Counted in `WALL_STEP`s whatever the
-## Ring of Walls says, the way `Encounter.walls_inside` counts: the land is the same land.
-const RING := 10
+## The first ring of land's reach and every later ring's width: `MapBuilder.START_LAND_RADIUS` and
+## `WALL_STEP`, which TownWorld may not name (MapBuilder names it). `test_generation` holds them together.
+## Counted in `WALL_STEP`s whatever the Ring of Walls says, the way `Encounter.walls_inside` counts: the
+## land is the same land.
+const FIRST_RING := 11
+const RING := 12
 ## No town is generated nearer than this to the origin: `MapBuilder.START_TOWN_DISTANCE`, held together the
 ## same way, so the start clearing finds nothing and a ring's one fortress can never be cleared away.
 const KEEP_OUT := 5
@@ -77,7 +79,7 @@ static func generate(seed_value: int, origin := SIZE / 2, world_size := SIZE) ->
 ## Which ring of land a spot `steps` from the origin is in, counted the way `MapBuilder.ring_of` counts:
 ## 0 inside the first wall, n between the nth wall and the next. -1 inside the keep-out.
 static func ring_of(steps: int) -> int:
-	return -1 if steps < KEEP_OUT else maxi(0, ceili(float(steps - RING) / RING))
+	return -1 if steps < KEEP_OUT else maxi(0, ceili(float(steps - FIRST_RING) / RING))
 
 
 ## The town's Tier, or -1 if there is no town.

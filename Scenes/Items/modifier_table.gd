@@ -44,7 +44,7 @@ const MODS := {
 	# A point of damage is a lot now that a sword carries one: the whole curve starts at a click for 1
 	# and this is the modifier that can double it, so its band is the tightest in the table.
 	"added_damage": {"kind": Kind.FLAT, "stat": "damage", "range": [1, 2], "weight": 10,
-		"level_flat": 0.25},
+		"level_flat": 0.1},
 	"increased_crit": {"kind": Kind.PERCENT, "stat": "crit_chance", "range": [10, 30], "weight": 10},
 	"added_crit": {"kind": Kind.FLAT, "stat": "crit_chance", "range": [1, 4], "weight": 10},
 	"increased_attack_speed": {"kind": Kind.PERCENT, "stat": "attack_speed", "range": [5, 12], "weight": 10},
@@ -85,8 +85,8 @@ const MODS := {
 		"level_flat": 0.0},
 	# The globals, and the jewellery is the only place they land. A percentage of the whole set is
 	# worth more than a percentage of one piece, so increased damage rolls the smaller of the two
-	# bands here -- the frontier is beaten with what the set adds up to, and test_combat's edge-fight
-	# line is where that band is actually read off. Attack speed has no flat form (see below), so
+	# bands here -- the frontier is beaten with what the set adds up to. Attack speed has no flat
+	# form (see below), so
 	# this is the whole of what a ring can do to it.
 	"global_increased_damage": {"kind": Kind.GLOBAL, "stat": "damage", "range": [5, 12], "weight": 8},
 	"global_increased_attack_speed": {"kind": Kind.GLOBAL, "stat": "attack_speed", "range": [5, 12], "weight": 8},
@@ -242,8 +242,8 @@ static func _level_band(id: String, level: int) -> Array[float]:
 		Kind.FLAT:
 			# An amount of a stat, so it grows the way that stat's own numbers do -- unless the entry
 			# says otherwise. `level_flat` is there for the one stat whose per-level step was sized for
-			# the piece that has it as a base stat: a whole point of damage a level is right for the
-			# sword, which is where a click's damage comes from, and four times too much once the
+			# the piece that has it as a base stat: the weapon's step is right for the sword, which
+			# is where a click's damage comes from, and four times too much once the
 			# jewellery can add a modifier's worth of damage on every finger. Only the absolute step is
 			# the entry's; the multiplier is the stat's either way.
 			# ponytail: a band stays whole ints, which pass int64 near item level 370 -- far past

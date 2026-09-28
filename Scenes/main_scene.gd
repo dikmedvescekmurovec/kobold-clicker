@@ -132,7 +132,7 @@ var _town_cell := HexMap.NO_CELL
 ## run (Farm) rather than the tile's own (Chart).
 var _fight_target := HexMap.NO_CELL
 var _fight_farms := false
-## Where the player set out from to fight for a tile: a lost fight runs them back there, and a save made
+## The charted tile the player stepped onto the fought-for one from: a lost fight runs them back there, and a save made
 ## while they stand on the uncharted tile puts them there.
 var _retreat_cell := HexMap.NO_CELL
 var _env_rows: VBoxContainer
@@ -1392,6 +1392,9 @@ func _walk_to_fight(cell: Vector2i, farming: bool) -> void:
 	_fight_farms = farming
 	_retreat_cell = view.player_cell
 	var route: Array[Vector2i] = view.move_to(cell) if farming else view.walk_onto(cell)
+	# The charted tile they step onto it from, not where the walk began.
+	if not farming and route.size() > 1:
+		_retreat_cell = route[-2]
 	print("Walking onto %s to %s it, %d tile(s) away" % [cell, "farm" if farming else "chart", route.size()])
 	_update_buttons()
 
@@ -1492,6 +1495,9 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	fight.first_sword = not inventory.first_sword_taken
 	fight.guarantee_elite = fight.first_sword
 	fight.orbs_after = maxi(0, OrbTable.FIRST_ORB_KILLS - inventory.kills)
+	# The second fight is promised a Transmutation and the first is not: a player with no kills yet
+	# is in their first.
+	fight.first_orb = not inventory.first_orb_taken and inventory.kills > 0
 	fight.uniques_after = maxi(0, UniqueTable.FIRST_UNIQUE_KILLS - inventory.kills)
 	fight.strikes = true
 	fight.even_loot = Settings.even_loot_on()
@@ -1596,7 +1602,7 @@ func _bank_depths() -> void:
 
 
 ## Back from the fight. The tile is charted only if it was won, and the player stays on it; a lost one
-## runs them back to where they set out from, unless `retrying` keeps them there for the next go.
+## runs them back to the charted tile they stepped onto it from, unless `retrying` keeps them there for the next go.
 func _on_combat_finished(won: bool, cell: Vector2i, retrying := false) -> void:
 	var kills: int = _combat.fight.kills()
 	# Read before the fight is freed, and before banking, which zeroes the run's own pouch.

@@ -20,12 +20,17 @@ signal arrived(cell: Vector2i)
 enum State { HIDDEN, UNCHARTED, CHARTED }
 
 ## The land is a hexagon: every cell within `land_radius` steps of cell (0, 0). It starts this wide.
-const START_LAND_RADIUS := 10
+## So the first wall stands on ring 12 (the user's, 2026-09-28).
+const START_LAND_RADIUS := 11
 ## The ring just outside the land is the ice wall, and beating any one tile of it brings the whole ring
-## down: the land then reaches this many rings further, to the next wall.
-const WALL_STEP := 10
+## down: the land then reaches this many rings further, to the next wall. A multiple of `LEVEL_TILES`,
+## with the first wall on one too, so every wall's ring starts a level: the land just past a wall is
+## a level above the land just inside it (the user's, 2026-09-28).
+const WALL_STEP := 12
 ## And how many under the Ring of Walls curse (`wall_step`).
-const RING_OF_WALLS_STEP := 5
+const RING_OF_WALLS_STEP := 6
+## How many rings of distance one tile level spans: level 1 is rings 0-3, level 2 rings 4-7, and on.
+const LEVEL_TILES := 4
 ## How far past the wall the map is generated: the frozen wasteland the player can see out there, and
 ## real land under it for the wall to blend against and for the day the wall falls.
 const WASTE_DEPTH := 5
@@ -474,22 +479,38 @@ func _draw_chest(cell: Vector2i) -> void:
 	_chest_sprites[cell] = sprite
 
 
-## The level of a tile, in bands that widen as they go: the middle tile alone is level 1, the next
-## two rings are level 2, the three after that level 3, and so on. Band n is n tiles wide, so level n
-## begins at the nth triangular number, and this is that series inverted. Levels come quickly off the
-## start, where one step is a real change, and slow down at the frontier, where the walk is long.
+## The level of a tile, in even bands of `LEVEL_TILES` rings: rings 0-3 are level 1, 4-7 level 2,
+## and on. The walls stand on band edges, so beating one steps the level up. (It was bands that
+## widened by one a level, which left a whole circle two levels deep past the first wall; replaced
+## by the user, 2026-09-28.)
 ##
 ## It is what the side panel shows and the ceiling on what can drop here. Note it is not the whole
 ## story of how hard a tile is: enemy health is smooth in the distance while this is banded, so two
 ## tiles at opposite ends of one band read the same number and do not fight the same.
 static func level_of(cell: Vector2i) -> int:
-	return int((1.0 + sqrt(1.0 + 8.0 * HexGrid.distance(CENTER, cell))) / 2.0)
+	return _level_at(HexGrid.distance(CENTER, cell))
+
+
+@warning_ignore("integer_division")
+static func _level_at(steps: int) -> int:
+	return 1 + steps / LEVEL_TILES
+
+
+## The first ring of level `level`: where its band begins.
+static func first_step(level: int) -> int:
+	return (maxi(level, 1) - 1) * LEVEL_TILES
+
+
+## The deepest level of land in `cell`'s circle: the level of its outer ring, the one just inside the
+## next wall. Every tile in a circle answers the same, so what is gated on it moves a wall at a time.
+static func circle_level(cell: Vector2i) -> int:
+	return _level_at(START_LAND_RADIUS + (circle_of(cell) - 1) * WALL_STEP)
 
 
 ## Which circle of land `cell` is in: 1 inside the first ice wall, 2 out to the second, and so on. A
 ## wall's own ring counts with the land its fall opens. Counted by distance in plain `WALL_STEP`s, the
 ## way the Ring of Walls goes on counting, so that curse moves no circle. What a circle is for:
-## `LootTable.CIRCLE_MATERIAL_LEVEL`.
+## the smith's cap (`circle_level`).
 static func circle_of(cell: Vector2i) -> int:
 	return 1 + maxi(0, ceili((HexGrid.distance(CENTER, cell) - START_LAND_RADIUS) / float(WALL_STEP)))
 

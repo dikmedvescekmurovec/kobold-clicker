@@ -29,7 +29,12 @@ const UNIQUES_NAMES := ["Ask", "Sell", "Keep"]
 const UNIQUES_TIPS := ["A unique among the handful is asked about on its own",
 		"A unique among the handful is sold or thrown away with the rest",
 		"A unique among the handful is left in the bag"]
-const DETAILS_TIP := "Shows beside each modifier the lowest and highest it could have rolled at the item's level, like +14(8-20)% increased Damage."
+## The balancing page's rows, one a `Settings.wall_hp` entry, and the buttons either side of the
+## number: [face, what it does to the number].
+const WALL_HP_NAMES := ["Inside wall 1", "Wall 1 to wall 2", "Wall 2 to wall 3"]
+const HP_NUDGES := [["/10", "Divide by 10"], ["-1", "Take 1 away"], ["+1", "Add 1"], ["x10", "Multiply by 10"]]
+const HP_BASE_TIP := "The health of an ordinary body on this circle's first ring. Every body in the circle scales with it."
+const DETAILS_TIP :="Shows beside each modifier the lowest and highest it could have rolled at the item's level, like +14(8-20)% increased Damage."
 
 ## The debug build's item generator works on these; the main scene sets them, as it sets a town
 ## page's `view`. Without them there is no button for it.
@@ -176,6 +181,9 @@ func _foot(asking: bool) -> VBoxContainer:
 			var cash := UITheme.button("Gold x10", "LightButton", "Dev: multiply the purse by ten")
 			cash.pressed.connect(cash_pressed.emit)
 			foot.add_child(cash)
+			var balance := UITheme.button("Balancing", "LightButton", "Dev: scale enemy health wall by wall")
+			balance.pressed.connect(_open_balance)
+			foot.add_child(balance)
 			if inventory != null:
 				var forge := UITheme.button("Item generator", "LightButton", "Dev: make a piece to order")
 				forge.pressed.connect(_open_generator)
@@ -204,6 +212,57 @@ func _open_generator() -> void:
 	UITheme.clear(_rows)
 	_rows.add_child(ItemGenerator.new(inventory, inventory_path, open))
 	layout.call_deferred()
+
+
+## Dev: enemy health scaled by how many walls stand inside the tile (`Settings.wall_hp`), a row a
+## circle of land: its base health (`Encounter.circle_base_hp` until changed) between /10 -1 and
+## +1 x10, never under 1. Takes hold from the next fight.
+func _open_balance() -> void:
+	_played = null
+	UITheme.clear(_rows)
+	_rows.add_child(UITheme.label("Enemy health"))
+	for walls in Settings.wall_hp.size():
+		_rows.add_child(UITheme.rule(WIDTH))
+		_rows.add_child(UITheme.label(WALL_HP_NAMES[walls], null, true))
+		var now := Settings.hp_base(walls)
+		if now <= 0.0:
+			now = Encounter.baseline_hp(walls)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 2)
+		for nudge_of: Array in HP_NUDGES:
+			var next := _nudged(now, nudge_of[0])
+			# The small face: four buttons and a growing number share the settings' width.
+			var nudge := UITheme.button(nudge_of[0], "SmallButton", nudge_of[1])
+			nudge.disabled = next == now
+			nudge.pressed.connect(func() -> void:
+				Settings.wall_hp[walls] = next
+				Settings.save()
+				_open_balance.call_deferred())
+			row.add_child(nudge)
+		var value := UITheme.label(BigNumber.format(now))
+		value.tooltip_text = HP_BASE_TIP
+		value.mouse_filter = Control.MOUSE_FILTER_PASS
+		value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		row.add_child(value)
+		row.move_child(value, 2)
+		_rows.add_child(row)
+	var foot := HBoxContainer.new()
+	foot.size_flags_vertical = Control.SIZE_EXPAND | Control.SIZE_SHRINK_END
+	var back := UITheme.back_button("Back to the settings")
+	back.pressed.connect(open)
+	foot.add_child(back)
+	_rows.add_child(foot)
+	layout.call_deferred()
+
+
+## `from` after one of `HP_NUDGES`' faces: whole numbers, never under 1.
+static func _nudged(from: float, face: String) -> float:
+	match face:
+		"/10": return maxf(1.0, roundf(from / 10.0))
+		"-1": return maxf(1.0, from - 1.0)
+		"+1": return from + 1.0
+		_: return from * 10.0
 
 
 func _ask(asking: bool) -> void:

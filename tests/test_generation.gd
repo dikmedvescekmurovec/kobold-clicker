@@ -27,16 +27,16 @@ func _run() -> void:
 	_report("generation")
 
 
-## A tile's level, in bands that widen as they go: band n is n tiles wide, so level n begins at the
-## nth triangular number. It is what the panel shows and the ceiling on what can drop on a tile.
+## A tile's level, in even bands of `LEVEL_TILES` rings. It is what the panel shows and the ceiling on
+## what can drop on a tile.
 func _test_tile_levels() -> bool:
 	_check(MapBuilder.level_of(MapBuilder.CENTER) == 1, "the middle of the map is level 1")
 
-	# Band n starts exactly at n(n-1)/2 and is exactly n tiles wide. This is the whole curve: if it
-	# holds out to level 10 it holds everywhere, because the formula has no other moving part.
+	# Band n starts exactly at `first_step(n)` and is exactly LEVEL_TILES wide. This is the whole curve:
+	# if it holds out to level 10 it holds everywhere, because the formula has no other moving part.
 	for n in range(1, 11):
-		var starts: int = n * (n - 1) / 2
-		for steps in range(starts, starts + n):
+		var starts := MapBuilder.first_step(n)
+		for steps in range(starts, starts + MapBuilder.LEVEL_TILES):
 			_check(MapBuilder.level_of(Vector2i(steps, 0)) == n,
 					"%d steps out is level %d, not %d" % [steps, n, MapBuilder.level_of(Vector2i(steps, 0))])
 		_check(MapBuilder.level_of(Vector2i(starts - 1, 0)) == n - 1 if n > 1 else true,
@@ -224,7 +224,7 @@ func _test_towns() -> bool:
 	_check(TownWorld.generate(WORLD_SEED).towns() == world.towns(), "same seed gives the same towns")
 
 	# Laid out ring by ring round the origin. TownWorld may not name MapBuilder, so its twins are held here.
-	_check(TownWorld.RING == MapBuilder.WALL_STEP and TownWorld.RING == MapBuilder.START_LAND_RADIUS
+	_check(TownWorld.RING == MapBuilder.WALL_STEP and TownWorld.FIRST_RING == MapBuilder.START_LAND_RADIUS
 			and TownWorld.KEEP_OUT == MapBuilder.START_TOWN_DISTANCE, "TownWorld's ring and keep-out are MapBuilder's")
 	var origin := TownWorld.SIZE / 2
 	var ring_spots := {}
@@ -650,14 +650,14 @@ func _test_blind_charting() -> bool:
 			carried += 1
 	_check(carried > 0, "some land past the wall was looked at")
 	# A ring a wall stood on carries none, even once it has fallen and even though it counts with the
-	# land outside it: under the Ring of Walls the edge of this land is where its second wall stood.
+	# land outside it -- the first wall's, which the Ring of Walls moves no more than it moves the level.
 	view.wall_step = MapBuilder.RING_OF_WALLS_STEP
 	var walled := 0
 	for cell: Vector2i in _cells_within(MapBuilder.CENTER, view.land_radius):
-		if view.on_wall_ring(cell) and view.ring_of(cell) == 2:
+		if view.on_wall_ring(cell) and view.ring_of(cell) == 1:
 			_check(view.mods_of(cell, true).is_empty(), "the ring a wall stood on at %s carries none" % cell)
 			walled += 1
-	_check(walled > 0, "the Ring of Walls' second wall ring was looked at")
+	_check(walled > 0, "the Ring of Walls' first wall ring was looked at")
 	view.wall_step = MapBuilder.WALL_STEP
 	map.queue_free()
 	return true
@@ -1166,9 +1166,13 @@ func _test_map_saving() -> bool:
 	_check(restored.land_radius == view.land_radius, "with the wall where it was")
 	# A save from before the wall: the wall goes past the farthest tile the player has seen.
 	_check(MapBuilder.migrated_radius({}) == MapBuilder.START_LAND_RADIUS
-			and MapBuilder.migrated_radius({Vector2i(10, 0): 2}) == MapBuilder.START_LAND_RADIUS
-			and MapBuilder.migrated_radius({Vector2i(14, 0): 1, Vector2i(30, 0): 0}) == 20
-			and MapBuilder.migrated_radius({Vector2i(21, 0): 1}) == 30,
+			and MapBuilder.migrated_radius({Vector2i(MapBuilder.START_LAND_RADIUS, 0): 2})
+					== MapBuilder.START_LAND_RADIUS
+			and MapBuilder.migrated_radius({Vector2i(MapBuilder.START_LAND_RADIUS + 3, 0): 1,
+					Vector2i(MapBuilder.START_LAND_RADIUS + 2 * MapBuilder.WALL_STEP, 0): 0})
+					== MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
+			and MapBuilder.migrated_radius({Vector2i(MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP + 1, 0): 1})
+					== MapBuilder.START_LAND_RADIUS + 2 * MapBuilder.WALL_STEP,
 			"an old save's wall goes on the first ring past what was seen")
 	_check(restored.player_cell == view.player_cell, "with the player where they were left")
 	_check(restored.start_town == view.start_town, "and the same first town")

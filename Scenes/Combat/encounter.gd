@@ -109,23 +109,34 @@ const MOST_DROPS := 4
 const WALL := {"enemies": 1, "seconds": 60.0, "elite_every": 1, "boss_last": true}
 const WALL_NAME := "The Ice Wall"
 ## What the wall's health is multiplied by on top of its boss body. The dial for how hard the wall is,
-## and a steep one with cliffs: `tests/balance_wall.gd` plays it out -- 33 is about 1100 kills at five clicks a second, 35 already 1600.
-const WALL_HP := 33.0
+## and a steep one with cliffs: 28 was about 1000 kills at five clicks a second, 30 already 1200. It was
+## 33 until weapons stopped gaining a whole point of damage a level (`LootTable.LEVEL_FLAT`, 2026-09-27).
+const WALL_HP := 28.0
 ## What every wall already fallen multiplies the health of everything behind it by -- the whole land it
 ## opened as well as the next wall, through `base_hp`. The step lands on top of the walk, so with the
-## band's own `HP_GROWTH ^ 10` a wall is about fifteen times the one before it: 34,056 on ring 11,
-## 502,128 on ring 21, 7.4e6 on ring 31.
+## band's own `HP_GROWTH ^ WALL_STEP` a wall is some sixteen times the one before it (walls on rings
+## 12, 24, 36 since 2026-09-28; the figures this used to quote were for rings 11, 21, 31).
 ##
 ## The land needs the step as much as the wall does: felling a wall means about forty times the damage
 ## a second that the land inside it asks for (a wall is `WALL_HP` over a boss body, some 930 commons,
-## in a minute), and a band of ten rings only grows by `HP_GROWTH ^ 10`, about five. Without the step
+## in a minute), and a band of `WALL_STEP` rings only grows by `HP_GROWTH ^ WALL_STEP`, about seven. Without the step
 ## everything behind a fallen wall died to one click for ever. With it, a wall is crossed with roughly
 ## fourteen times the power the new band's first ring wants, the band's own curve eats that, and the
 ## next wall is again the same forty-times check -- every band the same shape as the first.
 ##
-## The first wall is a day's farming; the second is the gate a transcension is for -- half a million
-## health, some fifteen times the first, where at 10 it was 1.79e6 and no farming ever reached it.
-const WALL_GROWTH := 2.8
+## The first wall is a day's farming; the second is the gate a transcension is for -- a third of a
+## million health, where at 10 it was 1.79e6 and no farming ever reached it. It was 2.8 until the
+## weapons' damage step came down (2026-09-27); 2.2 gives the frontier past the wall and the second
+## wall back what they asked of a farmed set before.
+##
+## Since 2026-09-27 it is the step for the **wall and the blows** only: the bodies' health behind a
+## wall steps by LAND_GROWTH instead (the user's ruling: the wall is right, the land past it too soft).
+const WALL_GROWTH := 2.2
+## What every wall already fallen multiplies the *health* of the bodies behind it by (`base_hp`'s
+## default): the first tile past a felled wall is ten times the land inside it, on top of the walk
+## (the user's ruling, 2026-09-27). The walls themselves and the size of a blow (`hit_of`) keep
+## WALL_GROWTH, so this moves the land past a wall and nothing else.
+const LAND_GROWTH := 10.0
 ## The dungeon: a block of fifteen floors that repeats for ever, an elite every fifth and a boss on
 ## the fifteenth, against one minute. `enemies` is the block, which is what the HUD's bar stands.
 const DUNGEON := {"enemies": 15, "seconds": 60.0, "elite_every": 5, "boss_last": true}
@@ -158,6 +169,11 @@ const BASE_HP := 7
 ## flat addition, so the frontier pulls away from whatever the player is carrying and farming a tile
 ## already taken is the way to catch up. The dial for how fast that happens.
 const HP_GROWTH := 1.18
+## Base health set by hand for a circle of land, by the walls inside it (`walls_inside`): an
+## ordinary body on its first ring has this, and the rest of the circle scales with it
+## (`hp_tuning`). A circle not listed keeps the formula's. The user's (2026-09-28): 10k between the
+## second wall and the third, where the formula gave about 26.7k.
+const CIRCLE_HP := {2: 10000.0}
 
 ## What a body is carrying, on a tile next to the start. An ordinary common one at the very middle
 ## of the map is worth exactly BASE_GOLD, which is where the whole curve is pinned.
@@ -202,7 +218,7 @@ const HIT_TIER := {
 }
 ## Seconds a common's blow takes off the clock on a tile next to the start, before the walk out
 ## multiplies it the way it multiplies health (`hit_of`). The dial for how much defence matters at
-## all; `test_combat._test_a_won_fight` holds that a bare-handed first ring still wins under it.
+## all.
 const HIT_SECONDS := 0.25
 ## Armour and dodge are ratings, and a rating is a flat share of every blow whatever its size:
 ## `rating / (rating + K)`, so K of it is half, 9K is 90%, and no amount of it ever reaches the whole
@@ -357,6 +373,11 @@ var always_orb := false
 ## Kills this fight has to make before orbs can drop: what is left of `OrbTable.FIRST_ORB_KILLS` for
 ## this player. The main scene sets it; zero, the default, means orbs drop from the first body.
 var orbs_after := 0
+
+## Whether the first body to fall here leaves `OrbTable.FIRST_ORB`, past `orbs_after` and the chance.
+## The main scene turns it on for every fight after the player's first until that orb has dropped
+## (`Inventory.first_orb_taken`), and the first kill here spends it.
+var first_orb := false
 
 ## What changes how this fight plays rather than a number, by effect id (`Inventory.effects()`): the
 ## capstone skills the player has learned and the uniques they are wearing. A worn unique is one entry
@@ -629,10 +650,10 @@ func _health_of(enemy: String, position := -1) -> float:
 		return maxf(1.0, roundf(BASE_HP * pow(DUNGEON_GROWTH, first_floor + at)
 				* float(DUNGEON_TIER_HP[EnemyRoster.tier_of(enemy)])))
 	if enemy == WALL_NAME:
-		# `WALL_GROWTH` is not applied here: `hp_of` already carries a step for every wall inside this
-		# one, and a wall's own ring counts none of itself, so the wall on ring 21 comes out
-		# WALL_GROWTH times this one on top of the ten rings' walk -- about fifteen times over.
-		return roundf(hp_of(enemy, cell) * WALL_HP
+		# `hp_of` at WALL_GROWTH carries a step for every wall inside this one, and a wall's own ring
+		# counts none of itself, so the second wall comes out WALL_GROWTH times the first on top of
+		# the band's walk. Not LAND_GROWTH: that is the land's.
+		return roundf(hp_of(enemy, cell, WALL_GROWTH) * WALL_HP
 				* (LONG_WINTER_HP if Curses.effect(Curses.LONG_WINTER) in effects else 1.0))
 	var more := 1.0 + _hp_more
 	if enemy == MIMIC and Curses.effect(Curses.HUNGRY_MIMICS) in effects:
@@ -764,8 +785,31 @@ func start() -> void:
 
 ## What one enemy is worth on this tile: an ordinary body grows with the distance from the middle of
 ## the map, and the enemy's own size and tier multiply it (a slime halves it, an elite trebles it).
-static func hp_of(enemy_name: String, cell: Vector2i) -> float:
-	return maxf(1.0, roundf(base_hp(cell) * EnemyRoster.hp_modifier(enemy_name)))
+## The settings' balancing page scales a body by the walls inside its tile; the ice wall has `WALL_HP`.
+static func hp_of(enemy_name: String, cell: Vector2i, step := LAND_GROWTH) -> float:
+	var tuned := 1.0 if enemy_name == WALL_NAME else hp_tuning(walls_inside(cell))
+	return maxf(1.0, roundf(base_hp(cell, step) * EnemyRoster.hp_modifier(enemy_name) * tuned))
+
+
+## What this circle's bodies are multiplied by: its base health (the balancing page's number, else
+## `baseline_hp`) over the formula's own (`circle_base_hp`).
+static func hp_tuning(walls: int) -> float:
+	var wanted := Settings.hp_base(walls)
+	if wanted <= 0.0:
+		wanted = baseline_hp(walls)
+	return wanted / circle_base_hp(walls)
+
+
+## The base health a circle has with nothing set on the balancing page: `CIRCLE_HP`'s, else the formula's.
+static func baseline_hp(walls: int) -> float:
+	return float(CIRCLE_HP.get(walls, circle_base_hp(walls)))
+
+
+## The formula's health for an ordinary body on the first ring of the circle with `walls` walls
+## inside it: the middle tile inside the first wall, the ring past the wall's own after that.
+static func circle_base_hp(walls: int) -> float:
+	var ring := 0 if walls == 0 else MapBuilder.START_LAND_RADIUS + 2 + (walls - 1) * MapBuilder.WALL_STEP
+	return base_hp(MapBuilder.CENTER + Vector2i(ring, 0))
 
 
 ## The health of an ordinary common body on this tile, before the enemy's own multiplier. A whole
@@ -773,10 +817,11 @@ static func hp_of(enemy_name: String, cell: Vector2i) -> float:
 ## so an int64 overflowed a few hundred hexes out.
 ##
 ## Two terms: the smooth walk out from the middle, and a step for every wall already behind the cell.
-## The step is what makes the land a wall opens a frontier again -- see `WALL_GROWTH`.
-static func base_hp(cell: Vector2i) -> float:
+## The step is what makes the land a wall opens a frontier again -- `LAND_GROWTH` for a body's health,
+## `WALL_GROWTH` for the wall and for the size of a blow, which pass it as `step`.
+static func base_hp(cell: Vector2i, step := LAND_GROWTH) -> float:
 	return maxf(1.0, roundf(BASE_HP * pow(HP_GROWTH, HexGrid.distance(MapBuilder.CENTER, cell))
-			* pow(WALL_GROWTH, walls_inside(cell))))
+			* pow(step, walls_inside(cell))))
 
 
 ## How many walls stand between the middle of the map and `cell`. A wall's own ring counts none of
@@ -1001,7 +1046,7 @@ func _even_find() -> Item:
 		if found != null:
 			return found
 		step = ItemRarity.Rarity.ELITE
-	return LootTable.roll(lineup[index], loot_rng, true, level, 0.0, 0.0, MapBuilder.circle_of(cell), step)
+	return LootTable.roll(lineup[index], loot_rng, true, level, 0.0, 0.0, step)
 
 
 ## The drop rate a gear roll is handed: the player's, or half the finished chance under Lean Pickings.
@@ -1159,11 +1204,11 @@ func _kill() -> void:
 		var certain: bool = always_drop or mimic or (roll == 0
 				and ((guarantee_elite and on_elite()) or (big and "trophy" in effects)))
 		var dropped := LootTable.roll(lineup[index], loot_rng, certain, MapBuilder.level_of(cell),
-				gear_rate, item_rarity, MapBuilder.circle_of(cell))
+				gear_rate, item_rarity)
 		# Lucky Wound: a body that took a crit rolls again and leaves the better of the two.
 		if _crit_landed and "lucky_wound" in effects:
 			dropped = _better(dropped, LootTable.roll(lineup[index], loot_rng, certain,
-					MapBuilder.level_of(cell), gear_rate, item_rarity, MapBuilder.circle_of(cell)))
+					MapBuilder.level_of(cell), gear_rate, item_rarity))
 		var found := 0
 		while dropped != null:
 			if first_sword:
@@ -1178,7 +1223,7 @@ func _kill() -> void:
 			# `always_drop`, a mimic, the elite's promise, Trophy Hunter -- does not, because it beat
 			# nothing: the promise is one piece.
 			dropped = null if certain or found >= MOST_DROPS else LootTable.roll(lineup[index],
-					loot_rng, false, MapBuilder.level_of(cell), gear_rate, item_rarity, MapBuilder.circle_of(cell))
+					loot_rng, false, MapBuilder.level_of(cell), gear_rate, item_rarity)
 	# Every body carries one, which is the whole difference between gold and gear: nine kills in
 	# ten leave nothing, and all ten leave this.
 	# Gold find lifts the purse here rather than inside `gold_of`, which is what the body is worth
@@ -1197,7 +1242,7 @@ func _kill() -> void:
 	if "magpie" in effects and not no_gear and loot_rng.randf() < MAGPIE_CHANCE:
 		purse = 0.0
 		loot_dropped.emit(index, _lean(_raw(LootTable.roll(lineup[index], loot_rng, true,
-				MapBuilder.level_of(cell), drop_rate, item_rarity, MapBuilder.circle_of(cell)))))
+				MapBuilder.level_of(cell), drop_rate, item_rarity))))
 	# The Pauper's curse, and a Barren tile, where a body carries nothing at all.
 	if purse > 0.0 and Curses.effect(Curses.PAUPER) in effects:
 		purse = maxf(1.0, roundf(purse * PAUPER_PURSE))
@@ -1226,7 +1271,7 @@ func _kill() -> void:
 				* (HOME_UNIQUES if _cursed_with(Curses.HOMELAND) and _at_home() else 1.0)
 		var unique_rate := _lifted(drop_rate, lucky)
 		var found := UniqueTable.roll(lineup[index], env, unique_rng, MapBuilder.level_of(cell),
-				unique_rate)
+				unique_rate, false, item_rarity)
 		if found != null:
 			loot_dropped.emit(index, _lean(found))
 	# The Hourglass: a second back for anything but a boss, and never past what the fight began
@@ -1239,7 +1284,10 @@ func _kill() -> void:
 	# Drop rate adds to orb find here for the reason it adds to gold find above, and `chance_for` is
 	# handed the sum rather than taught about a second stat.
 	var orb := ""
-	if always_orb or index >= orbs_after:
+	if first_orb:
+		first_orb = false
+		orb = OrbTable.FIRST_ORB
+	elif always_orb or index >= orbs_after:
 		orb = OrbTable.roll(lineup[index], orb_rng, always_orb, _lifted(orb_find + drop_rate,
 				RAW_ORBS if _cursed_with(Curses.RAW_FINDS) else 1.0))
 	if not orb.is_empty():
@@ -1370,11 +1418,12 @@ static func _share(rating: float, k: float) -> float:
 
 
 ## How many seconds one blow from this enemy is worth on this tile, before the player's defence: a
-## common's HIT_SECONDS, grown with the walk exactly as its health is (`base_hp`, walls and all), and
+## common's HIT_SECONDS, grown with the walk as its health is and stepped by `WALL_GROWTH` at a wall
+## (not the land's `LAND_GROWTH`: a body past a wall is tougher, not harder-hitting), and
 ## multiplied by what its tier's blow is worth. The size of the body does not come into it -- a slime
 ## and a giant of one tier take the same off the clock.
 static func hit_of(enemy_name: String, cell: Vector2i) -> float:
-	return HIT_SECONDS * base_hp(cell) / BASE_HP * float(HIT_TIER[EnemyRoster.tier_of(enemy_name)])
+	return HIT_SECONDS * base_hp(cell, WALL_GROWTH) / BASE_HP * float(HIT_TIER[EnemyRoster.tier_of(enemy_name)])
 
 
 ## The weapon swinging on its own, `attack_speed` times a second. Only earns while an enemy is

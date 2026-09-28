@@ -40,6 +40,11 @@ static var all_services := true
 ## Dev: a body drops one find a time in three, every rarity from common to unique as likely
 ## (`Encounter.even_loot`). Read through `even_loot_on()`, like the uniques.
 static var even_loot := false
+## Dev: the health an ordinary body has on the first ring of each circle of land, by how many walls
+## stand inside it (`Encounter.walls_inside`): inside the first wall, between the first and second,
+## between the second and third. 0 is the formula's own; every body in the circle scales with it
+## (`Encounter.hp_tuning`), and land further out never does. Read through `hp_base()`.
+static var wall_hp: Array = [0.0, 0.0, 0.0]
 ## Where the file is. Empty means nowhere: nothing is read and nothing written, which is what every
 ## test and screenshot script gets, because the main scene only sets it on the player's own save.
 static var path := ""
@@ -59,6 +64,9 @@ static func load_settings() -> void:
 	old_icons = bool(file.get_value(SECTION, "old_icons", old_icons))
 	all_services = bool(file.get_value(SECTION, "all_services", all_services))
 	even_loot = bool(file.get_value(SECTION, "even_loot", even_loot))
+	var bases: Variant = file.get_value(SECTION, "wall_hp_base", wall_hp)
+	if bases is Array and bases.size() == wall_hp.size():
+		wall_hp = bases.map(func(base: Variant) -> float: return maxf(0.0, float(base)))
 
 
 static func save() -> void:
@@ -75,6 +83,7 @@ static func save() -> void:
 	file.set_value(SECTION, "old_icons", old_icons)
 	file.set_value(SECTION, "all_services", all_services)
 	file.set_value(SECTION, "even_loot", even_loot)
+	file.set_value(SECTION, "wall_hp_base", wall_hp)
 	if file.save(path) != OK:
 		push_warning("Settings: cannot write %s" % path)
 
@@ -93,6 +102,14 @@ static func show_old_icons() -> bool:
 
 static func even_loot_on() -> bool:
 	return even_loot and OS.is_debug_build()
+
+
+## The balancing page's base health for the circle with `walls` walls inside it, or 0 for the
+## formula's own: past the third wall, never set, and always in a release build.
+static func hp_base(walls: int) -> float:
+	if not OS.is_debug_build() or walls < 0 or walls >= wall_hp.size():
+		return 0.0
+	return float(wall_hp[walls])
 
 
 static func show_all_services() -> bool:

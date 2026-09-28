@@ -170,6 +170,8 @@ func _disc(stat: String, value: float) -> VBoxContainer:
 	disc.add_theme_stylebox_override("panel", box)
 	disc.custom_minimum_size = Vector2(DISC_SIDE, DISC_SIDE)
 	disc.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	# Through to the column, whose tooltip says what the attribute does (`TipCard.text_of`).
+	disc.mouse_filter = Control.MOUSE_FILTER_PASS
 	# Bone with an ink outline, as the numbers over the map are: it has to read on all three colours.
 	var number := UITheme.label(BigNumber.format(roundf(value)), Palette.BONE)
 	number.name = stat
@@ -182,6 +184,12 @@ func _disc(stat: String, value: float) -> VBoxContainer:
 	var label := UITheme.label(LootTable.STAT_LABELS[stat], Palette.TEXT_SOFT, true)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(label)
+	# What a point is worth, off the same `attribute_gift` the fight's numbers are, so the Scholar's
+	# Circlet turning intelligence to damage says so here too.
+	var gift := inventory.attribute_gift(stat, value)
+	var gives := "Experience" if gift[0] == "xp_more" else str(LootTable.STAT_LABELS[gift[0]])
+	column.tooltip_text = "Each point of %s adds %.1f%% more %s.\nYours add +%.1f%%." % [
+			LootTable.STAT_LABELS[stat], inventory.attribute_gift(stat, 1.0)[1], gives, gift[1]]
 	return column
 
 

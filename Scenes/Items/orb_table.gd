@@ -53,25 +53,30 @@ const ORBS := {
 		"does": "Makes a piece rare with fresh modifiers, or rerolls a rare one's.",
 	},
 	"Orb of Divine": {
-		"icon": "Orb of Divine.png", "weight": 7, "beam": ItemRarity.Rarity.RARE,
+		"icon": "Orb of Divine.png", "weight": 7, "beam": ItemRarity.Rarity.RARE, "glow": Color8(181, 188, 192),
 		"does": "Rerolls the value of every modifier, keeping the modifiers and their tiers.",
 	},
 	"Orb of Chaos": {
-		"icon": "Orb of Chaos.png", "weight": 4, "beam": ItemRarity.Rarity.RARE,
+		"icon": "Orb of Chaos.png", "weight": 4, "beam": ItemRarity.Rarity.RARE, "glow": Color8(221, 67, 11),
 		"does": "Rerolls the tier and value of every modifier, keeping the modifiers themselves.",
 	},
 	"Orb of Exalted": {
-		"icon": "Orb of Exalted.png", "weight": 3, "beam": ItemRarity.Rarity.ELITE,
+		"icon": "Orb of Exalted.png", "weight": 3, "beam": ItemRarity.Rarity.ELITE, "glow": Color8(241, 216, 23),
 		"does": "Makes a piece elite with fresh modifiers, or rerolls an elite one's.",
 	},
 }
 
-## `beam` is the rarity whose `LootBeam` a good orb stands in the arena when it drops; the cheap ones
-## drop plain.
+## `beam` is the rarity whose `LootBeam` shape a good orb stands in the arena when it drops, and `glow`
+## its colour, picked off the orb's own icon; the cheap ones drop plain.
 
 ## Kills the player makes, across every fight, before the first orb can fall. Orbs change gear, so
 ## they wait until the player has had time to find some.
-const FIRST_ORB_KILLS := 50
+const FIRST_ORB_KILLS := 20
+
+## The orb the player's second fight is promised, whatever FIRST_ORB_KILLS says: the first body that
+## falls in any fight after the first leaves one until it has dropped (`Encounter.first_orb`,
+## `Inventory.first_orb_taken`), so crafting is met early and on the cheapest orb there is.
+const FIRST_ORB := "Orb of Transmutation"
 
 ## How often a body carries an orb at all. Read beside LootTable's own pair: an orb is a little more
 ## common than a piece of gear off the same body, because one piece of gear is worth a great many

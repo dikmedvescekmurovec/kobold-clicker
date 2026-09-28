@@ -116,13 +116,14 @@ static var _styles := {}
 
 ## How strongly increased item rarity lifts each step: a step's weight is multiplied by
 ## 1 + rarity% x this. Common is never lifted, so the odds move up the ramp rather than every step
-## growing alike, and the rarer a step the harder it is pushed. Unique is in neither table, so no
-## bonus can reach it.
+## growing alike, and the rarer a step the harder it is pushed. Unique has no weight to lift, so its
+## step multiplies `UniqueTable.chance_for` instead, off the ramp: 1, the drop rate's own strength.
 const RARITY_STEP := {
 	Rarity.COMMON: 0,
 	Rarity.UNCOMMON: 1,
 	Rarity.RARE: 2,
 	Rarity.ELITE: 3,
+	Rarity.UNIQUE: 1,
 }
 ## What the weights are blown up by once a rarity bonus is in play, so the lift survives being kept in
 ## whole numbers: a 15 weight lifted 3% is 15.45, which would round straight back to 15.
