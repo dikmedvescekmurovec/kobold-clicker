@@ -625,7 +625,7 @@ def aurora(cv, seed, y0, height, cols, strength=0.55):
                                         - 0.5) * 70
         ray = height * (0.35 + 0.65 * fbm(seed + k * 13, W, ((40, 1.0), (97, 0.7))))
         u = (edge[None, :] - YY) / ray[None, :]
-        t = np.where((u >= 0) & (u <= 1), (1 - u) ** 1.5, 0.0)
+        t = np.where((u >= 0) & (u <= 1), np.clip(1 - u, 0, 1) ** 1.5, 0.0)
         t = np.where((u < 0) & (u > -0.12), 0.6, t)
         cv.tint(np.ones((H, W), bool), c, t * strength * (1 - 0.3 * k), levels=4, seam=0.3)
 

@@ -12,6 +12,8 @@ from vista import rgb, mix, shade, W, H
 
 ENVS = ("grass", "forest", "dirt", "desert", "mountains", "ice")
 VARIANTS = ("plain", "road", "village", "town", "fortress")
+## Each (environment, variant) comes in this many layouts: `CombatScene.AREA_LAYOUTS` must match.
+LAYOUTS = 4
 
 
 # ---------------------------------------------------------------- grass: a bright late morning

@@ -25,15 +25,13 @@ Godot skips this folder because of `.gdignore`.
 | `python qa.py showcase <tag>` | One map mixing all terrain, variants, roads and towns (illegal-border check included) |
 | `python qa.py blends <tag>` | Blend overlays: spill, seam coverage and seam match vs `v1`, illegal borders, plus `qa/blend_pairs_<tag>.png` (before/after for each allowed pair), `qa/blend_map_<tag>.png` and 3× zooms `qa/blend_<hi>_<lo>_<tag>.png` |
 | `python qa.py slimes <tag>` | Slimes: silhouette, palette and ramp checks, plus `qa/slimes_<tag>.png` (the baseline above all six, every frame) and `qa/slimes_ground_<tag>.png` |
-| `python qa.py areas <tag> [env...]` | Battle backdrops: skeleton, variant, palette-size, layout-twin and cross-environment `cousins` checks, plus the 6x5 contact sheet `qa/area_sheet_<tag>.png` and the layouts sheet. Name environments to scope it -- a full pass is over two minutes, one place is ten seconds |
-| `python qa.py frozen check` | The desert's twenty scenes against their recorded hashes. Two seconds; run it after anything that touches a shared primitive |
-| `python qa.py audit` | Every piece name every plan asks for, resolved against the kit that would draw it, plus whether anything anchored to a rock actually sits on it. Under a second, no rendering |
+| `python vista_scenes.py <tag> [env...] [variant...] [layout...] [fighters]` | Battle backdrops: every named (environment, variant, layout) on one sheet, `qa/vista_<tag>.png` -- one cell at 2x, more two to a row. Defaults are all six places, `plain`, layout 1; `fighters` stands the hero and a Masked Orc where the fight puts them (`vista_fighters.py`). A scene is about a third of a second |
 | `python qa.py hpbar <tag>` | The health bar's nine parts: checks, plus `qa/hpbar_<tag>.png` |
 | `python qa.py gear <tag>` | The generated gear icons among the pack's own: doubling, soft alpha, outline room, determinism, colour count and outline-ink checks, plus `qa/gear_<tag>.png` |
 | `python qa.py ui <tag>` | The old 9-slice UI (unwired): size, silhouette, outline and 8-periodicity checks, plus `qa/ui_sheet_<tag>.png` and a `qa/ui_mock_<tag>.png` showing every state and the panels stretched from 16 px to 428 px |
 | `python build.py` | Exports every hex PNG through Aseprite into `../AI-sprites/`, writes the spritesheet and JSON, then verifies each file pixel by pixel |
 | `python build_ui.py` | The same for the UI sprites, into `../AI-sprites/ui/` with its own `ui_sheet.json` |
-| `python build_areas.py` | Writes the 120 backdrops into `../Assets/Area/<env>_<variant>_<n>.png` at 4x, prunes names it no longer writes, and reads every file back to check it |
+| `python build_areas.py` | Writes the 120 backdrops (`vista_scenes.render`) into `../Assets/Area/<env>_<variant>_<n>.png` at 4x, prunes names it no longer writes, and reads every file back to check it. About two and a half minutes; refuses to start while the Godot editor holds the files |
 | `python build_towns.py` | Writes the 18 settlement building sprites (84x96, RGBA) into `../Assets/Towns/` and reads every file back. No Aseprite. Run `build.py` too: the ground tiles under them are in the atlas |
 | `python build_hpbar.py` | Writes the health bar's parts loose into `../Assets/UI/` and reads every file back. No Aseprite |
 | `python build_slimes.py` | Writes the six slimes into `../Assets/Enemies/<Env> Slime/` and reads every file back to check it. No Aseprite: the source is already a PNG pack and these ship as ordinary RGBA sprites, not as part of an indexed atlas |
@@ -47,19 +45,17 @@ Godot skips this folder because of `.gdignore`.
 | `stamps.py` | Scatter placement, shaded domes, boulders, tufts, pebbles, lines, `seg_dist` |
 | `terrain.py` | The six environments and their six variants (`v1`-`v3`, `accent`-`accent3`; `objects=False` gives bare ground for towns), the lighting kit (`relief`, `raised`, `canopy`, `pine`, `rock`, `pond`), the `"base"` pseudo-variant, and the adjacency rules (`ADJACENT`, `can_border`, `ENV_CHAIN`) |
 | `roads.py` | Road overlays for dirt, stone and snow, with every rotation |
-| `town_parts.py` | The old building and prop primitives; no hex tile uses them any more, only the backdrops' `areaplan.py` |
 | `towns.py`, `build_towns.py` | The settlements: a 3/4 building renderer (`render`, `box`, `round_part`, `curtain`, `tiered`), each environment's looks and its village, town and fortress. `build(env, tier)` gives the ground tile (atlas) and the building sprite (`sprites()`, written by `build_towns.py`) |
 | `blends.py` | Blend overlays: priority, coverage mask, fringe details per environment |
 | `preview.py`, `qa.py` | Preview images and checks |
 | `slimes.py` | The per-environment slimes: the baseline's eight colours, and the five-step `hexlib.PALETTE` body ramp each environment swaps in |
-| `arealib.py` | Backdrop toolkit: banded skies, cloud ceilings and banks, triangular mountain ranges, ridges, foliage clumps, rocks, furrows, patches, flowers |
-| `areapal.py` | One palette per environment for the backdrops, plus the peak and haze colours |
-| `areabuild.py` | The primitives and what every place shares: rectangles and boxes, road, rock, water, haze, trees, fences, a signpost. Nothing that is *built* -- that lives in the six `bld_<env>.py` |
-| `areas.py` | The scenes themselves: skylines, ground cover, the settlement dispatch, and the `sheet` and `layout_sheet` previews. `scene(env, variant, seed, layout)` -- one layout step moves the *shared* seed, so `plain` and `road`, which build nothing, still come in four |
-| `bld_<env>.py` | One culture's own pieces, six files. A piece here cannot be reached by another environment, which is the point rather than the filing -- see the rule below |
-| `lay_<env>.py` | One culture's own twelve plans, four to a variant |
-| `areaplan.py` | The settlement layout engine: `Site`, the `Land`/`Row`/`Course`/`Fix`/`Belt` steps, and the `KIT`/`TREE`/`LATE` tables. `KIT[env]` -- there is no style name in between, because nothing is shared. A plan is an ordered list of steps and list order is draw order |
-| `arealayouts.py` | A thin index over the six `lay_<env>` catalogues: `LAYOUTS[env][variant]`, one plan per layout index |
+| `vista.py` | Backdrop toolkit, numpy on a 576x324 `Canvas`: stepped skies, cumulus and cirrus, sun and glow, stars and aurora, tent-peak ranges, mesas, dunes, rolling hills, drifts, trees, firs, leaf clumps, ferns, sun shafts; `tint` (a quantised wash) and `seat` (the row a footprint stands on) |
+| `vista_build.py` | Building parts, front-on and lit from the upper left: walls (with batter and courses), timber framing, windows, doors, lancets, gable and pediment roofs, cones, domes, crenels and teeth, stacked tiers, arches, pennants, palms |
+| `vista_towns.py` | `Site` (where a settlement stands, the hill raised under it, `build`), `row` (the placer that seats each piece), and the grass people's kit |
+| `vista_kits.py` | The other five peoples' kits: dirt, forest, desert, mountains, ice -- one section each, reaching only its own pieces |
+| `vista_props.py` | The open land: the road (`road_path`, `near_road`, `far_road`), signpost, milestone, cart, fence, pond, and each plain's landmark (oak, dead tree, standing stones, ruin, shards, cairn, log, mushrooms) |
+| `vista_scenes.py` | The six places, one function each, `LAND` (road and landmark per place), `render(env, variant, layout)` and the preview CLI |
+| `vista_fighters.py` | QA only: the hero and an enemy stood on a scene where `CombatScene` puts them |
 | `hpbar.py` | The health bar's parts: a left cap, a right cap and a track in three tier colourways, in `hexlib.PALETTE` |
 | `gearlib.py`, `gear.py` | The gear icons: `gearlib` is the kit and what was measured off the RPG pack, `gear` one function a kind (`ICONS`) and a unique (`UNIQUES`). No build script: `tools/ui_kit.py` writes them |
 | `ui.py` | The old 9-slice UI (unwired): `RectTile` (rectangular, not hex), rect primitives, the two panels and the 16 buttons |
@@ -102,59 +98,31 @@ Godot skips this folder because of `.gdignore`.
 - **Own sheet:** the UI ships in `AI-sprites/ui/`, not the hex atlas, so hex atlas coordinates never move.
 
 ### Battle backdrops
-- **The reference sets the grid:** `Assets/Area/Summer2.png` is 2304x1296 but blocky at exactly 4x, so the art is **576x324** and ships nearest-upscaled. `arealib.W/H/SCALE` hold that.
-- **One skeleton, six places:** every scene has the horizon at y=200 and the land starting at y=202, with four bands under it. An enemy standing at a given height stands in the same spot whatever the backdrop, and `qa.py areas` fails if a scene moves the land.
-- **A settlement is a plan, not a function.** `areaplan.py` walks a cursor along a span dropping seeded pieces, so two seeds give two villages rather than one village jittered; `arealayouts.py` says which plan each (environment, variant) builds. The bar the engine had to clear was the ksar -- a `Land("mesa")` publishes a standing line, a `Course` walks down it and draws the highest houses first, which is why it reads as a stack of cubes and not a pile.
-- **Measure a layout family by its roofline, not by its pixels.** Two seeds of one plan already differ in thousands of pixels and still read as one town, and a whole-image diff passes at about a third whatever you do, because the sky and the cover are seeded anyway. `qa.py areas` takes the topmost row where a scene differs from `plain` at the same layout -- which isolates the settlement exactly -- and counts columns whose roofline moved, out of the columns that have anything built in them.
+- **The grid is the reference's:** `Assets/Area/Summer2.png` is 2304x1296 but blocky at exactly 4x, so the art is **576x324** and ships nearest-upscaled (`vista.W/H/SCALE`).
+- **Depth is value.** A scene is painted back to front -- sky, far range, far hills, middle distance with its settlement, the near ground the fight is on -- and every layer further back is pulled toward that place's haze colour (`hz`). Nothing else says what is far: no outlines, no scale tricks.
+- **A place is a time of day as much as a terrain.** Grass is a bright morning; forest a misty clearing, three walls of firs fading into haze, sun shafts and a canopy over the top edge; dirt a golden-hour steppe under a low sun, mesas lit on their left faces; desert noon over the dunes; mountains a sharp alpine valley; ice twilight, stars and an aurora, which is what makes the ice people's lit windows glow. Two places sharing a sky is the first thing that makes them one place.
+- **Washes are quantised, never dithered across an area.** A Bayer dither over a whole region reads as a mesh at 2x; `Canvas.tint` pulls pixels toward a colour in a few flat steps with only a thin dithered seam between them. Skies are stepped bands for the same reason.
+- **Clouds are heaps, lit from above.** The first backdrops' striped cloud layer read as a glitch and sat behind the HUD. A `cumulus` is overlapping puffs, each lit on top and shaded underneath, drawn back to front, its base cut flat.
+- **Nothing can float, by construction.** A settlement's `Site` raises the middle ground into a hill before it is filled, then every piece is seated with `vista.seat` -- the lowest ground under its whole footprint -- so its foot reaches down to the land on every column; a piece on a slope stands in front of the rise rather than over a gap. The old generator anchored pieces to a single crest row and 71 of them hung in the air.
+- **The fight owns the near ground; the landmark stands between the fighters.** The fighters stand at `CombatScene.GROUND` (0.86, row 278) on the near ground, the hero at 0.24 and the enemy at 0.72 of the width, so whatever a scene is about -- a fortress, an oak, a pond -- is centred between them in the middle distance (`Site` centres 0.47-0.53). A settlement behind the hero is a settlement nobody sees.
 - **Six places, six ways of building, and nothing shared between them.** Each environment commits
   to one wall material, one roof logic and one signature motif, and no two share any of the three:
 
   | env | wall | roof | signature |
   |---|---|---|---|
-  | grass | cream plaster in dark oak, on limestone | steep, dormered | round stair-turret under a tall slate cone |
-  | dirt | brown daub and undressed rubble | fat thatch cone; flat crenellated | crossed poles over a thatch apex; grouped lancets |
-  | ice | dark timber and carved ice | upswept eaves under a load of snow | a warm light in every opening |
-  | forest | timber posts on mossy stone | receding stacked tiers | a finial on every apex |
+  | grass | cream plaster in dark oak, on limestone | steep gables, gable-front townhouses | round stair-turret under a tall slate cone and a pennant |
+  | dirt | brown daub and warm rubble | fat thatch cone; flat crenellated | crossed poles over a thatch apex; grouped lancets |
+  | ice | dark timber and carved ice | upswept eaves under a load of snow | a warm light in every opening; ice needles |
+  | forest | timber on posts over mossy stone | steep dark thatch; receding stacked tiers (meru) | a gold finial on every apex; split gates |
   | mountains | warm ashlar, timber galleries bolted on | flat parapet deck | red cone, pennant, arcaded viaduct |
-  | desert | red rammed earth, battered | flat parapet deck | pointed merlon teeth, incised lattice |
+  | desert | red rammed earth, battered | flat parapet deck | pointed merlon teeth, incised lattice, palms |
 
-  Both halves matter. Within one environment the village, the town and the fortress are the same
-  people at three scales; between environments no two build the same shape out of the same stuff.
-  `qa.py areas` measures the second half as `cousins`, and it takes both axes -- on silhouette
-  alone it called a gold temple and a white ice palace one place, and on material alone it would
-  miss four grey castles that each had a different `stone` value.
-
-- **A fortress is composed to three rules, in its own culture's terms.** One dominant mass with
-  everything stepping down from it. The base hidden, so you cannot see where it meets the ground --
-  haze, a curtain, a viaduct, whatever that place has. And the tallest thing carries that culture's
-  own crown: a slate cone and a pennant in grass, a red cone in the mountains, a needle in ice, a
-  gold finial in forest, toothed merlons in the desert, and in dirt nothing at all, because dirt's
-  fortress is a box with the top taken off and that is what makes it the grimmest of them.
-
-- **There was a shared castle once, and it is why this was rewritten.** A grand tower, a curtain,
-  a great gate and a flight of steps used to be injected into every style, so six cultures drew
-  from one set of castle pieces and differed only by tint -- four of the six fortresses were the
-  same building. Pieces now live one culture to a file and a plan can only reach its own, which
-  makes the mistake unavailable rather than merely discouraged.
-
-- **A piece standing on a rock wants `on="land"`, not `on="crest"`.** A mesa is only at full
-  height in the middle: its profile is `(1 - t**1.7)`, so anything anchored to the single highest
-  row and placed further out hangs in the air over the shoulder. `crest` is for things that must be
-  level with the summit, and a wall running wider than its rock is an outer curtain -- it belongs
-  at ground level with the citadel above it. `qa.py audit` checks this.
-
-- **A fortress is the one thing allowed to dominate the frame.** The twenty non-desert ones are hand-written rather than varied off a template, and each keeps three rules: height comes from ONE dominant mass with everything stepping down from it, never several towers of a height; the base is hidden, in `Land("mist")` or behind a curtain or over a `mesa`, because a castle you can see the bottom of is a building; and the tallest thing carries a `pennant`, which at this size does more for scale than another fifty pixels of stone. The first pass built them wide and low -- dirt's rose twenty-nine pixels above the horizon -- and they now clear a hundred.
-- **Haze must blend, and the blend must be quantised.** `mist` mixes toward the palette's `horizon` in three fixed steps. Replacing pixels outright drew a bright band across the curtain wall that read as damage, and a *continuous* mix is no longer a limited palette -- it put six scenes over the colour ceiling on its own, which is what that check is for.
-- **A ruin is drawn top-first.** Work out the broken profile, then draw each column only up to it. Painting the missing part dark instead puts a black slab on the skyline where there should be sky.
-- **A fortress is mostly `Fix` pieces**, so its layouts are the ones that come out as twins: walls, towers and a gate that do not move leave only the outliers to vary. That is the worklist the twins check prints, not a bug in it.
-- **The pale top is the cloud ceiling, not a band.** Each sky ramp starts at its deepest blue and `overcast()` paints the pale sheet over it with a ragged edge; baking the pale into the ramp gives a dead straight line across the top of the picture.
-- **Ground reads as noise when every mark is the same size.** Each cover is big soft `patches` first, then mid-scale marks (`furrows`, `ripple_layer`, `clump_layer`), then a few `boulders` -- never one dense speckle layer.
-- **A road runs across the shot, not into it.** The fight happens on the near band, and at this scale a vanishing point is four pixels wide and reads as a spike, so the road variant lays a track across the front and a second one out in the field. Roads on the map run town to town anyway.
-- **The desert builds in earth, so it gets its own vocabulary.** Re-tinting a gabled hut sand-colour gives a European village in a desert; `bld_desert`'s mud set is drawn from the kasbah references instead -- walls that batter inward as they rise, flat roofs behind a parapet, pointed merlons, a lattice pressed into the upper courses. The town is Ait Benhaddou: houses placed by walking down a crag in courses and drawing the highest first, so every roof line sits against the wall behind it. Four towers of one height at one spacing read as a fence, so nothing in the fortress is mirrored and its quarter stands a storey above the curtain.
-- **The desert settlement goes in front of its cover, not behind it.** Its cover is dune ripples and dust patches drawn right across the mid band, which scribble over a mud wall rather than standing in front of it. The palm belt each desert settlement ends with is what stands in front instead -- and that belt stays broken and low, because a continuous green stripe across a desert reads as a lawn.
-- **Settlements sit on the mid band, behind the cover**, on a low trodden `_patch`: anything taller than about ten pixels reads as a wall of earth behind the houses rather than as ground.
-- **Mountains are triangles.** A noise ridge makes hills; `mountain_range` overlaps straight-sloped peaks and snows the ones above the snow line. Distant ranges are mixed toward `PEAKS[env]["haze"]`.
-- **Forest is framed by the nearest tree:** two edge trunks and a hanging canopy, drawn last of all, after the road.
+  Within one environment the village, the town and the fortress are the same people at three scales. A kit reaches only its own pieces (`vista_kits.py` one section a people), which is what stops the old mistake -- one shared castle kit made four of six fortresses the same grey building.
+- **A fortress is one dominant mass on a hill,** everything stepping down from it, its foot hidden (a curtain along the slope, the temple's terraces, a toothed outer wall, a wall of ice blocks), and its tallest point wears the culture's crown. Dirt's is the exception by design: a rubble box with the top bitten out of it, windows open onto the sky, and no crown at all -- the grimmest of them.
+- **The viaduct only spans a drop.** Its deck is level and its piers run down to the ground, so it is only as tall as the land falling away beneath it; laid under a whole castle it read as a platform, so it strides off the hill toward one edge of the frame.
+- **A road curves up into the distance.** `road_path` runs from low on one side to the crest on the other, its width falling with distance from the horizon, and narrows to nothing over the rise rather than stopping square; two of the four layouts pick it up again beyond the hill (`far_road`). The first backdrops laid a straight band across the whole width, which read as a stripe.
+- **Every plain has its landmark,** one per layout, standing at the back of the fighting ground between the two sides: an oak, a pond, standing stones, a colonnade, a dead tree, cairns, an oasis, ice shards, a fallen log. Drawn on the middle distance they came out as specks.
+- **Every (variant, layout) has its own sky.** `render` seeds by both, so the plain and the village of one layout are not the same picture with houses added.
 
 ### Slimes
 - **A pure swap:** every environment slime is the blue pack under `Assets/Enemies/Slime` with its five-step body ramp exchanged for one built from `hexlib.PALETTE`, pixel for pixel. Nothing is drawn on top, so the silhouette, the shading and the animation timing stay the baseline's -- `qa.py slimes` fails on a single changed alpha pixel, an off-palette colour, a leftover baseline colour, or a frame whose colour count moved (a ramp step collapsing into its neighbour).

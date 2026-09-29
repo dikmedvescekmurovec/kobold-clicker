@@ -52,7 +52,7 @@ class Site:
             return line
         xs = np.arange(W)
         t = (xs - self.cx) / (self.half * 1.25)
-        bump = np.where(np.abs(t) < 1, (1 - t * t) ** 1.6, 0)
+        bump = np.clip(1 - t * t, 0, None) ** 1.6
         return np.minimum(line, line[int(self.cx)] - self.mound * bump)
 
     def build(self, cv, line, hz, haze=0.1):

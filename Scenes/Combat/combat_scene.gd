@@ -44,7 +44,7 @@ signal xp_gained(amount: int)
 ## on, so it visibly fills as the gems land rather than before they have set off.
 signal xp_absorbed(amount: int)
 
-## Where the fighters stand, as a share of the viewport: the grass band of the backdrop.
+## Where the fighters stand, as a share of the viewport: on the near ground every backdrop paints.
 const GROUND := 0.86
 const PLAYER_X := 0.24
 const ENEMY_X := 0.72
@@ -64,13 +64,13 @@ const SIZE_HEIGHT := {
 const ELITE_SCALE := 1.15
 ## Where an enemy starts its run-in, past the right edge.
 const OFFSCREEN_X := 1.15
-## The backdrops: one per environment and variant under Assets/Area. They are all drawn to the same
-## skeleton -- horizon and ground on the same rows -- so GROUND stands the fighters in the same place
-## whichever one is behind them.
+## The backdrops: one per environment and variant under Assets/Area. Every one lays its near ground
+## (the land the fight happens on) from about a quarter of the way up, so GROUND stands the fighters
+## on land whichever one is behind them, and what stands in the middle distance sits between them.
 const AREA_PATH := "res://Assets/Area/%s_%s_%d.png"
 ## How many ways each place was drawn. A village is four villages: the same environment and the same
 ## tier, built four ways, so two towns on one map are not the same picture twice. Must agree with
-## `areas.LAYOUTS_PER_VARIANT` in the generator; `_test_backdrops` sweeps every path to hold it.
+## `vista_scenes.LAYOUTS` in the generator; `_test_backdrops` sweeps every path to hold it.
 ## Changing it re-rolls which backdrop each tile fights on, which is harmless -- nothing is saved
 ## about the one it had.
 const AREA_LAYOUTS := 4
