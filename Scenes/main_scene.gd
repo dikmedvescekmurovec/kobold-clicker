@@ -158,6 +158,10 @@ var _fight_farms := false
 ## The charted tile the player stepped onto the fought-for one from: a lost fight runs them back there, and a save made
 ## while they stand on the uncharted tile puts them there.
 var _retreat_cell := HexMap.NO_CELL
+## The Nightwalkers' way into the dark still to fight for, the goal last (`MapBuilder.dark_path`): each
+## won fight walks on to the next by itself. A loss ends it, and so does anything that stops the next
+## fight opening; Retry keeps it.
+var _dark_way: Array[Vector2i] = []
 var _env_rows: VBoxContainer
 var _tile_title: Label
 var _level_label: Label
@@ -1414,9 +1418,12 @@ func _on_chart_pressed() -> void:
 	var cell := map.selected_cell
 	if not view.can_chart(cell) or inventory.encumbered():
 		return
-	# Not on it yet: walk onto it, and the fight opens on arrival. Already on it is a Retry.
+	# Not on it yet: walk onto it, and the fight opens on arrival. Already on it is a Retry. Further into
+	# the dark (the Nightwalkers), onto the first tile of the way, and the rest follow as each is won.
 	if view.player_cell != cell:
-		_walk_to_fight(cell, false)
+		var way := view.dark_path(cell)
+		_dark_way = way.slice(2)
+		_walk_to_fight(way[1], false)
 		return
 	# Asked of the builder and not of what is drawn: a tile taken blind has nothing drawn on it yet.
 	var env := view.env_at(cell)
@@ -1578,6 +1585,8 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# downstream believes the fight. A second listener applying the rule a second way is how the
 	# counter, the pouch and the bag would come to disagree about what a run found.
 	_combat.autodiscard = inventory.autodiscards
+	# The Nightwalkers take a won tile's loot for the player, so a way into the dark runs by itself.
+	_combat.auto_collect = not farming and "nightwalker" in inventory.effects()
 	_combat.loot_kept.connect(_on_loot_dropped)
 	_combat.loot_discarded.connect(_on_loot_autodiscarded)
 	_combat.drop_discarded.connect(_on_drop_discarded)
@@ -1715,12 +1724,26 @@ func _on_combat_finished(won: bool, cell: Vector2i, retrying := false) -> void:
 	# Off land that is not theirs. Not onto the black screen, where the world is already gone.
 	if not won and not ledger.farming and not retrying and not world_lost:
 		view.move_to(_retreat_cell)
+	# The Nightwalkers: a tile won on the way walks on to the next. Anything but a win or a Retry ends it.
+	var next := HexMap.NO_CELL
+	if won and not ledger.farming and not _dark_way.is_empty():
+		next = _dark_way.pop_front()
+	elif not retrying:
+		_dark_way.clear()
 	ledger.farming = false
 	if map.selected_cell != HexMap.NO_CELL:
 		_panel.show()
 	_update_buttons()
 	# After banking, so a run's pouch counts; after the fight, so a pop-up never covers one.
 	_check_tips()
+	# Walked onto like any tile beside the charted land, so its fight opens on arrival -- unless the bag
+	# filled on the way, which stops the fights and so the way.
+	if next != HexMap.NO_CELL:
+		if view.can_chart(next) and not inventory.encumbered():
+			map.select_cell(next)
+			_walk_to_fight(next, false)
+		else:
+			_dark_way.clear()
 	# No Second Chances: the tile's fight was the world's. Last, so everything the fight earned is
 	# banked and saved before the black screen, on which nothing may be.
 	if world_lost:

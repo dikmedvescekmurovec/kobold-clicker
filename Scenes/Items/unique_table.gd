@@ -435,7 +435,7 @@ const UNIQUES := {
 		"name": "Nightwalkers", "base": "Leather Boot",
 		"mods": ["increased_move_speed", "added_dodge"],
 		"effect": "nightwalker",
-		"effect_text": "You can chart a tile up to {tiles} steps into the dark. The land you cross to it is charted with it.",
+		"effect_text": "You can chart a tile up to {tiles} steps into the dark, fighting for every tile on the way, one after another.",
 		"ranks": {"tiles": [5, 10, 20, 40]},
 	},
 	"dreadmask": {

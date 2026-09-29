@@ -90,10 +90,6 @@ var walking: bool:
 ## tile beside it, unless the main scene says otherwise (the Nightwalker's Boots). Asked, not told,
 ## so taking the boots off is felt at the next hover.
 var dark_reach := Callable()
-## The tiles of the walk into the dark under way -- the dark ones crossed and the tile fought for,
-## last -- which a route may cross until the player stands on charted land again: it is how a lost
-## fight walks back out. Empty the rest of the time.
-var _trail: Array[Vector2i] = []
 ## Every tile that can be charted now (`can_chart`), worked out once for the map as it stands and the
 ## reach it was worked out at: the hover asks on every move of the mouse.
 var _chartable: Dictionary[Vector2i, bool] = {}
@@ -542,12 +538,12 @@ func seen(cell: Vector2i) -> bool:
 
 
 ## Whether the player can chart this cell: generated land or wall within `reach()` steps of a charted tile
-## -- next to one, but under the Nightwalker's Boots -- with every tile between open land (`_dark_path`),
-## and they have to be standing still. **Seen or not:** the first tile into the fog can be taken blind,
-## which is how a player under the Thick Fog, whose charts uncover nothing round them, moves at all.
-## With a ring of sight or more every tile beside the charted land has been seen already, so for
-## everyone else this is the rule it was. Every charted tile is reachable, since charting only ever
-## grows out from the start and a walk into the dark is charted along with the tile it took.
+## -- next to one, but under the Nightwalkers -- across land (`dark_path`, every tile of which the main
+## scene has them fight for in turn), and they have to be standing still. **Seen or not:** the first
+## tile into the fog can be taken blind, which is how a player under the Thick Fog, whose charts
+## uncover nothing round them, moves at all. With a ring of sight or more every tile beside the charted
+## land has been seen already, so for everyone else this is the rule it was. Every charted tile is
+## reachable, since charting only ever grows out from the start one tile at a time.
 func can_chart(cell: Vector2i) -> bool:
 	if walking:
 		return false
@@ -565,7 +561,7 @@ func reach() -> int:
 	return maxi(1, int(dark_reach.call())) if dark_reach.is_valid() else 1
 
 
-## Every tile `steps` or fewer from the charted land, out through the open land between, into
+## Every tile `steps` or fewer from the charted land, out across the land between, into
 ## `_chartable`: one walk out from every charted tile at once, a ring of steps at a time.
 func _find_chartable(steps: int) -> void:
 	var ring: Array[Vector2i] = []
@@ -579,23 +575,17 @@ func _find_chartable(steps: int) -> void:
 				if _chartable.has(next) or not _tiles.has(next) or charted(next) or is_wasteland(next):
 					continue
 				_chartable[next] = true
-				if _crossable(next):
+				# Land only goes on: the wall is where a way ends, never what it crosses.
+				if is_land(next):
 					next_ring.append(next)
 		ring = next_ring
 
 
-## Whether a walk into the dark may cross `cell` on the way to the tile it is for: open land with
-## nothing on it to fight for -- no settlement, cave, chest or wall -- since whatever it crosses is
-## charted with that tile, fight and all.
-func _crossable(cell: Vector2i) -> bool:
-	return is_land(cell) and not charted(cell) and town_tier(cell) == -1 and cell != cave \
-			and not has_chest(cell)
-
-
-## The way to `cell` from the charted land: the charted tile it starts on, the dark tiles crossed and
-## `cell` last. The fewest dark tiles, and of those the start the player is fewest steps from. Empty
-## when no charted tile is within `reach()`.
-func _dark_path(cell: Vector2i) -> Array[Vector2i]:
+## The way to `cell` from the charted land: the charted tile it starts on, the uncharted tiles between,
+## each beside the last, and `cell` last -- every one of them fought for in turn (the main scene's
+## `_dark_way`). The fewest tiles, and of those the start the player is fewest steps from. Empty when
+## no charted tile is within `reach()`.
+func dark_path(cell: Vector2i) -> Array[Vector2i]:
 	var came_from: Dictionary[Vector2i, Vector2i] = {cell: cell}
 	var ring: Array[Vector2i] = [cell]
 	var steps := reach()
@@ -609,7 +599,7 @@ func _dark_path(cell: Vector2i) -> Array[Vector2i]:
 				if charted(next):
 					came_from[next] = at
 					starts.append(next)
-				elif step + 1 < steps and _tiles.has(next) and _crossable(next):
+				elif step + 1 < steps and _tiles.has(next) and is_land(next):
 					came_from[next] = at
 					next_ring.append(next)
 		if not starts.is_empty():
@@ -628,10 +618,10 @@ func _dark_path(cell: Vector2i) -> Array[Vector2i]:
 	return []
 
 
-## The charted tile a walk onto `cell` starts from, the one the player is fewest steps from: next to it,
-## or, into the dark, where the fewest dark tiles lie between. NO_CELL when none is within `reach()`.
+## The charted tile a way onto `cell` starts from, the one the player is fewest steps from: next to it,
+## or, into the dark, where the fewest tiles lie between. NO_CELL when none is within `reach()`.
 func chart_from(cell: Vector2i) -> Vector2i:
-	var path := _dark_path(cell)
+	var path := dark_path(cell)
 	return HexMap.NO_CELL if path.is_empty() else path[0]
 
 
@@ -716,8 +706,7 @@ func can_move_to(cell: Vector2i) -> bool:
 
 
 ## The tiles the player would cross on the way to `cell`, the destination last and the tile they stand on left
-## out. Every tile of the route is charted, or on the walk into the dark the player is still out on
-## (`_trail`); the route is empty when none leads there.
+## out. Every tile of the route is charted; the route is empty when none leads there.
 func route_to(cell: Vector2i) -> Array[Vector2i]:
 	if not charted(cell) or cell == player_cell:
 		return []
@@ -728,7 +717,7 @@ func route_to(cell: Vector2i) -> Array[Vector2i]:
 		var at := queue[i]
 		i += 1
 		for next in HexGrid.neighbors(at):
-			if not (charted(next) or next in _trail) or came_from.has(next):
+			if not charted(next) or came_from.has(next):
 				continue
 			came_from[next] = at
 			if next == cell:
@@ -752,17 +741,18 @@ func move_to(cell: Vector2i) -> Array[Vector2i]:
 	return route
 
 
-## Sends the player onto a tile they are about to fight for: to the charted tile it is charted from
-## (`chart_from`), then across the dark between (`_trail`) onto it, where `player_cell` stands on
-## uncharted land until the fight is decided. Returns the tiles they will cross, empty if the walk
-## didn't start.
+## Sends the player onto a tile beside the charted land they are about to fight for: to the charted tile
+## beside it (`chart_from`), then the one step onto it, where `player_cell` stands on uncharted land
+## until the fight is decided. Returns the tiles they will cross, empty if the walk didn't start -- as
+## it never does for a tile further into the dark, whose way is fought for a tile at a time.
 func walk_onto(cell: Vector2i) -> Array[Vector2i]:
 	if not can_chart(cell):
 		return []
-	var path := _dark_path(cell)
+	var path := dark_path(cell)
+	if path.size() != 2:
+		return []
 	var route := route_to(path[0])
-	_trail = path.slice(1)
-	route.append_array(_trail)
+	route.append(cell)
 	map.player.walk(route)
 	return route
 
@@ -791,9 +781,6 @@ func jump_to(cell: Vector2i) -> bool:
 
 func _on_player_arrived(cell: Vector2i) -> void:
 	player_cell = cell
-	# Back on charted land, the walk into the dark is over: won and charted, or walked back out of.
-	if charted(cell):
-		_trail.clear()
 	arrived.emit(cell)
 
 
@@ -905,8 +892,9 @@ func _accent_roll(cell: Vector2i) -> float:
 func chart(cell: Vector2i, sight := 1) -> int:
 	if not can_chart(cell):
 		return -1
-	# The walk into the dark that took it is charted with it, and seen round like it.
-	var taken: Array[Vector2i] = _trail if not _trail.is_empty() and _trail[-1] == cell 			else _dark_path(cell).slice(1)
+	# Beside the charted land, the tile alone. Further into the dark only the dev's skip comes here,
+	# and it takes the whole way at once, so charted land still never stands apart.
+	var taken: Array[Vector2i] = dark_path(cell).slice(1)
 	if is_wall(cell):
 		_break_wall()
 	var shown := 0

@@ -360,6 +360,12 @@ var bag_size := Inventory.CAPACITY
 ## Asked of each find's level: whether the player has told the game to stop bringing that level.
 ## An unset Callable keeps everything, so a fight nobody has told anything behaves as it always did.
 var autodiscard := Callable()
+## Whether a won tile fight takes its loot and leaves by itself, `AUTO_COLLECT_SECONDS` after its verdict
+## is up, as Collect would: the main scene's, while the Nightwalkers are worn, so a way into the dark is
+## fought through with nobody at the keys. A Timer child, so a pause (a tip) holds it and a scene freed
+## first takes it along.
+var auto_collect := false
+const AUTO_COLLECT_SECONDS := 1.5
 ## How many finds that rule has thrown away. Said once, at the end, and never drawn as a square:
 ## the whole point of the rule is not having to look at them.
 var _auto_discarded := 0
@@ -1557,6 +1563,14 @@ func _on_finished(won: bool) -> void:
 	_result.show()
 	Juice.pop_in(_result, _ui_scale)
 	Juice.reveal(_result_drops.pieces())
+	if won and auto_collect and not fight.endless and not fight.dungeon:
+		var wait := Timer.new()
+		wait.one_shot = true
+		wait.wait_time = AUTO_COLLECT_SECONDS
+		# `pop_out` leaves once however often it is asked, so a Collect pressed first wins.
+		wait.timeout.connect(_leave.bind(_on_back_pressed))
+		add_child(wait)
+		wait.start()
 	await _centre_result()
 	# A loss is not celebrated; a win, an ended run and a descent are.
 	if not lost:

@@ -56,6 +56,7 @@ func _run() -> void:
 	await _test_settings()
 	await _test_the_nameplate_wears_the_tier()
 	await _test_the_map_hands_over_and_takes_back()
+	await _test_the_nightwalkers_fight_their_way()
 	await _test_a_world_under_the_fog()
 	await _test_the_way_down()
 	_report("combat")
@@ -1342,8 +1343,8 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 	var fight: Encounter = main._combat.fight
 	_play(fight, 10000)
 	_check(fight.victory, "the rematch is won")
-	_check(main._combat._collect.visible and not main._combat._lost_row.visible,
-			"and a won tile leaves by Collect")
+	_check(main._combat._collect.visible and not main._combat._lost_row.visible and not main._combat.auto_collect,
+			"and a won tile leaves by Collect, pressed: nothing collects by itself without the Nightwalkers")
 	main._combat._on_back_pressed()
 	await process_frame
 	_check(main.view.charted(target), "a won tile is charted")
@@ -1411,6 +1412,66 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 	await process_frame
 	_check(not main.view.walking and main.view.player_cell == target, "a run ended leaves them where it was")
 	main.queue_free()
+
+
+## The Nightwalkers: Chart on a tile a few steps into the dark fights for every tile of the way in turn,
+## each won one collecting its loot and walking on to the next by itself; Retry keeps the way, and a
+## loss ends it.
+func _test_the_nightwalkers_fight_their_way() -> void:
+	_clear_saves()
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	main.inventory_path = SCRATCH_INVENTORY
+	main.map_path = SCRATCH_MAP
+	root.add_child(main)
+	for i in 3:
+		await process_frame
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var boots := Item.rolled_unique("nightwalkers", rng, 1)
+	main.inventory.add(boots)
+	main.inventory.equip(boots, Equipment.Socket.BOOTS)
+	# A veteran's save, every tip read: a tip up holds the fight still, and its automatic Collect with it.
+	for tip: Array in main.TIPS:
+		main.inventory.tips.append(tip[0])
+	var line: Array[Vector2i] = [MapBuilder.CENTER]
+	for i in 3:
+		line.append(HexGrid.neighbor(line[-1], HexGrid.Edge.E))
+	main.map.select_cell(line[3])
+	_check(main.view.can_chart(line[3]) and main._chart_button.visible, "three steps into the dark can be charted")
+	main._on_chart_pressed()
+	main.map.player.finish_walk()
+	_check(main.view.player_cell == line[1] and main._combat != null and main._combat.cell == line[1],
+			"the first fight is for the first tile of the way")
+	_play(main._combat.fight, 10000)
+	_check(main._combat.auto_collect and main._combat._collect.visible, "won, the verdict is up")
+	await create_timer(CombatScene.AUTO_COLLECT_SECONDS + Juice.LEAVE_TIME + 0.3).timeout
+	_check(main.view.charted(line[1]) and main.view.walking and main._combat == null,
+			"and with nobody pressing Collect the loot is taken, the tile charted and the hero walks on")
+	main.map.player.finish_walk()
+	_check(main._combat != null and main._combat.cell == line[2], "and the next tile's fight opens")
+	# Retry keeps the way.
+	main._combat.fight.give_up()
+	main._combat.retry.emit()
+	_check(main._combat != null and main._combat.cell == line[2] and main._dark_way == [line[3]],
+			"Retry fights the same tile again, the way kept")
+	_play(main._combat.fight, 10000)
+	await create_timer(CombatScene.AUTO_COLLECT_SECONDS + Juice.LEAVE_TIME + 0.3).timeout
+	main.map.player.finish_walk()
+	_check(main.view.charted(line[2]) and main._combat != null and main._combat.cell == line[3],
+			"won, on to the goal")
+	# A loss ends the way, and runs the hero back to the last tile won.
+	main._combat.fight.give_up()
+	main._combat._on_back_pressed()
+	await process_frame
+	main.map.player.finish_walk()
+	_check(not main.view.charted(line[3]) and main._dark_way.is_empty() and main._combat == null
+			and main.view.player_cell == line[2] and not main.view.walking,
+			"a loss leaves the goal uncharted, the way over and the hero on the last tile won")
+	main.queue_free()
+	await process_frame
+	_clear_saves()
 
 
 ## A descent played to the end of its clock with a weapon worth `damage` a swing, `speed` swings a
