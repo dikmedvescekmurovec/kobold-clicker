@@ -1127,6 +1127,7 @@ func _test_smithing() -> void:
 	page._on_lock_pressed()
 	_check(piece.level == 3 and piece.locked_mod().is_empty() and inventory.gold == 0,
 			"and nothing was done on the way past the button")
+	_check(page._swing_clock < 0.0, "and the smith did not strike for it")
 
 	# With the gold, the hammer lands: the piece moves, the purse pays and the save is written.
 	inventory.gold = price * 3
@@ -1136,6 +1137,7 @@ func _test_smithing() -> void:
 	_check(upgrade != null and not upgrade.disabled, "with the gold the hammer is live")
 	page._on_upgrade_pressed()
 	_check(piece.level == 4, "the piece came back a level higher (%d)" % piece.level)
+	_check(page._swing_clock == 0.0 and page._swings_owed == 0, "and the smith strikes")
 	_check(inventory.gold == price * 2, "the purse paid (%d, want %d)" % [inventory.gold, price * 2])
 	_check(Inventory.load_from(TEST_PATH).items[0].level == 4, "and the upgrade was saved")
 
@@ -1148,6 +1150,11 @@ func _test_smithing() -> void:
 	page._smith_rng = _stream_that(true)
 	page._on_upgrade_pressed()
 	_check(piece.broken and piece.level == 4, "the hammer broke it and left the level alone")
+	# Pressed mid-strike: owed, and begun SWING_OVERLAP frames before the first would have ended.
+	_check(page._swings_owed == 1, "a press mid-strike waits its turn")
+	page._process((page._swing_frames() - TownPage.SWING_OVERLAP) * DialogueBox.FRAME_TIME + 0.001)
+	_check(page._swings_owed == 0 and page._swing_clock == 0.0,
+			"and starts %d frames before the first ends" % TownPage.SWING_OVERLAP)
 	_check(inventory.gold == before_break - broke_price,
 			"and the gold went anyway (%d, want %d)" % [inventory.gold, before_break - broke_price])
 	_check(not page._smith_note.is_empty(), "the page says what happened (%s)" % page._smith_note)
@@ -1284,6 +1291,28 @@ func _test_entering() -> void:
 	root.add_child(main)
 	for i in 3:
 		await process_frame
+
+	# Any button made after the scene clicks; one held down on its own clicks as a toggle, a tab as a button.
+	var tick := Button.new()
+	tick.toggle_mode = true
+	main.add_child(tick)
+	tick.pressed.emit()
+	_check(main._toggle_sound.playing and not main._button_sound.playing, "a toggle clicks as a toggle")
+	var tab := Button.new()
+	tab.toggle_mode = true
+	tab.button_group = ButtonGroup.new()
+	main.add_child(tab)
+	tab.pressed.emit()
+	_check(main._button_sound.playing, "a tab clicks as a button")
+	tick.queue_free()
+	tab.queue_free()
+	main.inventory.gold += 10.0
+	_check(not main._coins_sound.playing, "gold coming in is no purchase")
+	main.inventory.gold -= 10.0
+	_check(main._coins_sound.playing, "gold going out is one")
+	main._coins_sound.stop()
+	main.inventory.sell_for(10.0)
+	_check(main._coins_sound.playing, "and so is a sale")
 
 	var town: Vector2i = main.view.start_town - main.view.origin
 	_check(main.view.town_tier(town) == TownWorld.Tier.SMALL, "the start town is a village")

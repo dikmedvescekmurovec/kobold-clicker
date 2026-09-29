@@ -15,7 +15,7 @@ func _run() -> void:
 	_check(_test_stacking() == true, "stacking tests ran to the end")
 	_check(_test_respec() == true, "reset tests ran to the end")
 	_check(_test_save() == true, "save tests ran to the end")
-	_check(_test_overranks() == true, "overrank tests ran to the end")
+	_check(await _test_bursts() == true, "burst tests ran to the end")
 	_check(_test_hold() == true, "held press tests ran to the end")
 	_check(_test_rarity() == true, "rarity tests ran to the end")
 	_check(_test_gold_and_orbs() == true, "gold and orb find tests ran to the end")
@@ -211,66 +211,86 @@ func _test_save() -> bool:
 	return true
 
 
-## Every tree full: a skill goes past its most, each rank past it dearer by its row's weight, and the
-## numbers grow while the capstone's effect stays the one rule.
-func _test_overranks() -> bool:
-	var full := SkillTree.capacity("power") + SkillTree.capacity("fortune") + SkillTree.capacity("guard")
+## Every tree full: the trees burst, keep what they gave, start again a point dearer a rank, and a
+## capstone's effect is not given twice.
+func _test_bursts() -> bool:
+	var full := SkillTree.total_capacity()
+	_check(full == 69, "the trees hold 69 ranks (%d)" % full)
 	var level := full + 1
 	var skills := Skills.new()
 	for tree: String in ["power", "fortune"]:
 		_fill(skills, tree, level)
-	_check(skills.why_not("titan", level) == SkillTree.FULL, "no rank past the most while a tree has room")
+	_check(not skills.can_burst() and not skills.burst(), "no burst while a tree has room")
+	_check(skills.why_not("titan", level) == SkillTree.FULL, "and no rank past the most")
 	_fill(skills, "guard", level)
-	_check(skills.points(level) == 0, "every tree full takes every point at level %d" % level)
-	_check(skills.why_not("titan", level) == "No skill points left", "then only the points are missing")
-
-	_check(SkillTree.rank_cost("sharpened_edge", 0) == 1 and SkillTree.rank_cost("titan", 0) == 1,
-			"a rank up to the most is a point")
-	_check(SkillTree.rank_cost("sharpened_edge", 5) == 1 and SkillTree.rank_cost("sharpened_edge", 6) == 2,
-			"past the root's most: 1, then 2")
-	_check(SkillTree.rank_cost("titan", 1) == 6 and SkillTree.rank_cost("titan", 2) == 12,
-			"past a capstone: 6, then 12")
-	_check(SkillTree.points_for("titan", 3) == 1 + 6 + 12, "the costs add up (%d)" % SkillTree.points_for("titan", 3))
-	for id: String in SkillTree.nodes_of("power"):
-		var paid := 0
-		for rank in 8:
-			paid += SkillTree.rank_cost(id, rank)
-		_check(SkillTree.points_for(id, 8) == paid, "%s: points_for is the sum of rank_cost" % id)
-
+	_check(skills.points(level) == 0 and skills.can_burst(), "every tree full takes every point at level %d" % level)
 	var damage := float(skills.flat()["damage"])
 	var boost := float(skills.percent()["damage"])
-	_check(skills.why_not("titan", level + 5) == "Needs 6 skill points", "five points are not enough (%s)"
-			% skills.why_not("titan", level + 5))
-	_check(skills.rank_up("titan", level + 6) and skills.points(level + 6) == 0, "six buy it")
-	_check(skills.rank_of("titan") == 2, "Titan holds two")
-	_check(float(skills.flat()["damage"]) == damage + 2 and float(skills.percent()["damage"]) == boost + 15,
-			"and adds its numbers again")
-	_check(skills.effects().count("giant_slayer") == 1, "but its effect once")
-	_check(skills.rank_up("sharpened_edge", level + 7) and skills.rank_up("sharpened_edge", level + 9),
-			"the root past its most for 1, then 2")
+	var effects := skills.effects()
 
-	# A Reset gives every point back, the overranks' too, and the other trees keep theirs.
+	_check(skills.burst() and skills.bursts == 1 and skills.ranks.is_empty(), "the trees burst and start again")
+	_check(float(skills.flat()["damage"]) == damage and float(skills.percent()["damage"]) == boost
+			and skills.effects() == effects, "keeping everything the burnt trees gave")
+	_check(skills.rank_cost() == 2 and skills.sunk() == full, "a rank now costs 2, and the burnt 69 stay spent")
+	_check(skills.points(level) == 0 and skills.why_not("sharpened_edge", level) == "No skill points left",
+			"nothing is handed back")
+	_check(skills.why_not("sharpened_edge", level + 1) == "Needs 2 skill points", "one point is not a rank")
+	_check(skills.rank_up("sharpened_edge", level + 2) and skills.points(level + 2) == 0, "two are")
+	_check(skills.spent("power") == 2 and skills.total_of("sharpened_edge") == 6, "spent in points, ranks stacked")
+	var edge := float(SkillTree.node("sharpened_edge")["flat"]["damage"])
+	_check(float(skills.flat()["damage"]) == damage + edge, "the new rank adds to the old tree's")
+
+	# The second tree's capstones: their numbers again, their effect not twice.
+	var second := level + 2 * full
+	for tree: String in SkillTree.trees():
+		_fill(skills, tree, second)
+	_check(skills.can_burst() and skills.points(second) == 0, "the second tree costs twice as much (%d)"
+			% skills.points(second))
+	_check(float(skills.percent()["damage"]) == 2 * boost, "and gives the first one's numbers again")
+	_check(skills.effects().count("giant_slayer") == 1, "but Giant Slayer once")
+	skills.burst()
+	_check(skills.rank_cost() == 3 and skills.sunk() == full * 3, "a third tree costs 3 a rank")
+
+	# A Reset gives back only this tree's points, at what they cost.
 	var inventory := Inventory.new()
-	inventory.level = level + 9
+	inventory.level = second + 10
 	inventory.skills = skills
 	inventory.gold = 1e30
-	_check(inventory.respec("fortune") and skills.points(inventory.level) == SkillTree.capacity("fortune"),
-			"a reset of a plain tree gives its points back")
-	_check(skills.rank_of("titan") == 2 and skills.why_not("titan", 1000) == SkillTree.FULL,
-			"Titan keeps its rank, and no more go past until every tree is full again")
+	skills.rank_up("scavenger", inventory.level)
+	_check(skills.spent("fortune") == 3 and inventory.respec("fortune") and skills.points(inventory.level) == 10,
+			"a reset hands back this tree's points and never a burnt one's")
 
-	# The save keeps a full tree's overranks and cuts a rank past the most anywhere else.
+	# The save keeps the bursts; a world's transcension starts them over.
+	skills.rank_up("scavenger", inventory.level)
 	_check(inventory.save(TEST_PATH), "saved")
 	var back := Inventory.load_from(TEST_PATH)
-	_check(back.skills.ranks == skills.ranks, "overranks survive the save (%s)" % [back.skills.ranks])
-	_check(Skills.from_dict({"scavenger": 9}, 99).ranks == {"scavenger": 5}, "a tree not full is cut down")
+	_check(back.skills.bursts == 2 and back.skills.ranks == skills.ranks
+			and back.skills.points(back.level) == skills.points(inventory.level), "the bursts survive the save")
+	_check(inventory.transcended().skills.bursts == 0, "and end with the world")
+	_check(Skills.from_dict({}, 10, 1).bursts == 0, "bursts a level cannot have paid for are forgotten")
+	# A version 29 save's ranks past the most are cut down, their points free again.
 	var file := FileAccess.open(TEST_PATH, FileAccess.WRITE)
-	file.store_string(JSON.stringify({"version": 23, "level": inventory.level, "xp": 0, "items": [],
-		"skills": inventory.skills.to_dict(), "skill_sunk": 69, "skill_transcends": 1}))
+	file.store_string(JSON.stringify({"version": 29, "level": 100, "xp": 0, "items": [],
+		"skills": {"sharpened_edge": 9}}))
 	file.close()
 	var legacy := Inventory.load_from(TEST_PATH)
-	_check(legacy.skills.points(legacy.level) == skills.points(inventory.level),
-			"a version 23 save's sunk points are free again")
+	_check(legacy.skills.ranks == {"sharpened_edge": 5} and legacy.skills.points(100) == 94,
+			"a version 29 save's overranks are free again")
+
+	# The page plays it: opened over full trees, it bursts them and saves.
+	var was := Settings.animations
+	Settings.animations = Settings.Anim.NONE
+	var player := Inventory.new()
+	player.level = level
+	for tree: String in SkillTree.trees():
+		_fill(player.skills, tree, level)
+	var page := SkillsPage.new(player, TEST_PATH, 1.0)
+	root.add_child(page)
+	await process_frame
+	_check(player.skills.bursts == 1 and Inventory.load_from(TEST_PATH).skills.bursts == 1,
+			"the page bursts full trees and saves it")
+	page.free()
+	Settings.animations = was
 	return true
 
 

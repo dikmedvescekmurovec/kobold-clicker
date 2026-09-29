@@ -22,6 +22,8 @@ uniform bool front = false;
 uniform float grow = 1.0;
 // 1 animates, 0 holds it still (animations turned down).
 uniform float speed = 1.0;
+// 0 to 1, a beam's own: shifts its clock and its sparks, so two beams side by side are not in step.
+uniform float seed = 0.0;
 
 // How flat the ring lies: its height as a share of its width.
 const float FLAT = 0.3;
@@ -52,8 +54,13 @@ vec4 over(vec4 under, vec4 add) {
 }
 
 void fragment() {
+	// Nothing until the find has landed: at 0 the pillar and ribbons would still draw a row of pixels
+	// at the foot, carried along the throw, and the column's smoothstep would have equal edges.
+	if (grow <= 0.0) {
+		discard;
+	}
 	vec2 px = floor(local) + 0.5;
-	float t = TIME * speed;
+	float t = TIME * speed + seed * 100.0;
 	float y = -px.y;
 	float tall = max(height * grow, 1.0);
 	float up = y / tall;
@@ -157,7 +164,7 @@ void fragment() {
 
 	// Sparks: one column in three carries one, climbing at its own rate round the foot of the beam.
 	if (sparks && front) {
-		float lane = px.x;
+		float lane = px.x + seed * 1000.0;
 		float rise = fract(hash(vec2(lane, 2.0)) + t * (0.3 + 0.4 * hash(vec2(lane, 1.0))));
 		float spark_y = rise * tall * 0.6;
 		if (hash(vec2(lane, 3.0)) > 0.66 && abs(px.x) < cover.x * 1.2 && abs(y - spark_y) < 0.5) {

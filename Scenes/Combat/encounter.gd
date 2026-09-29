@@ -497,6 +497,8 @@ var _attack_more := 0.0
 var xp_more := 0.0
 ## Whether `wear` has already taken the curses on, which it must do once however often it is called.
 var _cursed := false
+## Whether `wear` has already sent the Dreadmask's commons away, which it must do once as well.
+var _dreaded := false
 ## What keeps a blow off the clock (`taken`, `_struck_by`): two ratings, seconds off each blow, and
 ## seconds a landed hit of the player's wins back of what the blows took.
 var armor := 0.0
@@ -727,7 +729,28 @@ func tier_for(position: int) -> EnemyRoster.Tier:
 func wear(worn: Array, unique_ranks := {}) -> void:
 	effects = worn
 	ranks = unique_ranks
+	_take_dread()
 	_take_curses()
+
+
+## The Dreadmask: its number of commons fewer, less one for every ice wall inside the tile, taken off
+## the front of the lineup so the elites and the boss still come, and never the last body standing.
+## A fight on the land only -- a farm run has no count to shorten and the dungeon's depths are its own.
+func _take_dread() -> void:
+	if _dreaded or endless or dungeon or not "dread" in effects:
+		return
+	_dreaded = true
+	var fewer := int(_dial("dreadmask", "fewer")) - walls_inside(cell)
+	var at := 0
+	while fewer > 0 and at < lineup.size() and lineup.size() > 1:
+		if EnemyRoster.tier_of(lineup[at]) == EnemyRoster.Tier.COMMON:
+			lineup.remove_at(at)
+			health.remove_at(at)
+			fewer -= 1
+		else:
+			at += 1
+	enemies = lineup.size()
+	hp = health[0]
 
 
 ## One of a worn unique's numbers at the rank this fight was told (`ranks`), rank I if it was told none.

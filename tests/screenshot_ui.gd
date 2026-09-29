@@ -333,16 +333,11 @@ func _shoot_skills() -> void:
 	print("Saved ", ProjectSettings.globalize_path("user://ui_tooltip.png"))
 	root.warp_mouse(Vector2.ZERO)
 
-	# Every tree full and a few skills past their most, with the card over Titan, two ranks in.
+	# The trees burst once, the second tree begun, with the card over Titan: its numbers, no effect.
 	main.inventory.level = 100
 	main.inventory.skills = Skills.new()
-	for tree: String in SkillTree.trees():
-		for row in SkillTree.ROWS:
-			for id: String in SkillTree.nodes_of(tree):
-				if int(SkillTree.node(id)["row"]) == row:
-					while main.inventory.skills.rank_of(id) < int(SkillTree.node(id)["max_rank"]):
-						main.inventory.skills.rank_up(id, main.inventory.level)
-	for id: String in ["titan", "sharpened_edge", "sharpened_edge", "sharpened_edge", "battle_rhythm"]:
+	main.inventory.skills.bursts = 1
+	for id: String in ["sharpened_edge", "sharpened_edge", "sharpened_edge", "keen_eye", "scavenger"]:
 		main.inventory.skills.rank_up(id, main.inventory.level)
 	main.skills_page.open()
 	var away := InputEventMouseMotion.new()
@@ -357,8 +352,8 @@ func _shoot_skills() -> void:
 	for i in 2:
 		await process_frame
 	await RenderingServer.frame_post_draw
-	root.get_texture().get_image().save_png("user://ui_skills_overrank.png")
-	print("Saved ", ProjectSettings.globalize_path("user://ui_skills_overrank.png"))
+	root.get_texture().get_image().save_png("user://ui_skills_burst.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_skills_burst.png"))
 	main.queue_free()
 	await process_frame
 

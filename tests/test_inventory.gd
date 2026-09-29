@@ -4162,6 +4162,24 @@ func _test_achievements() -> bool:
 	player.add(ring)
 	player.equip(ring, player.equipment.sockets_for(ring)[0])
 	_check("ogres_knuckle" in Achievements.earn(player), "20 strength worn earns the Ogre's Knuckle")
+	# Into the Dark: the furthest wall ever broken, read off how far the land has reached.
+	player.reach(MapBuilder.START_LAND_RADIUS + 2 * MapBuilder.WALL_STEP)
+	_check(not "nightwalkers" in Achievements.earn(player), "the second wall is not the third")
+	player.reach(MapBuilder.START_LAND_RADIUS + 3 * MapBuilder.WALL_STEP)
+	_check("nightwalkers" in Achievements.earn(player) and Achievements.rank(player, "nightwalkers") == 1,
+			"the third wall earns the Nightwalkers")
+	_check(Achievements.text("nightwalkers", UniqueTable.PEAK) == "Break the sixth ice wall.",
+			"and rank IV asks for the sixth (%s)" % Achievements.text("nightwalkers", UniqueTable.PEAK))
+	# The boots reach the map through the inventory, from either doll, at the rank earned.
+	_check(player.dark_reach() == 1, "no boots, one step")
+	var boots := Item.rolled_unique("nightwalkers", rng, 1)
+	player.stash().items.append(boots)
+	player.stash().equip(boots, Equipment.Socket.BOOTS)
+	_check(player.dark_reach() == 5, "rank I on the heirlooms' doll, five")
+	player.achievements["nightwalkers"] = 3
+	_check(player.dark_reach() == 20, "rank III, twenty")
+	player.stash().unequip(Equipment.Socket.BOOTS)
+	player.achievements["nightwalkers"] = 1
 
 	# A fight: its counts on a run and a tile fight both, its streaks and feats on a tile fight only.
 	var run := Encounter.farm(Vector2i(3, 0), "grass")
@@ -4171,6 +4189,11 @@ func _test_achievements() -> bool:
 	Achievements.record(player, run)
 	_check(player.tally.get("crit_kills") == 5 and player.tally.get("kills:grass") == 7
 			and not player.tally.has("dry_streak"), "a run counts its kills and crits, not its streaks (%s)" % [player.tally])
+	# Dreaded: the kills on every ground together.
+	player.tick("kills:forest", int(Achievements.need_at("dreadmask", 1)) - 8)
+	_check(not "dreadmask" in Achievements.earn(player), "one kill short earns nothing")
+	player.tick("kills:dirt")
+	_check("dreadmask" in Achievements.earn(player), "and the last, on another ground, earns the Dreadmask")
 	var wall := Encounter.for_wall(Vector2i(11, 0))
 	wall.tally = {"dry_streak": 40}
 	wall.victory = true
@@ -4252,16 +4275,20 @@ func _test_achievements() -> bool:
 	var figures := Achievements.state(zealot)
 	_check(zealot.attributes()["dexterity"] > 0.0 and figures["dexterity"] == 0.0 and figures["zealot"] == 250.0
 			and figures["accord"] == 0.0, "the Brand counts for the fight and not for an ask (%s)" % [figures])
-	# Mastery: the trees filled, and its last rank past the most once all three are.
+	# Mastery: the trees filled, and its last rank for filling them twice.
 	var scholar := Inventory.new()
 	scholar.level = 500
 	for tree: String in SkillTree.trees():
 		for id: String in SkillTree.nodes_of(tree):
 			scholar.skills.ranks[id] = int(SkillTree.node(id)["max_rank"])
 	_check(Achievements.state(scholar)["mastery"] == float(SkillTree.trees().size()), "every tree full")
-	var first: String = SkillTree.nodes_of(SkillTree.trees()[0]).keys()[0]
-	scholar.skills.ranks[first] += Achievements.MASTERY_OVERRANKS
-	_check(Achievements.state(scholar)["mastery"] == float(UniqueTable.PEAK), "and ranks past the most on top")
+	scholar.skills.burst()
+	_check(Achievements.state(scholar)["mastery"] == float(SkillTree.trees().size()), "a burst counts all three")
+	for tree: String in SkillTree.trees():
+		for id: String in SkillTree.nodes_of(tree):
+			scholar.skills.ranks[id] = int(SkillTree.node(id)["max_rank"])
+	_check(Achievements.state(scholar)["mastery"] >= Achievements.need_at("sages_abacus", UniqueTable.PEAK),
+			"and filling them twice is its last rank")
 	_check(Achievements.state(Inventory.new())["carried"] == 0.0, "and a bag is counted piece by piece")
 
 	# The starters' own numbers, read by `stats()`.
@@ -4296,8 +4323,8 @@ func _test_achievements() -> bool:
 	await process_frame
 	_check(main.inventory.achievements == {"duelists_buckler": 1}, "a save that reaches one earns it")
 	_check(main._banner != null and _said_by(main._banner).contains("Sharp Eye")
-			and _said_by(main._banner).contains("Unlocks Duelist's Buckler") and main._banner_closable,
-			"on a banner naming it and its unique, its X up at once off a fight")
+			and _said_by(main._banner).contains("Unlocks Duelist's Buckler"),
+			"on a banner naming it and its unique")
 	_check(Inventory.load_from(TEST_PATH).achievements == {"duelists_buckler": 1}, "and it is saved")
 	_check(UniqueTable.ranks == {"duelists_buckler": 1}, "and the cards write its unique at that rank")
 	_check(main._achievements_button.visible and main._flashes.has("new_achievement"), "its button comes on, pulsing")
@@ -4463,28 +4490,23 @@ func _test_collection() -> bool:
 	main._on_loot_dropped(0, Item.rolled_unique("stonebreaker", drop_rng, 5))
 	await process_frame
 	_check(main._banner != null, "a unique new to the log raises its banner")
-	_check(not main._banner_closable and main._banner_head.get_child_count() == 1,
-			"with no way to put it down for the first five seconds")
-	# A click inside those five seconds says the player is fighting, so it goes at the end of them.
-	main._banner_clicked = true
-	main._on_banner_held(main._banner)
-	_check(main._banner == null, "a player who was clicking has it taken away at the end of them")
-	main._on_loot_dropped(0, Item.rolled_unique("stonebreaker", drop_rng, 5))
-	_check(main._banner == null, "a second copy of one already logged raises nothing")
-	main._on_loot_dropped(0, LootTable.roll("Baby Dragon", drop_rng, true, 5))
-	_check(main._banner == null, "and an ordinary find raises nothing")
-	# Nobody clicked: it grows an X instead of going, and stays until it is pressed or a swing lands.
-	main._on_loot_dropped(0, Item.rolled_unique("headsman", drop_rng, 5))
-	await process_frame
-	main._on_banner_held(main._banner)
-	_check(main._banner != null and main._banner_closable
-			and main._banner_head.get_child_count() == 2,
-			"a player who sat still gets an X, and it stays")
+	_check(main._banner_head.get_child_count() == 2, "its X up at once")
+	# A swing lands on the fight, never on the banner.
 	var swing := InputEventMouseButton.new()
 	swing.button_index = MOUSE_BUTTON_LEFT
 	swing.pressed = true
 	main._input(swing)
-	_check(main._banner == null, "and the next swing puts it down")
+	_check(main._banner != null, "a swing leaves it up")
+	await create_timer(main.BANNER_HOLD + 0.1).timeout
+	_check(main._banner == null, "and it goes by itself after its seconds")
+	main._on_loot_dropped(0, Item.rolled_unique("stonebreaker", drop_rng, 5))
+	_check(main._banner == null, "a second copy of one already logged raises nothing")
+	main._on_loot_dropped(0, LootTable.roll("Baby Dragon", drop_rng, true, 5))
+	_check(main._banner == null, "and an ordinary find raises nothing")
+	main._on_loot_dropped(0, Item.rolled_unique("headsman", drop_rng, 5))
+	await process_frame
+	(main._banner_head.get_child(1) as BaseButton).pressed.emit()
+	_check(main._banner == null, "and its X puts it down early")
 	main.queue_free()
 	_clear_save()
 	return true

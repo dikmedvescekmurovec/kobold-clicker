@@ -75,6 +75,18 @@ const TILE_GAP := 8
 const SETTLEMENT_KINDS: Array[String] = ["Village", "Town", "Fortress"]
 ## A terrain's name on the tile panel where its key capitalised is not a word for land.
 const TERRAIN_NAMES := {"grass": "Grassland", "dirt": "Barrens"}
+## The music: an `idle*` track of `MUSIC_DIR` on the map, a `battle*` one while a fight or the dungeon
+## is on the screen, picked at random each time the one gives way to the other. Read off the folder,
+## so a track dropped in is played with no line here.
+const MUSIC_DIR := "res://Sounds/Music"
+const IDLE_MUSIC := "idle"
+const BATTLE_MUSIC := "battle"
+## What a press of any button plays, and of a toggle (a button held down on its own, not a tab of a group).
+const BUTTON_SOUND := preload("res://Sounds/UI/click1.ogg")
+const TOGGLE_SOUND := preload("res://Sounds/UI/click4.ogg")
+## A side panel sliding in or out, and anything bought or sold.
+const PAGE_SOUND := preload("res://Sounds/UI/bookFlip2.ogg")
+const COINS_SOUND := preload("res://Sounds/UI/handleCoins.ogg")
 
 var towns: TownWorld
 var view: MapBuilder
@@ -87,10 +99,10 @@ const LEVEL_UP_FLASH := Color(1.0, 0.95, 0.75, 0.35)
 const LEVEL_UP_TIME := 1.6
 const LEVEL_UP_FONT := 48
 
-## The banner a unique new to the collection log raises. It is up for `BANNER_HOLD` whatever the
-## player does, then goes by the rule in `_on_banner_held`; `BANNER_GAP` is the air it keeps under the
-## fight's own top-centre column, in screen pixels.
-const BANNER_HOLD := 5.0
+## The banner a unique new to the collection log raises. It wears its X from the start and goes by
+## itself after `BANNER_HOLD`; `BANNER_GAP` is the air it keeps under the fight's own top-centre
+## column, in screen pixels.
+const BANNER_HOLD := 3.0
 const BANNER_WIDTH := ItemCard.WIDTH * 1.5
 const BANNER_FADE := 0.4
 const BANNER_GAP := 12.0
@@ -119,6 +131,14 @@ var _move_button: Button
 var _farm_button: Button
 ## What `_update_buttons` last greyed the fights for, so `_process` knows when the bag has crossed the cap.
 var _was_encumbered := false
+var _music: AudioStreamPlayer
+## Every track of `MUSIC_DIR`, looped, under the name it starts with (`IDLE_MUSIC`, `BATTLE_MUSIC`).
+var _tracks := {IDLE_MUSIC: [], BATTLE_MUSIC: []}
+var _button_sound: AudioStreamPlayer
+var _toggle_sound: AudioStreamPlayer
+var _page_sound: AudioStreamPlayer
+var _page_flipped_at := -1
+var _coins_sound: AudioStreamPlayer
 var _town_button: Button
 ## Down into the cave, on the cave's own tile: green, as Enter town is.
 var _cave_button: Button
@@ -186,8 +206,7 @@ var _item_card: ItemCard
 ## The player in the top-left corner, over the map and over a fight alike.
 var _character: CharacterPanel
 ## The banner under the fight's column, while one is up; null otherwise: a unique the log has never
-## held, or a bounty filled. `_banner_head` is the row its heading sits in, which is where the X goes
-## if one is ever needed.
+## held, or a bounty filled. `_banner_head` is the row its heading sits in, the X at its end.
 var _banner: Control
 ## What a bounty handed in paid, up over the town until Collect: a screen-wide catch with the verdict's
 ## wood panel in the middle of it.
@@ -195,9 +214,6 @@ var _paid: Control
 var _banner_head: HBoxContainer
 ## The toast over the last counted bounty kill, while it is up. The next one puts it down.
 var _toast: Control
-## Whether a left press has landed since it went up, and whether it may now be put down by one.
-var _banner_clicked := false
-var _banner_closable := false
 
 ## What the fight going on now has earned, and whether it is banked yet. Never null: between fights
 ## it is the last fight's, or an empty one, so `ledger.farming` can always be asked.
@@ -303,7 +319,47 @@ func _notification(what: int) -> void:
 		inventory.save(inventory_path)
 
 
+## Every button made from here on, in this scene or anywhere else in the tree, clicks when pressed.
+## Hooked before the scene's own children enter, so none is missed.
+func _enter_tree() -> void:
+	_button_sound = _sfx_player(BUTTON_SOUND)
+	_toggle_sound = _sfx_player(TOGGLE_SOUND)
+	_page_sound = _sfx_player(PAGE_SOUND)
+	_coins_sound = _sfx_player(COINS_SOUND)
+	get_tree().node_added.connect(_on_node_added)
+
+
+func _sfx_player(stream: AudioStream) -> AudioStreamPlayer:
+	var player := AudioStreamPlayer.new()
+	player.stream = stream
+	player.bus = Settings.SFX_BUS
+	player.max_polyphony = 4
+	return player
+
+
+func _on_node_added(node: Node) -> void:
+	if node is BaseButton:
+		node.pressed.connect(_on_any_button_pressed.bind(node))
+
+
+## In or out alike, and once a frame: one page swapped for another is one flip.
+func _on_panel_slid() -> void:
+	if _page_flipped_at != Engine.get_process_frames():
+		_page_flipped_at = Engine.get_process_frames()
+		_page_sound.play()
+
+
+## Asked at the press rather than as the button is made, which may set its toggle mode after.
+func _on_any_button_pressed(button: BaseButton) -> void:
+	var toggle := button.toggle_mode and button.button_group == null
+	(_toggle_sound if toggle else _button_sound).play()
+
+
 func _ready() -> void:
+	add_child(_button_sound)
+	add_child(_toggle_sound)
+	add_child(_page_sound)
+	add_child(_coins_sound)
 	# Two different nulls: no file at all is a first run, and a file that cannot be honoured stops.
 	# Generating a world in its place would write over it on the player's first step, and a map lost
 	# to a bad read is worse than an error message.
@@ -314,12 +370,23 @@ func _ready() -> void:
 	Settings.path = Settings.SAVE_PATH if inventory_path == Inventory.SAVE_PATH else ""
 	Settings.load_settings()
 	Settings.apply_audio()
+	_music = AudioStreamPlayer.new()
+	_music.bus = Settings.MUSIC_BUS
+	add_child(_music)
+	for file in ResourceLoader.list_directory(MUSIC_DIR):
+		for kind: String in _tracks:
+			if file.begins_with(kind):
+				var track: AudioStream = load(MUSIC_DIR.path_join(file))
+				track.loop = true
+				_tracks[kind].append(track)
+	_play_music(IDLE_MUSIC)
 	TownServices.show_all = Settings.show_all_services()
 	var problem: Array = []
 	inventory = Inventory.load_from(inventory_path, problem)
 	if not problem.is_empty():
 		_refuse_save("inventory", inventory_path, str(problem[0]))
 		return
+	inventory.traded.connect(_coins_sound.play)
 	# What every card writes a unique's numbers at, from the first card drawn.
 	UniqueTable.ranks = Achievements.ranks(inventory)
 	# Before anything below saves over it: the hour the player left is what the camp pays from.
@@ -359,6 +426,7 @@ func _ready() -> void:
 	map.dragged.connect(_on_map_dragged)
 	map.cell_aimed.connect(_on_cell_aimed)
 	view.arrived.connect(_on_player_arrived)
+	view.dark_reach = func() -> int: return inventory.dark_reach()
 	map.player.move_speed = func() -> float:
 		var speed := float(inventory.stats().get("move_speed", 0.0))
 		# An overfull bag slows the whole pace, whatever the boots add to it.
@@ -787,7 +855,9 @@ func _build_pages(layer: CanvasLayer) -> void:
 		layer.add_child(page)
 		# In from its own edge and back out to it, whatever shows or hides it (`Juice.slides`).
 		Juice.slides(page, page != town_page)
+		page.visibility_changed.connect(_on_panel_slid)
 	Juice.slides(_panel, false)
+	_panel.visibility_changed.connect(_on_panel_slid)
 	# On the character's layer, over the pages and over a fight (layer 2), so a find in the loot
 	# popup or under the verdict gets its card too. It takes no mouse, so it costs no swings.
 	_item_card = ItemCard.new(ui_scale)
@@ -858,7 +928,7 @@ func _is_new_unique(item: Item) -> bool:
 ## an `ItemSlot`, so the gold frame and its glint come for nothing. What that costs is one line -- the
 ## square has to leave `ItemSlot.GROUP` at once, or the one `ItemCard` finds it under the cursor and
 ## stands its own card over this one.
-func _announce_unique(item: Item, title := "Unique Found", closable := false) -> void:
+func _announce_unique(item: Item, title := "Unique Found") -> void:
 	var slot := ItemSlot.make(item)
 	slot.remove_from_group(ItemSlot.GROUP)
 	# What the piece *is* and the rule it bends, and none of its numbers: a banner is read in a glance
@@ -874,8 +944,6 @@ func _announce_unique(item: Item, title := "Unique Found", closable := false) ->
 		lines.append(ItemDetails.line(item.peak_text(), Palette.SLOT_TAN_DK, BANNER_WIDTH, true))
 	# The unique's own name colour, which is the half of the ramp picked to be read on cream.
 	_raise_banner(title, item.text_color(), slot, lines)
-	if closable:
-		_banner_x()
 
 
 ## A bounty filled: the monster's picture beside its name, the count and where to hand the work in, on
@@ -980,8 +1048,8 @@ func _tier_mark(tier: EnemyRoster.Tier) -> TextureRect:
 
 
 ## A banner under the fight's own column: `square` beside `lines` under a heading, on the cards'
-## cream, on the character's layer so it stands over the fight. Up for `BANNER_HOLD` whatever
-## happens, then `_on_banner_held` decides. Raised by a unique new to the log and by a bounty filled.
+## cream, on the character's layer so it stands over the fight. Its X is up at once and it goes by
+## itself after `BANNER_HOLD`. Raised by a unique new to the log, a bounty filled and an achievement.
 func _raise_banner(title: String, colour: Color, square: Control, lines: Array[Control]) -> void:
 	_close_banner()
 	# The banner says more than the toast before it did, and stands where it stood.
@@ -1013,6 +1081,11 @@ func _raise_banner(title: String, colour: Color, square: Control, lines: Array[C
 	var heading := UITheme.label(title, colour)
 	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_banner_head.add_child(heading)
+	var shut := UITheme.button("", "CloseButton", "Close")
+	shut.custom_minimum_size = Vector2(UITheme.icon_size("CloseButton"))
+	shut.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	shut.pressed.connect(_close_banner)
+	_banner_head.add_child(shut)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1026,10 +1099,8 @@ func _raise_banner(title: String, colour: Color, square: Control, lines: Array[C
 		rows.add_child(line)
 	layer.add_child(panel)
 	_banner = panel
-	_banner_clicked = false
-	_banner_closable = false
 	# Placed now, again once the labels have laid out -- with the sparks thrown from where it actually
-	# landed -- and again whenever it settles at another size, which is what the X at five seconds does.
+	# landed -- and again whenever it settles at another size.
 	panel.resized.connect(_place_banner)
 	_place_banner()
 	_place_banner.call_deferred(Settings.animations == Settings.Anim.DEFAULT)
@@ -1038,14 +1109,12 @@ func _raise_banner(title: String, colour: Color, square: Control, lines: Array[C
 		var spring := create_tween()
 		spring.tween_property(panel, "scale", Vector2(ui_scale, ui_scale), 0.25).set_trans(
 				Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	# Through a weak reference, not `bind(panel)`: a banner put down before its five seconds has been
-	# freed by then, and a freed Object handed to a `Control` parameter (or captured by a lambda) is an
-	# error logged; a weak reference to it is null and nothing else.
+	# Through a weak reference, not `bind(panel)`: a banner put down early has been freed by then, and a
+	# freed Object captured by a lambda is an error logged; a weak reference to it is null and nothing else.
 	var held: WeakRef = weakref(panel)
 	get_tree().create_timer(BANNER_HOLD).timeout.connect(func() -> void:
-		var alive: Control = held.get_ref()
-		if alive != null:
-			_on_banner_held(alive))
+		if _banner != null and _banner == held.get_ref():
+			_close_banner())
 
 
 ## Centred under the fight's top column, which is the one thing it must not cover. Run again whenever
@@ -1070,30 +1139,8 @@ func _place_banner(spark := false) -> void:
 				Palette.GOLD, 28, 220.0, 3.0, 0.7)
 
 
-## The five seconds are up. Someone who was swinging through them has read it or does not care, so it
-## goes; someone who stopped to read gets an X, and from then on the next swing puts it down as well.
-func _on_banner_held(panel: Control) -> void:
-	if _banner != panel or _banner_closable:
-		return
-	if _banner_clicked:
-		_close_banner()
-		return
-	_banner_x()
-
-
-## The banner's X, and from then on the next click anywhere puts it down as well.
-func _banner_x() -> void:
-	_banner_closable = true
-	var shut := UITheme.button("", "CloseButton", "Close")
-	shut.custom_minimum_size = Vector2(UITheme.icon_size("CloseButton"))
-	shut.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	shut.pressed.connect(_close_banner)
-	# The X widens the heading; `resized` is what centres the panel again on its new size.
-	_banner_head.add_child(shut)
-
-
-## Puts it down, from the timer, the X, a swing past the five seconds, another banner, or the fight
-## ending -- so it is never left standing over a verdict.
+## Puts it down, from the timer, the X, another banner, or the fight ending -- so it is never left
+## standing over a verdict.
 ## What a bounty paid, laid out as a fight's verdict is and arriving the way it does: the pages' panel
 ## with the word on its green bar, the monster, the sums counting up behind their marks, and the orbs
 ## and the piece popping in on the bag's light panel. It is paid already -- Collect only puts the
@@ -1195,8 +1242,6 @@ func _close_banner() -> void:
 	var panel := _banner
 	_banner = null
 	_banner_head = null
-	_banner_clicked = false
-	_banner_closable = false
 	if Settings.animations == Settings.Anim.NONE:
 		panel.queue_free()
 		return
@@ -1408,11 +1453,10 @@ func _on_farm_pressed() -> void:
 func _walk_to_fight(cell: Vector2i, farming: bool) -> void:
 	_fight_target = cell
 	_fight_farms = farming
-	_retreat_cell = view.player_cell
+	# The charted tile they step onto it from, not where the walk began: never a tile of a walk into
+	# the dark, which is not theirs until the fight is won.
+	_retreat_cell = view.player_cell if farming else view.chart_from(cell)
 	var route: Array[Vector2i] = view.move_to(cell) if farming else view.walk_onto(cell)
-	# The charted tile they step onto it from, not where the walk began.
-	if not farming and route.size() > 1:
-		_retreat_cell = route[-2]
 	print("Walking onto %s to %s it, %d tile(s) away" % [cell, "farm" if farming else "chart", route.size()])
 	_update_buttons()
 
@@ -1550,6 +1594,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	_combat.place = view.name_of(cell)
 	_combat.xp_target = _character.xp_point()
 	_combat.begin(fight, cell, ui_scale, view.area_variant(cell))
+	_play_music(BATTLE_MUSIC)
 	# The map keeps its state but stops running, so nothing walks on underneath the fight.
 	map.hide()
 	map.process_mode = Node.PROCESS_MODE_DISABLED
@@ -1584,6 +1629,7 @@ func _on_dungeon_pressed() -> void:
 	add_child(_combat)
 	_combat.place = DUNGEON_NAME
 	_combat.begin(fight, Vector2i.ZERO, ui_scale)
+	_play_music(BATTLE_MUSIC)
 	map.hide()
 	map.process_mode = Node.PROCESS_MODE_DISABLED
 	_close_town()
@@ -1598,12 +1644,23 @@ func _on_dungeon_finished(_won: bool) -> void:
 	_bank_depths()
 	_combat.queue_free()
 	_combat = null
+	_play_music(IDLE_MUSIC)
 	map.process_mode = Node.PROCESS_MODE_INHERIT
 	map.show()
 	_show_corner(true)
 	if map.selected_cell != HexMap.NO_CELL:
 		_panel.show()
 	_update_buttons()
+
+
+## A random track of `kind` from its start, unless one of that kind is already playing, so a retried
+## fight's music carries on through the close and the open.
+func _play_music(kind: String) -> void:
+	var tracks: Array = _tracks[kind]
+	if tracks.is_empty() or (_music.playing and _music.stream in tracks):
+		return
+	_music.stream = tracks.pick_random()
+	_music.play()
 
 
 ## Writes down the depths the descent that is open has won, if it has won any. On the way out of it
@@ -1633,6 +1690,8 @@ func _on_combat_finished(won: bool, cell: Vector2i, retrying := false) -> void:
 	ledger.bank_kills(kills)
 	_combat.queue_free()
 	_combat = null
+	if not retrying:
+		_play_music(IDLE_MUSIC)
 	# Gems still in the air when the fight closed never arrive, so the panel is put back on the ledger.
 	_sync_character()
 	map.process_mode = Node.PROCESS_MODE_INHERIT
@@ -1719,10 +1778,12 @@ func _mods_of(cell: Vector2i) -> Array[String]:
 func _on_combat_retry(cell: Vector2i) -> void:
 	_on_combat_finished(false, cell, true)
 	# Under No Second Chances the loss just ended the world, and there is no second go.
-	if _transcend_page != null:
-		return
-	map.select_cell(cell)
-	_on_chart_pressed()
+	if _transcend_page == null:
+		map.select_cell(cell)
+		_on_chart_pressed()
+	# A retry that did not open a fight (a full bag, No Second Chances) is back on the map.
+	if _combat == null:
+		_play_music(IDLE_MUSIC)
 
 
 ## The player walks to the tile; the tile panel's buttons stay hidden until they get there.
@@ -2254,8 +2315,6 @@ func _announce_achievements(ids: Array[String]) -> void:
 	if ids.size() == 1:
 		title = "Achievement" if Achievements.rank(inventory, ids[0]) <= 1 else "Rank Up"
 	_raise_banner(title, piece.text_color(), slot, lines)
-	if _combat == null:
-		_banner_x()
 
 
 func _on_character_pressed() -> void:
@@ -2442,14 +2501,6 @@ func _transcend() -> void:
 ## further down the tree -- except under a tip, where it is not processing and the tip is what closes.
 func _input(event: InputEvent) -> void:
 	Cursors.twitch(get_tree(), event)
-	# A swing decides how the unique banner goes away: one in its first five seconds closes it at the
-	# end of them, one after that closes it there and then. Never marked handled, so the click still
-	# reaches the fight and costs the player nothing.
-	if (_banner != null and event is InputEventMouseButton and event.pressed
-			and event.button_index == MOUSE_BUTTON_LEFT):
-		_banner_clicked = true
-		if _banner_closable:
-			_close_banner()
 
 
 func _unhandled_input(event: InputEvent) -> void:

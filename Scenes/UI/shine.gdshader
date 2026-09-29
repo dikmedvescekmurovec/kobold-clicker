@@ -14,7 +14,8 @@ void vertex() {
 }
 
 void fragment() {
-	vec4 base = texture(TEXTURE, UV);
+	// Times COLOR, the node's modulate, which writing COLOR would otherwise throw away.
+	vec4 base = texture(TEXTURE, UV) * COLOR;
 	// Snapped to whole source pixels so the band is pixel art, not a smear.
 	vec2 p = floor(local) / side;
 	// Sweeps from off the top-left to off the bottom-right over the first third of the period.

@@ -11,6 +11,9 @@ const SAVE_PATH := "user://settings.cfg"
 const SECTION := "settings"
 const MUSIC_BUS := "Music"
 const SFX_BUS := "SFX"
+## How far every sound effect sits under its file's own level: the files hold how loud each is beside
+## the others (`tools/sound_levels.py`), and this is how loud they all are beside the music.
+const SFX_DB := -6.0
 
 ## How much a fight throws about. LOW is one coin and one gem a body, numbers that do not pop, and no
 ## shake or freeze; NONE throws and writes nothing at all, and what was earned still reaches its counter.
@@ -125,4 +128,6 @@ static func apply_audio() -> void:
 			index = AudioServer.bus_count
 			AudioServer.add_bus()
 			AudioServer.set_bus_name(index, bus[0])
+			if bus[0] == SFX_BUS:
+				AudioServer.set_bus_volume_db(index, SFX_DB)
 		AudioServer.set_bus_mute(index, not bus[1])

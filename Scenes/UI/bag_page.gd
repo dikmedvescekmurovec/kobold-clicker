@@ -397,7 +397,7 @@ func refresh() -> void:
 				slot.add_child(_upgrade_mark())
 			grid.add_child(slot)
 	_count.text = ("%d to spend" % _purse.super_orbs if _heirlooms and _transcending
-			else str(inventory.total()) if _heirlooms
+			else "" if _heirlooms
 			else "%d / %d" % [inventory.total(), inventory.capacity()])
 	# Rust a few squares early: a full bag is a fight throwing finds away, and that should be seen coming.
 	_count.add_theme_color_override("font_color", Palette.RUST
@@ -658,7 +658,7 @@ func _clear_level(level: int, uniques: bool) -> void:
 func _sell_level(level: int, uniques: bool) -> void:
 	var gone := inventory.discard_level(level, uniques)
 	var paid := TownPrices.sell_total(gone)
-	_purse.gold += paid
+	_purse.sell_for(paid)
 	print("Sold %d item(s) at level %d for %s gold"
 			% [gone.size(), level, BigNumber.format(paid)])
 	_save()
@@ -914,7 +914,7 @@ func _on_discard_pressed(item: Item) -> void:
 func _on_sell_pressed(item: Item) -> void:
 	var price := TownPrices.sell_price(item)
 	if inventory.remove(item):
-		_purse.gold += price
+		_purse.sell_for(price)
 		print("Sold %s (%s, level %d) for %s gold"
 				% [item.type, item.rarity_name(), item.level, BigNumber.format(price)])
 		_save()

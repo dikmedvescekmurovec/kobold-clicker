@@ -10,8 +10,8 @@ extends RefCounted
 ## **A camp is not a second economy.** What it pays is the tile's own farm run played actively --
 ## `Encounter.farm` armed from what the player wears, clicked at `CLICK_RATE` -- sampled here
 ## (`rates`) and cut to `IDLE_SHARE` of it. So every dial that moves what a tile is worth moves a
-## camp with it, and the one figure here is the share: a full camp (`MAX_SECONDS`, 8 h) pays what an
-## hour of that play pays.
+## camp with it, and the one figure here is the share: a full camp (`MAX_SECONDS`, 8 h) pays what
+## half an hour of that play pays.
 ##
 ## `ponytail:` sampling rather than playing out the whole night. A night is thousands of kills and
 ## the run's lineup grows one entry per body; the sample keeps the cost flat at a few thousand
@@ -32,8 +32,9 @@ const SAMPLE_STEP := 1.0 / 30.0
 const MAX_SECONDS := 8.0 * 3600.0
 ## The clicks a second the sample plays at: an attentive player, the middle of the balance tables'.
 const CLICK_RATE := 5.0
-## What a camp pays of that active play: a full camp is worth one hour of it.
-const IDLE_SHARE := 3600.0 / MAX_SECONDS
+## What a camp pays of that active play: a full camp is worth half an hour of it (an hour until the
+## user halved it, 2026-09-29: a night took a level-30 hero to 70).
+const IDLE_SHARE := 1800.0 / MAX_SECONDS
 
 ## The keys of the drawer `make` builds.
 ## The Restless curse: a camp that fills in `RESTLESS_SECONDS` and pays `RESTLESS_PAY` times over.

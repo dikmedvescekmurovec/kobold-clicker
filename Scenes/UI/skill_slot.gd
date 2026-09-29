@@ -92,6 +92,22 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2(-RING, -RING), size + Vector2(RING, RING) * 2), Palette.GOLD, false, RING)
 
 
+## The glint a unique's frame wears (`ItemSlot`), sweeping once a `period` without end: the trees about
+## to burst. The tween is the slot's, so it dies when the tree is redrawn.
+func glint(period: float) -> void:
+	var shine := ShaderMaterial.new()
+	shine.shader = ItemSlot.SHINE
+	shine.set_shader_parameter("side", float(SIDE))
+	_icon.material = shine
+	create_tween().set_loops().tween_method(
+		func(at: float) -> void: shine.set_shader_parameter("progress", at), 0.0, 1.0, period)
+
+
+## The glint off again: a burst tree lies black.
+func stop_glint() -> void:
+	_icon.material = null
+
+
 ## A press is passed on whatever state the skill is in: whether it takes a point is `Skills`' to
 ## decide, and a press that does nothing still leaves the card saying why.
 func _gui_input(event: InputEvent) -> void:

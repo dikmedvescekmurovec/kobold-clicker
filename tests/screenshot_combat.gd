@@ -158,8 +158,7 @@ func _shoot_fight() -> void:
 
 	# The banner a unique new to the collection log raises, under the fight's own column: `_combat` is
 	# set by hand because this fight was built here and not through `_open_fight`. Shot once the flash
-	# and the spring have settled, so what the shot says is where it stands and how it reads, and then
-	# again with the X the five seconds leave on one nobody clicked through.
+	# and the spring have settled, so what the shot says is where it stands and how it reads.
 	main._combat = combat
 	var prize_rng := RandomNumberGenerator.new()
 	prize_rng.seed = WORLD_SEED
@@ -169,8 +168,6 @@ func _shoot_fight() -> void:
 	main._on_loot_dropped(0, Item.rolled_unique("stonebreaker", prize_rng, 8))
 	await create_timer(0.7).timeout
 	await _save(combat, "combat_unique.png")
-	main._on_banner_held(main._banner)
-	await _save(combat, "combat_unique_held.png")
 	main._close_banner()
 	# Let it finish fading, or it hangs over the next shot.
 	await create_timer(0.5).timeout

@@ -20,6 +20,8 @@ const LOOKS := {
 }
 ## Seconds the beam takes to shoot up to its height once the find has landed.
 const RISE := 0.3
+## Seconds it takes to sink back into the ground once the find is picked up (`collapse`).
+const FALL := 0.15
 
 
 ## Whether `rarity` stands a beam at all.
@@ -37,6 +39,8 @@ static func make(rarity: int, colour: Color, landed: float, cover: Vector2) -> N
 	var half := cover.x * 1.1 * 1.6 + 2.0
 	var top: float = -look.height - 2.0
 	var bottom := half * 0.3 + 2.0
+	# One seed for both layers, or a ribbon's near turns would not meet its far ones.
+	var seed := randf()
 	for front in [false, true]:
 		var material := ShaderMaterial.new()
 		material.shader = SHADER
@@ -47,6 +51,7 @@ static func make(rarity: int, colour: Color, landed: float, cover: Vector2) -> N
 			material.set_shader_parameter(key, look[key])
 		material.set_shader_parameter("speed", 1.0 if Settings.animations == Settings.Anim.DEFAULT else 0.0)
 		material.set_shader_parameter("grow", 0.0)
+		material.set_shader_parameter("seed", seed)
 		var layer := Polygon2D.new()
 		layer.name = "Front" if front else "Back"
 		layer.polygon = PackedVector2Array([Vector2(-half, top), Vector2(half, top),
@@ -57,3 +62,12 @@ static func make(rarity: int, colour: Color, landed: float, cover: Vector2) -> N
 		layer.tree_entered.connect(func() -> void:
 			layer.create_tween().tween_property(material, "shader_parameter/grow", 1.0, RISE) 					.set_delay(landed).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT), CONNECT_ONE_SHOT)
 	return beam
+
+
+## Sinks a beam `make` built back into its foot over `FALL`, then frees it.
+static func collapse(beam: Node2D) -> void:
+	var fall := beam.create_tween().set_parallel(true)
+	for layer: Polygon2D in beam.get_children():
+		fall.tween_property(layer.material, "shader_parameter/grow", 0.0, FALL) \
+				.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	fall.chain().tween_callback(beam.queue_free)

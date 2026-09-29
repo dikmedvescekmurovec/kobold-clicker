@@ -15,6 +15,7 @@ const SCRATCH_MAP := "user://test_combat_map.json"
 func _run() -> void:
 	_clear_saves()
 	_check(_test_lineup() == true, "lineup tests ran to the end")
+	_check(_test_the_dreadmask() == true, "dreadmask tests ran to the end")
 	_check(_test_health() == true, "health tests ran to the end")
 	_check(_test_a_won_fight() == true, "won fight tests ran to the end")
 	_check(_test_the_ice_wall() == true, "ice wall tests ran to the end")
@@ -477,6 +478,51 @@ func _test_lineup() -> bool:
 	return true
 
 
+## The Dreadmask: its number of commons fewer off the front of a fight on the land, one fewer for every
+## wall inside the tile, the elites and the boss still coming, once however often the fight is told;
+## never a farm run, the dungeon or the ice wall.
+func _test_the_dreadmask() -> bool:
+	var tiers := func(fight: Encounter) -> Array:
+		return Array(fight.lineup).map(func(enemy: String) -> EnemyRoster.Tier: return EnemyRoster.tier_of(enemy))
+	var inside := Vector2i(3, 4)
+	var plain := Encounter.for_tile(inside, "grass")
+	var dread := Encounter.for_tile(inside, "grass")
+	dread.wear(["dread"], {"dreadmask": 2})
+	dread.wear(["dread"], {"dreadmask": 2})
+	_check(dread.enemies == Encounter.ENEMIES - 4 and dread.lineup.size() == dread.enemies
+			and dread.health.size() == dread.enemies, "rank II inside the first wall is four fewer, once (%d)" % dread.enemies)
+	_check(dread.lineup == plain.lineup.slice(4) and dread.hp == dread.health[0],
+			"the first four commons go and the fight opens on the next")
+	_check(tiers.call(dread)[-1] == EnemyRoster.Tier.ELITE, "the elite still ends it")
+	# Past two walls, two fewer at rank II; past four, none.
+	var two_out := MapBuilder.CENTER + Vector2i(MapBuilder.START_LAND_RADIUS + 1 + MapBuilder.WALL_STEP + 2, 0)
+	_check(Encounter.walls_inside(two_out) == 2, "%s is past two walls" % two_out)
+	var past := Encounter.for_tile(two_out, "grass")
+	past.wear(["dread"], {"dreadmask": 2})
+	_check(past.enemies == Encounter.ENEMIES - 2, "two walls in, rank II is two fewer (%d)" % past.enemies)
+	var far := Encounter.for_tile(two_out + Vector2i(2 * MapBuilder.WALL_STEP, 0), "grass")
+	far.wear(["dread"], {"dreadmask": 2})
+	_check(far.enemies == Encounter.ENEMIES, "four walls in, none")
+	# Rank IV inside the first wall asks for more commons than there are: the elite alone is left.
+	var all := Encounter.for_tile(inside, "grass")
+	all.wear(["dread"], {"dreadmask": 4})
+	_check(tiers.call(all) == [EnemyRoster.Tier.ELITE], "rank IV leaves the elite alone (%s)" % [tiers.call(all)])
+	var siege := Encounter.for_tile(inside, "grass", "village")
+	var commons: int = tiers.call(siege).count(EnemyRoster.Tier.COMMON)
+	siege.wear(["dread"], {"dreadmask": 4})
+	_check(siege.enemies == Encounter.SETTLEMENT["enemies"] - mini(commons, 10)
+			and tiers.call(siege)[-1] == EnemyRoster.Tier.BOSS, "a settlement keeps its elites and its boss")
+	var run := Encounter.farm(inside, "grass")
+	run.wear(["dread"], {"dreadmask": 4})
+	var wall := Encounter.for_wall(MapBuilder.CENTER + Vector2i(MapBuilder.START_LAND_RADIUS + 1, 0))
+	wall.wear(["dread"], {"dreadmask": 4})
+	var down := Encounter.for_dungeon()
+	down.wear(["dread"], {"dreadmask": 4})
+	_check(run.lineup.size() == 1 and Array(wall.lineup) == [Encounter.WALL_NAME] and down.lineup.size() == 1,
+			"a farm run, the ice wall and the dungeon are left as they were")
+	return true
+
+
 ## What a body is carrying: one gold at the very middle, growing with the walk both ways at once,
 ## and worth what the body itself was worth to kill.
 func _test_gold() -> bool:
@@ -785,8 +831,24 @@ func _test_thrown_finds() -> void:
 	_check(combat.get_child(combat.get_child_count() - 1).get_child_count() == 0,
 			"and a cheap one carries no beam")
 	combat._on_orb_dropped(4, "Orb of Exalted")
-	_check(combat.get_child(combat.get_child_count() - 1).get_child_count() == 1,
-			"but a good one does")
+	var orb := combat.get_child(combat.get_child_count() - 1) as Node2D
+	_check(orb.get_child_count() == 1, "but a good one does")
+
+	# Its two layers share one seed, or a ribbon's turns would not meet; picked up, the find leaves
+	# its beam on the arena to sink away and free itself.
+	if orb.get_child_count() == 1:
+		var beam := orb.get_child(0) as Node2D
+		_check(beam.get_node("Back").material.get_shader_parameter("seed")
+				== beam.get_node("Front").material.get_shader_parameter("seed"), "one seed a beam")
+		combat._fly_to_counter(orb)
+		_check(beam.get_parent() == combat and orb.get_child_count() == 0,
+				"a find picked up leaves its beam behind")
+		# Polled rather than timed to `FALL`: a headless run's tweens can lag the timer's clock.
+		for i in 40:
+			if not is_instance_valid(beam):
+				break
+			await create_timer(0.05).timeout
+		_check(not is_instance_valid(beam), "and the beam is gone once it has sunk")
 
 	# The toasts are gone, so nothing may still be reaching for them.
 	_check(not ("_toasts" in combat), "there is no toast left to raise")

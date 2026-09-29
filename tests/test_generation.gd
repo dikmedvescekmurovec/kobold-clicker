@@ -19,6 +19,7 @@ func _run() -> void:
 	_check(_test_roads() == true, "road tests ran to the end")
 	_check(_test_map_builder() == true, "map builder tests ran to the end")
 	_check(_test_sight() == true, "sight tests ran to the end")
+	_check(_test_dark_reach() == true, "dark reach tests ran to the end")
 	_check(_test_ring_towns() == true, "ring town tests ran to the end")
 	_check(_test_tile_levels() == true, "tile level tests ran to the end")
 	_check(_test_map_saving() == true, "map save tests ran to the end")
@@ -659,6 +660,73 @@ func _test_blind_charting() -> bool:
 			walled += 1
 	_check(walled > 0, "the Ring of Walls' first wall ring was looked at")
 	view.wall_step = MapBuilder.WALL_STEP
+	map.queue_free()
+	return true
+
+
+## The Nightwalkers: with a reach past 1, a tile that many steps from the charted land can be charted,
+## the walk onto it crosses the dark, and the land it crossed is charted with it; a fight lost out there
+## walks back out the way it came; and nothing a walk crosses is a thing to fight for.
+func _test_dark_reach() -> bool:
+	var map: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
+	root.add_child(map)
+	var view := MapBuilder.create(map, TownWorld.generate(WORLD_SEED), Vector2i(128, 128), 99)
+	# A straight way out from the centre, the one tile charted at the start, through five of open land.
+	var line: Array[Vector2i] = []
+	for edge: HexGrid.Edge in HexGrid.EDGES:
+		var cells: Array[Vector2i] = [MapBuilder.CENTER]
+		for i in 5:
+			cells.append(HexGrid.neighbor(cells[-1], edge))
+		if cells.slice(1).all(func(cell: Vector2i) -> bool: return view._crossable(cell)):
+			line = cells
+			break
+	_check(line.size() == 6, "a way out through open land was found")
+	if line.size() != 6:
+		map.queue_free()
+		return true
+	var far := line[4]
+	_check(view.reach() == 1 and not view.can_chart(far), "with no reach, four steps into the dark is out of it")
+	var reach := [1]
+	view.dark_reach = func() -> int: return reach[0]
+	reach[0] = 3
+	_check(not view.can_chart(far), "three steps' reach falls one short")
+	reach[0] = 4
+	_check(view.can_chart(far) and not view.can_chart(line[5]), "four reaches it, the hover asking again, and no further")
+	_check(view.chart_from(far) == line[0], "it is charted from the charted tile the dark begins at")
+
+	var route := view.walk_onto(far)
+	_check(route == ([line[1], line[2], line[3], line[4]] as Array[Vector2i]),
+			"the walk goes from the edge of the charted land on across the dark (%s)" % [route])
+	map.player.finish_walk()
+	_check(view.player_cell == far and not view.charted(line[2]), "they stand on it, the dark behind them still dark")
+	# A fight lost out there: the way back crosses the dark they came by, and ends it.
+	_check(view.move_to(line[0]) == ([line[3], line[2], line[1], line[0]] as Array[Vector2i]),
+			"a lost fight walks back out the way it came")
+	map.player.finish_walk()
+	_check(view._trail.is_empty() and view.route_to(far).is_empty(),
+			"and once on charted land again, the dark is no road")
+
+	# Won: the tile and the land crossed to it are charted, each seen round.
+	view.walk_onto(far)
+	map.player.finish_walk()
+	_check(view.chart(far, 1) > 0, "winning it charts it")
+	_check(line.slice(0, 5).all(func(cell: Vector2i) -> bool: return view.charted(cell))
+			and not view.charted(line[5]), "and every tile crossed to it, and not the one past it")
+	for cell: Vector2i in HexGrid.neighbors(line[2]):
+		_check(view.seen(cell), "the land beside the way is seen (%s)" % cell)
+	_check(not view.move_to(MapBuilder.CENTER).is_empty(), "and it is a road home like any charted land")
+	map.player.finish_walk()
+
+	# A settlement, a chest and the cave are fought for, so no walk crosses one; one can still be the goal.
+	reach[0] = 40
+	view.can_chart(MapBuilder.CENTER)
+	_check(view._chartable.size() > 50, "forty steps reach far into the dark (%d tiles)" % view._chartable.size())
+	for cell: Vector2i in view._chartable:
+		var path := view._dark_path(cell)
+		_check(path.size() >= 2 and view.charted(path[0]) and path[-1] == cell, "%s has a way in" % cell)
+		for step: Vector2i in path.slice(1, -1):
+			_check(view.town_tier(step) == -1 and not view.has_chest(step) and step != view.cave
+					and view.is_land(step), "the way to %s crosses open land only (%s)" % [cell, step])
 	map.queue_free()
 	return true
 

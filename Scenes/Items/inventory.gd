@@ -67,7 +67,9 @@ const SAVE_PATH := "user://inventory.json"
 ## the log but must be earned again to fall (the user's ruling).
 ## 29 makes `achievements` a rank each (id -> 1..4); a version 28 save's list is rank I of each, and
 ## the walls it has broken this world start the lifetime count Thaw now asks for (`tally.walls`).
-const VERSION := 29
+## 30 adds `skill_bursts`, how often every tree has been filled and burst this world, and drops the
+## ranks past a skill's most: a version 29 save's are cut to the most and their points are free again.
+const VERSION := 30
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -127,8 +129,17 @@ var tips: Array[String] = []
 ## than a thing, so it never weighs the bag down. It lives
 ## here rather than beside the map because it is carried, not explored. A whole number in a double,
 ## for the reason every growing quantity is one (`BigNumber`): a purse climbs exponentially with the
-## walk and would pass int64 out past the two hundredth hex.
-var gold := 0.0
+## walk and would pass int64 out past the two hundredth hex. Every drop in it is a purchase, and says so.
+var gold := 0.0:
+	set(value):
+		var paid := value < gold
+		gold = value
+		if paid:
+			traded.emit()
+
+## Gold changed hands: something was bought (any drop in the purse) or sold (`sell_for`). The main
+## scene's coins.
+signal traded
 
 ## Every enemy the player has ever killed. It is what holds orbs back until `OrbTable.FIRST_ORB_KILLS`,
 ## and uniques until `UniqueTable.FIRST_UNIQUE_KILLS`.
@@ -276,6 +287,12 @@ func capacity() -> int:
 	if keeper == null and "packmule" in effects() and _peak("packmule"):
 		return CAPACITY + PACKMULE_ROOM
 	return CAPACITY
+
+
+## How many steps from the charted land a tile can be charted (`MapBuilder.dark_reach`): 1, the tile
+## beside it, or the Nightwalkers' reach at the player's rank while they are worn on either doll.
+func dark_reach() -> int:
+	return int(_dial("nightwalkers", "tiles")) if "nightwalker" in effects() else 1
 
 
 ## How many more loose items fit. Never negative, even for a bag over the cap.
@@ -932,6 +949,13 @@ func note_unique(id: String) -> bool:
 	return true
 
 
+## A sale's takings into the purse. Gold that comes any other way (a fight, a camp, a bounty) is
+## added straight on and says nothing.
+func sell_for(price: float) -> void:
+	gold += price
+	traded.emit()
+
+
 ## What resetting `tree` would cost now.
 func respec_cost(tree: String) -> float:
 	return SkillTree.respec_cost(level, skills.spent(tree))
@@ -987,6 +1011,7 @@ func save(path := SAVE_PATH) -> bool:
 		"level": level,
 		"xp": xp,
 		"skills": skills.to_dict(),
+		"skill_bursts": skills.bursts,
 		"towns": towns.to_dict(),
 		"orbs": orbs,
 		"items": saved,
@@ -1100,7 +1125,10 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	inventory.add_xp(maxi(0, int(saved_xp)) if typeof(saved_xp) in [TYPE_INT, TYPE_FLOAT] else 0)
 	# Version 8 knew nothing about skills: an absent key is nothing learned. Read after the level,
 	# because what a save may have spent is counted off it.
-	inventory.skills = Skills.from_dict(data.get("skills", {}), inventory.level)
+	# Version 30 added the bursts; an absent key is none.
+	var bursts: Variant = data.get("skill_bursts", 0)
+	inventory.skills = Skills.from_dict(data.get("skills", {}), inventory.level,
+			int(bursts) if typeof(bursts) in [TYPE_INT, TYPE_FLOAT] else 0)
 	# Version 9 knew nothing about towns, and an absent key reads as no settlement walked into yet --
 	# which is what every save had before there was anything in one to do.
 	inventory.towns = TownState.from_dict(data.get("towns", {}))

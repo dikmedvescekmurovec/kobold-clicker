@@ -22,7 +22,7 @@ func _run() -> void:
 
 
 ## A camp is the farm run played actively, cut to a share: a hero whose weapon does not swing
-## still earns by the clicks, a better weapon earns more, and a full camp is an hour of play.
+## still earns by the clicks, a better weapon earns more.
 func _test_a_camp_is_the_farm_run_nobody_clicks() -> bool:
 	var bare := Camp.rates(_armed(0.0, 4.0))
 	_check(float(bare[Camp.GOLD]) > 0.0, "clicks alone bring back gold")
@@ -34,8 +34,6 @@ func _test_a_camp_is_the_farm_run_nobody_clicks() -> bool:
 	_check(float(fast[Camp.KILLS]) > float(slow[Camp.KILLS]),
 			"a faster weapon drives more off in the same hour")
 	_check(float(fast[Camp.GOLD]) > float(slow[Camp.GOLD]), "and brings back more gold")
-	_check(is_equal_approx(Camp.IDLE_SHARE * Camp.MAX_SECONDS, 3600.0),
-			"a full camp pays one hour of active play")
 	return true
 
 

@@ -4,6 +4,11 @@ extends Control
 ## a Reset that buys its points back for gold, and a card beside the skill under the cursor,
 ## placed as `ItemCard` is. A press held on a skill keeps putting points in until it is let go or the
 ## skill refuses one. Showing or hiding this node opens or closes the whole page.
+##
+## The point that fills the last tree bursts them all (`Skills.burst`), and the page plays it: every
+## skill glints as a unique does, trembles harder and harder as if something were building inside it,
+## pops, and lies black, and then the fresh trees come up out of the black. It is played whenever the
+## page is up over full trees, so a game shut mid-burst plays it again rather than losing it.
 
 ## The page's X was pressed.
 signal closed
@@ -19,6 +24,18 @@ const HOLD_DELAY := 0.4
 const HOLD_FIRST := 0.3
 const HOLD_SPEEDUP := 0.85
 const HOLD_FASTEST := 0.08
+## The burst, in seconds: glinting alone, then trembling (up to `BURST_SHAKE_MOST` panel pixels, and
+## warming towards `BURST_HEAT`), the pop (swelling to `BURST_POP_SCALE` and back while going black),
+## lying black, and the new trees rising out of it.
+const BURST_GLINT := 2.0
+const BURST_GLINT_PERIOD := 1.0
+const BURST_SHAKE := 1.6
+const BURST_SHAKE_MOST := 3.0
+const BURST_HEAT := Color(1.6, 1.4, 1.1)
+const BURST_POP := 0.15
+const BURST_POP_SCALE := 1.4
+const BURST_DARK := 0.8
+const BURST_RISE := 0.6
 
 var inventory: Inventory
 var _save_path: String
@@ -33,6 +50,8 @@ var _card: SkillCard
 var _held := ""
 var _hold_timer: Timer
 var _hold_gap := HOLD_FIRST
+## While the trees are bursting, and nothing on the page may be pressed.
+var _bursting := false
 
 
 func _init(player_inventory: Inventory, save_path: String, ui_scale: float) -> void:
@@ -96,9 +115,14 @@ func _ready() -> void:
 
 ## Redraws the page from the inventory: levels and gold both move while it is shut.
 func open() -> void:
+	# Shut and opened again mid-burst: the burst is still playing on these very slots.
+	if _bursting:
+		return
 	changed.emit()
 	var free := inventory.skills.points(inventory.level)
 	_points.text = "%d skill point%s" % [free, "" if free == 1 else "s"]
+	if inventory.skills.bursts > 0:
+		_points.text += ", %d a rank" % inventory.skills.rank_cost()
 	_points.add_theme_color_override("font_color", Palette.LEAF if free > 0 else Palette.TEXT_SOFT)
 	for tree: String in _skill_views:
 		_skill_views[tree].fill(tree, inventory.skills.ranks)
@@ -109,6 +133,9 @@ func open() -> void:
 		reset.disabled = spent <= 0 or inventory.gold < cost
 	# Whatever the cursor was over has just been redrawn.
 	_hide_card()
+	# Deferred, so a page opened over full trees is up before they burst.
+	if inventory.skills.can_burst() and not _bursting:
+		_burst.call_deferred()
 
 
 ## Full window height against the left edge.
@@ -120,7 +147,7 @@ func layout() -> void:
 
 ## One point into a skill. A refused press does nothing: the card already says why.
 func _on_skill_pressed(id: String) -> void:
-	if not inventory.rank_up_skill(id):
+	if _bursting or not inventory.rank_up_skill(id):
 		return
 	inventory.save(_save_path)
 	print("Learned %s (%d/%d)" % [SkillTree.node(id)["name"], inventory.skills.rank_of(id),
@@ -163,6 +190,71 @@ func _on_respec_pressed(tree: String) -> void:
 	inventory.save(_save_path)
 	print("Reset %s for %s gold" % [tree, BigNumber.format(cost)])
 	open()
+
+
+## Every tree full: the burst played over them, and then `_burn` does it. Nothing while the page is
+## shut -- opening it is what plays it.
+func _burst() -> void:
+	if _bursting or not is_visible_in_tree() or not inventory.skills.can_burst():
+		return
+	_bursting = true
+	_stop_holding()
+	_hide_card()
+	for tree: String in _respec_buttons:
+		_respec_buttons[tree].disabled = true
+	if Settings.animations == Settings.Anim.NONE:
+		_burn()
+		return
+	var slots: Array[SkillSlot] = []
+	for tree: String in _skill_views:
+		for slot: SkillSlot in _skill_views[tree].get_children():
+			slots.append(slot)
+			slot.glint(BURST_GLINT_PERIOD)
+			slot.pivot_offset = slot.size / 2.0
+	var tween := create_tween()
+	tween.tween_interval(BURST_GLINT)
+	tween.tween_method(_tremble.bind(slots), 0.0, 1.0, BURST_SHAKE)
+	tween.tween_callback(_pop.bind(slots))
+	tween.tween_interval(BURST_POP + BURST_DARK)
+	tween.tween_callback(_burn)
+
+
+## The pressure building, `at` 0 to 1: each skill a whole number of pixels off its place, further and
+## hotter as it grows.
+func _tremble(at: float, slots: Array[SkillSlot]) -> void:
+	for slot in slots:
+		var push := Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * BURST_SHAKE_MOST * at * at
+		slot.position = SkillTreeView.corner_of(slot.id) + push.round()
+		slot.modulate = Color.WHITE.lerp(BURST_HEAT, at)
+
+
+## Every skill swells, sparks and goes black, and the lines between them with it.
+func _pop(slots: Array[SkillSlot]) -> void:
+	for slot in slots:
+		slot.position = SkillTreeView.corner_of(slot.id)
+		slot.stop_glint()
+		slot.scale = Vector2.ONE * BURST_POP_SCALE
+		var pop := slot.create_tween().set_parallel()
+		pop.tween_property(slot, "scale", Vector2.ONE, BURST_POP)
+		pop.tween_property(slot, "modulate", Color.BLACK, BURST_POP)
+		Juice.burst(slot.get_parent(), SkillTreeView.centre_of(slot.id), Palette.GOLD, 10, 90.0, 2.0, 0.5, 150.0)
+	for tree: String in _skill_views:
+		_skill_views[tree].create_tween().tween_property(_skill_views[tree], "self_modulate", Color.BLACK, BURST_POP)
+
+
+## The burst itself: the trees burnt, saved, and drawn fresh, rising out of the black.
+func _burn() -> void:
+	inventory.skills.burst()
+	inventory.save(_save_path)
+	print("The skill trees burst (%d), a rank now %d points" % [inventory.skills.bursts, inventory.skills.rank_cost()])
+	_bursting = false
+	open()
+	for tree: String in _skill_views:
+		var view: SkillTreeView = _skill_views[tree]
+		view.self_modulate = Color.WHITE
+		if Settings.animations != Settings.Anim.NONE:
+			view.modulate = Color.BLACK
+			view.create_tween().tween_property(view, "modulate", Color.WHITE, BURST_RISE)
 
 
 ## Placed now and again deferred: the first pass measures labels that have not laid out yet.

@@ -34,12 +34,9 @@ const TIER_NAMES := ["", "First Steps", "The Walls", "Far Lands", "Legends"]
 ## What a rank is called where it is written.
 const RANK_NAMES := ["", "I", "II", "III", "IV"]
 ## An ice wall named in an ask, from the middle out (`{nth}`).
-const ORDINALS := ["first", "second", "third", "fourth"]
+const ORDINALS := ["first", "second", "third", "fourth", "fifth", "sixth"]
 ## Clean Sweep: the one-blow kills in a row, in one tile fight, that count the land it was fought on.
 const DOMINO_STREAK := 10
-## Mastery's last rank: ranks past the most, over every tree, once all three are full.
-const MASTERY_OVERRANKS := 10
-
 ## Keyed by the unique each one unlocks: its name, what it asks, its tier (1-4), the key its number is
 ## kept under and the four numbers its ranks need, easiest first. `text` writes the rank's number
 ## through `{need}` -- or `{nth}` where the number is an ice wall -- or is four sentences, one a rank.
@@ -88,6 +85,8 @@ const ACHIEVEMENTS := {
 			"tier": 2, "key": "spawn_speed", "need": [50, 75, 100, 150]},
 	"brawlers_wraps": {"name": "All-Rounder", "text": "Reach {need} strength and {need} dexterity.",
 			"tier": 2, "key": "strength_and_dexterity", "need": [50, 150, 300, 600]},
+	"dreadmask": {"name": "Dreaded", "text": "Kill {need} enemies.",
+			"tier": 2, "key": "kills", "need": [5000, 25000, 100000, 500000]},
 	# --- III: far lands.
 	"last_gasp": {"name": "By a Hair", "text": "Break the {nth} ice wall with under a second left.",
 			"tier": 3, "key": "wall_last_second", "need": [1, 2, 3, 4]},
@@ -101,8 +100,8 @@ const ACHIEVEMENTS := {
 	"scholars_circlet": {"name": "Bookworm", "text": "Reach {need} intelligence.",
 			"tier": 3, "key": "intelligence", "need": [100, 175, 300, 500]},
 	"sages_abacus": {"name": "Mastery", "text": ["Fill one skill tree.", "Fill two skill trees.",
-			"Fill all three skill trees.", "Fill all three skill trees and take 10 ranks past the most."],
-			"tier": 3, "key": "mastery", "need": [1, 2, 3, 4]},
+			"Fill all three skill trees.", "Fill all three skill trees twice."],
+			"tier": 3, "key": "mastery", "need": [1, 2, 3, 6]},
 	"gamblers_die": {"name": "Gambler", "text": "Use {need} Orbs of Chaos.",
 			"tier": 3, "key": "chaos", "need": [10, 100, 200, 500]},
 	"the_tithe": {"name": "Hoarder", "text": "Hold {need} gold at once.",
@@ -115,6 +114,8 @@ const ACHIEVEMENTS := {
 	"heirlooms_echo": {"name": "Legacy", "text": ["Transcend.", "Transcend {need} times.",
 			"Transcend {need} times.", "Transcend {need} times."],
 			"tier": 3, "key": "transcended", "need": [1, 3, 10, 25]},
+	"nightwalkers": {"name": "Into the Dark", "text": "Break the {nth} ice wall.",
+			"tier": 3, "key": "furthest_wall", "need": [3, 4, 5, 6]},
 	# --- IV: legends.
 	"metronome": {"name": "Hands Off", "text": "Break the {nth} ice wall without clicking.",
 			"tier": 4, "key": "wall_no_clicks", "need": [1, 2, 3, 4]},
@@ -186,9 +187,11 @@ static func state(inventory: Inventory) -> Dictionary:
 	var full := 0
 	for tree: String in SkillTree.trees():
 		full += int(SkillTree.is_full(tree, inventory.skills.ranks))
-	var past := 0
-	for id: String in inventory.skills.ranks:
-		past += maxi(0, int(inventory.skills.ranks[id]) - int(SkillTree.node(id)["max_rank"]))
+	# Dreaded: every kill on every ground, which is only ever counted where `record` counts.
+	var kills := 0
+	for key: String in inventory.tally:
+		if key.begins_with("kills:"):
+			kills += int(inventory.tally[key])
 	return {
 		"strength": values[0],
 		"dexterity": values[1],
@@ -204,9 +207,12 @@ static func state(inventory: Inventory) -> Dictionary:
 		"crit_chance": float(stats.get("crit_chance", 0.0)),
 		"armor": float(stats.get("armor", 0.0)),
 		"gold": inventory.gold,
-		# Mastery: the trees filled, and its last rank for ranks past the most once all three are.
-		"mastery": float(full + int(full == SkillTree.trees().size() and past >= MASTERY_OVERRANKS)),
+		# Mastery: the trees filled, a burst counting all three.
+		"mastery": float(full + SkillTree.trees().size() * inventory.skills.bursts),
 		"depth": float(inventory.dungeon_depth),
+		"kills": float(kills),
+		# Into the Dark: the furthest wall ever broken, in any world, off how far the land has reached.
+		"furthest_wall": floorf(float(inventory.farthest_land - MapBuilder.START_LAND_RADIUS) / MapBuilder.WALL_STEP),
 	}
 
 

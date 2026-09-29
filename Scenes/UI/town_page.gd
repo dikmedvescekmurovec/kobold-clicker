@@ -206,6 +206,13 @@ var craft_held: Callable
 ## What the last blow of the hammer did, when it is worth saying out loud. A break is the one thing
 ## that happens on this page the player did not ask for, so it is said rather than left to be noticed.
 var _smith_note := ""
+## The smith's strike, which survives the counter being drawn again: seconds into the one playing (-1
+## when he stands still), strikes pressed for while it played, still owed, and the face the bench on
+## screen now shows. An owed strike starts `SWING_OVERLAP` frames before the one playing would end.
+const SWING_OVERLAP := 3
+var _swing_clock := -1.0
+var _swings_owed := 0
+var _smith_face: AtlasTexture
 ## Her answer, over the whole window while it is up (null otherwise), and the scroll it is written in.
 var _told: Control
 var _told_scroll: ScrollContainer
@@ -766,9 +773,7 @@ func _fill_smith() -> void:
 	# so they are what is worth reading while the hammer is up -- and watching them change after a blow
 	# is the whole of what the blow bought. It scrolls; the buttons stay pinned at the foot.
 	var body := _scrolled(ROW_GAP)
-	var square := ItemSlot.make(_bag_piece)
-	square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	body.add_child(square)
+	_smith_bench(body, ItemSlot.make(_bag_piece))
 	var details := UITheme.vbox(2, BODY_WIDTH)
 	body.add_child(details)
 	ItemDetails.fill(details, _bag_piece, BODY_WIDTH)
@@ -797,15 +802,34 @@ func _fill_smith() -> void:
 			_on_lock_pressed))
 
 
-## The smith with nothing held up to him: himself at his anvil beside the empty square a piece would
-## stand on, and his two services with what each does and the least it costs on anything the player
+## The smith with nothing held up to him: the empty square a piece would stand on beside himself at
+## his anvil, and his two services with what each does and the least it costs on anything the player
 ## has -- so the tab says what he is for before a piece is picked, rather than one line sending the
 ## player off to the bag to find out.
 func _fill_idle_smith() -> void:
 	var body := _scrolled(ROW_GAP)
+	_smith_bench(body, ItemSlot.empty("Open a piece in your bag or on your doll", tab_mark(TownServices.SMITH, false)))
+	body.add_child(_sign("Open a piece in your bag or on your doll.", Palette.TEXT_SOFT))
+	body.add_child(UITheme.rule(BODY_WIDTH))
+	var cap := _upgrade_cap()
+	var pieces := inventory.items + inventory.equipment.items()
+	_smith_service(body, "Upgrade", "One level up, its modifiers kept. It can break.",
+			pieces.filter(func(p: Item) -> bool: return Blacksmith.can_upgrade(p, cap))
+				.map(func(p: Item) -> float: return TownPrices.upgrade_price(p)))
+	_smith_service(body, "Lock", "Pins one modifier for good.",
+			pieces.filter(func(p: Item) -> bool: return Blacksmith.can_lock(p))
+				.map(func(p: Item) -> float: return TownPrices.lock_price(p)))
+
+
+## The top of the smith's counter, whether a piece is open or not: `square` -- the empty anvil square,
+## or the open piece -- on the left, by the anvil he is drawn with, and the smith on the right. The
+## portrait rests on its first frame; an Upgrade or a Lock plays his strike once (`_strike`).
+func _smith_bench(body: VBoxContainer, square: Control) -> void:
 	var bench := HBoxContainer.new()
 	bench.add_theme_constant_override("separation", ROW_GAP)
 	bench.alignment = BoxContainer.ALIGNMENT_CENTER
+	square.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bench.add_child(square)
 	var socket := PanelContainer.new()
 	var style := BountyList.flat(Palette.SLOT_TAN, 0)
 	style.content_margin_left = DialogueBox.SOCKET_PAD.x
@@ -822,20 +846,44 @@ func _fill_idle_smith() -> void:
 	picture.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	socket.add_child(picture)
 	bench.add_child(socket)
-	var anvil := ItemSlot.empty("Open a piece in your bag or on your doll", tab_mark(TownServices.SMITH, false))
-	anvil.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	bench.add_child(anvil)
 	body.add_child(bench)
-	body.add_child(_sign("Open a piece in your bag or on your doll.", Palette.TEXT_SOFT))
-	body.add_child(UITheme.rule(BODY_WIDTH))
-	var cap := _upgrade_cap()
-	var pieces := inventory.items + inventory.equipment.items()
-	_smith_service(body, "Upgrade", "One level up, its modifiers kept. It can break.",
-			pieces.filter(func(p: Item) -> bool: return Blacksmith.can_upgrade(p, cap))
-				.map(func(p: Item) -> float: return TownPrices.upgrade_price(p)))
-	_smith_service(body, "Lock", "Pins one modifier for good.",
-			pieces.filter(func(p: Item) -> bool: return Blacksmith.can_lock(p))
-				.map(func(p: Item) -> float: return TownPrices.lock_price(p)))
+	_smith_face = face
+	_show_swing()
+
+
+## An Upgrade or a Lock went through: he strikes now, or once the strike playing is nearly done.
+func _strike() -> void:
+	if Settings.animations == Settings.Anim.NONE:
+		return
+	if _swing_clock >= 0.0:
+		_swings_owed += 1
+	else:
+		_swing_clock = 0.0
+
+
+func _process(delta: float) -> void:
+	if _swing_clock < 0.0:
+		return
+	_swing_clock += delta
+	var end := _swing_frames() - (SWING_OVERLAP if _swings_owed > 0 else 0)
+	if _swing_clock >= end * DialogueBox.FRAME_TIME:
+		if _swings_owed > 0:
+			_swings_owed -= 1
+			_swing_clock = 0.0
+		else:
+			_swing_clock = -1.0
+	_show_swing()
+
+
+func _swing_frames() -> int:
+	return maxi(1, _smith_face.atlas.get_height() / DialogueBox.PORTRAIT_HEIGHT) if _smith_face != null else 1
+
+
+## The frame the strike is on, or the first while he stands still.
+func _show_swing() -> void:
+	if _smith_face != null:
+		var frame := int(_swing_clock / DialogueBox.FRAME_TIME) if _swing_clock >= 0.0 else 0
+		_smith_face.region.position.y = mini(frame, _swing_frames() - 1) * DialogueBox.PORTRAIT_HEIGHT
 
 
 ## One of the smith's services on his idle counter: its name, the least it costs on any piece in
@@ -1253,6 +1301,7 @@ func _on_upgrade_pressed() -> void:
 	if not _smith_why_not(Blacksmith.why_not_upgrade(_bag_piece, cap), price).is_empty():
 		return
 	inventory.gold -= price
+	_strike()
 	if Blacksmith.upgrade(_bag_piece, cap, _smith_rng):
 		_smith_note = ""
 		print("Upgraded %s to level %d for %s gold"
@@ -1272,6 +1321,7 @@ func _on_lock_pressed() -> void:
 	inventory.gold -= price
 	if not Blacksmith.lock(_bag_piece, _smith_rng):
 		return
+	_strike()
 	print("Locked %s on %s for %s gold" % [ModifierTable.line(_bag_piece.locked_mod()),
 			_bag_piece.display_name(), BigNumber.format(price)])
 	_smith_done()

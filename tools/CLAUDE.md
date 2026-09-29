@@ -28,6 +28,8 @@ Two things are generated rather than cut, because no pack draws them: the namepl
 
 `tools/seeing_stone.py` draws the Seeing Stone, a stand-in until the user's pixellab stone: the orb on its stand and, apart, the light inside it (white, stepped alpha) that `main_scene` tints by `FortuneTeller.warmth`, so five temperatures are one sprite and a tint. `--export` writes `Assets/UI/seeing_stone.png`, `seeing_stone_glow.png` and her badge `Assets/Fortune/stone.png` (the stone lit warm on `ui_kit`'s skill frame in the "teller" purple, so her hover glow rims it like her other spells instead of filling a clear square).
 
+`tools/sound_levels.py` sets the mix: no `AudioStreamPlayer` in the game sets a volume, so each file's own level is how loud it is beside the others (the whole SFX bus then sits `Settings.SFX_DB` under them), and `LEVELS` (path -> target) is where it is tuned. Music by integrated LUFS (-20), everything else by its loudest 400 ms (swing -18, punch and death -16, coins -19, footsteps -22, clicks and page flip -23). It rewrites the files in place, same codec, rate and bitrate; a file within 0.5 dB is left alone, and a spike already at the -1 dBTP ceiling is not raised again (click1 and footstep05 stop short of theirs). A sound added to the game gets a line in `LEVELS`. Needs ffmpeg on the path; skips a file another program holds open.
+
 `tools/pixel_flatten.py` is the other tool here that touches enemies: it flattens an AI-generated creature's frames to the bought packs' look (one median-cut palette across every frame, lightness stretched to the packs' range, despeckled). Preview only into `tools/qa/pixel_flatten.png`; `--export` overwrites the sprites.
 
 ## Rules and gotchas

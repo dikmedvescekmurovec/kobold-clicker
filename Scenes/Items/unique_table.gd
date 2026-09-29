@@ -429,6 +429,22 @@ const UNIQUES := {
 		"ranks": {"times": [2, 2.5, 3, 4]},
 		"peak": "Every heirloom counts as one plus higher.",
 	},
+	# The two that hurry a veteran through land already known (2026-09-29, the user's). No rank IV
+	# line yet: the user named the four numbers and nothing past them.
+	"nightwalkers": {
+		"name": "Nightwalkers", "base": "Leather Boot",
+		"mods": ["increased_move_speed", "added_dodge"],
+		"effect": "nightwalker",
+		"effect_text": "You can chart a tile up to {tiles} steps into the dark. The land you cross to it is charted with it.",
+		"ranks": {"tiles": [5, 10, 20, 40]},
+	},
+	"dreadmask": {
+		"name": "Dreadmask", "base": "Leather Helmet",
+		"mods": ["increased_armor", "added_strength"],
+		"effect": "dread",
+		"effect_text": "Fights on the land have {fewer} fewer common enemies, one fewer for every ice wall inside the tile.",
+		"ranks": {"fewer": [2, 4, 6, 10]},
+	},
 }
 
 ## The rank at which a unique is all it will be.

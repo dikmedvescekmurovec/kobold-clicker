@@ -89,6 +89,10 @@ const CAVE_GROUND := 0.915
 ## behind it goes a layer's share slower and the last not at all, which is the whole of the depth.
 const CAVE_SPEED := 90.0
 const ATTACK_SOUND := preload("res://Assets/Player/attack.mp3")
+## A blow landing on the enemy, over the swing.
+const HIT_SOUND := preload("res://Sounds/universfield-punch-03-352040.mp3")
+## A body going down.
+const DEATH_SOUND := preload("res://Sounds/universfield-character-fall-impact-352287.mp3")
 ## Where a swing re-triggered mid-swing cuts back in: past the wind-up, at the blow. Two frames at
 ## CombatActor.FPS is 0.2s, so the picture and the sound come back in at the same instant -- move one
 ## and move the other.
@@ -166,8 +170,9 @@ const THROW_STAGGER := 0.06
 ## piles up on the ground however long a run goes on.
 const THROW_FADE := 0.4
 const COIN_REST := 0.5
-## A find lies there longer than a coin: it is the thing worth looking at, it lands once where a
-## purse lands ten, and it is the only sight of it until the player opens the counter.
+## A find lies there longer than a coin before it too flies into the counter: it is the thing worth
+## looking at, it lands once where a purse lands ten, and it is the only sight of it until the
+## player opens the counter.
 const FIND_REST := 3.0
 ## Experience does not lie on the ground: its gems pop out of the body and fly into the character
 ## panel's bar. How long the pop takes, how high it goes and how far to either side it may land.
@@ -298,6 +303,8 @@ var _enemy: CombatActor
 var _enemy_scale := Vector2.ONE
 var _enemy_hit: Tween
 var _sound: AudioStreamPlayer
+var _hit_sound: AudioStreamPlayer
+var _death_sound: AudioStreamPlayer
 
 var _hud: Control
 var _clock: VBoxContainer
@@ -503,8 +510,19 @@ func _build() -> void:
 	_sound.bus = Settings.SFX_BUS
 	_sound.stream = ATTACK_SOUND
 	add_child(_sound)
+	_hit_sound = _sfx_player(HIT_SOUND)
+	_death_sound = _sfx_player(DEATH_SOUND)
 
 	_build_hud()
+
+
+func _sfx_player(stream: AudioStream) -> AudioStreamPlayer:
+	var player := AudioStreamPlayer.new()
+	player.bus = Settings.SFX_BUS
+	player.stream = stream
+	player.max_polyphony = 4
+	add_child(player)
+	return player
 
 
 ## Where the fighters' feet are, as a share of the view's height.
@@ -852,6 +870,7 @@ func _on_hit_landed(amount: float, crit: bool, automatic: bool) -> void:
 		_swing()
 	_show_damage(amount, crit)
 	_jolt_enemy()
+	_hit_sound.play()
 	if crit:
 		Juice.shake(_arena, SHAKE_CRIT)
 
@@ -1003,7 +1022,7 @@ func _drop_origin() -> Vector2:
 ## `spread` is how far to either side it may land and `rest` how long it lies there.
 ##
 ## `collect` is called after the rest instead of the fade, for something that goes somewhere rather
-## than lying there -- the coins, which fly into the counter.
+## than lying there -- coins and finds, which fly into the counter.
 func _throw(node: Node2D, index: int, from: Vector2, spread: float, rest: float,
 		collect := Callable()) -> void:
 	node.z_index = 1
@@ -1035,15 +1054,20 @@ func _throw(node: Node2D, index: int, from: Vector2, spread: float, rest: float,
 	arc.tween_callback(node.queue_free)
 
 
-## A coin that has lain its moment flies into the loot counter, gathering speed and shrinking, and
-## the counter flashes as it lands.
-func _collect_coin(coin: Node2D) -> void:
+## A coin or a find that has lain its moment flies into the loot counter, gathering speed and
+## shrinking, and the counter flashes as it lands. A find leaves its beam behind on the ground, to
+## sink back into it (`LootBeam.collapse`), drawn at the find's depth as it was.
+func _fly_to_counter(thing: Node2D) -> void:
+	for beam: Node2D in thing.get_children():
+		beam.z_index = thing.z_index
+		beam.reparent(self)
+		LootBeam.collapse(beam)
 	var into := _loot_button.position + _loot_button.size * _ui_scale / 2.0
 	var fly := create_tween()
 	fly.set_parallel(true)
-	fly.tween_property(coin, "position", into, COIN_FLY).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	fly.tween_property(coin, "scale", coin.scale * 0.5, COIN_FLY)
-	fly.chain().tween_callback(coin.queue_free)
+	fly.tween_property(thing, "position", into, COIN_FLY).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	fly.tween_property(thing, "scale", thing.scale * 0.5, COIN_FLY)
+	fly.chain().tween_callback(thing.queue_free)
 	fly.tween_callback(_bump_counter)
 
 
@@ -1066,7 +1090,7 @@ func _show_coins(amount: float) -> void:
 		var coin := AnimatedSprite2D.new()
 		coin.sprite_frames = Coins.frames()
 		coin.play("spin")
-		_throw(coin, i, from, THROW_SPREAD, COIN_REST, _collect_coin)
+		_throw(coin, i, from, THROW_SPREAD, COIN_REST, _fly_to_counter)
 
 
 ## A body's experience, as gems that pop out of it and fly into the character panel. As many as a
@@ -1128,7 +1152,7 @@ func _show_find(picture: Texture2D, rarity: int = -1, glow := Color.WHITE) -> vo
 		pillar.position = Vector2(0, picture.get_height() / 2.0)
 		pillar.scale = Vector2.ONE / size
 		find.add_child(pillar)
-	_throw(find, 0, _drop_origin(), FIND_SPREAD, FIND_REST)
+	_throw(find, 0, _drop_origin(), FIND_SPREAD, FIND_REST, _fly_to_counter)
 	find.scale *= size
 	find.z_index = 1 + maxi(rarity, 0)
 
@@ -1305,6 +1329,7 @@ func _on_enemy_hit(hp_left: float) -> void:
 ## longer, and with the arena rattling, the bigger the thing that fell.
 func _on_enemy_died(index: int) -> void:
 	_enemy.play_once("death")
+	_death_sound.play()
 	if Settings.animations != Settings.Anim.NONE:
 		var burst := Juice.burst(self, _drop_origin(), _enemy.tint(), DEATH_PIXELS, 220.0,
 				3.0 * _ui_scale, 0.6, 500.0)

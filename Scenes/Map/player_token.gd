@@ -25,6 +25,17 @@ const SECONDS_PER_TILE := 2.0
 ## A puff of dust kicked up every DUST_EVERY seconds while walking, drawn under the character.
 const DUST_EVERY := 0.3
 const DUST := Color("c8b48a")
+## A footstep every FOOTSTEP_EVERY seconds while walking, shortened by Move Speed like a tile's crossing,
+## each the next of the footsteps in turn. A running pace, quicker than the legs are drawn.
+const FOOTSTEP_EVERY := 0.25
+const FOOTSTEPS := 10
+## Each footstep leaves a print at the feet, FOOTPRINT_SPREAD map pixels to the side it fell on,
+## which stays FOOTPRINT_HOLD seconds and then fades out over FOOTPRINT_LIFE.
+const FOOTPRINT := Color(0.1, 0.06, 0.03, 0.85)
+const FOOTPRINT_SIZE := Vector2(3, 2)
+const FOOTPRINT_SPREAD := 2.0
+const FOOTPRINT_HOLD := 1.5
+const FOOTPRINT_LIFE := 2.0
 
 ## The last tile of a walk has been reached.
 signal arrived(cell: Vector2i)
@@ -44,6 +55,10 @@ var _step := 0.0
 ## How long this walk takes per tile: SECONDS_PER_TILE shortened by `move_speed`.
 var _seconds := SECONDS_PER_TILE
 var _dust_left := 0.0
+var _footsteps: Array[AudioStream] = []
+var _footstep := 0
+var _footstep_left := 0.0
+var _sound: AudioStreamPlayer
 
 
 func setup(map: HexMap) -> void:
@@ -54,12 +69,18 @@ func setup(map: HexMap) -> void:
 	# FOOT_OFFSET map pixels below the middle of the tile.
 	offset = Vector2(0, FOOT_OFFSET / SCALE - BOUNDS.size.y / 2.0)
 	play("idle")
+	for i in FOOTSTEPS:
+		_footsteps.append(load("res://Sounds/Footsteps/footstep%02d.ogg" % i))
+	_sound = AudioStreamPlayer.new()
+	_sound.bus = Settings.SFX_BUS
+	add_child(_sound)
 
 
 func _process(delta: float) -> void:
 	if is_walking():
 		advance(delta)
 		_kick_dust(delta)
+		_tread(delta)
 
 
 ## Dust at the feet, on a timer rather than per frame of the run cycle, and put under the character.
@@ -72,6 +93,33 @@ func _kick_dust(delta: float) -> void:
 	var puff := Juice.burst(get_parent(), position + Vector2(0, FOOT_OFFSET), DUST, 4, 10.0, 1.5, 0.45, -8.0)
 	puff.spread = 60.0
 	get_parent().move_child(puff, get_index())
+
+
+func _tread(delta: float) -> void:
+	_footstep_left -= delta
+	if _footstep_left > 0.0:
+		return
+	_footstep_left = FOOTSTEP_EVERY * _seconds / SECONDS_PER_TILE
+	_sound.stream = _footsteps[_footstep]
+	_sound.play()
+	_footstep = (_footstep + 1) % FOOTSTEPS
+	_leave_print()
+
+
+## A print under the character, to the left or right of the line walked by turns.
+func _leave_print() -> void:
+	var across := (_to - _from).normalized().orthogonal()
+	var side := FOOTPRINT_SPREAD if _footstep % 2 == 0 else -FOOTPRINT_SPREAD
+	var foot := ColorRect.new()
+	foot.color = FOOTPRINT
+	foot.size = FOOTPRINT_SIZE
+	foot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	foot.position = (position + Vector2(0, FOOT_OFFSET) + across * side - FOOTPRINT_SIZE / 2).round()
+	get_parent().add_child(foot)
+	get_parent().move_child(foot, get_index())
+	var fade := foot.create_tween()
+	fade.tween_property(foot, "modulate:a", 0.0, FOOTPRINT_LIFE).set_delay(FOOTPRINT_HOLD)
+	fade.tween_callback(foot.queue_free)
 
 
 ## Puts the token on a cell, or on HexMap.NO_CELL to take it off the map. Any walk in progress is dropped.
