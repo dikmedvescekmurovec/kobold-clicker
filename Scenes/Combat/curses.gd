@@ -68,7 +68,7 @@ const CURSES := {
 		"text": "Tile modifiers start past the first wall, not the second, and every tile has one more.",
 		"reward": "Every tile modifier pays 10% more."},
 	THICK_FOG: {"name": "Thick Fog", "skulls": 2,
-		"text": "-1 Sight. You begin with a Broken Torch, which gives it back while held.", "reward": "Unique items drop twice as often."},
+		"text": "-2 Sight. You begin with a Broken Torch, which gives one back while held.", "reward": "Unique items drop twice as often."},
 	# A "less" on the finished experience, after every "more" has been added (`Encounter.LESSONS_XP`);
 	# the doubling is `Inventory.skill_worth`, read by `stats()` and by the skill's card.
 	HARD_LESSONS: {"name": "Hard Lessons", "skulls": 2,

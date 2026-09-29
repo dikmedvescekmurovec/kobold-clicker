@@ -68,7 +68,10 @@ func _run() -> void:
 	_check(_test_unique_items() == true, "unique item tests ran to the end")
 	_check(await _test_unique_stats() == true, "unique stat tests ran to the end")
 	_check(_test_attribute_uniques() == true, "attribute unique tests ran to the end")
+	_check(_test_rank_four_uniques() == true, "rank IV unique tests ran to the end")
+	_check(_test_attribute_requirements() == true, "attribute requirement tests ran to the end")
 	_check(await _test_collection() == true, "collection log tests ran to the end")
+	_check(await _test_achievements() == true, "achievement tests ran to the end")
 	_check(await _test_character_page() == true, "character page tests ran to the end")
 	_check(await _test_item_generator() == true, "item generator tests ran to the end")
 	_check(await _test_heirlooms() == true, "heirloom tests ran to the end")
@@ -1706,7 +1709,7 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 	main._update_buttons()
 	_check(main._farm_button.disabled and main._chart_button.disabled,
 			"an overencumbered player cannot fight")
-	_check(main._farm_button.tooltip_text == main.ENCUMBERED_TIP, "and the button says why")
+	_check(main._farm_button.tooltip_text == main.ENCUMBERED_TIP % main.inventory.capacity(), "and the button says why")
 	main._on_farm_pressed()
 	_check(main._combat == null, "and pressing Farm anyway opens nothing")
 	main.inventory.remove(extra)
@@ -1933,9 +1936,11 @@ func _test_heirlooms() -> bool:
 	_clear_save()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = WORLD_SEED
+	# Straight onto the doll: these pieces are fixtures for the heirlooms' rules, and past
+	# `LootTable.NEEDS_FROM` the player's Equip would ask for attributes nobody here wears.
 	var wear := func(side: Inventory, piece: Item) -> void:
-		side.items.append(piece)
-		_check(side.equip(piece, side.equipment.sockets_for(piece)[0]), "%s goes on" % piece.display_name())
+		side.items.append_array(side.equipment.equip(side.equipment.sockets_for(piece)[0], piece))
+		_check(piece in side.equipment.items(), "%s goes on" % piece.display_name())
 	var ring_of := func(percent: int) -> Item:
 		var ring := Item.new()
 		ring.type = "Gold Ring"
@@ -2002,7 +2007,8 @@ func _test_heirlooms() -> bool:
 	_check(bag.super_orbs == 3 and worn.level == 9, "no orb is spent on it, and nothing about the piece has moved")
 
 	# The save, and a file from before there were heirlooms.
-	_check(bag.stash().equip(worn, Equipment.Socket.WEAPON), "an heirloom goes on the heirlooms' doll")
+	_check(bag.stash().remove(worn) and bag.stash().equipment.equip(Equipment.Socket.WEAPON, worn).is_empty(),
+			"an heirloom goes on the heirlooms' doll")
 	bag.super_orbs = 4
 	_check(bag.save(TEST_PATH), "it saves")
 	var back := Inventory.load_from(TEST_PATH)
@@ -2063,15 +2069,16 @@ func _test_heirlooms() -> bool:
 	plate.type = "Wooden Armor"
 	plate.stats = {"armor": 1000.0}
 	wear.call(spiked, plate)
-	_check(is_equal_approx(spiked.stats()["damage"], bare_damage + 1000.0 * Inventory.SPIKES_SHARE),
+	_check(is_equal_approx(spiked.stats()["damage"],
+			bare_damage + 1000.0 * UniqueTable.dial("spiked_helm", "share") / 100.0),
 			"the helm among the heirlooms reads the ordinary doll's armour (%s)" % spiked.stats()["damage"])
 
-	# A set is made inside one doll, and the sack pays from either.
+	# Each doll's home piece is its own, and the sack pays from either.
 	var split := Inventory.new()
 	wear.call(split, Item.rolled_unique("meadowstriders", rng, 1))
 	wear.call(split.stash(), Item.rolled_unique("rimeplate", rng, 1))
-	_check(split.effects().size() == 4 and not ("grazing:ice" in split.effects()),
-			"a home piece on each doll is two lone pieces (%s)" % [split.effects()])
+	_check(split.effects() == ["home:grass", "home:ice"], "a home piece on each doll is two lone pieces (%s)"
+			% [split.effects()])
 	var junk := _piece(ItemRarity.Rarity.RARE, 8)
 	_check(split.salvage(junk) == 0.0, "no sack, no salvage")
 	wear.call(split.stash(), Item.rolled_unique("rag_and_bone_sack", rng, 1))
@@ -2228,7 +2235,7 @@ func _test_mod_tiers() -> bool:
 		_check(not ModifierTable.tiered(id) and not ModifierTable.rolled_mod(id, rng, 20).has("under"),
 				"%s has one band, and so no tier" % id)
 
-	# A Divine moves the number and never the tier; the smith takes the tier up with the level.
+	# A Divine moves the number and never the tier; the smith moves neither.
 	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.ELITE, rng, 20)
 	var unders := sword.mods.map(func(mod: Dictionary) -> int: return int(mod.get("under", 0)))
 	for i in 10:
@@ -2240,9 +2247,11 @@ func _test_mod_tiers() -> bool:
 		_check(int(mod["value"]) >= int(band[0]) and int(mod["value"]) <= int(band[1]),
 				"and rolls inside it: %s in %s" % [mod, band])
 	var tiers := sword.mods.map(sword.tier_of)
+	var values := sword.mods.map(func(mod: Dictionary) -> int: return int(mod["value"]))
 	_check(Blacksmith.upgrade(sword, 99, _never_breaks()), "the hammer lands")
-	_check(sword.mods.map(sword.tier_of) == tiers.map(func(tier: int) -> int: return tier + 1),
-			"an upgrade is a tier as well as a level")
+	_check(sword.mods.map(sword.tier_of) == tiers
+			and sword.mods.map(func(mod: Dictionary) -> int: return int(mod["value"])) == values,
+			"an upgrade is a level and leaves every tier and number")
 
 	# A line saved before there were tiers keeps its number and is given the tier that holds it.
 	var saved := sword.to_dict()
@@ -2390,6 +2399,56 @@ func _by_tooltip(parent: Node, text: String) -> Button:
 	return null
 
 
+## What a piece asks before it goes on (`LootTable.requirement`, `Inventory.why_not_equip`): nothing
+## up to `NEEDS_FROM` or on jewellery, its kind's attribute past it, met by both dolls but never by
+## the piece itself or by what the swap takes off.
+func _test_attribute_requirements() -> bool:
+	var past := LootTable.NEEDS_FROM + 5
+	_check(LootTable.requirement("Wooden Sword", LootTable.NEEDS_FROM).is_empty(), "nothing asked up to the grace")
+	_check(LootTable.requirement("Gold Ring", past).is_empty(), "jewellery asks nothing")
+	_check(LootTable.requirement("Bone Knife", past)[0] == "dexterity"
+			and LootTable.requirement("Wooden Torch", past)[0] == "intelligence", "each kind asks its own")
+	var needs: int = LootTable.requirement("Wooden Sword", past)[1]
+	_check(needs > 0 and LootTable.requirement("Wooden Sword", past + 1)[1] > needs, "and more a level")
+	var strong := func(points: int) -> Item:
+		var ring := Item.new()
+		ring.type = "Iron Band"
+		ring.stats = Item.scaled_stats(ring.type, 1)
+		ring.mods = [{"id": "added_strength", "value": points}]
+		return ring
+
+	var bag := Inventory.new()
+	var sword := _piece(ItemRarity.Rarity.COMMON, past)
+	bag.items.append(sword)
+	_check(bag.why_not_equip(sword, Equipment.Socket.WEAPON) == "Needs %d Strength" % needs
+			and not bag.equip(sword, Equipment.Socket.WEAPON), "a bare player cannot wear it")
+	sword.mods = [{"id": "added_strength", "value": needs}]
+	_check(not bag.can_equip(sword, Equipment.Socket.WEAPON), "its own strength does not lift it")
+	bag.equipment.equip(Equipment.Socket.RING_LEFT, strong.call(needs))
+	_check(bag.equip(sword, Equipment.Socket.WEAPON), "a ring's strength does")
+	# A second sword asking the same, over a first that carries the strength: the swap takes it off.
+	var worn := Inventory.new()
+	var carrier := _piece(ItemRarity.Rarity.COMMON, 1)
+	carrier.mods = [{"id": "added_strength", "value": needs}]
+	worn.equipment.equip(Equipment.Socket.WEAPON, carrier)
+	var next := _piece(ItemRarity.Rarity.COMMON, past)
+	worn.items.append(next)
+	_check(not worn.can_equip(next, Equipment.Socket.WEAPON), "what the swap takes off does not count")
+	# Both dolls: a ring among the heirlooms meets the bag's piece, and the bag's ring an heirloom's.
+	var two := Inventory.new()
+	two.stash().equipment.equip(Equipment.Socket.RING_LEFT, strong.call(needs))
+	var mine := _piece(ItemRarity.Rarity.COMMON, past)
+	two.items.append(mine)
+	_check(two.can_equip(mine, Equipment.Socket.WEAPON), "the heirlooms' strength counts for the bag")
+	var heir := Inventory.new()
+	heir.equipment.equip(Equipment.Socket.RING_LEFT, strong.call(needs))
+	var kept := _piece(ItemRarity.Rarity.COMMON, past)
+	heir.stash().items.append(kept)
+	_check(heir.stash().can_equip(kept, Equipment.Socket.WEAPON), "and the bag's for the heirlooms")
+	_check(heir.equipment.worn.size() == 1 and two.stash().equipment.worn.size() == 1,
+			"asking takes nothing off either doll")
+	return true
+
 ## An item built to order, for the tests that care about where a piece sorts rather than what it
 ## rolled. `Item.rolled` needs a generator and rolls modifiers; these want neither.
 func _piece(rarity: ItemRarity.Rarity, level: int) -> Item:
@@ -2435,6 +2494,15 @@ func _test_bag_order() -> bool:
 	_check(bag.levels() == [9, 5, 2], "and the sections run highest level first")
 	_check(bag.count_at(5) == 3 and bag.count_at(9) == 1 and bag.count_at(1) == 0,
 			"with the right number in each")
+
+	# An orb lifts the older common past the rare, but the open bag sorts by what it was.
+	l5_common_old.rarity = ItemRarity.Rarity.ELITE
+	read.clear()
+	for i in bag.order({l5_common_old: ItemRarity.Rarity.COMMON}):
+		read.append(bag.items[i])
+	_check(read == [l9_common, l5_rare, l5_common_new, l5_common_old, l2_elite],
+			"a piece held at its old rarity keeps its place")
+	_check(bag.items[bag.order()[1]] == l5_common_old, "and sorted afresh it moves up")
 	return true
 
 
@@ -3557,9 +3625,20 @@ func _test_unique_table() -> bool:
 	for id: String in UniqueTable.UNIQUES:
 		var row: Dictionary = UniqueTable.UNIQUES[id]
 		_check(LootTable.ITEMS.has(row["base"]), "%s is a real piece (%s)" % [id, row["base"]])
-		_check(not str(row["name"]).is_empty() and not str(row["effect_text"]).is_empty(),
+		# A unique is a rule -- but for the Wayfarer's Torch, a starter the user asked for as a plain stat
+		# stick, which says nothing because it does nothing but carry its three lines.
+		var stick := id == "wayfarers_torch"
+		_check(not str(row["name"]).is_empty() and UniqueTable.effect_text(id).is_empty() == stick,
 				"%s has a name and says what it does" % id)
-		_check(not UniqueTable.effect_of(id).is_empty(), "%s changes something" % id)
+		# A unique an achievement unlocks has four ranks of numbers, and its sentence writes each of them.
+		_check(UniqueTable.is_ranked(id) == Achievements.ACHIEVEMENTS.has(id), "%s has ranks only if it is earned" % id)
+		for key: String in row.get("ranks", {}):
+			_check(row["ranks"][key].size() == UniqueTable.PEAK, "%s's %s has a number a rank" % [id, key])
+		for rank in range(1, UniqueTable.PEAK + 1):
+			var said := UniqueTable.effect_text(id, rank)
+			_check(not said.contains("{") and not said.contains("}"), "%s says every number at rank %d (%s)" % [id, rank, said])
+		_check(not row.has("clause"), "%s has no second rule of a set" % id)
+		_check(UniqueTable.effect_of(id).is_empty() == stick, "%s changes something" % id)
 		_check(UniqueTable.icon(id) != null and UniqueTable.icon(id).get_size() == Vector2(32, 32),
 				"%s has a 32 px picture" % id)
 		var mods: Array = row["mods"]
@@ -3579,12 +3658,13 @@ func _test_unique_table() -> bool:
 			if entry.get("kind") in [ModifierTable.Kind.PERCENT, ModifierTable.Kind.GLOBAL]:
 				_check(not entry["stat"] in increased, "%s says 'increased %s' once" % [id, entry["stat"]])
 				increased.append(entry["stat"])
-		for env: String in row["envs"]:
-			_check(env in envs, "%s is found on %s, which is real ground" % [id, env])
-		if row["effect"] == "home":
-			_check(row["envs"] == [row["home"]], "%s is found on the ground it is for" % id)
-	for env in envs:
-		_check(UniqueTable.pool_for(env).size() >= 2, "%s has uniques to hunt (%s)" % [env, UniqueTable.pool_for(env)])
+		# Only a home piece has a ground, and only its damage is tied to it: every unique drops anywhere.
+		_check(row.has("home") == (row["effect"] == "home") and (not row.has("home") or row["home"] in envs),
+				"%s names a ground only as a home piece, and a real one" % id)
+		_check(not row.has("envs"), "%s is not tied to any other ground" % id)
+		if row.has("home"):
+			_check(UniqueTable.home_piece(row["home"]) == id, "%s is the one piece at home on %s" % [id, row["home"]])
+	_check(UniqueTable.pool_for(Achievements.STARTERS) == Achievements.STARTERS, "the starters are there to hunt from the first")
 	for mod_id: String in ModifierTable.UNIQUE_ONLY:
 		var used := false
 		for id: String in UniqueTable.UNIQUES:
@@ -3726,12 +3806,18 @@ func _test_attribute_uniques() -> bool:
 	wear.call(uneven, unique.call("crown_of_accord"))
 	_check(uneven.attributes()["strength"] == 100.0, "and nothing once one falls behind")
 
-	# The Zealot's Brand: the highest four times, the rest nothing.
+	# The Zealot's Brand: the two lower counted as the highest, times its rank's number.
 	var zeal: Inventory = armed.call([{"added_strength": 30, "added_dexterity": 60, "added_intelligence": 10}])
 	wear.call(zeal, unique.call("zealots_brand"))
-	_check(zeal.attributes() == {"strength": 0.0, "dexterity": 240.0, "intelligence": 0.0},
-			"the Brand keeps the highest, four times over (%s)" % zeal.attributes())
-	_check(not zeal.stats().has("strength") and zeal.stats()["dexterity"] == 240.0, "and so do the stats")
+	var lifted := 60.0 * UniqueTable.dial("zealots_brand", "times", 1)
+	_check(zeal.attributes() == {"strength": lifted, "dexterity": 60.0, "intelligence": lifted},
+			"the Brand brings the lower two up to the highest (%s)" % zeal.attributes())
+	_check(zeal.stats()["strength"] == lifted and zeal.stats()["dexterity"] == 60.0, "and so do the stats")
+	_check(zeal.gear_attributes() == {"strength": 30.0, "dexterity": 60.0, "intelligence": 10.0},
+			"while what the gear adds up to is what it always was")
+	zeal.achievements["zealots_brand"] = UniqueTable.PEAK
+	_check(zeal.attributes()["strength"] == 60.0 * UniqueTable.dial("zealots_brand", "times", UniqueTable.PEAK),
+			"and at rank IV to its rank's times the highest (%s)" % zeal.attributes())
 
 	# The Scholar's Circlet: intelligence gives damage at five times the rate, and no experience.
 	var reader: Inventory = armed.call([{"added_intelligence": 50}])
@@ -3762,6 +3848,187 @@ func _test_attribute_uniques() -> bool:
 	var quick: Inventory = armed.call([{"added_dexterity": 50}])
 	wear.call(quick, unique.call("quickdraw_boots"))
 	_check(quick.stats()["spawn_speed"] == 50.0, "and fifty dexterity is 50%% spawn speed on the boots")
+
+	# Every one of them reads its number at the rank the player has earned, and the card says the same.
+	var at := func(id: String, key: String) -> float: return UniqueTable.dial(id, key, UniqueTable.PEAK)
+	for bag_of: Inventory in [ogre, fencer, butcher, quick, reader, sage, even, bag]:
+		for id: String in Achievements.ACHIEVEMENTS:
+			bag_of.achievements[id] = UniqueTable.PEAK
+	_check(is_equal_approx(ogre.stats()["damage"] - weak, 100.0 * at.call("ogres_knuckle", "share") / 100.0 * 1.2),
+			"the Knuckle at IV (%s)" % (ogre.stats()["damage"] - weak))
+	_check(fencer.stats()["time_on_hit"] == 50.0 / at.call("fencers_signet", "dexterity"), "the Signet at IV")
+	_check(butcher.stats()["bleed"] == 100.0 / at.call("butchers_cleaver", "strength"), "the Cleaver at IV")
+	_check(quick.stats()["spawn_speed"] == 50.0 * at.call("quickdraw_boots", "times"), "the Boots at IV")
+	_check(reader.attribute_gift("intelligence", 50.0) == ["damage", 10.0 * at.call("scholars_circlet", "times")],
+			"the Circlet at IV")
+	_check(is_equal_approx(sage.skill_worth(), 1.0 + 50.0 / at.call("sages_abacus", "intelligence") / 100.0),
+			"the Abacus at IV (%s)" % sage.skill_worth())
+	_check(even.attributes()["strength"] == 100.0 * at.call("crown_of_accord", "times"), "the Crown at IV")
+	# The Echo at III: past it, the plus it lifts the heirlooms by is `_test_rank_four_uniques`'.
+	bag.achievements["heirlooms_echo"] = 3
+	var again := UniqueTable.dial("heirlooms_echo", "times", 3) - 1.0
+	_check(bag.attributes() == {"strength": 50.0 + 20.0 * again, "dexterity": 40.0 + 40.0 * again, "intelligence": 10.0},
+			"the Echo at III (%s)" % bag.attributes())
+	UniqueTable.ranks = {"ogres_knuckle": UniqueTable.PEAK}
+	_check(Item.rolled_unique("ogres_knuckle", rng, 1).effect_text() == UniqueTable.effect_text("ogres_knuckle", UniqueTable.PEAK)
+			and UniqueTable.effect_text("ogres_knuckle", UniqueTable.PEAK).contains("%d%%" % int(at.call("ogres_knuckle", "share"))),
+			"and its card writes the rank's number")
+	_check(UniqueTable._written(3.0) == "3" and UniqueTable._written(2.5) == "2.5",
+			"a whole number is written without a point, and a half with one")
+	_check(UniqueTable.effect_text("sages_abacus", 0).contains("every 5/4/3/2 intelligence")
+			and UniqueTable.effect_text("hourglass_amulet", 0).contains("puts 1/1.5/2/3 seconds back"),
+			"rank 0 writes every rank's numbers, four sentences at IV's wording")
+	UniqueTable.ranks = {}
+	return true
+
+
+## The lines the uniques the inventory answers for gain at rank IV, each against rank III.
+func _test_rank_four_uniques() -> bool:
+	var iv := UniqueTable.PEAK
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var wear := func(bag: Inventory, piece: Item) -> void:
+		bag.items.append(piece)
+		_check(bag.equip(piece, bag.equipment.sockets_for(piece)[0]), "%s goes on" % piece.display_name())
+	var lined := func(piece: Item, lines: Dictionary) -> Item:
+		piece.mods = []
+		for id: String in lines:
+			piece.mods.append({"id": id, "value": lines[id]})
+		return piece
+	var ring := func(lines: Dictionary) -> Item:
+		var piece := Item.new()
+		piece.type = "Iron Band"
+		piece.stats = Item.scaled_stats(piece.type, 1)
+		return lined.call(piece, lines)
+	var at := func(bag: Inventory, id: String, rank: int) -> Inventory:
+		bag.achievements[id] = rank
+		return bag
+
+	# The Packmule's Harness: the bag holds more.
+	var mule := Inventory.new()
+	wear.call(mule, lined.call(Item.rolled_unique("packmule", rng, 1), {}))
+	for i in Inventory.CAPACITY:
+		mule.items.append(_piece(ItemRarity.Rarity.COMMON, 1))
+	_check(at.call(mule, "packmule", 3).capacity() == Inventory.CAPACITY and mule.is_full(), "a full bag at III")
+	_check(at.call(mule, "packmule", iv).capacity() == Inventory.CAPACITY + Inventory.PACKMULE_ROOM
+			and not mule.is_full() and mule.room_left() == Inventory.PACKMULE_ROOM, "and room to spare at IV")
+	_check(mule.stash().capacity() == Inventory.CAPACITY, "the heirlooms' stash is not the bag")
+
+	# The Patchwork Coat: any piece may be worn, while the Coat stays on.
+	var motley := Inventory.new()
+	wear.call(motley, Item.rolled_unique("patchwork_coat", rng, 1))
+	var deep := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 20)
+	motley.items.append(deep)
+	_check(not at.call(motley, "patchwork_coat", 3).why_not_equip(deep, Equipment.Socket.WEAPON).is_empty(),
+			"a deep sword asks for its strength at III")
+	_check(at.call(motley, "patchwork_coat", iv).why_not_equip(deep, Equipment.Socket.WEAPON).is_empty(),
+			"and not at IV")
+	var plate := Item.rolled("Wooden Armor", ItemRarity.Rarity.COMMON, rng, 20)
+	motley.items.append(plate)
+	_check(not motley.why_not_equip(plate, Equipment.Socket.BODY).is_empty(),
+			"but a piece that takes the Coat off asks all the same")
+
+	# The Heirloom's Echo: every heirloom one plus higher, its lines with it -- the piece itself untouched.
+	var lowest := int(ModifierTable.band_for("added_strength", 1)[0])
+	var echoed := Inventory.new()
+	var heir: Item = ring.call({"added_strength": lowest})
+	wear.call(echoed.stash(), heir)
+	wear.call(echoed, lined.call(Item.rolled_unique("heirlooms_echo", rng, 1), {}))
+	var times := UniqueTable.dial("heirlooms_echo", "times", iv)
+	var before: float = at.call(echoed, "heirlooms_echo", 3).attributes()["strength"]
+	var lifted: float = at.call(echoed, "heirlooms_echo", iv).attributes()["strength"]
+	_check(before == lowest * UniqueTable.dial("heirlooms_echo", "times", 3) and lifted > lowest * times
+			and int(heir.mods[0]["value"]) == lowest and heir.plus == 0,
+			"the Echo at IV lifts the heirloom a plus in the count alone (%s, %s)" % [before, lifted])
+
+	# The Purist's Seal: a pure piece's lines count a quarter higher.
+	var pure := Inventory.new()
+	var sword: Item = lined.call(Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 1), {"added_damage": 20})
+	wear.call(pure, sword)
+	wear.call(pure, lined.call(Item.rolled_unique("purists_seal", rng, 1), {}))
+	var plain_damage: float = at.call(pure, "purists_seal", 3).stats()["damage"]
+	var purer: float = at.call(pure, "purists_seal", iv).stats()["damage"]
+	_check(purer > plain_damage and int(sword.mods[0]["value"]) == 20,
+			"the Seal at IV counts the sword's line higher, and leaves it as it is (%s, %s)" % [plain_damage, purer])
+
+	# The Rag and Bone Sack: now and then an orb as well.
+	var sack := Inventory.new()
+	wear.call(sack, Item.rolled_unique("rag_and_bone_sack", rng, 1))
+	for rank in [3, iv]:
+		at.call(sack, "rag_and_bone_sack", rank)
+		var draws := RandomNumberGenerator.new()
+		draws.seed = WORLD_SEED
+		var orbs := 0
+		for i in 400:
+			var orb := sack.salvage_orb(draws)
+			orbs += int(not orb.is_empty())
+			_check(orb.is_empty() or OrbTable.ORBS.has(orb), "a real orb (%s)" % orb)
+		_check((orbs == 0) == (rank != iv) and orbs < 60, "orbs from the Sack at rank %d: %d of 400" % [rank, orbs])
+
+	# The Sage's Abacus: every skill learned counts one rank higher.
+	var sage := Inventory.new()
+	var root: String = SkillTree.nodes_of(SkillTree.trees()[0]).keys()[0]
+	sage.skills.ranks[root] = 1
+	for stat: String in sage.skills.flat():
+		_check(sage.skills.flat(1)[stat] == 2.0 * sage.skills.flat()[stat], "a rank more is the rank's again (%s)" % stat)
+	wear.call(sage, lined.call(Item.rolled_unique("sages_abacus", rng, 1), {}))
+	_check(at.call(sage, "sages_abacus", iv).stats() != at.call(sage, "sages_abacus", 3).stats(),
+			"and the Abacus at IV hands the fight that")
+
+	# The Fencer's Signet and the Scholar's Circlet: dexterity to dodge, intelligence to crit damage.
+	var fencer := Inventory.new()
+	wear.call(fencer, ring.call({"added_dexterity": 50, "added_intelligence": 50}))
+	wear.call(fencer, lined.call(Item.rolled_unique("fencers_signet", rng, 1), {}))
+	wear.call(fencer, lined.call(Item.rolled_unique("scholars_circlet", rng, 1), {}))
+	at.call(fencer, "fencers_signet", 3)
+	at.call(fencer, "scholars_circlet", 3)
+	var dodged := float(fencer.stats().get("dodge", 0.0))
+	var sharp := float(fencer.stats().get("crit_damage", 0.0))
+	at.call(fencer, "fencers_signet", iv)
+	at.call(fencer, "scholars_circlet", iv)
+	_check(fencer.stats()["dodge"] - dodged == 50.0 and fencer.stats()["crit_damage"] - sharp == 50.0 / Inventory.SCHOLAR_CRIT,
+			"both at IV and neither at III (%s, %s)" % [fencer.stats().get("dodge"), fencer.stats().get("crit_damage")])
+
+	# The Quickdraw Boots: Spawn Speed past 100% is attack speed.
+	var quick := Inventory.new()
+	wear.call(quick, lined.call(Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 1), {}))
+	wear.call(quick, ring.call({"added_dexterity": 150}))
+	wear.call(quick, lined.call(Item.rolled_unique("quickdraw_boots", rng, 1), {}))
+	var slow: float = at.call(quick, "quickdraw_boots", 3).stats()["attack_speed"]
+	var spawn: float = quick.stats()["spawn_speed"]
+	var fast: float = at.call(quick, "quickdraw_boots", iv).stats()["attack_speed"]
+	var spawn_iv: float = quick.stats()["spawn_speed"]
+	_check(is_equal_approx(fast, slow * (1.0 + (spawn_iv - 100.0) / 100.0)) and spawn > 100.0,
+			"the Boots at IV turn Spawn Speed past 100%% into attack speed (%s from %s)" % [fast, slow])
+
+	# The Crown of Accord: attributes a fifth apart count.
+	var crown := Inventory.new()
+	wear.call(crown, ring.call({"added_strength": 100, "added_dexterity": 85, "added_intelligence": 85}))
+	wear.call(crown, lined.call(Item.rolled_unique("crown_of_accord", rng, 1), {}))
+	_check(at.call(crown, "crown_of_accord", 3).attributes()["strength"] == 100.0, "85 of 100 is too far at III")
+	_check(at.call(crown, "crown_of_accord", iv).attributes()["strength"]
+			== 100.0 * UniqueTable.dial("crown_of_accord", "times", iv), "and near enough at IV")
+
+	# The Zealot's Brand: every attribute's gift a quarter more.
+	var zeal := Inventory.new()
+	wear.call(zeal, lined.call(Item.rolled_unique("zealots_brand", rng, 1), {}))
+	var gift: float = at.call(zeal, "zealots_brand", 3).attribute_gift("strength", 100.0)[1]
+	_check(at.call(zeal, "zealots_brand", iv).attribute_gift("strength", 100.0)[1] == gift * Inventory.ZEALOT_GIFT,
+			"the Brand at IV")
+
+	# The card writes the rank IV line once it is reached, and not before.
+	var metro := Item.rolled_unique("metronome", rng, 1)
+	var rows := VBoxContainer.new()
+	UniqueTable.ranks = {"metronome": 3}
+	ItemDetails.fill(rows, metro, 150.0)
+	_check(metro.peak_text().is_empty() and not _said_by(rows).contains(UniqueTable.peak_text("metronome")),
+			"no rank IV line at III")
+	UniqueTable.ranks = {"metronome": iv}
+	ItemDetails.fill(rows, metro, 150.0)
+	_check(metro.peak_text() == UniqueTable.peak_text("metronome") and _said_by(rows).contains(metro.peak_text())
+			and _said_by(rows).contains("Rank IV"), "and the line and the rank at IV")
+	UniqueTable.ranks = {}
+	rows.free()
 	return true
 
 
@@ -3789,8 +4056,9 @@ func _test_unique_stats() -> bool:
 	helm.mods.clear()
 	wear.call(bag, helm)
 	var armour: float = bag.equipment.totals()["armor"]
-	_check(is_equal_approx(bag.stats()["damage"], without + armour * Inventory.SPIKES_SHARE * 1.5),
-			"a hundredth of the armour, scaled like any flat damage (%s from %s)" % [bag.stats()["damage"], without])
+	var spikes := UniqueTable.dial("spiked_helm", "share") / 100.0
+	_check(is_equal_approx(bag.stats()["damage"], without + armour * spikes * 1.5),
+			"its share of the armour, scaled like any flat damage (%s from %s)" % [bag.stats()["damage"], without])
 
 	# The two counts the fight cannot see for itself.
 	_check(bag.stats()["bare_sockets"] == Equipment.NAMES.size() - 3, "three sockets filled, the rest bare")
@@ -3798,13 +4066,18 @@ func _test_unique_stats() -> bool:
 	bag.items.append(_piece(ItemRarity.Rarity.COMMON, 1))
 	_check(bag.stats()["bag_pieces"] == 2, "and two pieces in the bag")
 
-	# The Rag and Bone Sack: a quarter of what a trader gives, and only while it is worn.
+	# The Rag and Bone Sack: its rank's share of what a trader gives, and only while it is worn.
 	var junk := _piece(ItemRarity.Rarity.RARE, 8)
 	_check(bag.salvage(junk) == 0.0, "nothing is paid for rubbish without the sack")
 	wear.call(bag, Item.rolled_unique("rag_and_bone_sack", rng, 5))
 	var paid := bag.salvage(junk)
-	_check(paid == maxf(1.0, roundf(TownPrices.sell_price(junk) * 0.25)) and paid < TownPrices.sell_price(junk),
-			"a quarter of the trader's price (%s of %s)" % [paid, TownPrices.sell_price(junk)])
+	var share := UniqueTable.dial("rag_and_bone_sack", "share") / 100.0
+	_check(paid == maxf(1.0, roundf(TownPrices.sell_price(junk) * share)) and paid < TownPrices.sell_price(junk),
+			"its share of the trader's price (%s of %s)" % [paid, TownPrices.sell_price(junk)])
+	bag.achievements["rag_and_bone_sack"] = UniqueTable.PEAK
+	_check(bag.salvage(junk) == maxf(1.0, roundf(TownPrices.sell_price(junk)
+			* UniqueTable.dial("rag_and_bone_sack", "share", UniqueTable.PEAK) / 100.0)), "and more at rank IV")
+	bag.achievements.erase("rag_and_bone_sack")
 	# A run pouches it like any gold; the bag pays for its own discards at once.
 	var run := FightLedger.new(bag, TEST_PATH, true)
 	run.add_gold(paid)
@@ -3822,42 +4095,266 @@ func _test_unique_stats() -> bool:
 	_check(level_one == 2 and bag.gold > paid * 2.0 and bag.count_at(1) == 0, "and so does a level's bin")
 	page.queue_free()
 
-	# One home piece is at home on its own ground. Two or more are a Pilgrim's set: every piece's rule
-	# on every piece's ground, and each ground named once so the damage never stacks.
-	var pilgrim := Inventory.new()
-	wear.call(pilgrim, Item.rolled_unique("meadowstriders", rng, 1))
-	_check(pilgrim.effects() == ["home:grass", "grazing:grass"], "one piece, one ground (%s)" % [pilgrim.effects()])
-	wear.call(pilgrim, Item.rolled_unique("rimeplate", rng, 1))
-	var two := pilgrim.effects()
-	for id: String in ["home:grass", "home:ice", "grazing:grass", "grazing:ice", "frozen_clock:grass", "frozen_clock:ice"]:
-		_check(two.count(id) == 1, "two pieces share their grounds: %s (%s)" % [id, two])
-	_check(two.size() == 6, "and nothing else")
-	# No two home pieces share a socket, so the whole set can be worn and everywhere is home.
-	for id: String in ["hunters_lantern", "sunscorched_cowl", "stonebreaker", "gravediggers_charm"]:
-		wear.call(pilgrim, Item.rolled_unique(id, rng, 1))
-	var six := pilgrim.effects()
-	for env: String in ["grass", "forest", "desert", "ice", "mountains", "dirt"]:
-		_check(six.count("home:" + env) == 1, "all six: %s is home, once" % env)
-		for clause: String in ["grazing", "flush_out", "heatstroke", "frozen_clock", "giantsbane", "restless"]:
-			_check(("%s:%s" % [clause, env]) in six, "all six: %s on %s" % [clause, env])
-	var slots := {}
-	for id: String in UniqueTable.UNIQUES:
-		if UniqueTable.UNIQUES[id]["effect"] == "home":
-			var slot := LootTable.slot_of(UniqueTable.UNIQUES[id]["base"])
-			_check(not slots.has(slot), "%s and %s do not fight over the %s socket" % [id, slots.get(slot, ""), slot])
-			slots[slot] = id
-	# Every home row says so on its card, and no other row does.
-	for id: String in UniqueTable.UNIQUES:
-		_check((UniqueTable.set_text(id) == UniqueTable.PILGRIM_TEXT) == (UniqueTable.UNIQUES[id]["effect"] == "home"),
-				"%s's card mentions the Pilgrim's set only if it is a home piece" % id)
-	# A set piece is a unique in green, frame and all; any other unique stays gold.
+	# A home piece is at home on its own ground and nowhere else, alone or beside another: there is no set.
+	var homes := Inventory.new()
+	wear.call(homes, Item.rolled_unique("meadowstriders", rng, 1))
+	_check(homes.effects() == ["home:grass"], "one piece, one ground (%s)" % [homes.effects()])
+	wear.call(homes, Item.rolled_unique("rimeplate", rng, 1))
+	_check(homes.effects().size() == 2 and "home:grass" in homes.effects() and "home:ice" in homes.effects(),
+			"two pieces, each its own ground and nothing more (%s)" % [homes.effects()])
+	# And it wears the unique's gold, frame and all, like every other.
 	var home := Item.rolled_unique("rimeplate", rng, 1)
-	_check(home.rarity == ItemRarity.Rarity.UNIQUE and home.is_set(), "a home piece is a unique and a set piece")
-	_check(home.border_color() == ItemRarity.SET_BORDER and home.text_color() == ItemRarity.SET_TEXT
-			and home.frame() != null, "and wears the set's green, with a frame of its own")
-	_check(Item.rolled_unique("snowball", rng, 1).border_color() == Palette.GOLD, "a plain unique stays gold")
+	_check(home.border_color() == Palette.GOLD and home.text_color() == ItemRarity.TEXT_COLORS[ItemRarity.Rarity.UNIQUE]
+			and home.frame() != null, "a home piece is a unique in gold")
 	_clear_save()
 	return true
+
+
+## Achievements: each unlocks one unique into the drops, reached by a count or a figure off the player;
+## a fight is counted by `record` -- its feats only on a tile fight -- and what is earned is saved,
+## carried through a transcension, announced and listed on its page. And the starters' own numbers.
+func _test_achievements() -> bool:
+	_clear_save()
+	# The table: every unique is a starter or has exactly one achievement, never both.
+	for id: String in UniqueTable.UNIQUES:
+		_check((id in Achievements.STARTERS) != Achievements.ACHIEVEMENTS.has(id),
+				"%s is either a starter or unlocked by an achievement" % id)
+	for id: String in Achievements.ACHIEVEMENTS:
+		var row: Dictionary = Achievements.ACHIEVEMENTS[id]
+		_check(UniqueTable.UNIQUES.has(id) and int(row["tier"]) in [1, 2, 3, 4] and not str(row["name"]).is_empty(),
+				"%s is a whole row" % id)
+		# Four ranks, each asking more than the last, and each said in full.
+		var need: Array = row["need"]
+		_check(need.size() == UniqueTable.PEAK and float(need[0]) > 0.0, "%s asks one number a rank" % id)
+		for rank in range(1, UniqueTable.PEAK + 1):
+			if rank > 1:
+				_check(float(need[rank - 1]) > float(need[rank - 2]), "%s asks more at rank %d" % [id, rank])
+			var said := Achievements.text(id, rank)
+			_check(not said.is_empty() and not said.contains("{"), "%s says what rank %d asks (%s)" % [id, rank, said])
+	_check(Achievements.STARTERS.size() == 8, "eight starters, one a socket")
+
+	# A count earns at its need, and not before.
+	var player := Inventory.new()
+	_check(Achievements.unlocked(player) == Achievements.STARTERS, "a new player has the starters and no more")
+	player.tick("crits", 99)
+	_check(Achievements.earn(player).is_empty(), "99 crits earn nothing")
+	player.tick("crits")
+	_check(Achievements.earn(player) == ["duelists_buckler"] and "duelists_buckler" in Achievements.unlocked(player)
+			and player.achievements_new == ["duelists_buckler"] and Achievements.rank(player, "duelists_buckler") == 1,
+			"the hundredth earns the Duelist's Buckler at rank I, once")
+	_check(Achievements.earn(player).is_empty(), "and it is not earned twice")
+	# It climbs a rank at each need, several at once where the count already stood past them, and no
+	# further than the last.
+	player.achievements_new.clear()
+	player.tick("crits", int(Achievements.need_at("duelists_buckler", 2)) - 100)
+	_check(Achievements.earn(player) == ["duelists_buckler"] and Achievements.rank(player, "duelists_buckler") == 2
+			and player.achievements_new == ["duelists_buckler"], "the next need is rank II, and new again")
+	player.tick("crits", int(Achievements.need_at("duelists_buckler", UniqueTable.PEAK)) * 10)
+	_check(Achievements.earn(player) == ["duelists_buckler"]
+			and Achievements.rank(player, "duelists_buckler") == UniqueTable.PEAK, "a count past the last is rank IV at once")
+	_check(Achievements.earn(player).is_empty(), "and nothing climbs past it")
+	_check(Achievements.ranks(player) == {"duelists_buckler": UniqueTable.PEAK}, "which is what a fight is told")
+	# A figure off the player: strength worn.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var ring := Item.rolled("Iron Band", ItemRarity.Rarity.COMMON, rng, 1)
+	ring.mods = [{"id": "added_strength", "value": 25}]
+	player.add(ring)
+	player.equip(ring, player.equipment.sockets_for(ring)[0])
+	_check("ogres_knuckle" in Achievements.earn(player), "20 strength worn earns the Ogre's Knuckle")
+
+	# A fight: its counts on a run and a tile fight both, its streaks and feats on a tile fight only.
+	var run := Encounter.farm(Vector2i(3, 0), "grass")
+	run.tally = {"crit_kills": 5, "dry_streak": 40, "clicks": 0}
+	run.index = 7
+	run.victory = true
+	Achievements.record(player, run)
+	_check(player.tally.get("crit_kills") == 5 and player.tally.get("kills:grass") == 7
+			and not player.tally.has("dry_streak"), "a run counts its kills and crits, not its streaks (%s)" % [player.tally])
+	var wall := Encounter.for_wall(Vector2i(11, 0))
+	wall.tally = {"dry_streak": 40}
+	wall.victory = true
+	wall.time_left = wall.seconds
+	Achievements.record(player, wall)
+	_check(player.tally.get("dry_streak") == 40 and player.tally.get("wall_no_clicks") == 1
+			and player.tally.get("wall_half_clock") == 1 and not player.tally.has("wall_last_second"),
+			"a wall broken without a click, and with the clock untouched, is two feats (%s)" % [player.tally])
+	var lost := Encounter.for_wall(Vector2i(11, 0))
+	lost.victory = false
+	lost.time_left = 0.5
+	Achievements.record(player, lost)
+	_check(not player.tally.has("wall_last_second"), "a wall not broken is no feat")
+	_check("metronome" in Achievements.earn(player) and Achievements.is_unlocked(player, "metronome"),
+			"and a feat unlocks its unique")
+	# A feat is kept as the furthest wall out it was done at: the second wall's ring is its rank II.
+	var second := Encounter.for_wall(Vector2i(MapBuilder.START_LAND_RADIUS + 1 + MapBuilder.WALL_STEP, 0))
+	second.tally = {}
+	second.victory = true
+	second.time_left = second.seconds
+	Achievements.record(player, second)
+	Achievements.record(player, wall)
+	_check(player.tally.get("wall_no_clicks") == 2 and Achievements.earn(player).has("metronome")
+			and Achievements.rank(player, "metronome") == 2, "the second wall is rank II, and the first takes nothing back")
+	# Clean Sweep: ten one-blow kills in a row in one tile fight, counted by the walls behind the land.
+	for case: Array in [[Vector2i(4, 0), 0], [Vector2i(MapBuilder.START_LAND_RADIUS + 2, 0), 1]]:
+		var sweep := Encounter.for_tile(case[0], "grass")
+		sweep.tally = {"domino_streak": Achievements.DOMINO_STREAK}
+		var sweeper := Inventory.new()
+		Achievements.record(sweeper, sweep)
+		_check(int(sweeper.tally.get("domino_wall", 0)) == case[1], "a sweep at %s is past %d walls" % case)
+	# The walls ever broken are counted as they are paid for, in any world.
+	var mason := Inventory.new()
+	mason.credit_walls(2)
+	mason.credit_walls(3)
+	_check(mason.tally.get("walls") == 3 and mason.transcended().tally.get("walls") == 3,
+			"every wall broken is counted once, and the count outlives the world")
+
+	# Saved, carried through a transcension, and an old save has earned nothing.
+	player.save(TEST_PATH)
+	var back := Inventory.load_from(TEST_PATH)
+	_check(back.achievements == player.achievements and back.tally == player.tally
+			and back.achievements_new == player.achievements_new, "what was earned and counted survives the save")
+	var next := player.transcended()
+	_check(next.achievements == player.achievements and next.tally.get("crit_kills") == 5
+			and next.tally.get("transcended") == 1, "and a transcension, which it counts")
+	var old := FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	old.store_string(JSON.stringify({"version": 27, "uniques_found": ["metronome"]}))
+	old.close()
+	var older := Inventory.load_from(TEST_PATH)
+	_check(older.achievements.is_empty() and older.tally.is_empty() and older.uniques_found == ["metronome"]
+			and not Achievements.is_unlocked(older, "metronome"),
+			"a version 27 save earned nothing: its find stays in the log and must be earned again")
+	# Version 28 kept a list: every one of it rank I, and the walls down in its world the lifetime count.
+	var listed := FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	listed.store_string(JSON.stringify({"version": 28, "achievements": ["metronome", "no_such_feat"],
+			"achievements_new": ["metronome"], "walls_credited": 3, "tally": {"walls": 1, "crits": 7}}))
+	listed.close()
+	var ranked := Inventory.load_from(TEST_PATH)
+	_check(ranked.achievements == {"metronome": 1} and ranked.achievements_new == ["metronome"]
+			and ranked.tally.get("walls") == 3 and ranked.tally.get("crits") == 7,
+			"a version 28 save's achievements are rank I, and its walls count (%s, %s)" % [ranked.achievements, ranked.tally])
+	var climbed := FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	climbed.store_string(JSON.stringify({"version": Inventory.VERSION, "achievements": {"metronome": 9, "bulwark": 0}}))
+	climbed.close()
+	_check(Inventory.load_from(TEST_PATH).achievements == {"metronome": UniqueTable.PEAK},
+			"a rank off the end of the table is held to it, and none at all is nothing earned")
+
+	# The figures read off the player: what the gear adds up to, not what the Brand makes of it.
+	var zealot := Inventory.new()
+	var focus := Item.rolled("Iron Band", ItemRarity.Rarity.COMMON, rng, 1)
+	focus.mods = [{"id": "added_strength", "value": 250}]
+	zealot.add(focus)
+	zealot.equip(focus, zealot.equipment.sockets_for(focus)[0])
+	var brand := Item.rolled_unique("zealots_brand", rng, 1)
+	brand.mods = []
+	zealot.add(brand)
+	zealot.equip(brand, zealot.equipment.sockets_for(brand)[0])
+	var figures := Achievements.state(zealot)
+	_check(zealot.attributes()["dexterity"] > 0.0 and figures["dexterity"] == 0.0 and figures["zealot"] == 250.0
+			and figures["accord"] == 0.0, "the Brand counts for the fight and not for an ask (%s)" % [figures])
+	# Mastery: the trees filled, and its last rank past the most once all three are.
+	var scholar := Inventory.new()
+	scholar.level = 500
+	for tree: String in SkillTree.trees():
+		for id: String in SkillTree.nodes_of(tree):
+			scholar.skills.ranks[id] = int(SkillTree.node(id)["max_rank"])
+	_check(Achievements.state(scholar)["mastery"] == float(SkillTree.trees().size()), "every tree full")
+	var first: String = SkillTree.nodes_of(SkillTree.trees()[0]).keys()[0]
+	scholar.skills.ranks[first] += Achievements.MASTERY_OVERRANKS
+	_check(Achievements.state(scholar)["mastery"] == float(UniqueTable.PEAK), "and ranks past the most on top")
+	_check(Achievements.state(Inventory.new())["carried"] == 0.0, "and a bag is counted piece by piece")
+
+	# The starters' own numbers, read by `stats()`.
+	var starter := Inventory.new()
+	var bare := starter.stats()
+	for id: String in ["squires_blade", "couriers_boots", "novices_cap"]:
+		var piece := Item.rolled_unique(id, rng, 1)
+		piece.mods = []
+		starter.add(piece)
+		starter.equip(piece, starter.equipment.sockets_for(piece)[0])
+	var worn := starter.stats()
+	_check(float(worn.get("damage", 0.0)) >= float(bare.get("damage", 0.0)) + Inventory.SQUIRE_DAMAGE,
+			"the Squire's Blade adds its damage (%s)" % worn.get("damage"))
+	_check(float(worn.get("spawn_speed", 0.0)) == Inventory.COURIER_SPAWN, "the Courier's Boots their spawn speed")
+	_check(float(worn.get("xp_more", 0.0)) == Inventory.NOVICE_XP, "the Novice's Cap its experience")
+	starter.level = Inventory.NOVICE_UNTIL
+	_check(float(starter.stats().get("xp_more", 0.0)) == 0.0, "until the level it stops at")
+
+	# The page, the button and the banner.
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	main.inventory_path = TEST_PATH
+	main.map_path = TEST_MAP_PATH
+	_clear_save()
+	root.add_child(main)
+	await process_frame
+	_check(not main._achievements_button.visible, "no achievements button before the first")
+	main.inventory.tick("crits", 100)
+	main.inventory.save(TEST_PATH)
+	await process_frame
+	await process_frame
+	_check(main.inventory.achievements == {"duelists_buckler": 1}, "a save that reaches one earns it")
+	_check(main._banner != null and _said_by(main._banner).contains("Sharp Eye")
+			and _said_by(main._banner).contains("Unlocks Duelist's Buckler") and main._banner_closable,
+			"on a banner naming it and its unique, its X up at once off a fight")
+	_check(Inventory.load_from(TEST_PATH).achievements == {"duelists_buckler": 1}, "and it is saved")
+	_check(UniqueTable.ranks == {"duelists_buckler": 1}, "and the cards write its unique at that rank")
+	_check(main._achievements_button.visible and main._flashes.has("new_achievement"), "its button comes on, pulsing")
+	main._close_banner()
+	# The next rank is a banner of its own: the rank reached, and the unique's rule at its new numbers.
+	main.inventory.tick("crits", int(Achievements.need_at("duelists_buckler", 2)) - 100)
+	main.inventory.save(TEST_PATH)
+	await process_frame
+	await process_frame
+	var risen := _said_by(main._banner) if main._banner != null else ""
+	_check(Achievements.rank(main.inventory, "duelists_buckler") == 2 and risen.contains("Rank Up")
+			and risen.contains("Sharp Eye II") and risen.contains(UniqueTable.effect_text("duelists_buckler", 2)),
+			"a rank climbed raises its own banner (%s)" % risen)
+	_check(UniqueTable.ranks == {"duelists_buckler": 2}, "and the cards follow it")
+	main._close_banner()
+	main._on_achievements_pressed()
+	await process_frame
+	_check(main.achievements_page.visible and main.inventory.achievements_new.is_empty()
+			and not main._flashes.has("new_achievement"), "the page opens and the pulse stops")
+	var tiles: Array = main.achievements_page.find_children("*", "ItemSlot", true, false)
+	_check(tiles.size() == Achievements.ACHIEVEMENTS.size(), "one square an achievement (%d)" % tiles.size())
+	var lit := tiles.filter(func(slot: ItemSlot) -> bool: return slot.modulate == Color.WHITE)
+	_check(lit.size() == 1 and lit[0].item.unique == "duelists_buckler", "the earned one lit, the rest dimmed")
+	_check(_said_by(lit[0]).contains("II"), "with its rank on its corner (%s)" % _said_by(lit[0]))
+	_check(tiles.all(func(slot: ItemSlot) -> bool: return slot.hint.is_valid()), "and each writes its own card")
+	var bar: Label = main.achievements_page.find_child(AchievementsPage.SHARE_NAME, true, false)
+	_check(bar.text == "%d%%" % roundi(200.0 / (Achievements.ACHIEVEMENTS.size() * UniqueTable.PEAK)),
+			"the bar says how much is earned, rank by rank (%s)" % bar.text)
+	var rows := VBoxContainer.new()
+	AchievementsPage.write_card(rows, 150.0, main.inventory, "knucklebone_ring", Achievements.state(main.inventory))
+	var said := _said_by(rows)
+	_check(said.contains("Drumroll") and said.contains(Achievements.text("knucklebone_ring", 1))
+			and said.contains("Progress: 0 / %d (0%%)" % int(Achievements.need_at("knucklebone_ring", 1)))
+			and said.contains("Unlocks Knucklebone Ring"), "a square's card says what, how far and what for (%s)" % said)
+	AchievementsPage.write_card(rows, 150.0, main.inventory, "duelists_buckler", Achievements.state(main.inventory))
+	said = _said_by(rows)
+	_check(said.contains("Rank II of IV") and said.contains(Achievements.text("duelists_buckler", 3))
+			and said.contains("Strengthens Duelist's Buckler"), "an earned one's says its rank and asks the next (%s)" % said)
+	rows.free()
+	# Dev: Skill points +10 is ten levels, and the ten points they earn, saved.
+	var free: int = main.inventory.skills.points(main.inventory.level)
+	main.settings_page.points_pressed.emit()
+	_check(main.inventory.skills.points(main.inventory.level) == free + 10
+			and Inventory.load_from(TEST_PATH).level == main.inventory.level, "Skill points +10 gives ten, saved")
+	main._on_left_page_closed()
+	main.queue_free()
+	await process_frame
+	_clear_save()
+	return true
+
+
+## Everything a banner says, run together.
+func _said_by(node: Node) -> String:
+	var said := ""
+	for label: Node in node.find_children("*", "Label", true, false):
+		said += (label as Label).text + " "
+	return said
 
 
 ## The collection log: a button that is not there until there is something to log, a page of squares
@@ -3879,7 +4376,7 @@ func _test_collection() -> bool:
 	_check(main._collection_button.visible and main._flashes.has("new_unique"), "it comes on, pulsing")
 	_check("first_unique" in main.inventory.tips and main._tip_panel != null, "with a word about what was found")
 	main._on_tip_closed()
-	main.inventory.fortunes[FortuneTeller.PEEKED] = ["rimeplate"]
+	main.inventory.achievements["rimeplate"] = 1
 	main._on_collection_pressed()
 	await process_frame
 	_check(main.collection_page.visible and main._collection_button.visible, "the page opens, its button beside it")
@@ -3907,37 +4404,35 @@ func _test_collection() -> bool:
 	for square: ItemSlot in squares:
 		var id: String = square.item.unique
 		var found := id == "metronome"
-		var told := id == "rimeplate"
+		var told := not found and Achievements.is_unlocked(main.inventory, id)
 		shown += int(found)
 		# Every square writes its card through the hint now: a found one so it still says where the
-		# piece is carried, a missing one so it says nothing else.
+		# piece is carried, a locked one so it says what unlocks it.
 		_check(square.hint.is_valid(), "%s: the card is written by the hint" % id)
-		_check((square.modulate == ItemSlot.SHADOW) == told, "%s: darkened only once a fortuneteller has shown it" % id)
 		var icon: TextureRect = square.get_child(0)
+		_check((icon.modulate == ItemSlot.SHADOW) == told, "%s: darkened only while unlocked and not found" % id)
+		_check((square.self_modulate == ItemSlot.KNOWN_SOCKET) == told, "%s: on a faint socket then" % id)
 		_check((icon.modulate == Color.BLACK) == (not found and not told),
-				"%s: a black outline only while nobody has shown it" % id)
+				"%s: a black outline only while locked" % id)
 		_check((square.get_node_or_null(ItemSlot.FRAME_NAME) == null) == (not found),
-				"%s: a missing one is the sprite alone, with no ring" % id)
-		_check((square.get_theme_stylebox("panel") is StyleBoxEmpty) == (not found),
-				"%s: and no socket" % id)
+				"%s: a missing one has no ring" % id)
+		_check((square.get_theme_stylebox("panel") is StyleBoxEmpty) == (not found and not told),
+				"%s: and a locked one no socket" % id)
 	_check(shown == 1, "the found one is drawn as itself")
-	# The hint says nothing of the piece or its ground until a fortuneteller has shown it, and both
-	# after -- and where it is carried stays on the card once the piece is found, which is the one
-	# place a second copy or the rest of a set can be looked up.
-	for state: Array in [[false, false], [true, false], [true, true]]:
-		var peeked: bool = state[0]
-		var found: bool = state[1]
+	# The hint says only "Locked" of a locked piece, and what it is once it is unlocked -- and never
+	# where it is carried: every unique is carried on every ground.
+	for peeked: bool in [false, true]:
 		var rows := VBoxContainer.new()
-		CollectionPage.write_hint(rows, 150.0, "rimeplate", main.view,
-				CollectionPage.specimen("rimeplate") if peeked else null, found)
+		CollectionPage.write_hint(rows, 150.0, CollectionPage.specimen("rimeplate") if peeked else null)
 		var said := ""
 		for label: Node in rows.find_children("*", "Label", true, false):
 			said += (label as Label).text + " "
-		_check(said.contains("Rimeplate") == peeked and said.contains("Nearest:") == peeked,
-				"a hint says what and where only once it has been peeked (%s: %s)" % [peeked, said])
-		if peeked:
-			_check(said.contains("Found") == found and said.contains("Not found yet") == (not found),
-					"and whether it is held (found %s: %s)" % [found, said])
+		_check(said.contains("Rimeplate") == peeked and said.contains("Locked") == (not peeked)
+				and not said.contains("Frost Hunter"),
+				"a hint says it is locked, and what it is once it is unlocked (%s: %s)" % [peeked, said])
+		# The square says whether it is found; the card never does, nor where anything is carried.
+		_check(not said.contains("Found") and not said.contains("Not found yet") and not said.contains("Nearest:")
+				and not said.contains("Carried by"), "and nothing about being found or where (%s)" % said)
 		rows.free()
 	# The found square's own card is the same block, so the log reads alike either way.
 	var held_rows := VBoxContainer.new()
@@ -3947,8 +4442,9 @@ func _test_collection() -> bool:
 	var held := ""
 	for label: Node in held_rows.find_children("*", "Label", true, false):
 		held += (label as Label).text + " "
-	_check(held.contains("Found") and not held.contains("Not found yet") and held.contains("Nearest:"),
-			"a found square still says where the piece is carried (%s)" % held)
+	# The Metronome was found and is not unlocked: an old save's find, which must be earned again.
+	_check(held.contains("Metronome") and held.contains("Locked") and not held.contains("Hands Off"),
+			"a found square that is locked says so and no more (%s)" % held)
 	held_rows.free()
 	# The settings page's dev tick draws the lot as found. A static, so it is put back.
 	Settings.all_uniques = true

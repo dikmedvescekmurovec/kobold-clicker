@@ -656,7 +656,7 @@ func _shoot_town() -> void:
 	print("Saved ", ProjectSettings.globalize_path("user://ui_town_broken.png"))
 
 	# The fortuneteller: what she can be asked with its prices, then three of her answers in the list's
-	# place -- the roads, a whole piece read (the rare amulet), and a relic shown. The bounty that is out
+	# place -- the roads, a whole piece read (the rare amulet), and the quarry found. The bounty that is out
 	# is located on the way, so the journal below has the land on its card.
 	main.inventory.gold = 1.0e9
 	main.town_page._on_tab_pressed(TownServices.FORTUNE)
@@ -690,7 +690,7 @@ func _shoot_town() -> void:
 	main._on_tip_closed()
 	await create_timer(Juice.LEAVE_TIME + 0.1).timeout
 	for shot: Array in [[FortuneTeller.ROADS, "ui_town_roads"], [FortuneTeller.APPRAISE, "ui_town_appraise"],
-			[FortuneTeller.RELIC, "ui_town_relic"], [FortuneTeller.QUARRY, "ui_town_quarry"]]:
+			[FortuneTeller.QUARRY, "ui_town_quarry"]]:
 		main.town_page._on_reading_pressed(shot[0])
 		for i in 2:
 			await process_frame
@@ -799,20 +799,26 @@ func _shoot_town() -> void:
 	root.get_texture().get_image().save_png("user://ui_bounty_journal.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_bounty_journal.png"))
 
-	# The collection log behind the corner's trophy, with a few uniques found and two more shown by a
-	# fortuneteller: the card beside a found one says what it is, and beside a darkened one where it
-	# hides as well. The rest are outlines in black.
+	# The collection log behind the corner's trophy, with a few uniques found and two more unlocked by
+	# achievements: the card beside a found one says what it is, and beside a darkened one where it
+	# hides as well. The locked ones are outlines in black.
 	main._on_left_page_closed()
 	for id: String in ["metronome", "knucklebone_ring", "rimeplate"]:
 		main.inventory.note_unique(id)
-	var told := UniqueTable.ids().filter(func(id: String) -> bool:
-		return not main.inventory.uniques_found.has(id)).slice(0, 2)
-	main.inventory.fortunes[FortuneTeller.PEEKED] = told
+	# A starter: unlocked from the first, not yet found, and in the grid's top row.
+	var told := ["couriers_boots"]
+	# Rimeplate at rank III, so its card writes its rank's numbers.
+	main.inventory.achievements.merge({"rimeplate": 3, "knucklebone_ring": 1})
+	UniqueTable.ranks = Achievements.ranks(main.inventory)
+	# The wall broken above earned Thaw on the next save; its banner is not what this shot is of.
+	for i in 2:
+		await process_frame
+	main._close_banner()
 	main._on_collection_pressed()
 	for i in 2:
 		await process_frame
 	var squares: Array = main.collection_page.find_children("*", "ItemSlot", true, false)
-	# A home piece for the found one: its card is the longest a unique writes, three sentences.
+	# A home piece for the found one, at the rank above.
 	for shot: Array in [["ui_collection", "rimeplate"], ["ui_collection_missing", told[0]]]:
 		var at: Array = squares.filter(func(square: ItemSlot) -> bool: return square.item.unique == shot[1])
 		root.warp_mouse((at[0] as ItemSlot).get_global_rect().get_center())
@@ -821,6 +827,19 @@ func _shoot_town() -> void:
 		await RenderingServer.frame_post_draw
 		root.get_texture().get_image().save_png("user://%s.png" % shot[0])
 		print("Saved ", ProjectSettings.globalize_path("user://%s.png" % shot[0]))
+	# The same Rimeplate under detailed descriptions: every rank's numbers, and rank IV's line locked.
+	Settings.item_details = true
+	root.warp_mouse(Vector2.ZERO)
+	for i in 3:
+		await process_frame
+	var rime: Array = squares.filter(func(square: ItemSlot) -> bool: return square.item.unique == "rimeplate")
+	root.warp_mouse((rime[0] as ItemSlot).get_global_rect().get_center())
+	for i in 3:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_collection_detailed.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_collection_detailed.png"))
+	Settings.item_details = false
 	# What the log is worth, on the tip card beside the mark at the count's end.
 	var help: Control = main.collection_page.find_children("*", "TextureRect", true, false).filter(
 			func(mark: Control) -> bool: return not mark.tooltip_text.is_empty())[0]
@@ -833,6 +852,30 @@ func _shoot_town() -> void:
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_collection_help.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_collection_help.png"))
+	root.warp_mouse(Vector2.ZERO)
+
+	# An achievement earned on the map: its banner, then its page with a square's card up.
+	main._on_left_page_closed()
+	main.inventory.tick("crits", 100)
+	main.inventory.save(main.inventory_path)
+	for i in 3:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_achievement_banner.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_achievement_banner.png"))
+	main._close_banner()
+	main.inventory.tick("blows_taken", 320)
+	main._on_achievements_pressed()
+	for i in 2:
+		await process_frame
+	var tile: ItemSlot = main.achievements_page.find_children("*", "ItemSlot", true, false).filter(
+			func(slot: ItemSlot) -> bool: return slot.item.unique == "spiked_helm")[0]
+	root.warp_mouse(tile.get_global_rect().get_center())
+	for i in 3:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_achievements.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_achievements.png"))
 	root.warp_mouse(Vector2.ZERO)
 
 	# The character page, behind a press on the corner's character panel.

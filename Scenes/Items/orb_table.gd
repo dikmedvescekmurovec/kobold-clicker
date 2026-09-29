@@ -214,9 +214,7 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator) -> bool:
 ## Rolls every modifier's number again in its own tier's band (`Item.tier_of`), leaving the ids and
 ## the tiers alone:
 ## that is the whole difference between a Divine and a Chaos, and the reason a piece with the right
-## modifiers and poor rolls is worth keeping. **The smith's upgrade calls this too** (`Blacksmith`),
-## which is why it is a function rather than a branch: a band read at two levels in two files is two
-## places to drift apart.
+## modifiers and poor rolls is worth keeping.
 ##
 ## A locked or bound modifier is locked at the roll it was locked at -- paying the smith and then
 ## rerolling the number would be paying to keep a line and losing it anyway -- and a perfected one

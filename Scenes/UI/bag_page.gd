@@ -142,6 +142,9 @@ var _action_box: VBoxContainer
 ## The selected bag item as an index into `inventory.items`, or -1. At most one of this and
 ## `_worn_selected` is set: both darken their square and stand `_actions` beside it.
 var _selected := -1
+## Each piece's rarity when the bag was last sorted (Item -> rarity), which the grid sorts by: an orb
+## that lifts a piece leaves it where the cursor is until the bag is shut or a town's tab changes.
+var _sorted_as := {}
 ## The open worn piece as an `Equipment.Socket`, or -1.
 var _worn_selected := -1
 ## Which of the sockets the selected piece fits is the one Equip fills: an index into `sockets_for`,
@@ -276,12 +279,15 @@ func _ready() -> void:
 	# However the bag goes away -- its X, another page, a fight -- an orb must not stay on the cursor.
 	visibility_changed.connect(func() -> void:
 		if not is_visible_in_tree():
-			_armed = "")
+			_armed = ""
+			_sorted_as.clear())
 	refresh()
 
 
-## Opens on the grid, never on a stat block left over from last time.
+## Opens on the grid, never on a stat block left over from last time, and sorted afresh (a town's
+## tab changing comes through here too, by `shop`).
 func open() -> void:
+	_sorted_as.clear()
 	_close_confirm()
 	_selected = -1
 	_worn_selected = -1
@@ -363,7 +369,10 @@ func refresh() -> void:
 	# Cleared at once: the click hit-test walks these children, and a queued square is still one.
 	UITheme.clear(_sections)
 	var by_level := {}
-	for i in inventory.order():
+	for item in inventory.items:
+		if not _sorted_as.has(item):
+			_sorted_as[item] = item.rarity
+	for i in inventory.order(_sorted_as):
 		by_level.get_or_add(inventory.items[i].level, []).append(i)
 	for level: int in inventory.levels():
 		_sections.add_child(_section_heading(level))
@@ -389,10 +398,10 @@ func refresh() -> void:
 			grid.add_child(slot)
 	_count.text = ("%d to spend" % _purse.super_orbs if _heirlooms and _transcending
 			else str(inventory.total()) if _heirlooms
-			else "%d / %d" % [inventory.total(), Inventory.CAPACITY])
+			else "%d / %d" % [inventory.total(), inventory.capacity()])
 	# Rust a few squares early: a full bag is a fight throwing finds away, and that should be seen coming.
 	_count.add_theme_color_override("font_color", Palette.RUST
-			if not _heirlooms and inventory.total() >= Inventory.CAPACITY - NEARLY_FULL
+			if not _heirlooms and inventory.total() >= inventory.capacity() - NEARLY_FULL
 			else Palette.TEXT_SOFT)
 	refresh_gold()
 	refresh_orbs()
@@ -638,6 +647,8 @@ func _clear_level(level: int, uniques: bool) -> void:
 	# The Rag and Bone Sack pays for what is thrown away, which is nothing unless it is worn.
 	for item: Item in gone:
 		_purse.gold += _purse.salvage(item)
+		_purse.add_orb(_purse.salvage_orb())
+	_purse.tick("discarded", gone.size())
 	_save()
 	_select_item(-1)
 
@@ -892,6 +903,8 @@ func _on_discard_pressed(item: Item) -> void:
 	if inventory.remove(item):
 		print("Discarded %s (%s, level %d)" % [item.type, item.rarity_name(), item.level])
 		_purse.gold += _purse.salvage(item)
+		_purse.add_orb(_purse.salvage_orb())
+		_purse.tick("discarded")
 		_save()
 	_select_item(-1)
 
@@ -1157,6 +1170,8 @@ func _craft(orb: String, item: Item, written := Callable()) -> void:
 	if written.is_valid():
 		written.call()
 	_purse.spend_orb(orb)
+	if orb == "Orb of Chaos":
+		_purse.tick("chaos")
 	_save()
 	print("Spent %s on %s (%s, level %d)" % [orb, item.display_name(), item.rarity_name(), item.level])
 	if _purse.orb_count(_armed) <= 0:

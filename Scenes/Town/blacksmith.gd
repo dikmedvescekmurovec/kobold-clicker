@@ -10,11 +10,10 @@ extends RefCounted
 ##
 ## He is the one exception to "a piece's level and base stats never change". An **upgrade** raises the
 ## level by one, rewrites the base stats to exactly what a fresh roll at that level would have carried
-## (`Item.scaled_stats`), and **rolls every modifier's number again in its band at the new level**
-## (`OrbTable.reroll_values`, the Divine orb's own act) -- so the whole piece comes off the anvil at
-## its new level, and the blow is a gamble with the good rolls as well as with the piece. What a lock
-## or an Orb of Binding holds fast is not rerolled, which is what a lock is bought for. A **lock**
-## pins one modifier to the piece, and every orb then works around it.
+## (`Item.scaled_stats`), and **leaves every modifier as it was**, tier and number (the user's ruling,
+## 2026-09-28) -- only a perfected line moves, to the new top, and an heirloom's line climbs back
+## towards the tier it had before its world ended (`Item.level_up`). A **lock** pins one modifier to the
+## piece, and every orb then works around it.
 ##
 ## The cap an upgrade stops at is handed in rather than worked out here: it belongs to the wall circle
 ## the town stands in, and this file has no business knowing what a map is.
@@ -68,12 +67,7 @@ static func upgrade(item: Item, cap: int, rng: RandomNumberGenerator) -> bool:
 	if risk > 0.0 and rng.randf() < risk:
 		item.broken = true
 		return false
-	item.level += 1
-	# Exactly what a fresh roll at the new level would carry, base stats and modifier numbers alike.
-	# Both after the level moves, because both are read at it.
-	item.stats = Item.scaled_stats(item.type, item.level)
-	OrbTable.reroll_values(item, rng)
-	item.refresh_perfect()
+	item.level_up()
 	return true
 
 

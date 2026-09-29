@@ -144,7 +144,12 @@ _PIXELLAB_IDS = [
     # The attribute uniques (2026-09-28).
     "ogres_knuckle", "fencers_signet", "scholars_circlet", "sages_abacus", "crown_of_accord", "zealots_brand",
     "patchwork_coat", "purists_seal", "brawlers_wraps", "butchers_cleaver", "quickdraw_boots", "heirlooms_echo",
+    # The starters (2026-09-28).
+    "squires_blade", "wayfarers_torch", "novices_cap", "couriers_boots", "beginners_luck", "worry_stone",
 ]
+# The uniques whose fire is kept as drawn, as BASE_FIRE keeps a torch's: `_muted` paled the Wayfarer's
+# Torch's flame pink. No glow, which would smudge the collection log's black outline.
+UNIQUE_FIRE = {"wayfarers_torch"}
 UNIQUE_GEAR = {name: ((PIXELLAB + name, 0, 0, 32, 32, 1), []) for name in _PIXELLAB_IDS}
 UNIQUE_OUT = "Assets/Gear/Unique"
 # What the pixellab pieces replaced, still written beside them for the settings' dev tick "Show old
@@ -803,6 +808,23 @@ ICONS_DRAWN = {
         o33332222211o
         ooooooooooooo
     """,
+    # The achievements' tab (2026-09-28): a medal on its ribbon, a stand-in until one is drawn.
+    "ui_icon_medal": """
+        .oo.......oo.
+        .o3o.....o3o.
+        ..o3o...o3o..
+        ...o3o.o3o...
+        ...ooooooo...
+        ..o4444433o..
+        .o44ooooo32o.
+        .o4o44433o2o.
+        .o4o43332o2o.
+        .o3o33322o1o.
+        .o3o32221o1o.
+        .o33ooooo11o.
+        ..o3222211o..
+        ...ooooooo...
+    """,
 }
 
 # The skill trees' icons, off "Ability Icons" -- loose 16 px files that carry their own framed square,
@@ -1387,7 +1409,9 @@ def unique_gear():
     """The unique items' icons, each on its own GEAR_SIDE square."""
     out = {}
     for name, entry in UNIQUE_GEAR.items():
-        out[name] = _squared(name, _shift(_outlined(_muted(_cut(entry[0])), own_edge=True), *entry[1:]))
+        art = _cut(entry[0])
+        fire = _fire(art) if name in UNIQUE_FIRE else set()
+        out[name] = _squared(name, _shift(_outlined(_muted(art, fire), own_edge=True), *entry[1:]))
     return out
 
 

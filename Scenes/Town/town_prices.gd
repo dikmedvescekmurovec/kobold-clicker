@@ -60,7 +60,6 @@ const FORTUNE_BODIES := {
 	"roads": 50.0,
 	"treasure": 20.0,
 	"quarry": 5.0,
-	"relic": 50.0,
 	"appraise": 5.0,
 	"scour": 1000.0,
 	"homecoming": 200.0,
@@ -69,8 +68,8 @@ const FORTUNE_BODIES := {
 }
 
 ## What every casting of a reading multiplies the next one by. The shelf reroll's own dial and for the
-## same reason: her five readings are asked as often as the player likes now, so what stops a purse
-## being stood in front of her and turned into every unique in the log is that the eighth relic costs
+## same reason: her four readings are asked as often as the player likes now, so what stops a purse
+## being stood in front of her and turned into an answer a minute is that the eighth asking costs
 ## what a hundred and twenty-eight firsts do.
 const FORTUNE_GROWTH := 2.0
 
@@ -113,11 +112,11 @@ static func sell_price(item: Item) -> float:
 ## `SELL_SHARE` is the whole of why there is no loop to stand in at
 ## one counter -- buying back what was just sold costs five times what it fetched. Read off
 ## `sell_price` rather than written out again, so the two can never be tuned apart.
-## What the Rag and Bone Sack pays for a piece thrown away: `SALVAGE_SHARE` of what a trader would
-## give, so a counter is still worth the walk. Here because every figure in gold is made here.
-const SALVAGE_SHARE := 0.25
-static func salvage_price(item: Item) -> float:
-	return maxf(1.0, roundf(sell_price(item) * SALVAGE_SHARE))
+## What the Rag and Bone Sack pays for a piece thrown away: `share` of what a trader would give (its
+## rank's, short of the whole, so a counter is still worth the walk). Here because every figure in gold
+## is made here.
+static func salvage_price(item: Item, share: float) -> float:
+	return maxf(1.0, roundf(sell_price(item) * share))
 
 
 static func buy_price(item: Item) -> float:

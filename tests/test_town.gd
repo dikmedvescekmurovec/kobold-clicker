@@ -323,24 +323,21 @@ func _test_smith() -> bool:
 	var safe := _stream_that(false)
 	var doomed := _stream_that(true)
 
-	# An upgrade is exactly a fresh roll at the new level: the base stats, and the modifiers' numbers
-	# rerolled in their bands at that level. Only the lines themselves stay.
+	# An upgrade is the base stats of a fresh roll at the new level, and the modifiers left as they were.
 	var piece := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 3)
 	var mods_before := piece.mods.duplicate(true)
+	var tiers_before := piece.mods.map(piece.tier_of)
 	_check(Blacksmith.can_upgrade(piece, cap), "a piece under the cap can be upgraded")
 	_check(Blacksmith.why_not_upgrade(piece, cap).is_empty(), "and nothing is said against it")
 	_check(Blacksmith.upgrade(piece, cap, safe), "the hammer lands")
 	_check(piece.level == 4, "the piece is a level higher (%d)" % piece.level)
 	_check(piece.stats == Item.scaled_stats("Wooden Sword", 4),
 			"with exactly the base stats a fresh roll at that level would carry")
-	var ids_before := mods_before.map(func(mod: Dictionary) -> String: return str(mod["id"]))
-	var ids_after := piece.mods.map(func(mod: Dictionary) -> String: return str(mod["id"]))
-	_check(ids_after == ids_before, "carrying the modifiers it already had")
-	for mod: Dictionary in piece.mods:
-		var band := ModifierTable.band_for(str(mod["id"]), piece.tier_of(mod))
-		_check(int(mod["value"]) >= int(band[0]) and int(mod["value"]) <= int(band[1]),
-				"%s rerolled inside its band at the new level (%d in %d-%d)"
-				% [mod["id"], int(mod["value"]), int(band[0]), int(band[1])])
+	var pick := func(mods: Array, key: String) -> Array: return mods.map(func(mod: Dictionary): return mod[key])
+	_check(pick.call(piece.mods, "id") == pick.call(mods_before, "id")
+			and pick.call(piece.mods, "value") == pick.call(mods_before, "value"),
+			"carrying the modifiers it already had, at the numbers they had")
+	_check(piece.mods.map(piece.tier_of) == tiers_before, "and at the tiers they had")
 	_check(not piece.broken, "nothing broke")
 
 	# A locked line is what the lock is bought for: the hammer leaves its number where it was.
@@ -434,15 +431,21 @@ func _test_smith() -> bool:
 	# An heirloom out of a world that has ended is walked back up to the level it had for nothing but
 	# gold: the doomed stream, which breaks anything else on its first blow, never touches it.
 	var heirloom := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 6)
+	var peaks := heirloom.mods.map(heirloom.tier_of)
 	heirloom.transcend()
 	_check(heirloom.level == 1 and heirloom.safe_level == 6, "an heirloom comes back at level 1, remembering 6")
+	_check(heirloom.mods.all(func(mod: Dictionary) -> bool: return heirloom.tier_of(mod) == 1),
+			"its lines at level 1's one tier")
 	_check(Blacksmith.break_chance(heirloom) == 0.0, "and under that the hammer cannot break it")
 	for level in range(2, 7):
 		doomed.seed = doomed.seed
 		_check(Blacksmith.upgrade(heirloom, 99, doomed) and heirloom.level == level,
 				"level %d lands whatever the draw" % level)
+		_check(heirloom.mods.map(heirloom.tier_of) == peaks.map(func(peak: int) -> int: return mini(peak, level)),
+				"each line a tier nearer the one it had, as far as level %d allows" % level)
 	_check(not heirloom.broken and heirloom.stats == Item.scaled_stats("Wooden Sword", 6),
 			"whole, and worth what a fresh level 6 is")
+	_check(Item.from_dict(heirloom.to_dict()).mods == heirloom.mods, "and the save remembers the tiers")
 	_check(Blacksmith.break_chance(heirloom) == Blacksmith.BREAK_CHANCE, "past it the hammer is the hammer")
 	doomed = _stream_that(true)
 	_check(not Blacksmith.upgrade(heirloom, 99, doomed) and heirloom.broken and heirloom.level == 6,
@@ -555,6 +558,12 @@ func _test_bounties() -> bool:
 	paid = BountyBoard.reward_item(sworn, TOWN_CELL, rng)
 	_check(paid != null and not paid.unique.is_empty() and paid.rarity == ItemRarity.Rarity.UNIQUE
 			and paid.plus == 0, "a unique promised is a unique paid (%s)" % [paid.display_name() if paid else "nothing"])
+	# Only one the player has unlocked, as a body would drop.
+	var unlocked_only := true
+	for i in 40:
+		unlocked_only = unlocked_only and BountyBoard.reward_item(sworn, TOWN_CELL, rng, ["metronome"]).unique == "metronome"
+		unlocked_only = unlocked_only and str(BountyBoard.reward_item(sworn, TOWN_CELL, rng).unique) in Achievements.STARTERS
+	_check(unlocked_only, "and it is always one the player has unlocked")
 	_check(BountyBoard.reward_item({BountyBoard.ENEMY: "Imp"}, TOWN_CELL, rng) == null,
 			"and a posting that promised none pays none")
 
@@ -1491,19 +1500,10 @@ func _test_entering() -> void:
 	await process_frame
 
 
-## The fortuneteller's rules, with no interface: the peek, the odds, the prices and the patch a scour takes.
+## The fortuneteller's rules, with no interface: the odds, the prices and the patch a scour takes.
 func _test_fortune() -> bool:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
-	var found := [UniqueTable.ids()[0]]
-	var shown := []
-	for i in UniqueTable.ids().size() - 1:
-		var id := FortuneTeller.peek(found, shown, rng)
-		_check(not id.is_empty() and not (id in found) and not (id in shown),
-				"a peek is a unique neither found nor shown (%s)" % id)
-		shown.append(id)
-	_check(FortuneTeller.peek(found, shown, rng).is_empty(), "and there is none left when all are known")
-
 	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 5)
 	var odds := FortuneTeller.odds(sword)
 	var pool := ModifierTable.pool_for("Wooden Sword")
@@ -1564,15 +1564,14 @@ func _test_fortune() -> bool:
 	# What she sold the player is saved with the player, and comes back as it was written.
 	var inventory := Inventory.new()
 	inventory.fortunes[FortuneTeller.CHEST] = [12, 34]
-	inventory.fortunes[FortuneTeller.PEEKED] = ["rimeplate"]
-	FortuneTeller.note_cast(inventory.fortunes, FortuneTeller.RELIC)
-	FortuneTeller.note_cast(inventory.fortunes, FortuneTeller.RELIC)
+	FortuneTeller.note_cast(inventory.fortunes, FortuneTeller.ROADS)
+	FortuneTeller.note_cast(inventory.fortunes, FortuneTeller.ROADS)
 	inventory.save(TEST_PATH)
 	var back := Inventory.load_from(TEST_PATH)
 	_check(FortuneTeller.chest(back.fortunes) == Vector2i(12, 34)
-			and FortuneTeller.cast(back.fortunes, FortuneTeller.RELIC) == 2
-			and FortuneTeller.peeked(back.fortunes) == ["rimeplate"], "what she sold survives the save (%s)" % [back.fortunes])
-	_check(FortuneTeller.chest({}) == TownWorld.NO_SPOT and FortuneTeller.cast({}, FortuneTeller.RELIC) == 0,
+			and FortuneTeller.cast(back.fortunes, FortuneTeller.ROADS) == 2,
+			"what she sold survives the save (%s)" % [back.fortunes])
+	_check(FortuneTeller.chest({}) == TownWorld.NO_SPOT and FortuneTeller.cast({}, FortuneTeller.ROADS) == 0,
 			"and a save that bought nothing has nothing")
 
 	# A great spell is one a settlement, which is the drawer's key and not the player's count.
@@ -1677,22 +1676,6 @@ func _test_fortune_page() -> void:
 	_check(not _dead(main, FortuneTeller.TREASURE), "and the star can be bought again")
 	_check(_price(main, FortuneTeller.TREASURE) == TownPrices.fortune_price(FortuneTeller.TREASURE, town)
 			* TownPrices.FORTUNE_GROWTH, "for double what the first one cost")
-
-	# A relic: shown on her page, and on the log's card from then on.
-	_ask(main, FortuneTeller.RELIC)
-	await process_frame
-	var peeked := FortuneTeller.peeked(main.inventory.fortunes)
-	_check(peeked.size() == 1, "one relic is shown")
-	var named: String = UniqueTable.UNIQUES[peeked[0]]["name"]
-	_check(main.town_page._told == null and main._banner != null and _said(main._banner).contains(named),
-			"by name, on the unique's banner rather than a popup (%s)" % named)
-	_check(main._banner_closable and _deep_button(main._banner, "") != null, "with its X up at once")
-	main._close_banner()
-	await process_frame
-	# A reading is sold as often as it is paid for, and every telling doubles the next one's price.
-	_check(not _dead(main, FortuneTeller.RELIC), "a second relic can be asked for")
-	_check(_price(main, FortuneTeller.RELIC) == TownPrices.fortune_price(FortuneTeller.RELIC, town)
-			* TownPrices.FORTUNE_GROWTH, "at double the price")
 
 	# A piece read: the bag's open piece, as the smith's is.
 	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, RandomNumberGenerator.new())

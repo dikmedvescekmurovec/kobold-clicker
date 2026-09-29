@@ -1092,12 +1092,60 @@ UNIQUE_PROMPTS = [
   "brown shadows #4e2d1f", "the solid locket"),
 ]
 
-out = ["# Pixellab prompts: the attribute uniques", "",
- "Settings: 32x32, transparent background on, Direction and View None, Single color outline; the Pixen model, "
- "Highly detailed.",
- "Save each as `Assets/Potential/Unique/<its id>.png` (the id starts each heading), then follow tools/DESIGN.md, "
- "*To bring one in*.", ""]
-for unique_id, heading, pose, subject, palette, shine, *guard in UNIQUE_PROMPTS:
-    out += [f"### {unique_id} -- {heading}", "", "```", unique_prompt(pose, subject, palette, shine, *guard), "```", ""]
-open("tools/qa/pixellab_unique_prompts.md", "w", encoding="utf-8").write("\n".join(out))
-print(len(UNIQUE_PROMPTS), "unique prompts")
+# The eight starter uniques (2026-09-28), the ones in the pool before any achievement: six are new. Each
+# plays up what a beginner's piece is -- a practice sword, a cloth cap, a clover -- with its own silhouette.
+# The boots are short, so they take the boot pose without its "taller than it is wide".
+POSE["SHORT_BOOT"] = POSE["BOOT"].replace("runs from the top of the canvas to the bottom and is a little taller than "
+                                          "it is wide", "fills most of the canvas")
+STARTER_PROMPTS = [
+ ("squires_blade", "Squire's Blade -- every blow deals 3 more damage", "WEAPON",
+  "A blunt wooden practice sword with a rounded end and no point, a grip wrapped in tan orange leather, and one "
+  "brick red ribbon tied round the crossguard, its two long ends hanging down past the grip.\n" + SWORD_SHAPE,
+  PAL["w1"] + ", one brick red ribbon #ba3423", "the red ribbon", SWORD_ALONE),
+ ("wayfarers_torch", "Wayfarer's Torch -- strength, dexterity and intelligence on one piece", "TORCH",
+  "A plain wooden hand torch whose head is bound with three wide cloth bands side by side, each clearly its own "
+  "colour: brick red, moss green and dusty blue. A big flame burns above them.\n" + TORCH_SHAPE,
+  WOOD + ", " + FIRE + ", brick red #ba3423, moss green #69903e and dusty blue #628ab9 only on the three bands",
+  "the fire", ONE["TORCH"]),
+ ("novices_cap", "Novice's Cap -- double experience while under level 20", "HOOD",
+  "A soft, padded cloth cap, not a metal helmet and not a hood: a rounded, puffy top, a thick rolled band round "
+  "its bottom edge, and one long muted white quill feather tucked into the band on the right, slanting up past "
+  "the top.",
+  "dusty blue #628ab9 cloth with steel blue shadows #546783, a sand band #cca67b, a muted white quill #F1F5E7 "
+  "shaded with light grey #d1d1d1, dark brown shadows #4e2d1f", "the white quill",
+  "An empty cap with nothing inside it: the opening under the band is plain dark shadow."),
+ ("couriers_boots", "Courier's Boots -- enemies walk in 30% sooner", "SHORT_BOOT",
+  "A pair of short, light leather boots that reach only just above the ankle, each with a thick turned-down cuff; "
+  "a folded muted white letter with a round brick red seal is tucked into the cuff of the front boot, sticking "
+  "up out of it.",
+  "tan orange #de6c0a and warm brown #a0542a leather, apricot highlights #f5ac5d, a muted white letter #F1F5E7 "
+  "shaded with light grey #d1d1d1, one brick red seal #ba3423, dark brown shadows #4e2d1f", "the white letter",
+  NO_LEG),
+ ("beginners_luck", "Beginner's Luck -- your critical strike chance is 25%", "RING",
+  "A slim dull gold ring crowned by one big four-leaf clover standing upright on its top, the clover as wide as "
+  "the ring, its four round leaves clearly apart.\n" + RING_SHAPE,
+  "dull gold #c49e48 and #9b7227 on the band, bright gold highlights #e9bc3d, moss green #69903e leaves with pine "
+  "green shadows #226723, dark brown shadows #4e2d1f", "the green clover"),
+ ("worry_stone", "Worry Stone -- once a fight, 5 seconds back when the clock runs out", "PENDANT",
+  "A dark brown cord with one smooth, flat, oval pebble hanging from it, polished glassy smooth, with a shallow "
+  "round dip worn into its middle that catches the light.\n" + PENDANT_SHAPE,
+  "a teal pebble #12878a with dark slate teal shadows #1f3139, light grey #d1d1d1 on the lit edge of the dip, a "
+  "dark brown cord #4e2d1f", "the worn dip"),
+]
+
+
+def write_uniques(title, prompts, path):
+    out = [f"# Pixellab prompts: {title}", "",
+     "Settings: 32x32, transparent background on, Direction and View None, Single color outline; the Pixen model, "
+     "Highly detailed.",
+     "Save each as `Assets/Potential/Unique/<its id>.png` (the id starts each heading), then follow tools/DESIGN.md, "
+     "*To bring one in*.", ""]
+    for unique_id, heading, pose, subject, palette, shine, *guard in prompts:
+        out += [f"### {unique_id} -- {heading}", "", "```", unique_prompt(pose, subject, palette, shine, *guard),
+                "```", ""]
+    open(path, "w", encoding="utf-8").write("\n".join(out))
+    print(len(prompts), title)
+
+
+write_uniques("the attribute uniques", UNIQUE_PROMPTS, "tools/qa/pixellab_unique_prompts.md")
+write_uniques("the starter uniques", STARTER_PROMPTS, "tools/qa/pixellab_starter_prompts.md")

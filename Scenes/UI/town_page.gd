@@ -42,9 +42,6 @@ signal xp_claimed(amount: int)
 signal bounty_paid(enemy: String, gold: float, xp: int, orbs: Dictionary, piece: Item)
 ## The roads lifted settlements out of the dark: the map has changed and wants saving.
 signal towns_revealed
-## The relic reading showed the unique `id`: the main scene raises the collection log's banner over it,
-## which is the reading's whole answer.
-signal relic_shown(id: String)
 ## A spell that is aimed at the map was asked for, at `price`, in the town on `spot`. Nothing has been
 ## charged and nothing is written down: choosing the land happens on the map, which is the main
 ## scene's, and so does the paying -- and the marking of that town's drawer -- once land has been
@@ -116,7 +113,6 @@ const FORTUNE_ICONS := {
 	FortuneTeller.ROADS: "res://Assets/Fortune/roads.png",
 	FortuneTeller.TREASURE: "res://Assets/Fortune/treasure.png",
 	FortuneTeller.QUARRY: "res://Assets/Fortune/quarry.png",
-	FortuneTeller.RELIC: "res://Assets/Fortune/relic.png",
 	FortuneTeller.APPRAISE: "res://Assets/Fortune/appraise.png",
 	FortuneTeller.SCOUR: "res://Assets/Fortune/scour.png",
 	FortuneTeller.HOMECOMING: "res://Assets/Fortune/homecoming.png",
@@ -139,7 +135,6 @@ const FORTUNE_TIPS := {
 	FortuneTeller.ROADS: "Brings every settlement between the ice walls around you out of the fog",
 	FortuneTeller.TREASURE: "Puts a star over the nearest chest you have not seen. It stays until that chest is opened",
 	FortuneTeller.QUARRY: "Shows the lands your bounty's monster lives on, and the nearest tile of them you have seen",
-	FortuneTeller.RELIC: "Shows one unique you have not found. It stays shown in your collection log, with the monsters that carry it",
 	FortuneTeller.APPRAISE: "Lists every modifier the open piece can roll, the range it rolls in at the piece's level, and how often it comes up",
 	FortuneTeller.SCOUR: "Brings a tile and the two rings of land around it, nineteen tiles, out of the fog",
 	FortuneTeller.HOMECOMING: "Moves you to a settlement you have already charted",
@@ -211,8 +206,6 @@ var craft_held: Callable
 ## What the last blow of the hammer did, when it is worth saying out loud. A break is the one thing
 ## that happens on this page the player did not ask for, so it is said rather than left to be noticed.
 var _smith_note := ""
-## The unique she showed, while the relic's answer is being written.
-var _relic := ""
 ## Her answer, over the whole window while it is up (null otherwise), and the scroll it is written in.
 var _told: Control
 var _told_scroll: ScrollContainer
@@ -717,7 +710,7 @@ func _on_claim_pressed(bounty: Dictionary) -> void:
 		inventory.add_xp(xp)
 		xp_claimed.emit(xp)
 	# The promised piece, rolled now: the log hears of a unique as it would off a body.
-	var piece := BountyBoard.reward_item(bounty, _cell, _stock_rng)
+	var piece := BountyBoard.reward_item(bounty, _cell, _stock_rng, Achievements.unlocked(inventory))
 	if piece != null:
 		item_claimed.emit(piece)
 		inventory.note_unique(piece.unique)
@@ -795,7 +788,7 @@ func _fill_smith() -> void:
 				else UITheme.label("Safe", Palette.LEAF, true))
 		_rows.add_child(odds)
 	_rows.add_child(_smith_button("Upgrade", up_price, up_why,
-			"Take this to level %d for %s gold. Its modifiers are rolled again at that level, except any he has locked"
+			"Take this to level %d for %s gold. Its modifiers stay as they are"
 			% [_bag_piece.level + 1, BigNumber.format(up_price)], _on_upgrade_pressed, UITheme.GO_BUTTON))
 	var lock_price := TownPrices.lock_price(_bag_piece)
 	var lock_why := _smith_why_not(Blacksmith.why_not_lock(_bag_piece), lock_price)
@@ -837,7 +830,7 @@ func _fill_idle_smith() -> void:
 	body.add_child(UITheme.rule(BODY_WIDTH))
 	var cap := _upgrade_cap()
 	var pieces := inventory.items + inventory.equipment.items()
-	_smith_service(body, "Upgrade", "One level up, its modifiers rolled again. It can break.",
+	_smith_service(body, "Upgrade", "One level up, its modifiers kept. It can break.",
 			pieces.filter(func(p: Item) -> bool: return Blacksmith.can_upgrade(p, cap))
 				.map(func(p: Item) -> float: return TownPrices.upgrade_price(p)))
 	_smith_service(body, "Lock", "Pins one modifier for good.",
@@ -907,10 +900,6 @@ func _fill_fortune() -> void:
 ## the page instead (`_cast`). The appraisal offers no tick: its table is the whole of what was bought.
 func _tell(reading: String) -> void:
 	_close_told()
-	# The relic has no popup: it is shown on the unique's own banner (`relic_shown`).
-	if reading == FortuneTeller.RELIC:
-		relic_shown.emit(_relic)
-		return
 	var can_skip := reading != FortuneTeller.APPRAISE
 	if can_skip and SKIP_TOLD + reading in inventory.tips:
 		_cast = reading
@@ -1183,10 +1172,6 @@ func _fortune_why_not(reading: String) -> String:
 				return "No bounty is out."
 			if BountyBoard.located(bounty):
 				return "Already told."
-		FortuneTeller.RELIC:
-			if FortuneTeller.hidden(inventory.uniques_found,
-					FortuneTeller.peeked(inventory.fortunes)).is_empty():
-				return "Every relic is known."
 		FortuneTeller.APPRAISE:
 			var why := FortuneTeller.why_not_appraise(_bag_piece)
 			if not why.is_empty():
@@ -1232,11 +1217,6 @@ func _on_reading_pressed(reading: String) -> void:
 			chest_bought.emit(_near_chest)
 		FortuneTeller.QUARRY:
 			BountyBoard.locate(BountyBoard.active(inventory.towns))
-		FortuneTeller.RELIC:
-			var shown := FortuneTeller.peeked(inventory.fortunes)
-			_relic = FortuneTeller.peek(inventory.uniques_found, shown, _stock_rng)
-			shown.append(_relic)
-			inventory.fortunes[FortuneTeller.PEEKED] = shown
 		FortuneTeller.STONE:
 			inventory.seeing_stone = true
 			stone_bought.emit()

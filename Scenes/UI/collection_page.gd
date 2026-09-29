@@ -1,16 +1,15 @@
 class_name CollectionPage
 extends Control
 ## The collection log, as a page against the left edge: every unique the game has, one square each in
-## `UniqueTable`'s order. One the player has found is drawn as the piece it is; one a fortuneteller
-## has shown them (`FortuneTeller.peek`) is the same piece darkened; any other is its outline in black --
-## either with no socket or ring, the sprite alone --
-## and its card says nothing but that.
+## `UniqueTable`'s order. One the player has found is drawn as the piece it is; one unlocked and not
+## yet found (`Achievements.is_unlocked`) is the same piece darkened; one still locked is its outline in
+## black -- either with no socket or ring, the sprite alone -- and its card says only "Locked".
 ##
-## **Where a piece is carried is written on a found square as well as a shown one** (`write_hint`): a
-## second copy is worth hunting and a set is worth finishing, and the log is the one place that answers
-## either. Only a square nobody has shown them says nothing. The cost is that a found square now carries
-## a `hint`, and `ItemCard` skips its Alt comparison on any square that does -- which is right, because
-## the square is a `specimen`, never the piece in the player's bag.
+## **A found square carries its card as well as an unlocked one** (`write_hint`): a found piece that is
+## locked says so, since an old save's finds must be earned again to drop (the user's ruling), and the
+## achievements page says how. The cost is that `ItemCard` skips its Alt comparison on any square that
+## carries a `hint` -- which is right, because the square is a `specimen`, never the piece in the bag.
+## Every unique is carried on every ground, so the card names none (the user's, 2026-09-29).
 ##
 ## Built like the other left-hand pages (`BountyList`): `open()` redraws it, `layout()` fits it to the
 ## window, `closed` is its X, and it carries `UITheme.theme()` because it hangs off a `CanvasLayer`.
@@ -18,8 +17,7 @@ extends Control
 ## the cursor has been over it, and then `seen` asks the main scene to save and still the button.
 ##
 ## Every square is an `ItemSlot`, so the one `ItemCard` the main scene built describes these too --
-## every one of them through the `hint` it carries, except the one nobody has shown them, whose hint is
-## the two grey lines saying so.
+## every one of them through the `hint` it carries, a locked one's saying only that.
 
 ## The page's X was pressed.
 signal closed
@@ -32,16 +30,14 @@ const BONUS_NAME := "Bonus"
 const COUNT_NAME := "Count"
 
 var inventory: Inventory
-var view: MapBuilder
 var _ui_scale: float
 var _panel: VBoxContainer
 var _rows: VBoxContainer
 var _foot: HBoxContainer
 
 
-func _init(player_inventory: Inventory, map_view: MapBuilder, ui_scale: float) -> void:
+func _init(player_inventory: Inventory, ui_scale: float) -> void:
 	inventory = player_inventory
-	view = map_view
 	_ui_scale = ui_scale
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	theme = UITheme.theme()
@@ -94,11 +90,10 @@ func open() -> void:
 	grid.add_theme_constant_override("h_separation", BagPage.SLOT_GAP)
 	grid.add_theme_constant_override("v_separation", BagPage.SLOT_GAP)
 	_rows.add_child(grid)
-	var peeked := FortuneTeller.peeked(inventory.fortunes)
 	for id: String in UniqueTable.ids():
 		# Dev (`Settings.show_all_uniques`): every square as found. The count and the bonus stay the save's.
 		var found := Settings.show_all_uniques() or inventory.uniques_found.has(id)
-		var slot := CollectionPage.square(id, found, view, id in peeked)
+		var slot := CollectionPage.square(id, found, Achievements.is_unlocked(inventory, id))
 		grid.add_child(slot)
 		if found and id in inventory.uniques_new:
 			slot.keep_shining()
@@ -119,16 +114,15 @@ func _on_seen(id: String, slot: ItemSlot) -> void:
 
 ## One unique's square. A specimen rather than the player's own: the log says what the thing *is*, at
 ## level 1 and the bottom of every band, and the one in the bag says what theirs rolled.
-static func square(id: String, found: bool, map_view: MapBuilder, peeked := false) -> ItemSlot:
+static func square(id: String, found: bool, unlocked := false) -> ItemSlot:
 	var piece := CollectionPage.specimen(id)
 	if found:
-		# The piece as it is, and the card still says where it is carried: a second copy is worth hunting
-		# and a set is worth finishing long after the first one is in the bag.
+		# The piece as it is, and the card still says whether it is locked.
 		var slot := ItemSlot.make(piece)
-		slot.hint = CollectionPage.write_hint.bind(id, map_view, piece, true)
+		slot.hint = CollectionPage.write_hint.bind(piece, unlocked)
 		return slot
-	return ItemSlot.shadow(piece, CollectionPage.write_hint.bind(id, map_view,
-			piece if peeked else null, false), peeked)
+	return ItemSlot.shadow(piece, CollectionPage.write_hint.bind(piece if unlocked else null, unlocked),
+			unlocked)
 
 
 ## The log's own copy of a unique: level 1, every modifier at the bottom of its band.
@@ -141,42 +135,21 @@ static func specimen(id: String) -> Item:
 	return piece
 
 
-## What the card says beside a unique in the log. With no `specimen` -- one nobody has shown them --
-## only that and who to ask. With one: the piece itself (the log's own), whether it is `found`, then
-## where to look -- the ground it is carried on as the tile panel's own swatches, and the nearest piece
-## of that ground the player has seen (`MapBuilder.nearest_env`, which never names land under the fog).
-## The fortuneteller's own page writes the same card and leaves `found` alone, so a relic reads the same
-## at her table and in the log.
-static func write_hint(rows: VBoxContainer, width: float, id: String, map_view: MapBuilder,
-		specimen: Item = null, found := false) -> void:
+## What the card says beside a unique in the log. With no `specimen` -- one still locked -- only the
+## word "Locked". With one: the piece itself (the log's own), and then "Locked" if it is. Whether it
+## is found is not written: the square says it.
+static func write_hint(rows: VBoxContainer, width: float, specimen: Item = null, unlocked := true) -> void:
+	# A locked one says so and nothing else: what unlocks it is the achievements page's to say (the
+	# user's call, 2026-09-28).
 	if specimen == null:
-		rows.add_child(ItemDetails.line("Not found yet", Palette.TEXT_SOFT, width))
-		rows.add_child(ItemDetails.line("A fortuneteller could say more.", Palette.TEXT_SOFT, width, true))
+		rows.add_child(ItemDetails.line("Locked", Palette.TEXT_SOFT, width))
 		return
-	# `fill` empties the rows it is given, so the piece goes in first and whether it is held under it.
-	ItemDetails.fill(rows, specimen, width)
-	rows.add_child(UITheme.rule())
-	rows.add_child(ItemDetails.line("Found" if found else "Not found yet",
-			Palette.LEAF if found else Palette.TEXT_SOFT, width, true))
-	var envs: Array = UniqueTable.UNIQUES[id]["envs"]
-	if envs.is_empty():
-		rows.add_child(ItemDetails.line("Carried by monsters everywhere.", Palette.TEXT, width, true))
-	else:
-		rows.add_child(ItemDetails.line("Carried by the monsters of:", Palette.TEXT, width, true))
-		if map_view != null:
-			var swatches := HBoxContainer.new()
-			swatches.add_theme_constant_override("separation", 2)
-			for env: String in envs:
-				swatches.add_child(map_view.map.tileset.env_icon(env))
-			rows.add_child(swatches)
-		else:
-			rows.add_child(ItemDetails.line(", ".join(PackedStringArray(envs)), Palette.TEXT, width, true))
-		if map_view != null:
-			var near := map_view.nearest_env(PackedStringArray(envs), 0)
-			rows.add_child(ItemDetails.line("Nearest: %s" % (map_view.name_of(near)
-					if near != HexMap.NO_CELL else "none you have seen yet."), Palette.TEXT_SOFT, width, true))
-	rows.add_child(ItemDetails.line("Bosses carry one far more often than the rabble.",
-			Palette.TEXT_SOFT, width, true))
+	# `fill` empties the rows it is given, so the piece goes in first. The square itself says whether
+	# it is found, so the card does not: under the piece is only "Locked".
+	ItemDetails.fill(rows, specimen, width, [], Settings.item_details)
+	if not unlocked:
+		rows.add_child(UITheme.rule())
+		rows.add_child(ItemDetails.line("Locked", Palette.TEXT_SOFT, width, true))
 
 
 ## Full window height against the left edge, where the other pages stand.

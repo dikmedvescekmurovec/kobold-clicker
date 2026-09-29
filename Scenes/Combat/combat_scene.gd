@@ -348,6 +348,8 @@ var _drops: Array[Item] = []
 ## when nobody has said -- a fight with no bag behind it, which is what the screenshot scripts run.
 ## The scene owns no rules here: it is handed a number and it draws it.
 var bag_room := -1
+## How many the bag holds in all (`Inventory.capacity`), which the counter's face is a share of.
+var bag_size := Inventory.CAPACITY
 ## Asked of each find's level: whether the player has told the game to stop bringing that level.
 ## An unset Callable keeps everything, so a fight nobody has told anything behaves as it always did.
 var autodiscard := Callable()
@@ -1376,7 +1378,7 @@ func _on_drop_discarded(item: Item) -> void:
 ## The counter's face: green through gold to red as the bag fills, the way the clock ramps as it runs out. Nobody having
 ## said (`bag_room` at -1) is an empty bag: a fight with no bag behind it has nothing to warn about.
 func _tint_loot_button() -> void:
-	var fill := 0.0 if bag_room < 0 else clampf(1.0 - float(bag_room) / Inventory.CAPACITY, 0.0, 1.0)
+	var fill := 0.0 if bag_room < 0 else clampf(1.0 - float(bag_room) / maxi(bag_size, 1), 0.0, 1.0)
 	if is_equal_approx(fill, _loot_filled):
 		return
 	_loot_filled = fill

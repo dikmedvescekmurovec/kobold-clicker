@@ -105,6 +105,8 @@ static func scaled_stats(item_type: String, item_level: int) -> Dictionary:
 ## was is remembered as `safe_level`, and the best it has ever been rather than the last, so a short
 ## run never costs a piece what a long one earned. Rarity, locks, `broken` and `unique` do not move.
 ## The one hand that moves a held-fast line: from its own band to the new level's, and held there.
+## Each line remembers the best tier it has had (`"peak"`) and drops only as far as level 1 makes it;
+## the smith walks it back up (`level_up`).
 func transcend() -> void:
 	safe_level = maxi(safe_level, level)
 	var was := mods.map(tier_of)
@@ -113,9 +115,36 @@ func transcend() -> void:
 		var mod := mods[i]
 		if mod.has("at"):
 			mod["at"] = mod_level()
-		mod["value"] = ModifierTable.rescaled(str(mod["id"]), int(mod["value"]), int(was[i]), tier_of(mod))
+		if ModifierTable.tiered(str(mod["id"])):
+			mod["peak"] = maxi(int(mod.get("peak", 0)), int(was[i]))
+			_set_tier(mod, int(was[i]), mini(int(mod["peak"]), band_level(mod)))
 	refresh_perfect()
 	stats = scaled_stats(type, 1)
+
+
+## The smith's upgrade: one level, the base stats a fresh roll there would carry, and every modifier
+## kept at its tier and number (the user's ruling) -- but an heirloom's line climbs a tier a level
+## back towards the one it had before its world ended (`"peak"`), never past what the level allows,
+## its number keeping its place in the band. Held-fast lines read their band at `"at"` and do not move.
+func level_up() -> void:
+	var was := mods.map(tier_of)
+	level += 1
+	for i in mods.size():
+		var mod := mods[i]
+		if held_fast(mod) or bool(mod.get("perfect", false)) or not ModifierTable.tiered(str(mod["id"])):
+			continue
+		_set_tier(mod, int(was[i]), maxi(int(was[i]), mini(int(mod.get("peak", 0)), mod_level())))
+	stats = scaled_stats(type, level)
+	refresh_perfect()
+
+
+## Puts a line at `tier` (1 to its band level), its number as far up that band as it stood in `from`'s.
+func _set_tier(mod: Dictionary, from: int, tier: int) -> void:
+	tier = clampi(tier, 1, band_level(mod))
+	mod.erase("under")
+	if band_level(mod) > tier:
+		mod["under"] = band_level(mod) - tier
+	mod["value"] = ModifierTable.rescaled(str(mod["id"]), int(mod["value"]), from, tier)
 
 
 ## The level its modifiers' bands are read at: its own, and `PLUS_LEVELS` more for every plus.
@@ -180,9 +209,18 @@ func display_name() -> String:
 	return named if plus <= 0 else "%s +%d" % [named, plus]
 
 
-## The sentence saying what a unique changes about a fight, or "" for a piece that changes nothing.
+## The sentence saying what a unique changes about a fight, with its numbers at the player's rank of
+## it (`UniqueTable.shown_rank`), or "" for a piece that changes nothing.
 func effect_text() -> String:
-	return "" if unique.is_empty() else UniqueTable.effect_text(unique)
+	return "" if unique.is_empty() else UniqueTable.effect_text(unique, UniqueTable.shown_rank(unique))
+
+
+## The line a unique gains at rank IV, once the player has reached it there; "" before, and for
+## every other piece.
+func peak_text() -> String:
+	if unique.is_empty() or UniqueTable.shown_rank(unique) < UniqueTable.PEAK:
+		return ""
+	return UniqueTable.peak_text(unique)
 
 
 ## What the piece is worth before anything it rolled -- as it was rolled, not as the table reads
@@ -246,26 +284,16 @@ func rarity_name() -> String:
 
 
 func text_color() -> Color:
-	return ItemRarity.SET_TEXT if is_set() else ItemRarity.TEXT_COLORS[rarity]
+	return ItemRarity.TEXT_COLORS[rarity]
 
 
 func border_color() -> Color:
-	return ItemRarity.SET_BORDER if is_set() else ItemRarity.BORDER_COLORS[rarity]
+	return ItemRarity.BORDER_COLORS[rarity]
 
 
-## The frame its square wears: its rarity's, or the set's green one. Null for a common piece.
+## The frame its square wears: its rarity's. Null for a common piece.
 func frame() -> Texture2D:
-	return load(ItemRarity.FRAMES % ItemRarity.SET) if is_set() else ItemRarity.frame(rarity)
-
-
-## Whether this is one piece of a set -- a unique in every way but the green it wears.
-func is_set() -> bool:
-	return not set_text().is_empty()
-
-
-## What its set does, as the card says it under the piece's own rule. "" for a piece of no set.
-func set_text() -> String:
-	return "" if unique.is_empty() else UniqueTable.set_text(unique)
+	return ItemRarity.frame(rarity)
 
 
 func icon() -> Texture2D:
@@ -438,6 +466,8 @@ static func from_dict(data: Variant) -> Item:
 					mod[flag] = true
 			if entry.has("at"):
 				mod["at"] = int(entry["at"])
+			if entry.has("peak"):
+				mod["peak"] = int(entry["peak"])
 			# Written only above 0. A line saved before there were tiers has none either, and is given
 			# the highest tier that holds its number -- which for a top-tier line is the top again, so
 			# asking every time is safe. A perfect line is the top by definition.

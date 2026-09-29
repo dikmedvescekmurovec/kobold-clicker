@@ -379,8 +379,9 @@ static func reward_text(bounty: Dictionary) -> String:
 
 ## The piece a finished posting pays, rolled here and now, or null for a posting that promised none.
 ## Its level is the town's ceiling for the posting's tier, the better of two rolls, as a vendor's
-## shelf is; a unique is any unique the game has, at that ceiling. `rng` is the caller's.
-static func reward_item(bounty: Dictionary, cell: Vector2i, rng: RandomNumberGenerator) -> Item:
+## shelf is; a unique is any of `unlocked` (`Achievements.unlocked`), at that ceiling. `rng` is the caller's.
+static func reward_item(bounty: Dictionary, cell: Vector2i, rng: RandomNumberGenerator,
+		unlocked: Array = Achievements.STARTERS) -> Item:
 	var promise := item_of(bounty)
 	if promise.is_empty():
 		return null
@@ -392,8 +393,7 @@ static func reward_item(bounty: Dictionary, cell: Vector2i, rng: RandomNumberGen
 			ItemRarity.roll_level(rarity, ceiling, rng))
 	var item: Item
 	if rarity == ItemRarity.Rarity.UNIQUE:
-		var ids := UniqueTable.ids()
-		item = Item.rolled_unique(str(ids[rng.randi_range(0, ids.size() - 1)]), rng, level)
+		item = Item.rolled_unique(str(unlocked[rng.randi_range(0, unlocked.size() - 1)]), rng, level)
 	else:
 		# The card promised this kind, so it is paid in it: the town's tile level picks the material, and
 		# a kind that begins past the plainest (the greaves) is lifted to its first.

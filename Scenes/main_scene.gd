@@ -11,6 +11,8 @@ extends Node2D
 ## How far the mouse wheel takes the map's zoom either way, in the same whole steps.
 const ZOOM_MIN := 1.0
 const ZOOM_MAX := 6.0
+## Rings a charted tile shows round it with no torch held; the Thick Fog takes all of it.
+const BASE_SIGHT := 2
 ## The same for the UI panel. Pixellari only renders cleanly at its native 16 px, so the way to make
 ## the interface smaller is to draw its pixels smaller, not to shrink the font.
 @export var ui_scale := 2.0
@@ -54,6 +56,7 @@ const STONE_ASLEEP := Color(0.55, 0.55, 0.6)
 const STONE_TIP := "The Seeing Stone. Press it to feel how near the Gollux cave is"
 const STONE_ASLEEP_TIP := "The Seeing Stone sleeps: the way down in this world is found"
 const TROPHY_ICON := "res://Assets/UI/ui_icon_trophy.png"
+const MEDAL_ICON := "res://Assets/UI/ui_icon_medal.png"
 ## The heirlooms'. A stand-in from the pack until they have a mark of their own.
 const CROWN_ICON := "res://Assets/UI/ui_icon_crown.png"
 ## The air between one and the next, in panel pixels.
@@ -154,6 +157,7 @@ var settings_page: SettingsPage
 var leaderboard: Leaderboard
 var leaderboard_page: LeaderboardPage
 var collection_page: CollectionPage
+var achievements_page: AchievementsPage
 ## What the player adds up to, opened by a press anywhere on the character panel.
 var character_page: CharacterPage
 ## See-through, over the character panel, which takes no mouse itself because it stands over fights
@@ -172,6 +176,7 @@ var _stone_tween: Tween
 ## "Colder" are said against. Not saved -- a new session asks afresh.
 var _stone_band := -1
 var _collection_button: Button
+var _achievements_button: Button
 ## There while an heirloom is held, and the one corner button a
 ## town leaves standing: pressed there it swaps the bag and the heirlooms at the counter.
 var _heirloom_button: Button
@@ -315,6 +320,8 @@ func _ready() -> void:
 	if not problem.is_empty():
 		_refuse_save("inventory", inventory_path, str(problem[0]))
 		return
+	# What every card writes a unique's numbers at, from the first card drawn.
+	UniqueTable.ranks = Achievements.ranks(inventory)
 	# Before anything below saves over it: the hour the player left is what the camp pays from.
 	var left_at := inventory.saved_at
 	ledger = FightLedger.new(inventory, inventory_path)
@@ -694,6 +701,10 @@ func _build_pages(layer: CanvasLayer) -> void:
 	_collection_button = UITheme.icon_button(load(TROPHY_ICON), "The uniques you have found", ui_scale)
 	_collection_button.pressed.connect(_on_collection_pressed)
 	layer.add_child(_collection_button)
+	_achievements_button = UITheme.icon_button(load(MEDAL_ICON), "Achievements, and the uniques they unlock",
+			ui_scale)
+	_achievements_button.pressed.connect(_on_achievements_pressed)
+	layer.add_child(_achievements_button)
 	_heirloom_button = UITheme.icon_button(load(CROWN_ICON), "What you would take to another world", ui_scale)
 	_heirloom_button.pressed.connect(_on_heirlooms_pressed)
 	layer.add_child(_heirloom_button)
@@ -705,8 +716,11 @@ func _build_pages(layer: CanvasLayer) -> void:
 	_character_button.pressed.connect(_on_character_pressed)
 	layer.add_child(_character_button)
 	character_page = CharacterPage.new(inventory, ui_scale)
-	collection_page = CollectionPage.new(inventory, view, ui_scale)
+	collection_page = CollectionPage.new(inventory, ui_scale)
 	collection_page.seen.connect(_on_unique_seen)
+	achievements_page = AchievementsPage.new(inventory, ui_scale)
+	# Everything that changes the player ends in a save, so a save is where an achievement is noticed.
+	inventory.save_written.connect(_check_achievements, CONNECT_DEFERRED)
 	skills_page = SkillsPage.new(inventory, inventory_path, ui_scale)
 	skills_page.changed.connect(func() -> void: _pulse(_skills_button, "skill_point", _skill_point_free()))
 	bag_page = BagPage.new(inventory, inventory_path, ui_scale)
@@ -723,6 +737,13 @@ func _build_pages(layer: CanvasLayer) -> void:
 	settings_page.cash_pressed.connect(func() -> void:
 		inventory.gold = maxf(inventory.gold, 1.0) * 10.0
 		inventory.save(inventory_path))
+	# Dev only: a skill point is a level (`Skills.earned`), never stored, so ten points are ten levels.
+	# The tips put the star up the first time, and light it.
+	settings_page.points_pressed.connect(func() -> void:
+		inventory.level += 10
+		inventory.save(inventory_path)
+		_sync_character()
+		_check_tips())
 	# The town page stands on the other edge, but it is closed by the same X rule and hidden by the
 	# same fight, so it is built and wired here with the two that share the left one.
 	town_page = TownPage.new(inventory, inventory_path, ui_scale)
@@ -731,10 +752,6 @@ func _build_pages(layer: CanvasLayer) -> void:
 	town_page.chest_bought.connect(func(_cell: Vector2i) -> void: _sync_chest())
 	town_page.spell_aimed.connect(_on_spell_aimed)
 	town_page.towns_revealed.connect(_save_map)
-	# A relic is shown on the unique's own banner, with its X up at once: it was paid for in a town, where
-	# there is no fight to swing through it, and it must never be left waiting five seconds to be put away.
-	town_page.relic_shown.connect(func(id: String) -> void:
-		_announce_unique(CollectionPage.specimen(id), "Unique Revealed", true))
 	town_page.transcend_pressed.connect(_on_transcend_pressed)
 	town_page.stone_bought.connect(_sync_stone)
 	town_page.xp_claimed.connect(_on_xp_absorbed)
@@ -764,7 +781,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 	leaderboard_page = LeaderboardPage.new(leaderboard, func() -> int: return inventory.dungeon_floors,
 			ui_scale)
 	for page: Control in [skills_page, bag_page, heirloom_page, bounty_page, settings_page,
-			collection_page, character_page, leaderboard_page, town_page]:
+			collection_page, achievements_page, character_page, leaderboard_page, town_page]:
 		page.hide()
 		page.closed.connect(_on_left_page_closed)
 		layer.add_child(page)
@@ -853,8 +870,8 @@ func _announce_unique(item: Item, title := "Unique Found", closable := false) ->
 				item.text_color(), BANNER_WIDTH, true),
 		ItemDetails.line(item.effect_text(), Palette.SLOT_TAN_DK, BANNER_WIDTH, true),
 	]
-	if item.is_set():
-		lines.append(ItemDetails.line(item.set_text(), ItemRarity.SET_TEXT, BANNER_WIDTH, true))
+	if not item.peak_text().is_empty():
+		lines.append(ItemDetails.line(item.peak_text(), Palette.SLOT_TAN_DK, BANNER_WIDTH, true))
 	# The unique's own name colour, which is the half of the ramp picked to be read on cream.
 	_raise_banner(title, item.text_color(), slot, lines)
 	if closable:
@@ -1276,6 +1293,7 @@ func _layout_ui() -> void:
 	bounty_page.layout()
 	settings_page.layout()
 	collection_page.layout()
+	achievements_page.layout()
 	character_page.layout()
 	leaderboard_page.layout()
 	town_page.layout()
@@ -1401,8 +1419,9 @@ func _walk_to_fight(cell: Vector2i, farming: bool) -> void:
 
 const CHART_TIP := "Fight for this tile and what lies behind it"
 const FARM_TIP := "Fight here for as long as you like, for the loot"
-## What Chart and Farm say while the bag is over its cap and greys them.
-const ENCUMBERED_TIP := "Your bag is too heavy to fight with. Sell or throw away gear until it holds %d or fewer." 		% Inventory.CAPACITY
+## What Chart and Farm say while the bag is over its cap and greys them, the cap (`Inventory.capacity`)
+## written in where it is said, since the Packmule's Harness at IV moves it.
+const ENCUMBERED_TIP := "Your bag is too heavy to fight with. Sell or throw away gear until it holds %d or fewer."
 
 
 ## Why the hero holds no camp in this world, or "" where they do. Two curses say so in their text.
@@ -1433,7 +1452,7 @@ func _camp_while_away(left_at: float) -> void:
 	# Armed exactly as `_open_fight` arms one, and for the same reason: a camp is that fight. What it
 	# is never given is the things a camp does not pay -- no first sword, no orbs, no uniques.
 	var fight := Encounter.farm(cell, env, view.area_variant(cell), _mods_of(cell))
-	fight.wear(inventory.effects())
+	fight.wear(inventory.effects(), Achievements.ranks(inventory))
 	fight.arm(inventory.stats())
 	var camp := Camp.make(cell, view.name_of(cell), fight, left_at)
 	var earned := Camp.earned(camp, now)
@@ -1488,8 +1507,8 @@ func _break_camp() -> void:
 func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# What the player is wearing, read once as the fight opens. Changing gear mid-fight is not a
 	# thing that can happen -- the bag goes away while one is on -- so there is nothing to keep live.
-	# What is worn and learned first: `arm` reads some of it, and two home pieces reshape the lineup.
-	fight.wear(inventory.effects())
+	# What is worn and learned first, with the rank of every unique: `arm` reads some of it.
+	fight.wear(inventory.effects(), Achievements.ranks(inventory))
 	fight.arm(inventory.stats())
 	# Until the Broken Sword has dropped, the first piece of gear is it, and an elite is promised it.
 	fight.first_sword = not inventory.first_sword_taken
@@ -1499,6 +1518,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# is in their first.
 	fight.first_orb = not inventory.first_orb_taken and inventory.kills > 0
 	fight.uniques_after = maxi(0, UniqueTable.FIRST_UNIQUE_KILLS - inventory.kills)
+	fight.unlocked = Achievements.unlocked(inventory)
 	fight.strikes = true
 	fight.even_loot = Settings.even_loot_on()
 	ledger = FightLedger.new(inventory, inventory_path, farming)
@@ -1556,7 +1576,7 @@ func _on_cave_pressed() -> void:
 ## It begins under the depths already won, whichever world they were won in.
 func _on_dungeon_pressed() -> void:
 	var fight := Encounter.for_dungeon(inventory.dungeon_depth)
-	fight.wear(inventory.effects())
+	fight.wear(inventory.effects(), Achievements.ranks(inventory))
 	fight.arm(inventory.stats())
 	print("Down the dungeon, depth %d" % fight.depth())
 	_combat = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
@@ -1594,7 +1614,7 @@ func _bank_depths() -> void:
 	var floors := fight.first_floor + fight.index
 	print("Left the dungeon at depth %d, %d won, %s on the board" % [fight.depth(), fight.cleared(),
 			Leaderboard.score_text(floors)])
-	if won > inventory.dungeon_depth or floors > inventory.dungeon_floors:
+	if fight.cleared() > 0 or won > inventory.dungeon_depth or floors > inventory.dungeon_floors:
 		inventory.dungeon_depth = maxi(inventory.dungeon_depth, won)
 		inventory.dungeon_floors = maxi(inventory.dungeon_floors, floors)
 		inventory.save(inventory_path)
@@ -1608,6 +1628,8 @@ func _on_combat_finished(won: bool, cell: Vector2i, retrying := false) -> void:
 	# Read before the fight is freed, and before banking, which zeroes the run's own pouch.
 	var earned: float = _combat.fight.gold
 	_bank_run()
+	# Before the kills are banked, whose save is what the achievements are checked on.
+	Achievements.record(inventory, _combat.fight)
 	ledger.bank_kills(kills)
 	_combat.queue_free()
 	_combat = null
@@ -1663,13 +1685,13 @@ func _credit_walls() -> void:
 		_save_map()
 
 
-## How far the player sees from a tile they have just taken: their own ring behind it, plus whatever a
+## How far the player sees from a tile they have just taken: their own `BASE_SIGHT` rings behind it, plus whatever a
 ## torch adds. It is read here and nowhere else -- at the moment the tile is charted -- so a torch put
 ## on afterwards uncovers nothing and one taken off hides nothing. What a tile showed is what it showed.
 func _sight() -> int:
-	# Under the Thick Fog the player's own ring is gone, and a torch is what buys it back. None at all
+	# Under the Thick Fog the player's own sight is gone, and a torch is what buys it back. None at all
 	# is a chart that uncovers the tile taken and nothing round it (`MapBuilder.chart`).
-	return (0 if Curses.THICK_FOG in inventory.curses else 1) + int(inventory.stats().get("sight", 0))
+	return (0 if Curses.THICK_FOG in inventory.curses else BASE_SIGHT) + int(inventory.stats().get("sight", 0))
 
 
 ## The Homeland's two lands, chosen once, the first time the cursed world's map exists: the kind the
@@ -1745,10 +1767,11 @@ func _update_buttons() -> void:
 	_farm_button.visible = view.can_farm(cell)
 	# An overfull bag greys the fights rather than hiding them, with the reason on each.
 	var heavy := inventory.encumbered()
+	var too_heavy := ENCUMBERED_TIP % inventory.capacity()
 	_chart_button.disabled = heavy
-	_chart_button.tooltip_text = ENCUMBERED_TIP if heavy else CHART_TIP
+	_chart_button.tooltip_text = too_heavy if heavy else CHART_TIP
 	_farm_button.disabled = heavy
-	_farm_button.tooltip_text = ENCUMBERED_TIP if heavy else FARM_TIP
+	_farm_button.tooltip_text = too_heavy if heavy else FARM_TIP
 	_was_encumbered = heavy
 	_town_button.visible = view.can_visit(cell)
 	_cave_button.visible = view.can_enter_cave(cell)
@@ -1816,14 +1839,19 @@ func _on_drop_discarded(item: Item) -> void:
 ## The Rag and Bone Sack, for a find thrown away in a fight. Through the ledger like any gold, so a
 ## run pouches it and a tile fight banks it; the bag pays for its own discards (`BagPage`).
 func _pay_salvage(item: Item) -> void:
+	inventory.tick("discarded")
 	var paid := inventory.salvage(item)
 	if paid > 0.0:
 		ledger.add_gold(paid)
+	var orb := inventory.salvage_orb()
+	if not orb.is_empty():
+		ledger.add_orb(orb)
 
 
 ## Tells the fight how much room is left, which is what puts the full-bag warning up.
 func _refresh_bag_room() -> void:
 	if _combat != null:
+		_combat.bag_size = inventory.capacity()
 		_combat.bag_room = ledger.room_left()
 
 
@@ -1871,7 +1899,7 @@ func _place_corner() -> void:
 						_character.position.y))
 	var step := (_bag_button.get_combined_minimum_size().y + CORNER_GAP) * ui_scale
 	for button: Button in [_bag_button, _heirloom_button, _skills_button, _bounty_button,
-			_settings_button, _collection_button]:
+			_settings_button, _collection_button, _achievements_button]:
 		if button.visible:
 			# The column glides after a page that comes or goes, rather than jumping.
 			var was := button.position
@@ -1909,6 +1937,9 @@ func _show_corner(shown: bool) -> void:
 	_collection_button.visible = shown and (Settings.show_all_uniques()
 			or not inventory.uniques_found.is_empty())
 	_pulse(_collection_button, "new_unique", not inventory.uniques_new.is_empty())
+	# The goals are not shown until the first is reached: the page appears with the unique it unlocked.
+	_achievements_button.visible = shown and not inventory.achievements.is_empty()
+	_pulse(_achievements_button, "new_achievement", not inventory.achievements_new.is_empty())
 	if _bag_button.visible:
 		_flash(_bag_button, "opened_bag")
 	_pulse(_skills_button, "skill_point", _skill_point_free())
@@ -2065,7 +2096,7 @@ func _on_unique_seen() -> void:
 ## there is one place that knows which those are.
 func _left_pages() -> Array[Control]:
 	return [bag_page, heirloom_page, skills_page, bounty_page, settings_page, collection_page,
-			character_page, leaderboard_page]
+			achievements_page, character_page, leaderboard_page]
 
 
 func _close_left_pages() -> void:
@@ -2169,6 +2200,62 @@ func _on_bounty_pressed() -> void:
 
 func _on_collection_pressed() -> void:
 	_toggle_left_page(collection_page)
+
+
+## Opening the page is seeing what was earned: the button stops pulsing.
+func _on_achievements_pressed() -> void:
+	_toggle_left_page(achievements_page)
+	if achievements_page.visible and not inventory.achievements_new.is_empty():
+		inventory.achievements_new.clear()
+		inventory.save(inventory_path)
+		_pulse(_achievements_button, "new_achievement", false)
+
+
+## After every save: earns what the player has reached (`Achievements.earn`), keeps it, and raises the
+## banner. Never while the black screen is up, where nothing may be saved, nor over a refused or reset
+## save.
+func _check_achievements() -> void:
+	if _resetting or _save_blocked or _transcend_page != null:
+		return
+	var earned := Achievements.earn(inventory)
+	if earned.is_empty():
+		return
+	# Every card from here on writes the uniques at their new ranks.
+	UniqueTable.ranks = Achievements.ranks(inventory)
+	inventory.save(inventory_path)
+	_show_corner(_combat == null)
+	_announce_achievements(earned)
+
+
+## The banner for achievements earned or climbed: the unique of the first in the square, and for each
+## what was done and what it did -- "Unlocks" the unique at rank I, and past it the rank reached and
+## the unique's rule at its new numbers. Its X is up at once when there is no fight to swing through it.
+func _announce_achievements(ids: Array[String]) -> void:
+	var piece := CollectionPage.specimen(ids[0])
+	var slot := ItemSlot.make(piece)
+	slot.remove_from_group(ItemSlot.GROUP)
+	var lines: Array[Control] = []
+	for id: String in ids:
+		var rank := Achievements.rank(inventory, id)
+		var named := str(Achievements.ACHIEVEMENTS[id]["name"])
+		var unique := str(UniqueTable.UNIQUES[id]["name"])
+		lines.append(ItemDetails.line(named if rank <= 1 else "%s %s" % [named, Achievements.RANK_NAMES[rank]],
+				Palette.TEXT, BANNER_WIDTH))
+		lines.append(ItemDetails.line(Achievements.text(id, rank), Palette.SLOT_TAN_DK, BANNER_WIDTH, true))
+		if rank <= 1:
+			lines.append(ItemDetails.line("Unlocks %s" % unique, piece.text_color(), BANNER_WIDTH, true))
+		else:
+			lines.append(ItemDetails.line("Strengthens %s" % unique, piece.text_color(), BANNER_WIDTH, true))
+			lines.append(ItemDetails.line(UniqueTable.effect_text(id, rank), Palette.SLOT_TAN_DK,
+					BANNER_WIDTH, true))
+			if rank >= UniqueTable.PEAK:
+				lines.append(ItemDetails.line(UniqueTable.peak_text(id), Palette.SLOT_TAN_DK, BANNER_WIDTH, true))
+	var title := "%d Achievements" % ids.size()
+	if ids.size() == 1:
+		title = "Achievement" if Achievements.rank(inventory, ids[0]) <= 1 else "Rank Up"
+	_raise_banner(title, piece.text_color(), slot, lines)
+	if _combat == null:
+		_banner_x()
 
 
 func _on_character_pressed() -> void:
@@ -2292,6 +2379,7 @@ func _exit_tree() -> void:
 	if _combat != null and _combat.fight.dungeon:
 		_bank_depths()
 	elif _combat != null:
+		Achievements.record(inventory, _combat.fight)
 		ledger.bank_kills(_combat.fight.kills())
 	_save_map()
 

@@ -12,6 +12,8 @@ extends RefCounted
 ## own width and its own way back. The lines want a bone background: the darker half of the rarity
 ## ramp is chosen to be read on the white panel, not on wood.
 
+const PEAK_ICON := "res://Assets/UI/ui_icon_trophy.png"
+
 ## Empties `rows` and writes `item` into it. `width` is what a line may use before it wraps.
 ##
 ## What a smith has left on a piece reads here and so reads everywhere a piece is shown: "Broken"
@@ -20,16 +22,29 @@ extends RefCounted
 ## `against` is what this one would replace, when there is anything: it adds a block, first under the
 ## name, saying what wearing this would gain or lose, which is the question the bag is actually being read to answer.
 ## A list rather than one piece, because a greatsword takes the offhand off with the weapon.
-static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[Item] = []) -> void:
+##
+## `every_rank` (the collection log under detailed descriptions) writes a ranked unique's rule with
+## every rank's numbers, "5/4/3/2", and its rank IV line greyed behind a trophy until it is reached.
+static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[Item] = [],
+		every_rank := false) -> void:
 	for child: Node in rows.get_children():
 		child.queue_free()
 	rows.add_child(line(item.display_name(), item.text_color(), width))
 	# Rarity and level on one line: they are the two things that say what a piece is worth, and they
 	# are rolled together off the same body. A piece that needs both hands says so here as well: it
-	# costs a socket, which is as much a part of what it is worth as its level is.
-	rows.add_child(line("%s · level %d%s" % [item.rarity_name(), item.level,
-			" · Two-handed" if LootTable.two_handed(item.type) else ""],
+	# costs a socket, which is as much a part of what it is worth as its level is. So does a unique's
+	# rank, which is the player's and moves every number its rule writes.
+	var ranked := not item.unique.is_empty() and UniqueTable.is_ranked(item.unique)
+	rows.add_child(line("%s · level %d%s%s" % [item.rarity_name(), item.level,
+			" · Two-handed" if LootTable.two_handed(item.type) else "",
+			" · Rank %s" % Achievements.RANK_NAMES[UniqueTable.shown_rank(item.unique)] if ranked else ""],
 			item.text_color(), width, true))
+	# What it asks before it goes on. Not coloured by whether it is met: this block knows no player,
+	# and a greyed Equip says it where it matters.
+	var needs := LootTable.requirement(item.type, item.level)
+	if not needs.is_empty():
+		rows.add_child(line("Requires %d %s" % [needs[1], LootTable.STAT_LABELS[needs[0]]],
+				Palette.TEXT_SOFT, width, true))
 	# Under what the piece is, because that is what it now is: still worn, still sold, and never to be
 	# changed again. In the colour a loss is written in, so it is not read as a line it rolled.
 	if item.broken:
@@ -40,11 +55,28 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 	# What a unique is worn for, straight under what it is: the one line on the block that is a rule
 	# rather than a number. In the pack's wood brown and not the unique's own gold, which carries a
 	# name at 16 px and is too pale on cream for a sentence at 10.
-	if not item.effect_text().is_empty():
-		rows.add_child(line(item.effect_text(), Palette.SLOT_TAN_DK, width, true))
-	# What its set does, in the set's own green -- which is also the colour of its name and its frame.
-	if item.is_set():
-		rows.add_child(line(item.set_text(), ItemRarity.SET_TEXT, width, true))
+	every_rank = every_rank and ranked
+	var rule := UniqueTable.effect_text(item.unique, 0) if every_rank else item.effect_text()
+	if not rule.is_empty():
+		rows.add_child(line(rule, Palette.SLOT_TAN_DK, width, true))
+	# And what it gained at rank IV, in the same brown: it is as much the piece's rule as the first.
+	if not item.peak_text().is_empty():
+		rows.add_child(line(item.peak_text(), Palette.SLOT_TAN_DK, width, true))
+	# Not reached yet: "<trophy> IV: the line", greyed the way a dead button is -- the mark faded as a
+	# bare one's, the words in a disabled face's colour.
+	elif every_rank:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 2)
+		var trophy := TextureRect.new()
+		trophy.texture = load(PEAK_ICON)
+		trophy.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+		trophy.modulate = UITheme.BARE_DISABLED
+		# Beside the sentence's first line, however many it wraps to.
+		trophy.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		row.add_child(trophy)
+		row.add_child(line("%s: %s" % [Achievements.RANK_NAMES[UniqueTable.PEAK], UniqueTable.peak_text(item.unique)],
+				UITheme.DISABLED_FONT_COLOR, width - trophy.texture.get_width() - 2, true))
+		rows.add_child(row)
 	# Three blocks of [text, colour], each under a rule of its own and
 	# drawn as a table (name left, number right): what the swap is worth, what the
 	# piece is, what it rolled. The swap goes first, straight under the name: it is the answer the

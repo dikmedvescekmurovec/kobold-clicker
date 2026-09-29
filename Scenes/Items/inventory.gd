@@ -62,7 +62,12 @@ const SAVE_PATH := "user://inventory.json"
 ## 26 adds `dungeon_floors`, the leaderboard's score; a version 25 save has beaten the floors of the
 ## depths it won and none past them.
 ## 27 adds `first_orb_taken`; a version 26 save is already under way, so it reads as taken.
-const VERSION := 27
+## 28 adds `achievements`, `achievements_new` and `tally`; a version 27 save has earned none and counted
+## nothing, so only the starter uniques drop for it until it earns them -- a unique it found stays in
+## the log but must be earned again to fall (the user's ruling).
+## 29 makes `achievements` a rank each (id -> 1..4); a version 28 save's list is rank I of each, and
+## the walls it has broken this world start the lifetime count Thaw now asks for (`tally.walls`).
+const VERSION := 29
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -72,8 +77,12 @@ const CAPACITY := 40
 ## How fast an overencumbered player walks the map, as a share of their usual pace.
 const ENCUMBERED_SPEED := 0.5
 
-## The Spiked Helm: how much of the set's armour is added to its damage.
-const SPIKES_SHARE := 0.01
+## The starter uniques' numbers: the Squire's Blade's damage, the Courier's Boots' spawn speed, and the
+## Novice's Cap's experience and the level it stops at.
+const SQUIRE_DAMAGE := 3.0
+const COURIER_SPAWN := 30.0
+const NOVICE_XP := 100.0
+const NOVICE_UNTIL := 20
 
 ## What a point of each attribute is worth, in percent of the stat it names. Minor on purpose: a roll
 ## of strength is a slot that could have held damage outright, and a piece carrying none of them is the
@@ -81,15 +90,16 @@ const SPIKES_SHARE := 0.01
 const ATTRIBUTE_PERCENT := 0.2
 const ATTRIBUTE_GIVES := {"strength": "damage", "dexterity": "attack_speed", "intelligence": "xp_more"}
 
-## What the attribute uniques are tuned by (`UniqueTable`, which writes the same figures in words).
-const OGRE_SHARE := 0.1          ## of strength, added to the flat damage
-const FENCER_DEXTERITY := 10.0   ## dexterity a tenth of a second of time on hit
-const BUTCHER_STRENGTH := 20.0   ## strength a point of bleed; uncapped (the user's ruling)
-const SCHOLAR_TIMES := 5.0       ## intelligence's share, given to damage in place of experience
-const ABACUS_POINTS := 5.0       ## intelligence a percent more of every skill
-const ACCORD_WITHIN := 0.9       ## the lowest attribute against the highest
-const ACCORD_TIMES := 5.0
-const ZEALOT_TIMES := 4.0
+## How close the Crown of Accord asks the three to be: the lowest against the highest. Every other
+## number a unique reads here is its rank's (`_dial`, `UniqueTable`), so the card and the rule agree.
+const ACCORD_WITHIN := 0.9
+## What the lines a unique gains at rank IV are tuned by (`UniqueTable`'s `peak` says each in words).
+const ACCORD_WITHIN_PEAK := 0.8   ## a fifth instead of a tenth, Crown of Accord
+const ZEALOT_GIFT := 1.25         ## what each attribute's gift is multiplied by, Zealot's Brand
+const SCHOLAR_CRIT := 10.0        ## intelligence a point of crit damage, Scholar's Circlet
+const PACKMULE_ROOM := 20         ## pieces more the bag holds, Packmule's Harness
+const SALVAGE_ORB := 0.05         ## of the pieces thrown away that leave an orb, Rag and Bone Sack
+const PURIST_MODS := 1.25         ## what a pure piece's modifiers count for, Purist's Seal
 
 ## What is held, in the order it was picked up. The panel does not show it in this order -- `order()`
 ## does that -- and nothing outside here should: an index into this array is how a piece is named,
@@ -171,6 +181,19 @@ var towns := TownState.new()
 var uniques_found: Array[String] = []
 ## The found ones the player has not hovered in the log yet: what makes its button and their squares shine.
 var uniques_new: Array[String] = []
+## The achievements earned, `Achievements` id -> the rank reached (1..`UniqueTable.PEAK`): each unlocks
+## its unique into the drops, and its rank is what that unique's numbers are read at. Like the log,
+## they only grow and go with the player through a transcension.
+var achievements := {}
+## The earned ones the achievements page has not been opened on since: what makes its button shine.
+var achievements_new: Array[String] = []
+## What the achievements count, key -> number (`Achievements` names the keys): lifetime sums, and the
+## longest of each streak. Carried through a transcension with the achievements.
+var tally := {}
+
+## Said at the end of every `save`, which is what everything that changes the player ends in: the main
+## scene checks the achievements on it (`Achievements.newly_earned`).
+signal save_written
 
 ## What the fortuneteller has sold that belongs to the player rather than to a town: the chest the
 ## star points at, the uniques she has shown, whether the scour is spent. A plain Dictionary whose
@@ -219,6 +242,9 @@ var uniques_doubled: Array[String] = []
 ## `stash()` sets it on the heirlooms each time they are asked for, which is how the Lone Heir
 ## reaches a second `Inventory` that knows nothing of curses.
 var most_worn := -1
+## The player's own `Inventory`, on the heirlooms: set by `stash()` like `most_worn`, so this doll's
+## Equip can count the attributes of both. A `WeakRef`, or the two would keep each other alive.
+var keeper: WeakRef = null
 
 ## Pacifist Hands: swings a second the hands make on their own, before everything is doubled.
 const PACIFIST_SWINGS := 1.5
@@ -244,31 +270,42 @@ func total() -> int:
 	return items.size()
 
 
+## How many loose items the bag holds: `CAPACITY`, and `PACKMULE_ROOM` more while a Packmule's Harness
+## at rank IV is worn on either doll. The heirlooms' stash keeps to `CAPACITY`.
+func capacity() -> int:
+	if keeper == null and "packmule" in effects() and _peak("packmule"):
+		return CAPACITY + PACKMULE_ROOM
+	return CAPACITY
+
+
 ## How many more loose items fit. Never negative, even for a bag over the cap.
 func room_left() -> int:
-	return maxi(0, CAPACITY - items.size())
+	return maxi(0, capacity() - items.size())
 
 
 func is_full() -> bool:
-	return items.size() >= CAPACITY
+	return items.size() >= capacity()
 
 
 ## Over the cap: slow on the map, and no fight can be started until the bag is back down to it.
 func encumbered() -> bool:
-	return items.size() > CAPACITY
+	return items.size() > capacity()
 
 
 ## The order the bag is read in: by level, highest first, and inside a level by rarity, best first,
 ## and inside a rarity newest first -- because the thing just picked up is the thing being looked
 ## for. Given as indices into `items`, so whoever is holding one (the open stat block) goes on
-## holding the same piece across a refresh.
-func order() -> Array[int]:
+## holding the same piece across a refresh. `held` (Item -> rarity) sorts a piece by the rarity it had
+## then, so a piece an orb has just lifted stays where it was until the bag sorts afresh (`BagPage`).
+func order(held := {}) -> Array[int]:
 	var by := _indices()
 	by.sort_custom(func(a: int, b: int) -> bool:
 		if items[a].level != items[b].level:
 			return items[a].level > items[b].level
-		if items[a].rarity != items[b].rarity:
-			return items[a].rarity > items[b].rarity
+		var ra: int = held.get(items[a], items[a].rarity)
+		var rb: int = held.get(items[b], items[b].rarity)
+		if ra != rb:
+			return ra > rb
 		return a > b)
 	return by
 
@@ -349,16 +386,54 @@ func can_equip(item: Item, socket: Equipment.Socket) -> bool:
 
 
 ## Why `item` cannot go on at `socket`, or "" where it can: it does not fit, the bag has no room for
-## what comes off, or this doll is at `most_worn` and the press would add a piece rather than swap one.
+## what comes off, or this doll is at `most_worn` and the press would add a piece rather than swap one,
+## or the player is short of the attribute it asks for (`LootTable.requirement`).
 func why_not_equip(item: Item, socket: Equipment.Socket) -> String:
 	if not Equipment.fits(socket, item):
 		return "It does not go there"
-	var off := equipment.displaced_by(socket, item).size()
-	if items.size() - 1 + off > maxi(CAPACITY, items.size()):
+	var displaced := equipment.displaced_by(socket, item)
+	var off := displaced.size()
+	if items.size() - 1 + off > maxi(capacity(), items.size()):
 		return "The bag is full"
 	if most_worn >= 0 and equipment.worn.size() - off + 1 > most_worn:
 		return "Lone Heir: only one heirloom may be worn"
+	var needs := LootTable.requirement(item.type, item.level)
+	if not needs.is_empty():
+		var player: Inventory = self if keeper == null else keeper.get_ref()
+		if player == null:
+			player = self
+		if not player._needs_waived(displaced) and player.points_without(displaced)[needs[0]] < needs[1]:
+			return "Needs %d %s" % [needs[1], LootTable.STAT_LABELS[needs[0]]]
 	return ""
+
+
+## The Patchwork Coat at rank IV: while one stays worn, on either doll, through the swap (it is not in
+## `off`), any piece may be worn whatever attribute it asks for.
+func _needs_waived(off: Array[Item]) -> bool:
+	if not _peak("patchwork_coat"):
+		return false
+	for piece: Item in equipment.items() + stash().equipment.items():
+		if piece.unique == "patchwork_coat" and not piece in off:
+			return true
+	return false
+
+
+## `attributes()` as they would be with `off` taken off whichever doll wears them: what a piece's
+## requirement is met by, since what the swap takes off cannot hold it up (the user's ruling,
+## 2026-09-28). The piece itself is in the bag, so it never counts toward its own. Both dolls' sockets
+## are swapped for trimmed copies, `attributes()` read -- so the Crown, the Brand and the Echo count as
+## they would -- and put back before anything else can run.
+func points_without(off: Array[Item]) -> Dictionary:
+	var dolls: Array[Equipment] = [equipment, stash().equipment]
+	var kept := dolls.map(func(doll: Equipment) -> Dictionary: return doll.worn)
+	for doll in dolls:
+		doll.worn = doll.worn.duplicate()
+		for piece in off:
+			doll.worn.erase(doll.worn.find_key(piece))
+	var points := attributes()
+	for index in dolls.size():
+		dolls[index].worn = kept[index]
+	return points
 
 
 ## Takes `item` out of the bag and puts it on, and drops whatever it displaced back into the bag.
@@ -451,35 +526,44 @@ func add_xp(amount: int) -> int:
 func stats() -> Dictionary:
 	var worn := effects()
 	var points := attributes()
-	var flat := _skills_worth(skills.flat())
-	var percent := _skills_worth(skills.percent())
-	var other := stash().equipment
+	# The Sage's Abacus at IV: every skill learned counts one rank higher.
+	var extra := 1 if "abacus" in worn and _peak("sages_abacus") else 0
+	var flat := _skills_worth(skills.flat(extra))
+	var percent := _skills_worth(skills.percent(extra))
+	var dolls := _counted_dolls()
 	if "spikes" in worn:
-		var armour := float(equipment.totals(flat, percent, other).get("armor", 0.0))
-		flat["damage"] = float(flat.get("damage", 0.0)) + armour * SPIKES_SHARE
+		var armour := float(dolls[0].totals(flat, percent, dolls[1]).get("armor", 0.0))
+		flat["damage"] = float(flat.get("damage", 0.0)) + armour * _dial("spiked_helm", "share") / 100.0
 	# The attribute uniques that turn points into another stat's flat, in with the skills' so the
 	# percents scale them like any other point. One on each doll counts twice.
 	var turned := {
-		"damage": points["strength"] * OGRE_SHARE * worn.count("ogre"),
-		"time_on_hit": points["dexterity"] / FENCER_DEXTERITY * worn.count("fencer"),
-		"bleed": points["strength"] / BUTCHER_STRENGTH * worn.count("butcher"),
-		"spawn_speed": points["dexterity"] * worn.count("quickdraw"),
+		"damage": points["strength"] * _dial("ogres_knuckle", "share") / 100.0 * worn.count("ogre")
+				+ SQUIRE_DAMAGE * worn.count("squire"),
+		"time_on_hit": points["dexterity"] / _dial("fencers_signet", "dexterity") * worn.count("fencer"),
+		"bleed": points["strength"] / _dial("butchers_cleaver", "strength") * worn.count("butcher"),
+		"spawn_speed": points["dexterity"] * _dial("quickdraw_boots", "times") * worn.count("quickdraw")
+				+ COURIER_SPAWN * worn.count("courier"),
 	}
+	# At IV the Fencer's Signet adds the dexterity to dodge and the Scholar's Circlet the intelligence
+	# to crit damage, the same way.
+	if "fencer" in worn and _peak("fencers_signet"):
+		turned["dodge"] = points["dexterity"] * worn.count("fencer")
+	if "scholar" in worn and _peak("scholars_circlet"):
+		turned["crit_damage"] = points["intelligence"] / SCHOLAR_CRIT * worn.count("scholar")
 	for stat: String in turned:
 		if turned[stat] > 0.0:
 			flat[stat] = float(flat.get(stat, 0.0)) + turned[stat]
-	var out := equipment.totals(flat, percent, other)
+	var out := dolls[0].totals(flat, percent, dolls[1])
 	out["bare_sockets"] = _side_count("ascetic",
 			func(side: Inventory) -> int: return Equipment.NAMES.size() - side.equipment.worn.size())
 	out["bag_pieces"] = _side_count("packmule", func(side: Inventory) -> int: return side.items.size())
 	# The Patchwork Coat's count and the Purist's Seal's, over all sixteen pieces.
 	out["attribute_lines"] = 0
 	out["pure_pieces"] = 0
-	for piece: Item in equipment.items() + other.items():
-		var lines := piece.mods.filter(func(mod: Dictionary) -> bool:
-				return ATTRIBUTE_GIVES.has(ModifierTable.MODS.get(mod["id"], {}).get("stat", "")))
-		out["attribute_lines"] += lines.size()
-		out["pure_pieces"] += int(lines.is_empty())
+	for piece: Item in equipment.items() + stash().equipment.items():
+		var lines := _attribute_lines(piece)
+		out["attribute_lines"] += lines
+		out["pure_pieces"] += int(lines == 0)
 	# The collection log's share, on its own the way the skills' percent is: it multiplies what gear
 	# and skills made rather than adding to either.
 	if out.has("damage"):
@@ -495,6 +579,15 @@ func stats() -> Dictionary:
 			out[stat] = float(out.get(stat, 0.0)) + gift[1]
 		elif out.has(stat):
 			out[stat] = float(out[stat]) * (1.0 + gift[1] / 100.0)
+	# The Quickdraw Boots at IV: Spawn Speed past 100%, which the walk-in has no more use for, is a
+	# percent of attack speed a point.
+	if "quickdraw" in worn and _peak("quickdraw_boots") and out.has("attack_speed"):
+		var past := float(out.get("spawn_speed", 0.0)) - 100.0
+		if past > 0.0:
+			out["attack_speed"] = float(out["attack_speed"]) * (1.0 + past / 100.0)
+	# The Novice's Cap: experience, until the player has outgrown it.
+	if level < NOVICE_UNTIL and "novice" in worn:
+		out["xp_more"] = float(out.get("xp_more", 0.0)) + NOVICE_XP * worn.count("novice")
 	# Pacifist Hands: the hands swing for themselves, and then everything that swings swings faster.
 	if Curses.PACIFIST_HANDS in curses:
 		out["attack_speed"] = (float(out.get("attack_speed", 0.0)) + PACIFIST_SWINGS) * PACIFIST_FASTER
@@ -512,46 +605,74 @@ static func attribute_bonus(points: float) -> float:
 
 
 ## What `points` of `attribute` add, as [the stat, the percent]: `ATTRIBUTE_GIVES`' stat at
-## `attribute_bonus`, but intelligence gives damage at `SCHOLAR_TIMES` under the Scholar's Circlet.
+## `attribute_bonus`, but intelligence gives damage at its rank's times under the Scholar's Circlet --
+## and all of it a quarter more under the Zealot's Brand at IV.
 func attribute_gift(attribute: String, points: float) -> Array:
-	if attribute == "intelligence" and "scholar" in effects():
-		return ["damage", attribute_bonus(points) * SCHOLAR_TIMES]
-	return [ATTRIBUTE_GIVES[attribute], attribute_bonus(points)]
+	var worn := effects()
+	var gift := [ATTRIBUTE_GIVES[attribute], attribute_bonus(points)]
+	if attribute == "intelligence" and "scholar" in worn:
+		gift = ["damage", attribute_bonus(points) * _dial("scholars_circlet", "times")]
+	if "zealot" in worn and _peak("zealots_brand"):
+		gift[1] = float(gift[1]) * ZEALOT_GIFT
+	return gift
+
+
+## The three attributes as the gear itself adds them up over both dolls, before any unique counts them
+## again: what an achievement that asks for an attribute reads (the user's ruling, 2026-09-29).
+func gear_attributes() -> Dictionary:
+	return _attribute_sums(equipment, stash().equipment)
+
+
+## The three attributes two dolls add up to, none below nothing.
+static func _attribute_sums(doll: Equipment, other: Equipment) -> Dictionary:
+	var sums := doll.totals({}, {}, other)
+	var out := {}
+	for attribute: String in ATTRIBUTE_GIVES:
+		out[attribute] = maxf(0.0, float(sums.get(attribute, 0.0)))
+	return out
 
 
 ## The three attributes as everything that reads one counts them. **Added up over both dolls**, like
-## any stat (the user's ruling), then the heirlooms' doll's once more for every Heirloom's Echo worn;
-## the Crown of Accord's test is of those sums, and the Zealot's Brand comes last, so it can take what
-## the Crown gave. Nothing but gear carries an attribute, so the skills are not asked.
+## any stat (the user's ruling), then the heirlooms' doll's again for every Heirloom's Echo worn, to its
+## rank's times over; the Crown of Accord's test is of those sums, and the Zealot's Brand comes last,
+## so it can take what the Crown gave. Nothing but gear carries an attribute, so the skills are not asked.
+## The dolls are the counted ones (`_counted_dolls`), so an heirloom the Echo at IV lifts a plus lifts
+## its attribute lines with it.
 func attributes() -> Dictionary:
 	var worn := effects()
-	var sums := equipment.totals({}, {}, stash().equipment)
-	var echo := stash().equipment.totals()
-	var out := {}
-	for attribute: String in ATTRIBUTE_GIVES:
-		out[attribute] = maxf(0.0, float(sums.get(attribute, 0.0))
-				+ float(echo.get(attribute, 0.0)) * worn.count("echo"))
+	var dolls := _counted_dolls()
+	var out := _attribute_sums(dolls[0], dolls[1])
+	if "echo" in worn:
+		var echo := dolls[1].totals()
+		var again := (_dial("heirlooms_echo", "times") - 1.0) * worn.count("echo")
+		for attribute: String in out:
+			out[attribute] = maxf(0.0, out[attribute] + float(echo.get(attribute, 0.0)) * again)
 	var high: float = out.values().max()
-	if "accord" in worn and high > 0.0 and out.values().min() >= high * ACCORD_WITHIN:
+	# The Crown of Accord at IV lets them stand further apart.
+	var within := ACCORD_WITHIN_PEAK if _peak("crown_of_accord") else ACCORD_WITHIN
+	if "accord" in worn and high > 0.0 and out.values().min() >= high * within:
 		for attribute: String in out:
-			out[attribute] *= 1.0 + (ACCORD_TIMES - 1.0) * worn.count("accord")
+			out[attribute] *= 1.0 + (_dial("crown_of_accord", "times") - 1.0) * worn.count("accord")
+	# The Zealot's Brand brings the two lower up to its rank's times the highest (the user's,
+	# 2026-09-29). One on each doll counts twice, as every attribute unique does.
 	if "zealot" in worn:
-		var top: String = out.find_key(out.values().max())
+		var high_now: float = out.values().max()
+		var top: String = out.find_key(high_now)
 		for attribute: String in out:
-			out[attribute] = out[attribute] * (1.0 + (ZEALOT_TIMES - 1.0) * worn.count("zealot")) \
-					if attribute == top else 0.0
+			if attribute != top:
+				out[attribute] = high_now * _dial("zealots_brand", "times") * worn.count("zealot")
 	return out
 
 
 ## What one skill point is worth against what the tree says: double under Hard Lessons, and a percent
-## more for every `ABACUS_POINTS` intelligence under each Sage's Abacus. A skill's card writes it by
-## describing that many points (`SkillCard.fill`), so the card says what the fight gets.
+## more for every so much intelligence (its rank's) under each Sage's Abacus. A skill's card writes it
+## by describing that many points (`SkillCard.fill`), so the card says what the fight gets.
 func skill_worth() -> float:
 	var worth := 1.0 + (1.0 if Curses.HARD_LESSONS in curses else 0.0) \
 			+ (0.5 if Curses.SPECIALIST in curses else 0.0)
 	var abaci := effects().count("abacus")
 	if abaci > 0:
-		worth *= 1.0 + abaci * float(attributes()["intelligence"]) / ABACUS_POINTS / 100.0
+		worth *= 1.0 + abaci * float(attributes()["intelligence"]) / _dial("sages_abacus", "intelligence") / 100.0
 	return worth
 
 
@@ -593,9 +714,66 @@ func _side_count(effect: String, count: Callable) -> int:
 
 
 ## What throwing `item` away pays: nothing, unless the Rag and Bone Sack is worn -- on either doll,
-## and for an heirloom thrown away as much as for a find.
+## and for an heirloom thrown away as much as for a find -- and then its rank's share of a trader's.
 func salvage(item: Item) -> float:
-	return TownPrices.salvage_price(item) if "salvage" in effects() else 0.0
+	if not "salvage" in effects():
+		return 0.0
+	return TownPrices.salvage_price(item, _dial("rag_and_bone_sack", "share") / 100.0)
+
+
+## The Rag and Bone Sack at rank IV: now and then a piece thrown away leaves an orb as well -- "" when
+## it does not. Paid in the same four places as `salvage`.
+func salvage_orb(rng := RandomNumberGenerator.new()) -> String:
+	if not ("salvage" in effects() and _peak("rag_and_bone_sack")) or rng.randf() >= SALVAGE_ORB:
+		return ""
+	return OrbTable.roll("", rng, true)
+
+
+## One of a unique's numbers at the rank the player has of it (`Achievements.rank`), rank I for one
+## worn and not yet earned -- an old save's find.
+func _dial(id: String, key: String) -> float:
+	return UniqueTable.dial(id, key, maxi(1, Achievements.rank(self, id)))
+
+
+## Whether the player has `id` at rank IV, where it gains its last line (`UniqueTable.peak_text`).
+## Asked beside whether it is worn, never instead of it.
+func _peak(id: String) -> bool:
+	return Achievements.rank(self, id) >= UniqueTable.PEAK
+
+
+## How many of `piece`'s modifiers are attribute lines: the Patchwork Coat's count, and none makes it
+## the Purist's Seal's pure piece.
+static func _attribute_lines(piece: Item) -> int:
+	return piece.mods.filter(func(mod: Dictionary) -> bool:
+			return ATTRIBUTE_GIVES.has(ModifierTable.MODS.get(mod["id"], {}).get("stat", ""))).size()
+
+
+## The two dolls as their totals are read: themselves -- or, while a rank IV Heirloom's Echo or
+## Purist's Seal is worn, copies of them with every heirloom one plus higher (`Item.ascend`) and every
+## pure piece's modifiers `PURIST_MODS` over. Copies, so nothing the player holds is changed by being
+## counted; `stats` and `attributes` both total these.
+func _counted_dolls() -> Array[Equipment]:
+	var worn := effects()
+	var echo := "echo" in worn and _peak("heirlooms_echo")
+	var purist := "purist" in worn and _peak("purists_seal")
+	var dolls: Array[Equipment] = [equipment, stash().equipment]
+	if not echo and not purist:
+		return dolls
+	var counted: Array[Equipment] = []
+	for side in dolls.size():
+		var copy := Equipment.new()
+		for socket: Equipment.Socket in dolls[side].worn:
+			var piece := Item.from_dict(dolls[side].worn[socket].to_dict())
+			if piece == null:
+				continue
+			if echo and side == 1:
+				piece.ascend()
+			if purist and _attribute_lines(piece) == 0:
+				for mod in piece.mods:
+					mod["value"] = int(roundf(float(mod["value"]) * PURIST_MODS))
+			copy.worn[socket] = piece
+		counted.append(copy)
+	return counted
 
 
 ## What the collection log adds to the player's damage, in percent: `UniqueTable.COLLECTION_DAMAGE`
@@ -607,8 +785,7 @@ func collection_bonus() -> int:
 
 
 ## What changes how a fight plays rather than a number: the capstones learned and the uniques worn,
-## as one list of effect ids for `Encounter.effects`. Each doll answers for itself, which is what
-## keeps a Pilgrim's set inside one doll: a home piece on each is two lone pieces.
+## as one list of effect ids for `Encounter.effects`, each doll answering for itself.
 func effects() -> Array:
 	return skills.effects() + equipment.effects() + stash().equipment.effects() \
 			+ curses.map(Curses.effect) \
@@ -620,6 +797,7 @@ func stash() -> Inventory:
 	if heirlooms == null:
 		heirlooms = Inventory.new()
 	heirlooms.most_worn = 1 if Curses.LONE_HEIR in curses else -1
+	heirlooms.keeper = weakref(self)
 	return heirlooms
 
 
@@ -628,6 +806,8 @@ func stash() -> Inventory:
 func credit_walls(fallen: int) -> bool:
 	if fallen <= walls_credited:
 		return false
+	# Thaw counts every wall ever broken, in every world, where this world's count starts again.
+	tick("walls", fallen - walls_credited)
 	# The Long Winter's pay: a wall twice as hard is worth two.
 	# No Second Chances pays one more, and the two add: three a wall under both.
 	super_orbs += (fallen - walls_credited) * (1 + int(Curses.LONG_WINTER in curses)
@@ -708,6 +888,10 @@ func transcended(lost := false) -> Inventory:
 	next.uniques_found = uniques_found.duplicate()
 	next.uniques_new = uniques_new.duplicate()
 	next.uniques_doubled = uniques_doubled.duplicate()
+	next.achievements = achievements.duplicate()
+	next.achievements_new = achievements_new.duplicate()
+	next.tally = tally.duplicate()
+	next.tick("transcended")
 	next.kills = kills
 	next.play_seconds = play_seconds
 	next.dungeon_depth = dungeon_depth
@@ -764,6 +948,11 @@ func respec(tree: String) -> bool:
 	return true
 
 
+## One more of `key` in the achievements' `tally` (`n` more).
+func tick(key: String, n := 1) -> void:
+	tally[key] = int(tally.get(key, 0)) + n
+
+
 ## Every orb held, counted together.
 func total_orbs() -> int:
 	var total := 0
@@ -783,7 +972,7 @@ func save(path := SAVE_PATH) -> bool:
 		kept.append(item.to_dict())
 	saved_at = Time.get_unix_time_from_system()
 	# Indented, so the save can be read and edited by a person.
-	return SafeFile.write(path, JSON.stringify({
+	var written := SafeFile.write(path, JSON.stringify({
 		"version": VERSION,
 		"first_sword_taken": first_sword_taken,
 		"first_orb_taken": first_orb_taken,
@@ -814,7 +1003,12 @@ func save(path := SAVE_PATH) -> bool:
 		"skull_budget": skull_budget,
 		"homeland": homeland,
 		"uniques_doubled": uniques_doubled,
+		"achievements": achievements,
+		"achievements_new": achievements_new,
+		"tally": tally,
 	},"\t"))
+	save_written.emit()
+	return written
 
 
 ## The inventory in `path`, or an empty one when there isn't a usable file there. A missing file is a
@@ -973,6 +1167,29 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	for entry: Variant in _strings(data.get("uniques_doubled", [])):
 		if UniqueTable.UNIQUES.has(entry) and not inventory.uniques_doubled.has(entry):
 			inventory.uniques_doubled.append(entry)
+	# Version 27 earned nothing and counted nothing; version 28 kept a list, every one of it rank I. A
+	# retired achievement is dropped, a rank is held to I..IV, and a count is whole.
+	var earned: Variant = data.get("achievements", {})
+	if typeof(earned) == TYPE_ARRAY:
+		for entry: String in _strings(earned):
+			if Achievements.ACHIEVEMENTS.has(entry):
+				inventory.achievements[entry] = 1
+	elif typeof(earned) == TYPE_DICTIONARY:
+		for entry: Variant in earned:
+			if Achievements.ACHIEVEMENTS.has(str(entry)) and typeof(earned[entry]) in [TYPE_INT, TYPE_FLOAT] \
+					and int(earned[entry]) >= 1:
+				inventory.achievements[str(entry)] = mini(int(earned[entry]), UniqueTable.PEAK)
+	for entry: String in _strings(data.get("achievements_new", [])):
+		if inventory.achievements.has(entry) and not inventory.achievements_new.has(entry):
+			inventory.achievements_new.append(entry)
+	var counted: Variant = data.get("tally", {})
+	if typeof(counted) == TYPE_DICTIONARY:
+		for key: Variant in counted:
+			if typeof(counted[key]) in [TYPE_INT, TYPE_FLOAT]:
+				inventory.tally[str(key)] = maxi(0, int(counted[key]))
+	# Version 28 counted no wall ever broken: this world's are where the lifetime count starts.
+	if version < 29 and inventory.walls_credited > int(inventory.tally.get("walls", 0)):
+		inventory.tally["walls"] = inventory.walls_credited
 	return inventory
 
 

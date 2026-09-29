@@ -14,6 +14,8 @@ signal closed
 signal reset_pressed
 ## The debug build's Gold x10 was pressed.
 signal cash_pressed
+## The debug build's Skill points +10 was pressed.
+signal points_pressed
 ## The debug build's "Show all uniques" was ticked or unticked: the trophy may have come or gone.
 signal uniques_toggled
 ## Dev: the "show all chests" box moved; the main scene redraws the map's chests.
@@ -181,6 +183,10 @@ func _foot(asking: bool) -> VBoxContainer:
 			var cash := UITheme.button("Gold x10", "LightButton", "Dev: multiply the purse by ten")
 			cash.pressed.connect(cash_pressed.emit)
 			foot.add_child(cash)
+			var points := UITheme.button("Skill points +10", "LightButton",
+					"Dev: ten levels, and the ten skill points they earn")
+			points.pressed.connect(points_pressed.emit)
+			foot.add_child(points)
 			var balance := UITheme.button("Balancing", "LightButton", "Dev: scale enemy health wall by wall")
 			balance.pressed.connect(_open_balance)
 			foot.add_child(balance)

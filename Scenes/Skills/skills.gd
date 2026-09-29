@@ -58,15 +58,16 @@ func reset(tree: String) -> void:
 			ranks.erase(id)
 
 
-## Every stat the learned skills add before anything multiplies.
-func flat() -> Dictionary:
-	return _sum("flat")
+## Every stat the learned skills add before anything multiplies. `extra` is ranks more on every skill
+## learned (the Sage's Abacus at IV), never on one that has none.
+func flat(extra := 0) -> Dictionary:
+	return _sum("flat", extra)
 
 
 ## Every stat the learned skills increase, in percent. Summed, not compounded: two skills of 10%
 ## increased damage are 20%, which is what a player adds up in their head.
-func percent() -> Dictionary:
-	return _sum("percent")
+func percent(extra := 0) -> Dictionary:
+	return _sum("percent", extra)
 
 
 ## The effects of every learned skill that has one, for `Encounter.effects`.
@@ -78,12 +79,12 @@ func effects() -> Array:
 	return out
 
 
-func _sum(kind: String) -> Dictionary:
+func _sum(kind: String, extra := 0) -> Dictionary:
 	var out := {}
 	for id: String in ranks:
 		var part: Dictionary = SkillTree.node(id)[kind]
 		for stat: String in part:
-			out[stat] = float(out.get(stat, 0.0)) + float(part[stat]) * int(ranks[id])
+			out[stat] = float(out.get(stat, 0.0)) + float(part[stat]) * (int(ranks[id]) + extra)
 	return out
 
 

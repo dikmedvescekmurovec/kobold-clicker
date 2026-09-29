@@ -35,6 +35,9 @@ const FRAME_NAME := "Frame"
 const GLINT_NAME := "Glint"
 ## What a `shadow` square is multiplied by: dark enough to read as not held, light enough to tell what it is.
 const SHADOW := Color(0.35, 0.35, 0.35)
+## The socket under a piece the log knows of and the player has not found: faint, so it reads as
+## within reach without looking held.
+const KNOWN_SOCKET := Color(1, 1, 1, 0.4)
 
 ## What the square holds (null for an empty socket) and whether it is the one its page has open.
 var item: Item
@@ -127,13 +130,12 @@ static func make(item: Item, selected := false, translucent := false) -> ItemSlo
 
 
 ## A piece the player has not found, for the collection log, lying still, with `hint` for the card to
-## say in the piece's place. One a fortuneteller has shown them (`known`) is the whole square darkened
-## (`SHADOW`); any other is its outline in black. Either is the sprite alone: no socket and no ring.
+## say in the piece's place. One unlocked and not found (`known`) is the piece darkened (`SHADOW`) on a
+## faint socket; any other is its outline in black with no socket. Neither wears a ring.
 static func shadow(item: Item, says: Callable, known := false) -> ItemSlot:
 	var slot := make(item)
 	slot.hint = says
 	slot.tooltip_text = "Not found yet"
-	slot.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	var frame := slot.get_node_or_null(FRAME_NAME)
 	if frame != null:
 		slot.remove_child(frame)
@@ -141,8 +143,12 @@ static func shadow(item: Item, says: Callable, known := false) -> ItemSlot:
 	# No glint: that is what a piece in hand does.
 	(slot.get_child(0) as TextureRect).material = null
 	if known:
-		slot.modulate = SHADOW
+		# The piece darkened on a faint socket, and no ring (the user's call, 2026-09-28): the socket's
+		# own drawing is `self_modulate`, so the icon over it is not faded with it.
+		slot.self_modulate = KNOWN_SOCKET
+		(slot.get_child(0) as TextureRect).modulate = SHADOW
 		return slot
+	slot.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	(slot.get_child(0) as TextureRect).modulate = Color.BLACK
 	return slot
 

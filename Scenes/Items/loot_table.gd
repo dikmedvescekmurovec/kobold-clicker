@@ -46,7 +46,8 @@ const OLD_ROOT := ROOT + "Old/"
 ## out. Three more keys are optional: `two_handed` closes the offhand while the piece is worn,
 ## `tier_levels` names the levels a kind's materials unlock at where it has fewer than five (the torch,
 ## and the greaves, which begin at iron), and `tier_stats` is the torch's alone, stating each
-## material's Sight outright rather than multiplying a number.
+## material's Sight outright rather than multiplying a number. `needs` is the attribute a piece of the
+## kind asks for past `NEEDS_FROM` (`requirement`); the jewellery asks for none.
 ##
 ## Stats span pieces on purpose. Base `damage` lives on the weapons -- a click's damage comes from
 ## what is held, or that stops being the interesting slot -- while armour and dodge roll nearly
@@ -68,20 +69,20 @@ const KINDS := {
 	# --- Helmet: a half each, and the two ways a head keeps a blow off the clock -- armour, which
 	# takes a share of every hit, and dodge, which now and then takes all of one.
 	"helm": {
-		"slot": "helmet", "weight": 18,
+		"slot": "helmet", "weight": 18, "needs": "strength",
 		"stats": {"armor": 3},
 		"affixes": ["time_on_hit", "strength", "intelligence"],
 		"tiers": ["Leather Helmet", "Iron Helmet", "Steel Helm", "Golden Helm", "Masterwork Helm"],
 	},
 	"hood": {
-		"slot": "helmet", "weight": 18,
+		"slot": "helmet", "weight": 18, "needs": "dexterity",
 		"stats": {"dodge": 3},
 		"affixes": ["armor", "dexterity", "intelligence"],
 		"tiers": ["Hide Hood", "Leather Hood", "Studded Hood", "Shadow Hood", "Masterwork Hood"],
 	},
 	# --- Boots: every one of them keeps Move Speed, because that is what a boot is for.
 	"boot": {
-		"slot": "boots", "weight": 24,
+		"slot": "boots", "weight": 24, "needs": "dexterity",
 		"stats": {"move_speed": 5, "dodge": 2},
 		"affixes": ["armor", "dexterity"],
 		"tiers": ["Leather Boot", "Studded Boot", "Ranger's Boot", "Shadow Boot", "Masterwork Boot"],
@@ -89,7 +90,7 @@ const KINDS := {
 	# No first material: the Bronze Greaves went (the user's call, 2026-09-24), so the boots' tier one is
 	# the Leather Boot alone, and a greaves roll under level 3 is dealt as one (`_tier_at`).
 	"greaves": {
-		"slot": "boots", "weight": 24,
+		"slot": "boots", "weight": 24, "needs": "strength",
 		"stats": {"move_speed": 4, "armor": 3},
 		"affixes": ["dodge", "strength"],
 		"tier_levels": [3, 5, 7, 9],
@@ -101,27 +102,27 @@ const KINDS := {
 	# sits between the sword and the greatsword, idle or clicking, at every level and material -- it
 	# carries crit chance for that, because crits are what grow and bleed only takes a point a level.
 	"sword": {
-		"slot": "weapon", "weight": 12,
+		"slot": "weapon", "weight": 12, "needs": "strength",
 		"stats": {"damage": 1, "crit_chance": 5, "crit_damage": 50, "attack_speed": 1.0},
 		"affixes": ["time_on_hit", "strength"],
 		"tiers": ["Wooden Sword", "Iron Sword", "Steel Sword", "Golden Sword", "Masterwork Sword"],
 	},
 	"dagger": {
-		"slot": "weapon", "weight": 9,
+		"slot": "weapon", "weight": 9, "needs": "dexterity",
 		"stats": {"damage": 1, "crit_chance": 8, "crit_damage": 50, "attack_speed": 1.8},
 		"affixes": ["time_on_hit", "dexterity"],
 		"power": {"damage": 0.6},
 		"tiers": ["Bone Knife", "Iron Dagger", "Steel Stiletto", "Golden Kris", "Masterwork Dagger"],
 	},
 	"mace": {
-		"slot": "weapon", "weight": 9,
+		"slot": "weapon", "weight": 9, "needs": "strength",
 		"stats": {"damage": 1, "crit_chance": 5, "crit_damage": 60, "attack_speed": 0.75, "bleed": 20},
 		"affixes": ["time_on_hit", "strength"],
 		"power": {"damage": 1.3},
 		"tiers": ["Wooden Club", "Iron Mace", "Steel Morningstar", "Golden Sceptre", "Masterwork Mace"],
 	},
 	"greatsword": {
-		"slot": "weapon", "weight": 6, "two_handed": true,
+		"slot": "weapon", "weight": 6, "needs": "strength", "two_handed": true,
 		"stats": {"damage": 1, "crit_chance": 5, "crit_damage": 75, "attack_speed": 0.5},
 		"affixes": ["time_on_hit", "strength"],
 		"power": {"damage": 2.2},
@@ -129,7 +130,7 @@ const KINDS := {
 	},
 	# The player's first find and nothing else's (FIRST_DROP): weight 0, so no roll ever deals one.
 	"broken_sword": {
-		"slot": "weapon", "weight": 0,
+		"slot": "weapon", "weight": 0, "needs": "strength",
 		"stats": {"damage": 1},
 		"affixes": ["time_on_hit", "strength"],
 		"tiers": ["Broken Sword"],
@@ -138,13 +139,13 @@ const KINDS := {
 	# because Sight is worth more than any number on it. Block lives here and nowhere else: a
 	# greatsword gives it up with the hand it closes.
 	"shield": {
-		"slot": "offhand", "weight": 30,
+		"slot": "offhand", "weight": 30, "needs": "strength",
 		"stats": {"armor": 3, "block": 2},
 		"affixes": ["strength"],
 		"tiers": ["Wooden Shield", "Iron Shield", "Steel Kite Shield", "Golden Aegis", "Masterwork Shield"],
 	},
 	"buckler": {
-		"slot": "offhand", "weight": 24,
+		"slot": "offhand", "weight": 24, "needs": "dexterity",
 		"stats": {"dodge": 3, "block": 2},
 		"affixes": ["armor", "dexterity"],
 		"tiers": ["Hide Buckler", "Iron Buckler", "Steel Targe", "Golden Buckler", "Masterwork Buckler"],
@@ -155,7 +156,7 @@ const KINDS := {
 	# there is nothing on it for a percent modifier to scale. Crit chance sits beside the crit damage
 	# it already rolled, and is what makes its pool deep enough for an elite piece.
 	"torch": {
-		"slot": "offhand", "weight": 18,
+		"slot": "offhand", "weight": 18, "needs": "intelligence",
 		"tier_levels": [1, 5, 9],
 		"tier_stats": [{"sight": 1}, {"sight": 2}, {"sight": 3}],
 		"affixes": ["block", "crit_chance", "crit_damage", "intelligence"],
@@ -165,20 +166,20 @@ const KINDS := {
 	# 0, like the Broken Sword. A Wooden Torch's Sight and nothing more, so holding it buys back what
 	# the curse took and costs the hand a shield would have had.
 	"broken_torch": {
-		"slot": "offhand", "weight": 0,
+		"slot": "offhand", "weight": 0, "needs": "intelligence",
 		"stats": {"sight": 1},
 		"affixes": ["block", "crit_chance", "crit_damage", "intelligence"],
 		"tiers": ["Broken Torch"],
 	},
 	# --- Body: the biggest numbers in the table, and the same two-way split as the head.
 	"plate": {
-		"slot": "body", "weight": 12,
+		"slot": "body", "weight": 12, "needs": "strength",
 		"stats": {"armor": 5},
 		"affixes": ["time_on_hit", "dodge", "strength"],
 		"tiers": ["Wooden Armor", "Iron Armor", "Steel Plate", "Golden Plate", "Masterwork Plate"],
 	},
 	"jerkin": {
-		"slot": "body", "weight": 12,
+		"slot": "body", "weight": 12, "needs": "dexterity",
 		"stats": {"dodge": 5},
 		"affixes": ["armor", "time_on_hit", "dexterity"],
 		"tiers": ["Hide Jerkin", "Leather Jerkin", "Studded Jerkin", "Shadow Leathers", "Masterwork Jerkin"],
@@ -266,8 +267,9 @@ const KINDS := {
 }
 
 ## The item level each material is found from, and what one is worth on top of the kind's own
-## numbers: a fifth more of every quantity for each step up the materials, so the masterwork is worth
-## 1.8 times the plainest. Both are dials. A kind may name levels of its own (`tier_levels`), as
+## numbers: half again of every quantity for each step up the materials, so the masterwork is worth
+## 3 times the plainest (0.2 until 2026-09-28, when the user made the pieces that ask for an attribute
+## -- every one with materials; the jewellery has one -- worth the asking). Both are dials. A kind may name levels of its own (`tier_levels`), as
 ## the torch and the greaves do. A piece's step (`material`) counts up from the material its kind
 ## begins at, so the greaves' first piece takes iron's step, not the plainest's.
 ##
@@ -276,7 +278,13 @@ const KINDS := {
 ## steel, and on to the masterwork from 9 (`_tier_at` draws evenly among everything unlocked). A
 ## masterwork with no art yet wears `tools/ui_kit.py`'s "!" (`MISSING`).
 const TIER_MIN_LEVEL := [1, 3, 5, 7, 9]
-const TIER_POWER := 0.2
+const TIER_POWER := 0.5
+## What wearing a piece asks for (the user's, 2026-09-28): nothing up to item level `NEEDS_FROM`, the
+## first circle's ground, because commons carry no lines and a fresh player has no attributes at all;
+## past it, its kind's `needs` at about one middling attribute line of its level -- `NEEDS_LINE` is
+## the middle of `added_strength`'s level-1 band, grown by `scale` as the line is. Both are dials.
+const NEEDS_FROM := 5
+const NEEDS_LINE := 5.0
 ## The player's first piece of gear, whatever the roll said it was: `Encounter.first_sword` swaps it
 ## in at level 1, keeping the rarity, so it is always 1 Damage and the modifiers that rarity carries.
 const FIRST_DROP := "Broken Sword"
@@ -498,8 +506,8 @@ static func slot_of(item: String) -> String:
 
 
 ## How much of `stat` this piece is worth for being the kind and the material it is: the kind's own
-## factor -- a dagger's 0.6 of a sword's damage -- times a fifth more for every material above the
-## plainest.
+## factor -- a dagger's 0.6 of a sword's damage -- times `TIER_POWER` more for every material above
+## the plainest.
 ##
 ## Applied by `Item.scaled_stats` after `scale` and nowhere else, which is what lets the smith's
 ## upgrade follow it for nothing. *After*, because LEVEL_FLAT adds the same damage a level to
@@ -523,6 +531,15 @@ static func power_of(item: String, stat: String) -> float:
 static func two_handed(item: String) -> bool:
 	var kind: Dictionary = KINDS[ITEMS[item]["kind"]]
 	return bool(kind.get("two_handed", false))
+
+
+## What a piece of `item` at `level` asks of the player before it goes on: [attribute, points], or
+## [] for nothing. A unique asks what its base does. `Inventory.why_not_equip` is the gate.
+static func requirement(item: String, level: int) -> Array:
+	var attribute: String = KINDS[ITEMS[item]["kind"]].get("needs", "")
+	if attribute.is_empty() or level <= NEEDS_FROM:
+		return []
+	return [attribute, roundi(scale(attribute, NEEDS_LINE, level))]
 
 
 ## The stats this piece can roll a flat modifier for without having any of its own.

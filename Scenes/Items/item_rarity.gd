@@ -79,12 +79,6 @@ const BORDER_COLORS := {
 	Rarity.ELITE: Palette.BRICK,
 	Rarity.UNIQUE: Palette.GOLD,
 }
-## A set piece is a unique that wears green instead of gold: border, name and frame (`FRAMES % SET`).
-## Asked for through `Item.border_color` / `text_color` / `frame`, since a rarity cannot know it.
-const SET_BORDER := Palette.LEAF_LT
-const SET_TEXT := Palette.LEAF
-const SET := "set"
-
 ## The same step written as text on the bone panel, where the lighter half of the ramp disappears.
 const TEXT_COLORS := {
 	Rarity.COMMON: Palette.SLATE,

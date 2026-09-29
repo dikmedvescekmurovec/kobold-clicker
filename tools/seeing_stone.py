@@ -89,6 +89,14 @@ def tinted(glow_img, colour):
     return out
 
 
+def badge(lit):
+    """`lit` trimmed and centred on the skills' frame in the fortuneteller's "teller" tint."""
+    import ui_kit
+    frame = Image.open(os.path.join(HERE, "..", ui_kit.POTENTIAL, ui_kit.SKILL_FRAME + ".png")).convert("RGBA")
+    frame = ui_kit._corners_cut(frame.crop((0, 0, ui_kit.SKILL_BADGE, ui_kit.SKILL_BADGE)))
+    return ui_kit._badge(frame, "teller", lit.crop(lit.getbbox()))
+
+
 def preview(base, light):
     """At rest, then lit in each temperature, on the map's dark and on grass, at 4x."""
     shots = [base]
@@ -115,10 +123,11 @@ def main():
     if "--export" in sys.argv:
         base.save(os.path.join(OUT, "seeing_stone.png"))
         light.save(os.path.join(OUT, "seeing_stone_glow.png"))
-        # Her badge is the stone itself, lit warm, until a pixellab symbol is framed for it by ui_kit.py.
-        badge = base.copy()
-        badge.alpha_composite(tinted(light, TEMPERATURES[2][1]))
-        badge.save(os.path.join(HERE, "..", "Assets", "Fortune", "stone.png"))
+        # Her badge is the stone lit warm on her spells' purple frame (ui_kit's), so it reads as one of
+        # them and her hover glow rims it rather than filling the clear round a bare stone.
+        lit = base.copy()
+        lit.alpha_composite(tinted(light, TEMPERATURES[2][1]))
+        badge(lit).save(os.path.join(HERE, "..", "Assets", "Fortune", "stone.png"))
         print("wrote Assets/UI/seeing_stone.png, seeing_stone_glow.png and Assets/Fortune/stone.png")
 
 

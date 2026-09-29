@@ -3,16 +3,16 @@ extends RefCounted
 ## The fortuneteller: what she can be asked, and what she answers.
 ##
 ## Every settlement has her, and she is the one counter that sells nothing to carry: what she sells is
-## knowledge the game used to give away or never gave at all. Five **readings** -- where the nearest
-## settlements lie, where a chest is, where the accepted bounty's monster lives, what one unique not
-## yet found is and where it drops, and what a piece could still roll -- each asked as often as the
+## knowledge the game used to give away or never gave at all. Four **readings** -- where the nearest
+## settlements lie, where a chest is, where the accepted bounty's monster lives, and what a piece could
+## still roll -- each asked as often as the
 ## player will pay for it, the price doubling every time; and two **great spells**, one a settlement:
 ## a patch of the map lifted out of the dark, and the road home walked in no time at all.
 ##
 ## Static and node-free like `Blacksmith`, so the tests need no interface. What a spell costs is
 ## `TownPrices.fortune_price`'s business. What was bought is written where it belongs: what a town has
 ## sold in that town's drawer (`ASKED`), the bounty's location on the posting, and what belongs to the
-## player rather than to a town -- the chest, the peeked uniques, and how often each reading has been
+## player rather than to a town -- the chest, and how often each reading has been
 ## asked -- in `inventory.fortunes`, a plain Dictionary this file holds the keys of, because
 ## `Inventory` must not name a class that names `Item`'s tables back at it.
 
@@ -20,7 +20,6 @@ extends RefCounted
 const ROADS := "roads"
 const TREASURE := "treasure"
 const QUARRY := "quarry"
-const RELIC := "relic"
 const APPRAISE := "appraise"
 const SCOUR := "scour"
 const HOMECOMING := "homecoming"
@@ -33,7 +32,7 @@ const TRANSCEND := "transcend"
 ## once this world has a cave, and it is priced like the way out, the same in every town.
 const STONE := "stone"
 ## The order her buttons stand in: the readings first, then the great spells, the stone and the way out.
-const READINGS := [ROADS, TREASURE, QUARRY, RELIC, APPRAISE, SCOUR, HOMECOMING, STONE, TRANSCEND]
+const READINGS := [ROADS, TREASURE, QUARRY, APPRAISE, SCOUR, HOMECOMING, STONE, TRANSCEND]
 
 ## Her list is in two halves, and which half a spell is in is the whole of its rule.
 ##
@@ -44,7 +43,7 @@ const READINGS := [ROADS, TREASURE, QUARRY, RELIC, APPRAISE, SCOUR, HOMECOMING, 
 ##
 ## Written out rather than derived from `READINGS`, which is the grid's order; `test_town` holds the
 ## three lists together.
-const COMMON := [ROADS, TREASURE, QUARRY, RELIC, APPRAISE]
+const COMMON := [ROADS, TREASURE, QUARRY, APPRAISE]
 const GREAT := [SCOUR, HOMECOMING]
 
 ## What each reading's button says.
@@ -52,7 +51,6 @@ const LABELS := {
 	ROADS: "Roads",
 	TREASURE: "Treasure",
 	QUARRY: "Quarry",
-	RELIC: "Relic",
 	APPRAISE: "Appraise",
 	SCOUR: "Scour",
 	# "Homecoming" is two letters wider than a shelf square, and a name on her grid is clipped rather
@@ -68,7 +66,6 @@ const LABELS := {
 const ASKED := "fortune_"
 ## `inventory.fortunes`' keys.
 const CHEST := "chest"
-const PEEKED := "peeked"
 ## reading -> how many times it has been asked in this world, which is what doubles a reading's price.
 const CAST := "cast"
 
@@ -92,21 +89,6 @@ static func warmth(steps: int) -> int:
 		if steps <= most:
 			band += 1
 	return band
-
-
-## The uniques she could still show: neither found nor shown already.
-static func hidden(found: Array, shown: Array) -> Array:
-	var left := []
-	for id: String in UniqueTable.ids():
-		if not (id in found) and not (id in shown):
-			left.append(id)
-	return left
-
-
-## One unique she has not shown and the player has not found, or "" when there is none left to show.
-static func peek(found: Array, shown: Array, rng: RandomNumberGenerator) -> String:
-	var left := hidden(found, shown)
-	return "" if left.is_empty() else str(left[rng.randi_range(0, left.size() - 1)])
 
 
 ## Why she will not appraise this piece, or "" when she will.
@@ -152,12 +134,6 @@ static func chest(fortunes: Dictionary) -> Vector2i:
 	if typeof(saved) != TYPE_ARRAY or (saved as Array).size() != 2:
 		return TownWorld.NO_SPOT
 	return Vector2i(int(saved[0]), int(saved[1]))
-
-
-## The uniques she has shown, by id.
-static func peeked(fortunes: Dictionary) -> Array:
-	var saved: Variant = fortunes.get(PEEKED, [])
-	return saved if typeof(saved) == TYPE_ARRAY else []
 
 
 ## Whether `reading` has been paid for in the town whose drawer this is: a great spell spent here, or
