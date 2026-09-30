@@ -1,7 +1,7 @@
 class_name BigNumber
 ## The one way a growing quantity is written down. Gold, monster HP, damage and prices all climb
-## exponentially, so a late figure is twenty digits in a page three squares wide. Under a million the
-## whole number is spelled out; above it, three significant digits and the short scale's name --
+## exponentially, so a late figure is twenty digits in a page three squares wide. Under `PLAIN_BELOW` the
+## whole number is spelled out, its thousands parted by commas; above it, three significant digits and the short scale's name --
 ## `123K`, `1.23M`, `45.6B`, `789T` -- for as far as `SUFFIXES` has names, and `1.23e36` past the last one
 ## (the user, 2026-09-25: "use big number until you can"). There is no mantissa class underneath -- the quantities are plain doubles and plain
 ## arithmetic, and this is the only place they are turned into text.
@@ -30,8 +30,11 @@ static func format(value: float, signed := false) -> String:
 	# writing "100000" there would leak the one shape this exists to keep off the page.
 	var rounded := roundf(value)
 	if absf(rounded) < PLAIN_BELOW:
-		# roundi carries its own minus, so `signed` is all that is left to add.
-		return ("+" if signed and rounded > 0.0 else "") + str(roundi(rounded))
+		# Thousands parted by a comma: "60,000" is read at a glance where "60000" is counted.
+		var digits := str(absi(roundi(rounded)))
+		for at in range(digits.length() - 3, 0, -3):
+			digits = digits.insert(at, ",")
+		return ("-" if rounded < 0.0 else "+" if signed and rounded > 0.0 else "") + digits
 	var v := absf(rounded)
 	var decade := floori(log(v) / log(10.0))
 	var mant := v / pow(10.0, decade)

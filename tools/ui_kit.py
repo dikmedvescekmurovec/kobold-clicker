@@ -549,6 +549,22 @@ KEYS = {
     "ui_key_ctrl": (0, 2),
     "ui_key_alt": (1, 2),
 }
+# The corner buttons' hotkeys, shown on their tooltip cards (`TipCard.KEY`), off the same pack's letters
+# sheet: an 8 x 14 grid of 16 px keys, the top seven rows unpressed (arrows, F1-F12, then A-Z and
+# symbols) and the bottom seven the same keys pressed. Cut the way the keys above are. name -> (column, row).
+LETTER_SHEET = "Keyboard/Keyboard Letters and Symbols"
+LETTER_CELL = (16, 16)
+LETTERS = {
+    "ui_key_c": (2, 2),
+    "ui_key_h": (7, 2),
+    "ui_key_i": (0, 3),
+    "ui_key_j": (1, 3),
+    "ui_key_k": (2, 3),
+    "ui_key_l": (3, 3),
+    "ui_key_o": (6, 3),
+    "ui_key_p": (7, 3),
+    "ui_key_y": (0, 5),
+}
 
 # The marks no pack draws, for the fight's two square buttons and the corner's bounty journal: drawn
 # here in Icons.png's own
@@ -2077,9 +2093,12 @@ def notch_preview(cut, sprites, margins):
 
 
 def keys():
-    """The item card's keys, trimmed to their own faces."""
+    """The item card's keys and the hotkeys' letters, trimmed to their own faces."""
     w, h = KEY_CELL
-    return {name: _cut((KEY_SHEET, col * w, row * h, w, h, 1)) for name, (col, row) in KEYS.items()}
+    out = {name: _cut((KEY_SHEET, col * w, row * h, w, h, 1)) for name, (col, row) in KEYS.items()}
+    w, h = LETTER_CELL
+    out.update({name: _cut((LETTER_SHEET, col * w, row * h, w, h, 1)) for name, (col, row) in LETTERS.items()})
+    return out
 
 
 def key_preview(cut, sprites, margins):

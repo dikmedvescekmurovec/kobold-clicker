@@ -25,8 +25,11 @@ const PEAK_ICON := "res://Assets/UI/ui_icon_trophy.png"
 ##
 ## `every_rank` (the collection log under detailed descriptions) writes a ranked unique's rule with
 ## every rank's numbers, "5/4/3/2", and its rank IV line greyed behind a trophy until it is reached.
+##
+## `base` false leaves out what the piece itself is worth, the base-stat table: the smith's counter,
+## whose portrait takes the height it would need, and whose piece is also on the card beside the bag.
 static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[Item] = [],
-		every_rank := false) -> void:
+		every_rank := false, base := true) -> void:
 	for child: Node in rows.get_children():
 		child.queue_free()
 	rows.add_child(line(item.display_name(), item.text_color(), width))
@@ -91,8 +94,9 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 			# up; one that ever inverted would need one here, and there is none.
 			blocks[0].append([LootTable.stat_delta(stat, change[stat]),
 					Palette.LEAF if change[stat] > 0.0 else Palette.RUST])
-	for text in item.stat_lines():
-		blocks[1].append([text, Palette.TEXT])
+	if base:
+		for text in item.stat_lines():
+			blocks[1].append([text, Palette.TEXT])
 	# The locked one in a base stat's ink: it is as fixed as they are, and under the rule that parts
 	# the two it cannot be taken for one of them.
 	# A perfected one in the wood brown a unique's rule wears: the one line as good as it can be.
@@ -112,20 +116,20 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 		var table := UITheme.vbox(0)
 		rows.add_child(table)
 		for entry: Array in block:
-			# Every line an item writes opens with its number (`LootTable.stat_line`, `stat_delta`,
-			# `ModifierTable.line`): the first word is the row's value and the rest is its name.
 			var text: String = entry[0]
-			var number := text.get_slice(" ", 0)
-			var named := text.substr(number.length() + 1)
 			var striped := table.get_child_count() % 2 == 1
 			if index < 2:
-				table.add_child(UITheme.table_row(named, number, striped, width, entry[1], entry[1]))
+				# A stat line opens with its number (`LootTable.stat_line`, `stat_delta`): the first word
+				# is the row's value and the rest is its name.
+				var number := text.get_slice(" ", 0)
+				table.add_child(UITheme.table_row(text.substr(number.length() + 1), number, striped, width,
+						entry[1], entry[1]))
 				continue
-			# A modifier's value carries its band and runs long, so it always goes under the name.
-			var found := tier.search(named)
-			var tag := "" if found == null else found.get_string(1)
-			table.add_child(UITheme.stacked_row(named if found == null else named.substr(0, found.get_start()),
-					tag, number, striped, width, entry[1]))
+			# A modifier is a sentence ("+5% to Crit Damage", "+8% increased Damage") and is read as one,
+			# on one row; only its tier, under detailed descriptions, stands apart at the right.
+			var found := tier.search(text)
+			table.add_child(UITheme.table_row(text if found == null else text.substr(0, found.get_start()),
+					"" if found == null else found.get_string(1), striped, width, entry[1], entry[1]))
 
 
 ## What wearing `item` instead of `against` would change: stat -> the signed difference.

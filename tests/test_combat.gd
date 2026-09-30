@@ -3232,8 +3232,8 @@ func _test_the_way_down() -> void:
 	await process_frame
 	_check(main.inventory.dungeon_depth == 2 and Inventory.load_from(SCRATCH_INVENTORY).dungeon_depth == 2,
 			"two Golluxes dead is two depths won, and saved")
-	_check(main.inventory.dungeon_floors == 30 and Cloud.score_text(30) == "3.00"
-			and Cloud.score_text(44) == "3.14" and Cloud.score_text(5) == "1.05",
+	_check(main.inventory.dungeon_floors == 30 and Cloud.depth_and_floor(30) == Vector2i(3, 0)
+			and Cloud.depth_and_floor(44) == Vector2i(3, 14) and Cloud.depth_and_floor(5) == Vector2i(1, 5),
 			"a score is the depth and the floors of it beaten (%d)" % main.inventory.dungeon_floors)
 	_check("depth 3" in main._cave_button.tooltip_text, "Enter cave says where that leaves the player (%s)"
 			% main._cave_button.tooltip_text)

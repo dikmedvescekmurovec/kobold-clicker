@@ -38,8 +38,9 @@ func _test_summary() -> bool:
 
 
 func _test_score() -> bool:
-	_check(Cloud.score_text(44) == "3.14" and Cloud.score_text(45) == "4.00" and Cloud.score_text(5) == "1.05",
-			"a score is the depth and the floors of it beaten, two digits")
+	_check(Cloud.depth_and_floor(44) == Vector2i(3, 14) and Cloud.depth_and_floor(45) == Vector2i(4, 0)
+			and Cloud.depth_and_floor(5) == Vector2i(1, 5), "a score is the depth and the floors of it beaten")
+	_check(Cloud.score_text(44) == "Depth 3, floor 14", "and says so in words, not as a decimal")
 	return true
 
 
@@ -98,7 +99,7 @@ func _test_question() -> bool:
 		_check(faces == (["Keep this device's", "Keep the cloud's"] if kind == "conflict"
 				else ["Start over from this device", "Keep the cloud's"]), "%s asks with two answers %s" % [kind, faces])
 		var labels := question.find_children("*", "Label", true, false).map(func(made: Label) -> String: return made.text)
-		_check("Unknown" in labels and "2.05" in labels, "each side shows what is known of it")
+		_check("Unknown" in labels and "Depth 2, floor 5" in labels, "each side shows what is known of it")
 		if kind == "refused":
 			_check(labels.any(func(text: String) -> bool: return "Kills went down" in text), "and a refusal says why")
 		(buttons[0] as Button).pressed.emit()

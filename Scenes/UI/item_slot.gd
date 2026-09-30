@@ -39,6 +39,8 @@ const SHADOW := Color(0.65, 0.65, 0.65)
 ## The socket under a piece the log knows of and the player has not found: faint, so it reads as
 ## within reach without looking held.
 const KNOWN_SOCKET := Color(1, 1, 1, 0.4)
+const GREY := preload("res://Scenes/UI/grey.gdshader")
+static var _grey: ShaderMaterial
 
 ## What the square holds (null for an empty socket) and whether it is the one its page has open.
 var item: Item
@@ -131,8 +133,9 @@ static func make(item: Item, selected := false, translucent := false) -> ItemSlo
 
 
 ## A piece the player has not found, for the collection log, lying still, with `hint` for the card to
-## say in the piece's place. One unlocked and not found (`known`) is the piece darkened (`SHADOW`) on a
-## faint socket; any other is its outline in black with no socket. Neither wears a ring.
+## say in the piece's place. One unlocked and not found (`known`) is the piece darkened (`SHADOW`) and
+## drained of its colour (`GREY`) on a faint socket; any other is its outline in black with no socket.
+## Neither wears a ring.
 static func shadow(item: Item, says: Callable, known := false) -> ItemSlot:
 	var slot := make(item)
 	slot.hint = says
@@ -145,9 +148,16 @@ static func shadow(item: Item, says: Callable, known := false) -> ItemSlot:
 	(slot.get_child(0) as TextureRect).material = null
 	if known:
 		# The piece darkened on a faint socket, and no ring (the user's call, 2026-09-28): the socket's
-		# own drawing is `self_modulate`, so the icon over it is not faded with it.
+		# own drawing is `self_modulate`, so the icon over it is not faded with it. Grey as well as dark:
+		# darkened alone, a found square and an unfound one were told apart by the ring, which is too
+		# little -- and darker was the user's "way too dark", so the colour goes instead.
 		slot.self_modulate = KNOWN_SOCKET
-		(slot.get_child(0) as TextureRect).modulate = SHADOW
+		var icon := slot.get_child(0) as TextureRect
+		icon.modulate = SHADOW
+		if _grey == null:
+			_grey = ShaderMaterial.new()
+			_grey.shader = GREY
+		icon.material = _grey
 		return slot
 	slot.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	(slot.get_child(0) as TextureRect).modulate = Color.BLACK

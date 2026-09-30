@@ -14,9 +14,14 @@ const DELAY := 0.5
 ## A meta on a Control whose tooltip is the whole of what it is for -- an info mark -- and so does
 ## not wait: `set_meta(TipCard.NOW, true)`.
 const NOW := "tip_now"
+## A meta naming the key that presses this Control -- a corner button's hotkey, `set_meta(TipCard.KEY,
+## "k")` -- whose picture, cut from the keyboard pack by `tools/ui_kit.py`, the card shows after its words.
+const KEY := "tip_key"
+const KEY_PICTURE := "res://Assets/UI/ui_key_%s.png"
 
 var _ui_scale: float
 var _line: Label
+var _key: TextureRect
 var _over: Control
 var _text := ""
 var _held := 0.0
@@ -28,9 +33,19 @@ func _init(ui_scale: float) -> void:
 	theme_type_variation = "TextPanel"
 	scale = Vector2(ui_scale, ui_scale)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(row)
 	_line = UITheme.label("", Palette.TEXT, true)
 	_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_line)
+	_line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(_line)
+	_key = TextureRect.new()
+	_key.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	_key.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_key.hide()
+	row.add_child(_key)
 	hide()
 
 
@@ -57,6 +72,9 @@ func _process(delta: float) -> void:
 	if _line.get_minimum_size().x > ItemCard.WIDTH:
 		_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_line.custom_minimum_size.x = ItemCard.WIDTH
+	var key := str(over.get_meta(KEY, ""))
+	_key.visible = not key.is_empty()
+	_key.texture = load(KEY_PICTURE % key) if _key.visible else null
 	show()
 	# Placed now and again deferred: the first pass measures a label that has not laid out yet.
 	_place()

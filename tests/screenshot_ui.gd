@@ -995,23 +995,18 @@ func _shoot_board() -> void:
 	print("Saved ", ProjectSettings.globalize_path("user://ui_kit.png"))
 
 
-## Godot only shows hover and pressed on real input, so force each state with draw_mode overrides:
-## a disabled button draws disabled, and for hover/pressed we draw the stylebox behind a plain label.
+## Godot only shows hover and pressed on real input, so each state is a real Button wearing that
+## state's stylebox and font colour as its normal ones. A Panel with a centred Label stood in once, and
+## drew the label where no button puts it -- hover and pressed read as lifting the word, which the
+## game never did (pressed sinks it a pixel, `UITheme.build`).
 func _sample(variation: String, state: String, size: Vector2) -> Control:
-	if state == "normal" or state == "disabled":
-		var button := Button.new()
-		button.theme_type_variation = variation
-		button.text = "" if size.x < 40 else state
-		button.disabled = state == "disabled"
-		button.custom_minimum_size = size
-		return button
-	var box := Panel.new()
-	box.add_theme_stylebox_override("panel", UITheme.theme().get_stylebox(state, variation))
-	box.custom_minimum_size = size
-	if size.x >= 40:
-		var label := Label.new()
-		label.text = state
-		label.add_theme_color_override("font_color", UITheme.theme().get_color("font_color", variation))
-		label.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
-		box.add_child(label)
-	return box
+	var button := Button.new()
+	button.theme_type_variation = variation
+	button.text = "" if size.x < 40 else state
+	button.disabled = state == "disabled"
+	button.custom_minimum_size = size
+	if state == "hover" or state == "pressed":
+		button.add_theme_stylebox_override("normal", UITheme.theme().get_stylebox(state, variation))
+		button.add_theme_color_override("font_color",
+				UITheme.theme().get_color("font_%s_color" % state, variation))
+	return button

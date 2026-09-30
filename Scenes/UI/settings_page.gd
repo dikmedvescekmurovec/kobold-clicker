@@ -180,16 +180,17 @@ func _spent() -> String:
 	return "Time played: %dm %ds" % [seconds / 60, seconds % 60]
 
 
-## A row of buttons one of which is `picked`, with the others faded (the town's tabs' way of saying
-## which is open: the pack's held face is one pixel). `write` puts the pressed one into `Settings`;
-## `tips`, where there are any, go on the buttons in order.
+## A row of buttons one of which is `picked`, which wears the green face (the pack's held face is one
+## pixel, too little to read a choice off). `write` puts the pressed one into `Settings`; `tips`, where
+## there are any, go on the buttons in order.
 func _choice(names: Array, tips: Array, picked: int, write: Callable) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 2)
+	# The picked one green, as an open town tab is; the rest a plain live face. Faded, they read as
+	# dead buttons rather than as choices not taken.
 	for at in names.size():
-		var pick := UITheme.button(names[at], "LightButton", tips[at] if at < tips.size() else "")
-		if at != picked:
-			pick.modulate = TownPage.TAB_REST
+		var pick := UITheme.button(names[at], UITheme.GO_BUTTON if at == picked else "LightButton",
+				tips[at] if at < tips.size() else "")
 		pick.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		pick.pressed.connect(func() -> void:
 			write.call(at)

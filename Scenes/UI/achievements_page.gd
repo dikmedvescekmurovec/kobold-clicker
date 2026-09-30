@@ -18,6 +18,11 @@ signal closed
 const SHARE_NAME := "Share"
 ## The bar across the top.
 const BAR_HEIGHT := 16
+## Each square's own bar (`progress_bar`): its node name for the tests, its height and how far in
+## from the square's edges it lies.
+const PROGRESS_NAME := "Progress"
+const PROGRESS_HEIGHT := 2
+const PROGRESS_INSET := 3
 
 var inventory: Inventory
 var _ui_scale: float
@@ -106,6 +111,8 @@ static func tile(player: Inventory, id: String, known: Dictionary) -> ItemSlot:
 		slot.remove_child(frame)
 		frame.free()
 	var rank := Achievements.rank(player, id)
+	# Before the rank's numeral, which is drawn over it.
+	slot.add_child(progress_bar(player, id, rank, known))
 	if rank <= 0:
 		slot.modulate = ItemSlot.SHADOW
 		# No glint: that is for a piece in hand.
@@ -113,6 +120,28 @@ static func tile(player: Inventory, id: String, known: Dictionary) -> ItemSlot:
 	else:
 		slot.add_child(OrbSlot.count_label(Achievements.RANK_NAMES[rank]))
 	return slot
+
+
+## How far a square's achievement is toward its next rank, along the square's foot: an ink trough
+## filling with leaf, and full and gold at rank IV. It is what sets this page apart from the collection
+## log's grid of the same pieces: here a square is a thing being worked at.
+static func progress_bar(player: Inventory, id: String, rank: int, known: Dictionary) -> ColorRect:
+	var share := 1.0
+	if rank < UniqueTable.PEAK:
+		var need := Achievements.need_at(id, rank + 1)
+		share = clampf(minf(Achievements.progress(player, id, known), need) / maxf(need, 1.0), 0.0, 1.0)
+	var trough := ColorRect.new()
+	trough.name = PROGRESS_NAME
+	trough.color = Palette.INK
+	trough.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	trough.position = Vector2(PROGRESS_INSET, ItemSlot.SIDE - PROGRESS_INSET - PROGRESS_HEIGHT)
+	trough.size = Vector2(ItemSlot.SIDE - 2 * PROGRESS_INSET, PROGRESS_HEIGHT)
+	var fill := ColorRect.new()
+	fill.color = Palette.GOLD if rank >= UniqueTable.PEAK else Palette.LEAF
+	fill.size = Vector2(floorf(trough.size.x * share), PROGRESS_HEIGHT)
+	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	trough.add_child(fill)
+	return trough
 
 
 ## What the card beside a square says: the achievement's name and the rank reached, what the next rank

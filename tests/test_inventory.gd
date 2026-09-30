@@ -2462,15 +2462,21 @@ func _piece(rarity: ItemRarity.Rarity, level: int) -> Item:
 
 ## The bag's green arrow: something gained and nothing lost against what Equip would take off.
 func _test_upgrade_mark() -> bool:
-	var worn := Equipment.new()
-	var low := _piece(ItemRarity.Rarity.COMMON, 3)
-	_check(BagPage.is_upgrade(low, worn), "anything beats a bare socket")
-	var mid := _piece(ItemRarity.Rarity.COMMON, 5)
+	# Level 5 and under: those ask for no attribute (`LootTable.requirement`), so only the stats decide.
+	var player := Inventory.new()
+	var worn := player.equipment
+	var low := _piece(ItemRarity.Rarity.COMMON, 1)
+	_check(BagPage.is_upgrade(low, player), "anything beats a bare socket")
+	var mid := _piece(ItemRarity.Rarity.COMMON, 3)
 	worn.equip(Equipment.Socket.WEAPON, mid)
-	_check(not BagPage.is_upgrade(low, worn), "a weaker sword is no upgrade")
-	_check(BagPage.is_upgrade(_piece(ItemRarity.Rarity.COMMON, 7), worn), "a stronger one is")
-	_check(not BagPage.is_upgrade(_piece(ItemRarity.Rarity.COMMON, 5), worn), "an equal one gains nothing")
-	_check(not BagPage.is_upgrade(mid, worn), "and the worn piece is never its own upgrade")
+	_check(not BagPage.is_upgrade(low, player), "a weaker sword is no upgrade")
+	_check(BagPage.is_upgrade(_piece(ItemRarity.Rarity.COMMON, 5), player), "a stronger one is")
+	_check(not BagPage.is_upgrade(_piece(ItemRarity.Rarity.COMMON, 3), player), "an equal one gains nothing")
+	_check(not BagPage.is_upgrade(mid, player), "and the worn piece is never its own upgrade")
+	# Stronger, but it asks for Strength the player does not have: Equip would refuse it, so no arrow.
+	var heavy := _piece(ItemRarity.Rarity.COMMON, 20)
+	_check(not LootTable.requirement(heavy.type, heavy.level).is_empty()
+			and not BagPage.is_upgrade(heavy, player), "nor is one the player cannot put on")
 	return true
 
 
@@ -3266,12 +3272,10 @@ func _test_locks_and_breaks() -> bool:
 	var written := VBoxContainer.new()
 	ItemDetails.fill(written, pinned_piece, 150.0)
 	var inked := 0
-	for number: Label in written.find_children(UITheme.TABLE_VALUE, "Label", true, false):
-		# A modifier's row is its name over its number; turned round it is the line Item wrote.
-		var named := number.get_parent().get_child(0)
-		var text := "%s %s" % [number.text, (named.get_child(0) if named is HBoxContainer else named).text]
-		if text in pinned_piece.mod_lines() and number.get_theme_color("font_color") == Palette.TEXT:
-			_check(text == pinned_piece.locked_line(), "only the locked modifier is in ink: %s" % text)
+	# A modifier's row is the line Item wrote, whole.
+	for line: Label in written.find_children("*", "Label", true, false):
+		if line.text in pinned_piece.mod_lines() and line.get_theme_color("font_color") == Palette.TEXT:
+			_check(line.text == pinned_piece.locked_line(), "only the locked modifier is in ink: %s" % line.text)
 			inked += 1
 	_check(inked == 1, "the block writes the locked modifier in ink")
 	written.free()
@@ -4350,6 +4354,15 @@ func _test_achievements() -> bool:
 	_check(lit.size() == 1 and lit[0].item.unique == "duelists_buckler", "the earned one lit, the rest dimmed")
 	_check(_said_by(lit[0]).contains("II"), "with its rank on its corner (%s)" % _said_by(lit[0]))
 	_check(tiles.all(func(slot: ItemSlot) -> bool: return slot.hint.is_valid()), "and each writes its own card")
+	# Each square's foot shows how far it is toward its next rank: the earned one partway to III, one
+	# never worked at empty.
+	var toward := func(unique: String) -> Array:
+		var slot: ItemSlot = tiles.filter(func(s: ItemSlot) -> bool: return s.item.unique == unique)[0]
+		var trough: ColorRect = slot.find_child(AchievementsPage.PROGRESS_NAME, false, false)
+		return [(trough.get_child(0) as ColorRect).size.x, trough.size.x]
+	var partway: Array = toward.call("duelists_buckler")
+	_check(partway[0] > 0.0 and partway[0] < partway[1], "the earned square's bar is partway (%s)" % [partway])
+	_check(toward.call("knucklebone_ring")[0] == 0.0, "and an untouched one's is empty")
 	var bar: Label = main.achievements_page.find_child(AchievementsPage.SHARE_NAME, true, false)
 	_check(bar.text == "%d%%" % roundi(200.0 / (Achievements.ACHIEVEMENTS.size() * UniqueTable.PEAK)),
 			"the bar says how much is earned, rank by rank (%s)" % bar.text)
@@ -4364,6 +4377,25 @@ func _test_achievements() -> bool:
 	_check(said.contains("Rank II of IV") and said.contains(Achievements.text("duelists_buckler", 3))
 			and said.contains("Strengthens Duelist's Buckler"), "an earned one's says its rank and asks the next (%s)" % said)
 	rows.free()
+	# A corner key presses its button: O opens the settings (always there) in the page's place, and the
+	# button's tip card names the key. A key whose button has not come yet does nothing: K, before a level.
+	var key := InputEventKey.new()
+	key.keycode = KEY_K
+	key.pressed = true
+	main._unhandled_input(key)
+	await process_frame
+	_check(not main._skills_button.visible and not main.skills_page.visible, "K does nothing before the skills are earned")
+	key.keycode = KEY_O
+	main._unhandled_input(key)
+	await process_frame
+	_check(main.settings_page.visible and not main.achievements_page.visible, "O opens the settings in the other's place")
+	_check(str(main._settings_button.get_meta(TipCard.KEY, "")) == "o"
+			and ResourceLoader.exists(TipCard.KEY_PICTURE % "o"), "and its card shows the O key")
+	key.shift_pressed = true
+	key.keycode = KEY_Y
+	main._unhandled_input(key)
+	await process_frame
+	_check(not main.achievements_page.visible, "but not with a modifier held, which is the item card's")
 	# Dev: Skill points +10 is ten levels, and the ten points they earn, saved.
 	var free: int = main.inventory.skills.points(main.inventory.level)
 	main.settings_page.points_pressed.emit()
@@ -4442,6 +4474,8 @@ func _test_collection() -> bool:
 		_check(square.hint.is_valid(), "%s: the card is written by the hint" % id)
 		var icon: TextureRect = square.get_child(0)
 		_check((icon.modulate == ItemSlot.SHADOW) == told, "%s: darkened only while unlocked and not found" % id)
+		_check((icon.material is ShaderMaterial and (icon.material as ShaderMaterial).shader == ItemSlot.GREY)
+				== told, "%s: and greyed only then" % id)
 		_check((square.self_modulate == ItemSlot.KNOWN_SOCKET) == told, "%s: on a faint socket then" % id)
 		_check((icon.modulate == Color.BLACK) == (not found and not told),
 				"%s: a black outline only while locked" % id)
@@ -4461,10 +4495,19 @@ func _test_collection() -> bool:
 		_check(said.contains("Rimeplate") == peeked and said.contains("Locked") == (not peeked)
 				and not said.contains("Frost Hunter"),
 				"a hint says it is locked, and what it is once it is unlocked (%s: %s)" % [peeked, said])
-		# The square says whether it is found; the card never does, nor where anything is carried.
+		# A found piece's card says nothing of being found, nor where anything is carried.
 		_check(not said.contains("Found") and not said.contains("Not found yet") and not said.contains("Nearest:")
 				and not said.contains("Carried by"), "and nothing about being found or where (%s)" % said)
 		rows.free()
+	# An unlocked piece not yet found says so under itself: its grey square alone was read as held.
+	var unfound := VBoxContainer.new()
+	CollectionPage.write_hint(unfound, 150.0, CollectionPage.specimen("rimeplate"), true, false)
+	var unfound_said := ""
+	for label: Node in unfound.find_children("*", "Label", true, false):
+		unfound_said += (label as Label).text + " "
+	_check(unfound_said.contains("Rimeplate") and unfound_said.contains("Not found yet")
+			and not unfound_said.contains("Locked"), "an unlocked piece not found says so (%s)" % unfound_said)
+	unfound.free()
 	# The found square's own card is the same block, so the log reads alike either way.
 	var held_rows := VBoxContainer.new()
 	for square: ItemSlot in squares:

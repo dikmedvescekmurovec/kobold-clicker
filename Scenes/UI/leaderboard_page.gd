@@ -20,6 +20,8 @@ const ME_COLOUR := Palette.ICE_DK
 const TROPHIES: Array[String] = ["res://Assets/UI/ui_icon_trophy_gold.png",
 		"res://Assets/UI/ui_icon_trophy_silver.png", "res://Assets/UI/ui_icon_trophy_bronze.png"]
 const PLACE_WIDTH := 14
+## The depth's column and the floor's, each wide enough for its heading.
+const NUMBER_WIDTH := 28
 
 var _board: Cloud
 ## The best the save holds, in floors: shown at once, before the server has answered.
@@ -141,6 +143,7 @@ func _draw_board() -> void:
 				else "Nobody has beaten a floor yet.", Palette.TEXT_SOFT, true))
 		return
 	var table := _table()
+	table.add_child(_heads())
 	for at in _board.top.size():
 		var row: Dictionary = _board.top[at]
 		var line := _place_row(int(row.get("rank", at + 1)), str(row.get("name", "")),
@@ -160,12 +163,11 @@ func _table() -> VBoxContainer:
 	return body
 
 
-## `UITheme.table_row` with the place in a column before the name: a trophy for the top three, else
-## the number (nothing while the server has not placed the player).
+## One line of the board: the place in a column before the name -- a trophy for the top three, else the
+## number (nothing while the server has not placed the player) -- then the depth and the floor of it in
+## two columns of their own. One figure, "3.14", read as a decimal: is 3.9 more or less?
 func _place_row(place: int, player: String, floors: int, striped: bool, mine: bool) -> PanelContainer:
 	var colour: Variant = ME_COLOUR if mine else null
-	var row := UITheme.table_row(player, Cloud.score_text(floors), striped, WIDTH - 2,
-			colour, colour)
 	var cell: Control
 	if place >= 1 and place <= TROPHIES.size():
 		var trophy := TextureRect.new()
@@ -176,15 +178,33 @@ func _place_row(place: int, player: String, floors: int, striped: bool, mine: bo
 		var number := UITheme.label(str(place) if place > 0 else "", colour, true)
 		number.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		cell = number
-	cell.custom_minimum_size.x = PLACE_WIDTH
-	cell.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var at := Cloud.depth_and_floor(floors)
+	return _columns(cell, player, str(at.x), str(at.y), striped, colour)
+
+
+## The board's column heads, over its first line.
+func _heads() -> PanelContainer:
+	return _columns(Control.new(), "", "Depth", "Floor", false, Palette.TEXT_SOFT)
+
+
+## `UITheme.table_row` laid out as the board's columns: `place` first, the name taking what is left, and
+## `depth` and `level` right-aligned at `NUMBER_WIDTH` each, so they stand in columns down the board.
+func _columns(place: Control, player: String, depth: String, level: String, striped: bool,
+		colour: Variant) -> PanelContainer:
+	var row := UITheme.table_row(player, depth, striped, WIDTH - 2, colour, colour)
 	var cells := row.get_child(0)
-	cells.add_child(cell)
-	cells.move_child(cell, 0)
-	# The name wraps in what the place column leaves it.
-	var name_cell: Label = cells.get_child(1)
-	name_cell.custom_minimum_size.x = maxf(name_cell.custom_minimum_size.x - PLACE_WIDTH
-			- UITheme.TABLE_GAP, 0.0)
+	place.custom_minimum_size.x = PLACE_WIDTH
+	place.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	cells.add_child(place)
+	cells.move_child(place, 0)
+	var floor_cell := UITheme.label(level, colour, true)
+	floor_cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	cells.add_child(floor_cell)
+	for number: Label in [cells.get_node(UITheme.TABLE_VALUE) as Label, floor_cell]:
+		number.custom_minimum_size.x = NUMBER_WIDTH
+	# The name wraps in what the three columns leave it.
+	(cells.get_child(1) as Label).custom_minimum_size.x = maxf(WIDTH - 2 - 2 * UITheme.TABLE_PAD.x
+			- PLACE_WIDTH - 2 * NUMBER_WIDTH - 3 * UITheme.TABLE_GAP, 0.0)
 	return row
 
 

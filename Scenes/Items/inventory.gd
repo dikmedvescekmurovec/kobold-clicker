@@ -155,7 +155,7 @@ var play_seconds := 0.0
 ## player's and not the world's, like the kills and the clock: every transcension carries it over.
 var dungeon_depth := 0
 ## Every floor of the dungeon ever beaten in one go, counted from the top: the leaderboard's score
-## (`Cloud.score_text` writes 44 as "3.14"). Only rises, and is carried like `dungeon_depth`.
+## (`Cloud.depth_and_floor` reads 44 as depth 3, floor 14). Only rises, and is carried like `dungeon_depth`.
 var dungeon_floors := 0
 ## How far the land has ever reached, in steps from the middle, in any world: the land radius the last
 ## wall ever broken opened. The Gollux cave of every world after is put down no further out than this

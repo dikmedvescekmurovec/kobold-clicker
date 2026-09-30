@@ -271,7 +271,9 @@ static func describe(id: String, points := 1.0) -> String:
 	for stat: String in percent:
 		parts.append("%d%% increased %s" % [roundi(float(percent[stat]) * points),
 				LootTable.STAT_LABELS.get(stat, stat)])
-	return ", ".join(parts)
+	# One effect a line: joined by commas they wrapped mid-phrase on the card's narrow width.
+	return "
+".join(parts)
 
 
 static func _flat_line(stat: String, value: float) -> String:

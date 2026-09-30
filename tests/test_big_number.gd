@@ -17,8 +17,11 @@ func _run() -> void:
 func _test_whole_numbers() -> bool:
 	_check(BigNumber.format(0.0) == "0", "nothing is nothing: %s" % BigNumber.format(0.0))
 	_check(BigNumber.format(7.0) == "7", "seven is seven: %s" % BigNumber.format(7.0))
-	_check(BigNumber.format(1000.0) == "1000", "a thousand is spelled out: %s" % BigNumber.format(1000.0))
-	_check(BigNumber.format(99999.0) == "99999", "and so is the last five-digit purse: %s" % BigNumber.format(99999.0))
+	_check(BigNumber.format(999.0) == "999", "under a thousand needs no comma: %s" % BigNumber.format(999.0))
+	_check(BigNumber.format(1000.0) == "1,000", "a thousand is spelled out, its thousands parted: %s" % BigNumber.format(1000.0))
+	_check(BigNumber.format(99999.0) == "99,999", "and so is the last five-digit purse: %s" % BigNumber.format(99999.0))
+	_check(BigNumber.format(-1234.0) == "-1,234" and BigNumber.format(1234.0, true) == "+1,234",
+			"with its sign in front of the comma: %s" % BigNumber.format(-1234.0))
 	_check(BigNumber.format(100000.0) == "100K", "six digits are K: %s" % BigNumber.format(100000.0))
 	_check(BigNumber.format(607047.0) == "607K", "three digits of them: %s" % BigNumber.format(607047.0))
 	_check(BigNumber.format(999999.0) == "1.00M", "and the last carries: %s" % BigNumber.format(999999.0))

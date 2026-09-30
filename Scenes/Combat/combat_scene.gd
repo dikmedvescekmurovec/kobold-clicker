@@ -779,8 +779,7 @@ func _build_hud() -> void:
 	_auto_label = _label("")
 	_auto_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	# Quieter than the verdict without being another colour: the panel is wood, and the dark half of
-	# the palette that reads on the bone one disappears into it. The same dimming DropsView gives
-	# "Nothing dropped", for the same reason -- it is a footnote, not a finding.
+	# the palette that reads on the bone one disappears into it -- it is a footnote, not a finding.
 	_auto_label.modulate = Color(1.0, 1.0, 1.0, 0.6)
 	_auto_label.hide()
 	_result_summary.add_child(_auto_label)

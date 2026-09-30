@@ -121,8 +121,8 @@ static func square(id: String, found: bool, unlocked := false) -> ItemSlot:
 		var slot := ItemSlot.make(piece)
 		slot.hint = CollectionPage.write_hint.bind(piece, unlocked)
 		return slot
-	return ItemSlot.shadow(piece, CollectionPage.write_hint.bind(piece if unlocked else null, unlocked),
-			unlocked)
+	return ItemSlot.shadow(piece, CollectionPage.write_hint.bind(piece if unlocked else null, unlocked,
+			false), unlocked)
 
 
 ## The log's own copy of a unique: level 1, every modifier at the bottom of its band.
@@ -136,9 +136,10 @@ static func specimen(id: String) -> Item:
 
 
 ## What the card says beside a unique in the log. With no `specimen` -- one still locked -- only the
-## word "Locked". With one: the piece itself (the log's own), and then "Locked" if it is. Whether it
-## is found is not written: the square says it.
-static func write_hint(rows: VBoxContainer, width: float, specimen: Item = null, unlocked := true) -> void:
+## word "Locked". With one: the piece itself (the log's own), and then "Locked" if it is, or "Not found
+## yet" if it is not `found`: a grey square beside a full card was read as a piece in hand.
+static func write_hint(rows: VBoxContainer, width: float, specimen: Item = null, unlocked := true,
+		found := true) -> void:
 	# A locked one says so and nothing else: what unlocks it is the achievements page's to say (the
 	# user's call, 2026-09-28).
 	if specimen == null:
@@ -147,9 +148,10 @@ static func write_hint(rows: VBoxContainer, width: float, specimen: Item = null,
 	# `fill` empties the rows it is given, so the piece goes in first. The square itself says whether
 	# it is found, so the card does not: under the piece is only "Locked".
 	ItemDetails.fill(rows, specimen, width, [], Settings.item_details)
-	if not unlocked:
+	if not unlocked or not found:
 		rows.add_child(UITheme.rule())
-		rows.add_child(ItemDetails.line("Locked", Palette.TEXT_SOFT, width, true))
+		rows.add_child(ItemDetails.line("Locked" if not unlocked else "Not found yet", Palette.TEXT_SOFT,
+				width, true))
 
 
 ## Full window height against the left edge, where the other pages stand.

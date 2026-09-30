@@ -139,11 +139,17 @@ func busy() -> bool:
 	return _out > 0
 
 
-## A score as the board writes it: the depth, then the floors of it beaten, "3.14". Gollux is the
-## fifteenth, so killing him is the next depth's ".00".
-static func score_text(floors: int) -> String:
+## A score as the depth reached and the floors of it beaten: 44 is depth 3, floor 14. Gollux is the
+## fifteenth, so killing him is the next depth's floor 0.
+static func depth_and_floor(floors: int) -> Vector2i:
 	var depth: int = Encounter.DUNGEON.enemies
-	return "%d.%02d" % [floors / depth + 1, floors % depth]
+	return Vector2i(floors / depth + 1, floors % depth)
+
+
+## The same in words. It was "3.14" once, which read as a decimal.
+static func score_text(floors: int) -> String:
+	var at := depth_and_floor(floors)
+	return "Depth %d, floor %d" % [at.x, at.y]
 
 
 ## What to do about two sides that may each have changed since they last agreed.

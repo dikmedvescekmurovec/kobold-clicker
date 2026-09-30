@@ -60,6 +60,13 @@ const MEDAL_ICON := "res://Assets/UI/ui_icon_medal.png"
 const PODIUM_ICON := "res://Assets/UI/ui_icon_podium.png"
 ## The heirlooms'. A stand-in from the pack until they have a mark of their own.
 const CROWN_ICON := "res://Assets/UI/ui_icon_crown.png"
+## The corner's keys -> the button each presses (`_unhandled_input`), whose tip card shows the key's
+## picture (`TipCard.KEY`). Letters only, and none the item card answers to (Shift, Ctrl, Alt).
+const HOTKEYS := {
+	KEY_I: "_bag_button", KEY_K: "_skills_button", KEY_C: "_character_button", KEY_J: "_bounty_button",
+	KEY_L: "_collection_button", KEY_Y: "_achievements_button", KEY_H: "_heirloom_button",
+	KEY_P: "_leaderboard_button", KEY_O: "_settings_button",
+}
 ## The air between one and the next, in panel pixels.
 const CORNER_GAP := 4.0
 ## The panel that stands in for the map when its save cannot be read: how wide it is allowed to be
@@ -217,6 +224,8 @@ var _character: CharacterPanel
 ## The banner under the fight's column, while one is up; null otherwise: a unique the log has never
 ## held, or a bounty filled. `_banner_head` is the row its heading sits in, the X at its end.
 var _banner: Control
+## A banner raised while a pop-up was up, as `_raise_banner`'s four arguments; empty with none waiting.
+var _held_banner: Array = []
 ## What a bounty handed in paid, up over the town until Collect: a screen-wide catch with the verdict's
 ## wood panel in the middle of it.
 var _paid: Control
@@ -592,6 +601,15 @@ func _process(delta: float) -> void:
 		camera.position = _clamp_to_map(map.player.position)
 	if _stone != null and _stone.visible:
 		_place_stone()
+	if not _held_banner.is_empty() and not _popup_up():
+		var held := _held_banner
+		_held_banner = []
+		_raise_banner(held[0], held[1], held[2], held[3])
+
+
+## Whether a page's question or the fortuneteller's answer stands over the window.
+func _popup_up() -> bool:
+	return bag_page != null and (bag_page.asking() or heirloom_page.asking() or town_page.telling())
 
 
 ## Built in code so the scene file stays untouched while the Godot editor has it open.
@@ -807,38 +825,41 @@ func _is_cave(cell: Vector2i) -> bool:
 ## The left-hand pages and the square buttons that open them. The pages are built before the first
 ## `_layout_ui`, which places all of them.
 func _build_pages(layer: CanvasLayer) -> void:
-	_skills_button = UITheme.icon_button(load(STAR_ICON), "What the player has become", ui_scale)
+	# Each tooltip is the page's own name, and each button answers to a key (`HOTKEYS`), whose picture
+	# the tip card shows after the name (`TipCard.KEY`).
+	_skills_button = UITheme.icon_button(load(STAR_ICON), "Skills", ui_scale)
 	_skills_button.pressed.connect(_on_skills_pressed)
 	layer.add_child(_skills_button)
-	_bag_button = UITheme.icon_button(load(CHEST_ICON), "What the monsters have dropped", ui_scale)
+	_bag_button = UITheme.icon_button(load(CHEST_ICON), "Items", ui_scale)
 	_bag_button.pressed.connect(_on_bag_pressed)
 	layer.add_child(_bag_button)
-	_bounty_button = UITheme.icon_button(load(SCROLL_ICON), "The work you have taken on", ui_scale)
+	_bounty_button = UITheme.icon_button(load(SCROLL_ICON), "Bounties", ui_scale)
 	_bounty_button.pressed.connect(_on_bounty_pressed)
 	layer.add_child(_bounty_button)
 	_settings_button = UITheme.icon_button(load(COG_ICON), "Settings", ui_scale)
 	_settings_button.pressed.connect(_on_settings_pressed)
 	layer.add_child(_settings_button)
-	_collection_button = UITheme.icon_button(load(TROPHY_ICON), "The uniques you have found", ui_scale)
+	_collection_button = UITheme.icon_button(load(TROPHY_ICON), "Collection", ui_scale)
 	_collection_button.pressed.connect(_on_collection_pressed)
 	layer.add_child(_collection_button)
-	_achievements_button = UITheme.icon_button(load(MEDAL_ICON), "Achievements, and the uniques they unlock",
-			ui_scale)
+	_achievements_button = UITheme.icon_button(load(MEDAL_ICON), "Achievements", ui_scale)
 	_achievements_button.pressed.connect(_on_achievements_pressed)
 	layer.add_child(_achievements_button)
-	_leaderboard_button = UITheme.icon_button(load(PODIUM_ICON), "The deepest descents of every player", ui_scale)
+	_leaderboard_button = UITheme.icon_button(load(PODIUM_ICON), "Leaderboard", ui_scale)
 	_leaderboard_button.pressed.connect(func() -> void: _toggle_left_page(leaderboard_page))
 	layer.add_child(_leaderboard_button)
-	_heirloom_button = UITheme.icon_button(load(CROWN_ICON), "What you would take to another world", ui_scale)
+	_heirloom_button = UITheme.icon_button(load(CROWN_ICON), "Heirlooms", ui_scale)
 	_heirloom_button.pressed.connect(_on_heirlooms_pressed)
 	layer.add_child(_heirloom_button)
 	_character_button = Button.new()
 	_character_button.focus_mode = Control.FOCUS_NONE
 	for state: String in ["normal", "hover", "pressed", "disabled"]:
 		_character_button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
-	_character_button.tooltip_text = "Your character"
+	_character_button.tooltip_text = "Character"
 	_character_button.pressed.connect(_on_character_pressed)
 	layer.add_child(_character_button)
+	for key: int in HOTKEYS:
+		(get(HOTKEYS[key]) as Button).set_meta(TipCard.KEY, OS.get_keycode_string(key).to_lower())
 	character_page = CharacterPage.new(inventory, ui_scale)
 	collection_page = CollectionPage.new(inventory, ui_scale)
 	collection_page.seen.connect(_on_unique_seen)
@@ -1106,7 +1127,17 @@ func _tier_mark(tier: EnemyRoster.Tier) -> TextureRect:
 ## A banner under the fight's own column: `square` beside `lines` under a heading, on the cards'
 ## cream, on the character's layer so it stands over the fight. Its X is up at once and it goes by
 ## itself after `BANNER_HOLD`. Raised by a unique new to the log, a bounty filled and an achievement.
+##
+## While a question or an answer stands over the window (`_popup_up`) it waits instead: raised then,
+## it lay over the pop-up's title. The latest one waiting goes up once the window is clear (`_process`).
 func _raise_banner(title: String, colour: Color, square: Control, lines: Array[Control]) -> void:
+	if _popup_up():
+		if not _held_banner.is_empty():
+			(_held_banner[2] as Control).queue_free()
+			for line: Control in _held_banner[3]:
+				line.queue_free()
+		_held_banner = [title, colour, square, lines]
+		return
 	_close_banner()
 	# The banner says more than the toast before it did, and stands where it stood.
 	if _toast != null:
@@ -2492,9 +2523,15 @@ func _on_town_tab_changed(_service: String) -> void:
 ## Points the bag at the town page's open tab. The town's own cell rather than whatever is selected:
 ## the map is still clickable behind the page, and what an orb is worth is a property of the town the
 ## player walked into, not of the tile they last looked at.
+##
+## A town with a gear merchant buys from the bag whichever tab is open: otherwise the same mark that
+## sells a level at his counter would throw it away for nothing at the board beside it.
 func _stand_at_counter() -> void:
 	var tab := town_page.open_tab()
-	_counter_page().shop(PackedStringArray() if tab.is_empty() else PackedStringArray([tab]))
+	var services := PackedStringArray() if tab.is_empty() else PackedStringArray([tab])
+	if not tab.is_empty() and tab != TownServices.GEAR and town_page.has_counter(TownServices.GEAR):
+		services.append(TownServices.GEAR)
+	_counter_page().shop(services)
 
 
 ## Quitting with a run still on. The pouch goes in rather than evaporating -- a run that is left
@@ -2591,6 +2628,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			and not _aiming.is_empty()):
 		_end_aim()
 		get_viewport().set_input_as_handled()
+		return
+	# A corner key presses its button, and only while that button could be pressed by hand: never under
+	# a tip, a pop-up, a camp or the black screen, nor with a modifier held (those are the item card's).
+	if (event is InputEventKey and event.pressed and not event.echo and HOTKEYS.has(event.keycode)
+			and not (event.shift_pressed or event.ctrl_pressed or event.alt_pressed or event.meta_pressed)
+			and _tip_panel == null and _transcend_page == null and _camp == null and not _popup_up()):
+		var button: Button = get(HOTKEYS[event.keycode])
+		if button.is_visible_in_tree() and not button.disabled:
+			get_viewport().set_input_as_handled()
+			button.pressed.emit()
 		return
 	# A camp answers for itself: its X and its Break camp are the ways out, so a stray Escape cannot
 	# quietly end a night's rest. The black screen of a transcension is the same.

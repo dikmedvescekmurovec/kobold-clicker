@@ -292,6 +292,11 @@ func open_tab() -> String:
 	return _open_tab
 
 
+## Whether this town has `service`'s counter at all, open or not.
+func has_counter(service: String) -> bool:
+	return service in _tabs
+
+
 ## The bag beside the counter changed what it has open -- which, because selling and discarding both
 ## close what was open, is also how the counter hears that the bag and the purse have moved. What is
 ## up is drawn again, so a Buy greyed out for a full bag comes back live the moment a piece is sold
@@ -776,7 +781,7 @@ func _fill_smith() -> void:
 	_smith_bench(body, ItemSlot.make(_bag_piece))
 	var details := UITheme.vbox(2, BODY_WIDTH)
 	body.add_child(details)
-	ItemDetails.fill(details, _bag_piece, BODY_WIDTH)
+	ItemDetails.fill(details, _bag_piece, BODY_WIDTH, [], false, false)
 	var cap := _upgrade_cap()
 	var up_price := TownPrices.upgrade_price(_bag_piece)
 	var up_why := _smith_why_not(Blacksmith.why_not_upgrade(_bag_piece, cap), up_price)
@@ -1089,6 +1094,11 @@ func _place_told() -> void:
 	var lines: Control = _told_scroll.get_child(0)
 	_told_scroll.custom_minimum_size.y = minf(lines.get_combined_minimum_size().y,
 			view_size.y / _ui_scale - TOLD_CHROME)
+
+
+## Whether one of her answers (or the way out's question) stands over the window, for a banner to wait behind.
+func telling() -> bool:
+	return _told != null
 
 
 ## Dismiss and Escape: the answer shrinks away, then goes. It is let go of at once, so the page under

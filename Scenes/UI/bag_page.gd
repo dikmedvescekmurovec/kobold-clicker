@@ -393,7 +393,7 @@ func refresh() -> void:
 				slot.set_meta(ItemCard.BESIDE, _actions)
 			_dim_for_orb(slot, inventory.items[i])
 			# Not on the way out of a world: there the bag is only being chosen from.
-			if not _transcending and is_upgrade(inventory.items[i], inventory.equipment):
+			if not _transcending and is_upgrade(inventory.items[i], inventory):
 				slot.add_child(_upgrade_mark())
 			grid.add_child(slot)
 	_count.text = ("%d to spend" % _purse.super_orbs if _heirlooms and _transcending
@@ -565,6 +565,11 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		_armed = ""
 		refresh()
+
+
+## Whether one of the page's questions stands over the window, for a banner to wait behind.
+func asking() -> bool:
+	return _confirm != null
 
 
 ## The question shrinks away, as a reward's panel does, then goes. It is let go of at once, so a deed
@@ -1184,11 +1189,14 @@ func _craft(orb: String, item: Item, written := Callable()) -> void:
 ## Whether wearing `item` loses nothing and gains something: against what Equip would take off (the
 ## emptiest socket it fits, both hands for a two-hander), and against nothing on a bare socket. A swap
 ## that trades one stat for another gets no mark -- that is the Alt card's to weigh, and most swaps are.
-static func is_upgrade(item: Item, equipment: Equipment) -> bool:
+## Nor does a piece Equip would refuse (`Inventory.can_equip`: the attribute it asks for, above all):
+## an arrow over a greyed Equip is a promise the next press breaks.
+static func is_upgrade(item: Item, player: Inventory) -> bool:
+	var equipment := player.equipment
 	if item in equipment.worn.values():
 		return false
 	var sockets := equipment.sockets_for(item)
-	if sockets.is_empty():
+	if sockets.is_empty() or not player.can_equip(item, sockets[0]):
 		return false
 	var changes := ItemDetails.deltas(item, equipment.displaced_by(sockets[0], item)).values()
 	return not changes.is_empty() and changes.all(func(change: float) -> bool: return change >= 0.0)

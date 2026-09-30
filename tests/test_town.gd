@@ -988,7 +988,7 @@ func _test_buying() -> void:
 	_check(price > TownPrices.sell_price(offered),
 			"a vendor asks more than it pays (%d over %d)" % [price, TownPrices.sell_price(offered)])
 	var buy := _deep_button(page._rows, "Buy")
-	_check(buy != null and buy.text == "Buy" and UITheme.price_of(buy) == "%d" % price, "the button carries the price (%s)"
+	_check(buy != null and buy.text == "Buy" and UITheme.price_of(buy) == BigNumber.format(price), "the button carries the price (%s)"
 			% [buy.text if buy != null else "no button"])
 
 	# The lines scroll and the buttons under them do not, the way the bag's stat block works: an elite
@@ -1117,9 +1117,9 @@ func _test_smithing() -> void:
 	var price := TownPrices.upgrade_price(piece)
 	var upgrade := _button(page._rows, "Upgrade")
 	var lock := _button(page._rows, "Lock")
-	_check(upgrade != null and upgrade.text == "Upgrade" and UITheme.price_of(upgrade) == "%d" % price,
+	_check(upgrade != null and upgrade.text == "Upgrade" and UITheme.price_of(upgrade) == BigNumber.format(price),
 			"the hammer carries its price (%s)" % [upgrade.text if upgrade != null else "no button"])
-	_check(lock != null and lock.text == "Lock" and UITheme.price_of(lock) == "%d" % TownPrices.lock_price(piece),
+	_check(lock != null and lock.text == "Lock" and UITheme.price_of(lock) == BigNumber.format(TownPrices.lock_price(piece)),
 			"and so does the lock (%s)" % [lock.text if lock != null else "no button"])
 	_check(upgrade != null and upgrade.disabled and lock != null and lock.disabled,
 			"an empty purse kills both")
@@ -1244,7 +1244,7 @@ func _test_board() -> void:
 	inventory.items.clear()
 	page._fill()
 	claim = _deep_button(page._rows, "Claim")
-	_check(claim != null and not claim.disabled and claim.tooltip_text.contains(str(reward))
+	_check(claim != null and not claim.disabled and claim.tooltip_text.contains(BigNumber.format(reward))
 			and claim.tooltip_text.ends_with("and an elite sword +1"),
 			"the finished one carries its reward (%s)" % [claim.tooltip_text if claim != null else "no button"])
 	if claim != null:
@@ -1404,7 +1404,10 @@ func _test_entering() -> void:
 	var vendor := TownServices.GEAR if TownServices.GEAR in services else TownServices.ORBS
 	_check(main.town_page.open_tab() == TownServices.BOUNTIES,
 			"a town opens on its board, the counter every settlement has (%s)" % [services])
-	_check(not main.bag_page._buys(vendor), "over which the bag sells nothing")
+	# The bag sells to the town's merchant from any tab: at the board beside him, the mark that sells a
+	# level must not throw it away for nothing. A town with no merchant buys nothing there.
+	_check(main.bag_page._buys(TownServices.GEAR) == (TownServices.GEAR in services)
+			and not main.bag_page._buys(TownServices.ORBS), "over which the bag sells only to a merchant the town has")
 	_check(BountyBoard.bounties(main.inventory.towns.visit(main.view.origin + town)).size()
 			== BountyBoard.COMMONS + BountyBoard.ELITES, "and the board has its three postings")
 	main.town_page._on_tab_pressed(vendor)

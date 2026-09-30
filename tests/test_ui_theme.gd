@@ -32,11 +32,10 @@ func _test_table_rows() -> bool:
 	var long := UITheme.table_row("increased Attack Speed T95", "+607K(416K-997K)%", false, 200.0)
 	_check(fits.get_child(0) is HBoxContainer, "a short value sits beside its name")
 	_check(long.get_child(0) is VBoxContainer, "a long one drops under it")
-	# A modifier's row: name and tier on one line, the value always under them.
-	var mod := UITheme.stacked_row("increased Attack Speed", "T95", "+607K(416K-997K)%", false, 200.0)
-	var top := mod.get_child(0).get_child(0)
-	_check(top.get_child_count() == 2 and top.get_child(1).text == "T95", "the tier stands beside the name")
-	_check(mod.get_child(0).get_child(1).name == UITheme.TABLE_VALUE, "and the value under them")
+	# A modifier's row (`ItemDetails.fill`): the whole sentence, and the tier alone in the value column.
+	var mod := UITheme.table_row("+607K(416K-997K)% increased Attack Speed", "T95", false, 200.0)
+	_check(mod.get_child(0).get_child(0).text.begins_with("+607K") and mod.find_child(UITheme.TABLE_VALUE,
+			true, false).text == "T95", "a modifier is one sentence with its tier beside it")
 	fits.free()
 	long.free()
 	mod.free()

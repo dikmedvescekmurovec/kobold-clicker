@@ -37,6 +37,7 @@ var discardable := false
 
 var _items: Array[Item] = []
 var _ground: PanelContainer
+var _none: Label
 var _grid: VBoxContainer
 var _scroll: ScrollContainer
 var _orbs: HBoxContainer
@@ -47,6 +48,13 @@ var _discard: Button
 
 func _init() -> void:
 	add_theme_constant_override("separation", 8)
+
+	# A fight that turned up nothing says so in a plain line, with no ground under it: in the framed
+	# ground, the words at half strength read as a dead button.
+	_none = UITheme.label("Nothing dropped", Palette.TEXT_SOFT, true)
+	_none.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_none.hide()
+	add_child(_none)
 
 	# The squares, on the bag's own light panel, so a find stands on the ground it will stand on once it is kept.
 	_ground = PanelContainer.new()
@@ -108,6 +116,7 @@ func _init() -> void:
 ## mid-run popup does not.
 func fill(items: Array[Item], orbs := {}) -> void:
 	_items = items.duplicate()
+	_none.visible = _items.is_empty() and orbs.is_empty()
 	inspect(-1)
 	UITheme.clear(_grid)
 	UITheme.clear(_orbs)
@@ -116,14 +125,8 @@ func fill(items: Array[Item], orbs := {}) -> void:
 		held.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_orbs.add_child(held)
 	_orbs.visible = not orbs.is_empty()
-	_scroll.visible = not (_items.is_empty() and _orbs.visible)
+	_scroll.visible = not _items.is_empty()
 	if _items.is_empty():
-		var none := Label.new()
-		none.theme_type_variation = "PanelLabel"
-		none.text = "Nothing dropped"
-		none.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		none.modulate = Color(1.0, 1.0, 1.0, 0.5)
-		_grid.add_child(none)
 		_fit_scroll()
 		return
 	var row: HBoxContainer = null
@@ -189,7 +192,7 @@ func pieces() -> Array:
 func inspect(index: int) -> void:
 	if index < 0 or index >= _items.size():
 		_inspect.hide()
-		_ground.show()
+		_ground.visible = not _none.visible
 	else:
 		ItemDetails.fill(_inspect_rows, _items[index], INSPECT_WIDTH)
 		_discard.visible = discardable
