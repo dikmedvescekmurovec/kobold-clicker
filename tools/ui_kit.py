@@ -83,10 +83,11 @@ GREEN_FAMILY = ["#38605b", "#478773"]
 # drop shadow -- is terrain the recolours leave alone.
 GREEN_RAMP = ["#50a978", "#57c767", "#478773", "#6ae356", "#68c97e", "#80e87c", "#a1f28d"]
 # The key each recolour plays that ramp in. DANGER is the pack's own red (#c0443a sits between its
-# #b82b28 and #d74427); DISABLED is grey, and drops the lightness a little so a dead button reads as
-# further away rather than merely paler.
+# #b82b28 and #d74427); DISABLED is a pale tan, lifted toward the cream it stands on so a dead button
+# sinks into its panel. It was grey until 2026-09-30, the one cold colour in the interface, which read
+# as a different kind of button rather than a dead one.
 DANGER_HUE, DANGER_SAT = 0.017, 0.55
-DISABLED_HUE, DISABLED_SAT, DISABLED_DIM = 0.62, 0.06, 0.80
+DISABLED_HUE, DISABLED_SAT, DISABLED_DIM = 0.07, 0.55, 1.45
 # BROWN is the pack's own square button, read off it: the pack draws one at Buttons.png (336, 339),
 # 11x12, in four states on a 16 px pitch -- and that sprite cannot be used. Its face is a diagonal
 # gradient, so no margin leaves a centre flat enough for check() to pass, and at 11x12 it could not
@@ -94,6 +95,45 @@ DISABLED_HUE, DISABLED_SAT, DISABLED_DIM = 0.62, 0.06, 0.80
 # the green face's lightness. Played on the green button's flat, tileable face the base step comes
 # out #714c2a against the pack's own #70492a -- the pack's brown square, on a face that nine-slices.
 BROWN_HUE, BROWN_SAT, BROWN_DIM = 0.08, 0.46, 0.62
+
+# The interface in ENDESGA 64 (the user's call, 2026-09-30): every sprite written to Assets/UI goes through
+# `hexlib.to_e64` last (`_e64`), each colour to its nearest in OKLab -- except these, picked by hand, the
+# pack's chrome, whose place in the palette decides how the whole interface reads. The cream is the
+# palette's second warm step and the slot's tan the third (the user's pick over the paler f9e6cf); the wood and the brown face its middle brown;
+# the green face its mid green lettered in ink; the red face its red; the outline its warm near-black.
+# Palette.gd's PANEL_CREAM, SLOT_TAN, SLOT_TAN_DK and BUTTON_BROWN are these same hexes, since a slot
+# drawn in code has to match the panel it sits on. Gear, orb, skill and spell icons are not interface.
+UI_FIXED = {
+    # The cream body and the slot's tan.
+    "#e5d6a1": "#f6ca9f", "#cda677": "#e69c69",
+    # The frame and the brown face, with its bevel: shadow, face, light.
+    "#583126": "#5d2c28", "#70492a": "#8a4836", "#714c2a": "#8a4836", "#5d3f22": "#5d2c28",
+    "#815730": "#bf6f4a", "#8e5f34": "#bf6f4a",
+    # The brown face lit under the cursor.
+    "#8a5d33": "#bf6f4a", "#a16c3c": "#e69c69", "#ad7540": "#e69c69", "#8b6231": "#8a4836",
+    # The red face and its bevel, and lit.
+    "#c14638": "#c42430", "#a03a2e": "#891e2b", "#cd5e51": "#ea323c", "#d37166": "#ea323c",
+    "#d16c60": "#ea323c", "#dc9088": "#f68187", "#e2a49d": "#f68187",
+    # The green face and the title bar, and lit.
+    "#50a978": "#33984b", "#478773": "#1e6f50", "#57c767": "#5ac54f", "#6ae356": "#99e65f",
+    "#3f7168": "#1e6f50", "#68c97e": "#5ac54f", "#80e87c": "#99e65f", "#a1f28d": "#d3fc7e",
+    # The outline every face and bar is drawn round with.
+    "#294040": "#1c121c",
+    # A mark's outline on a brown face (BONE_RAMP), a step darker than the face so the mark keeps its
+    # edge; and the close button's teal frame, kept teal.
+    "#6b4a30": "#5d2c28", "#38605b": "#134c4c",
+}
+# The lost fight's title bar is the green one played in the red face's colours, once it is in ENDESGA 64.
+GREEN_TO_RED = {"#33984b": "#c42430", "#1e6f50": "#891e2b", "#5ac54f": "#ea323c", "#99e65f": "#f68187",
+                "#134c4c": "#571c27"}
+
+
+def _e64(image):
+    """A sprite of the interface's in ENDESGA 64 (`hexlib.to_e64`), its chrome as `UI_FIXED` picks it."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "AI-sprites-generator"))
+    import hexlib
+    return hexlib.to_e64(image, UI_FIXED)
+
 
 # The gear icons are not theme sprites: they go to Assets/Gear as loose PNGs for LootTable.ROOT to
 # load by path, and never enter ui_sheet.png or ui_sheet.json. They are assembled here all the same
@@ -577,23 +617,23 @@ ICON_KEY = {"o": "#3e1f1d", "1": "#603928", "2": "#70492a", "3": "#825c2f", "4":
             "t": "#38605b", "c": "#e5d6a1", "l": "#fbf5bd", "k": "#151419"}
 ICONS_DRAWN = {
     # Auto (a level's autodiscard): the count's chest struck through -- what drops at this level is not
-    # kept. The user's pick of seven candidates (2026-09-25). The pack's chest, whose one 583126 is
-    # taken to 1.
+    # kept. The user's pick of seven candidates (2026-09-25), redrawn 2026-09-30 as a square chest
+    # (lid, seam, lock) under a dark strike: the rounded one with a light band read as a leaf.
     "ui_icon_auto": """
-        44o...........
-        o44ooooooo....
-        .o44o44443o...
-        ..o44o44333o..
-        .o2o44o33332o.
-        .o22o44o3322o.
-        .o122o44o221o.
-        .o1111o44o11o.
-        .o23313o44o2o.
-        .o223111o44oo.
-        .o1222332o44o.
-        ..ooooooooo44o
-        ...........o44
-        ............o4
+        .............o
+        ...oooooooo.oo
+        ..o44444444oo.
+        .o33333334ooo.
+        .o3333334oo3o.
+        .o333334oo33o.
+        .o11114oo111o.
+        .o2224oo2222o.
+        .o224oo22222o.
+        .o24oo222222o.
+        .o4oo2222222o.
+        .4oo22222222o.
+        .ooooooooooo..
+        oo............
     """,
     # Terminate: a flag on its pole -- leave the field and keep the haul.
     "ui_icon_flag": """
@@ -740,20 +780,6 @@ ICONS_DRAWN = {
         ...o2o.....
         ....oo.....
     """,
-    # Help, on the collection log: a question mark the close button's size (9x10), worn by no button --
-    # it stands on the panel and says its piece in a tooltip.
-    "ui_icon_help": """
-        ..ooooo..
-        .o44433o.
-        o43ooo32o
-        ooo.o332o
-        ...o332o.
-        ...o32o..
-        ...oooo..
-        ...o42o..
-        ...o21o..
-        ...oooo..
-    """,
     # Info, on the collection log: an "i" on a disc in the close button's colours (12x12), worn by no
     # button -- it stands on the panel and says its piece in a tooltip. Mockup: qa/info_icon_m2.png, C.
     "ui_icon_info": """
@@ -839,22 +865,56 @@ ICONS_DRAWN = {
         o33332222211o
         ooooooooooooo
     """,
-    # The achievements' tab (2026-09-28): a medal on its ribbon, a stand-in until one is drawn.
-    "ui_icon_medal": """
+    # The fight's count of the fallen (2026-09-30): two swords crossed. The skull it wore was the Last
+    # Gasp's own icon, and a skull is also what a curse costs and what marks an elite.
+    "ui_icon_kills": """
         .oo.......oo.
-        .o3o.....o3o.
-        ..o3o...o3o..
-        ...o3o.o3o...
+        o43o.....o34o
+        .o43o...o34o.
+        ..o43o.o34o..
+        ...o43o34o...
+        ...oo434oo...
+        ..o2o343o2o..
+        ...o24o42o...
+        ...oo2o2oo...
+        ..o1oo2oo1o..
+        .o1o..o..o1o.
+        o3o.......o3o
+        .o.........o.
+    """,
+    # The fortuneteller's tab (2026-09-30): a crystal ball on its stand, in place of a question mark
+    # that read as a help button.
+    "ui_icon_crystal": """
+        ....ooooo....
+        ...o44443o...
+        ..o4444333o..
+        .o444433322o.
+        .o444333222o.
+        .o443332221o.
+        .o433322211o.
+        .o333222111o.
+        ..o3222111o..
+        ...o22111o...
         ...ooooooo...
-        ..o4444433o..
-        .o44ooooo32o.
-        .o4o44433o2o.
-        .o4o43332o2o.
-        .o3o33322o1o.
-        .o3o32221o1o.
-        .o33ooooo11o.
-        ..o3222211o..
+        ..o2222111o..
         ...ooooooo...
+    """,
+    # The collection log's corner button (2026-09-30): a closed book, so the log no longer wears the
+    # trophy that the achievements' page does.
+    "ui_icon_book": """
+        .ooooooooo..
+        o133333333o.
+        o1333333334o
+        o1333333334o
+        o1222222224o
+        o1224444224o
+        o1222222224o
+        o1222112224o
+        o1222222224o
+        o1222222224o
+        o1222222224o
+        .o444444444o
+        ..ooooooooo.
     """,
     # The leaderboard's corner button (2026-09-30): a podium, first in the middle, second left.
     "ui_icon_podium": """
@@ -1015,9 +1075,9 @@ BONE_RAMP = {
 # scissors in both colourways: 603928 -> 2c4645, 70492a -> 3f7168, 88682d -> 50a978, a07f2d ->
 # 57c767 -- the outline to the close button's teal family and the ramp to the bar's green.
 BARE = ["ui_icon_auto", "ui_icon_filter", "ui_icon_trash", "ui_icon_coins", "ui_icon_scroll", "ui_icon_sword", "ui_icon_chest",
-        "ui_icon_gem", "ui_icon_anvil", "ui_icon_help"]
+        "ui_icon_gem", "ui_icon_anvil", "ui_icon_crystal", "ui_icon_kills"]
 GREEN_TABS = ["ui_icon_auto", "ui_icon_filter", "ui_icon_scroll", "ui_icon_sword", "ui_icon_gem", "ui_icon_anvil",
-              "ui_icon_help"]
+              "ui_icon_crystal"]
 GREEN_KEY = {"#3e1f1d": "#2c4645", "#603928": "#3f7168", "#70492a": "#478773", "#825c2f": "#50a978",
              "#88682d": "#57c767"}
 
@@ -2361,12 +2421,18 @@ def preview(sprites, margins):
 
 def main():
     sprites, margins = build()
+    sprites = {name: _e64(image) for name, image in sprites.items()}
+    # The lost fight's bar, and the body under it with the bar's drop line in the same red.
+    to_red = {_rgb(green): _rgb(red) for green, red in GREEN_TO_RED.items()}
+    for green, red in (("ui_bar_green", "ui_bar_red"), ("ui_panel_headed", "ui_panel_headed_red")):
+        sprites[red] = _map_colors(sprites[green], to_red)
+        margins[red] = margins[green]
     os.makedirs(OUT, exist_ok=True)
     os.makedirs(QA, exist_ok=True)
     preview(sprites, margins).save(os.path.join(QA, "ui_kit_tiling.png"))
 
     for name, image in parts().items():
-        image.save(os.path.join(OUT, name + ".png"))
+        _e64(image).save(os.path.join(OUT, name + ".png"))
 
     unique = unique_gear()
     unique_preview(unique).save(os.path.join(QA, "ui_kit_uniques.png"))
@@ -2390,20 +2456,23 @@ def main():
 
     # Loose as well, and for the same reason the parts are: a mark is drawn at its own size and the
     # face behind it is what stretches.
-    mark = icons()
+    mark = {name: _e64(image) for name, image in icons().items()}
     icon_preview(mark, sprites, margins).save(os.path.join(QA, "ui_kit_icons.png"))
     bare_preview(mark, sprites, margins).save(os.path.join(QA, "ui_kit_bare.png"))
     for name, image in mark.items():
         image.save(os.path.join(OUT, name + ".png"))
 
     # Loose too: a patch is laid over a frame at its own size, never stretched.
-    notch = notches()
+    notch = {name: _e64(image) for name, image in notches().items()}
+    # The red title bar's own patch (`UITheme.danger_bar`), the green one's twin.
+    notch["ui_notch_bar_red_a"] = _map_colors(notch["ui_notch_bar_a"],
+                                              {_rgb(green): _rgb(red) for green, red in GREEN_TO_RED.items()})
     notch_preview(notch, sprites, margins).save(os.path.join(QA, "ui_kit_notches.png"))
     for name, image in notch.items():
         image.save(os.path.join(OUT, name + ".png"))
 
     # Loose too, and at their own size: a key is drawn beside a word, never on a button.
-    key = keys()
+    key = {name: _e64(image) for name, image in keys().items()}
     key_preview(key, sprites, margins).save(os.path.join(QA, "ui_kit_keys.png"))
     for name, image in key.items():
         image.save(os.path.join(OUT, name + ".png"))
@@ -2436,7 +2505,7 @@ def main():
 
     # Loose, like the parts: a pip is drawn at its own size and never stretched, so it has no
     # nine-slice and no business in the theme sheet.
-    pip = pips()
+    pip = {name: _e64(image) for name, image in pips().items()}
     pip_preview(pip).save(os.path.join(QA, "ui_kit_pips.png"))
     for name, image in pip.items():
         image.save(os.path.join(OUT, name + ".png"))
@@ -2444,6 +2513,8 @@ def main():
     # Loose as well: the frame and its bars are drawn at their own size, and the bars are clipped
     # rather than stretched as they empty.
     char, portrait_at = character()
+    # The hero's face is a portrait, not interface.
+    char = {name: image if name == "ui_char_portrait" else _e64(image) for name, image in char.items()}
     character_preview(char, portrait_at).save(os.path.join(QA, "ui_kit_character.png"))
     for name, image in char.items():
         image.save(os.path.join(OUT, name + ".png"))

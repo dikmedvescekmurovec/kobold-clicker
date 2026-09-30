@@ -349,7 +349,7 @@ static func progress_bar(have: int, need: int, width: float) -> Control:
 	holder.add_child(trough)
 	var inside := width - BAR_BORDER * 2
 	var fill := ColorRect.new()
-	fill.color = Palette.LEAF
+	fill.color = Palette.LEAF_LT
 	fill.position = Vector2(BAR_BORDER, BAR_BORDER)
 	fill.size = Vector2(floorf(inside * clampf(float(have) / maxi(need, 1), 0.0, 1.0)),
 			BAR_HEIGHT - BAR_BORDER * 2)

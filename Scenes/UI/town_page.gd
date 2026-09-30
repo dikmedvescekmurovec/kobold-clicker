@@ -94,7 +94,7 @@ const TAB_ICONS := {
 	TownServices.GEAR: "sword",
 	TownServices.ORBS: "gem",
 	TownServices.SMITH: "anvil",
-	TownServices.FORTUNE: "help",
+	TownServices.FORTUNE: "crystal",
 }
 const TAB_MARK := "res://Assets/UI/ui_icon_%s_%s.png"
 ## How far a choice that is not the one picked is faded, so the picked one is read off a row of them

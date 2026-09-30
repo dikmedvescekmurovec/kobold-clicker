@@ -40,10 +40,10 @@ const TROUGH := 2 + 4 * SEGMENTS
 
 ## The red the trough empties in. Defined here rather than on CombatScene because this is the bar it
 ## belongs to; the fight borrows it back for the crit numbers and for the end of the clock's ramp.
-const FILL := Color("c4453a")
+const FILL := Color("c42430")
 ## What a blow took off, left standing in a pale bar behind the red for GHOST_HOLD seconds and then
 ## drained away at GHOST_SPEED channel pixels a second -- so how big a hit was is read off the bar.
-const GHOST := Color("f2d7a6")
+const GHOST := Palette.SLOT_TAN
 const GHOST_HOLD := 0.25
 const GHOST_SPEED := 60.0
 

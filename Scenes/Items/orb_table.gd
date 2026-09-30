@@ -67,15 +67,15 @@ const ORBS := {
 		"does": "Makes an item rare with fresh modifiers, or rerolls a rare one's.",
 	},
 	"Orb of Divinity": {
-		"icon": "Orb of Divinity.png", "weight": 7, "beam": ItemRarity.Rarity.RARE, "glow": Color8(181, 188, 192),
+		"icon": "Orb of Divinity.png", "weight": 7, "beam": ItemRarity.Rarity.RARE, "glow": Color("b4b4b4"),
 		"does": "Rerolls the value of every modifier, keeping the modifiers and their tiers.",
 	},
 	"Orb of Chaos": {
-		"icon": "Orb of Chaos.png", "weight": 4, "beam": ItemRarity.Rarity.RARE, "glow": Color8(221, 67, 11),
+		"icon": "Orb of Chaos.png", "weight": 4, "beam": ItemRarity.Rarity.RARE, "glow": Color("ff5000"),
 		"does": "Rerolls the tier and value of every modifier, keeping the modifiers themselves.",
 	},
 	"Orb of Exaltation": {
-		"icon": "Orb of Exaltation.png", "weight": 3, "beam": ItemRarity.Rarity.ELITE, "glow": Color8(241, 216, 23),
+		"icon": "Orb of Exaltation.png", "weight": 3, "beam": ItemRarity.Rarity.ELITE, "glow": Color("ffc825"),
 		"does": "Makes an item epic with fresh modifiers, or rerolls an epic one's.",
 	},
 }

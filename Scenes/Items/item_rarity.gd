@@ -93,7 +93,7 @@ const TEXT_COLORS := {
 	Rarity.UNCOMMON: Palette.ICE_DK,
 	Rarity.RARE: Palette.LILAC,
 	Rarity.ELITE: Palette.BRICK,
-	Rarity.UNIQUE: Palette.GOLD,
+	Rarity.UNIQUE: Palette.GOLD_TEXT,
 }
 
 ## The socket every item square is drawn on.

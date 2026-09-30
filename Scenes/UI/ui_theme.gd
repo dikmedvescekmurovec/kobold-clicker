@@ -37,6 +37,10 @@ const PANELS := {
 	"WoodPanel": "ui_panel_wood",
 	"TextPanel": "ui_panel_white",
 	"HeaderBar": "ui_bar_green",
+	# The same bar in the red face's colours, for a fight lost (`danger_bar`), and the body under it
+	# with its drop line in the same red.
+	"HeaderBarDanger": "ui_bar_red",
+	"HeadedPanelDanger": "ui_panel_headed_red",
 	# The cream body as it stands under the bar: no top frame, a drop line and a tan row instead, so
 	# the bar sits on the cream the way the pack draws it rather than over a second dark edge.
 	"HeadedPanel": "ui_panel_headed",
@@ -97,9 +101,9 @@ const BARE_DISABLED := Color(1, 1, 1, 0.4)
 ## One label colour for every button: the faces are the pack's green replayed in the icon buttons'
 ## brown (or red for danger), and the words are the same cream as the icon buttons' marks.
 const FONT_COLOR := Palette.PANEL_CREAM
-## A dead button keeps its label but stops shouting: pale grey on the grey face is legible and
-## plainly switched off, where a dark ink would read as live.
-const DISABLED_FONT_COLOR := Palette.STONE_LT
+## A dead button keeps its label but stops shouting: the wood's brown on the pale tan face
+## (`tools/ui_kit.py` `DISABLED`) is legible and plainly switched off, where cream on brown reads as live.
+const DISABLED_FONT_COLOR := Palette.SLOT_TAN_DK
 const PANEL_MARGIN := 10
 ## How far a page's panel stands off the window's edge, in panel pixels: the pack floats its panels,
 ## and one flush against the edge read as part of the window rather than as a thing in it.
@@ -163,7 +167,7 @@ static func build() -> Theme:
 	for variation: String in PANELS:
 		built.set_type_variation(variation, "PanelContainer")
 		var box := _style(sheet, regions[PANELS[variation]], margins[PANELS[variation]])
-		if variation == "HeaderBar":
+		if variation in ["HeaderBar", DANGER_BAR]:
 			box.content_margin_left = BAR_MARGIN.x
 			box.content_margin_right = BAR_MARGIN.x
 			box.content_margin_top = BAR_MARGIN.y
@@ -543,6 +547,8 @@ static func titled_panel(title_text: String, tooltip: String, on_close: Callable
 ## its bar or, on a card, too short to wobble -- the bar wobbles on its own (`bar`): its highlight
 ## breaks along its top at `NOTCH_BAR_PITCH`.
 const NOTCH := "res://Assets/UI/ui_notch_%s_%s.png"
+## The red title bar's variation (`danger_bar`).
+const DANGER_BAR := "HeaderBarDanger"
 const NOTCH_PITCH := 40
 const NOTCH_STAGGER := 20
 const NOTCH_BOTTOM_PITCH := 36
@@ -557,8 +563,10 @@ static func notched(panel: Control, bar := false) -> void:
 
 
 static func _draw_notches(panel: Control, bar: bool) -> void:
+	# The bar's patch is cut off the green bar; a red bar wears its red twin.
+	var red := bar and panel.theme_type_variation == DANGER_BAR
 	for place: Array in notch_places(panel.size, bar):
-		panel.draw_texture(place[0], place[1])
+		panel.draw_texture(_notches["bar_reda"] if red else place[0], place[1])
 
 
 ## Where the patches fall on a panel of `size`: [texture, position] each. tools/ui_kit.py
@@ -568,6 +576,7 @@ static func notch_places(size: Vector2, bar := false) -> Array:
 		for side: String in ["left", "right", "bottom", "bar"]:
 			for letter: String in ("abc" if side == "bottom" else "ab" if side != "bar" else "a"):
 				_notches[side + letter] = load(NOTCH % [side, letter])
+		_notches["bar_reda"] = load(NOTCH % ["bar_red", "a"])
 	var places := []
 	if bar:
 		var patch: Texture2D = _notches["bara"]
@@ -604,6 +613,16 @@ static func body_of(panel: VBoxContainer) -> VBoxContainer:
 
 static func title_of(panel: VBoxContainer) -> Label:
 	return panel.get_child(0).get_child(0).get_child(0)
+
+
+## A `titled_panel`'s bar worn red (`DANGER_BAR`, its title in bone) or green again: a fight lost was
+## headed in the same green as a fight won.
+static func danger_bar(panel: VBoxContainer, on: bool) -> void:
+	var bar := panel.get_child(0) as PanelContainer
+	bar.theme_type_variation = DANGER_BAR if on else "HeaderBar"
+	(panel.get_child(1) as PanelContainer).theme_type_variation = "HeadedPanelDanger" if on else "HeadedPanel"
+	title_of(panel).add_theme_color_override("font_color", Palette.BONE if on else Palette.INK)
+	bar.queue_redraw()
 
 
 ## Frees every child but `keep`, taking each out of the tree at once: a queued child still counts in

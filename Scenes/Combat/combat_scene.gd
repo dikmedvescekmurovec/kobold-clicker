@@ -116,9 +116,9 @@ const SWING_RESTART_SECONDS := 0.2
 ## The bar behind the clock and its fill. The enemy's health is a HealthBar now -- a generated
 ## sprite frame with a drawn fill -- so the only thing borrowed back from it here is the red, which
 ## the crit numbers and the end of the clock's ramp are both keyed to.
-const BAR_BACK := Color(0.08, 0.07, 0.11, 0.85)
+const BAR_BACK := Color(Palette.INK, 0.85)
 const BAR_HEALTH := HealthBar.FILL
-const BAR_TIME := Color("6fa84a")
+const BAR_TIME := Palette.LEAF_LT
 ## How thick a dark border the clock is given, in panel pixels. The HUD stands on the arena itself
 ## rather than on a wood panel, so what is behind it is a backdrop -- a snow field, a desert noon, a
 ## night sky -- and a bar with no border round it disappears into about half of them.
@@ -144,8 +144,8 @@ const CLOCK_AMBER := 0.3
 ## them, and it is a ramp rather than a step at some number of items for the reason the clock ramps:
 ## it is read out of the corner of an eye, and a reddening counter says go and throw something away
 ## a good deal earlier than one that changes all at once.
-const FACE_BROWN := Color("714c2a")
-const FACE_DANGER := Color("c0443a")
+const FACE_BROWN := Palette.BUTTON_BROWN
+const FACE_DANGER := Color("c42430")
 
 ## The number that floats off a hit: how long it lives, how far it climbs, how far either side of the
 ## enemy it may start, and the two sizes it is drawn at. Pixellari renders cleanly at whole multiples
@@ -201,8 +201,9 @@ const XP_FADE_SHARE := 0.3
 ## this many times larger again -- whole numbers only, for the reason `zoom` is.
 const XP_GEM_SCALE := 2
 const XP_GEM := preload("res://Assets/UI/xp_gem.png")
-## The verdict's kill mark: the pack's skull, which the Last Gasp also wears.
-const SKULL := preload("res://Assets/Gear/Unique/last_gasp.png")
+## The verdict's kill mark: two swords crossed, in the brown a mark bare on the cream wears. It was the
+## Last Gasp's own skull, and a skull is also what a curse costs and what marks an elite.
+const KILLS_MARK := preload("res://Assets/UI/ui_icon_kills_brown.png")
 ## What the nameplate says a tier in: the colour of the name -- the pips' and the health bar's own
 ## green and gold -- and the mark either side of it, cut cream by tools/ui_kit.py.
 const TIER_COLOUR := {
@@ -766,7 +767,7 @@ func _build_hud() -> void:
 	_xp_row = _xp_label.get_parent()
 	_xp_row.hide()
 	# The bodies, as a count behind a skull. The pack's 32 px skull at half size, the orb tray's 2:1.
-	_kills_label = _sum(sums, SKULL, Vector2(Coins.SIZE, Coins.SIZE))
+	_kills_label = _sum(sums, KILLS_MARK, Vector2(Coins.SIZE, Coins.SIZE))
 	# What the fight left behind, under the sums: the finds on the bag's light panel and the orbs in a
 	# row under them. Kept even when it was lost, so this is where that promise is visibly kept.
 	_result_drops = DropsView.new()
@@ -817,7 +818,7 @@ func _build_hud() -> void:
 	var so_far := _sums_row(found)
 	_loot_gold = _sum(so_far, Coins.icon(), Vector2(Coins.SIZE, Coins.SIZE))
 	_loot_xp = _sum(so_far, XP_GEM, Vector2(XP_GEM.get_width(), XP_GEM.get_height()) * XP_GEM_SCALE)
-	_loot_kills = _sum(so_far, SKULL, Vector2(Coins.SIZE, Coins.SIZE))
+	_loot_kills = _sum(so_far, KILLS_MARK, Vector2(Coins.SIZE, Coins.SIZE))
 	# What the counter's reddening face means, in words, in the one place the player has already
 	# asked what the run is carrying -- and over the list rather than under it, because it is about
 	# the whole of it. Here rather than out in the arena because this is where something can be done
@@ -873,7 +874,7 @@ func _square_button(icon: Texture2D) -> Button:
 	button.expand_icon = false
 	for item: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 		button.add_theme_color_override(item, Palette.PANEL_CREAM)
-	button.add_theme_color_override("font_disabled_color", Palette.STONE_LT)
+	button.add_theme_color_override("font_disabled_color", UITheme.DISABLED_FONT_COLOR)
 	return button
 
 
@@ -1567,6 +1568,8 @@ func _on_finished(won: bool) -> void:
 		_collect.text = "Leave"
 		_collect.tooltip_text = "Back to the map"
 	_result_detail.visible = lost or fight.dungeon
+	# A tile lost is headed red, not in the green a win wears; a descent ends rather than fails.
+	UITheme.danger_bar(_result, lost and not fight.dungeon)
 	_collect.visible = not lost
 	_lost_row.visible = lost
 	_loot_panel.hide()

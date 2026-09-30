@@ -164,7 +164,10 @@ def frame(rarity):
     for flip in (corner, corner.transpose(Image.FLIP_LEFT_RIGHT), corner.transpose(Image.FLIP_TOP_BOTTOM),
                  corner.transpose(Image.ROTATE_180)):
         art.alpha_composite(flip)
-    return art
+    # In ENDESGA 64 with the rest of the interface (2026-09-30), each colour to its nearest.
+    sys.path.insert(0, os.path.join(ROOT, "AI-sprites-generator"))
+    import hexlib
+    return hexlib.to_e64(art)
 
 
 def preview():

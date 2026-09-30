@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://5db20b35s5hu"
-path="res://.godot/imported/ui_icon_medal.png-24db2b749db4ff4e02f4dd140fa787c7.ctex"
+uid="uid://cv7ojfr25bqcu"
+path="res://.godot/imported/ui_icon_crystal.png-73da739896f08c2c810d1d03b574aeaf.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/UI/ui_icon_medal.png"
-dest_files=["res://.godot/imported/ui_icon_medal.png-24db2b749db4ff4e02f4dd140fa787c7.ctex"]
+source_file="res://Assets/UI/ui_icon_crystal.png"
+dest_files=["res://.godot/imported/ui_icon_crystal.png-73da739896f08c2c810d1d03b574aeaf.ctex"]
 
 [params]
 

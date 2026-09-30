@@ -101,12 +101,12 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 			blocks[1].append([text, Palette.TEXT])
 	# The locked one in a base stat's ink: it is as fixed as they are, and under the rule that parts
 	# the two it cannot be taken for one of them.
-	# A perfected one in the wood brown a unique's rule wears: the one line as good as it can be.
+	# A perfected one in leaf, apart from the rust the rest are written in: as good as it can be.
 	var pinned := item.fast_lines(Settings.item_details)
 	var perfect := item.perfect_lines(Settings.item_details)
 	for text in item.mod_lines(Settings.item_details):
 		blocks[2].append([text, Palette.TEXT if text in pinned
-				else Palette.SLOT_TAN_DK if text in perfect else Palette.RUST])
+				else Palette.LEAF if text in perfect else Palette.RUST])
 	# A detailed modifier line ends on its tier ("T95"), which stands apart at the row's right end.
 	var tier := RegEx.create_from_string(" (T[0-9]+)$")
 	for index in blocks.size():

@@ -22,7 +22,45 @@ func _run() -> void:
 	_check(_test_accordion() == true, "accordion tests ran to the end")
 	_check(await _test_settings_scroll() == true, "settings scroll tests ran to the end")
 	_check(_test_table_rows() == true, "table row tests ran to the end")
+	_check(_test_palette() == true, "palette tests ran to the end")
 	_report("UI theme")
+
+
+## The interface is in ENDESGA 64: every colour the code draws with and every pixel of the theme sheet.
+## And a word on the cream can be read: a body line to 4.5:1, a unique's name at 16 px to 3:1.
+func _test_palette() -> bool:
+	var e64: Array = Palette.E64
+	var constants: Dictionary = (Palette as Script).get_script_constant_map()
+	for name: String in constants:
+		if constants[name] is Color:
+			_check((constants[name] as Color).to_html(false) in e64,
+					"Palette.%s is in ENDESGA 64 (%s)" % [name, (constants[name] as Color).to_html(false)])
+	var sheet: Image = (load(UITheme.SHEET_JSON.get_base_dir().path_join("ui_sheet.png")) as Texture2D).get_image()
+	var stray := {}
+	for y in sheet.get_height():
+		for x in sheet.get_width():
+			var pixel := sheet.get_pixel(x, y)
+			if pixel.a > 0.0 and not pixel.to_html(false) in e64:
+				stray[pixel.to_html(false)] = true
+	_check(stray.is_empty(), "every pixel of the theme sheet is in ENDESGA 64 (%s)" % [stray.keys().slice(0, 5)])
+	for name: String in ["TEXT", "TEXT_SOFT", "SLOT_TAN_DK", "LEAF", "ICE_DK", "RUST", "BRICK"]:
+		var ratio := _contrast(constants[name], Palette.PANEL_CREAM)
+		_check(ratio >= 4.5, "Palette.%s reads on the cream as a body line (%.2f:1)" % [name, ratio])
+	for colour: Color in ItemRarity.TEXT_COLORS.values():
+		_check(_contrast(colour, Palette.PANEL_CREAM) >= 3.0, "a rarity's name reads on the cream (%s)" % colour.to_html(false))
+	return true
+
+
+## WCAG's contrast ratio between two colours.
+func _contrast(a: Color, b: Color) -> float:
+	var la := _luminance(a)
+	var lb := _luminance(b)
+	return (maxf(la, lb) + 0.05) / (minf(la, lb) + 0.05)
+
+
+func _luminance(c: Color) -> float:
+	var channel := func(v: float) -> float: return v / 12.92 if v <= 0.03928 else pow((v + 0.055) / 1.055, 2.4)
+	return 0.2126 * channel.call(c.r) + 0.7152 * channel.call(c.g) + 0.0722 * channel.call(c.b)
 
 
 ## A value too long to share a line with its name drops under it rather than squeezing the name
@@ -88,7 +126,7 @@ func _test_panels(theme: Theme) -> bool:
 		_check(_is_nine_slice(box, UITheme.PANELS[variation], variation) == true,
 				"%s is a tiled 9-slice" % variation)
 		# The bar is trim rather than a container, so it pads its title far less than a panel does.
-		var pad := UITheme.BAR_MARGIN.x if variation == "HeaderBar" else UITheme.PANEL_MARGIN
+		var pad := UITheme.BAR_MARGIN.x if variation in ["HeaderBar", UITheme.DANGER_BAR] else UITheme.PANEL_MARGIN
 		_check(box.content_margin_left == pad, "%s pads its contents" % variation)
 	return true
 

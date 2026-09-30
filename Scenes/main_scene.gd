@@ -45,8 +45,8 @@ const STONE_SIDE := 32.0
 ## word to be wider than it.
 const STONE_GAP := 12.0
 ## What the light inside it is, by `FortuneTeller.WARMTH`, coldest first: the preview's colours.
-const STONE_COLOURS: Array[Color] = [Color("#7fb8ff"), Color("#9fd8e8"), Color("#f2c96b"), Color("#f08a3c"),
-		Color("#e8452c")]
+const STONE_COLOURS: Array[Color] = [Color("0098dc"), Color("94fdff"), Color("ffc825"), Color("ed7614"),
+		Color("ea323c")]
 ## How long an answer burns before it settles, and how much of the light it keeps: the stone goes on
 ## showing its last answer, dimly, rather than being a live compass.
 const STONE_FADE := 4.0
@@ -55,8 +55,10 @@ const STONE_REST := 0.35
 const STONE_ASLEEP := Color(0.55, 0.55, 0.6)
 const STONE_TIP := "The Seeing Stone. Press it to feel how near the Gollux cave is"
 const STONE_ASLEEP_TIP := "The Seeing Stone sleeps: the way down in this world is found"
+## The achievements' trophy and the collection log's book: the log wore the trophy until 2026-09-30,
+## beside a medal for the achievements that read as a television.
 const TROPHY_ICON := "res://Assets/UI/ui_icon_trophy.png"
-const MEDAL_ICON := "res://Assets/UI/ui_icon_medal.png"
+const BOOK_ICON := "res://Assets/UI/ui_icon_book.png"
 const PODIUM_ICON := "res://Assets/UI/ui_icon_podium.png"
 ## The heirlooms'. A stand-in from the pack until they have a mark of their own.
 const CROWN_ICON := "res://Assets/UI/ui_icon_crown.png"
@@ -839,10 +841,10 @@ func _build_pages(layer: CanvasLayer) -> void:
 	_settings_button = UITheme.icon_button(load(COG_ICON), "Settings", ui_scale)
 	_settings_button.pressed.connect(_on_settings_pressed)
 	layer.add_child(_settings_button)
-	_collection_button = UITheme.icon_button(load(TROPHY_ICON), "Collection", ui_scale)
+	_collection_button = UITheme.icon_button(load(BOOK_ICON), "Collection", ui_scale)
 	_collection_button.pressed.connect(_on_collection_pressed)
 	layer.add_child(_collection_button)
-	_achievements_button = UITheme.icon_button(load(MEDAL_ICON), "Achievements", ui_scale)
+	_achievements_button = UITheme.icon_button(load(TROPHY_ICON), "Achievements", ui_scale)
 	_achievements_button.pressed.connect(_on_achievements_pressed)
 	layer.add_child(_achievements_button)
 	_leaderboard_button = UITheme.icon_button(load(PODIUM_ICON), "Leaderboard", ui_scale)
@@ -1014,7 +1016,7 @@ func _announce_unique(item: Item, title := "Unique found") -> void:
 	var lines: Array[Control] = [
 		ItemDetails.line(item.display_name(), item.text_color(), BANNER_WIDTH),
 		ItemDetails.line("%s · Level %d" % [item.rarity_label(), item.level],
-				item.text_color(), BANNER_WIDTH, true),
+				Palette.TEXT_SOFT, BANNER_WIDTH, true),
 		ItemDetails.line(item.effect_text(), Palette.SLOT_TAN_DK, BANNER_WIDTH, true),
 	]
 	if not item.peak_text().is_empty():
@@ -2407,9 +2409,9 @@ func _announce_achievements(ids: Array[String]) -> void:
 				Palette.TEXT, BANNER_WIDTH))
 		lines.append(ItemDetails.line(Achievements.text(id, rank), Palette.SLOT_TAN_DK, BANNER_WIDTH, true))
 		if rank <= 1:
-			lines.append(ItemDetails.line("Unlocks %s" % unique, piece.text_color(), BANNER_WIDTH, true))
+			lines.append(ItemDetails.line("Unlocks %s" % unique, Palette.TEXT_SOFT, BANNER_WIDTH, true))
 		else:
-			lines.append(ItemDetails.line("Strengthens %s" % unique, piece.text_color(), BANNER_WIDTH, true))
+			lines.append(ItemDetails.line("Strengthens %s" % unique, Palette.TEXT_SOFT, BANNER_WIDTH, true))
 			lines.append(ItemDetails.line(UniqueTable.effect_text(id, rank), Palette.SLOT_TAN_DK,
 					BANNER_WIDTH, true))
 			if rank >= UniqueTable.PEAK:

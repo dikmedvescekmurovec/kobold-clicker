@@ -80,7 +80,7 @@ static func share_bar(have: int, need: int) -> Control:
 	trough.custom_minimum_size = Vector2(BagPage.WIDTH, BAR_HEIGHT)
 	trough.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var fill := ColorRect.new()
-	fill.color = Palette.LEAF
+	fill.color = Palette.LEAF_LT
 	fill.position = Vector2.ONE
 	fill.size = Vector2(floorf((BagPage.WIDTH - 2) * share), BAR_HEIGHT - 2)
 	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -137,7 +137,7 @@ static func progress_bar(player: Inventory, id: String, rank: int, known: Dictio
 	trough.position = Vector2(PROGRESS_INSET, ItemSlot.SIDE - PROGRESS_INSET - PROGRESS_HEIGHT)
 	trough.size = Vector2(ItemSlot.SIDE - 2 * PROGRESS_INSET, PROGRESS_HEIGHT)
 	var fill := ColorRect.new()
-	fill.color = Palette.GOLD if rank >= UniqueTable.PEAK else Palette.LEAF
+	fill.color = Palette.GOLD if rank >= UniqueTable.PEAK else Palette.LEAF_LT
 	fill.size = Vector2(floorf(trough.size.x * share), PROGRESS_HEIGHT)
 	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	trough.add_child(fill)

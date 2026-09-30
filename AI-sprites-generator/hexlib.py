@@ -100,6 +100,91 @@ PALETTE = [
 assert len(PALETTE) <= 256
 C = {name: i for i, (name, _) in enumerate(PALETTE)}
 
+# ENDESGA 64 (Endesga; lospec.com/palette-list/endesga-64): the palette every fighter pack is drawn in, and
+# since 2026-09-30 the whole interface (the user's call): `to_e64` puts an image into it.
+E64 = ("ff0040 131313 1b1b1b 272727 3d3d3d 5d5d5d 858585 b4b4b4 ffffff c7cfdd 92a1b9 657392 424c6e "
+       "2a2f4e 1a1932 0e071b 1c121c 391f21 5d2c28 8a4836 bf6f4a e69c69 f6ca9f f9e6cf edab50 e07438 "
+       "c64524 8e251d ff5000 ed7614 ffa214 ffc825 ffeb57 d3fc7e 99e65f 5ac54f 33984b 1e6f50 134c4c "
+       "0c2e44 00396d 0069aa 0098dc 00cdf9 0cf1ff 94fdff fdd2ed f389f5 db3ffd 7a09fa 3003d9 0c0293 "
+       "03193f 3b1443 622461 93388f ca52c9 c85086 f68187 f5555d ea323c c42430 891e2b 571c27").split()
+
+
+def _oklab(rgb):
+    """One (r, g, b) in 0-255 as OKLab, the space colours are matched in: its steps are even to the eye."""
+    lin = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in (v / 255 for v in rgb)]
+    lms = [
+        (0.4122214708 * lin[0] + 0.5363325363 * lin[1] + 0.0514459929 * lin[2]) ** (1 / 3),
+        (0.2119034982 * lin[0] + 0.6806995451 * lin[1] + 0.1073969644 * lin[2]) ** (1 / 3),
+        (0.0883024619 * lin[0] + 0.2817188376 * lin[1] + 0.6299787005 * lin[2]) ** (1 / 3),
+    ]
+    return (0.2104542553 * lms[0] + 0.7936177850 * lms[1] - 0.0040720468 * lms[2],
+            1.9779984951 * lms[0] - 2.4285922050 * lms[1] + 0.4505937099 * lms[2],
+            0.0259040371 * lms[0] + 0.7827717662 * lms[1] - 0.8086757660 * lms[2])
+
+
+_E64_RGB = [tuple(int(h[i:i + 2], 16) for i in (0, 2, 4)) for h in E64]
+_E64_LAB = [_oklab(c) for c in _E64_RGB]
+
+
+def _rgb(text):
+    text = text.lstrip("#")
+    return tuple(int(text[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def to_e64(image, fixed=None, apart=0.06, reach=0.25):
+    """`image` (a PIL image) with every colour in ENDESGA 64 and its alpha untouched, so no shape moves.
+
+    `fixed` maps "#rrggbb" -> the "#rrggbb" it must become: the colours picked by hand (the interface's
+    cream, wood and button faces), which nothing moves. Every other colour takes its nearest in OKLab.
+    Two colours of one image further apart in lightness than `apart` that would land on one are kept
+    apart where they can be: the one farther from it takes its nearest on its own side, if that is
+    within `reach` of it -- so a bevel or a ramp's step does not melt into its neighbour, and no brown
+    is pushed into a green to stay apart (a wood panel went teal that way before `reach`)."""
+    fixed = {_rgb(k): _rgb(v) for k, v in (fixed or {}).items()}
+    out = image.convert("RGBA")
+    colours = sorted({c[:3] for _, c in out.getcolors(1 << 24) if c[3]})
+    lab = {c: _oklab(c) for c in colours}
+
+    def gap(c, i):
+        return sum((p - q) ** 2 for p, q in zip(lab[c], _E64_LAB[i])) ** 0.5
+
+    def ranked(c):
+        return sorted(range(len(E64)), key=lambda i: gap(c, i))
+
+    def shift(c, i):
+        return ((lab[c][0] - _E64_LAB[i][0]) ** 2 + 9 * ((lab[c][1] - _E64_LAB[i][1]) ** 2
+                                                          + (lab[c][2] - _E64_LAB[i][2]) ** 2)) ** 0.5
+
+    pick = {c: _E64_RGB.index(fixed[c]) if c in fixed else ranked(c)[0] for c in colours}
+    settled = set(fixed)
+    for _ in range(8):
+        moved = False
+        by_target = {}
+        for c in colours:
+            by_target.setdefault(pick[c], []).append(c)
+        for target, group in by_target.items():
+            if len(group) < 2:
+                continue
+            # The one nearest the target keeps it (a hand-picked one always does); the rest go their way.
+            keep = min(group, key=lambda c: (c not in fixed, abs(lab[c][0] - _E64_LAB[target][0])))
+            for c in group:
+                if c == keep or c in settled or abs(lab[c][0] - lab[keep][0]) <= apart:
+                    continue
+                darker = lab[c][0] < lab[keep][0]
+                # Moved by lightness, never by hue: chroma counts three times over, so a brown steps
+                # to a lighter or darker brown and not to a green of about its own lightness.
+                side = sorted((i for i in range(len(E64)) if i != target and shift(c, i) <= reach
+                               and (_E64_LAB[i][0] < _E64_LAB[target][0]) == darker), key=lambda i: shift(c, i))
+                settled.add(c)
+                if side:
+                    pick[c] = side[0]
+                    moved = True
+        if not moved:
+            break
+    table = {c: _E64_RGB[pick[c]] for c in colours}
+    out.putdata([p if not p[3] else table[p[:3]] + (p[3],) for p in out.get_flattened_data()])
+    return out
+
 _DARKER = {
     "leaf_hi": "leaf_lt", "leaf_lt": "leaf", "leaf": "leaf_dk", "leaf_dk": "pine",
     "pine": "pine_dk", "pine_dk": "ink",

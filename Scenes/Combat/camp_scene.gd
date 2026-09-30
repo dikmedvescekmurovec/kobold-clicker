@@ -59,7 +59,7 @@ func _build(env: String, variant: String) -> void:
 	add_child(_panel)
 	var rows := UITheme.body_of(_panel)
 
-	var place := UITheme.label(str(_camp.get(Camp.PLACE, "")), Palette.GOLD)
+	var place := UITheme.label(str(_camp.get(Camp.PLACE, "")), Palette.GOLD_TEXT)
 	place.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	rows.add_child(place)
 	var told := UITheme.label("While you were away, your hero camped on the best ground taken so "
@@ -78,14 +78,14 @@ func _build(env: String, variant: String) -> void:
 			["Gold", BigNumber.format(float(_earned[Camp.GOLD]))],
 			["Experience", str(int(_earned[Camp.XP]))]]:
 		table.add_child(UITheme.table_row(str(named[0]), str(named[1]), striped,
-				0.0, null, Palette.GOLD if named[0] == "Gold" else null))
+				0.0, null, Palette.GOLD_TEXT if named[0] == "Gold" else null))
 		striped = not striped
 
 	# Only where the cap is what stopped it, so a player back after a week is told why rather than
 	# left to wonder what went missing.
 	if bool(_earned["full"]):
 		var capped := UITheme.label("A hero can hold a camp for %d hours before rest is needed."
-				% int(float(_camp.get(Camp.MOST, Camp.MAX_SECONDS)) / 3600.0), Palette.STONE_LT, true)
+				% int(float(_camp.get(Camp.MOST, Camp.MAX_SECONDS)) / 3600.0), Palette.TEXT_SOFT, true)
 		capped.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		capped.custom_minimum_size.x = WIDTH
 		rows.add_child(capped)

@@ -15,13 +15,15 @@ from collections import Counter
 
 from PIL import Image
 
+import hexlib
 import hpbar
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Assets", "UI")
 
 
 def main():
-    made = hpbar.parts()
+    # In ENDESGA 64 with the rest of the interface (2026-09-30), each colour to its nearest.
+    made = {name: hexlib.to_e64(image) for name, image in hpbar.parts().items()}
     os.makedirs(OUT, exist_ok=True)
     written = []
     for name, image in sorted(made.items()):
