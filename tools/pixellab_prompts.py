@@ -1149,3 +1149,30 @@ def write_uniques(title, prompts, path):
 
 write_uniques("the attribute uniques", UNIQUE_PROMPTS, "tools/qa/pixellab_unique_prompts.md")
 write_uniques("the starter uniques", STARTER_PROMPTS, "tools/qa/pixellab_starter_prompts.md")
+
+
+# The two veteran uniques (2026-09-30): the Nightwalkers chart far into the dark, fighting every tile on the way;
+# the Dreadmask sends commons fleeing. Both wear their base's picture until these come back. The lantern's glow will
+# mute pale in `_muted`, as the torches' fire did -- check it on the sheet before wiring.
+# A mask reads only face on: the helmets' turned pose spoke of a face opening, which fought it.
+POSE["MASK"] = ("Front view, seen straight on and symmetrical: the mask faces the viewer, the horns rise evenly on "
+                "both sides.")
+VETERAN_PROMPTS = [
+ ("nightwalkers", "Nightwalkers -- chart a tile far into the dark, fighting every tile on the way", "BOOT",
+  "A pair of tall, soft boots of deep navy leather, made for walking in the dark: one small lit lantern hangs "
+  "by a short chain from the cuff of the front boot, its warm light the only warm colour on them.\n" + BOOT_SHAPE,
+  "navy #1a2134 and steel blue #546783 leather, dusty blue highlights #628ab9 along the folds and the cuffs, a small "
+  "dark grey #2f3236 lantern with an apricot #f5ac5d and light orange #e68908 light inside it, dark grey shadows "
+  "#2f3236", "the lantern's warm light",
+  NO_LEG),
+ ("dreadmask", "Dreadmask -- fewer common enemies in every fight, one fewer for each wall inside the tile", "MASK",
+  "A menacing war helmet made to frighten: its whole front is one smooth metal mask shaped like a snarling face, "
+  "with two big angry eye holes and a wide mouth of large pointed teeth, and two short thick horns curve up and "
+  "outward from the top of the helmet.",
+  "reddish brown #a24032 and dark brown #4e2d1f leather on the helmet and horns, a neutral grey #797e80 mask with "
+  "light grey #d1d1d1 highlights on the brow, cheeks and teeth, dark grey #2f3236 shadows, dark crimson #5a1122 in "
+  "the eye holes and between the teeth", "the metal mask",
+  "An empty helmet: no head, no eyes and no skin inside it; the eye holes and the gaps between the teeth are only "
+  "dark crimson shadow. Big simple shapes, no small details."),
+]
+write_uniques("the veteran uniques", VETERAN_PROMPTS, "tools/qa/pixellab_veteran_prompts.md")

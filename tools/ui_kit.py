@@ -146,10 +146,12 @@ _PIXELLAB_IDS = [
     "patchwork_coat", "purists_seal", "brawlers_wraps", "butchers_cleaver", "quickdraw_boots", "heirlooms_echo",
     # The starters (2026-09-28).
     "squires_blade", "wayfarers_torch", "novices_cap", "couriers_boots", "beginners_luck", "worry_stone",
+    # The veteran uniques (2026-09-30).
+    "nightwalkers", "dreadmask",
 ]
 # The uniques whose fire is kept as drawn, as BASE_FIRE keeps a torch's: `_muted` paled the Wayfarer's
 # Torch's flame pink. No glow, which would smudge the collection log's black outline.
-UNIQUE_FIRE = {"wayfarers_torch"}
+UNIQUE_FIRE = {"wayfarers_torch", "nightwalkers"}
 UNIQUE_GEAR = {name: ((PIXELLAB + name, 0, 0, 32, 32, 1), []) for name in _PIXELLAB_IDS}
 UNIQUE_OUT = "Assets/Gear/Unique"
 # What the pixellab pieces replaced, still written beside them for the settings' dev tick "Show old
