@@ -7,15 +7,26 @@ extends Node2D
 ## World spot shown at the map's center cell (0, 0), which is the middle of the screen. The row must be even.
 @export var map_origin := Vector2i(128, 128)
 ## Whole-number pixel zoom, so sprite pixels stay square: 3 draws every sprite pixel as 3x3 on screen.
-@export var zoom := 3.0
-## How far the mouse wheel takes the map's zoom either way, in the same whole steps.
+## 0 is `ZOOM_PER_UI` times `ui_scale`, rounded: 3 on the default window, and as much bigger on a phone.
+@export var zoom := 0.0
+## The map's zoom for each step of `ui_scale`, and how far the mouse wheel (or a pinch) takes it either
+## way, in the same whole steps: from 1 to `ZOOM_MOST` times `ui_scale`.
+const ZOOM_PER_UI := 1.5
 const ZOOM_MIN := 1.0
-const ZOOM_MAX := 6.0
+const ZOOM_MOST := 3.0
+## How far two fingers have to spread (or close, by its inverse) to step the zoom once.
+const PINCH_STEP := 1.3
 ## Rings a charted tile shows round it with no torch held; the Thick Fog takes all of it.
 const BASE_SIGHT := 2
 ## The same for the UI panel. Pixellari only renders cleanly at its native 16 px, so the way to make
-## the interface smaller is to draw its pixels smaller, not to shrink the font.
-@export var ui_scale := 2.0
+## the interface smaller is to draw its pixels smaller, not to shrink the font. 0 is picked from the
+## window as the game starts (`UITheme.pick_scale`): 2 on the default window.
+@export var ui_scale := 0.0
+## Held upright (`UITheme.narrow`), the tile panel is a sheet along the foot this share of the room tall,
+## the map above it -- a column would cover the tile it describes -- and a town is its page over the bag,
+## the page this share of the room.
+const TILE_SHEET := 0.45
+const TOWN_SPLIT := 0.5
 ## Where the inventory is kept. The tests and the screenshot scripts point this somewhere else
 ## before the scene enters the tree, so they never read or overwrite the player's own inventory.
 @export var inventory_path := Inventory.SAVE_PATH
@@ -147,6 +158,11 @@ var _button_sound: AudioStreamPlayer
 var _toggle_sound: AudioStreamPlayer
 var _page_sound: AudioStreamPlayer
 var _page_flipped_at := -1
+## The fingers on the screen, by index, where each is now; how far apart two of them were when the map
+## last stepped its zoom; and a trackpad's pinch gathered since its last step (`_pinch`).
+var _fingers := {}
+var _pinch_from := 0.0
+var _magnified := 1.0
 var _coins_sound: AudioStreamPlayer
 var _town_button: Button
 ## Down into the cave, on the cave's own tile: green, as Enter town is.
@@ -345,6 +361,13 @@ func _notification(what: int) -> void:
 			get_tree().quit()
 	elif what == NOTIFICATION_APPLICATION_PAUSED and cloud != null:
 		cloud.push()
+	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		# Answered wherever Escape is -- a fight, the bag, a question, this scene -- by being Escape.
+		for down: bool in [true, false]:
+			var back := InputEventAction.new()
+			back.action = "ui_cancel"
+			back.pressed = down
+			Input.parse_input_event(back)
 
 
 ## Every button made from here on, in this scene or anywhere else in the tree, clicks when pressed.
@@ -384,6 +407,18 @@ func _on_any_button_pressed(button: BaseButton) -> void:
 
 
 func _ready() -> void:
+	# A real window is drawn at its own pixels, and every scale in it is a whole number of them: the
+	# project's stretch would blow the default window up by a fraction on anything but its own size. A
+	# headless run keeps the stretch, whose window every test lays out against.
+	if DisplayServer.get_name() != "headless":
+		get_tree().root.content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
+	if ui_scale <= 0.0:
+		ui_scale = UITheme.pick_scale(get_viewport().get_visible_rect().size)
+	if zoom <= 0.0:
+		zoom = roundf(ZOOM_PER_UI * ui_scale)
+	map.ui_scale = ui_scale
+	# A phone's back button is Escape (`_notification`), never a way out of the game.
+	get_tree().quit_on_go_back = false
 	add_child(_button_sound)
 	add_child(_toggle_sound)
 	add_child(_page_sound)
@@ -756,9 +791,11 @@ func _build_stone(layer: CanvasLayer) -> void:
 
 ## The stone against the tile panel's left edge while it is up, else against the window's; top of the
 ## window either way. It glides when the panel comes or goes, as the corner column does after a page.
+## Held upright the panel is a sheet along the foot, and the stone keeps to the window's edge.
 func _place_stone() -> void:
-	var right := _panel.position.x if _panel.visible else get_viewport().get_visible_rect().size.x
-	var at := Vector2(right - (STONE_SIDE + STONE_GAP) * ui_scale, UITheme.EDGE * ui_scale).floor()
+	var safe := UITheme.safe_rect(get_viewport())
+	var right := _panel.position.x if _panel.visible and not _narrow() else safe.end.x
+	var at := Vector2(right - (STONE_SIDE + STONE_GAP) * ui_scale, safe.position.y + UITheme.EDGE * ui_scale).floor()
 	if _stone.position != at:
 		var was := _stone.position
 		_stone.position = at
@@ -1412,8 +1449,23 @@ func _show_mods(cell: Vector2i) -> void:
 
 
 ## The tile panel is a full-height column against the right edge, its buttons at its foot. The
-## left-hand pages lay themselves out against the other edge.
+## left-hand pages lay themselves out against the other edge. Held upright, every page stands over the
+## corner row, one at a time -- but a town, whose page stands over the bag.
 func _layout_ui() -> void:
+	_character.position = UITheme.safe_rect(get_viewport()).position + Vector2(8, 8)
+	var room := _pages_room()
+	var left := room
+	town_page.area = room
+	if _narrow() and _town_cell != HexMap.NO_CELL:
+		# The counter gives up what the bag under it needs -- the doll too, at the smith -- but keeps what
+		# its own tabs and buttons need.
+		var top := floorf(minf(room.size.y * TOWN_SPLIT, room.size.y - _counter_page().least_height(room.size.x)))
+		top = maxf(top, (town_page.get_child(0) as Control).get_combined_minimum_size().y * ui_scale
+				+ 2 * UITheme.EDGE * ui_scale)
+		town_page.area = Rect2(room.position, Vector2(room.size.x, top))
+		left = Rect2(room.position.x, room.position.y + top, room.size.x, room.size.y - top)
+	for page in _left_pages():
+		page.set("area", left)
 	_place_panel()
 	bag_page.layout()
 	heirloom_page.layout()
@@ -1430,6 +1482,7 @@ func _layout_ui() -> void:
 	_place_corner()
 	if _combat != null:
 		_combat.xp_target = _character.xp_point()
+		_combat.hud_top = _fight_top()
 
 
 func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
@@ -1473,7 +1526,7 @@ func _on_map_dragged(relative: Vector2) -> void:
 
 ## The wheel: one whole step of zoom, about the point under the cursor so it stays put on screen.
 func _zoom_at(screen_point: Vector2, step: float) -> void:
-	var to := clampf(camera.zoom.x + step, ZOOM_MIN, ZOOM_MAX)
+	var to := clampf(camera.zoom.x + step, ZOOM_MIN, ZOOM_MOST * ui_scale)
 	if to == camera.zoom.x:
 		return
 	var from_middle := screen_point - get_viewport().get_visible_rect().size / 2.0
@@ -1681,6 +1734,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# than worked out here: the map is what named it and what remembers the name.
 	_combat.place = view.name_of(cell)
 	_combat.xp_target = _character.xp_point()
+	_combat.hud_top = _fight_top()
 	_combat.begin(fight, cell, ui_scale, view.area_variant(cell))
 	_play_music(BATTLE_MUSIC)
 	# The map keeps its state but stops running, so nothing walks on underneath the fight.
@@ -1716,6 +1770,7 @@ func _on_dungeon_pressed() -> void:
 	_combat.finished.connect(_on_dungeon_finished)
 	add_child(_combat)
 	_combat.place = DUNGEON_NAME
+	_combat.hud_top = _fight_top()
 	_combat.begin(fight, Vector2i.ZERO, ui_scale)
 	_play_music(BATTLE_MUSIC)
 	map.hide()
@@ -1946,10 +2001,35 @@ func _update_buttons() -> void:
 ## town changes what the column holds and not where it is. Called whenever a row or a button comes
 ## or goes, because the column's width is its contents'.
 func _place_panel() -> void:
-	var view_size := Vector2(get_viewport().get_visible_rect().size)
 	_panel.reset_size()
-	_panel.size.y = view_size.y / ui_scale - 2 * UITheme.EDGE
-	_panel.position = Vector2(view_size.x - (_panel.size.x + UITheme.EDGE) * ui_scale, UITheme.EDGE * ui_scale)
+	var room := _pages_room()
+	if _narrow():
+		var tall := floorf(room.size.y * TILE_SHEET)
+		room = Rect2(room.position.x, room.end.y - tall, room.size.x, tall)
+	UITheme.dock(_panel, room, ui_scale, UITheme.Dock.RIGHT)
+
+
+## Where a fight's top-centre column stands, in window pixels: at the top of the safe part of the
+## window, or held upright, where there is no room for it beside the character panel, under that.
+func _fight_top() -> float:
+	if _narrow():
+		return _character.position.y + (_character.size.y + 4) * ui_scale
+	return UITheme.safe_rect(get_viewport()).position.y + CombatScene.HUD_MARGIN
+
+
+## Whether the window is held upright, too narrow for the panels to stand side by side.
+func _narrow() -> bool:
+	return UITheme.narrow(UITheme.safe_rect(get_viewport()).size, ui_scale)
+
+
+## Where the pages stand, in window pixels: the safe part of the window, less the corner row along its
+## foot while the window is narrow and any corner button is up.
+func _pages_room() -> Rect2:
+	var room := UITheme.safe_rect(get_viewport())
+	var shown := _bag_button != null and _corner_buttons().any(func(button: Button) -> bool: return button.visible)
+	if shown and _narrow():
+		room.size.y -= (_bag_button.get_combined_minimum_size().y + UITheme.EDGE) * ui_scale
+	return room
 
 
 ## A kill left something behind. Whether it goes straight into the bag or waits in the run's pouch is
@@ -2049,7 +2129,10 @@ func _place_corner() -> void:
 	# The bag measures itself as it is built (`laid_out`), before the pages after it exist.
 	if not is_instance_valid(character_page) or not character_page.is_inside_tree():
 		return
-	var at := Vector2(8, _character.position.y + (_character.size.y + 4) * ui_scale)
+	if _narrow():
+		_place_corner_row()
+		return
+	var at := Vector2(_character.position.x, _character.position.y + (_character.size.y + 4) * ui_scale)
 	var page := _left_page()
 	if page != null:
 		# Every page's own panel is its first child, against the left edge; the bag runs on past its.
@@ -2061,16 +2144,40 @@ func _place_corner() -> void:
 				else Vector2(panel.position.x + (panel.size.x + CORNER_GAP) * ui_scale,
 						_character.position.y))
 	var step := (_bag_button.get_combined_minimum_size().y + CORNER_GAP) * ui_scale
-	for button: Button in [_bag_button, _heirloom_button, _skills_button, _bounty_button,
-			_settings_button, _collection_button, _achievements_button, _leaderboard_button]:
+	for button in _corner_buttons():
 		if button.visible:
-			# The column glides after a page that comes or goes, rather than jumping.
-			var was := button.position
-			button.position = at
-			# Not from the corner a button is made in, on its first placing.
-			if was != at and was != Vector2.ZERO:
-				Juice.glide(button, was)
+			_move_corner(button, at)
 			at.y += step
+
+
+## Held upright, the corner buttons are a row centred along the window's foot, where a thumb is, and
+## every page stands over it (`_pages_room`): beside a page as wide as the window there is no room.
+func _place_corner_row() -> void:
+	var shown := _corner_buttons().filter(func(button: Button) -> bool: return button.visible)
+	var side := _bag_button.get_combined_minimum_size()
+	var across := shown.size() * side.x + maxf(shown.size() - 1, 0) * CORNER_GAP
+	var safe := UITheme.safe_rect(get_viewport())
+	var at := Vector2(safe.position.x + (safe.size.x - across * ui_scale) / 2.0,
+			safe.end.y - (side.y + UITheme.EDGE) * ui_scale).floor()
+	for button: Button in shown:
+		_move_corner(button, at)
+		at.x += (side.x + CORNER_GAP) * ui_scale
+
+
+## The corner buttons in the order they stand: what you carry (the bag, then the heirlooms), what you
+## are, what you have promised to do, then the settings and the logs.
+func _corner_buttons() -> Array[Button]:
+	return [_bag_button, _heirloom_button, _skills_button, _bounty_button, _settings_button,
+			_collection_button, _achievements_button, _leaderboard_button]
+
+
+## One corner button put `at`, gliding there after a page that comes or goes rather than jumping --
+## but not from the corner it is made in, on its first placing.
+func _move_corner(button: Button, at: Vector2) -> void:
+	var was := button.position
+	button.position = at
+	if was != at and was != Vector2.ZERO:
+		Juice.glide(button, was)
 
 
 ## Every corner button at once. They come and go together because what takes them away is never
@@ -2108,7 +2215,11 @@ func _show_corner(shown: bool) -> void:
 	if _bag_button.visible:
 		_flash(_bag_button, "opened_bag")
 	_pulse(_skills_button, "skill_point", _skill_point_free())
-	_place_corner()
+	# Held upright the row takes its height from the pages' room, so they are laid out again with it.
+	if _narrow():
+		_layout_ui()
+	else:
+		_place_corner()
 
 
 ## Whether the thing a tip is about has happened yet.
@@ -2486,9 +2597,12 @@ func _on_cell_aimed(cell: Vector2i) -> void:
 		return
 	var scouring := _aiming == FortuneTeller.SCOUR
 	var shown := view.scour(cell) if scouring else 0
-	if scouring and shown == 0:
-		return
-	if not scouring and not view.jump_to(cell):
+	var done := shown > 0 if scouring else view.jump_to(cell)
+	if not done:
+		# A finger has no right click, and a phone no Escape: a tap where the spell can do nothing puts
+		# it away as they would.
+		if Cursors.touched:
+			_end_aim()
 		return
 	inventory.gold -= _aim_price
 	# A great spell is one a settlement, and it is this town that cast it.
@@ -2518,6 +2632,9 @@ func _on_town_tab_changed(_service: String) -> void:
 		_open_left_page(bag_page)
 		_layout_ui()
 	_stand_at_counter()
+	# Held upright, the doll the smith brings with him takes its height from the counter over the bag.
+	if _narrow():
+		_layout_ui()
 	# Her tab or his opened for the first time is where the fortuneteller or the smith speaks.
 	_check_tips()
 
@@ -2613,7 +2730,40 @@ func _transcend() -> void:
 ## together. A fight answers for itself (`CombatScene._unhandled_input`) and gets the key first, being
 ## further down the tree -- except under a tip, where it is not processing and the tip is what closes.
 func _input(event: InputEvent) -> void:
+	Cursors.feel(event)
 	Cursors.twitch(get_tree(), event)
+	_pinch(event)
+
+
+## Two fingers spread or pinched over bare map zoom it a whole step at a time (`PINCH_STEP` of spread
+## a step) about the point between them, as the wheel does, and so does a trackpad's own pinch.
+func _pinch(event: InputEvent) -> void:
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			_fingers[event.index] = event.position
+		else:
+			_fingers.erase(event.index)
+		_pinch_from = _spread()
+		return
+	var zooms := _combat == null and map.visible and get_viewport().gui_get_hovered_control() == null
+	if event is InputEventScreenDrag:
+		_fingers[event.index] = event.position
+		var spread := _spread()
+		if zooms and _pinch_from > 0.0 and spread > 0.0 and absf(log(spread / _pinch_from)) >= log(PINCH_STEP):
+			_zoom_at((_fingers.values()[0] + _fingers.values()[1]) / 2.0, signf(spread - _pinch_from))
+			_pinch_from = spread
+	elif event is InputEventMagnifyGesture and zooms:
+		_magnified *= event.factor
+		if absf(log(_magnified)) >= log(PINCH_STEP):
+			_zoom_at(event.position, signf(_magnified - 1.0))
+			_magnified = 1.0
+
+
+## How far apart the two fingers on the screen are, or 0 with any other number of them down.
+func _spread() -> float:
+	if _fingers.size() != 2:
+		return 0.0
+	return (_fingers.values()[0] as Vector2).distance_to(_fingers.values()[1])
 
 
 func _unhandled_input(event: InputEvent) -> void:

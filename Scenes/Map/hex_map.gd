@@ -12,8 +12,9 @@ signal dragged(relative: Vector2)
 signal cell_aimed(cell: Vector2i)
 
 const NO_CELL := Vector2i(-99999, -99999)
-## A press that travels further than this many pixels drags the map instead of selecting a tile.
-const DRAG_THRESHOLD := 6.0
+## A press that travels further than this many panel pixels (`ui_scale` screen pixels each) drags the
+## map instead of selecting a tile -- a finger's, further (`Cursors.TOUCH_SLOP`).
+const DRAG_THRESHOLD := 3.0
 const BACKDROP_SHADER := preload("res://Scenes/Map/backdrop.gdshader")
 ## How far the backdrop reaches from cell (0, 0) each way, in world pixels: past anywhere the camera can go.
 const BACKDROP_REACH := 50000.0
@@ -38,6 +39,8 @@ var hidden_env := Callable()
 ## map sets it; unset, only a drawn tile answers the mouse.
 var can_pick := Callable()
 
+## The interface's scale, which a press's travel is measured in. The main scene's.
+var ui_scale := 2.0
 var _press_at := Vector2.ZERO
 var _pressing := false
 var _dragging := false
@@ -123,7 +126,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
 		_set_hovered(cell_at(world_position(event.position)))
 		if _pressing:
-			if _press_at.distance_to(event.position) > DRAG_THRESHOLD:
+			var slop := Cursors.TOUCH_SLOP if Cursors.touched else DRAG_THRESHOLD
+			if _press_at.distance_to(event.position) > slop * ui_scale:
 				_dragging = true
 			if _dragging:
 				dragged.emit(event.relative)

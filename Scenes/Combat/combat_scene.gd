@@ -52,6 +52,9 @@ const ENEMY_X := 0.72
 ## slime frame is 32x25, a Demon Boss 162x148), so nobody is drawn at their sheet's scale -- they are
 ## drawn at the size the roster says their body is.
 const ACTOR_HEIGHT := 0.33
+## And never taller than this share of its width, so on a window held upright the two stay apart
+## rather than filling it up to the shoulders. Across a monitor the height is always the lesser.
+const ACTOR_WIDE := 0.3
 ## What each Size band is worth against that, so a slime is knee-high and a boss looms.
 const SIZE_HEIGHT := {
 	EnemyRoster.Size.TINY: 0.45,
@@ -299,6 +302,9 @@ var place := ""
 ## Where on the screen experience gems fly to -- the character panel's bar, which stands on a layer
 ## above this one. Negative means nowhere, and the gems fade where they popped.
 var xp_target := Vector2(-1, -1)
+## How far down the window the top-centre column stands, in screen pixels: `HUD_MARGIN`, but under the
+## character panel on a window too narrow for the two side by side. The main scene's, like `xp_target`.
+var hud_top := HUD_MARGIN
 
 var _ui_scale := 2.0
 ## One of the backdrop's pixels, in scene pixels: what the fighters' scale is snapped to.
@@ -515,7 +521,7 @@ func _build() -> void:
 	_player = CombatActor.new()
 	_player.name = "Player"
 	arena.add_child(_player)
-	_player.setup_player(view.y * ACTOR_HEIGHT, _pixel)
+	_player.setup_player(_actor_height(view), _snap(view))
 	_player.self_modulate = light
 	_player.position = Vector2(view.x * PLAYER_X, view.y * _ground())
 	_player.animation_finished.connect(func() -> void: _player.play("idle"))
@@ -552,6 +558,18 @@ func _light_key() -> String:
 	if fight == null:
 		return ""
 	return "cave" if fight.dungeon else fight.env
+
+
+## How tall an ordinary fighter stands in `view`, in screen pixels (`ACTOR_HEIGHT`, `ACTOR_WIDE`).
+func _actor_height(view: Vector2) -> float:
+	return minf(view.y * ACTOR_HEIGHT, view.x * ACTOR_WIDE)
+
+
+## What a fighter's scale is snapped to: the backdrop's pixel, or half of it on a window held upright,
+## whose backdrop is blown up to cover its height and would otherwise draw no fighter smaller than a
+## giant. Half, so the two still share a grid.
+func _snap(view: Vector2) -> float:
+	return _pixel / 2.0 if UITheme.narrow(view, _ui_scale) else _pixel
 
 
 ## Where the fighters' feet are, as a share of the view's height.
@@ -1011,7 +1029,7 @@ func _float_text(text: String, colour: Color, font_size: int, across: float, pop
 	var font := label.get_theme_font("font")
 	var width := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x * _ui_scale
 	var from := Vector2(view.x * across + randf_range(-DAMAGE_SPREAD, DAMAGE_SPREAD) - width * 0.5,
-			view.y * (_ground() - ACTOR_HEIGHT * height))
+			view.y * _ground() - _actor_height(view) * height)
 	# Pops in large about its own middle and settles, which is what makes a number land rather than
 	# appear. The pivot is in the label's own unscaled pixels, and scaling about it moves the corner,
 	# so `from` is shifted back by what the settled scale would move it.
@@ -1039,7 +1057,7 @@ func _drop_origin() -> Vector2:
 	var view := _size()
 	if _enemy != null and _enemy.sprite_frames != null:
 		return _enemy.position - Vector2(0, _enemy.drawn_size().y * 0.5)
-	return Vector2(view.x * ENEMY_X, view.y * (_ground() - ACTOR_HEIGHT * DAMAGE_HEIGHT))
+	return Vector2(view.x * ENEMY_X, view.y * _ground() - _actor_height(view) * DAMAGE_HEIGHT)
 
 
 ## Throws one thing out of the body: an arc onto the ground, a rest where it landed, and a fade.
@@ -1178,7 +1196,7 @@ func _show_find(picture: Texture2D, rarity: int = -1, glow := Color.WHITE) -> vo
 		# The beam is sized on its own, so the find's size is taken back off it -- and handed over as
 		# the piece it has to cover instead. Drawn in the fighters' pixels, in the beam's own units.
 		var pillar := LootBeam.make(rarity, glow, THROW_TIME, picture.get_size() * Vector2(0.5, 1.0) * size,
-				_pixel / _ui_scale)
+				_snap(_size()) / _ui_scale)
 		pillar.position = Vector2(0, picture.get_height() / 2.0)
 		pillar.scale = Vector2.ONE / size
 		find.add_child(pillar)
@@ -1244,7 +1262,7 @@ func _on_enemy_coming(_index: int, enemy_name: String, _hp: float) -> void:
 	if _enemy_hit != null and _enemy_hit.is_valid():
 		_enemy_hit.kill()
 	_enemy.modulate = Color.WHITE
-	_enemy.setup_enemy(enemy_name, view.y * ACTOR_HEIGHT * band, _pixel, fight.on_elite())
+	_enemy.setup_enemy(enemy_name, _actor_height(view) * band, _snap(view), fight.on_elite())
 	_enemy_scale = _enemy.scale
 	_enemy.position = Vector2(view.x * OFFSCREEN_X, view.y * _ground())
 	_enemy.play("walk")
@@ -1480,7 +1498,9 @@ func _place_corners(view: Vector2) -> void:
 	# for the same reason as the rest: the column is scaled by _ui_scale and an anchor knows nothing
 	# about that.
 	var tally := _tally.get_combined_minimum_size() * _ui_scale
-	_tally.position = Vector2((view.x - tally.x) / 2.0, HUD_MARGIN)
+	_tally.position = Vector2((view.x - tally.x) / 2.0, hud_top)
+	# The corners keep to the safe part of the window: on a phone, clear of a notch and its rounded corners.
+	var safe := UITheme.safe_rect(get_viewport())
 	# The enemy's nameplate centred on the bottom edge, under the fight rather than in it: the health
 	# of whatever is standing there is the one thing read continuously, and the middle of the bottom
 	# edge is where the eye is already going -- it is directly under the pip bar and the clock, so the
@@ -1489,15 +1509,15 @@ func _place_corners(view: Vector2) -> void:
 	# side keeps the channel where it was, which is what HealthBar's own TROUGH is for.
 	_enemy_panel.scale = Vector2.ONE * _ui_scale * _plate_pop
 	var plate := _enemy_panel.get_combined_minimum_size() * _enemy_panel.scale
-	_enemy_panel.position = Vector2((view.x - plate.x) / 2.0, view.y - plate.y - HUD_MARGIN)
+	_enemy_panel.position = Vector2((view.x - plate.x) / 2.0, safe.end.y - plate.y - HUD_MARGIN)
 	# The counter in the bottom right, out at the corner so the nameplate has the middle.
 	var loot := _loot_button.get_combined_minimum_size() * _ui_scale
-	_loot_button.position = Vector2(view.x - loot.x - HUD_MARGIN, view.y - loot.y - HUD_MARGIN)
+	_loot_button.position = Vector2(safe.end.x - loot.x - HUD_MARGIN, safe.end.y - loot.y - HUD_MARGIN)
 	_tint_loot_button()
 	_show_warning(bag_room == 0)
 	if _terminate != null:
 		var leave := _terminate.get_combined_minimum_size() * _ui_scale
-		_terminate.position = Vector2(view.x - leave.x - HUD_MARGIN, HUD_MARGIN)
+		_terminate.position = Vector2(safe.end.x - leave.x - HUD_MARGIN, safe.position.y + HUD_MARGIN)
 
 
 ## An orb off a body, thrown out of it the way a find is. Plain, but for a good orb, which stands the
@@ -1614,6 +1634,7 @@ func _leave(then: Callable) -> void:
 ## verdict still shows its Collect and overlaps the column rather than losing its button.
 func _centre_result() -> void:
 	await get_tree().process_frame
+	_fit_window(_result, _result_drops)
 	Juice.centre(_result, _size())
 	var top := _result.position.y + _result.pivot_offset.y * (1.0 - _ui_scale)
 	var bottom := top + _result.get_combined_minimum_size().y * _ui_scale
@@ -1626,7 +1647,17 @@ func _centre_result() -> void:
 ## The loot popup, centred the same way and for the same reason.
 func _centre_loot() -> void:
 	await get_tree().process_frame
+	_fit_window(_loot_panel, _loot_drops)
 	Juice.centre(_loot_panel, _size())
+
+
+## A popup taller than the window gives up rows of its finds until it fits, and they scroll: a run's
+## pouch with the full-bag warning over it once ran its title off the top of a 648 px window.
+func _fit_window(panel: Control, drops: DropsView) -> void:
+	var over := panel.get_combined_minimum_size().y - (_size().y / _ui_scale - 2.0 * RESULT_GAP)
+	if over > 0.0 and drops.visible:
+		drops.fit_rows(over)
+		panel.reset_size()
 
 
 func _on_back_pressed() -> void:

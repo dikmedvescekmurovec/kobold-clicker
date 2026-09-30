@@ -110,6 +110,14 @@ const PANEL_MARGIN := 10
 const EDGE := 4
 const BUTTON_MARGIN := Vector2i(8, 4)   # x: left and right, y: top and bottom
 
+## The window every layout is budgeted for, in panel pixels: the default 1152x648 at `ui_scale` 2. A
+## window is drawn at the largest whole `ui_scale` that still leaves it this much (`pick_scale`), and
+## one left narrower than `MIN_LONG` -- by that rule only ever one held upright -- is laid out narrow.
+const MIN_SHORT := 324.0
+const MIN_LONG := 576.0
+## Which edge of its room a page's panel stands against (`dock`). A narrow window centres it.
+enum Dock { LEFT, RIGHT }
+
 static var _theme: Theme
 ## How big each icon button's sprite is. A Button with no text and no content margin has no minimum
 ## size of its own, so whoever places one asks here rather than repeating the number.
@@ -121,6 +129,62 @@ static func icon_size(variation: String) -> Vector2i:
 	if _icon_sizes.is_empty():
 		theme()
 	return _icon_sizes.get(variation, Vector2i.ZERO)
+
+
+## The whole-number `ui_scale` for a window of `window` pixels: the largest that still leaves
+## `MIN_SHORT` panel pixels on its short side and `MIN_LONG` on its long one, never under 1. Whole, so a
+## sprite pixel stays square; picked by the window rather than fixed, so a phone's is as big as a monitor's.
+static func pick_scale(window: Vector2) -> float:
+	var short := minf(window.x, window.y)
+	var long := maxf(window.x, window.y)
+	return maxf(1.0, minf(floorf(short / MIN_SHORT), floorf(long / MIN_LONG)))
+
+
+## Whether a window of `window` pixels at `ui_scale` is too narrow for the panels to stand side by side
+## as they do across a monitor -- a phone held upright -- so they stand one over another instead.
+static func narrow(window: Vector2, ui_scale: float) -> bool:
+	return window.x / ui_scale < MIN_LONG
+
+
+## The part of the viewport a panel may stand in, in its pixels: all of it, but on a phone only the
+## display's safe area, clear of a notch and the rounded corners.
+static func safe_rect(viewport: Viewport) -> Rect2:
+	var whole := viewport.get_visible_rect()
+	if not OS.has_feature("mobile"):
+		return whole
+	var safe := Rect2(DisplayServer.get_display_safe_area())
+	return whole.intersection(safe) if safe.has_area() else whole
+
+
+## Stands a page's `panel` in `room` (window pixels; an empty one is the whole window): its full height
+## less `EDGE` at the top and foot, at the panel's own width, against the room's `side` -- or centred in
+## it, where the window is narrow and there is no other panel to stand beside.
+static func dock(panel: Control, room: Rect2, ui_scale: float, side := Dock.LEFT) -> void:
+	if not room.has_area():
+		room = panel.get_viewport_rect()
+	var width := panel.get_combined_minimum_size().x
+	panel.size = Vector2(width, room.size.y / ui_scale - 2 * EDGE)
+	var x := room.position.x + EDGE * ui_scale
+	if narrow(panel.get_viewport_rect().size, ui_scale):
+		x = floorf(room.position.x + (room.size.x - width * ui_scale) / 2.0)
+	elif side == Dock.RIGHT:
+		x = room.end.x - (width + EDGE) * ui_scale
+	panel.position = Vector2(x, room.position.y + EDGE * ui_scale)
+
+
+## A finger is broader than the pack's 9 px X: on a touchscreen the X is pressed anywhere in
+## `TOUCH_TARGET` round it, and still drawn at its own size in the middle of that.
+const TOUCH_TARGET := Vector2(24, 16)
+static func _widen_for_fingers(close: Button) -> void:
+	var pad := (TOUCH_TARGET - Vector2(icon_size("CloseButton"))) / 2.0
+	for state: String in STATES:
+		var box := theme().get_stylebox(state, "CloseButton").duplicate() as StyleBoxTexture
+		box.set_expand_margin(SIDE_LEFT, -pad.x)
+		box.set_expand_margin(SIDE_RIGHT, -pad.x)
+		box.set_expand_margin(SIDE_TOP, -pad.y)
+		box.set_expand_margin(SIDE_BOTTOM, -pad.y)
+		close.add_theme_stylebox_override(state, box)
+	close.custom_minimum_size = TOUCH_TARGET
 
 
 ## The shared Theme, built once per run.
@@ -524,6 +588,8 @@ static func titled_panel(title_text: String, tooltip: String, on_close: Callable
 	if on_close.is_valid():
 		var close := button("", "CloseButton", tooltip)
 		close.custom_minimum_size = Vector2(icon_size("CloseButton"))
+		if DisplayServer.is_touchscreen_available():
+			_widen_for_fingers(close)
 		close.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		close.pressed.connect(on_close)
 		header.add_child(close)

@@ -326,12 +326,14 @@ func redraw() -> void:
 		layout()
 
 
+## Where the main scene stands the page, in window pixels: empty for the whole window. Held upright,
+## the top of it, over the bag.
+var area := Rect2()
+
+
 ## Full window height against the right edge, where the tile panel stands when no town is open.
 func layout() -> void:
-	var view_size := get_viewport_rect().size
-	var width := _panel.get_combined_minimum_size().x
-	_panel.size = Vector2(width, view_size.y / _ui_scale - 2 * UITheme.EDGE)
-	_panel.position = Vector2(view_size.x - (width + UITheme.EDGE) * _ui_scale, UITheme.EDGE * _ui_scale)
+	UITheme.dock(_panel, area, _ui_scale, UITheme.Dock.RIGHT)
 
 
 func _fill() -> void:

@@ -89,6 +89,8 @@ const DOLL_SCALE := 1.0
 const WORN_GAP := 6.0
 ## How much of the window's height the bag takes on a transcension's black screen.
 const TRANSCEND_HEIGHT := 0.7
+## How many rows of the grid a room held upright has to leave showing (`least_height`).
+const LEAST_ROWS := 2
 ## Each socket's centre in the doll sprite's own pixels, before DOLL_SCALE. The places the pack's figure had
 ## at 3x, kept when the pixellab doll replaced it (2026-09-23), which was generated and fitted to sit under them:
 ## head, chest and feet down the middle, the shield at the left edge and the sword hand at the right. The
@@ -322,27 +324,66 @@ func refresh_gold() -> void:
 	_gold.text = BigNumber.format(_purse.gold)
 
 
-## The bag stretched to the window's height, and the sheet centred against its right edge. At a
+## Where the main scene stands the page, in window pixels: empty for the whole window. Held upright in a
+## town, the foot of it, under the counter.
+var area := Rect2()
+
+
+## The bag stretched to its room's height, and the sheet centred against its right edge. At a
 ## transcension the two stand in the middle of the window instead, the bag `TRANSCEND_HEIGHT` of it.
+## Where the room is too narrow for the sheet beside the bag (a phone held upright), it stands over it.
 func layout() -> void:
-	var view_size := get_viewport_rect().size
-	_panel.size = Vector2(_panel.get_combined_minimum_size().x, view_size.y / _ui_scale - 2 * UITheme.EDGE)
-	_panel.position = Vector2.ONE * UITheme.EDGE * _ui_scale
+	var room := area if area.has_area() else get_viewport_rect()
 	_worn_panel.size = _worn_panel.get_combined_minimum_size()
-	if _transcending:
-		_panel.size.y = floorf(_panel.size.y * TRANSCEND_HEIGHT)
-		var beside: Control = (_worn_panel if _worn_panel.visible
-				else _show_button if _show_button.visible else null)
-		var width := _panel.size.x + (0.0 if beside == null else WORN_GAP + beside.size.x)
-		_panel.position = ((view_size - Vector2(width, _panel.size.y) * _ui_scale) / 2.0).floor()
-	_worn_panel.position = Vector2(_panel.position.x + (_panel.size.x + WORN_GAP) * _ui_scale,
-			(view_size.y - _worn_panel.size.y * _ui_scale) / 2.0)
+	var width := _panel.get_combined_minimum_size().x
+	if _worn_panel.visible and room.size.x < (width + WORN_GAP + _worn_panel.size.x + 2 * UITheme.EDGE) * _ui_scale:
+		_stack(room, width)
+	else:
+		_side_by_side(room, width)
 	# The caret heads the column of corner buttons that stands beside the page, so it sits at the top.
 	_show_button.size = _show_button.get_combined_minimum_size()
 	_show_button.position = Vector2(_worn_panel.position.x, _panel.position.y + WORN_GAP * _ui_scale)
 	_place_actions()
 	_place_confirm()
 	laid_out.emit()
+
+
+## The bag against the room's left edge (centred in a narrow window, and on a transcension's screen)
+## and the sheet or its caret beside it, the sheet centred down the room.
+func _side_by_side(room: Rect2, width: float) -> void:
+	_panel.size = Vector2(width, room.size.y / _ui_scale - 2 * UITheme.EDGE)
+	_panel.position = room.position + Vector2.ONE * UITheme.EDGE * _ui_scale
+	var beside: Control = (_worn_panel if _worn_panel.visible
+			else _show_button if _show_button.visible else null)
+	var both := width + (0.0 if beside == null else WORN_GAP + beside.get_combined_minimum_size().x)
+	if _transcending:
+		_panel.size.y = floorf(_panel.size.y * TRANSCEND_HEIGHT)
+		_panel.position = (room.position + (room.size - Vector2(both, _panel.size.y) * _ui_scale) / 2.0).floor()
+	elif UITheme.narrow(get_viewport_rect().size, _ui_scale):
+		_panel.position.x = floorf(room.position.x + (room.size.x - both * _ui_scale) / 2.0)
+	_worn_panel.position = Vector2(_panel.position.x + (_panel.size.x + WORN_GAP) * _ui_scale,
+			room.position.y + (room.size.y - _worn_panel.size.y * _ui_scale) / 2.0)
+
+
+## The least height, in window pixels, the page needs in a room `across` window pixels wide: the bag
+## with `LEAST_ROWS` rows of its grid showing, and the sheet too where it would have to stand over it.
+## A town held upright gives its counter what is left (the main scene's `_layout_ui`).
+func least_height(across: float) -> float:
+	var width := _panel.get_combined_minimum_size().x
+	var tall := _panel.get_combined_minimum_size().y + LEAST_ROWS * (ItemSlot.SIDE + SLOT_GAP) + 2 * UITheme.EDGE
+	_worn_panel.size = _worn_panel.get_combined_minimum_size()
+	if _worn_panel.visible and across < (width + WORN_GAP + _worn_panel.size.x + 2 * UITheme.EDGE) * _ui_scale:
+		tall += _worn_panel.size.y + WORN_GAP
+	return tall * _ui_scale
+
+
+## The sheet over the bag, both centred across the room, and the bag taking what the sheet leaves.
+func _stack(room: Rect2, width: float) -> void:
+	_worn_panel.position = Vector2(floorf(room.position.x + (room.size.x - _worn_panel.size.x * _ui_scale) / 2.0),
+			room.position.y + UITheme.EDGE * _ui_scale)
+	var top := _worn_panel.position.y + (_worn_panel.size.y + WORN_GAP) * _ui_scale
+	_panel.size = Vector2(width, (room.end.y - top) / _ui_scale - UITheme.EDGE)
+	_panel.position = Vector2(floorf(room.position.x + (room.size.x - width * _ui_scale) / 2.0), top)
 
 
 ## Where a column of buttons beside the page begins, in window pixels: `gap` past the sheet beside
@@ -679,7 +720,7 @@ func _on_grid_input(event: InputEvent) -> void:
 			_drag_from = event.position
 			_drag_scroll = _scroll.scroll_vertical
 			_dragged = 0.0
-		elif _dragged < DRAG_THRESHOLD:
+		elif _dragged < (Cursors.TOUCH_SLOP if Cursors.touched else DRAG_THRESHOLD):
 			_on_clicked(event.position + Vector2(0.0, _scroll.scroll_vertical),
 					event.shift_pressed, event.ctrl_pressed)
 	elif event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:

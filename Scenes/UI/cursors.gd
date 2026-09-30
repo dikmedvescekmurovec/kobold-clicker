@@ -40,6 +40,11 @@ const TILT := 15.0
 ## Shape: [as drawn, its hotspot, tilted, the tilted one's hotspot] (`_pair`). Empty until `install`,
 ## so a test that never installs gets the system's arrow back from `hold` instead.
 static var _drawn := {}
+## Whether the last press came from a finger rather than a mouse -- a touchscreen, or the mouse Godot
+## makes up from one. A finger has no hover, so what hover says with a mouse is said on a tap instead.
+static var touched := false
+## How far a finger may wobble, in panel pixels, and its press still be a tap rather than a drag.
+const TOUCH_SLOP := 8.0
 static var _scale := 1
 ## What stands in the arrow's place (`hold`), as the same pair, or empty.
 static var _held: Array = []
@@ -94,6 +99,12 @@ static func over_squares(control: Control, event: InputEvent, held := false) -> 
 static func hold(mark: Texture2D) -> void:
 	_held = [] if mark == null else _pair(mark.get_image(), mark.get_size() / 2.0, 1)
 	_show(ARROW, false)
+
+
+## Whether `event` came from a finger or a mouse (`touched`). Fed every event by the main scene's `_input`.
+static func feel(event: InputEvent) -> void:
+	if event is InputEventScreenTouch or event is InputEventMouse:
+		touched = event is InputEventScreenTouch or event.device == InputEvent.DEVICE_ID_EMULATION
 
 
 ## Every event the main scene hears (`_input`, since a Control would eat a press before anything

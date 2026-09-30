@@ -30,18 +30,22 @@ func _ready() -> void:
 	var panel := UITheme.titled_panel("Cloud save", "", Callable())
 	add_child(panel)
 	var body := UITheme.body_of(panel)
-	var width := 2 * COLUMN + GAP
+	# Held upright the two saves stand one over the other, and the words over them are one column wide.
+	var narrow := UITheme.narrow(size, _ui_scale)
+	var width := COLUMN if narrow else 2 * COLUMN + GAP
 	if conflict:
 		body.add_child(BountyList.wrapped("Keep which save?", width))
 	else:
 		body.add_child(BountyList.wrapped("The cloud refused this save: %s." % _question.get("reason", ""),
 				width, Palette.BRICK))
-	var sides := HBoxContainer.new()
+	var sides := BoxContainer.new()
+	sides.vertical = narrow
 	sides.add_theme_constant_override("separation", GAP)
 	sides.add_child(_side("This device", _question.get("local", {})))
 	sides.add_child(_side("The cloud", _question.get("cloud", {})))
 	body.add_child(sides)
-	var buttons := HBoxContainer.new()
+	var buttons := BoxContainer.new()
+	buttons.vertical = narrow
 	buttons.add_theme_constant_override("separation", GAP)
 	var mine := UITheme.button("Keep this device's" if conflict else "Start over from this device", "LightButton",
 			"This device's save goes to the cloud in the other's place" if conflict

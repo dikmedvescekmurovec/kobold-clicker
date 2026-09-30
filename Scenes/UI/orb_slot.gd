@@ -44,6 +44,9 @@ var orb := ""
 
 var _icon: TextureRect
 var _live := false
+## Under a finger (`Cursors.touched`): whether the tap that put this square's card up has been had, so
+## the next one presses it. Forgotten as the finger goes elsewhere.
+var _read := false
 
 
 ## Draws this orb held `count` times. `usable` is whether it can do anything to whatever the bag has
@@ -99,6 +102,7 @@ func setup(which: String, count: int, usable: bool, armed := false, side := SIDE
 					ItemRarity.slot_style(ItemRarity.Rarity.COMMON, true))
 		hovered.emit(orb))
 	mouse_exited.connect(func() -> void:
+		_read = false
 		add_theme_stylebox_override("panel", rest)
 		unhovered.emit())
 
@@ -110,6 +114,10 @@ func _gui_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		accept_event()  # Before the emit, which may redraw this slot out of the tree (SkillSlot's reason).
+		# A finger has no hover: its first tap is what puts the card up, and only the next presses.
+		if Cursors.touched and not _read:
+			_read = true
+			return
 		pressed.emit(orb)
 
 

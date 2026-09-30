@@ -95,6 +95,7 @@ func _shoot_backdrops() -> void:
 		var combat: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 		main.add_child(combat)
 		combat.place = TileNames.generate(CELL, env, MAP_SEED)
+		combat.hud_top = main._fight_top()
 		combat.begin(fight, CELL, main.ui_scale, variant, layout)
 		while fight.phase != Encounter.Phase.WAITING:
 			fight.advance(0.05)
@@ -109,6 +110,7 @@ func _shoot_backdrops() -> void:
 		var combat: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 		main.add_child(combat)
 		combat.place = TileNames.generate(CELL, LAYOUT_ENV, MAP_SEED, "small")
+		combat.hud_top = main._fight_top()
 		combat.begin(fight, CELL, main.ui_scale, LAYOUT_VARIANT, layout)
 		while fight.phase != Encounter.Phase.WAITING:
 			fight.advance(0.05)
@@ -149,6 +151,7 @@ func _shoot_fight() -> void:
 	combat.place = TileNames.generate(CELL, ENVIRONMENT, MAP_SEED)
 	# Built here rather than through the main scene, so the gems are told where the panel is by hand.
 	combat.xp_target = main._character.xp_point()
+	combat.hud_top = main._fight_top()
 	combat.begin(fight, CELL, main.ui_scale)
 	main.map.hide()
 	# Let the first enemy finish running in, so the shot shows the fight rather than an empty field.
@@ -258,6 +261,7 @@ func _shoot_fight() -> void:
 		var boss: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 		main.add_child(boss)
 		boss.place = TileNames.generate(CELL, ENVIRONMENT, MAP_SEED, "small")
+		boss.hud_top = main._fight_top()
 		boss.begin(boss_fight, CELL, main.ui_scale, SETTLEMENT_VARIANT)
 		combat.hide()
 		while boss_fight.phase != Encounter.Phase.WAITING:
@@ -287,6 +291,7 @@ func _shoot_fight() -> void:
 	main.add_child(lost)
 	var doomed := Encounter.for_tile(CELL, ENVIRONMENT)
 	lost.place = TileNames.generate(CELL, ENVIRONMENT, MAP_SEED)
+	lost.hud_top = main._fight_top()
 	lost.begin(doomed, CELL, main.ui_scale)
 	combat.hide()
 	doomed.advance(Encounter.SECONDS + 1.0)
@@ -329,6 +334,7 @@ func _shoot_farm() -> void:
 	# first frame.
 	combat.bag_room = 0
 	combat.place = TileNames.generate(CELL, ENVIRONMENT, MAP_SEED)
+	combat.hud_top = main._fight_top()
 	combat.begin(fight, CELL, main.ui_scale)
 	main.map.hide()
 
@@ -426,7 +432,7 @@ func _shoot_dungeon() -> void:
 	var combat: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 	root.add_child(combat)
 	combat.place = "The Descent"
-	combat.begin(fight, Vector2i.ZERO, 2.0)
+	combat.begin(fight, Vector2i.ZERO, UITheme.pick_scale(Vector2(root.size)))
 	# Past the walk-in, so the body is standing.
 	for i in 60:
 		await process_frame

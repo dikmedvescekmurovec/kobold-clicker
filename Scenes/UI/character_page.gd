@@ -193,8 +193,10 @@ func _disc(stat: String, value: float) -> VBoxContainer:
 	return column
 
 
+## Where the main scene stands the page, in window pixels: empty for the whole window.
+var area := Rect2()
+
+
 ## Full window height against the left edge, where the other pages stand.
 func layout() -> void:
-	_panel.size = Vector2(_panel.get_combined_minimum_size().x,
-			get_viewport_rect().size.y / _ui_scale - 2 * UITheme.EDGE)
-	_panel.position = Vector2.ONE * UITheme.EDGE * _ui_scale
+	UITheme.dock(_panel, area, _ui_scale)

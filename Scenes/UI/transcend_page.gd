@@ -62,6 +62,8 @@ var _curse_face: VBoxContainer
 ## so a table longer than the window scrolls under its pinned headings.
 var _curse_scroll: ScrollContainer
 var _curse_table: Control
+## Every line of the curses' table, headings first: what `_fit_curses` narrows.
+var _curse_lines: Array[HBoxContainer] = []
 
 
 func _init(inventory: Inventory, ui_scale: float, world_lost := false) -> void:
@@ -120,7 +122,9 @@ func _show_choice() -> void:
 	_choice = UITheme.vbox(CARD_GAP)
 	_choice.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_choice)
-	var cards := HBoxContainer.new()
+	# Side by side, or one over another on a window held upright, where three do not fit across.
+	var cards := BoxContainer.new()
+	cards.vertical = UITheme.narrow(get_viewport_rect().size, _ui_scale)
 	cards.add_theme_constant_override("separation", CARD_GAP)
 	_choice.add_child(cards)
 
@@ -185,6 +189,7 @@ func _show_curses() -> void:
 		scrolled = _curse_scroll.scroll_vertical
 		_curse_face.queue_free()
 	var pending := _inventory.pending_curses
+	_curse_lines.clear()
 	_curse_face = UITheme.titled_panel("Skulls: %d of %d" % [Curses.skulls_of(pending), _budget],
 			"Back to the choice", _show_choice)
 	_curse_face.scale = Vector2(_ui_scale, _ui_scale)
@@ -242,6 +247,7 @@ func _show_curses() -> void:
 		if full:
 			row.modulate = TownPage.TAB_REST
 		rows.add_child(row)
+	_fit_curses()
 	_back.show()
 	_layout()
 	_layout.call_deferred()
@@ -268,6 +274,7 @@ func _curse_cells(first: Control, skulls: Control, costs: Label, pays: Label) ->
 	cells.add_theme_constant_override("separation", UITheme.TABLE_GAP)
 	var widths := [CURSE_NAME_WIDTH, CURSE_SKULLS_WIDTH, CURSE_COST_WIDTH, CURSE_PAYS_WIDTH]
 	var made: Array = [first, skulls if skulls != null else Control.new(), costs, pays]
+	_curse_lines.append(cells)
 	for i in made.size():
 		var cell: Control = made[i]
 		cell.custom_minimum_size.x = widths[i]
@@ -276,6 +283,20 @@ func _curse_cells(first: Control, skulls: Control, costs: Label, pays: Label) ->
 			(cell as Label).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		cells.add_child(cell)
 	return cells
+
+
+## Too wide for the window -- a phone held upright -- the table's two sentences give up the difference
+## between them and wrap in what is left, so no column runs off the screen.
+func _fit_curses() -> void:
+	var room := get_viewport_rect().size.x / _ui_scale - 2.0 * CURSE_MARGIN
+	var over := _curse_face.get_combined_minimum_size().x - room
+	if over <= 0.0:
+		return
+	var words := CURSE_COST_WIDTH + CURSE_PAYS_WIDTH
+	var cost := floorf((words - over) * CURSE_COST_WIDTH / words)
+	for cells: HBoxContainer in _curse_lines:
+		(cells.get_child(2) as Control).custom_minimum_size.x = cost
+		(cells.get_child(3) as Control).custom_minimum_size.x = words - over - cost
 
 
 func _on_curse_toggled(on: bool, id: String) -> void:
@@ -319,6 +340,8 @@ func _layout() -> void:
 		# The arrow against the face's top-left corner, outside it, as it stands against a page's.
 		_back.position = _curse_face.position - Vector2(
 				(_back.get_combined_minimum_size().x + BagPage.WORN_GAP) * _ui_scale, 0.0)
+		# A face as wide as the window leaves the arrow nowhere to stand; its X is the same way back.
+		_back.visible = _back.position.x >= 0.0
 	for page: BagPage in [_create_page, _upgrade_page]:
 		if page.visible:
 			page.layout()

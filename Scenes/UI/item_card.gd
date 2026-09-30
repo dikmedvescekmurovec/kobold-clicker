@@ -88,7 +88,8 @@ func _process(_delta: float) -> void:
 			Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
 	# A square freed by a redraw compares equal to null, which would read as "still nothing" and leave
 	# the card of a square that is gone standing: a vendor's shelf does exactly that on a press.
-	var alt := Input.is_key_pressed(KEY_ALT)
+	# A finger has no Alt to hold: under one the worn piece is always the second card.
+	var alt := Input.is_key_pressed(KEY_ALT) or Cursors.touched
 	if alt == _alt and (is_instance_valid(_shown) and slot == _shown or (slot == null and not visible)):
 		return
 	_alt = alt
@@ -102,7 +103,8 @@ func _process(_delta: float) -> void:
 		slot.hint.call(_rows, WIDTH)
 	else:
 		ItemDetails.fill(_rows, slot.item, WIDTH)
-		var hints := hints_for(slot, alt)
+		# And no keys to press, so none are offered.
+		var hints := {} if Cursors.touched else hints_for(slot, alt)
 		if not hints.is_empty():
 			_rows.add_child(UITheme.rule())
 			_rows.add_child(key_row(hints))
@@ -135,6 +137,10 @@ func _process(_delta: float) -> void:
 ## did nothing at all, and neither does whatever a sale slid under a cursor that has not moved.
 func hovered(at: Vector2, pressed: bool) -> ItemSlot:
 	var slot := slot_at(at)
+	# A finger has no hover: its tap is how a piece is asked about, so the card comes up as it lifts
+	# and stays until the next tap lands somewhere else.
+	if pressed and Cursors.touched:
+		return null
 	if pressed:
 		_muted = slot.get_global_rect() if slot != null else Rect2()
 		_pressed_at = at
@@ -234,12 +240,24 @@ static func key_row(hints: Dictionary) -> HFlowContainer:
 
 
 ## Where a card of `card` window pixels stands beside `anchor`: to its right, or to its left when the
-## window's edge is in the way, and never off the window. Every floating card is placed by this.
+## window's edge is in the way, and never off the window. Every floating card is placed by this. Where
+## neither side has room -- a phone held upright -- it stands `under` the anchor instead.
 static func beside(anchor: Rect2, card: Vector2, window: Vector2, gap: float) -> Vector2:
 	var x := anchor.end.x + gap
 	if x + card.x > window.x:
 		x = anchor.position.x - gap - card.x
+	if x < 0.0:
+		return under(anchor, card, window, gap)
 	return Vector2(x, anchor.position.y).clamp(Vector2.ZERO, (window - card).max(Vector2.ZERO))
+
+
+## Where a card of `card` window pixels stands under `anchor`, centred on it -- or over it, where the
+## window's foot is too near -- and never off the window.
+static func under(anchor: Rect2, card: Vector2, window: Vector2, gap: float) -> Vector2:
+	var y := anchor.end.y + gap
+	if y + card.y > window.y:
+		y = anchor.position.y - gap - card.y
+	return Vector2(anchor.get_center().x - card.x / 2.0, y).clamp(Vector2.ZERO, (window - card).max(Vector2.ZERO))
 
 
 func _place(anchor: Rect2) -> void:
@@ -259,6 +277,19 @@ func _place(anchor: Rect2) -> void:
 	var worn_x := position.x + card.x + gap if right else position.x - gap - worn.x
 	if worn_x < 0 or worn_x + worn.x > window.x:
 		worn_x = anchor.position.x - gap - worn.x if right else anchor.end.x + gap
+	if worn_x < 0 or worn_x + worn.x > window.x:
+		_place_under(anchor, card, worn, window, gap)
+		return
 	# One top for both, the taller card's: whichever the window's foot pushes up takes the other with it.
 	position.y = clampf(anchor.position.y, 0.0, maxf(window.y - maxf(card.y, worn.y), 0.0))
 	_worn.position = Vector2(clampf(worn_x, 0.0, maxf(window.x - worn.x, 0.0)), position.y)
+
+
+## Neither side of the square has room for the two cards (a phone held upright): they stand under it
+## or over it together, side by side where the window is wide enough and the worn one under otherwise.
+func _place_under(anchor: Rect2, card: Vector2, worn: Vector2, window: Vector2, gap: float) -> void:
+	var across := card.x + gap + worn.x <= window.x
+	var both := (Vector2(card.x + gap + worn.x, maxf(card.y, worn.y)) if across
+			else Vector2(maxf(card.x, worn.x), card.y + gap + worn.y))
+	position = under(anchor, both, window, gap)
+	_worn.position = position + (Vector2(card.x + gap, 0.0) if across else Vector2(0.0, card.y + gap))

@@ -108,6 +108,11 @@ func _init(speaker: String, pages: Array, portrait: Texture2D, left := false) ->
 ## The shade fades in and the box swells in at the window's foot, `final` being the interface's scale.
 func pop_up(final: float) -> void:
 	_ui_scale = final
+	# Held upright the words take what the window leaves them beside the portrait, and wrap in it.
+	var over := _panel.get_combined_minimum_size().x - (get_viewport_rect().size.x / final - 2 * UITheme.EDGE)
+	if over > 0.0:
+		_words.custom_minimum_size.x = TEXT_WIDTH - over
+		(_words.get_parent() as Control).custom_minimum_size.x = TEXT_WIDTH - over
 	_panel.resized.connect(_settle)
 	Juice.pop_in(_panel, final)
 	_settle()

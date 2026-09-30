@@ -52,8 +52,7 @@ func _init(ui_scale: float) -> void:
 func _process(delta: float) -> void:
 	var over := get_viewport().gui_get_hovered_control()
 	var text := text_of(over, get_viewport().get_mouse_position())
-	# A press is the answer to whatever the card would have said, and what it changes is not what was read.
-	if text.is_empty() or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+	if text.is_empty() or not _asking(over):
 		_over = null
 		hide()
 		return
@@ -73,12 +72,28 @@ func _process(delta: float) -> void:
 		_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_line.custom_minimum_size.x = ItemCard.WIDTH
 	var key := str(over.get_meta(KEY, ""))
-	_key.visible = not key.is_empty()
+	_key.visible = not key.is_empty() and not Cursors.touched
 	_key.texture = load(KEY_PICTURE % key) if _key.visible else null
 	show()
+	# A finger held on a button to read it has not pressed it: a button disabled and enabled again
+	# forgets the press it was part way through, so letting go does nothing.
+	var button := over as BaseButton
+	if Cursors.touched and button != null and not button.disabled:
+		button.disabled = true
+		button.disabled = false
 	# Placed now and again deferred: the first pass measures a label that has not laid out yet.
 	_place()
 	_place.call_deferred()
+
+
+## Whether the card should be up over `over`. With a mouse, while no press is down: a press is the
+## answer to whatever the card would have said, and what it changes is not what was read. A finger has
+## no hover, so it asks by being held on the control -- or at once, over an info mark (`NOW`).
+func _asking(over: Control) -> bool:
+	var down := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	if Cursors.touched:
+		return down or over.has_meta(NOW)
+	return not down
 
 
 ## What Godot would have said over `control`: its own tooltip, or the nearest ancestor's the mouse

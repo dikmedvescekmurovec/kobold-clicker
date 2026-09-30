@@ -42,12 +42,16 @@ var _save_path: String
 var _ui_scale: float
 var _panel: VBoxContainer
 var _points: Label
+## The trees, as many to a row as the page's room takes: all three across a monitor, fewer on a phone.
+var _trees: HFlowContainer
 var _skill_views := {}
 var _respec_buttons := {}
 var _card: SkillCard
 ## The skill a held press is putting points into, "" while none is. Held here and not on the slot,
 ## because every point redraws the tree and frees the slot that was pressed.
 var _held := ""
+## Under a finger (`Cursors.touched`): the skill whose card a tap has put up, which the next tap learns.
+var _read := ""
 var _hold_timer: Timer
 var _hold_gap := HOLD_FIRST
 ## While the trees are bursting, and nothing on the page may be pressed.
@@ -79,19 +83,22 @@ func _ready() -> void:
 	pad.add_theme_constant_override("margin_left", SkillSlot.RING)
 	pad.add_theme_constant_override("margin_right", SkillSlot.COUNT_OVERHANG)
 	scroll.add_child(pad)
-	var trees := HBoxContainer.new()
-	trees.add_theme_constant_override("separation", TREE_GAP)
-	pad.add_child(trees)
+	_trees = HFlowContainer.new()
+	_trees.add_theme_constant_override("h_separation", TREE_GAP)
+	_trees.add_theme_constant_override("v_separation", TREE_GAP)
+	pad.add_child(_trees)
 	for tree: String in SkillTree.trees():
 		var column := UITheme.vbox(4)
-		trees.add_child(column)
+		_trees.add_child(column)
 		var name_label := UITheme.label(SkillTree.TREES[tree]["label"])
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		column.add_child(name_label)
 		var view := SkillTreeView.new()
 		view.node_pressed.connect(_on_skill_pressed)
 		view.node_hovered.connect(_on_skill_hovered)
-		view.node_unhovered.connect(_hide_card)
+		view.node_unhovered.connect(func() -> void:
+			_read = ""
+			_hide_card())
 		column.add_child(view)
 		_skill_views[tree] = view
 		var reset := UITheme.priced_button("Reset", 0.0, "LightButton",
@@ -138,15 +145,28 @@ func open() -> void:
 		_burst.call_deferred()
 
 
+## Where the main scene stands the page, in window pixels: empty for the whole window.
+var area := Rect2()
+
+
 ## Full window height against the left edge.
 func layout() -> void:
-	_panel.size = Vector2(_panel.get_combined_minimum_size().x,
-			get_viewport_rect().size.y / _ui_scale - 2 * UITheme.EDGE)
-	_panel.position = Vector2.ONE * UITheme.EDGE * _ui_scale
+	# The trees wrap at what the room leaves them, and never at less than one tree.
+	var room := area if area.has_area() else get_viewport_rect()
+	var across := -float(TREE_GAP)
+	for column: Control in _trees.get_children():
+		across += column.get_combined_minimum_size().x + TREE_GAP
+	var chrome := _panel.get_combined_minimum_size().x - _trees.get_combined_minimum_size().x
+	_trees.custom_minimum_size.x = minf(across, room.size.x / _ui_scale - 2 * UITheme.EDGE - chrome)
+	UITheme.dock(_panel, area, _ui_scale)
 
 
 ## One point into a skill. A refused press does nothing: the card already says why.
 func _on_skill_pressed(id: String) -> void:
+	# A finger has no hover: its first tap on a skill is what puts the card up, and the next learns it.
+	if Cursors.touched and _read != id:
+		_read = id
+		return
 	if _bursting or not inventory.rank_up_skill(id):
 		return
 	inventory.save(_save_path)

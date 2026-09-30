@@ -23,6 +23,8 @@ func _run() -> void:
 	_check(await _test_settings_scroll() == true, "settings scroll tests ran to the end")
 	_check(_test_table_rows() == true, "table row tests ran to the end")
 	_check(_test_palette() == true, "palette tests ran to the end")
+	_check(await _test_responsive() == true, "responsive layout tests ran to the end")
+	_check(await _test_fingers() == true, "finger tests ran to the end")
 	_report("UI theme")
 
 
@@ -698,4 +700,118 @@ func _test_settings_scroll() -> bool:
 				% [page._rows.size.y, scroll.size.y])
 	page.free()
 	root.size = was
+	return true
+
+
+## Every window gets the largest whole scale that leaves the 576x324 budget, a window held upright is
+## the narrow one, a card with no room either side stands under its anchor, a page docks against its
+## room's edge (centred when narrow), and a bag with no room for the doll beside it stands it on top.
+func _test_responsive() -> bool:
+	_check(UITheme.pick_scale(Vector2(1152, 648)) == 2.0, "the default window is drawn at 2")
+	_check(UITheme.pick_scale(Vector2(2340, 1080)) == 3.0, "a phone on its side at 3")
+	_check(UITheme.pick_scale(Vector2(1080, 2340)) == 3.0, "and held upright at 3 as well")
+	_check(UITheme.pick_scale(Vector2(2048, 1536)) == 3.0, "a 4:3 tablet at what its long side allows")
+	_check(UITheme.pick_scale(Vector2(1024, 768)) == 1.0, "and a small window never under 1")
+	_check(not UITheme.narrow(Vector2(1152, 648), 2.0) and not UITheme.narrow(Vector2(2340, 1080), 3.0),
+			"a window on its side is laid out as ever")
+	_check(UITheme.narrow(Vector2(1080, 2340), 3.0), "one held upright is narrow")
+
+	var window := Vector2(360, 780)
+	var anchor := Rect2(100, 100, 40, 40)
+	_check(ItemCard.beside(Rect2(10, 100, 40, 40), Vector2(150, 90), window, 4) == Vector2(54, 100),
+			"a card with room beside its anchor stands beside it")
+	_check(ItemCard.beside(anchor, Vector2(300, 90), window, 4) == Vector2(0, 144),
+			"with room on neither side, it stands under it, clamped to the window")
+	_check(ItemCard.beside(Rect2(100, 700, 40, 40), Vector2(300, 90), window, 4).y == 606.0,
+			"and over it where the foot is too near")
+
+	var page := Control.new()
+	root.add_child(page)
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(100, 50)
+	page.add_child(panel)
+	var whole := root.get_visible_rect().size
+	UITheme.dock(panel, Rect2(), 2.0)
+	_check(panel.position == Vector2.ONE * UITheme.EDGE * 2.0
+			and panel.size == Vector2(100, whole.y / 2.0 - 2 * UITheme.EDGE),
+			"an empty room is the whole window: the page full height against the left edge")
+	UITheme.dock(panel, Rect2(), 2.0, UITheme.Dock.RIGHT)
+	_check(panel.position.x == whole.x - (100 + UITheme.EDGE) * 2.0, "or the right")
+	var room := Rect2(0, 200, whole.x, 400)
+	UITheme.dock(panel, room, 2.0)
+	_check(panel.position.y == 200 + UITheme.EDGE * 2.0 and panel.size.y == 200 - 2 * UITheme.EDGE,
+			"a room given is the height it takes")
+	# At 4 the headless window is under the budget across: narrow, and centred.
+	UITheme.dock(panel, Rect2(), 4.0, UITheme.Dock.RIGHT)
+	_check(panel.position.x == floorf((whole.x - 100 * 4.0) / 2.0), "a narrow window centres it")
+	page.queue_free()
+
+	var bag := BagPage.new(Inventory.new(), "", 2.0)
+	root.add_child(bag)
+	await process_frame
+	bag.area = Rect2(0, 0, 330 * 2.0, whole.y)
+	bag.layout()
+	var worn: Control = bag._worn_panel
+	_check(worn.visible and worn.position.y + worn.size.y * 2.0 <= bag._panel.position.y,
+			"a room too narrow for the doll beside the bag puts it on top")
+	bag.area = Rect2()
+	bag.layout()
+	_check(worn.position.x > bag._panel.position.x and worn.position.y > bag._panel.position.y,
+			"and the whole window has it beside the bag again")
+	bag.queue_free()
+	return true
+
+
+## A finger has no hover: the flag says which the last press was, a tap shows a square's card rather
+## than muting it, an orb's first tap reads it and only the second presses it, and a tooltip is asked
+## for by a finger held down rather than a cursor at rest.
+func _test_fingers() -> bool:
+	var tap := InputEventMouseButton.new()
+	tap.device = InputEvent.DEVICE_ID_EMULATION
+	Cursors.feel(tap)
+	_check(Cursors.touched, "a mouse press Godot made up from a finger is a finger's")
+	var click := InputEventMouseButton.new()
+	Cursors.feel(click)
+	_check(not Cursors.touched, "and a real one is the mouse's again")
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var square := ItemSlot.make(Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng))
+	square.position = Vector2(100, 100)
+	square.size = Vector2(ItemSlot.SIDE, ItemSlot.SIDE)
+	root.add_child(square)
+	var card := ItemCard.new(2.0)
+	root.add_child(card)
+	var orb := OrbSlot.make("Orb of Transmutation", 3, true)
+	root.add_child(orb)
+	await process_frame
+	var presses: Array = []
+	orb.pressed.connect(func(which: String) -> void: presses.append(which))
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+
+	Cursors.touched = true
+	_check(card.hovered(Vector2(110, 110), true) == null, "a finger down shows no card, as a press never did")
+	_check(card.hovered(Vector2(110, 110), false) == square, "but lifted, the square it tapped has its card")
+	orb._gui_input(down)
+	_check(presses.is_empty(), "a first tap on an orb puts its card up and spends nothing")
+	orb._gui_input(down)
+	_check(presses.size() == 1, "the second presses it")
+	var tip := TipCard.new(2.0)
+	root.add_child(tip)
+	var info := Control.new()
+	info.set_meta(TipCard.NOW, true)
+	var plain := Control.new()
+	_check(tip._asking(info), "an info mark answers a finger at once")
+	_check(not tip._asking(plain), "anything else waits for a finger held on it")
+
+	Cursors.touched = false
+	_check(card.hovered(Vector2(110, 110), true) == null and card.hovered(Vector2(110, 110), false) == null,
+			"with the mouse, a press still puts the card away until the cursor has moved")
+	_check(tip._asking(plain), "and a tooltip waits for a cursor at rest")
+	info.free()
+	plain.free()
+	for made: Node in [square, card, orb, tip]:
+		made.queue_free()
 	return true

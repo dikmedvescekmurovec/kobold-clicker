@@ -22,6 +22,11 @@ const GAP := ItemSlot.SIDE / 7
 ## How many rows of squares show before the rest scroll by the wheel. A half row, so the cut-off
 ## squares say there is more; sized so the verdict still fits a 648 px window at `ui_scale` 2.
 const MAX_ROWS := 3.5
+## The fewest rows a short window cuts the box to (`fit_rows`).
+const FEWEST_ROWS := 1.5
+
+## How many rows of squares show before the rest scroll: `MAX_ROWS`, or fewer in a short window.
+var most_rows := MAX_ROWS
 
 ## Fired whenever the view changes height -- a drop opened or closed, or the list refilled -- so an
 ## owner that centres this panel knows to measure it again.
@@ -143,14 +148,25 @@ func fill(items: Array[Item], orbs := {}) -> void:
 	_fit_scroll()
 
 
-## Up to MAX_ROWS the box does not scroll and so is as tall as the grid; past it, it is cut to
-## MAX_ROWS and scrolls. Counted rather than measured: the grid has not been laid out yet.
+## Up to `most_rows` the box does not scroll and so is as tall as the grid; past it, it is cut to
+## `most_rows` and scrolls. Counted rather than measured: the grid has not been laid out yet.
 func _fit_scroll() -> void:
 	_scroll.scroll_vertical = 0
-	var long := ceili(_items.size() / float(PER_ROW)) > MAX_ROWS
+	var long := ceili(_items.size() / float(PER_ROW)) > most_rows
 	_scroll.vertical_scroll_mode = (ScrollContainer.SCROLL_MODE_SHOW_NEVER if long
 			else ScrollContainer.SCROLL_MODE_DISABLED)
-	_scroll.custom_minimum_size.y = MAX_ROWS * ItemSlot.SIDE + floorf(MAX_ROWS) * GAP if long else 0.0
+	_scroll.custom_minimum_size.y = most_rows * ItemSlot.SIDE + floorf(most_rows) * GAP if long else 0.0
+
+
+## The box `over` panel pixels too tall for the window its owner stands in: rows are given up until it
+## fits, down to `FEWEST_ROWS`, still ending on a half row so the cut-off squares say there is more.
+func fit_rows(over: float) -> void:
+	var shown := minf(most_rows, ceili(_items.size() / float(PER_ROW)))
+	var rows := floorf((shown - over / (ItemSlot.SIDE + GAP)) * 2.0) / 2.0
+	if rows == floorf(rows):
+		rows -= 0.5
+	most_rows = maxf(FEWEST_ROWS, rows)
+	_fit_scroll()
 
 
 ## Whether one drop's details are open rather than the grid.
