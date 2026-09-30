@@ -60,31 +60,26 @@ const SIZE_HEIGHT := {
 	EnemyRoster.Size.LARGE: 1.25,
 	EnemyRoster.Size.HUGE: 1.55,
 }
-## The backdrops ship nearest-upscaled from their drawn grid (`vista.SCALE` in the generator), so one
-## of their pixels is this many texture pixels: the grid the fighters are snapped to.
-const AREA_UPSCALE := 4
-## The light of each place, which the fighters stand in: each backdrop's haze colour (`hz` in
-## `vista_scenes.py`), and the cave's gloom. `SCENE_LIGHT` is how far toward it they are pulled -- a
-## multiply, so a little goes a long way; the hero at noon and at twilight is not the same blue.
+## The backdrops ship nearest-upscaled from their drawn grid (`sideview.SCALE` in the generator), so
+## one of their pixels is this many texture pixels: the grid the fighters are snapped to, and at it
+## the hero stands one backdrop pixel a pixel.
+const AREA_UPSCALE := 6
+## The light the fighters stand in, a colour they are pulled toward by `SCENE_LIGHT` (a multiply, so
+## a little goes a long way). Only the cave's gloom: the six places are drawn in the fighters' own
+## palette (ENDESGA 64), and pulling a fighter toward a place's colour would take it off that palette.
 const HAZE := {
-	"grass": Color("bcdcea"),
-	"forest": Color("b8d8bc"),
-	"dirt": Color("e8b890"),
-	"desert": Color("eadfc4"),
-	"mountains": Color("b8d2e4"),
-	"ice": Color("c8a8c0"),
 	"cave": Color("8a7fa0"),
 }
 const SCENE_LIGHT := 0.4
 ## Where an enemy starts its run-in, past the right edge.
 const OFFSCREEN_X := 1.15
-## The backdrops: one per environment and variant under Assets/Area. Every one lays its near ground
-## (the land the fight happens on) from about a quarter of the way up, so GROUND stands the fighters
-## on land whichever one is behind them, and what stands in the middle distance sits between them.
+## The backdrops: one per environment and variant under Assets/Area. Every one lays the ground strip
+## the fight stands on across its foot, the strip's top where GROUND puts the fighters' feet, and
+## what stands on it or behind it between the sides.
 const AREA_PATH := "res://Assets/Area/%s_%s_%d.png"
 ## How many ways each place was drawn. A village is four villages: the same environment and the same
 ## tier, built four ways, so two towns on one map are not the same picture twice. Must agree with
-## `vista_scenes.LAYOUTS` in the generator; `_test_backdrops` sweeps every path to hold it.
+## `sideview.LAYOUTS` in the generator; `_test_backdrops` sweeps every path to hold it.
 ## Changing it re-rolls which backdrop each tile fights on, which is harmless -- nothing is saved
 ## about the one it had.
 const AREA_LAYOUTS := 4
@@ -552,7 +547,7 @@ func _sfx_player(stream: AudioStream) -> AudioStreamPlayer:
 	return player
 
 
-## Which `HAZE` the fighters stand in.
+## Which `HAZE` the fighters stand in; a place with none leaves them as drawn.
 func _light_key() -> String:
 	if fight == null:
 		return ""
