@@ -42,12 +42,20 @@ const DETAILS_TIP :="Shows beside each modifier the lowest and highest it could 
 ## page's `view`. Without them there is no button for it.
 var inventory: Inventory
 var inventory_path := ""
+## The account and cloud save, set by the main scene; its section is left out while it is off.
+var cloud: Cloud
 
 var _ui_scale: float
 var _panel: VBoxContainer
 var _rows: VBoxContainer
 ## The time played, redrawn every frame while the page is up so it does not sit still as it is read.
 var _played: Label
+## The cloud's section, redrawn alone whenever the cloud says something changed.
+var _account: VBoxContainer
+## When the cloud last took the save ("3 min ago"), kept current like the time played.
+var _synced: Label
+## Delete cloud account was pressed and asks its question in place.
+var _deleting := false
 
 
 func _init(ui_scale: float) -> void:
@@ -67,6 +75,10 @@ func _ready() -> void:
 	_rows = UITheme.vbox(ROW_GAP, WIDTH)
 	_rows.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_rows)
+	if cloud != null:
+		cloud.changed.connect(func() -> void:
+			if visible and is_instance_valid(_account):
+				_draw_account())
 	open()
 
 
@@ -92,6 +104,12 @@ func open() -> void:
 	_rows.add_child(_choice(UNIQUES_NAMES, UNIQUES_TIPS, Settings.uniques,
 			func(rule: int) -> void: Settings.uniques = rule as Settings.Uniques))
 	_rows.add_child(UITheme.rule(WIDTH))
+	if cloud != null and cloud.enabled():
+		_deleting = false
+		_account = UITheme.vbox(ROW_GAP, WIDTH)
+		_rows.add_child(_account)
+		_draw_account()
+		_rows.add_child(UITheme.rule(WIDTH))
 	_played = UITheme.label(_spent(), null, true)
 	_rows.add_child(_played)
 	_rows.add_child(_foot(false))
@@ -102,6 +120,55 @@ func open() -> void:
 func _process(_delta: float) -> void:
 	if _played != null and is_instance_valid(_played) and visible:
 		_played.text = _spent()
+	if _synced != null and is_instance_valid(_synced) and visible:
+		_synced.text = cloud.status_text()
+
+
+## Cloud save: Sign in, the letters a sign-in under way shows, or the account -- what it was signed in
+## with, when the save last reached the cloud, Sign out, and Delete cloud account asking in place.
+func _draw_account() -> void:
+	UITheme.clear(_account)
+	_synced = null
+	_account.add_child(UITheme.section("Cloud save"))
+	if not cloud.signing_check.is_empty():
+		_account.add_child(LeaderboardPage.check_letters(cloud.signing_check))
+		_account.add_child(_button("Cancel", "LightButton", "Stop signing in", cloud.cancel_sign_in))
+	elif not cloud.signed_in():
+		var sign_in := _button("Sign in", UITheme.GO_BUTTON,
+				"Keep your save in the cloud and play it on any device. You sign in with Google or Discord, in your browser",
+				cloud.sign_in)
+		sign_in.disabled = cloud.busy()
+		_account.add_child(sign_in)
+	elif _deleting:
+		_account.add_child(BountyList.wrapped("Delete your cloud account?", WIDTH, Palette.RUST))
+		var buttons := HBoxContainer.new()
+		buttons.add_theme_constant_override("separation", 2)
+		for made: Button in [_button("Cancel", "LightButton", "", func() -> void:
+					_deleting = false
+					_draw_account()),
+				_button("Delete", "LightDangerButton", "", cloud.delete_account)]:
+			made.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			buttons.add_child(made)
+		_account.add_child(buttons)
+	else:
+		_account.add_child(UITheme.label("Signed in with %s" % cloud.provider.capitalize(), null, true))
+		_synced = UITheme.label(cloud.status_text(), Palette.TEXT_SOFT, true)
+		_account.add_child(_synced)
+		_account.add_child(_button("Sign out", "LightButton", "This device stops saving to the cloud and keeps its save",
+				cloud.sign_out))
+		_account.add_child(_button("Delete cloud account", "LightDangerButton",
+				"Delete your cloud save, your board name and your place on the board. This device keeps its save",
+				func() -> void:
+					_deleting = true
+					_draw_account()))
+	if not cloud.problem.is_empty():
+		_account.add_child(BountyList.wrapped(cloud.problem, WIDTH, Palette.BRICK))
+
+
+func _button(text: String, variation: String, tooltip: String, deed: Callable) -> Button:
+	var made := UITheme.button(text, variation, tooltip)
+	made.pressed.connect(func() -> void: deed.call())
+	return made
 
 
 ## How long this save has been played, as words. Hours once there are any, and seconds until then,
@@ -198,7 +265,8 @@ func _foot(asking: bool) -> VBoxContainer:
 		reset.pressed.connect(_ask.bind(true))
 		foot.add_child(reset)
 		return foot
-	foot.add_child(BountyList.wrapped("Delete everything and start over?", WIDTH, Palette.RUST))
+	foot.add_child(BountyList.wrapped("Delete everything, here and in the cloud, and start over?"
+			if cloud != null and cloud.signed_in() else "Delete everything and start over?", WIDTH, Palette.RUST))
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 2)
 	var cancel := UITheme.button("Cancel", "LightButton", "")

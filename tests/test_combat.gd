@@ -3216,7 +3216,7 @@ func _test_the_way_down() -> void:
 	_check(main.inventory.dungeon_depth == 0, "floors short of Gollux win no depth")
 	_check(main.inventory.dungeon_floors == fight.index,
 			"but the floors beaten are the leaderboard's score (%d)" % main.inventory.dungeon_floors)
-	_check(not main.leaderboard.enabled(), "and a test's main scene never calls the leaderboard")
+	_check(not main.cloud.enabled(), "and a test's main scene never calls the cloud")
 	_check(main.inventory.kills == kills_before and is_equal_approx(main.inventory.gold, gold_before),
 			"with no kill counted and nothing paid")
 	# A Gollux killed is a depth won, written down, and where the next descent begins.
@@ -3232,8 +3232,8 @@ func _test_the_way_down() -> void:
 	await process_frame
 	_check(main.inventory.dungeon_depth == 2 and Inventory.load_from(SCRATCH_INVENTORY).dungeon_depth == 2,
 			"two Golluxes dead is two depths won, and saved")
-	_check(main.inventory.dungeon_floors == 30 and Leaderboard.score_text(30) == "3.00"
-			and Leaderboard.score_text(44) == "3.14" and Leaderboard.score_text(5) == "1.05",
+	_check(main.inventory.dungeon_floors == 30 and Cloud.score_text(30) == "3.00"
+			and Cloud.score_text(44) == "3.14" and Cloud.score_text(5) == "1.05",
 			"a score is the depth and the floors of it beaten (%d)" % main.inventory.dungeon_floors)
 	_check("depth 3" in main._cave_button.tooltip_text, "Enter cave says where that leaves the player (%s)"
 			% main._cave_button.tooltip_text)

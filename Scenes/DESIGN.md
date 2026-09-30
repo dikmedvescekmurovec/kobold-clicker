@@ -63,3 +63,14 @@
 - **Enter town is green** (`UITheme.GO_BUTTON`), the one press a settlement's panel is for, as in town. Chart, Move here and Farm stay brown: whether green belongs on them is the user's to say.
 - **One width for every tile** (`MOD_WIDTH` on the scrolled rows) and air between a title and its X on every titled panel, so a long name no longer runs into the X.
 
+
+## The cloud save (2026-09-30)
+
+The user asked for saves that follow the player across devices and are "verified after every relevant action, so cheating can't occur", with sign-in "simple -- Google, Apple or similar". I set out three levels (a plain cloud save; a cloud save the server checks; a server that runs the game) and said honestly that no level stops cheating outright here -- the rules run on the player's machine and clicks land, so a bot at human speed is a human to any server. **The user chose level 2**, Google and Discord (Apple needs the $99/yr developer programme), signing in optional, the board open only to signed-in players, and a question whenever two devices disagree.
+
+How it works and every rule the server checks are in `backend/leaderboard/README.md`; what is worth knowing here:
+
+- **The save is the game's own two files, byte for byte.** Nothing about `Inventory` or `MapSave` changed: the cloud moves the files and the server reads the inventory's JSON for its checks, so a new field in the save needs nothing from the cloud unless it is something the server should check.
+- **A change of device is a download, not a question, because the first sync after a start-up judges the device by the files as the scene found them** (`Cloud.launched`). Start-up always writes (the map, a camp's pay); judged by the files after that, every change of device was a question. The e2e run found it.
+- **The board counts only floors beaten under the checks** (`saves.vouched`). Crediting a checked save's whole `dungeon_floors` let a first save -- which nothing can check -- carry hand-written floors onto the board one upload later.
+- **Level 3 (a server that replays the game) was turned down for now:** the rules are ~9,000 lines of GDScript that would have to run headless on a rented server, fights step on a variable frame delta, loot is deliberately unseeded, and the game would have to be online to be played. The next step inside level 2 is checking items against the modifier tables.

@@ -4327,7 +4327,7 @@ func _test_achievements() -> bool:
 			"on a banner naming it and its unique")
 	_check(Inventory.load_from(TEST_PATH).achievements == {"duelists_buckler": 1}, "and it is saved")
 	_check(UniqueTable.ranks == {"duelists_buckler": 1}, "and the cards write its unique at that rank")
-	_check(main._achievements_button.visible and main._flashes.has("new_achievement"), "its button comes on, pulsing")
+	_check(main._achievements_button.visible and main._flashes.has("opened_achievements"), "its button comes on, pulsing")
 	main._close_banner()
 	# The next rank is a banner of its own: the rank reached, and the unique's rule at its new numbers.
 	main.inventory.tick("crits", int(Achievements.need_at("duelists_buckler", 2)) - 100)
@@ -4343,7 +4343,7 @@ func _test_achievements() -> bool:
 	main._on_achievements_pressed()
 	await process_frame
 	_check(main.achievements_page.visible and main.inventory.achievements_new.is_empty()
-			and not main._flashes.has("new_achievement"), "the page opens and the pulse stops")
+			and not main._flashes.has("opened_achievements"), "the page opens and the pulse stops for good")
 	var tiles: Array = main.achievements_page.find_children("*", "ItemSlot", true, false)
 	_check(tiles.size() == Achievements.ACHIEVEMENTS.size(), "one square an achievement (%d)" % tiles.size())
 	var lit := tiles.filter(func(slot: ItemSlot) -> bool: return slot.modulate == Color.WHITE)
@@ -4400,22 +4400,26 @@ func _test_collection() -> bool:
 	_check(not main._collection_button.visible, "no collection button before the first unique")
 	main.inventory.note_unique("metronome")
 	main._check_tips()
-	_check(main._collection_button.visible and main._flashes.has("new_unique"), "it comes on, pulsing")
+	_check(main._collection_button.visible and main._flashes.has("opened_collection"), "it comes on, pulsing")
 	_check("first_unique" in main.inventory.tips and main._tip_panel != null, "with a word about what was found")
 	main._on_tip_closed()
 	main.inventory.achievements["rimeplate"] = 1
 	main._on_collection_pressed()
 	await process_frame
 	_check(main.collection_page.visible and main._collection_button.visible, "the page opens, its button beside it")
-	_check(main._flashes.has("new_unique"), "still pulsing while the find is not looked at")
+	_check(not main._flashes.has("opened_collection"), "opening the log stills the button for good")
 	var squares: Array = main.collection_page.find_children("*", "ItemSlot", true, false)
 	var fresh: Array = squares.filter(func(slot: ItemSlot) -> bool: return slot.has_node(ItemSlot.GLINT_NAME))
 	_check(fresh.size() == 1 and fresh[0].item.unique == "metronome", "the new find glints (%d)" % fresh.size())
 	fresh[0].hint.call(VBoxContainer.new(), 100.0)
 	await process_frame
-	_check(not main._flashes.has("new_unique") and not fresh[0].has_node(ItemSlot.GLINT_NAME),
-			"hovering it stills both")
+	_check(not fresh[0].has_node(ItemSlot.GLINT_NAME), "hovering it stills its glint")
 	_check(Inventory.load_from(TEST_PATH).uniques_new.is_empty(), "and that is saved")
+	main.inventory.note_unique("brawlers_wraps")
+	main._show_corner(true)
+	_check(not main._flashes.has("opened_collection"), "a later find does not start it again")
+	main.inventory.uniques_found.erase("brawlers_wraps")
+	main.inventory.uniques_new.erase("brawlers_wraps")
 	_check(squares.size() == UniqueTable.UNIQUES.size(), "one square a unique (%d)" % squares.size())
 	# The foot, under the scroll: what the log adds and how full it is, in the body font.
 	var bonus: Label = main.collection_page.find_child(CollectionPage.BONUS_NAME, true, false)

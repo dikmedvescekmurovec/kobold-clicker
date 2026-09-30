@@ -1,4 +1,4 @@
-# The Gollux leaderboard Worker. Deploy and set-up steps: README.md.
+# Kobold Clicker's backend Worker: sign-in, cloud saves, the Gollux leaderboard. Set-up and deploying: README.md.
 name = "gollux-leaderboard"
 main = "src/index.js"
 compatibility_date = "2025-09-01"
@@ -6,8 +6,8 @@ compatibility_date = "2025-09-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "gollux-leaderboard"
-# From `npx wrangler d1 create gollux-leaderboard` (README step 3). Local dev and the tests need no real one.
-database_id = "00000000-0000-0000-0000-000000000000"
+# The live database (`npx wrangler d1 create gollux-leaderboard`, README step 3). Not a secret.
+database_id = "8b254330-5b9e-4199-8698-d6161a4af93d"
 migrations_dir = "migrations"
 
 # Per IP address. A period is 10 or 60 seconds; namespace_id is any number unique in the account.
@@ -16,10 +16,17 @@ name = "REQUEST_LIMIT"
 namespace_id = "1001"
 simple = { limit = 60, period = 60 }
 
+# Sign-ins started, per IP address: a player who cancels and starts again has room to.
 [[ratelimits]]
-name = "REGISTER_LIMIT"
+name = "LOGIN_LIMIT"
 namespace_id = "1002"
-simple = { limit = 3, period = 60 }
+simple = { limit = 10, period = 60 }
+
+# The sign-in apps' client ids (not secrets; README "Sign-in providers"). An empty one hides that
+# provider's button. The two client secrets are Worker secrets: `npx wrangler secret put GOOGLE_CLIENT_SECRET`.
+[vars]
+GOOGLE_CLIENT_ID = "191853406621-4mo6j06of2q8u7ocueim286mveun0rpu.apps.googleusercontent.com"
+DISCORD_CLIENT_ID = "1554863898937659422"
 
 [observability]
 enabled = true

@@ -57,6 +57,7 @@ const STONE_TIP := "The Seeing Stone. Press it to feel how near the Gollux cave 
 const STONE_ASLEEP_TIP := "The Seeing Stone sleeps: the way down in this world is found"
 const TROPHY_ICON := "res://Assets/UI/ui_icon_trophy.png"
 const MEDAL_ICON := "res://Assets/UI/ui_icon_medal.png"
+const PODIUM_ICON := "res://Assets/UI/ui_icon_podium.png"
 ## The heirlooms'. A stand-in from the pack until they have a mark of their own.
 const CROWN_ICON := "res://Assets/UI/ui_icon_crown.png"
 ## The air between one and the next, in panel pixels.
@@ -126,7 +127,6 @@ const BOUNTY_TIER := {
 
 var _chart_button: Button
 ## Dev: charts the selected tile with no fight. Debug builds only.
-var _skip_button: Button
 var _move_button: Button
 var _farm_button: Button
 ## What `_update_buttons` last greyed the fights for, so `_process` knows when the bag has crossed the cap.
@@ -178,8 +178,12 @@ var skills_page: SkillsPage
 var bounty_page: BountyList
 ## Sound, animations, what an item says, and Reset. A left-hand page like the rest, always on offer.
 var settings_page: SettingsPage
-var leaderboard: Leaderboard
+## The account, the cloud save and the Gollux board: the run's one `Cloud`, under the root on the
+## player's own save (it outlives the reloads a download makes), a child that is off anywhere else.
+var cloud: Cloud
 var leaderboard_page: LeaderboardPage
+## The question the cloud asked (two saves, or a save it refused), while it is up; null otherwise.
+var _cloud_question: Control
 var collection_page: CollectionPage
 var achievements_page: AchievementsPage
 ## What the player adds up to, opened by a press anywhere on the character panel.
@@ -201,6 +205,7 @@ var _stone_tween: Tween
 var _stone_band := -1
 var _collection_button: Button
 var _achievements_button: Button
+var _leaderboard_button: Button
 ## There while an heirloom is held, and the one corner button a
 ## town leaves standing: pressed there it swaps the bag and the heirlooms at the counter.
 var _heirloom_button: Button
@@ -317,10 +322,18 @@ var _aim_price := 0.0
 var _aim_town := TownWorld.NO_SPOT
 
 
-## Closing the window writes the save, so the hour it was shut is the hour a camp pays from.
+## Closing the window writes the save, so the hour it was shut is the hour a camp pays from. Signed in,
+## the cloud closes the scene (which banks and writes the rest), uploads, and only then quits.
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_CLOSE_REQUEST and inventory != null and not _save_blocked:
-		inventory.save(inventory_path)
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		if inventory != null and not _save_blocked:
+			inventory.save(inventory_path)
+		if cloud != null and cloud.signed_in() and not _save_blocked and not _resetting:
+			cloud.leave.call_deferred(self)
+		else:
+			get_tree().quit()
+	elif what == NOTIFICATION_APPLICATION_PAUSED and cloud != null:
+		cloud.push()
 
 
 ## Every button made from here on, in this scene or anywhere else in the tree, clicks when pressed.
@@ -396,12 +409,7 @@ func _ready() -> void:
 	# Before anything below saves over it: the hour the player left is what the camp pays from.
 	var left_at := inventory.saved_at
 	ledger = FightLedger.new(inventory, inventory_path)
-	# The Gollux board, on the player's own save only, as the settings are. A best the server never
-	# acknowledged (the game was offline) goes again now.
-	leaderboard = Leaderboard.new()
-	leaderboard.path = Leaderboard.save_path() if inventory_path == Inventory.SAVE_PATH else ""
-	add_child(leaderboard)
-	leaderboard.submit(inventory.dungeon_floors)
+	_find_cloud()
 	var save := MapSave.load_from(map_path, problem, MapSave.fingerprint(map.tileset))
 	if not problem.is_empty():
 		_refuse_save("map", map_path, str(problem[0]))
@@ -454,6 +462,55 @@ func _ready() -> void:
 	_save_map()
 	# Last, over everything the rest of start-up put up: the hours the game was shut, paid.
 	_camp_while_away(left_at)
+	# Then the cloud: what this start-up wrote goes up, or a newer save comes down and the scene reloads.
+	cloud.sync.call_deferred(true)
+
+
+## The run's one cloud, found again after a reload, or made: under the root on the player's own save,
+## where quitting waits for it (`_notification`), and a child that is off in a test or a screenshot.
+func _find_cloud() -> void:
+	var real := inventory_path == Inventory.SAVE_PATH
+	cloud = get_tree().root.get_node_or_null(Cloud.NODE) as Cloud if real else null
+	if cloud == null:
+		cloud = Cloud.new(Cloud.save_path() if real else "")
+		if real:
+			cloud.name = Cloud.NODE
+			get_tree().root.add_child.call_deferred(cloud)
+		else:
+			add_child(cloud)
+	if real:
+		get_tree().set_auto_accept_quit(false)
+	# Before anything of this start-up is written: what the device held is what it is judged by.
+	cloud.launched()
+	cloud.calm = func() -> bool:
+		return (is_inside_tree() and _combat == null and _transcend_page == null and _camp == null
+				and _cloud_question == null and not _save_blocked and not _resetting)
+	cloud.replaced.connect(_on_cloud_replaced)
+	cloud.asked.connect(_on_cloud_asked)
+
+
+## The cloud's save is on disk now: nothing of this one may be written over it, and the scene loads it.
+func _on_cloud_replaced() -> void:
+	_resetting = true
+	print("Loaded the cloud's save, revision %d" % cloud.revision)
+	if get_tree().current_scene == self:
+		get_tree().reload_current_scene()
+
+
+## Two saves to choose between, or one the cloud refused: asked over the whole window.
+func _on_cloud_asked() -> void:
+	if _cloud_question != null:
+		return
+	_on_left_page_closed()
+	_cloud_question = CloudQuestion.new(cloud.question, ui_scale)
+	_cloud_question.answered.connect(func(keep_cloud: bool) -> void:
+		_cloud_question.queue_free()
+		_cloud_question = null
+		if keep_cloud:
+			cloud.keep_cloud()
+		else:
+			cloud.keep_device())
+	_ui_layer.add_child(_cloud_question)
 
 
 ## Points the badge at the chest a fortuneteller was paid to find, for as long as it stands: a chest
@@ -599,14 +656,6 @@ func _build_ui() -> void:
 	_chart_button.pressed.connect(_on_chart_pressed)
 	Cursors.wear(_chart_button, Cursors.SWORD)
 	buttons.add_child(_chart_button)
-	_skip_button = UITheme.button("Skip fight", "LightButton", "Dev: chart this tile without fighting for it")
-	_skip_button.pressed.connect(func() -> void:
-		print("Dev: charted %s, showing %d tile(s) behind it" % [map.selected_cell,
-				view.chart(map.selected_cell, _sight())])
-		_credit_walls()
-		_check_tips()
-		_update_buttons())
-	buttons.add_child(_skip_button)
 	_move_button =UITheme.button("Move here", "LightButton", "Walk to the selected tile")
 	_move_button.pressed.connect(_on_move_pressed)
 	Cursors.wear(_move_button, Cursors.BOOT)
@@ -777,6 +826,9 @@ func _build_pages(layer: CanvasLayer) -> void:
 			ui_scale)
 	_achievements_button.pressed.connect(_on_achievements_pressed)
 	layer.add_child(_achievements_button)
+	_leaderboard_button = UITheme.icon_button(load(PODIUM_ICON), "The deepest descents of every player", ui_scale)
+	_leaderboard_button.pressed.connect(func() -> void: _toggle_left_page(leaderboard_page))
+	layer.add_child(_leaderboard_button)
 	_heirloom_button = UITheme.icon_button(load(CROWN_ICON), "What you would take to another world", ui_scale)
 	_heirloom_button.pressed.connect(_on_heirlooms_pressed)
 	layer.add_child(_heirloom_button)
@@ -800,6 +852,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 	bounty_page = BountyList.new(inventory, view, inventory_path, ui_scale)
 	bounty_page.show_cell.connect(_on_show_cell)
 	settings_page = SettingsPage.new(ui_scale)
+	settings_page.cloud = cloud
 	settings_page.inventory = inventory
 	settings_page.inventory_path = inventory_path
 	settings_page.reset_pressed.connect(_on_reset_pressed)
@@ -850,8 +903,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 		page.held_changed.connect(town_page.orb_held)
 		page.laid_out.connect(_place_corner)
 	settings_page.laid_out.connect(_place_corner)
-	leaderboard_page = LeaderboardPage.new(leaderboard, func() -> int: return inventory.dungeon_floors,
-			ui_scale)
+	leaderboard_page = LeaderboardPage.new(cloud, func() -> int: return inventory.dungeon_floors, ui_scale)
 	for page: Control in [skills_page, bag_page, heirloom_page, bounty_page, settings_page,
 			collection_page, achievements_page, character_page, leaderboard_page, town_page]:
 		page.hide()
@@ -1277,14 +1329,8 @@ func _show_environments(weights: Dictionary) -> void:
 ## which town has a blacksmith is exactly the sort of thing that decides where to walk next.
 func _show_services(cell: Vector2i) -> void:
 	UITheme.clear(_service_rows)
-	# The cave has one thing in it, and says how far down the player has been.
+	# The cave's panel is its name and Enter cave, nothing under them.
 	if _is_cave(cell):
-		_service_rows.add_child(UITheme.section(DUNGEON_NAME))
-		_service_rows.add_child(UITheme.label("Depth %d won" % inventory.dungeon_depth
-				if inventory.dungeon_depth > 0 else "No depth won yet", Palette.TEXT, true))
-		var board := UITheme.button("Leaderboard", "LightButton", "The deepest descents of every player")
-		board.pressed.connect(_toggle_left_page.bind(leaderboard_page))
-		_service_rows.add_child(board)
 		return
 	# Nothing about a tile still under the fog, which one taken blind is when it is clicked.
 	var tier := view.town_tier(cell) if view.seen(cell) else -1
@@ -1679,12 +1725,13 @@ func _bank_depths() -> void:
 	var won := fight.first_floor / fight.enemies + fight.cleared()
 	var floors := fight.first_floor + fight.index
 	print("Left the dungeon at depth %d, %d won, %s on the board" % [fight.depth(), fight.cleared(),
-			Leaderboard.score_text(floors)])
+			Cloud.score_text(floors)])
 	if fight.cleared() > 0 or won > inventory.dungeon_depth or floors > inventory.dungeon_floors:
 		inventory.dungeon_depth = maxi(inventory.dungeon_depth, won)
 		inventory.dungeon_floors = maxi(inventory.dungeon_floors, floors)
 		inventory.save(inventory_path)
-	leaderboard.submit(inventory.dungeon_floors)
+	# The board is scored from the cloud save, so a descent goes up at once rather than at the next tick.
+	cloud.sync.call_deferred(true)
 
 
 ## Back from the fight. The tile is charted only if it was won, and the player stays on it; a lost one
@@ -1846,7 +1893,6 @@ func _on_player_arrived(cell: Vector2i) -> void:
 func _update_buttons() -> void:
 	var cell := map.selected_cell
 	_chart_button.visible = view.can_chart(cell)
-	_skip_button.visible = _chart_button.visible and OS.is_debug_build()
 	_move_button.visible = view.can_move_to(cell)
 	_farm_button.visible = view.can_farm(cell)
 	# An overfull bag greys the fights rather than hiding them, with the reason on each.
@@ -1983,7 +2029,7 @@ func _place_corner() -> void:
 						_character.position.y))
 	var step := (_bag_button.get_combined_minimum_size().y + CORNER_GAP) * ui_scale
 	for button: Button in [_bag_button, _heirloom_button, _skills_button, _bounty_button,
-			_settings_button, _collection_button, _achievements_button]:
+			_settings_button, _collection_button, _achievements_button, _leaderboard_button]:
 		if button.visible:
 			# The column glides after a page that comes or goes, rather than jumping.
 			var was := button.position
@@ -2020,10 +2066,12 @@ func _show_corner(shown: bool) -> void:
 	# The log is a thing to be found, like what it lists: it is not there until the first unique is.
 	_collection_button.visible = shown and (Settings.show_all_uniques()
 			or not inventory.uniques_found.is_empty())
-	_pulse(_collection_button, "new_unique", not inventory.uniques_new.is_empty())
+	_flash(_collection_button, "opened_collection")
 	# The goals are not shown until the first is reached: the page appears with the unique it unlocked.
 	_achievements_button.visible = shown and not inventory.achievements.is_empty()
-	_pulse(_achievements_button, "new_achievement", not inventory.achievements_new.is_empty())
+	_flash(_achievements_button, "opened_achievements")
+	# The board is there once the player has a score for it: a floor of the Descent beaten.
+	_leaderboard_button.visible = shown and cloud.enabled() and inventory.dungeon_floors > 0
 	if _bag_button.visible:
 		_flash(_bag_button, "opened_bag")
 	_pulse(_skills_button, "skill_point", _skill_point_free())
@@ -2170,10 +2218,9 @@ func _skill_point_free() -> bool:
 	return false
 
 
-## A new unique hovered in the log: kept, and the trophy stops pulsing once none are left.
+## A new unique hovered in the log: kept.
 func _on_unique_seen() -> void:
 	inventory.save(inventory_path)
-	_pulse(_collection_button, "new_unique", not inventory.uniques_new.is_empty())
 
 
 ## Every page that stands against the left edge. They share it, so opening one closes the rest and
@@ -2282,17 +2329,19 @@ func _on_bounty_pressed() -> void:
 	_toggle_left_page(bounty_page)
 
 
+## The first press stills the trophy for good; a new find glints in the log itself until hovered.
 func _on_collection_pressed() -> void:
+	_stop_flash("opened_collection")
 	_toggle_left_page(collection_page)
 
 
-## Opening the page is seeing what was earned: the button stops pulsing.
+## The first press stills the medal for good. Opening the page is seeing what was earned.
 func _on_achievements_pressed() -> void:
+	_stop_flash("opened_achievements")
 	_toggle_left_page(achievements_page)
 	if achievements_page.visible and not inventory.achievements_new.is_empty():
 		inventory.achievements_new.clear()
 		inventory.save(inventory_path)
-		_pulse(_achievements_button, "new_achievement", false)
 
 
 ## After every save: earns what the player has reached (`Achievements.earn`), keeps it, and raises the
@@ -2470,6 +2519,8 @@ func _exit_tree() -> void:
 ## generates a new world. The settings are a file of their own and stay.
 func _on_reset_pressed() -> void:
 	_resetting = true
+	# Signed in, the cloud's copy goes first: otherwise the next start-up would bring it back down.
+	await cloud.forget_save()
 	for path: String in [inventory_path, map_path]:
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))

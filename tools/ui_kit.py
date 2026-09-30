@@ -529,6 +529,15 @@ ICONS = {
 # Both icons are centred on one square, so both buttons come out the same size whatever they wear.
 ICON_SIDE = 14
 
+# The leaderboard's top three: the trophy's six browns, dark to light, played in a metal's ramp off
+# hexlib's palette (outline first). name -> six "#rrggbb", in the order of TROPHY_RAMP.
+TROPHY_RAMP = ["#3e1f1d", "#583126", "#603928", "#70492a", "#825c2f", "#88682d"]
+MEDALS = {
+    "ui_icon_trophy_gold": ["#3a2521", "#8e7a3c", "#c0a45c", "#e9b640", "#f2d492", "#fbeac0"],
+    "ui_icon_trophy_silver": ["#23263a", "#4f5568", "#6c7283", "#a6aabb", "#cfd3de", "#f6faff"],
+    "ui_icon_trophy_bronze": ["#3a2521", "#754e33", "#8c5438", "#b37649", "#d19a5a", "#e5b970"],
+}
+
 # The keys the item card names at its foot, off the keyboard pack's extras sheet: a 4 x 8 grid of
 # 32 x 16 cells, the top four rows the unpressed keys (white face) and the bottom four the pressed
 # ones (blue face). Cut at their own size and never recoloured: they stand on the cream card beside
@@ -830,6 +839,20 @@ ICONS_DRAWN = {
         .o33ooooo11o.
         ..o3222211o..
         ...ooooooo...
+    """,
+    # The leaderboard's corner button (2026-09-30): a podium, first in the middle, second left.
+    "ui_icon_podium": """
+        ....ooooo....
+        ....o443o....
+        ....o432o....
+        ooooo432o....
+        o443o432o....
+        o432o432ooooo
+        o432o432o443o
+        o432o432o432o
+        o432o432o432o
+        o321o321o321o
+        ooooooooooooo
     """,
 }
 
@@ -1952,6 +1975,9 @@ def icons():
             out[name + "_brown"] = _squared_mark(art)
         if name in GREEN_TABS:
             out[name + "_green"] = _squared_mark(_map_colors(art, green))
+    for name, ramp in MEDALS.items():
+        medal = {_rgb(brown): _rgb(metal) for brown, metal in zip(TROPHY_RAMP, ramp)}
+        out[name] = _squared_mark(_map_colors(marks["ui_icon_trophy"], medal))
     return out
 
 
