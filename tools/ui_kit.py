@@ -130,11 +130,6 @@ _RPG = "Pixel Art Icon Pack - RPG/"
 # The user's own 32 px pixellab pieces, one file an id. They come with an outline of their own, which
 # `_outlined(own_edge=True)` repaints in ink where it stands: a ring added outside would not fit 32.
 PIXELLAB = "Unique/"
-# Pixellab paints near-pure accents where the packs grey theirs down, so a piece's saturation is scaled
-# (never clamped: a gem's shades stay apart) until 90% of its pixels are at most this -- the bases' own
-# 90th percentile (0.68, measured off Assets/Gear, outline left out) lowered by eye: 0.60 still read loud
-# once all 27 were pixellab, 0.40 faded into the socket, 0.50 was chosen.
-SAT_CEILING = 0.50
 _PIXELLAB_IDS = [
     "metronome", "headsman", "knucklebone_ring", "the_tithe", "hourglass_amulet", "meadowstriders", "hunters_lantern",
     "sunscorched_cowl", "rimeplate", "stonebreaker", "gravediggers_charm", "berserkers_band", "glass_edge",
@@ -149,9 +144,6 @@ _PIXELLAB_IDS = [
     # The veteran uniques (2026-09-30).
     "nightwalkers", "dreadmask",
 ]
-# The uniques whose fire is kept as drawn, as BASE_FIRE keeps a torch's: `_muted` paled the Wayfarer's
-# Torch's flame pink. No glow, which would smudge the collection log's black outline.
-UNIQUE_FIRE = {"wayfarers_torch", "nightwalkers"}
 UNIQUE_GEAR = {name: ((PIXELLAB + name, 0, 0, 32, 32, 1), []) for name in _PIXELLAB_IDS}
 UNIQUE_OUT = "Assets/Gear/Unique"
 # What the pixellab pieces replaced, still written beside them for the settings' dev tick "Show old
@@ -245,8 +237,9 @@ MISSING_MARK = """
     .occco.
     ..ooo..
 """
-# The user's own pixellab bases, one file an item, finished like the pixellab uniques (`_muted`, then
-# `_outlined(own_edge=True)`). They are being made a kind at a time: tools/DESIGN.md, *Pixellab prompts*.
+# The user's own pixellab bases, one file an item, finished like the pixellab uniques
+# (`_outlined(own_edge=True)`, their colours kept as drawn: the saturation ceiling they were muted to was lifted
+# on 2026-09-30, the user's call). They are being made a kind at a time: tools/DESIGN.md, *Pixellab prompts*.
 PIXELLAB_BASES = "Bases/"
 # Pixellab pieces stretched until their longer side fills the square, before they are finished: on the doll a
 # piece that came back small looks lighter than the pieces beside it (the user's call, 2026-09-23). Nearest-neighbour
@@ -261,10 +254,9 @@ BASE_HOLE_MOST = 4
 # user's call, 2026-09-24). A pixellab piece that came back tip up-right is mirrored across the top-left diagonal, which
 # keeps the light on its upper-left; the source file stays as drawn.
 BASE_TRANSPOSE = {"Bone Knife", "Masterwork Dagger"}
-# The torches' fire (2026-09-24). `_muted` scales a piece by its most saturated tenth, which on a torch is the flame,
-# so every flame came out pale pink: the flame (`_fire`) is left as drawn and only the rest is muted. And the user
-# asked for a glow round every flame, which pixellab never drew, so `_glowed` adds it after the outline: apricot
-# (the charts' #f5ac5d) at these two alphas on the two pixels outside the flame.
+# The torches' fire (2026-09-24). The user asked for a glow round every flame, which pixellab never drew, so the
+# flame is found (`_fire`) and `_glowed` adds it after the outline: apricot (the charts' #f5ac5d) at these two alphas
+# on the two pixels outside the flame.
 BASE_FIRE = {"Wooden Torch", "Blazing Torch", "Masterwork Torch", "Broken Torch"}
 FIRE_GLOW = (245, 172, 93)
 FIRE_GLOW_ALPHAS = (150, 70)
@@ -1411,25 +1403,7 @@ def unique_gear():
     """The unique items' icons, each on its own GEAR_SIDE square."""
     out = {}
     for name, entry in UNIQUE_GEAR.items():
-        art = _cut(entry[0])
-        fire = _fire(art) if name in UNIQUE_FIRE else set()
-        out[name] = _squared(name, _shift(_outlined(_muted(art, fire), own_edge=True), *entry[1:]))
-    return out
-
-
-def _muted(art, keep=frozenset()):
-    """`art` with its saturation scaled down to SAT_CEILING at the 90th percentile: see PIXELLAB. The pixels in
-    `keep` (a torch's flame, `_fire`) are left as drawn and not counted."""
-    out = art.copy()
-    px = out.load()
-    spots = [(x, y) for y in range(out.height) for x in range(out.width) if px[x, y][3] and (x, y) not in keep]
-    hsv = {spot: colorsys.rgb_to_hsv(*[v / 255 for v in px[spot][:3]]) for spot in spots}
-    sats = sorted(s for _, s, v in hsv.values() if v >= 0.2)
-    top = sats[len(sats) * 9 // 10] if sats else 0.0
-    if top <= SAT_CEILING:
-        return out
-    for spot, (h, s, v) in hsv.items():
-        px[spot] = tuple(round(c * 255) for c in colorsys.hsv_to_rgb(h, s * SAT_CEILING / top, v)) + (px[spot][3],)
+        out[name] = _squared(name, _shift(_outlined(_cut(entry[0]), own_edge=True), *entry[1:]))
     return out
 
 
@@ -1548,7 +1522,7 @@ def base_gear():
                 if name in BASE_FILL:
                     art = _filled(art)
                 fire = _fire(art) if name in BASE_FIRE else set()
-                art = _outlined(_muted(art, fire), own_edge=True)
+                art = _outlined(art, own_edge=True)
             else:
                 art = _outlined(_cut(source))
             if len(tier) > 2:

@@ -3,7 +3,9 @@
 The creature pack draws each animation as a grid of 64 px cells, four across; EnemyRoster wants one
 row, so every grid is laid out end to end and its empty trailing cells dropped. Gollux is already
 in strips, but all but his idle leave an empty 128 px cell either side of him for effects he never
-uses, so only the painted cells are kept. The cave's layers are whole pictures, copied as they are:
+uses, so only the painted cells are kept. Every creature frame is then given the hero's outline
+(`INK`, one pixel round the outside, `outlined`): Admurin draws without one, and a bat with no edge
+vanished into the dark cave beside the outlined hero. The cave's layers are whole pictures, copied as they are:
 1 to 7, numbered from the front. The pack's 0 is all seven put together, a preview, and is left behind.
 
 No arguments writes the preview `tools/qa/cave_dungeon.png` only -- a common, an elite and the boss
@@ -28,6 +30,7 @@ PREVIEW = ROOT / "tools/qa/cave_dungeon.png"
 CELL = 64
 NEAREST, FARTHEST = 1, 7
 GROUND = 0.915  # CombatScene.CAVE_GROUND: where the fighters' feet are, down the view
+INK = (19, 19, 19, 255)  # the hero's own outline (Assets/Player), and the bought packs' near-black
 
 # name -> (source folder, {animation: grid file}). An animation the pack does not draw is left out.
 GRIDS = {
@@ -79,14 +82,31 @@ def painted(strip: Image.Image, side: int) -> Image.Image:
     return kept
 
 
+def outlined(strip: Image.Image, side: int) -> Image.Image:
+    """`strip` with INK on every clear pixel that touches the art on one of its four sides, frame by
+    frame, so no frame's ring spills into the next. Where the art runs to its cell's edge (Gollux and
+    the Skull stand on the bottom row; a burst or two is clipped by the pack) the ring stops there."""
+    out = strip.copy()
+    src, px = strip.load(), out.load()
+    for left in range(0, strip.width, side):
+        for y in range(strip.height):
+            for x in range(left, left + side):
+                if src[x, y][3]:
+                    continue
+                if any(left <= nx < left + side and 0 <= ny < strip.height and src[nx, ny][3]
+                       for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1))):
+                    px[x, y] = INK
+    return out
+
+
 def creatures() -> dict:
-    """name -> {animation: strip}, every creature of the dungeon."""
+    """name -> {animation: strip}, every creature of the dungeon, outlined."""
     found = {}
     for name, (folder, files) in GRIDS.items():
-        found[name] = {anim: strip_of(Image.open(GALORE / folder / (file + ".png")).convert("RGBA"))
+        found[name] = {anim: outlined(strip_of(Image.open(GALORE / folder / (file + ".png")).convert("RGBA")), CELL)
                        for anim, file in files.items()}
     for name, files in STRIPS.items():
-        found[name] = {anim: painted(Image.open(GOLLUX / (file + ".png")).convert("RGBA"), 128)
+        found[name] = {anim: outlined(painted(Image.open(GOLLUX / (file + ".png")).convert("RGBA"), 128), 128)
                        for anim, file in files.items()}
     return found
 

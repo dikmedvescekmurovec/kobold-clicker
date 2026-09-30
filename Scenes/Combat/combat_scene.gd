@@ -60,8 +60,22 @@ const SIZE_HEIGHT := {
 	EnemyRoster.Size.LARGE: 1.25,
 	EnemyRoster.Size.HUGE: 1.55,
 }
-## The elite at the end stands a little taller than its body alone would, so it reads as the wall it is.
-const ELITE_SCALE := 1.15
+## The backdrops ship nearest-upscaled from their drawn grid (`vista.SCALE` in the generator), so one
+## of their pixels is this many texture pixels: the grid the fighters are snapped to.
+const AREA_UPSCALE := 4
+## The light of each place, which the fighters stand in: each backdrop's haze colour (`hz` in
+## `vista_scenes.py`), and the cave's gloom. `SCENE_LIGHT` is how far toward it they are pulled -- a
+## multiply, so a little goes a long way; the hero at noon and at twilight is not the same blue.
+const HAZE := {
+	"grass": Color("bcdcea"),
+	"forest": Color("b8d8bc"),
+	"dirt": Color("e8b890"),
+	"desert": Color("eadfc4"),
+	"mountains": Color("b8d2e4"),
+	"ice": Color("c8a8c0"),
+	"cave": Color("8a7fa0"),
+}
+const SCENE_LIGHT := 0.4
 ## Where an enemy starts its run-in, past the right edge.
 const OFFSCREEN_X := 1.15
 ## The backdrops: one per environment and variant under Assets/Area. Every one lays its near ground
@@ -291,6 +305,8 @@ var place := ""
 var xp_target := Vector2(-1, -1)
 
 var _ui_scale := 2.0
+## One of the backdrop's pixels, in scene pixels: what the fighters' scale is snapped to.
+var _pixel := 0.0
 ## The backdrop and both fighters, which is what a shake rattles -- the HUD stays still over it.
 var _arena: Node2D
 ## The cave's layers, from the back, while the fight is the dungeon; empty otherwise.
@@ -497,16 +513,20 @@ func _build() -> void:
 		backdrop.scale = Vector2(cover, cover)
 		backdrop.position = (view - Vector2(art.get_size()) * cover) / 2.0
 		arena.add_child(backdrop)
+		_pixel = cover * AREA_UPSCALE
 
+	var light := Color.WHITE.lerp(HAZE.get(_light_key(), Color.WHITE), SCENE_LIGHT)
 	_player = CombatActor.new()
 	_player.name = "Player"
 	arena.add_child(_player)
-	_player.setup_player(view.y * ACTOR_HEIGHT)
+	_player.setup_player(view.y * ACTOR_HEIGHT, _pixel)
+	_player.self_modulate = light
 	_player.position = Vector2(view.x * PLAYER_X, view.y * _ground())
 	_player.animation_finished.connect(func() -> void: _player.play("idle"))
 
 	_enemy = CombatActor.new()
 	_enemy.name = "Enemy"
+	_enemy.self_modulate = light
 	arena.add_child(_enemy)
 	# The cave's nearest rock goes on after them both, so it is what they stand behind.
 	if fight != null and fight.dungeon:
@@ -529,6 +549,13 @@ func _sfx_player(stream: AudioStream) -> AudioStreamPlayer:
 	player.max_polyphony = 4
 	add_child(player)
 	return player
+
+
+## Which `HAZE` the fighters stand in.
+func _light_key() -> String:
+	if fight == null:
+		return ""
+	return "cave" if fight.dungeon else fight.env
 
 
 ## Where the fighters' feet are, as a share of the view's height.
@@ -556,6 +583,7 @@ func _add_cave_layer(arena: Node2D, view: Vector2, n: int) -> void:
 	layer.scale = Vector2(cover, cover)
 	layer.position = (view - Vector2(art.get_size()) * cover) / 2.0
 	arena.add_child(layer)
+	_pixel = cover
 	_cave.append(layer)
 
 
@@ -1217,11 +1245,10 @@ func _on_enemy_coming(_index: int, enemy_name: String, _hp: float) -> void:
 	var view := _size()
 	_enemy.show()
 	var band: float = SIZE_HEIGHT[EnemyRoster.size_of(enemy_name)]
-	var elite := ELITE_SCALE if fight.on_elite() else 1.0
 	if _enemy_hit != null and _enemy_hit.is_valid():
 		_enemy_hit.kill()
 	_enemy.modulate = Color.WHITE
-	_enemy.setup_enemy(enemy_name, view.y * ACTOR_HEIGHT * band * elite)
+	_enemy.setup_enemy(enemy_name, view.y * ACTOR_HEIGHT * band, _pixel, fight.on_elite())
 	_enemy_scale = _enemy.scale
 	_enemy.position = Vector2(view.x * OFFSCREEN_X, view.y * _ground())
 	_enemy.play("walk")

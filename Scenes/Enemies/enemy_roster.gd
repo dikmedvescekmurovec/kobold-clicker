@@ -494,7 +494,7 @@ const ENEMIES := {
 		"environments": ["cave"],
 		"dir": "Rat",
 		"frame": Vector2i(64, 64),
-		"bounds": Rect2i(23, 33, 22, 15),
+		"bounds": Rect2i(22, 32, 24, 17),
 		"sheets": {"idle": "idle.png", "walk": "walk.png", "attack": "attack.png", "hurt": "hurt.png", "death": "death.png"},
 	},
 	"Bat": {
@@ -505,7 +505,7 @@ const ENEMIES := {
 		"environments": ["cave"],
 		"dir": "Bat",
 		"frame": Vector2i(64, 64),
-		"bounds": Rect2i(22, 22, 21, 26),
+		"bounds": Rect2i(21, 21, 23, 28),
 		"sheets": {"idle": "idle.png", "walk": "walk.png", "attack": "attack.png", "hurt": "hurt.png", "death": "death.png"},
 	},
 	"Pebble": {
@@ -516,7 +516,7 @@ const ENEMIES := {
 		"environments": ["cave"],
 		"dir": "Pebble",
 		"frame": Vector2i(64, 64),
-		"bounds": Rect2i(24, 18, 27, 30),
+		"bounds": Rect2i(23, 17, 29, 32),
 		"sheets": {"idle": "idle.png", "walk": "walk.png", "hurt": "hurt.png", "death": "death.png"},
 	},
 	"Spiked Slime": {
@@ -527,7 +527,7 @@ const ENEMIES := {
 		"environments": ["cave"],
 		"dir": "Spiked Slime",
 		"frame": Vector2i(64, 64),
-		"bounds": Rect2i(17, 25, 30, 23),
+		"bounds": Rect2i(16, 24, 32, 25),
 		"sheets": {"idle": "idle.png", "walk": "walk.png", "attack": "attack.png", "hurt": "hurt.png", "death": "death.png"},
 	},
 	"Crab": {
@@ -538,7 +538,7 @@ const ENEMIES := {
 		"environments": ["cave"],
 		"dir": "Crab",
 		"frame": Vector2i(64, 64),
-		"bounds": Rect2i(19, 31, 27, 17),
+		"bounds": Rect2i(18, 30, 29, 19),
 		"sheets": {"idle": "idle.png", "walk": "walk.png", "attack": "attack.png", "hurt": "hurt.png", "death": "death.png"},
 	},
 	"Skull": {
@@ -549,7 +549,7 @@ const ENEMIES := {
 		"environments": ["cave"],
 		"dir": "Skull",
 		"frame": Vector2i(64, 64),
-		"bounds": Rect2i(26, 24, 20, 40),
+		"bounds": Rect2i(25, 23, 22, 41),
 		"sheets": {"idle": "idle.png", "walk": "walk.png", "hurt": "hurt.png", "death": "death.png"},
 	},
 	"Golem": {
@@ -560,7 +560,7 @@ const ENEMIES := {
 		"environments": ["cave"],
 		"dir": "Golem",
 		"frame": Vector2i(64, 64),
-		"bounds": Rect2i(16, 16, 31, 32),
+		"bounds": Rect2i(15, 15, 33, 34),
 		"sheets": {"idle": "idle.png", "walk": "walk.png", "attack": "attack.png", "hurt": "hurt.png", "death": "death.png"},
 	},
 	"Armored Golem": {
@@ -571,7 +571,7 @@ const ENEMIES := {
 		"environments": ["cave"],
 		"dir": "Armored Golem",
 		"frame": Vector2i(64, 64),
-		"bounds": Rect2i(16, 16, 31, 32),
+		"bounds": Rect2i(15, 15, 33, 34),
 		"sheets": {"idle": "idle.png", "walk": "walk.png", "attack": "attack.png", "hurt": "hurt.png", "death": "death.png"},
 	},
 	"Gollux": {
@@ -583,7 +583,7 @@ const ENEMIES := {
 		"environments": ["cave"],
 		"dir": "Gollux",
 		"frame": Vector2i(128, 128),
-		"bounds": Rect2i(35, 65, 73, 63),
+		"bounds": Rect2i(34, 64, 75, 64),
 		# The pack draws him no death: he bursts like anybody else.
 		"sheets": {"idle": "idle.png", "walk": "walk.png", "attack": "attack.png", "hurt": "hurt.png"},
 	},
