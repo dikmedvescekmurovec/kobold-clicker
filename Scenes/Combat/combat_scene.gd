@@ -1176,8 +1176,9 @@ func _show_find(picture: Texture2D, rarity: int = -1, glow := Color.WHITE) -> vo
 	var size: float = FIND_SIZE[rarity]
 	if LootBeam.has(rarity):
 		# The beam is sized on its own, so the find's size is taken back off it -- and handed over as
-		# the piece it has to cover instead.
-		var pillar := LootBeam.make(rarity, glow, THROW_TIME, picture.get_size() * Vector2(0.5, 1.0) * size)
+		# the piece it has to cover instead. Drawn in the fighters' pixels, in the beam's own units.
+		var pillar := LootBeam.make(rarity, glow, THROW_TIME, picture.get_size() * Vector2(0.5, 1.0) * size,
+				_pixel / _ui_scale)
 		pillar.position = Vector2(0, picture.get_height() / 2.0)
 		pillar.scale = Vector2.ONE / size
 		find.add_child(pillar)

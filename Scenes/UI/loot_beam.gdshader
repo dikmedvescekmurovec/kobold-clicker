@@ -5,9 +5,18 @@ shader_type canvas_item;
 // and sparks. Drawn twice by `LootBeam`: the back layer under the find (the pillar, the column's far
 // wall, the far half of the rings, whatever of a ribbon is behind the beam) and the `front` layer over
 // it (the column's near wall, the near half of the rings, the near turns, the sparks), so the find
-// stands inside the light. Whole pixels of the node it is drawn on. The origin is the find's foot.
+// stands inside the light. The origin is the find's foot.
+//
+// Drawn as pixel art, like the fighters it stands beside: in whole pixels of `pixel` (the backdrop's),
+// in three colours only, `colour`, `hot` and white, and at two strengths -- a lit pixel at OPACITY, and
+// the faint light (the tube round the find) at HAZE -- with a 4x4 ordered dither between the two, so
+// nothing fades smoothly.
 
 uniform vec4 colour : source_color = vec4(1.0);
+// The step above `colour` on its own ramp (`LootBeam.HOT`), the beam's bright edges.
+uniform vec4 hot_colour : source_color = vec4(1.0);
+// One of the beam's pixels, in the node's.
+uniform float pixel = 1.0;
 // How tall the pillar is above the foot, and its half-width, in the node's pixels.
 uniform float height = 80.0;
 uniform float width = 1.5;
@@ -27,6 +36,15 @@ uniform float seed = 0.0;
 
 // How flat the ring lies: its height as a share of its width.
 const float FLAT = 0.3;
+// Light under FAINT is haze, over SOLID lit; between them it is dithered. Under GONE it draws nothing.
+const float GONE = 0.03;
+const float FAINT = 0.15;
+const float SOLID = 0.6;
+// How opaque a lit pixel is, and a pixel of haze.
+const float OPACITY = 0.7;
+const float HAZE = 0.2;
+// The 4x4 Bayer matrix: a pixel is lit where its light reaches its threshold.
+const float BAYER[16] = { 0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0 };
 
 varying vec2 local;
 
@@ -59,12 +77,15 @@ void fragment() {
 	if (grow <= 0.0) {
 		discard;
 	}
-	vec2 px = floor(local) + 0.5;
+	// Everything is measured from the middle of the beam pixel this fragment is in, in the node's
+	// pixels; a line's thickness is written in beam pixels, hence the `* pixel` on every one.
+	vec2 cell = floor(local / pixel);
+	vec2 px = (cell + 0.5) * pixel;
 	float t = TIME * speed + seed * 100.0;
 	float y = -px.y;
 	float tall = max(height * grow, 1.0);
 	float up = y / tall;
-	vec3 hot = mix(colour.rgb, vec3(1.0), 0.4);
+	vec3 hot = hot_colour.rgb;
 	vec4 c = vec4(0.0);
 	float ring_r = cover.x * 1.1 * grow;
 
@@ -74,15 +95,15 @@ void fragment() {
 		if (e < 1.0) {
 			c = over(c, vec4(colour.rgb, 0.3 * (0.5 + 0.5 * e)));
 		}
-		if (ring_distance(px, ring_r) < 0.75) {
+		if (ring_distance(px, ring_r) < 0.75 * pixel) {
 			c = over(c, vec4(hot, 0.95));
-		} else if (ring_distance(px, ring_r) < 1.8) {
+		} else if (ring_distance(px, ring_r) < 1.8 * pixel) {
 			c = over(c, vec4(colour.rgb, 0.7));
 		}
 		if (rings > 1) {
 			// The second ring pulses out from the first and fades as it goes.
 			float wave = fract(t * 0.7);
-			if (ring_distance(px, ring_r * (1.0 + 0.6 * wave)) < 0.75) {
+			if (ring_distance(px, ring_r * (1.0 + 0.6 * wave)) < 0.75 * pixel) {
 				c = over(c, vec4(colour.rgb, 0.8 * (1.0 - wave)));
 			}
 		}
@@ -95,7 +116,7 @@ void fragment() {
 	float tube = ring_r * 0.85;
 	float neck = smoothstep(cover.y * 0.8 * grow, cover.y * 1.7 * grow, y);
 	float r = mix(tube, width * 2.0, neck);
-	float across = abs(px.x) / max(r, 0.5);
+	float across = abs(px.x) / max(r, 0.5 * pixel);
 	if (across <= 1.0 && neck < 1.0) {
 		float lip = ring_r * FLAT * sqrt(1.0 - across * across) * 0.85;
 		bool below = front ? px.y <= lip : px.y <= -lip;
@@ -104,7 +125,7 @@ void fragment() {
 			float rising = clamp(1.0 - (y + lip) / (cover.y * 1.5 * max(grow, 0.01)), 0.0, 1.0);
 			float wall = mix(0.08, front ? 0.45 : 0.6, pow(across, 4.0)) * rising;
 			c = over(c, vec4(colour.rgb, wall));
-			if (across > 1.0 - 1.2 / max(r, 1.0)) {
+			if (across > 1.0 - 1.2 * pixel / max(r, pixel)) {
 				c = over(c, vec4(hot, 0.9 * rising * rising));
 			}
 			for (int k = 0; k < 3; k++) {
@@ -113,7 +134,7 @@ void fragment() {
 					continue;
 				}
 				float climbing = fract((y + lip) / (cover.y * 1.5) - t * 0.6 + float(k) * 0.37);
-				if (abs(px.x - r * sin(a)) < 0.6 && climbing < 0.45) {
+				if (abs(px.x - r * sin(a)) < 0.6 * pixel && climbing < 0.45) {
 					c = over(c, vec4(hot, 0.7 * rising * (0.4 + 0.6 * abs(cos(a)))));
 				}
 			}
@@ -126,13 +147,13 @@ void fragment() {
 		float w = width * sqrt(1.0 - up);
 		float fade = 1.0 - up * up;
 		float pulse = 0.8 + 0.2 * step(0.75, fract((y - t * 60.0) / 24.0));
-		if (d <= w * 0.35 + 0.5) {
+		if (d <= w * 0.35 + 0.5 * pixel) {
 			c = over(c, vec4(vec3(1.0), fade));
-		} else if (d <= w + 0.5) {
+		} else if (d <= w + 0.5 * pixel) {
 			c = over(c, vec4(hot, 0.95 * fade * pulse));
-		} else if (d <= w * 2.2 + 1.0) {
+		} else if (d <= w * 2.2 + 1.0 * pixel) {
 			c = over(c, vec4(colour.rgb, 0.75 * fade * pulse));
-		} else if (d <= w * 4.0 + 1.5) {
+		} else if (d <= w * 4.0 + 1.5 * pixel) {
 			c = over(c, vec4(colour.rgb, 0.35 * fade));
 		}
 	}
@@ -155,9 +176,9 @@ void fragment() {
 		float dist = abs(px.x - x) / sqrt(1.0 + slope * slope);
 		// Brightest where it runs across the front, and fading out towards its top.
 		float lit = (1.0 - share * share) * (0.6 + 0.4 * abs(cos(a)));
-		if (dist < 0.9) {
+		if (dist < 0.9 * pixel) {
 			c = over(c, vec4(hot, lit));
-		} else if (dist < 1.9) {
+		} else if (dist < 1.9 * pixel) {
 			c = over(c, vec4(colour.rgb, 0.6 * lit));
 		}
 	}
@@ -167,13 +188,24 @@ void fragment() {
 		float lane = px.x + seed * 1000.0;
 		float rise = fract(hash(vec2(lane, 2.0)) + t * (0.3 + 0.4 * hash(vec2(lane, 1.0))));
 		float spark_y = rise * tall * 0.6;
-		if (hash(vec2(lane, 3.0)) > 0.66 && abs(px.x) < cover.x * 1.2 && abs(y - spark_y) < 0.5) {
+		if (hash(vec2(lane, 3.0)) > 0.66 && abs(px.x) < cover.x * 1.2 && abs(y - spark_y) < 0.5 * pixel) {
 			c = over(c, vec4(hot, 1.0 - rise));
 		}
 	}
 
-	if (c.a < 0.02) {
+	if (c.a < GONE) {
 		discard;
 	}
-	COLOR = c;
+	// Lit where the light is strong and a flat haze where it is faint, so the find is not lost under
+	// dots: only the fading edges between are dithered.
+	ivec2 q = ivec2(mod(cell, 4.0));
+	bool lit = smoothstep(FAINT, SOLID, c.a) >= (BAYER[q.x + q.y * 4] + 0.5) / 16.0;
+	// Every layer is one of the three colours, so what they blend to is snapped back to the nearest.
+	float to_colour = distance(c.rgb, colour.rgb);
+	float to_hot = distance(c.rgb, hot);
+	vec3 rgb = to_hot < to_colour ? hot : colour.rgb;
+	if (distance(c.rgb, vec3(1.0)) < min(to_colour, to_hot)) {
+		rgb = vec3(1.0);
+	}
+	COLOR = vec4(rgb, lit ? OPACITY : HAZE);
 }

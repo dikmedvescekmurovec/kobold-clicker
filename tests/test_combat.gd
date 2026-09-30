@@ -826,6 +826,15 @@ func _test_thrown_finds() -> void:
 			"rarer finds stand taller beams: %s" % [heights])
 	_check(heights.size() == 3 and heights[2] >= 2.0 * heights[1], "and a unique's dwarfs the rest")
 
+	# Every beam's colour has its bright step picked on the palette, a rarity's and a good orb's alike.
+	var glows: Array = LootBeam.LOOKS.keys().map(func(rarity: int) -> Color: return ItemRarity.BORDER_COLORS[rarity])
+	for orb: String in OrbTable.ORBS:
+		if OrbTable.ORBS[orb].has("beam"):
+			glows.append(OrbTable.ORBS[orb].glow)
+	for glow: Color in glows:
+		_check(LootBeam.HOT.has(glow) and LootBeam.HOT[glow].to_html(false) in Palette.E64,
+				"a %s beam has an ENDESGA 64 step above it" % glow.to_html(false))
+
 	# A cheap orb is thrown plain; a good one stands the beam its table names.
 	combat._on_orb_dropped(3, "Orb of Transmutation")
 	_check(combat._finds_shown == 4, "an orb is thrown too")

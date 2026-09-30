@@ -18,6 +18,16 @@ const LOOKS := {
 	ItemRarity.Rarity.ELITE: {"height": 140.0, "width": 2.5, "rings": 1, "ribbons": 1, "sparks": true},
 	ItemRarity.Rarity.UNIQUE: {"height": 300.0, "width": 3.5, "rings": 2, "ribbons": 2, "sparks": true},
 }
+## The step above each beam's colour on its own ENDESGA 64 ramp, which its bright edges are drawn in:
+## the rarities' ring colours and the good orbs' glows. Picked by hand, because the palette colour
+## nearest a lightened lilac is a grey. A colour not here is lightened, off the palette.
+const HOT := {
+	Palette.LILAC: Color("ca52c9"),
+	Palette.BRICK: Color("f5555d"),
+	Palette.GOLD: Color("ffeb57"),
+	Palette.STONE_LT: Color("c7cfdd"),
+	Color("ff5000"): Color("ffa214"),
+}
 ## Seconds the beam takes to shoot up to its height once the find has landed.
 const RISE := 0.3
 ## Seconds it takes to sink back into the ground once the find is picked up (`collapse`).
@@ -30,9 +40,10 @@ static func has(rarity: int) -> bool:
 
 
 ## A beam of `rarity`'s look in `colour`, its foot at its origin, its rings round a find of `cover`
-## (half-width, height) standing on it, shooting up once `landed` seconds have passed. Two layers:
-## `Back` drawn under the find it is a child of and `Front` over it, so the find stands inside the light.
-static func make(rarity: int, colour: Color, landed: float, cover: Vector2) -> Node2D:
+## (half-width, height) standing on it, shooting up once `landed` seconds have passed, drawn in
+## pixels `pixel` of its own wide (the backdrop's). Two layers: `Back` drawn under the find it is a
+## child of and `Front` over it, so the find stands inside the light.
+static func make(rarity: int, colour: Color, landed: float, cover: Vector2, pixel := 1.0) -> Node2D:
 	var beam := Node2D.new()
 	var look: Dictionary = LOOKS[rarity]
 	# Wide enough for the second ring at its widest, tall enough for the pillar.
@@ -45,6 +56,8 @@ static func make(rarity: int, colour: Color, landed: float, cover: Vector2) -> N
 		var material := ShaderMaterial.new()
 		material.shader = SHADER
 		material.set_shader_parameter("colour", colour)
+		material.set_shader_parameter("hot_colour", HOT.get(colour, colour.lerp(Color.WHITE, 0.4)))
+		material.set_shader_parameter("pixel", pixel)
 		material.set_shader_parameter("cover", cover)
 		material.set_shader_parameter("front", front)
 		for key: String in look:
