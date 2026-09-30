@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cenju32nxlecp"
-path="res://.godot/imported/Masterwork Boot.png-d7fcf960e9e2bb5728cef83d4683c960.ctex"
+uid="uid://u6cwspw5tgb1"
+path="res://.godot/imported/Orb of Exaltation.png-d6fddd2036967544e7102c6fd2cff4bb.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Gear/Masterwork Boot.png"
-dest_files=["res://.godot/imported/Masterwork Boot.png-d7fcf960e9e2bb5728cef83d4683c960.ctex"]
+source_file="res://Assets/Orbs/Orb of Exaltation.png"
+dest_files=["res://.godot/imported/Orb of Exaltation.png-d6fddd2036967544e7102c6fd2cff4bb.ctex"]
 
 [params]
 

@@ -139,7 +139,7 @@ static func bounties(drawer: Dictionary) -> Array:
 				saved_orbs = [] if str(saved_orbs).is_empty() else [str(saved_orbs)]
 			var orbs := []
 			for orb: Variant in saved_orbs:
-				var name := "Orb of Transmutation" if str(orb) == "Orb of Alteration" else str(orb)
+				var name := OrbTable.current(str(orb))
 				if OrbTable.ORBS.has(name):
 					orbs.append(name)
 			entry[ORB] = orbs
@@ -362,19 +362,21 @@ static func item_of(bounty: Dictionary) -> Dictionary:
 	return promise
 
 
-## The promise in words, for a tooltip: "an elite sword +1", "a unique piece", "" for none.
+## The promise in words, for a tooltip: "an epic sword +1", "a unique item", "" for none.
 static func reward_text(bounty: Dictionary) -> String:
 	var promise := item_of(bounty)
 	if promise.is_empty():
 		return ""
-	var rarity := str(promise[ITEM_RARITY])
+	# The rarity as it is shown ("epic"), not as it is saved.
+	var step := ItemRarity.from_name(str(promise[ITEM_RARITY]))
+	var rarity := ItemRarity.label_of(step).to_lower() if step >= 0 else str(promise[ITEM_RARITY])
 	var kind := str(promise[ITEM_KIND])
-	var words := "%s %s" % [rarity, kind if not kind.is_empty() else "piece"]
+	var words := "%s %s" % [rarity, kind if not kind.is_empty() else "item"]
 	var plus := int(promise[ITEM_PLUS])
 	if plus > 0:
 		words += " +%d" % plus
-	# "an elite", "an uncommon" -- and "a unique", which is read with a consonant.
-	return ("an " if rarity in ["elite", "uncommon"] else "a ") + words
+	# "an epic", "an uncommon" -- and "a unique", which is read with a consonant.
+	return ("an " if rarity in ["epic", "uncommon"] else "a ") + words
 
 
 ## The piece a finished posting pays, rolled here and now, or null for a posting that promised none.

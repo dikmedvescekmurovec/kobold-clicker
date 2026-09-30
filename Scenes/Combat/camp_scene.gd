@@ -74,7 +74,7 @@ func _build(env: String, variant: String) -> void:
 	rows.add_child(table)
 	var striped := false
 	for named in [["Resting", Camp.spell_time(float(_earned["seconds"]))],
-			["Driven off", str(int(_earned[Camp.KILLS]))],
+			["Kills", str(int(_earned[Camp.KILLS]))],
 			["Gold", BigNumber.format(float(_earned[Camp.GOLD]))],
 			["Experience", str(int(_earned[Camp.XP]))]]:
 		table.add_child(UITheme.table_row(str(named[0]), str(named[1]), striped,

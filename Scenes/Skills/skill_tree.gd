@@ -115,7 +115,7 @@ const TREES := {
 				"flat": {"time_on_hit": 1}, "percent": {}},
 			"phantom": {"name": "Phantom", "parents": ["evasion"], "max_rank": 1, "row": 4, "col": 0,
 				"flat": {}, "percent": {"dodge": 15},
-				"effect": "afterimage", "effect_text": "Afterimage: a dodged blow wins back up to 1s the blows have taken"},
+				"effect": "afterimage", "effect_text": "Afterimage: a dodge wins back up to 1s of lost time"},
 			"bastion": {"name": "Bastion", "parents": ["shield_mastery"], "max_rank": 1, "row": 4, "col": 1,
 				"flat": {"block": 3}, "percent": {},
 				"effect": "shieldwall", "effect_text": "Shield Wall: block counts double against elites and bosses"},

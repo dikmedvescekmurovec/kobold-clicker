@@ -111,7 +111,8 @@ static func items(drawer: Dictionary) -> Array:
 static func orbs(drawer: Dictionary) -> PackedStringArray:
 	var shelf := PackedStringArray()
 	for entry: Variant in _shelf(drawer, ORBS):
-		shelf.append(str(entry) if OrbTable.ORBS.has(str(entry)) else "")
+		var orb := OrbTable.current(str(entry))
+		shelf.append(orb if OrbTable.ORBS.has(orb) else "")
 	return shelf
 
 

@@ -452,11 +452,11 @@ func _section_heading(level: int) -> HBoxContainer:
 	var selling := _buys(TownServices.GEAR)
 	var worth := TownPrices.sell_total(inventory.items.filter(
 			func(item: Item) -> bool: return item.level == level)) if selling else 0.0
-	# A mark either way, coins for selling and a bin for throwing away; the tooltip says the sum.
+	# A mark either way, coins for selling and a bin for discarding; the tooltip says the sum.
+	var things := "item" if held == 1 else "items"
 	var clear := UITheme.button("", UITheme.BARE_BUTTON,
-			"Sell the %d item(s) held at level %d for %s gold"
-			% [held, level, BigNumber.format(worth)] if selling
-			else "Throw away the %d item(s) held at level %d" % [held, level])
+			"Sell %d level %d %s for %s gold" % [held, level, things, BigNumber.format(worth)] if selling
+			else "Discard %d level %d %s" % [held, level, things])
 	clear.icon = load(SELL_ICON if selling else CLEAR_ICON)
 	clear.disabled = held == 0
 	# Both ask first: a whole level goes in one press, and neither can be taken back.
@@ -464,7 +464,7 @@ func _section_heading(level: int) -> HBoxContainer:
 		clear.pressed.connect(_ask.bind("sell", "Sell all", clear.tooltip_text + "?", "Sell",
 				"LightButton", _on_sell_level_pressed.bind(level)))
 	else:
-		clear.pressed.connect(_ask.bind("clear", "Throw away", clear.tooltip_text + "?", "Discard",
+		clear.pressed.connect(_ask.bind("clear", "Discard", clear.tooltip_text + "?", "Discard",
 				"LightDangerButton", _on_clear_level_pressed.bind(level)))
 	row.add_child(clear)
 	return row
@@ -640,7 +640,7 @@ func _drop_level(level: int, selling: bool) -> void:
 		return
 	var names := ", ".join(uniques.map(func(item: Item) -> String: return item.display_name()))
 	var question := "%s %s unique. %s %s as well?" % [names, "is" if uniques.size() == 1 else "are",
-			"Sell" if selling else "Throw away", "it" if uniques.size() == 1 else "them"]
+			"Sell" if selling else "Discard", "it" if uniques.size() == 1 else "them"]
 	_ask(UNIQUES, "Uniques", question, "Sell" if selling else "Discard",
 			"LightButton" if selling else "LightDangerButton", deed.bind(level, true), true,
 			"Don't sell" if selling else "Don't discard")
@@ -766,7 +766,7 @@ func _show_item(index: int) -> void:
 		var refusal := inventory.why_not_equip(item, socket)
 		var full := not refusal.is_empty()
 		var equip := UITheme.button("Equip", "LightButton", refusal if full
-				else "Wear this in the %s socket%s" % [Equipment.LABELS[socket].to_lower(),
+				else "Wear this in the %s slot%s" % [Equipment.LABELS[socket].to_lower(),
 					"" if coming_off.is_empty()
 					else ", putting %s back in the bag" % ", ".join(coming_off)])
 		equip.disabled = full
@@ -791,11 +791,11 @@ func _show_item(index: int) -> void:
 		sell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_action_box.add_child(sell)
 	else:
-		var discard := UITheme.button("Discard", "LightDangerButton", "Throw this away for good")
+		var discard := UITheme.button("Discard", "LightDangerButton", "Discard this for good")
 		# An heirloom is asked about every time, with no tick to stop the asking.
 		if _heirlooms:
-			discard.pressed.connect(_ask.bind("discard_heirloom", "Throw away",
-					"Throw away %s for good? The choice that made it an heirloom does not come back."
+			discard.pressed.connect(_ask.bind("discard_heirloom", "Discard",
+					"Discard %s for good? The choice that made it an heirloom does not come back."
 					% item.display_name(), "Discard", "LightDangerButton",
 					_on_discard_pressed.bind(item), false))
 		else:
@@ -856,14 +856,14 @@ func _refresh_make() -> void:
 		return
 	var item := _open_piece()
 	_make_button.disabled = not _purse.can_make_heirloom(item)
-	_make_button.tooltip_text = ("Open the piece you would keep" if item == null
+	_make_button.tooltip_text = ("Open the item you would keep" if item == null
 			else Blacksmith.BROKEN if item.broken else "Keep this when the world is left behind")
 
 
 func _on_make_pressed() -> void:
 	var item := _open_piece()
 	if item != null:
-		_ask("heirloom", "Heirloom", "Make %s an heirloom? It is the one piece of this world you keep."
+		_ask("heirloom", "Heirloom", "Make %s an heirloom? It is the one item of this world you keep."
 				% item.display_name(), "Keep", "LightButton", _on_heirloom_pressed.bind(item), false)
 
 

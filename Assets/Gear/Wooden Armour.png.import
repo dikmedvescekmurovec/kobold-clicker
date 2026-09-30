@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://fgpqlsk8aig8"
-path="res://.godot/imported/Shadow Boot.png-1795083bd58b462fa33b4708f2e57dde.ctex"
+uid="uid://ciksqwmmhga6u"
+path="res://.godot/imported/Wooden Armour.png-7889d95957a8d845cd0a26d7a7f90e13.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Gear/Old/Shadow Boot.png"
-dest_files=["res://.godot/imported/Shadow Boot.png-1795083bd58b462fa33b4708f2e57dde.ctex"]
+source_file="res://Assets/Gear/Wooden Armour.png"
+dest_files=["res://.godot/imported/Wooden Armour.png-7889d95957a8d845cd0a26d7a7f90e13.ctex"]
 
 [params]
 

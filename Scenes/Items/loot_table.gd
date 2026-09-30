@@ -85,10 +85,10 @@ const KINDS := {
 		"slot": "boots", "weight": 24, "needs": "dexterity",
 		"stats": {"move_speed": 5, "dodge": 2},
 		"affixes": ["armor", "dexterity"],
-		"tiers": ["Leather Boot", "Studded Boot", "Ranger's Boot", "Shadow Boot", "Masterwork Boot"],
+		"tiers": ["Leather Boots", "Studded Boots", "Ranger's Boots", "Shadow Boots", "Masterwork Boots"],
 	},
 	# No first material: the Bronze Greaves went (the user's call, 2026-09-24), so the boots' tier one is
-	# the Leather Boot alone, and a greaves roll under level 3 is dealt as one (`_tier_at`).
+	# the Leather Boots alone, and a greaves roll under level 3 is dealt as one (`_tier_at`).
 	"greaves": {
 		"slot": "boots", "weight": 24, "needs": "strength",
 		"stats": {"move_speed": 4, "armor": 3},
@@ -176,7 +176,7 @@ const KINDS := {
 		"slot": "body", "weight": 12, "needs": "strength",
 		"stats": {"armor": 5},
 		"affixes": ["time_on_hit", "dodge", "strength"],
-		"tiers": ["Wooden Armor", "Iron Armor", "Steel Plate", "Golden Plate", "Masterwork Plate"],
+		"tiers": ["Wooden Armour", "Iron Armour", "Steel Plate", "Golden Plate", "Masterwork Plate"],
 	},
 	"jerkin": {
 		"slot": "body", "weight": 12, "needs": "dexterity",
@@ -290,6 +290,22 @@ const NEEDS_LINE := 5.0
 const FIRST_DROP := "Broken Sword"
 ## What a transcension under the Thick Fog puts in the new world's bag (`Inventory.transcended`).
 const BROKEN_TORCH := "Broken Torch"
+## Pieces a save may name under an older name -> the name they carry now: the house spelling is
+## British, and a pair of boots is plural like the greaves beside them (2026-09-30).
+const RENAMED := {
+	"Wooden Armor": "Wooden Armour",
+	"Iron Armor": "Iron Armour",
+	"Leather Boot": "Leather Boots",
+	"Studded Boot": "Studded Boots",
+	"Ranger's Boot": "Ranger's Boots",
+	"Shadow Boot": "Shadow Boots",
+	"Masterwork Boot": "Masterwork Boots",
+}
+
+
+## What a saved piece's name is called now (`RENAMED`); a name that never changed is itself.
+static func current(type: String) -> String:
+	return RENAMED.get(type, type)
 
 ## Every piece a monster can leave, keyed by name: the row every caller has always read -- `icon`,
 ## `weight`, `slot`, `stats`, `affixes` and the jewellery's `globals` -- plus the `kind` it belongs to

@@ -135,11 +135,11 @@ const FORTUNE_TIPS := {
 	FortuneTeller.ROADS: "Brings every settlement between the ice walls around you out of the fog",
 	FortuneTeller.TREASURE: "Puts a star over the nearest chest you have not seen. It stays until that chest is opened",
 	FortuneTeller.QUARRY: "Shows the lands your bounty's monster lives on, and the nearest tile of them you have seen",
-	FortuneTeller.APPRAISE: "Lists every modifier the open piece can roll, the range it rolls in at the piece's level, and how often it comes up",
+	FortuneTeller.APPRAISE: "Lists every modifier the open item can roll, the range it rolls in at the item's level, and how often it comes up",
 	FortuneTeller.SCOUR: "Brings a tile and the two rings of land around it, nineteen tiles, out of the fog",
 	FortuneTeller.HOMECOMING: "Moves you to a settlement you have already charted",
 	FortuneTeller.STONE: "A stone that grows warm the nearer you stand to the Gollux cave. Yours in every world from now on",
-	FortuneTeller.TRANSCEND: "Ends this world and starts you in a new one, worth far more. Everything you made here is lost",
+	FortuneTeller.TRANSCEND: "Ends this world and starts a new one, worth far more",
 }
 ## What stands over each half of her list. A reading is asked again and again at a climbing price; a
 ## great spell is one a settlement. Two words each: the rule itself is in every square's tooltip, and
@@ -161,7 +161,7 @@ const TOLD_PANEL := "Panel"
 ## What she says before the way out is taken, in the list's place, over the button that takes it.
 const TRANSCEND_LINES := [
 	"The ice will take this world back, and you will wake in another.",
-	"All you have made here is lost: your bag, your gold, your levels, this land. What waits on the other side is worth far more.",
+	"Your bag, gold, orbs, levels and this land are lost. What waits on the other side is worth far more.",
 ]
 
 var inventory: Inventory
@@ -813,15 +813,15 @@ func _fill_smith() -> void:
 ## player off to the bag to find out.
 func _fill_idle_smith() -> void:
 	var body := _scrolled(ROW_GAP)
-	_smith_bench(body, ItemSlot.empty("Open a piece in your bag or on your doll", tab_mark(TownServices.SMITH, false)))
-	body.add_child(_sign("Open a piece in your bag or on your doll.", Palette.TEXT_SOFT))
+	_smith_bench(body, ItemSlot.empty("Open an item in your bag or on your doll", tab_mark(TownServices.SMITH, false)))
+	body.add_child(_sign("Open an item in your bag or on your doll.", Palette.TEXT_SOFT))
 	body.add_child(UITheme.rule(BODY_WIDTH))
 	var cap := _upgrade_cap()
 	var pieces := inventory.items + inventory.equipment.items()
-	_smith_service(body, "Upgrade", "One level up, its modifiers kept. It can break.",
+	_smith_service(body, "Upgrade",
 			pieces.filter(func(p: Item) -> bool: return Blacksmith.can_upgrade(p, cap))
 				.map(func(p: Item) -> float: return TownPrices.upgrade_price(p)))
-	_smith_service(body, "Lock", "Pins one modifier for good.",
+	_smith_service(body, "Lock",
 			pieces.filter(func(p: Item) -> bool: return Blacksmith.can_lock(p))
 				.map(func(p: Item) -> float: return TownPrices.lock_price(p)))
 
@@ -893,7 +893,7 @@ func _show_swing() -> void:
 
 ## One of the smith's services on his idle counter: its name, the least it costs on any piece in
 ## `prices` (none when nothing the player has can take it), and what it does.
-func _smith_service(body: VBoxContainer, title: String, does: String, prices: Array) -> void:
+func _smith_service(body: VBoxContainer, title: String, prices: Array) -> void:
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 2)
 	var name_label := UITheme.label(title)
@@ -906,7 +906,6 @@ func _smith_service(body: VBoxContainer, title: String, does: String, prices: Ar
 		head.add_child(UITheme.label(BigNumber.format(least),
 				Palette.TEXT_SOFT if inventory.gold >= least else Palette.BRICK, true))
 	body.add_child(head)
-	body.add_child(_sign(does, Palette.TEXT_SOFT))
 
 
 ## One of the smith's two, with the coin and the price on it the way a Buy carries them, and the
@@ -1214,29 +1213,29 @@ func _fortune_price(reading: String) -> float:
 ## reading is sold as often as it is paid for.
 func _fortune_why_not(reading: String) -> String:
 	if view == null:
-		return "She sees nothing here."
+		return "She sees nothing here"
 	if reading in FortuneTeller.GREAT and FortuneTeller.asked(_drawer, reading):
-		return "That spell is spent here."
+		return "That spell is spent here"
 	match reading:
 		FortuneTeller.TREASURE:
 			var told := FortuneTeller.chest(inventory.fortunes)
 			if told != TownWorld.NO_SPOT and view.has_chest(told - view.origin):
-				return "The star is already out."
+				return "The star is already out"
 			if _near_chest == HexMap.NO_CELL:
-				return "She sees no hidden chest."
+				return "She sees no hidden chest"
 		FortuneTeller.QUARRY:
 			var bounty := BountyBoard.active(inventory.towns)
 			if bounty.is_empty():
-				return "No bounty is out."
+				return "No bounty is out"
 			if BountyBoard.located(bounty):
-				return "Already told."
+				return "Already told"
 		FortuneTeller.APPRAISE:
 			var why := FortuneTeller.why_not_appraise(_bag_piece)
 			if not why.is_empty():
 				return why
 		FortuneTeller.HOMECOMING:
 			if view.homes().is_empty():
-				return "You have found nowhere else to stand."
+				return "You have found nowhere else to stand"
 		FortuneTeller.TRANSCEND:
 			# Asking is free and is where the price is said; the Transcend in her question is what a
 			# short purse greys, and the price under the square is brick.
@@ -1374,9 +1373,9 @@ func _place_orb_card(square: OrbSlot) -> void:
 ## something away. An orb passes `needs_room` false -- orbs are counts, outside the cap entirely.
 func _why_not(price: float, needs_room: bool) -> String:
 	if inventory.gold < price:
-		return "Your purse is short."
+		return "Your purse is short"
 	if needs_room and inventory.is_full():
-		return "Your bag is full."
+		return "The bag is full"
 	return ""
 
 

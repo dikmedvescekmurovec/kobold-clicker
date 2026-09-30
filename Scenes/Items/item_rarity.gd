@@ -27,6 +27,14 @@ const NAMES := {
 	Rarity.ELITE: "elite",
 	Rarity.UNIQUE: "unique",
 }
+## What each step is called on the screen (`label_of`).
+const LABELS := {
+	Rarity.COMMON: "Common",
+	Rarity.UNCOMMON: "Uncommon",
+	Rarity.RARE: "Rare",
+	Rarity.ELITE: "Epic",
+	Rarity.UNIQUE: "Unique",
+}
 
 ## What a dead enemy's tier is worth, as integer weights out of a thousand -- so a weight is its own
 ## percentage with the point moved, and nobody has to divide to read the table. Rabble carries plain
@@ -170,9 +178,15 @@ static func mod_count(rarity: Rarity, rng: RandomNumberGenerator) -> int:
 	return rng.randi_range(int(band[0]), int(band[1]))
 
 
-## "rare", for the save file and for the stat block.
+## "rare", for the save file. What the player reads is `label_of`.
 static func name_of(rarity: Rarity) -> String:
 	return NAMES[rarity]
+
+
+## "Rare", as the player reads it. Apart from the save's `NAMES` since the elite step is shown as epic
+## (2026-09-30): "elite" is the enemies' word, and "an elite sword" read as one an elite had dropped.
+static func label_of(rarity: Rarity) -> String:
+	return LABELS[rarity]
 
 
 ## The step a save names, or -1 when it names something this build has never heard of.

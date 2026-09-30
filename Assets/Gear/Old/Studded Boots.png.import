@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c7okooxlw87tu"
-path="res://.godot/imported/Shadow Boot.png-858c01fec297cbfa37c06f520b783e98.ctex"
+uid="uid://c33puuoutlne8"
+path="res://.godot/imported/Studded Boots.png-543aa174976f4cd0884d3c1db0ba39c8.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Gear/Shadow Boot.png"
-dest_files=["res://.godot/imported/Shadow Boot.png-858c01fec297cbfa37c06f520b783e98.ctex"]
+source_file="res://Assets/Gear/Old/Studded Boots.png"
+dest_files=["res://.godot/imported/Studded Boots.png-543aa174976f4cd0884d3c1db0ba39c8.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cffhdayiqeyc6"
-path="res://.godot/imported/Iron Armor.png-4febd0dab815705a3dad304df0c8d517.ctex"
+uid="uid://04yq3topqr1m"
+path="res://.godot/imported/Leather Boots.png-040abb5cec338ccd11975c3f06cf60dd.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Gear/Old/Iron Armor.png"
-dest_files=["res://.godot/imported/Iron Armor.png-4febd0dab815705a3dad304df0c8d517.ctex"]
+source_file="res://Assets/Gear/Old/Leather Boots.png"
+dest_files=["res://.godot/imported/Leather Boots.png-040abb5cec338ccd11975c3f06cf60dd.ctex"]
 
 [params]
 

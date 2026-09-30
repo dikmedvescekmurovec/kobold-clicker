@@ -122,7 +122,7 @@ func open() -> void:
 	var free := inventory.skills.points(inventory.level)
 	_points.text = "%d skill point%s" % [free, "" if free == 1 else "s"]
 	if inventory.skills.bursts > 0:
-		_points.text += ", %d a rank" % inventory.skills.rank_cost()
+		_points.text += ", %d per rank" % inventory.skills.rank_cost()
 	_points.add_theme_color_override("font_color", Palette.LEAF if free > 0 else Palette.TEXT_SOFT)
 	for tree: String in _skill_views:
 		_skill_views[tree].fill(tree, inventory.skills.ranks)

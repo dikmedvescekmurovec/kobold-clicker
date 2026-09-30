@@ -33,23 +33,23 @@ const ORBS := {
 	},
 	ASCENSION: {
 		"aimed": false,
-		"does": "Makes the piece +1 for good: every modifier on it rolls as if the piece were %d levels higher. It can be done again and again.",
+		"does": "Makes the item +1 for good: every modifier on it rolls as if the item were %d levels higher. It can be done again and again.",
 	},
 	PERFECTION: {
 		"aimed": true,
-		"does": "Puts the modifier you choose at the top of its range, and it stays there whatever is done to the piece afterwards.",
+		"does": "Puts the modifier you choose at the top of its range, and it stays there whatever is done to the item afterwards.",
 	},
 	EXPANSION: {
 		"aimed": false,
-		"does": "Adds one modifier more than the piece's rarity allows. Once per piece.",
+		"does": "Adds one modifier more than the item's rarity allows. Once per item.",
 	},
 	MENDING: {
 		"aimed": false,
-		"does": "Makes a broken piece whole again.",
+		"does": "Makes a broken item whole again.",
 	},
 	BINDING: {
 		"aimed": true,
-		"does": "Locks the modifier you choose so that no orb can move it, beside whatever a smith has locked. Once per piece.",
+		"does": "Locks the modifier you choose so that no orb can move it, beside whatever a smith has locked. Once per item.",
 	},
 }
 
@@ -102,11 +102,11 @@ static func why_not(orb: String, item: Item) -> String:
 	if item == null or not ORBS.has(orb):
 		return "Nothing to use it on"
 	if orb == MENDING:
-		return "" if item.broken else "This piece is not broken"
+		return "" if item.broken else "This item is not broken"
 	if item.broken:
-		return "A broken piece cannot be changed"
+		return "A broken item cannot be changed"
 	if item.mods.is_empty() and orb != EXPANSION:
-		return "This piece has no modifiers"
+		return "This item has no modifiers"
 	var unique := item.rarity == ItemRarity.Rarity.UNIQUE
 	match orb:
 		REPLACEMENT:
@@ -116,16 +116,16 @@ static func why_not(orb: String, item: Item) -> String:
 			if unique:
 				return "A unique's modifiers are its own"
 			if item.rarity == ItemRarity.Rarity.COMMON:
-				return "A common piece cannot carry a modifier"
+				return "A common item cannot carry a modifier"
 			if item.extra_slot:
-				return "This piece has already been expanded"
+				return "This item has already been expanded"
 		BINDING:
 			# Its modifiers never change, so all a lock could do is refuse the player's own Divine.
 			if unique:
 				return "A unique's modifiers are its own"
 			for mod in item.mods:
 				if bool(mod.get("bound", false)):
-					return "This piece already has a modifier bound"
+					return "This item already has a modifier bound"
 	if aimed(orb):
 		for i in item.mods.size():
 			if can_aim(orb, item, i):

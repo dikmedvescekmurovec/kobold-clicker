@@ -823,7 +823,7 @@ func _build_hud() -> void:
 	# the whole of it. Here rather than out in the arena because this is where something can be done
 	# about it: every square below carries a Discard.
 	_warning = ItemDetails.line(
-			"Bag full -- more finds will leave you too laden to fight", Palette.RUST, WARNING_WIDTH)
+			"Bag full: more items will leave you too laden to fight", Palette.RUST, WARNING_WIDTH)
 	_warning.hide()
 	found.add_child(_warning)
 	_loot_drops = DropsView.new()
@@ -1578,8 +1578,8 @@ func _on_finished(won: bool) -> void:
 		Juice.count_up(_xp_label, float(fight.xp))
 	Juice.count_up(_kills_label, float(fight.kills()))
 	if _auto_discarded > 0:
-		_auto_label.text = ("1 find discarded automatically" if _auto_discarded == 1
-				else "%d finds discarded automatically" % _auto_discarded)
+		_auto_label.text = ("1 item discarded automatically" if _auto_discarded == 1
+				else "%d items discarded automatically" % _auto_discarded)
 		_auto_label.show()
 	# The way out of a run goes with the run. Leaving it standing under the verdict would put two
 	# buttons on the screen for the one thing left to do.

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://jexlrj64w87n"
-path="res://.godot/imported/Wooden Armor.png-122a4166a2faa9a0d412fc87a403d3e9.ctex"
+uid="uid://sca7uwtjhqvv"
+path="res://.godot/imported/Iron Armour.png-d98a7bc486c5353e0b5f500b3ae6dd2d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Gear/Wooden Armor.png"
-dest_files=["res://.godot/imported/Wooden Armor.png-122a4166a2faa9a0d412fc87a403d3e9.ctex"]
+source_file="res://Assets/Gear/Iron Armour.png"
+dest_files=["res://.godot/imported/Iron Armour.png-d98a7bc486c5353e0b5f500b3ae6dd2d.ctex"]
 
 [params]
 

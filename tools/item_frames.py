@@ -168,7 +168,7 @@ def frame(rarity):
 
 
 def preview():
-    pieces = ["Leather Boot", "Wooden Sword", "Wooden Armor", "Gold Ring", "Ruby Amulet"]
+    pieces = ["Leather Boots", "Wooden Sword", "Wooden Armour", "Gold Ring", "Ruby Amulet"]
     scale, pad = 4, 6
     rarities = list(RAMPS)
     sheet = Image.new("RGBA", ((SIDE + pad) * len(rarities) * 2 + pad, (SIDE + pad) * 2 + pad), _rgb("#f4ecc6"))

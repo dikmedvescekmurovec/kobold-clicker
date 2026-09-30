@@ -256,7 +256,7 @@ PIXELLAB_BASES = "Bases/"
 # Pixellab pieces stretched until their longer side fills the square, before they are finished: on the doll a
 # piece that came back small looks lighter than the pieces beside it (the user's call, 2026-09-23). Nearest-neighbour
 # at a small factor (the Wooden Armor is x1.19), so a few rows and columns are doubled; kept to the pieces that need it.
-BASE_FILL = {"Wooden Armor", "Iron Armor", "Steel Plate", "Golden Plate", "Masterwork Plate",
+BASE_FILL = {"Wooden Armour", "Iron Armour", "Steel Plate", "Golden Plate", "Masterwork Plate",
              "Hide Jerkin", "Leather Jerkin", "Studded Jerkin", "Shadow Leathers", "Masterwork Jerkin"}
 # Pixellab sometimes leaves a seam as a see-through slit (the Masterwork Plate had a 2 px and a 3 px one between its
 # shoulder guards and chest, 2026-09-23): an enclosed clear patch this small or smaller is filled (`_plugged`). The
@@ -343,7 +343,7 @@ BASE_KINDS = {
 
     # Pixellab too, each piece matched to the helmet of its tier. What it replaced is in BASE_OLD.
     "plate": ("Body", [
-        ("Wooden Armor", (PIXELLAB_BASES + "Wooden Armor", 0, 0, 32, 32, 1)), ("Iron Armor", (PIXELLAB_BASES + "Iron Armor", 0, 0, 32, 32, 1)),
+        ("Wooden Armour", (PIXELLAB_BASES + "Wooden Armor", 0, 0, 32, 32, 1)), ("Iron Armour", (PIXELLAB_BASES + "Iron Armor", 0, 0, 32, 32, 1)),
         ("Steel Plate", (PIXELLAB_BASES + "Steel Plate", 0, 0, 32, 32, 1)), ("Golden Plate", (PIXELLAB_BASES + "Golden Plate", 0, 0, 32, 32, 1)),
         ("Masterwork Plate", (PIXELLAB_BASES + "Masterwork Plate", 0, 0, 32, 32, 1))]),
     # The pack calls a strapped backpack its leather armour (it is rag_and_bone_sack), so all drawn.
@@ -355,11 +355,11 @@ BASE_KINDS = {
         ("Masterwork Jerkin", (PIXELLAB_BASES + "Masterwork Jerkin", 0, 0, 32, 32, 1))]),
 
     "boot": ("Boots", [
-        ("Leather Boot", (PIXELLAB_BASES + "Leather Boot", 0, 0, 32, 32, 1)),
-        ("Studded Boot", (PIXELLAB_BASES + "Studded Boot", 0, 0, 32, 32, 1)),
-        ("Ranger's Boot", (PIXELLAB_BASES + "Ranger's Boot", 0, 0, 32, 32, 1)),
-        ("Shadow Boot", (PIXELLAB_BASES + "Shadow Boot", 0, 0, 32, 32, 1)),
-        ("Masterwork Boot", (PIXELLAB_BASES + "Masterwork Boot", 0, 0, 32, 32, 1))]),
+        ("Leather Boots", (PIXELLAB_BASES + "Leather Boot", 0, 0, 32, 32, 1)),
+        ("Studded Boots", (PIXELLAB_BASES + "Studded Boot", 0, 0, 32, 32, 1)),
+        ("Ranger's Boots", (PIXELLAB_BASES + "Ranger's Boot", 0, 0, 32, 32, 1)),
+        ("Shadow Boots", (PIXELLAB_BASES + "Shadow Boot", 0, 0, 32, 32, 1)),
+        ("Masterwork Boots", (PIXELLAB_BASES + "Masterwork Boot", 0, 0, 32, 32, 1))]),
     "greaves": ("Boots", [
         ("Iron Greaves", (PIXELLAB_BASES + "Iron Greaves", 0, 0, 32, 32, 1)),
         ("Steel Greaves", (PIXELLAB_BASES + "Steel Greaves", 0, 0, 32, 32, 1)), ("Golden Greaves", (PIXELLAB_BASES + "Golden Greaves", 0, 0, 32, 32, 1)),
@@ -396,11 +396,11 @@ BASE_OLD = {
     "Iron Helmet": (_RPG + "Equipment/Iron Helmet", 0, 0, 32, 32, 1),
     "Steel Helm": (_RPG + "Equipment/Helm", 0, 0, 32, 32, 1),
     "Golden Helm": ("golden-helm", 0, 0, 32, 32, 1),
-    "Wooden Armor": (_RPG + "Equipment/Wooden Armor", 0, 0, 32, 32, 1),
-    "Iron Armor": (_RPG + "Equipment/Iron Armor", 0, 0, 32, 32, 1),
+    "Wooden Armour": (_RPG + "Equipment/Wooden Armor", 0, 0, 32, 32, 1),
+    "Iron Armour": (_RPG + "Equipment/Iron Armor", 0, 0, 32, 32, 1),
     "Steel Plate": DRAWN,
     "Golden Plate": DRAWN,
-    "Leather Boot": (_RPG + "Equipment/Leather Boot", 0, 0, 32, 32, 1),
+    "Leather Boots": (_RPG + "Equipment/Leather Boot", 0, 0, 32, 32, 1),
     "Iron Greaves": (_RPG + "Equipment/Iron Boot", 0, 0, 32, 32, 1),
     "Steel Greaves": DRAWN,
     "Golden Greaves": DRAWN,
@@ -444,9 +444,9 @@ BASE_OLD = {
     "Leather Hood": DRAWN,
     "Studded Hood": DRAWN,
     "Shadow Hood": DRAWN,
-    "Studded Boot": DRAWN,
-    "Ranger's Boot": DRAWN,
-    "Shadow Boot": DRAWN,
+    "Studded Boots": DRAWN,
+    "Ranger's Boots": DRAWN,
+    "Shadow Boots": DRAWN,
 }
 BASE_OLD_OUT = GEAR_OUT + "/Old"
 
@@ -461,8 +461,8 @@ ORBS = {
     "Orb of Augmentation": ("OreAndGem/OreGemSpritesheet", 7 * 32, 1 * 32, 32, 32, 1),
     "Orb of Alchemy": ("OreAndGem/OreGemSpritesheet", 9 * 32, 3 * 32, 32, 32, 1),
     "Orb of Chaos": ("OreAndGem/OreGemSpritesheet", 6 * 32, 2 * 32, 32, 32, 1),
-    "Orb of Exalted": ("OreAndGem/OreGemSpritesheet", 5 * 32, 1 * 32, 32, 32, 1),
-    "Orb of Divine": ("OreAndGem/OreGemSpritesheet", 8 * 32, 2 * 32, 32, 32, 1),
+    "Orb of Exaltation": ("OreAndGem/OreGemSpritesheet", 5 * 32, 1 * 32, 32, 32, 1),
+    "Orb of Divinity": ("OreAndGem/OreGemSpritesheet", 8 * 32, 2 * 32, 32, 32, 1),
     # The six super orbs (`SuperOrbTable`), spent only at a transcension: the sheet's crystals, where
     # the ordinary six are its stones, so the two trays never read as one family.
     "Orb of Replacement": ("OreAndGem/OreGemSpritesheet", 2 * 32, 1 * 32, 32, 32, 1),

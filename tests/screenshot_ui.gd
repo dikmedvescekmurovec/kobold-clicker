@@ -135,14 +135,14 @@ func _shoot_inventory() -> void:
 	# Every gear type appears at least once, so the shot also shows the three cut from the UI pack
 	# sitting next to the four that came with the game -- and spread over four levels, because the
 	# bag is sectioned by level now and one section would photograph none of that.
-	for spec in [["Leather Boot", ItemRarity.Rarity.COMMON, 1],
-			["Wooden Armor", ItemRarity.Rarity.COMMON, 1],
+	for spec in [["Leather Boots", ItemRarity.Rarity.COMMON, 1],
+			["Wooden Armour", ItemRarity.Rarity.COMMON, 1],
 			["Wooden Sword", ItemRarity.Rarity.UNCOMMON, 1],
 			["Wooden Shield", ItemRarity.Rarity.COMMON, 3],
 			["Wooden Torch", ItemRarity.Rarity.COMMON, 3],
 			["Gold Ring", ItemRarity.Rarity.RARE, 3],
-			["Leather Boot", ItemRarity.Rarity.RARE, 3],
-			["Wooden Armor", ItemRarity.Rarity.COMMON, 7],
+			["Leather Boots", ItemRarity.Rarity.RARE, 3],
+			["Wooden Armour", ItemRarity.Rarity.COMMON, 7],
 			["Ruby Amulet", ItemRarity.Rarity.ELITE, 7],
 			["Wooden Sword", ItemRarity.Rarity.ELITE, 12]]:
 		main.inventory.add(Item.rolled(spec[0], spec[1], rng, spec[2]))
@@ -157,14 +157,14 @@ func _shoot_inventory() -> void:
 	main.inventory.add_orb("Orb of Transmutation", 12)
 	main.inventory.add_orb("Orb of Augmentation", 3)
 	main.inventory.add_orb("Orb of Chaos")
-	main.inventory.add_orb("Orb of Divine", 2)
+	main.inventory.add_orb("Orb of Divinity", 2)
 	# Most of a set worn, so the shot shows what an equipped socket looks like against an empty one.
 	# The offhand and one ring are left bare on purpose: the empty squares and their marks are half
 	# of what this panel has to get right.
 	for pair in [["Wooden Sword", Equipment.Socket.WEAPON],
 			["Leather Helmet", Equipment.Socket.HELMET],
-			["Wooden Armor", Equipment.Socket.BODY],
-			["Leather Boot", Equipment.Socket.BOOTS],
+			["Wooden Armour", Equipment.Socket.BODY],
+			["Leather Boots", Equipment.Socket.BOOTS],
 			["Ruby Amulet", Equipment.Socket.AMULET],
 			["Gold Ring", Equipment.Socket.RING_LEFT]]:
 		var worn := Item.rolled(pair[0], ItemRarity.Rarity.RARE, rng)
@@ -376,9 +376,9 @@ func _shoot_town() -> void:
 	# that is not, and a spread of rarities, because the price is what changes with them.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = WORLD_SEED
-	for spec in [["Wooden Sword", ItemRarity.Rarity.ELITE, 6], ["Leather Boot", ItemRarity.Rarity.RARE, 6],
+	for spec in [["Wooden Sword", ItemRarity.Rarity.ELITE, 6], ["Leather Boots", ItemRarity.Rarity.RARE, 6],
 			["Gold Ring", ItemRarity.Rarity.UNCOMMON, 6], ["Wooden Shield", ItemRarity.Rarity.COMMON, 6],
-			["Wooden Armor", ItemRarity.Rarity.COMMON, 3], ["Wooden Torch", ItemRarity.Rarity.COMMON, 3],
+			["Wooden Armour", ItemRarity.Rarity.COMMON, 3], ["Wooden Torch", ItemRarity.Rarity.COMMON, 3],
 			["Ruby Amulet", ItemRarity.Rarity.RARE, 3]]:
 		main.inventory.add(Item.rolled(spec[0], spec[1], rng, spec[2]))
 	# A purse that can actually afford the shelf, so the Buy button is photographed live rather than
@@ -387,7 +387,7 @@ func _shoot_town() -> void:
 	main.inventory.gold = 60000
 	main.inventory.add_orb("Orb of Transmutation", 11)
 	main.inventory.add_orb("Orb of Chaos", 2)
-	main.inventory.add_orb("Orb of Exalted")
+	main.inventory.add_orb("Orb of Exaltation")
 	# Something worn, so the doll at the smith has a piece to hand him.
 	var worn := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 4)
 	main.inventory.add(worn)
@@ -515,7 +515,7 @@ func _shoot_town() -> void:
 	# The question a heading's coins ask before a whole level goes over the counter.
 	main.bag_page._select_item(-1)
 	for button: Button in main.bag_page._sections.find_children("", "Button", true, false):
-		if button.tooltip_text.begins_with("Sell the"):
+		if button.tooltip_text.begins_with("Sell "):
 			button.pressed.emit()
 			break
 	# Ticked, which is the state with the mark in it.
@@ -534,7 +534,7 @@ func _shoot_town() -> void:
 	main.bag_page.refresh()
 	await process_frame
 	for button: Button in main.bag_page._sections.find_children("", "Button", true, false):
-		if button.tooltip_text.begins_with("Sell the"):
+		if button.tooltip_text.begins_with("Sell "):
 			button.pressed.emit()
 			break
 	for button: Button in main.bag_page._confirm.find_children("", "Button", true, false):
@@ -587,7 +587,7 @@ func _shoot_town() -> void:
 	for i in 2:
 		await process_frame
 	for child: Node in main.bag_page._orb_tray.get_children():
-		if child is OrbSlot and (child as OrbSlot).orb == "Orb of Exalted":
+		if child is OrbSlot and (child as OrbSlot).orb == "Orb of Exaltation":
 			main.bag_page._on_orb_hovered((child as OrbSlot).orb, child)
 	for i in 2:
 		await process_frame

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bv32ojbs041q4"
-path="res://.godot/imported/Wooden Armor.png-2116f3650e24e403467d2b9593fbe5f4.ctex"
+uid="uid://csp6ce2u1rc65"
+path="res://.godot/imported/Studded Boots.png-69bcd299261280214d86b5c318a2405c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Gear/Old/Wooden Armor.png"
-dest_files=["res://.godot/imported/Wooden Armor.png-2116f3650e24e403467d2b9593fbe5f4.ctex"]
+source_file="res://Assets/Gear/Studded Boots.png"
+dest_files=["res://.godot/imported/Studded Boots.png-69bcd299261280214d86b5c318a2405c.ctex"]
 
 [params]
 

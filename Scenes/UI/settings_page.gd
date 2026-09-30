@@ -29,14 +29,14 @@ const ANIM_NAMES := ["None", "Low", "Default"]
 ## `Settings.Uniques` in order: what a heading's Sell all and bin do with a unique among the handful.
 const UNIQUES_NAMES := ["Ask", "Sell", "Keep"]
 const UNIQUES_TIPS := ["A unique among the handful is asked about on its own",
-		"A unique among the handful is sold or thrown away with the rest",
+		"A unique among the handful is sold or discarded with the rest",
 		"A unique among the handful is left in the bag"]
 ## The balancing page's rows, one a `Settings.wall_hp` entry, and the buttons either side of the
 ## number: [face, what it does to the number].
 const WALL_HP_NAMES := ["Inside wall 1", "Wall 1 to wall 2", "Wall 2 to wall 3"]
 const HP_NUDGES := [["/10", "Divide by 10"], ["-1", "Take 1 away"], ["+1", "Add 1"], ["x10", "Multiply by 10"]]
-const HP_BASE_TIP := "The health of an ordinary body on this circle's first ring. Every body in the circle scales with it."
-const DETAILS_TIP :="Shows beside each modifier the lowest and highest it could have rolled at the item's level, like +14(8-20)% increased Damage."
+const HP_BASE_TIP := "The health of an ordinary body on this circle's first ring. Every body in the circle scales with it"
+const DETAILS_TIP :="Shows beside each modifier the lowest and highest it could have rolled at the item's level, like +14(8-20)% increased Damage"
 
 ## The debug build's item generator works on these; the main scene sets them, as it sets a town
 ## page's `view`. Without them there is no button for it.
@@ -235,7 +235,7 @@ func _foot(asking: bool) -> VBoxContainer:
 			var old := _tick("Show old icons", Settings.old_icons,
 					func(on: bool) -> void: Settings.old_icons = on)
 			for part: Control in old.get_children():
-				part.tooltip_text = "Dev: a unique or a piece of gear whose icon was replaced wears its old one, from the next time it is drawn"
+				part.tooltip_text = "Dev: an item whose icon was replaced wears its old one, from the next time it is drawn"
 			foot.add_child(old)
 			var services := _tick("Show all services", Settings.all_services, func(on: bool) -> void:
 				Settings.all_services = on
@@ -259,7 +259,7 @@ func _foot(asking: bool) -> VBoxContainer:
 			balance.pressed.connect(_open_balance)
 			foot.add_child(balance)
 			if inventory != null:
-				var forge := UITheme.button("Item generator", "LightButton", "Dev: make a piece to order")
+				var forge := UITheme.button("Item generator", "LightButton", "Dev: make an item to order")
 				forge.pressed.connect(_open_generator)
 				foot.add_child(forge)
 		var reset := UITheme.button("Reset save", "LightDangerButton", "Delete the saves and start a new game")

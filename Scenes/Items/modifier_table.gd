@@ -31,7 +31,7 @@ extends RefCounted
 
 enum Kind {
 	PERCENT,  ## scales a base stat the item has: "+14% increased Damage"
-	FLAT,     ## adds a stat the item is allowed to carry: "+2 Damage"
+	FLAT,     ## adds a stat the item is allowed to carry: "+2 Damage", "+5% to Crit Chance"
 	GLOBAL,   ## scales what the whole set is worth, not the piece: a ring's "+14% increased Damage"
 }
 
@@ -261,7 +261,7 @@ static func _level_band(id: String, level: int) -> Array[float]:
 	return [low, high]
 
 
-## A fresh number for one modifier, in its tier's band. What an Orb of Divine spends itself on: the
+## A fresh number for one modifier, in its tier's band. What an Orb of Divinity spends itself on: the
 ## id and the tier stay and only the roll moves, which is why it is drawn here rather than by
 ## rolling the modifier again from scratch.
 static func reroll_value(id: String, rng: RandomNumberGenerator, tier := 1) -> int:
@@ -353,7 +353,10 @@ static func _written(id: String, amount: String) -> String:
 			return "+%s%% increased %s" % [amount, LootTable.STAT_LABELS[entry["stat"]]]
 		_:
 			# A flat roll on a stat that is itself a percentage adds percentage points, and has to
-			# say so: "+10% Drop Rate", never "+10 Drop Rate". Seconds carry their own "s" (`amount`).
+			# say so -- "+10% to Drop Rate", never "+10 Drop Rate" -- and "to" is what tells it from an
+			# increase of the same stat, "+10% increased Drop Rate", which "+10% Drop Rate" did not.
+			# Seconds carry their own "s" (`amount`).
 			var stat: String = entry["stat"]
-			var unit := "%" if stat in LootTable.PERCENT_STATS else ""
-			return "+%s%s %s" % [amount, unit, LootTable.STAT_LABELS[stat]]
+			if stat in LootTable.PERCENT_STATS:
+				return "+%s%% to %s" % [amount, LootTable.STAT_LABELS[stat]]
+			return "+%s %s" % [amount, LootTable.STAT_LABELS[stat]]

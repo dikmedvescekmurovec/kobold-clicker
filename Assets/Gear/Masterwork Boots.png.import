@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dra34shmf0tjv"
-path="res://.godot/imported/Studded Boot.png-bbb8a22a6732d0864b1c7883bd51f2e9.ctex"
+uid="uid://buvfcst8bowif"
+path="res://.godot/imported/Masterwork Boots.png-8fce9210d69c0cc2af838fe9db1b3e92.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Gear/Old/Studded Boot.png"
-dest_files=["res://.godot/imported/Studded Boot.png-bbb8a22a6732d0864b1c7883bd51f2e9.ctex"]
+source_file="res://Assets/Gear/Masterwork Boots.png"
+dest_files=["res://.godot/imported/Masterwork Boots.png-8fce9210d69c0cc2af838fe9db1b3e92.ctex"]
 
 [params]
 

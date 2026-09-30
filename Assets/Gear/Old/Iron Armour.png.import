@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dw4hki1nol7ou"
-path="res://.godot/imported/Orb of Divine.png-f4efa97397b7cb712627b07ab700df6e.ctex"
+uid="uid://dxcb387n4udd4"
+path="res://.godot/imported/Iron Armour.png-b9ea191e497acf0aafca30f80e9336d9.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Orbs/Orb of Divine.png"
-dest_files=["res://.godot/imported/Orb of Divine.png-f4efa97397b7cb712627b07ab700df6e.ctex"]
+source_file="res://Assets/Gear/Old/Iron Armour.png"
+dest_files=["res://.godot/imported/Iron Armour.png-b9ea191e497acf0aafca30f80e9336d9.ctex"]
 
 [params]
 

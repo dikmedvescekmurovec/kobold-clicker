@@ -831,7 +831,7 @@ func _test_thrown_finds() -> void:
 	_check(combat._finds_shown == 4, "an orb is thrown too")
 	_check(combat.get_child(combat.get_child_count() - 1).get_child_count() == 0,
 			"and a cheap one carries no beam")
-	combat._on_orb_dropped(4, "Orb of Exalted")
+	combat._on_orb_dropped(4, "Orb of Exaltation")
 	var orb := combat.get_child(combat.get_child_count() - 1) as Node2D
 	_check(orb.get_child_count() == 1, "but a good one does")
 
@@ -2920,9 +2920,9 @@ func _test_tile_mods() -> bool:
 			and Encounter.tier_in(hordes, 14) == EnemyRoster.Tier.COMMON, "Horde II is twenty, still ending on its elite")
 	var more_elites := Encounter.for_tile(here, "grass", "plain", false, ["elite_ground", "elite_ground"])
 	_check(more_elites.elite_every == 3, "Elite Ground II fields one every third (%d)" % more_elites.elite_every)
-	_check(TileMods.describe("savage", 2) == PackedStringArray(["Savage II", "Enemies hit 100% harder.", "+40% drop rate"]),
-			"Savage II reads its own numbers (%s)" % [TileMods.describe("savage", 2)])
-	_check(TileMods.describe("piercing", 2)[1] == "Your armour counts for 25% of itself.", "a factor tier compounds")
+	_check(TileMods.describe("savage", 2) == PackedStringArray(["Brutal II", "Enemies hit 100% harder.", "+40% drop rate"]),
+			"Brutal II reads its own numbers (%s)" % [TileMods.describe("savage", 2)])
+	_check(TileMods.describe("piercing", 2)[1] == "Only 25% of your armour counts.", "a factor tier compounds")
 	_check(TileMods.describe("sparse", 1)[1] == "4 fewer enemies on the same clock." and TileMods.describe("sparse", 1)[2] == "",
 			"Sparse reads as the boon it is")
 	var repeats := false

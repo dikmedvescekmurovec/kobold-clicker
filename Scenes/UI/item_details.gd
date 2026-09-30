@@ -38,10 +38,12 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 	# costs a socket, which is as much a part of what it is worth as its level is. So does a unique's
 	# rank, which is the player's and moves every number its rule writes.
 	var ranked := not item.unique.is_empty() and UniqueTable.is_ranked(item.unique)
-	rows.add_child(line("%s · level %d%s%s" % [item.rarity_name(), item.level,
+	# In the soft ink for every rarity: the name over it carries the rarity's colour, which at 10 px on
+	# cream is too pale to read a line by (2026-09-30).
+	rows.add_child(line("%s · Level %d%s%s" % [item.rarity_label(), item.level,
 			" · Two-handed" if LootTable.two_handed(item.type) else "",
 			" · Rank %s" % Achievements.RANK_NAMES[UniqueTable.shown_rank(item.unique)] if ranked else ""],
-			item.text_color(), width, true))
+			Palette.TEXT_SOFT, width, true))
 	# What it asks before it goes on. Not coloured by whether it is met: this block knows no player,
 	# and a greyed Equip says it where it matters.
 	var needs := LootTable.requirement(item.type, item.level)

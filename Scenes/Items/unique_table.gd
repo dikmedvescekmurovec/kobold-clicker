@@ -6,7 +6,7 @@ extends RefCounted
 ## state. A unique is hand-written where every other piece is rolled: its base piece, its modifiers and
 ## its effect are all in its row, so every Metronome carries the same lines. Only the *values* of those
 ## modifiers roll, inside the band any modifier rolls in at the piece's level, which is what leaves an
-## Orb of Divine something to do and makes a well-rolled one a second thing to hunt.
+## Orb of Divinity something to do and makes a well-rolled one a second thing to hunt.
 ##
 ## A unique is worn in an ordinary socket and is meant to lose to a crafted elite on raw numbers: two
 ## or three modifiers against five or six. What it is worn for is its `effect`, which changes how a
@@ -73,16 +73,16 @@ const UNIQUES := {
 		"effect_text": "Double experience while you are under level 20.",
 	},
 	"couriers_boots": {
-		"name": "Courier's Boots", "base": "Leather Boot",
+		"name": "Courier's Boots", "base": "Leather Boots",
 		"mods": ["increased_move_speed", "added_spawn_speed", "added_dodge"],
 		"effect": "courier",
-		"effect_text": "Enemies walk in 30% sooner.",
+		"effect_text": "+30% Spawn Speed.",
 	},
 	"beginners_luck": {
 		"name": "Beginner's Luck", "base": "Jade Ring",
 		"mods": ["added_crit_damage", "added_damage"],
 		"effect": "beginners_luck",
-		"effect_text": "Your critical strike chance is 25%.",
+		"effect_text": "Your crit chance is 25%.",
 	},
 	"worry_stone": {
 		"name": "Worry Stone", "base": "Emerald Amulet",
@@ -135,12 +135,12 @@ const UNIQUES := {
 	},
 	# The home pieces: each is found anywhere, and its damage counts on its own ground alone.
 	"meadowstriders": {
-		"name": "Meadowstriders", "base": "Leather Boot",
+		"name": "Meadowstriders", "base": "Leather Boots",
 		"mods": ["increased_move_speed", "added_drop_rate"],
 		"effect": "home", "home": "grass",
-		"effect_text": "Deals {times} times the damage on grass.",
+		"effect_text": "Deals {times} times the damage in grassland.",
 		"ranks": {"times": [2, 2.5, 3, 4]},
-		"peak": "Fights on grass give double experience.",
+		"peak": "Fights in grassland give double experience.",
 	},
 	"hunters_lantern": {
 		"name": "Hunter's Lantern", "base": "Wooden Torch",
@@ -148,7 +148,7 @@ const UNIQUES := {
 		"effect": "home", "home": "forest",
 		"effect_text": "Deals {times} times the damage in forest.",
 		"ranks": {"times": [2, 2.5, 3, 4]},
-		"peak": "Elites in forest always drop a piece of gear.",
+		"peak": "Elites in forest always drop an item.",
 	},
 	"sunscorched_cowl": {
 		"name": "Sunscorched Cowl", "base": "Leather Helmet",
@@ -159,7 +159,7 @@ const UNIQUES := {
 		"peak": "Purses in desert are twice as full.",
 	},
 	"rimeplate": {
-		"name": "Rimeplate", "base": "Wooden Armor",
+		"name": "Rimeplate", "base": "Wooden Armour",
 		"mods": ["added_damage", "increased_armor"],
 		"effect": "home", "home": "ice",
 		"effect_text": "Deals {times} times the damage on ice.",
@@ -178,9 +178,9 @@ const UNIQUES := {
 		"name": "Gravedigger's Charm", "base": "Ruby Amulet",
 		"mods": ["global_increased_damage", "added_crit_damage"],
 		"effect": "home", "home": "dirt",
-		"effect_text": "Deals {times} times the damage on dirt.",
+		"effect_text": "Deals {times} times the damage in the barrens.",
 		"ranks": {"times": [2, 2.5, 3, 4]},
-		"peak": "Orbs drop twice as often on dirt.",
+		"peak": "Orbs drop twice as often in the barrens.",
 	},
 	# --- Trade-offs ---
 	"berserkers_band": {
@@ -211,9 +211,9 @@ const UNIQUES := {
 		"name": "Ascetic's Cord", "base": "Ruby Amulet",
 		"mods": ["global_increased_damage"],
 		"effect": "ascetic",
-		"effect_text": "{more}% more damage for every place on you that is bare.",
+		"effect_text": "{more}% more damage for every empty slot.",
 		"ranks": {"more": [15, 20, 25, 35]},
-		"peak": "Each bare place also gives 5% dodge.",
+		"peak": "Each empty slot also gives 5% dodge.",
 	},
 	# --- The clock ---
 	"last_gasp": {
@@ -229,10 +229,10 @@ const UNIQUES := {
 		"name": "Duelist's Buckler", "base": "Wooden Shield",
 		"mods": ["added_crit_damage", "increased_block"],
 		"effect": "opening_strike",
-		"effect_text": ["Your first blow against every enemy is a critical strike.",
-				"Your first {blows} blows against every enemy are critical strikes.",
-				"Your first {blows} blows against every enemy are critical strikes.",
-				"Your first {blows} blows against every enemy are critical strikes."],
+		"effect_text": ["Your first blow against every enemy is a crit.",
+				"Your first {blows} blows against every enemy are crits.",
+				"Your first {blows} blows against every enemy are crits.",
+				"Your first {blows} blows against every enemy are crits."],
 		"ranks": {"blows": [1, 2, 3, 4]},
 		"peak": "The opening blows against an elite or boss deal double critical damage.",
 	},
@@ -257,7 +257,7 @@ const UNIQUES := {
 	# What a one-blow kill had left over goes on into the next body, and a body it fells passes its own
 	# leftover on in turn (the user's, 2026-09-29) -- never into an elite or a boss.
 	"dominoes": {
-		"name": "Dominoes", "base": "Leather Boot",
+		"name": "Dominoes", "base": "Leather Boots",
 		"mods": ["added_damage", "increased_move_speed"],
 		"effect": "domino",
 		"effect_text": "An enemy felled in one blow carries {share}% of the damage left over into the next, and on through any it fells. Never into an elite or a boss.",
@@ -265,18 +265,18 @@ const UNIQUES := {
 		"peak": "The carry-over reaches elites and bosses too, at half.",
 	},
 	"snowball": {
-		"name": "Snowball", "base": "Wooden Armor",
+		"name": "Snowball", "base": "Wooden Armour",
 		"mods": ["increased_armor", "added_damage"],
 		"effect": "momentum",
 		"effect_text": "2% more damage for every kill this fight, up to double.",
 	},
 	"packmule": {
-		"name": "Packmule's Harness", "base": "Wooden Armor",
+		"name": "Packmule's Harness", "base": "Wooden Armour",
 		"mods": ["increased_armor", "added_drop_rate"],
 		"effect": "packmule",
-		"effect_text": "{more}% more damage for every piece in your bag.",
+		"effect_text": "{more}% more damage for every item in your bag.",
 		"ranks": {"more": [1, 1.5, 2, 3]},
-		"peak": "Your bag holds 20 more pieces.",
+		"peak": "Your bag holds 20 more items.",
 	},
 	# --- Defence given a second job, on top of keeping blows off the clock ---
 	"bulwark": {
@@ -285,10 +285,10 @@ const UNIQUES := {
 		"effect": "riposte",
 		"effect_text": "A blow your block stops entirely is answered at once with a swing of your own, at {share}% damage.",
 		"ranks": {"share": [100, 150, 200, 300]},
-		"peak": "The answering swing is always a critical strike.",
+		"peak": "The answering swing is always a crit.",
 	},
 	"heartwood_plate": {
-		"name": "Heartwood Plate", "base": "Wooden Armor",
+		"name": "Heartwood Plate", "base": "Wooden Armour",
 		"mods": ["increased_armor", "added_armor"],
 		"effect": "heartwood",
 		"effect_text": "Every fifty armour you have is a second more on the clock, up to {most}.",
@@ -308,23 +308,23 @@ const UNIQUES := {
 		"name": "Magpie's Band", "base": "Opal Ring",
 		"mods": ["added_drop_rate", "added_gold_find"],
 		"effect": "magpie",
-		"effect_text": "One purse in twenty is a piece of gear instead.",
+		"effect_text": "One purse in twenty is an item instead.",
 	},
 	"lucky_wound": {
 		"name": "Lucky Wound", "base": "Wooden Torch",
 		"mods": ["added_crit", "added_drop_rate"],
 		"effect": "lucky_wound",
-		"effect_text": "An enemy killed by a critical strike rolls its drop {rolls} times and keeps the best.",
+		"effect_text": "An enemy killed by a crit rolls its drop {rolls} times and keeps the best.",
 		"ranks": {"rolls": [2, 3, 4, 5]},
 		"peak": "A crit kill rolls its unique chance twice as well.",
 	},
 	"rag_and_bone_sack": {
-		"name": "Rag and Bone Sack", "base": "Wooden Armor",
+		"name": "Rag and Bone Sack", "base": "Wooden Armour",
 		"mods": ["added_gold_find", "increased_armor"],
 		"effect": "salvage",
-		"effect_text": "Gear you throw away pays {share}% of what a trader would give.",
+		"effect_text": "Gear you discard pays {share}% of what a trader would give.",
 		"ranks": {"share": [20, 30, 40, 50]},
-		"peak": "One piece in twenty thrown away leaves an orb.",
+		"peak": "One item in twenty discarded leaves an orb.",
 	},
 	# --- The attributes, made worth building for: every point is counted over both dolls
 	# (`Inventory.attributes`), and the Crown, the Brand and the Echo change what every other one reads.
@@ -385,17 +385,17 @@ const UNIQUES := {
 		"name": "Patchwork Coat", "base": "Hide Jerkin",
 		"mods": ["added_strength", "added_dexterity", "added_intelligence"],
 		"effect": "patchwork",
-		"effect_text": "{more}% more damage for every attribute line you wear.",
+		"effect_text": "{more}% more damage for every attribute modifier you wear.",
 		"ranks": {"more": [2, 4, 6, 8]},
-		"peak": "You may wear any piece, whatever attribute it needs.",
+		"peak": "You may wear any item, whatever attribute it needs.",
 	},
 	"purists_seal": {
 		"name": "Purist's Seal", "base": "Pearl Ring",
 		"mods": ["added_damage", "global_increased_damage"],
 		"effect": "purist",
-		"effect_text": "{more}% more damage for every piece you wear without an attribute line.",
+		"effect_text": "{more}% more damage for every item you wear without an attribute modifier.",
 		"ranks": {"more": [10, 15, 20, 30]},
-		"peak": "The modifiers on pieces without an attribute line count a quarter higher.",
+		"peak": "The modifiers on items without an attribute modifier count a quarter higher.",
 	},
 	"brawlers_wraps": {
 		"name": "Brawler's Wraps", "base": "Opal Ring",
@@ -414,7 +414,7 @@ const UNIQUES := {
 		"peak": "An enemy that dies bleeding passes its wound to the next.",
 	},
 	"quickdraw_boots": {
-		"name": "Quickdraw Boots", "base": "Leather Boot",
+		"name": "Quickdraw Boots", "base": "Leather Boots",
 		"mods": ["added_dexterity", "increased_move_speed"],
 		"effect": "quickdraw",
 		"effect_text": "Every point of dexterity is {times} Spawn Speed.",
@@ -432,7 +432,7 @@ const UNIQUES := {
 	# The two that hurry a veteran through land already known (2026-09-29, the user's). No rank IV
 	# line yet: the user named the four numbers and nothing past them.
 	"nightwalkers": {
-		"name": "Nightwalkers", "base": "Leather Boot",
+		"name": "Nightwalkers", "base": "Leather Boots",
 		"mods": ["increased_move_speed", "added_dodge"],
 		"effect": "nightwalker",
 		"effect_text": "You can chart a tile up to {tiles} steps into the dark, fighting for every tile on the way, one after another.",

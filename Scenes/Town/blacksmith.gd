@@ -30,7 +30,7 @@ const BREAK_CHANCE := 0.05
 ## What he says about a piece he has already ruined. `OrbTable` says the same thing in its own words
 ## rather than reading it from here: the items know nothing about towns, and that is worth more than
 ## one shared sentence.
-const BROKEN := "This piece is broken."
+const BROKEN := "This item is broken"
 
 
 ## Whether this piece can be taken one level higher here. `cap` is the deepest level this town's
@@ -46,7 +46,7 @@ static func why_not_upgrade(item: Item, cap: int) -> String:
 		return ""
 	if item.broken:
 		return BROKEN
-	return "Level %d is the most here." % maxi(cap, 1)
+	return "Level %d is the most here" % maxi(cap, 1)
 
 
 ## How likely the next blow is to ruin this piece. Nothing while an heirloom is being walked back up
@@ -84,8 +84,8 @@ static func why_not_lock(item: Item) -> String:
 	if item.broken:
 		return BROKEN
 	if not item.locked_mod().is_empty():
-		return "One lock to a piece."
-	return "Nothing here to lock."
+		return "One lock to an item"
+	return "Nothing here to lock"
 
 
 ## Pins one modifier, drawn at random from what the piece carries. The smith picks, not the player:

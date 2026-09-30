@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dsdfaxog6vlj4"
-path="res://.godot/imported/Ranger's Boot.png-ae5082dcf78aebf5dc830256040cf09a.ctex"
+uid="uid://c3k5hjxed1p8"
+path="res://.godot/imported/Orb of Divinity.png-7dc7f9f823c300fbee86db39ec8ef65f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Gear/Ranger's Boot.png"
-dest_files=["res://.godot/imported/Ranger's Boot.png-ae5082dcf78aebf5dc830256040cf09a.ctex"]
+source_file="res://Assets/Orbs/Orb of Divinity.png"
+dest_files=["res://.godot/imported/Orb of Divinity.png-7dc7f9f823c300fbee86db39ec8ef65f.ctex"]
 
 [params]
 

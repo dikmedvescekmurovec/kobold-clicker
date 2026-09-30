@@ -357,7 +357,7 @@ func _test_smith() -> bool:
 			"a piece that is not there is refused without a fuss")
 
 	# A break: the level and the stats stand, and the piece takes no more work of any kind.
-	var ruined := Item.rolled("Leather Boot", ItemRarity.Rarity.RARE, rng, 3)
+	var ruined := Item.rolled("Leather Boots", ItemRarity.Rarity.RARE, rng, 3)
 	var ruined_stats := ruined.base_stats()
 	var ruined_mods := ruined.mods.duplicate(true)
 	_check(not Blacksmith.upgrade(ruined, cap, doomed), "the hammer broke it")
@@ -383,7 +383,7 @@ func _test_smith() -> bool:
 			"the hammer breaks about one in twenty (%d of %d)" % [breaks, BLOWS])
 
 	# The lock: one to a piece, drawn by the smith, and nothing at all on a piece with no modifiers.
-	var bare := Item.rolled("Wooden Armor", ItemRarity.Rarity.COMMON, rng, 3)
+	var bare := Item.rolled("Wooden Armour", ItemRarity.Rarity.COMMON, rng, 3)
 	_check(not Blacksmith.can_lock(bare), "a bare common has nothing to lock")
 	_check(not Blacksmith.why_not_lock(bare).is_empty(), "and says so")
 	_check(not Blacksmith.lock(bare, rng) and bare.mods.is_empty(), "and stays bare")
@@ -544,8 +544,8 @@ func _test_bounties() -> bool:
 			and BountyBoard.item_of({}).is_empty(),
 			"a promise this build cannot keep is no promise")
 	_check(BountyBoard.reward_text({BountyBoard.ITEM: {"kind": "sword", "rarity": "elite", "plus": 1}})
-			== "an elite sword +1" and BountyBoard.reward_text({BountyBoard.ITEM:
-			{"kind": "", "rarity": "unique", "plus": 0}}) == "a unique piece"
+			== "an epic sword +1" and BountyBoard.reward_text({BountyBoard.ITEM:
+			{"kind": "", "rarity": "unique", "plus": 0}}) == "a unique item"
 			and BountyBoard.reward_text({}).is_empty(), "and the promise is put into words")
 	# The piece itself, rolled at the hand-in, is what was promised and no more.
 	var sworn := {BountyBoard.ENEMY: "Imp", BountyBoard.ITEM: {"kind": "sword", "rarity": "elite", "plus": 1}}
@@ -774,7 +774,7 @@ func _test_selling() -> void:
 	rng.seed = WORLD_SEED
 	var piece := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 4)
 	inventory.add(piece)
-	inventory.add(Item.rolled("Leather Boot", ItemRarity.Rarity.RARE, rng, 4))
+	inventory.add(Item.rolled("Leather Boots", ItemRarity.Rarity.RARE, rng, 4))
 	inventory.add_orb("Orb of Chaos", 3)
 	var page := BagPage.new(inventory, TEST_PATH, 1.0)
 	root.add_child(page)
@@ -785,7 +785,7 @@ func _test_selling() -> void:
 	_check(_deep_button(page._actions, "Discard") != null, "outside a town a piece is discarded")
 	_check(_deep_button(page._actions, "Sell") == null, "and there is nothing to sell it to")
 	_check(page._sections.get_child(0).get_children().any(func(child: Node) -> bool:
-			return child is Button and (child as Button).tooltip_text.begins_with("Throw away the")),
+			return child is Button and (child as Button).tooltip_text.begins_with("Discard ")),
 			"and a level is cleared")
 
 	# At the gear merchant the same two buttons buy instead.
@@ -795,7 +795,7 @@ func _test_selling() -> void:
 	_check(sell != null and _deep_button(page._actions, "Discard") == null,
 			"at the merchant the piece is sold rather than thrown away")
 	_check(page._sections.get_child(0).get_children().any(func(child: Node) -> bool:
-			return child is Button and (child as Button).tooltip_text.begins_with("Sell the")),
+			return child is Button and (child as Button).tooltip_text.begins_with("Sell ")),
 			"and a level is sold at once")
 	var price := TownPrices.sell_price(piece)
 	if sell != null:
@@ -826,7 +826,7 @@ func _test_selling() -> void:
 	page.refresh()
 	await process_frame
 	for button: Button in page._sections.find_children("", "Button", true, false):
-		if button.tooltip_text.begins_with("Sell the"):
+		if button.tooltip_text.begins_with("Sell "):
 			button.pressed.emit()
 			break
 	var sell_all := _deep_button(page._confirm, "Sell")
@@ -1016,7 +1016,7 @@ func _test_buying() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = WORLD_SEED
 	while not inventory.is_full():
-		inventory.add(Item.rolled("Leather Boot", ItemRarity.Rarity.COMMON, rng, 1))
+		inventory.add(Item.rolled("Leather Boots", ItemRarity.Rarity.COMMON, rng, 1))
 	page._fill()
 	buy = _deep_button(page._rows, "Buy")
 	_check(buy != null and buy.disabled, "a full bag kills the button too")
@@ -1237,7 +1237,7 @@ func _test_board() -> void:
 		inventory.add(Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng))
 	page._fill()
 	var claim := _deep_button(page._rows, "Claim")
-	_check(claim != null and claim.disabled and claim.tooltip_text == "Your bag is full.",
+	_check(claim != null and claim.disabled and claim.tooltip_text == "The bag is full",
 			"a promised piece cannot be claimed into a full bag (%s)" % [claim.tooltip_text if claim else "no button"])
 	page._on_claim_pressed(bounty)
 	_check(inventory.gold == 0 and not bool(bounty[BountyBoard.DONE]), "and a press pays nothing")
@@ -1245,7 +1245,7 @@ func _test_board() -> void:
 	page._fill()
 	claim = _deep_button(page._rows, "Claim")
 	_check(claim != null and not claim.disabled and claim.tooltip_text.contains(BigNumber.format(reward))
-			and claim.tooltip_text.ends_with("and an elite sword +1"),
+			and claim.tooltip_text.ends_with("and an epic sword +1"),
 			"the finished one carries its reward (%s)" % [claim.tooltip_text if claim != null else "no button"])
 	if claim != null:
 		claim.pressed.emit()
@@ -1832,7 +1832,7 @@ func _test_fortune_page() -> void:
 	rng.seed = WORLD_SEED
 	var kept := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 5)
 	main.inventory.add(kept)
-	main.inventory.add(Item.rolled("Leather Boot", ItemRarity.Rarity.COMMON, rng, 5))
+	main.inventory.add(Item.rolled("Leather Boots", ItemRarity.Rarity.COMMON, rng, 5))
 	main.inventory.kills = 321
 	main.town_page.redraw()
 	await process_frame
@@ -2042,7 +2042,7 @@ func _test_curses_the_world_feels() -> void:
 	_check(main._combat == null and main._transcend_page != null, "a lost tile ends the world, Retry or no")
 	var black: TranscendPage = main._transcend_page
 	black._show_choice()
-	_check(_deep_button(black, "Create an heirloom").disabled and "lost" in _said(black),
+	_check(_deep_button(black, "Create an heirloom").disabled and "lost" in _said(black).to_lower(),
 			"and a world lost that way makes no heirloom")
 	black.finish()
 	await process_frame

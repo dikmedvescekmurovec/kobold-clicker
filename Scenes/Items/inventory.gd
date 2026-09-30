@@ -1134,12 +1134,13 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	inventory.towns = TownState.from_dict(data.get("towns", {}))
 	# Version 6 knew nothing about orbs, and an absent key reads as none. An orb this build no longer
 	# has is dropped rather than kept as a name nothing can draw -- the same pruning by name that
-	# Item.from_dict does to a retired piece, and the reason orbs are saved by name at all. The one
-	# exception is Alteration, whose job Transmutation took over: its count is Transmutation's now.
+	# Item.from_dict does to a retired piece, and the reason orbs are saved by name at all. A renamed
+	# one (`OrbTable.RENAMED`: Alteration, whose job Transmutation took over, and the two adjectives)
+	# is counted under its name now.
 	var currency: Variant = data.get("orbs", {})
 	if typeof(currency) == TYPE_DICTIONARY:
 		for orb: Variant in currency:
-			var named := "Orb of Transmutation" if str(orb) == "Orb of Alteration" else str(orb)
+			var named := OrbTable.current(str(orb))
 			if not OrbTable.ORBS.has(named):
 				continue
 			var held: Variant = currency[orb]

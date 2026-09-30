@@ -73,7 +73,7 @@ func open() -> void:
 	Cursors.wear(help, Cursors.HELP)
 	# The mark is only there to be read, so its card is up at once.
 	help.set_meta(TipCard.NOW, true)
-	help.tooltip_text = ("Each unique found adds %d%% increased Damage, worn or not."
+	help.tooltip_text = ("Each unique found adds %d%% increased Damage, worn or not"
 			% UniqueTable.COLLECTION_DAMAGE)
 	var bonus := UITheme.label("+%d%% Damage" % inventory.collection_bonus(), Palette.TEXT_SOFT, true)
 	bonus.name = BONUS_NAME

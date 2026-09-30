@@ -63,7 +63,7 @@ func setup(held: Item, open := false, translucent := false) -> void:
 		socket.set_border_width_all(1)
 		socket.border_color = Palette.SLOT_TAN_DK
 	add_theme_stylebox_override("panel", socket)
-	tooltip_text = "%s (%s, level %d)" % [item.display_name(), item.rarity_name(), item.level]
+	tooltip_text = "%s (%s, level %d)" % [item.display_name(), item.rarity_label(), item.level]
 	var icon := TextureRect.new()
 	icon.texture = item.icon()
 	icon.custom_minimum_size = Vector2(ICON, ICON)

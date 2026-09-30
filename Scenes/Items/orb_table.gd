@@ -30,6 +30,20 @@ extends RefCounted
 
 const ROOT := "res://Assets/Orbs/"
 
+## Orbs a save may name under an older name -> the name they carry now: Alteration's job went to
+## Transmutation, and Exalted and Divine were adjectives where every other orb is "of" a noun (2026-09-30).
+const RENAMED := {
+	"Orb of Alteration": "Orb of Transmutation",
+	"Orb of Exalted": "Orb of Exaltation",
+	"Orb of Divine": "Orb of Divinity",
+}
+
+
+## What a saved orb's name is called now (`RENAMED`); a name that never changed is itself.
+static func current(orb: String) -> String:
+	return RENAMED.get(orb, orb)
+
+
 ## The order the tray draws them in, and it never changes: six fixed squares whose places the
 ## player learns. Cheap and frequent first, running to the rare.
 ##
@@ -42,7 +56,7 @@ const ROOT := "res://Assets/Orbs/"
 const ORBS := {
 	"Orb of Transmutation": {
 		"icon": "Orb of Transmutation.png", "weight": 24,
-		"does": "Makes a piece uncommon with fresh modifiers, or rerolls an uncommon one's.",
+		"does": "Makes an item uncommon with fresh modifiers, or rerolls an uncommon one's.",
 	},
 	"Orb of Augmentation": {
 		"icon": "Orb of Augmentation.png", "weight": 10,
@@ -50,19 +64,19 @@ const ORBS := {
 	},
 	"Orb of Alchemy": {
 		"icon": "Orb of Alchemy.png", "weight": 8,
-		"does": "Makes a piece rare with fresh modifiers, or rerolls a rare one's.",
+		"does": "Makes an item rare with fresh modifiers, or rerolls a rare one's.",
 	},
-	"Orb of Divine": {
-		"icon": "Orb of Divine.png", "weight": 7, "beam": ItemRarity.Rarity.RARE, "glow": Color8(181, 188, 192),
+	"Orb of Divinity": {
+		"icon": "Orb of Divinity.png", "weight": 7, "beam": ItemRarity.Rarity.RARE, "glow": Color8(181, 188, 192),
 		"does": "Rerolls the value of every modifier, keeping the modifiers and their tiers.",
 	},
 	"Orb of Chaos": {
 		"icon": "Orb of Chaos.png", "weight": 4, "beam": ItemRarity.Rarity.RARE, "glow": Color8(221, 67, 11),
 		"does": "Rerolls the tier and value of every modifier, keeping the modifiers themselves.",
 	},
-	"Orb of Exalted": {
-		"icon": "Orb of Exalted.png", "weight": 3, "beam": ItemRarity.Rarity.ELITE, "glow": Color8(241, 216, 23),
-		"does": "Makes a piece elite with fresh modifiers, or rerolls an elite one's.",
+	"Orb of Exaltation": {
+		"icon": "Orb of Exaltation.png", "weight": 3, "beam": ItemRarity.Rarity.ELITE, "glow": Color8(241, 216, 23),
+		"does": "Makes an item epic with fresh modifiers, or rerolls an epic one's.",
 	},
 }
 
@@ -101,7 +115,7 @@ const SIZE_CHANCE := {
 const RARITY_OF := {
 	"Orb of Transmutation": ItemRarity.Rarity.UNCOMMON,
 	"Orb of Alchemy": ItemRarity.Rarity.RARE,
-	"Orb of Exalted": ItemRarity.Rarity.ELITE,
+	"Orb of Exaltation": ItemRarity.Rarity.ELITE,
 }
 
 ## How many of the orb before it in the tray the orb vendor takes for one orb (`upscale_from`).
@@ -149,15 +163,15 @@ static func can_apply(orb: String, item: Item) -> bool:
 	if item.broken:
 		return false
 	# A unique's modifiers are its row's and stay: only their numbers may move, which is Divine and Chaos.
-	if item.rarity == ItemRarity.Rarity.UNIQUE and orb not in ["Orb of Divine", "Orb of Chaos"]:
+	if item.rarity == ItemRarity.Rarity.UNIQUE and orb not in ["Orb of Divinity", "Orb of Chaos"]:
 		return false
 	match orb:
-		"Orb of Transmutation", "Orb of Alchemy", "Orb of Exalted":
+		"Orb of Transmutation", "Orb of Alchemy", "Orb of Exaltation":
 			# No orb lowers a rarity: each makes its own, or rerolls a piece already there.
 			return item.rarity <= RARITY_OF[orb]
 		"Orb of Augmentation":
 			return item.mods.size() < _room(item)
-		"Orb of Divine", "Orb of Chaos":
+		"Orb of Divinity", "Orb of Chaos":
 			return not item.mods.is_empty()
 	return false
 
@@ -170,20 +184,20 @@ static func can_apply(orb: String, item: Item) -> bool:
 static func why_not(orb: String, item: Item) -> String:
 	if item == null or not ORBS.has(orb) or can_apply(orb, item):
 		return ""
-	var piece := "%s %s" % [item.rarity_name(), item.display_name()]
+	var piece := "%s %s" % [item.rarity_label().to_lower(), item.display_name()]
 	if item.broken:
-		return "A broken piece cannot be changed"
+		return "A broken item cannot be changed"
 	if item.rarity == ItemRarity.Rarity.UNIQUE:
-		return "Only an Orb of Divine or Chaos can change a unique"
+		return "Only an Orb of Divinity or Chaos can change a unique"
 	match orb:
-		"Orb of Transmutation", "Orb of Alchemy", "Orb of Exalted":
-			return "A %s piece cannot be made %s" % [item.rarity_name().to_lower(),
-					ItemRarity.NAMES[RARITY_OF[orb]].to_lower()]
+		"Orb of Transmutation", "Orb of Alchemy", "Orb of Exaltation":
+			return "A %s item cannot be made %s" % [item.rarity_label().to_lower(),
+					ItemRarity.label_of(RARITY_OF[orb]).to_lower()]
 		"Orb of Augmentation":
 			if _room(item) == 0:
-				return "A common piece cannot carry a modifier"
+				return "A common item cannot carry a modifier"
 			return "This %s already carries all it can" % piece
-		"Orb of Divine", "Orb of Chaos":
+		"Orb of Divinity", "Orb of Chaos":
 			return "This %s has no modifiers to reroll" % piece
 	return "Cannot be used on this %s" % piece
 
@@ -197,14 +211,14 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator) -> bool:
 	if not can_apply(orb, item):
 		return false
 	match orb:
-		"Orb of Transmutation", "Orb of Alchemy", "Orb of Exalted":
+		"Orb of Transmutation", "Orb of Alchemy", "Orb of Exaltation":
 			_reroll_at(item, RARITY_OF[orb], rng)
 		"Orb of Augmentation":
 			var extra := ModifierTable.add_one(item.type, item.mods, rng, item.mod_level())
 			if extra.is_empty():
 				return false
 			item.mods.append(extra)
-		"Orb of Divine":
+		"Orb of Divinity":
 			reroll_values(item, rng)
 		"Orb of Chaos":
 			reroll_tiers(item, rng)

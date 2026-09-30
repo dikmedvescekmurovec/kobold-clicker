@@ -283,6 +283,11 @@ func rarity_name() -> String:
 	return ItemRarity.name_of(rarity)
 
 
+## The rarity as the player reads it: "Epic" (`ItemRarity.label_of`).
+func rarity_label() -> String:
+	return ItemRarity.label_of(rarity)
+
+
 func text_color() -> Color:
 	return ItemRarity.TEXT_COLORS[rarity]
 
@@ -404,7 +409,7 @@ static func from_dict(data: Variant) -> Item:
 	if typeof(data) != TYPE_DICTIONARY:
 		return null
 	var saved: Dictionary = data
-	var item_type := str(saved.get("type", ""))
+	var item_type := LootTable.current(str(saved.get("type", "")))
 	if not LootTable.ITEMS.has(item_type):
 		return null
 	var step := ItemRarity.from_name(str(saved.get("rarity", "")))

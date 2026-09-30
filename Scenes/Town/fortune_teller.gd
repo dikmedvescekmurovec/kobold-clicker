@@ -79,7 +79,7 @@ const WARMTH_STEPS := [16, 10, 5, 2]
 const SCOUR_RADIUS := 2
 
 ## What she says about a piece whose modifiers are its row's and nothing else's.
-const WRITTEN := "Its lines are already written."
+const WRITTEN := "Its lines are already written"
 
 
 ## How warm the stone is `steps` from the cave: an index into `WARMTH`, 0 the coldest.
@@ -94,7 +94,7 @@ static func warmth(steps: int) -> int:
 ## Why she will not appraise this piece, or "" when she will.
 static func why_not_appraise(item: Item) -> String:
 	if item == null:
-		return "Open a piece in your bag."
+		return "Open an item in your bag"
 	return WRITTEN if not item.unique.is_empty() else ""
 
 

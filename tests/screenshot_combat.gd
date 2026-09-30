@@ -357,7 +357,7 @@ func _shoot_farm() -> void:
 	# The rest of the beams, one a rarity and a good orb's, so all of them stand in one shot.
 	for rarity in [ItemRarity.Rarity.ELITE, ItemRarity.Rarity.UNIQUE]:
 		combat._show_find(showpiece.icon(), rarity, ItemRarity.BORDER_COLORS[rarity])
-	combat._on_orb_dropped(0, "Orb of Exalted")
+	combat._on_orb_dropped(0, "Orb of Exaltation")
 	# Part way through the arc, which is where a thrown thing is most obviously thrown.
 	for i in 12:
 		await process_frame

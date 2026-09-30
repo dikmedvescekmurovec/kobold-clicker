@@ -127,24 +127,19 @@ func _show_choice() -> void:
 	var held := _inventory.stash().total() + _inventory.stash().equipment.worn.size()
 	var orbs := _inventory.super_orbs
 	cards.add_child(_card("Create an heirloom", load(CROWN_ICON), not _made and not lost,
-			"This world was lost to No Second Chances, and nothing of it goes with you." if lost
-			else "Done. It goes with you." if _made
-			else "Choose one piece of this world, carried or worn. It goes with you into every world after this one.",
+			"Lost to No Second Chances" if lost else "Done" if _made else "",
 			_open.bind(_create_page)))
 	cards.add_child(_card("Upgrade an heirloom", SuperOrbTable.icon(SuperOrbTable.ASCENSION),
 			held > 0 and orbs > 0,
-			"You hold no heirloom yet." if held == 0
-			else "Every wall you broke is an orb of great power, and none is left." if orbs == 0
-			else "Every wall you broke is an orb of great power. You have %d to spend on the heirlooms you hold." % orbs,
+			"None held" if held == 0 else "No orbs left" if orbs == 0 else "%d to spend" % orbs,
 			_open.bind(_upgrade_page)))
 	var taken := PackedStringArray()
 	for id: String in _inventory.pending_curses:
 		taken.append(str(Curses.CURSES[id]["name"]))
 	var spent := Curses.skulls_of(_inventory.pending_curses)
 	cards.add_child(_card("Take on a curse", load(SKULL_ICON), _budget > 0,
-			"No skulls to spend. Break walls under curses or go deeper in the dungeon to earn them." if _budget == 0
-			else "A harder world that pays for it, up to %d skulls. None taken." % _budget if taken.is_empty()
-			else "The new world is under %s: %d of %d skulls." % [", ".join(taken), spent, _budget],
+			"No skulls" if _budget == 0 else "0 of %d skulls" % _budget if taken.is_empty()
+			else "%s: %d of %d skulls" % [", ".join(taken), spent, _budget],
 			_show_curses))
 
 	var on := UITheme.button("Leave without an heirloom" if _warned and not _made
@@ -156,7 +151,8 @@ func _show_choice() -> void:
 	_layout.call_deferred()
 
 
-## One card: its button, and under it what pressing it means, in bone on the black.
+## One card: its button, and under it where it stands (done, what is left to spend), in bone on the
+## black -- a status, never what the card is for: the user wants no explaining on a page.
 func _card(title: String, mark: Texture2D, live: bool, text: String, pressed: Callable) -> Control:
 	var card := UITheme.vbox(4, CARD_WIDTH)
 	var button := UITheme.button(title, "LightButton", "")
@@ -167,6 +163,8 @@ func _card(title: String, mark: Texture2D, live: bool, text: String, pressed: Ca
 	button.disabled = not live
 	button.pressed.connect(pressed)
 	card.add_child(button)
+	if text.is_empty():
+		return card
 	var words := UITheme.label(text, Palette.BONE, true)
 	words.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	words.custom_minimum_size.x = CARD_WIDTH

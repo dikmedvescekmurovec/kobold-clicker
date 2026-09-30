@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://siimvbe2g08w"
-path="res://.godot/imported/Studded Boot.png-e84772886a3f8fa715900fab6df886d9.ctex"
+uid="uid://d3f37285yddhh"
+path="res://.godot/imported/Ranger's Boots.png-275dc7d762217c5ed048a970acf79c4c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Gear/Studded Boot.png"
-dest_files=["res://.godot/imported/Studded Boot.png-e84772886a3f8fa715900fab6df886d9.ctex"]
+source_file="res://Assets/Gear/Ranger's Boots.png"
+dest_files=["res://.godot/imported/Ranger's Boots.png-275dc7d762217c5ed048a970acf79c4c.ctex"]
 
 [params]
 

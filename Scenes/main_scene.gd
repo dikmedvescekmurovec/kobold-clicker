@@ -296,7 +296,7 @@ const TIPS := [
 	], "fortuneteller"],
 	["first_smith", "Blacksmith", [
 		"Put it on the anvil. Don't touch anything else.",
-		"I can make it better quality, but the item is reforged. It might need some polish after.",
+		"I can make it better quality. Whatever's on it stays on it.",
 		"Now and then the metal gives. That's the metal's fault, not mine. You still pay.",
 	], "blacksmith"],
 ]
@@ -1005,7 +1005,7 @@ func _is_new_unique(item: Item) -> bool:
 ## an `ItemSlot`, so the gold frame and its glint come for nothing. What that costs is one line -- the
 ## square has to leave `ItemSlot.GROUP` at once, or the one `ItemCard` finds it under the cursor and
 ## stands its own card over this one.
-func _announce_unique(item: Item, title := "Unique Found") -> void:
+func _announce_unique(item: Item, title := "Unique found") -> void:
 	var slot := ItemSlot.make(item)
 	slot.remove_from_group(ItemSlot.GROUP)
 	# What the piece *is* and the rule it bends, and none of its numbers: a banner is read in a glance
@@ -1013,7 +1013,7 @@ func _announce_unique(item: Item, title := "Unique Found") -> void:
 	# are two presses away in the bag, and the rule is the thing that cannot be guessed from the icon.
 	var lines: Array[Control] = [
 		ItemDetails.line(item.display_name(), item.text_color(), BANNER_WIDTH),
-		ItemDetails.line("%s · level %d" % [item.rarity_name(), item.level],
+		ItemDetails.line("%s · Level %d" % [item.rarity_label(), item.level],
 				item.text_color(), BANNER_WIDTH, true),
 		ItemDetails.line(item.effect_text(), Palette.SLOT_TAN_DK, BANNER_WIDTH, true),
 	]
@@ -1043,7 +1043,7 @@ func _announce_bounty(enemy: String, tier: EnemyRoster.Tier, have: int, need: in
 	var spot := BountyBoard.active_spot(inventory.towns)
 	var town := bounty_page.town_name(TownState.spot(spot)) if not spot.is_empty() else "the town"
 	lines.append(ItemDetails.line("Claim it at %s." % town, Palette.LEAF, BANNER_WIDTH, true))
-	_raise_banner("Bounty Filled", colour, _bounty_face(enemy, tier, true), lines)
+	_raise_banner("Bounty filled", colour, _bounty_face(enemy, tier, true), lines)
 
 
 ## A counted kill short of filling the bounty: "+1" beside the monster's picture, under the fight's
@@ -1549,7 +1549,7 @@ const CHART_TIP := "Fight for this tile and what lies behind it"
 const FARM_TIP := "Fight here for as long as you like, for the loot"
 ## What Chart and Farm say while the bag is over its cap and greys them, the cap (`Inventory.capacity`)
 ## written in where it is said, since the Packmule's Harness at IV moves it.
-const ENCUMBERED_TIP := "Your bag is too heavy to fight with. Sell or throw away gear until it holds %d or fewer."
+const ENCUMBERED_TIP := "Your bag is too heavy to fight with. Sell or discard gear until it holds %d or fewer"
 
 
 ## Why the hero holds no camp in this world, or "" where they do. Two curses say so in their text.
@@ -2416,7 +2416,7 @@ func _announce_achievements(ids: Array[String]) -> void:
 				lines.append(ItemDetails.line(UniqueTable.peak_text(id), Palette.SLOT_TAN_DK, BANNER_WIDTH, true))
 	var title := "%d Achievements" % ids.size()
 	if ids.size() == 1:
-		title = "Achievement" if Achievements.rank(inventory, ids[0]) <= 1 else "Rank Up"
+		title = "Achievement" if Achievements.rank(inventory, ids[0]) <= 1 else "Rank up"
 	_raise_banner(title, piece.text_color(), slot, lines)
 
 

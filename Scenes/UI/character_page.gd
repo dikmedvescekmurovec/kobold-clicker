@@ -188,7 +188,7 @@ func _disc(stat: String, value: float) -> VBoxContainer:
 	# Circlet turning intelligence to damage says so here too.
 	var gift := inventory.attribute_gift(stat, value)
 	var gives := "Experience" if gift[0] == "xp_more" else str(LootTable.STAT_LABELS[gift[0]])
-	column.tooltip_text = "Each point of %s adds %.1f%% more %s.\nYours add +%.1f%%." % [
+	column.tooltip_text = "Each point of %s adds %.1f%% more %s.\nYours add +%.1f%%" % [
 			LootTable.STAT_LABELS[stat], inventory.attribute_gift(stat, 1.0)[1], gives, gift[1]]
 	return column
 

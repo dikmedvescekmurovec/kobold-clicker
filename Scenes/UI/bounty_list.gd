@@ -387,7 +387,7 @@ func town_name(spot: Vector2i) -> String:
 ## Cancel gives the work up, and asks first on the button itself: a second press is the answer, since
 ## what it throws away is every kill counted so far.
 func _cancel_button(bounty: Dictionary) -> Button:
-	var button := UITheme.button("Cancel", "SmallDangerButton", "Give this bounty up")
+	var button := UITheme.button("Give up", "SmallDangerButton", "Give this bounty up")
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.pressed.connect(func() -> void:
 		if button.text != "Sure?":
