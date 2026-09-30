@@ -34,7 +34,8 @@ const FRAME_NAME := "Frame"
 ## The child `keep_shining` adds.
 const GLINT_NAME := "Glint"
 ## What a `shadow` square is multiplied by: dark enough to read as not held, light enough to tell what it is.
-const SHADOW := Color(0.35, 0.35, 0.35)
+## 0.35 until 2026-09-30, when the user found every unfound unique "way too dark" to make out.
+const SHADOW := Color(0.65, 0.65, 0.65)
 ## The socket under a piece the log knows of and the player has not found: faint, so it reads as
 ## within reach without looking held.
 const KNOWN_SOCKET := Color(1, 1, 1, 0.4)

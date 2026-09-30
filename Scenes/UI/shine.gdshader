@@ -14,8 +14,10 @@ void vertex() {
 }
 
 void fragment() {
-	// Times COLOR, the node's modulate, which writing COLOR would otherwise throw away.
-	vec4 base = texture(TEXTURE, UV) * COLOR;
+	// COLOR already holds the texture times the node's modulate. Sampling TEXTURE again and multiplying
+	// drew every rare-and-better icon with its colours squared -- darker and bluer than the same piece
+	// in a common's square (two Opal Rings side by side, 2026-09-30).
+	vec4 base = COLOR;
 	// Snapped to whole source pixels so the band is pixel art, not a smear.
 	vec2 p = floor(local) / side;
 	// Sweeps from off the top-left to off the bottom-right over the first third of the period.

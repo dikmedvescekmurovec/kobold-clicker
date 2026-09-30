@@ -114,6 +114,18 @@ GEAR_SIDE = 32
 GREY_CEILING = 0.88
 # The lightest the outline ink may be: see _outlined.
 OUTLINE_INK = 0.16
+# Every base and unique icon is put into the game's palette last (`_paletted`, 2026-09-30, the user's call): the
+# nearest colour in OKLab with lightness counted this many times over hue and chroma, so each shade keeps its value
+# and the drawing's forms survive even where its hue has no match (the palette has no dark purple: those go maroon or
+# navy). Neighbours further apart in lightness than PALETTE_KEEP_APART are never merged into one colour.
+PALETTE_LIGHT_WEIGHT = 2.0
+# And every colour is lifted first, L' = L ** PALETTE_LIFT in OKLab (1 leaves it be): the pieces as drawn sat too
+# dark on the cream bag and the brown doll ("everything is too dark", the user, 2026-09-30). A power keeps every
+# shade in its order and lifts the darks most, so the forms stay and only the whole piece comes up. 0.75 left the
+# navy masterworks near black; 0.5 washed the light pieces out; 0.6 was chosen off a sheet of the darkest pieces,
+# then 0.8 (the user) once the shine shader had stopped darkening every rare-and-better icon a second time.
+PALETTE_LIFT = 0.8
+PALETTE_KEEP_APART = 0.035
 # The least of an icon's edge that has to be that ink for a base to be written or shown. Not 1.0:
 # the pack leaves the odd edge pixel out of its border, one or two an icon.
 OUTLINE_FLOOR = 0.97
@@ -1338,6 +1350,83 @@ def outline_share(art):
     return len(inked) / max(1, len(edge))
 
 
+def _oklab(rgb):
+    """sRGB rows (0-255) to OKLab, the space the palette is matched in: its steps are even to the eye."""
+    import numpy as np
+    c = np.asarray(rgb, float) / 255
+    c = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    lms = np.cbrt(c @ np.array([[0.4122214708, 0.2119034982, 0.0883024619],
+                                [0.5363325363, 0.6806995451, 0.2817188376],
+                                [0.0514459929, 0.1073969644, 0.6299787005]]))
+    return lms @ np.array([[0.2104542553, 1.9779984951, 0.0259040371],
+                           [0.7936177850, -2.4285922050, 0.7827717662],
+                           [-0.0040720468, 0.4505937099, -0.8086757660]])
+
+
+def _paletted(art):
+    """`art` in the game's own colours (`hexlib.PALETTE`, the map's and the backdrops'), its alpha untouched
+    so no shape moves: see PALETTE_LIGHT_WEIGHT. The outline goes to the palette's ink. Two neighbouring
+    colours a clear step apart in lightness that would land on one palette colour are kept apart -- the
+    one farther from it takes its next nearest on its own side -- so a fold or a rim does not melt away."""
+    import numpy as np
+    palette, lab = _palette()
+    out = art.copy()
+    px = out.load()
+    w, h = out.size
+    solid = {(x, y) for y in range(h) for x in range(w) if px[x, y][3]}
+    edge = {(x, y) for x, y in solid if any((x + dx, y + dy) not in solid for dx, dy in _FOUR)}
+    colours = sorted({px[spot][:3] for spot in solid - edge})
+    have = _oklab(colours) if colours else np.zeros((0, 3))
+    have[:, 0] = np.clip(have[:, 0], 0, 1) ** PALETTE_LIFT
+    gap = lab[None] - have[:, None]
+    gap[..., 0] *= PALETTE_LIGHT_WEIGHT
+    order = np.argsort((gap ** 2).sum(-1), axis=1)
+    at = {c: i for i, c in enumerate(colours)}
+    pick = dict.fromkeys(colours, 0)
+    apart = {tuple(sorted((px[a][:3], px[b][:3])))
+             for a in solid - edge for b in ((a[0] + 1, a[1]), (a[0], a[1] + 1)) if b in solid and b not in edge
+             and px[a][:3] != px[b][:3]
+             and abs(have[at[px[a][:3]], 0] - have[at[px[b][:3]], 0]) > PALETTE_KEEP_APART}
+
+    def chosen(c):
+        return order[at[c]][pick[c]]
+
+    for _ in range(6):
+        clashes = [(p, q) for p, q in apart if chosen(p) == chosen(q)]
+        if not clashes:
+            break
+        for p, q in clashes:
+            if chosen(p) != chosen(q):
+                continue
+            shared = lab[chosen(p), 0]
+            mover, other = (p, q) if abs(have[at[p], 0] - shared) > abs(have[at[q], 0] - shared) else (q, p)
+            above = have[at[mover], 0] > have[at[other], 0]
+            k = pick[mover] + 1
+            while k < len(palette) and (lab[order[at[mover]][k], 0] > shared) != above:
+                k += 1
+            if k < len(palette):
+                pick[mover] = k
+    ink = palette[_palette_ink()]
+    for spot in solid:
+        colour = ink if spot in edge else palette[chosen(px[spot][:3])]
+        px[spot] = colour + (px[spot][3],)
+    return out
+
+
+def _palette():
+    """The generator's palette, clear left out, as RGB tuples and as OKLab rows."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "AI-sprites-generator"))
+    import hexlib
+    colours = [tuple(int(code[i:i + 2], 16) for i in (1, 3, 5)) for name, code in hexlib.PALETTE if name != "clear"]
+    return colours, _oklab(colours)
+
+
+def _palette_ink():
+    """Where the palette's `ink` is in `_palette`'s list."""
+    import hexlib
+    return [name for name, _ in hexlib.PALETTE if name != "clear"].index("ink")
+
+
 def _doubled(art):
     """Whether `art` is smaller art blown up: every 2x2 block of it, from its own corner, one colour.
 
@@ -1403,7 +1492,7 @@ def unique_gear():
     """The unique items' icons, each on its own GEAR_SIDE square."""
     out = {}
     for name, entry in UNIQUE_GEAR.items():
-        out[name] = _squared(name, _shift(_outlined(_cut(entry[0]), own_edge=True), *entry[1:]))
+        out[name] = _squared(name, _paletted(_shift(_outlined(_cut(entry[0]), own_edge=True), *entry[1:])))
     return out
 
 
@@ -1527,6 +1616,7 @@ def base_gear():
                 art = _outlined(_cut(source))
             if len(tier) > 2:
                 art = _shift(art, *BASE_TINTS[tier[2]])
+            art = _paletted(art)
             if _doubled(art):
                 raise SystemExit("%s is doubled art: every 2x2 block of it is one colour" % name)
             if outline_share(art) < OUTLINE_FLOOR:
