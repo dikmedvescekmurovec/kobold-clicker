@@ -101,6 +101,11 @@ static func hold(mark: Texture2D) -> void:
 	_show(ARROW, false)
 
 
+## Whether something is in the arrow's place: an orb is in the hand.
+static func holding() -> bool:
+	return not _held.is_empty()
+
+
 ## Whether `event` came from a finger or a mouse (`touched`). Fed every event by the main scene's `_input`.
 static func feel(event: InputEvent) -> void:
 	if event is InputEventScreenTouch or event is InputEventMouse:

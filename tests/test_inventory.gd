@@ -3450,10 +3450,9 @@ func _test_orb_saving() -> bool:
 	return true
 
 
-## Crafting as the player does it: the real panel, the real tray, and a square pressed. The tables
-## are checked above; this is the wiring -- which orbs the tray offers against the piece that is
-## open, what a press does to the piece and to the count, and that the block it was pressed from is
-## still open on the same piece afterwards.
+## Crafting as the player does it: the real panel, the real tray, an orb picked up and a square pressed
+## with it. The tables are checked above; this is the wiring -- that the tray never spends on the open
+## piece, what a press does to the piece and to the count, and the card's light.
 func _test_crafting_from_the_bag() -> bool:
 	_clear_save()
 	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
@@ -3476,47 +3475,52 @@ func _test_crafting_from_the_bag() -> bool:
 	for i in 2:
 		await process_frame
 
-	# The tray with a common piece open: one of the two held orbs has something to do and the other
-	# has not, which is the whole of what the lit/grey split says.
-	var lit: Array = []
-	var grey: Array = []
-	for child: Node in main.bag_page._orb_tray.get_children():
-		var orb: String = child.orb
-		if main.inventory.orb_count(orb) <= 0:
-			continue
-		if OrbTable.can_apply(orb, sword):
-			lit.append(orb)
-		else:
-			grey.append(orb)
-	_check(lit == ["Orb of Transmutation"], "only transmutation is lit on a common, got %s" % [lit])
-	_check(grey == ["Orb of Divinity"], "divine is grey on a common, got %s" % [grey])
+	# A piece open greys nothing in the tray: no orb is spent on it, so every one held can be picked up.
+	var live: Array = main.bag_page._orb_tray.get_children() \
+			.filter(func(slot: OrbSlot) -> bool: return slot._live).map(func(slot: OrbSlot) -> String: return slot.orb)
+	_check(live == ["Orb of Transmutation", "Orb of Divinity"],
+			"with a piece open every orb held stays lit, got %s" % [live])
 	_check(main.bag_page._orb_tray.get_child_count() == OrbTable.ORBS.size(),
 			"the tray draws every orb, held or not")
 
-	# Pressed, exactly as a click on the square does it.
+	# Pressed with the sword open: the sword is shut and the orb picked up instead, nothing spent.
 	main.bag_page._on_orb_pressed("Orb of Transmutation")
+	_check(main.bag_page._selected == -1 and not main.bag_page._actions.visible,
+			"an orb pressed with a piece open shuts the piece")
+	_check(main.bag_page._armed == "Orb of Transmutation", "and is picked up in its place")
+	_check(sword.rarity == ItemRarity.Rarity.COMMON and main.inventory.orb_count("Orb of Transmutation") == 2,
+			"without being spent on the piece that was open")
+
+	# The square pressed with it, exactly as a click on it does it.
+	var craft := func(piece: Item) -> void:
+		var square: ItemSlot = _bag_squares(main).filter(func(s: ItemSlot) -> bool: return s.item == piece)[0]
+		main.bag_page._on_clicked(_square_spot(square))
+	craft.call(sword)
 	for i in 2:
 		await process_frame
 	_check(sword.rarity == ItemRarity.Rarity.UNCOMMON, "the sword came up uncommon")
 	_check(not sword.mods.is_empty(), "and carries modifiers")
 	_check(main.inventory.orb_count("Orb of Transmutation") == 1, "one orb was spent")
-	# Crafting adds nothing and removes nothing, so the selection is still the same piece -- which is
-	# what lets the player watch a piece change rather than go hunting for it again.
-	_check(main.bag_page._selected == 0, "the selection stayed on the same piece")
-	_check(main.bag_page._actions.visible, "and its buttons are still showing")
+	_check(main.bag_page._armed == "Orb of Transmutation", "and the orb is still in hand while any are left")
+	_check(_card_lit(main) == OrbTable.ORBS["Orb of Transmutation"].glow,
+			"the hover card is lit from behind in the orb's colour")
 
 	# Alchemy takes it to rare, and then Transmutation has nothing to do: no orb lowers a rarity, and
 	# pressing it must not cost the player the second one. The square is grey and ignores the click;
 	# the handler is checked too, because the guarantee is apply first and spend only if it landed.
 	main.inventory.add_orb("Orb of Alchemy")
 	main.bag_page._on_orb_pressed("Orb of Alchemy")
+	_check(main.bag_page._armed == "Orb of Alchemy", "another orb pressed takes the first one's place")
+	craft.call(sword)
 	_check(sword.rarity == ItemRarity.Rarity.RARE, "alchemy made it rare")
 	main.bag_page._on_orb_pressed("Orb of Transmutation")
+	craft.call(sword)
 	_check(main.inventory.orb_count("Orb of Transmutation") == 1, "a refused orb is not spent")
 	_check(sword.rarity == ItemRarity.Rarity.RARE, "and the piece did not change again")
 
-	# Divine is lit now that there are modifiers to reroll.
+	# Divine works now that there are modifiers to reroll.
 	main.bag_page._on_orb_pressed("Orb of Divinity")
+	craft.call(sword)
 	for i in 2:
 		await process_frame
 	_check(sword.rarity == ItemRarity.Rarity.RARE, "divine kept the rarity")
@@ -3556,7 +3560,7 @@ func _test_crafting_from_the_bag() -> bool:
 	_check(back.items.size() == 1, "the sword came back")
 	_check(back.items[0].to_dict() == before, "the crafted sword round-trips exactly")
 
-	# The other way round: the orb first, with nothing open, and then the piece where it lies.
+	# From the grid: the orb picked up with nothing open, and the piece pressed where it lies.
 	var plain := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 4)
 	main.inventory.add(plain)
 	main.bag_page._select_item(-1)
@@ -3573,17 +3577,16 @@ func _test_crafting_from_the_bag() -> bool:
 	main.bag_page._on_clicked(_square_spot(sword_square))
 	_check(main.inventory.orb_count("Orb of Transmutation") == 1 and main.bag_page._selected == -1
 			and main.bag_page._armed != "", "a refused piece spends nothing and stays shut")
-	var told: Array = []
-	main.bag_page.crafted.connect(func() -> void: told.append(true))
 	plain_square = _bag_squares(main).filter(func(s: ItemSlot) -> bool: return s.item == plain)[0]
 	main.bag_page._on_clicked(_square_spot(plain_square))
 	await process_frame
 	_check(plain.rarity == ItemRarity.Rarity.UNCOMMON, "the piece pressed next came up uncommon")
 	_check(main.inventory.orb_count("Orb of Transmutation") == 0, "the orb was spent")
 	_check(main.bag_page._selected == -1 and not main.bag_page._actions.visible, "without the piece being opened")
-	_check(told.size() == 1, "and the hover card was told to speak again")
+	# The last light was Divinity's; this one is the Transmutation's.
+	_check(_card_lit(main) == OrbTable.ORBS["Orb of Transmutation"].glow, "and the card lit up for it")
 	_check(main.bag_page._armed == "", "the last of an orb puts it down")
-	# Opening a piece puts a held orb down too: from there the tray crafts on what is open.
+	# Opening a piece puts a held orb down too: an open piece and an orb in hand never stand together.
 	main.inventory.add_orb("Orb of Divinity", 2)
 	main.bag_page._on_orb_pressed("Orb of Divinity")
 	main.bag_page._on_orb_pressed("Orb of Divinity")
@@ -3603,6 +3606,12 @@ func _test_crafting_from_the_bag() -> bool:
 	await process_frame
 	_clear_save()
 	return true
+## The colour the hover card's light is in (`ItemCard.shine`), or black with none up.
+func _card_lit(main: Node) -> Color:
+	var light: Node2D = main._item_card.get_node_or_null(ItemCard.SHINE_NAME)
+	return Color.BLACK if light == null else (light.material as ShaderMaterial).get_shader_parameter("colour")
+
+
 ## The right-hand edge of a panel on the UI layer, in window pixels.
 func _panel_right(panel: Control, ui_scale: float) -> float:
 	return panel.get_global_position().x + panel.size.x * ui_scale

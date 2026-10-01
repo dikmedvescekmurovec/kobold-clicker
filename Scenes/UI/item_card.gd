@@ -27,6 +27,14 @@ const BESIDE := "beside"
 ## writes beside that key's picture: `{"shift": "equip", "ctrl": "sell"}`. The page that draws the
 ## square sets it, since only it knows what its buttons do; Alt is the card's own.
 const KEYS := "keys"
+const ORB_SHINE := preload("res://Scenes/UI/orb_shine.gdshader")
+## How long the light behind the card takes to swell in, and to die after the least orb and after the
+## best, in seconds (`shine`); and the most it reaches past the card's edges, in the card's pixels.
+const SHINE_RISE := 0.1
+const SHINE_TIME := Vector2(0.4, 1.0)
+const SHINE_REACH := 40.0
+## The child `shine` adds.
+const SHINE_NAME := "Shine"
 ## The keys' pictures, cut from the keyboard pack by `tools/ui_kit.py`.
 const KEY_ICONS := {
 	"alt": "res://Assets/UI/ui_key_alt.png",
@@ -49,7 +57,6 @@ var _alt := false
 ## new `Item`s too (`VendorStock.items`), so nothing pressed is still there to be compared with.
 var _muted := Rect2()
 var _pressed_at := Vector2.INF
-var _unmute := false
 
 
 func _init(ui_scale: float) -> void:
@@ -134,21 +141,21 @@ func _process(_delta: float) -> void:
 ## drag scrolling the bag or a press opening the piece, and a card flickering from square to square
 ## under either is in the way. And a press puts the card away for good: the piece pressed says
 ## nothing more until the cursor has been somewhere else, whether the press opened it, shut it or
-## did nothing at all, and neither does whatever a sale slid under a cursor that has not moved.
+## did nothing at all, and neither does whatever a sale slid under a cursor that has not moved. But
+## not with an orb in the hand: that press crafts the piece where it lies, and the new lines are the
+## whole point of it.
 func hovered(at: Vector2, pressed: bool) -> ItemSlot:
 	var slot := slot_at(at)
 	# A finger has no hover: its tap is how a piece is asked about, so the card comes up as it lifts
 	# and stays until the next tap lands somewhere else.
 	if pressed and Cursors.touched:
 		return null
+	if Cursors.holding():
+		return slot
 	if pressed:
 		_muted = slot.get_global_rect() if slot != null else Rect2()
 		_pressed_at = at
 		return null
-	if _unmute:
-		_unmute = false
-		_muted = Rect2()
-		_pressed_at = Vector2.INF
 	if at == _pressed_at or _muted.has_point(at):
 		return null
 	_muted = Rect2()
@@ -156,11 +163,43 @@ func hovered(at: Vector2, pressed: bool) -> ItemSlot:
 	return slot
 
 
-## Lets the pressed place speak again without the cursor leaving it: a held orb has just changed the
-## piece under it (`BagPage.crafted`), and the new lines are the whole point of that press.
-## Taken up once the button is let go, because a socket on the doll crafts on the way down.
-func unmute() -> void:
-	_unmute = true
+## Light from behind the card in `orb`'s colour (`glow`, `orb_shine.gdshader`), swelling in and dying
+## away: the orb has just gone into the piece, and the card is where the piece is read. The better the
+## orb, the more light -- its place in the tray, a super orb past them all -- and the longer. A second
+## orb puts the last one's light out. A `Node2D` drawn behind the card's panel, so the card (a container)
+## leaves it be and it can reach past the edges; it moves, scales and hides with the card, and outlives
+## a redraw, which only refills `_rows`.
+func shine(orb: String) -> void:
+	if Settings.animations == Settings.Anim.NONE:
+		return
+	var super_orb := SuperOrbTable.has(orb)
+	var power := 1.0 if super_orb else (OrbTable.orbs().find(orb) + 1.0) / (OrbTable.orbs().size() + 1.0)
+	var old := get_node_or_null(SHINE_NAME)
+	if old != null:
+		remove_child(old)
+		old.queue_free()
+	var light := Node2D.new()
+	light.name = SHINE_NAME
+	light.show_behind_parent = true
+	var glow := ShaderMaterial.new()
+	glow.shader = ORB_SHINE
+	glow.set_shader_parameter("colour", (SuperOrbTable.ORBS if super_orb else OrbTable.ORBS)[orb].glow)
+	glow.set_shader_parameter("power", power)
+	glow.set_shader_parameter("reach", SHINE_REACH)
+	light.material = glow
+	light.draw.connect(func() -> void:
+		light.draw_rect(Rect2(-Vector2.ONE * SHINE_REACH, size + Vector2.ONE * SHINE_REACH * 2.0), Color.WHITE))
+	add_child(light)
+	# The card is measured again with every piece it writes, so the light follows its size as it goes.
+	var lit := func(life: float) -> void:
+		glow.set_shader_parameter("life", life)
+		glow.set_shader_parameter("card", size)
+		light.queue_redraw()
+	var fade := light.create_tween()
+	fade.tween_method(lit, 0.0, 1.0, SHINE_RISE).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	fade.tween_method(lit, 1.0, 0.0, lerpf(SHINE_TIME.x, SHINE_TIME.y, power)) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	fade.tween_callback(light.queue_free)
 
 
 ## The square under `at` (in viewport pixels), or null. A square scrolled out of its box is still

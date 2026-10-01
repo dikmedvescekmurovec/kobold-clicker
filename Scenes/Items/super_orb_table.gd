@@ -24,30 +24,36 @@ const MENDING := "Orb of Mending"
 const BINDING := "Orb of Binding"
 
 ## In the tray's order. `does` is the whole explanation of one, as `OrbTable`'s is; `aimed` is whether
-## a modifier has to be chosen for it. The icons are `tools/ui_kit.py`'s, the crystals of the sheet
-## the ordinary orbs are the stones of.
+## a modifier has to be chosen for it; `glow` is its colour, as `OrbTable`'s is. The icons are
+## `tools/ui_kit.py`'s, the crystals of the sheet the ordinary orbs are the stones of.
 const ORBS := {
 	REPLACEMENT: {
+		"glow": Color("93388f"),
 		"aimed": true,
 		"does": "Replaces the modifier you choose with another, freshly rolled.",
 	},
 	ASCENSION: {
+		"glow": Color("ffc825"),
 		"aimed": false,
 		"does": "Makes the item +1 for good: every modifier on it rolls as if the item were %d levels higher. It can be done again and again.",
 	},
 	PERFECTION: {
+		"glow": Color("c7cfdd"),
 		"aimed": true,
 		"does": "Puts the modifier you choose at the top of its range, and it stays there whatever is done to the item afterwards.",
 	},
 	EXPANSION: {
+		"glow": Color("5ac54f"),
 		"aimed": false,
 		"does": "Adds one modifier more than the item's rarity allows. Once per item.",
 	},
 	MENDING: {
+		"glow": Color("f68187"),
 		"aimed": false,
 		"does": "Makes a broken item whole again.",
 	},
 	BINDING: {
+		"glow": Color("0098dc"),
 		"aimed": true,
 		"does": "Locks the modifier you choose so that no orb can move it, beside whatever a smith has locked. Once per item.",
 	},

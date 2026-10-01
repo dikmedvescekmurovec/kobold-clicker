@@ -389,6 +389,11 @@ func _test_item_card() -> bool:
 	_check(card.hovered(Vector2(112, 112), false) == null, "nor does moving about on the same piece")
 	_check(card.hovered(Vector2(5, 5), false) == null and card.hovered(Vector2(110, 110), false) == seen,
 			"until the cursor has been somewhere else")
+	# With an orb in the hand a press crafts the piece where it lies, and the card is where that is read.
+	Cursors.hold(OrbTable.icon("Orb of Chaos"))
+	_check(card.hovered(Vector2(110, 110), true) == seen and card.hovered(Vector2(110, 110), false) == seen,
+			"but a press with an orb in the hand keeps it")
+	Cursors.hold(null)
 	_check(card.theme_type_variation == "TextPanel" and card.mouse_filter == Control.MOUSE_FILTER_IGNORE,
 			"it is a cream panel that never takes a press")
 	# The second card, under Alt: what is worn where the hovered piece would go.

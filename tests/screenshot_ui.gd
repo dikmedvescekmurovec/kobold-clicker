@@ -227,36 +227,6 @@ func _shoot_inventory() -> void:
 	image.save_png("user://ui_item_detail.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_item_detail.png"))
 
-	# The tray doing its second job. The elite sword is still open, so the orbs that can touch an
-	# elite stand lit beside the ones that cannot -- which is the whole of the crafting interface and
-	# the one thing no still of the grid can show.
-	var tray_rect := Rect2(main.bag_page._orb_tray.get_global_position(),
-			main.bag_page._orb_tray.size * Vector2(main.ui_scale, main.ui_scale))
-	var craft := image.get_region(Rect2i(tray_rect).grow(12)
-			.intersection(Rect2i(Vector2i.ZERO, image.get_size())))
-	craft.resize(craft.get_width() * 3, craft.get_height() * 3, Image.INTERPOLATE_NEAREST)
-	craft.save_png("user://ui_orb_craft.png")
-	print("Saved ", ProjectSettings.globalize_path("user://ui_orb_craft.png"))
-
-	# The card, over an orb that cannot be used on what is open -- the case worth photographing,
-	# because it is the only place the game says why a square is grey. The *last* such orb rather than
-	# the first: a card near the left end fits inside the bag panel, and the arrangement worth seeing
-	# is the one where it hangs out over the character sheet.
-	var grey: OrbSlot = null
-	for child: Node in main.bag_page._orb_tray.get_children():
-		if child is OrbSlot and not OrbTable.can_apply((child as OrbSlot).orb,
-				main.inventory.items[main.bag_page._selected]):
-			grey = child
-	if grey != null:
-		main.bag_page._on_orb_hovered(grey.orb, grey)
-		for i in 2:
-			await process_frame
-		await RenderingServer.frame_post_draw
-		image = root.get_texture().get_image()
-		image.save_png("user://ui_orb_card.png")
-		print("Saved ", ProjectSettings.globalize_path("user://ui_orb_card.png"))
-		main.bag_page._hide_orb_card()
-
 	# The two pages together and nothing else, doubled. The whole question the spread exists to
 	# answer is whether the two columns read as one comparison, and that cannot be judged from a shot
 	# of the map with them off in the corner.
@@ -269,6 +239,32 @@ func _shoot_inventory() -> void:
 	pages.resize(pages.get_width() * 2, pages.get_height() * 2, Image.INTERPOLATE_NEAREST)
 	pages.save_png("user://ui_compare.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_compare.png"))
+	# An orb pressed with the sword open: the sword is shut and the orb is in hand, every square it can
+	# do nothing to grey -- the whole of the crafting interface, and the one thing no still of the grid
+	# at rest can show.
+	main.bag_page._on_orb_pressed("Orb of Chaos")
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	var held := root.get_texture().get_image()
+	var bag := Rect2i(Rect2(main.bag_page._panel.position, main.bag_page._panel.size * main.bag_page._panel.scale))
+	var craft := held.get_region(bag.grow(8).intersection(Rect2i(Vector2i.ZERO, held.get_size())))
+	craft.resize(craft.get_width() * 2, craft.get_height() * 2, Image.INTERPOLATE_NEAREST)
+	craft.save_png("user://ui_orb_craft.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_orb_craft.png"))
+	# The card over the last orb, with the cursor really on it: a card near the left end fits inside the
+	# bag panel, and the arrangement worth seeing is the one where it hangs out over the character sheet.
+	var last: OrbSlot = main.bag_page._orb_tray.get_child(main.bag_page._orb_tray.get_child_count() - 1)
+	root.warp_mouse(last.get_global_rect().get_center())
+	main.bag_page._on_orb_hovered(last.orb, last)
+	for i in 3:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_orb_card.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_orb_card.png"))
+	main.bag_page._hide_orb_card()
+	root.warp_mouse(Vector2.ZERO)
+	main.bag_page._on_orb_pressed("Orb of Chaos")
 	# A greatsword on, with the block shut so the doll is back: the weapon hand holds the piece and
 	# the offhand wears the same icon faded, which is the one state of the doll no other shot has.
 	var heavy := Item.rolled("Wooden Greatsword", ItemRarity.Rarity.RARE, rng, 12)

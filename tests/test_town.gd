@@ -866,13 +866,14 @@ func _test_selling() -> void:
 	_check(page._armed == "Orb of Chaos", "the press picked the orb up")
 	page._on_orb_pressed("Orb of Chaos")
 
-	# With a piece open the tray is the crafting tray it has always been, vendor or not.
+	# With a piece open the press shuts it and picks the orb up, vendor or not: never a sale, never a craft.
 	page._select_item(0)
-	var in_hand := inventory.orb_count("Orb of Chaos")
 	page._on_orb_pressed("Orb of Chaos")
-	_check(inventory.orb_count("Orb of Chaos") == in_hand - 1,
-			"a piece open makes the tray craft rather than sell")
-	_check(inventory.gold == price, "and nothing was paid for the orb it spent")
+	_check(page._selected == -1 and page._armed == "Orb of Chaos",
+			"a piece open is shut and the orb picked up instead")
+	_check(inventory.orb_count("Orb of Chaos") == held and inventory.gold == price,
+			"and nothing was spent or paid for it")
+	page._on_orb_pressed("Orb of Chaos")
 
 	# A board is a counter for work, not for goods: nothing is bought or sold over one.
 	page.shop(PackedStringArray([TownServices.BOUNTIES]))

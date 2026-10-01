@@ -10,9 +10,9 @@ signal closed
 ## The piece the bag has open changed, bag item or worn, and null when it went back to the grid.
 ## Whoever is standing beside the bag acts on what is open in it -- the blacksmith's counter does.
 signal selection_changed(item: Item)
-## A held orb went into a piece where it lies (`_armed`). The main scene lets the hover card speak
-## again on it: the press that crafted would otherwise have put the card away with the result unread.
-signal crafted
+## `orb` went into a piece, ordinary or super. The main scene lights the hover card with it
+## (`ItemCard.shine`), the card being where the piece is read.
+signal crafted(orb: String)
 ## The page has measured itself again, and `column_origin` may have moved: the sheet beside the bag
 ## comes, goes and changes face with what is open.
 signal laid_out
@@ -770,7 +770,8 @@ func _press_action(shift: bool) -> void:
 			return
 
 
-## Every change of selection puts a held orb down: with a piece open the tray crafts on that piece.
+## Every change of selection puts a held orb down: an open piece and an orb in the hand never stand
+## together, and an orb is only ever spent by pressing a piece with it held.
 func _select_item(index: int) -> void:
 	_socket_pick = 0
 	_selected = index
@@ -1116,7 +1117,8 @@ func _open_piece() -> Item:
 	return null
 
 
-## Every orb held, lit; with a piece open, only the ones that can do something to it stay lit.
+## Every orb held, lit, whatever is open: an orb is picked up, never spent on the open piece. The super
+## orbs are the exception -- they have no hand to be held in -- lit only for the heirloom open.
 func refresh_orbs() -> void:
 	UITheme.clear(_orb_tray)
 	var against := _open_piece()
@@ -1138,8 +1140,7 @@ func refresh_orbs() -> void:
 	_orb_tray.visible = _purse.total_orbs() > 0 or "first_orb" in _purse.tips
 	_orb_rule.visible = _orb_tray.visible
 	for orb: String in OrbTable.orbs():
-		var slot := OrbSlot.make(orb, _purse.orb_count(orb),
-				against == null or OrbTable.can_apply(orb, against), orb == _armed)
+		var slot := OrbSlot.make(orb, _purse.orb_count(orb), true, orb == _armed)
 		slot.pressed.connect(_on_orb_pressed)
 		slot.hovered.connect(_on_orb_hovered.bind(slot))
 		slot.unhovered.connect(_hide_orb_card)
@@ -1148,19 +1149,17 @@ func refresh_orbs() -> void:
 	_hide_orb_card()
 
 
-## Applied first and spent second, so an orb with nothing to do is never consumed. The selection
-## survives: crafting adds nothing to the bag and takes nothing out.
+## Picks the orb up (`_armed`), and a second press puts it down; the next piece pressed is crafted with
+## it (`_craft`). With a piece open the press shuts it first (the user's rule, 2026-10-01): an orb is
+## never spent on the open piece. Orbs are never sold: a vendor only sells them.
 func _on_orb_pressed(orb: String) -> void:
-	var item := _open_piece()
 	if _purse.orb_count(orb) <= 0:
 		return
-	# A press with no piece open picks the orb up (`_armed`), and a second one puts it down. Orbs are
-	# never sold: a vendor only sells them.
-	if item == null:
-		_armed = "" if orb == _armed else orb
-		refresh()
-		return
-	_craft(orb, item)
+	if _open_piece() != null:
+		# Which puts down whatever was held, so the press always picks this one up.
+		_select_item(-1)
+	_armed = "" if orb == _armed else orb
+	refresh()
 
 
 ## A super orb pressed with a piece open. An aimed one asks which modifier, and that answer is the
@@ -1207,6 +1206,7 @@ func _super_craft(orb: String, item: Item, index: int) -> void:
 	_purse.super_orbs -= 1
 	print("Spent %s on %s (%s, level %d)" % [orb, item.display_name(), item.rarity_name(), item.level])
 	refresh()
+	crafted.emit(orb)
 
 
 ## The held orb on a piece that is not the bag's -- one off a vendor's shelf. `written` is called
@@ -1231,8 +1231,7 @@ func _craft(orb: String, item: Item, written := Callable()) -> void:
 	if _purse.orb_count(_armed) <= 0:
 		_armed = ""
 	refresh()
-	if _open_piece() == null:
-		crafted.emit()
+	crafted.emit(orb)
 
 
 ## Whether wearing `item` loses nothing and gains something: against what Equip would take off (the

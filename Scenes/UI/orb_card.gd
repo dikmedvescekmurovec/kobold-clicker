@@ -1,7 +1,8 @@
 class_name OrbCard
 extends PanelContainer
 ## What an orb is, shown while the cursor is over it: its name, what it does, and where the player
-## stands with it -- how many they hold, or why it is greyed out against the piece they have open.
+## stands with it -- that none are held, or for a super orb why it is greyed out against the heirloom
+## open.
 ##
 ## It is not Godot's tooltip, and that is a decision rather than an oversight.
 ##
@@ -12,9 +13,9 @@ extends PanelContainer
 ## own CanvasLayer, scaled by `ui_scale` and placed by the scene, exactly as CombatScene's full-bag
 ## warning is placed, and for exactly the same reason.
 ##
-## Up to three lines, and the third is the one worth having. A player who can see that an orb is grey does
-## not need to be told it is grey; they need to be told what would have to be true for it not to be,
-## and OrbTable.why_not is where that sentence lives.
+## Up to three lines, and the third is the one worth having. A player who can see that a super orb is
+## grey does not need to be told it is grey; they need to be told what would have to be true for it not
+## to be, and SuperOrbTable.why_not is where that sentence lives.
 
 ## How wide the card runs before its lines wrap. DropsView.INSPECT_WIDTH, which is what the game
 ## already uses for a block of text that floats rather than one that fills a panel -- narrow enough
@@ -36,10 +37,9 @@ func _init() -> void:
 	add_child(_rows)
 
 
-## Fills the card for one orb. `held` is how many the player has, and `against` is the piece the bag
-## has open -- null when none is, which is the tray at rest and the case where there is nothing to
-## refuse. `note`, where given, is the third line instead: a vendor's price, or why it cannot be had,
-## where the bag's "press it, then the piece" would be wrong (`TownPage`).
+## Fills the card for one orb. `held` is how many the player has, and `against` is the heirloom the
+## page has open, which only a super orb is spent on -- null when none is. `note`, where given, is the
+## third line instead: a vendor's price, or why it cannot be had (`TownPage`).
 ##
 ## Ink for the name and slate for the sentence: the card stands on the item card's cream page, which
 ## the darker half of the palette was picked to be read on.
@@ -69,15 +69,8 @@ func fill(orb: String, held: int, against: Item, note := "", note_tone := Palett
 		status = ("Open an heirloom, then press this" if against == null
 				else "Use on %s" % against.display_name() if fits else SuperOrbTable.why_not(orb, against))
 		tone = Palette.TEXT_SOFT if against == null else Palette.LEAF if fits else Palette.RUST
-	elif against == null:
-		# Nothing to add: the count is on the square, and that a square is pressed goes without saying.
-		pass
-	elif OrbTable.can_apply(orb, against):
-		status = "Use on %s" % against.display_name()
-		tone = Palette.LEAF
-	else:
-		status = OrbTable.why_not(orb, against)
-		tone = Palette.RUST
+	# An ordinary orb has nothing to add: the count is on the square, and it is never spent on the open
+	# piece, only picked up -- a piece it can do nothing to greys once it is in the hand.
 	if not status.is_empty():
 		_rows.add_child(ItemDetails.line(status, tone, WIDTH, true))
 	# The card is measured the frame after it is filled, so whoever places it has a size to place.

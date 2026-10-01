@@ -980,9 +980,8 @@ func _build_pages(layer: CanvasLayer) -> void:
 	_item_card = ItemCard.new(ui_scale)
 	_item_card.equipment = inventory.equipment
 	_character.get_parent().add_child(_item_card)
-	# A held orb changes a piece without opening it, and the card is the only place the result is read.
-	bag_page.crafted.connect(_item_card.unmute)
-	heirloom_page.crafted.connect(_item_card.unmute)
+	bag_page.crafted.connect(_item_card.shine)
+	heirloom_page.crafted.connect(_item_card.shine)
 	# Every `tooltip_text` there is, on the same cream card and the same layer.
 	_character.get_parent().add_child(TipCard.new(ui_scale))
 

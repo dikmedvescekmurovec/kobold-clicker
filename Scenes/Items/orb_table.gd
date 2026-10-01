@@ -55,15 +55,15 @@ static func current(orb: String) -> String:
 ## the frontier the only place worth farming, and the frontier is the part the player cannot reach.
 const ORBS := {
 	"Orb of Transmutation": {
-		"icon": "Orb of Transmutation.png", "weight": 24,
+		"icon": "Orb of Transmutation.png", "glow": Color("0069aa"), "weight": 24,
 		"does": "Makes an item uncommon with fresh modifiers, or rerolls an uncommon one's.",
 	},
 	"Orb of Augmentation": {
-		"icon": "Orb of Augmentation.png", "weight": 10,
+		"icon": "Orb of Augmentation.png", "glow": Color("00cdf9"), "weight": 10,
 		"does": "Adds one more modifier, at any rarity.",
 	},
 	"Orb of Alchemy": {
-		"icon": "Orb of Alchemy.png", "weight": 8,
+		"icon": "Orb of Alchemy.png", "glow": Color("c64524"), "weight": 8,
 		"does": "Makes an item rare with fresh modifiers, or rerolls a rare one's.",
 	},
 	"Orb of Divinity": {
@@ -80,8 +80,9 @@ const ORBS := {
 	},
 }
 
-## `beam` is the rarity whose `LootBeam` shape a good orb stands in the arena when it drops, and `glow`
-## its colour, picked off the orb's own icon; the cheap ones drop plain.
+## `glow` is the orb's colour, picked off its icon in ENDESGA 64: the light it leaves behind the card of a
+## piece it goes into (`ItemCard.shine`), and the `LootBeam` a good one stands in the arena when it drops,
+## in the shape of the rarity `beam` names; the cheap ones drop plain.
 
 ## Kills the player makes, across every fight, before the first orb can fall. Orbs change gear, so
 ## they wait until the player has had time to find some.
