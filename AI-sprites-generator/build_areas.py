@@ -1,33 +1,45 @@
-"""Writes the battle backdrops into ../Assets/Area/, then reads every file back and checks it.
+"""Writes the battle backdrops' layers into ../Assets/Area/, then reads every file back and checks it.
 
-Like build_slimes.py this one skips Aseprite: the backdrops are ordinary RGB PNGs under Assets/
-rather than tiles in the indexed hex atlas, so there is nothing to emit and no palette to hold to.
-What it does do is the same verification the other builds make -- every file on disk is compared
-pixel by pixel against what sideview.py drew, after the 6x upscale.
+Like build_slimes.py this one skips Aseprite: the layers are ordinary PNGs under Assets/ rather
+than tiles in the indexed hex atlas, so there is nothing to emit and no palette to hold to. What it
+does do is the same verification the other builds make -- every file on disk is compared pixel by
+pixel against what sideview.py drew -- and every layer's join is checked (`sideview.seam`), since
+each one repeats as it scrolls.
 
-The art is 384x216 and ships at 2304x1296, nearest-neighbour: one backdrop pixel is one of the
-fighters' pixels on screen (`CombatScene.AREA_UPSCALE`).
+Three kinds of file, all on the 384x216 grid the fighters stand on (CombatScene scales them up):
+- `sky/<sky>.png`, one a sky, opaque;
+- `land/<env>_<layout>_<band>.png`, a place's land in bands from the farthest (1), clear above;
+- `<env>_<variant>_<layout>.png`, the ground the fight stands on and all that stands on it.
 
-Run `python sideview.py <tag> ...` first and look at qa/side_<tag>_<env>.png; this overwrites files.
+Run `python sideview.py skies <tag>` (and `scroll`) first and look at the previews; this overwrites
+files.
 """
 import os
 import re
 from collections import Counter
 
+import numpy as np
 from PIL import Image
 
 import sideview as scenes
-from sideview import H, SCALE, W
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Assets", "Area")
+SKY, LAND = os.path.join(OUT, "sky"), os.path.join(OUT, "land")
 
-## The names this script owns, and the only ones it will ever delete. `Summer2.png` -- the bought
-## background the earlier sets were measured off -- and the `Village/` prop pack share
-## this folder, and the older one-file-per-pair names (`grass_village.png`) have to go when the
-## numbered ones land, because a stale PNG is a backdrop the game can still load and nobody looks
-## at again.
+## The ground layers' names in OUT, the only ones there this script will ever delete. `Summer2.png`
+## -- the bought background the earlier sets were measured off -- the `Village/` prop pack and the
+## cave's `cave/` share this folder. `sky/` and `land/` are wholly this script's.
 MINE = re.compile(r"^(%s)_(%s)(_\d+)?\.png(\.import)?$"
                   % ("|".join(scenes.ENVS), "|".join(scenes.VARIANTS)))
+
+
+def _owned():
+    """Every PNG this script may overwrite or delete, as (folder, name)."""
+    out = [(OUT, n) for n in sorted(os.listdir(OUT)) if MINE.match(n) and n.endswith(".png")]
+    for folder in (SKY, LAND):
+        if os.path.isdir(folder):
+            out += [(folder, n) for n in sorted(os.listdir(folder)) if n.endswith(".png")]
+    return out
 
 
 def _locked():
@@ -39,11 +51,9 @@ def _locked():
     so the question is asked before a single byte is written.
     """
     held = []
-    for name in sorted(os.listdir(OUT)):
-        if not MINE.match(name) or not name.endswith(".png"):
-            continue
+    for folder, name in _owned():
         try:
-            with open(os.path.join(OUT, name), "r+b"):
+            with open(os.path.join(folder, name), "r+b"):
                 pass
         except OSError:
             held.append(name)
@@ -51,17 +61,21 @@ def _locked():
 
 
 def _prune(keep):
-    """Removes backdrops this script used to write and no longer does."""
+    """Removes files this script used to write and no longer does, with their .import."""
     gone = []
-    for name in sorted(os.listdir(OUT)):
-        if MINE.match(name) and name.split(".png")[0] + ".png" not in keep:
-            os.remove(os.path.join(OUT, name))
+    for folder, name in _owned():
+        path = os.path.join(folder, name)
+        if path not in keep:
+            for p in (path, path + ".import"):
+                if os.path.exists(p):
+                    os.remove(p)
             gone.append(name)
     return gone
 
 
 def main():
-    os.makedirs(OUT, exist_ok=True)
+    for folder in (OUT, SKY, LAND):
+        os.makedirs(folder, exist_ok=True)
     held = _locked()
     if held:
         print("refusing to build: %d file(s) are open elsewhere, the first being %s."
@@ -70,28 +84,38 @@ def main():
         print("dies part of the way through leaves Assets/Area half old and half new.")
         raise SystemExit(1)
     problems = Counter()
-    written = []
-    # Compared as each one is written rather than at the end: holding all 120 at 2304x1296 would
-    # be a gigabyte of RGB for a check that only ever looks at one of them.
-    for env in scenes.ENVS:
-        for variant in scenes.VARIANTS:
-            for layout in range(1, scenes.LAYOUTS + 1):
-                im = scenes.render(env, variant, layout).resize((W * SCALE, H * SCALE),
-                                                                 Image.NEAREST)
-                name = "%s_%s_%d.png" % (env, variant, layout)
-                path = os.path.join(OUT, name)
-                im.save(path)
-                written.append(name)
-                back = Image.open(path).convert("RGB")
-                problems["wrong size"] += back.size != im.size
-                problems["pixel mismatch"] += sum(
-                    a != b for a, b in zip(back.get_flattened_data(), im.get_flattened_data()))
+    written = set()
 
-    gone = _prune(set(written))
-    print("files written:", len(written), "at", "%dx%d" % (W * SCALE, H * SCALE))
+    def write(path, layer, opaque=False):
+        score = scenes.seam(layer)
+        problems["seam"] += int(score > scenes.SEAM)
+        if score > scenes.SEAM:
+            print("seam %.2f: %s" % (score, os.path.relpath(path, OUT)))
+        im = Image.fromarray(layer[..., :3] if opaque else layer, "RGB" if opaque else "RGBA")
+        im.save(path)
+        written.add(path)
+        back = np.array(Image.open(path).convert(im.mode))
+        problems["wrong size"] += back.shape != np.array(im).shape
+        problems["pixel mismatch"] += int((back != np.array(im)).any(axis=-1).sum())
+
+    for name in scenes.SKIES:
+        write(os.path.join(SKY, "%s.png" % name), scenes.sky_layer(name), opaque=True)
+    for env in scenes.ENVS:
+        for layout in range(1, scenes.LAYOUTS + 1):
+            for variant in scenes.VARIANTS:
+                stack = scenes.layers(env, variant, layout)
+                # The land is the same under every variant of a layout: written once, with the plain.
+                if variant == "plain":
+                    for band, layer in enumerate(stack[:-1], 1):
+                        write(os.path.join(LAND, "%s_%d_%d.png" % (env, layout, band)), layer)
+                write(os.path.join(OUT, "%s_%s_%d.png" % (env, variant, layout)), stack[-1])
+
+    gone = _prune(written)
+    print("files written:", len(written), "at %dx%d" % (scenes.W, scenes.H))
     if gone:
         print("stale files removed:", len(gone), "(%s...)" % ", ".join(gone[:3]))
     print("problems:", dict(problems))
+    raise SystemExit(1 if any(problems.values()) else 0)
 
 
 if __name__ == "__main__":

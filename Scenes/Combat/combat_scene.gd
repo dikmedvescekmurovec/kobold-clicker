@@ -63,23 +63,44 @@ const SIZE_HEIGHT := {
 	EnemyRoster.Size.LARGE: 1.25,
 	EnemyRoster.Size.HUGE: 1.55,
 }
-## The backdrops ship nearest-upscaled from their drawn grid (`sideview.SCALE` in the generator), so
-## one of their pixels is this many texture pixels: the grid the fighters are snapped to, and at it
-## the hero stands one backdrop pixel a pixel.
-const AREA_UPSCALE := 6
-## The light the fighters stand in, a colour they are pulled toward by `SCENE_LIGHT` (a multiply, so
-## a little goes a long way). Only the cave's gloom: the six places are drawn in the fighters' own
-## palette (ENDESGA 64), and pulling a fighter toward a place's colour would take it off that palette.
-const HAZE := {
-	"cave": Color("8a7fa0"),
-}
+## The meta a piece lying on the ground keeps its throw's tween under, so a pick-up can cut it short.
+const THROWN := &"thrown"
+## The light the fighters stand in down the dungeon, a colour they are pulled toward by
+## `SCENE_LIGHT` (a multiply, so a little goes a long way).
+const CAVE_HAZE := Color("8a7fa0")
+## How far the fighters are pulled toward the light they stand in: the cave's gloom or the sky's.
 const SCENE_LIGHT := 0.4
 ## Where an enemy starts its run-in, past the right edge.
 const OFFSCREEN_X := 1.15
-## The backdrops: one per environment and variant under Assets/Area. Every one lays the ground strip
-## the fight stands on across its foot, the strip's top where GROUND puts the fighters' feet, and
-## what stands on it or behind it between the sides.
+## A place's backdrop is layers that slide past at their own speeds while an enemy walks in
+## (`backdrop_layers`), each drawn on the fighters' 384x216 grid and repeating round its width
+## (`AI-sprites-generator/sideview.py`): at the back the sky, which is the player's clock's
+## (`SKY_HOURS`); then the land, in bands from the farthest; then the ground. The ground is one per
+## environment and variant: the strip the fight stands on across its foot, the strip's top where
+## GROUND puts the fighters' feet, and what stands on it or behind it.
 const AREA_PATH := "res://Assets/Area/%s_%s_%d.png"
+## A place's land, numbered from the farthest band (environment, layout, band). The same under every
+## variant of a layout. As many bands as there are files.
+const LAND_PATH := "res://Assets/Area/land/%s_%d_%d.png"
+const SKY_PATH := "res://Assets/Area/sky/%s.png"
+## Which sky the hours bring: each entry the hour (the player's own, 0-23) it comes up at. Before the
+## first, it is still the last.
+const SKY_HOURS := [[5, "morning"], [10, "noon"], [14, "alpine"], [17, "golden"], [19, "twilight"],
+		[21, "night"]]
+## What each sky's light does to the land under it, a multiply on every layer but the sky's own, and
+## to the fighters `SCENE_LIGHT` of the way. Must agree with `sideview.LIGHT`.
+const SKY_LIGHT := {
+	"morning": Color.WHITE,
+	"noon": Color.WHITE,
+	"alpine": Color.WHITE,
+	"golden": Color(1.0, 0.86, 0.74),
+	"twilight": Color(0.74, 0.68, 0.9),
+	"night": Color(0.45, 0.52, 0.72),
+}
+## How fast the land's farthest and nearest bands slide, as shares of the ground's: the sky stands
+## still and the ground goes at `WALK_SPEED`. Must agree with `sideview.speeds`.
+const BAND_SLOWEST := 0.2
+const BAND_FASTEST := 0.6
 ## How many ways each place was drawn. A village is four villages: the same environment and the same
 ## tier, built four ways, so two towns on one map are not the same picture twice. Must agree with
 ## `sideview.LAYOUTS` in the generator; `_test_backdrops` sweeps every path to hold it.
@@ -97,9 +118,17 @@ const CAVE_FARTHEST := 7
 ## Where the fighters stand down there: on the cave's floor, which lies lower than a backdrop's grass
 ## band, with their feet just behind the top of the nearest rock.
 const CAVE_GROUND := 0.915
-## Art pixels a second the nearest layer slides while the hero walks on to the next floor. Each layer
-## behind it goes a layer's share slower and the last not at all, which is the whole of the depth.
-const CAVE_SPEED := 90.0
+## Held upright (`UITheme.narrow`) the fight stands this far down the window rather than at its foot,
+## where a backdrop covering a tall window puts its ground: the whole scene is lifted to put it there
+## (`_lift`), each layer's own bottom `UNDERFOOT_ROWS` repeating under it to the window's foot
+## (`_underfoot`), and the enemy's nameplate stands `PLATE_UNDER` panel pixels under the feet.
+const GROUND_UPRIGHT := 0.6
+const UNDERFOOT_ROWS := 16
+const PLATE_UNDER := 16.0
+## Backdrop pixels a second the ground (or the cave's nearest rock) slides while the hero walks on to
+## the next enemy. Each layer behind it goes slower and the farthest not at all, which is the whole
+## of the depth.
+const WALK_SPEED := 90.0
 const ATTACK_SOUND := preload("res://Assets/Player/attack.mp3")
 ## A blow landing on the enemy, over the swing.
 const HIT_SOUND := preload("res://Sounds/universfield-punch-03-352040.mp3")
@@ -294,6 +323,9 @@ var area_variant := "plain"
 ## Which of that place's layouts this fight is on. `begin` takes 0 to mean "whichever this cell
 ## fights on", which is what the game always wants; the screenshot script passes one explicitly.
 var area_layout := 1
+## Which sky is over it (`SKY_LIGHT`'s names). `begin` takes "" to mean the player's clock's, which
+## is what the game always wants; the screenshot scripts pass one explicitly.
+var area_sky := "morning"
 ## What this place is called, as the map named it when the player first saw it. Set before `begin`,
 ## the way `bag_room` and `autodiscard` are, because the HUD is built inside it. Empty is allowed
 ## and means a fight with no map behind it -- the tests and the screenshot scripts -- which then
@@ -311,8 +343,15 @@ var _ui_scale := 2.0
 var _pixel := 0.0
 ## The backdrop and both fighters, which is what a shake rattles -- the HUD stays still over it.
 var _arena: Node2D
-## The cave's layers, from the back, while the fight is the dungeon; empty otherwise.
-var _cave: Array[Sprite2D] = []
+## The backdrop's layers from the back -- a place's or the cave's -- and the share of `WALK_SPEED` each
+## slides at.
+var _layers: Array[Sprite2D] = []
+var _rates: Array[float] = []
+## What the bodies have thrown and is lying on the ground, or still in the air on its way there. It
+## goes by with the ground as the hero walks on (`_scroll`), and a piece the hero reaches is picked
+## up there and then (`_pick_up`), whatever was left of its rest. Each piece carries its throw's
+## tween as `THROWN`.
+var _ground_drops: Node2D
 ## The gold half of the HUD's heading, which the dungeon rewrites floor by floor.
 var _level_label: Label
 var _player: CombatActor
@@ -410,14 +449,16 @@ var _xp_row: HBoxContainer
 
 ## Starts the fight for `cell`. `ui_scale` matches the map's, so the panels are the same size, and
 ## `variant` is what the world put on the tile, which picks the backdrop with the encounter's terrain.
+## `layout` 0 is the cell's own and `sky` "" the clock's.
 func begin(encounter: Encounter, for_cell: Vector2i, ui_scale: float, variant := "plain",
-		layout := 0) -> void:
+		layout := 0, sky := "") -> void:
 	fight = encounter
 	# No Control lies over the arena, so the cursor there is the default one: a press is a swing.
 	Input.set_default_cursor_shape(Cursors.SWORD)
 	cell = for_cell
 	area_variant = variant
 	area_layout = layout if layout > 0 else layout_for(for_cell)
+	area_sky = sky if SKY_LIGHT.has(sky) else sky_at(Time.get_datetime_dict_from_system().hour)
 	_ui_scale = ui_scale
 	fight.enemy_coming.connect(_on_enemy_coming)
 	fight.enemy_spawned.connect(_on_enemy_spawned)
@@ -440,7 +481,7 @@ func _process(delta: float) -> void:
 	if fight == null or fight.finished:
 		return
 	fight.advance(delta)
-	_scroll_cave(delta)
+	_scroll(delta)
 	_slide_enemy()
 	_refresh()
 
@@ -469,15 +510,60 @@ func _unhandled_input(event: InputEvent) -> void:
 		_refresh()
 
 
-## The backdrop for a place. Terrain the art does not cover falls back rather than failing: a fight
-## with no picture behind it would be unplayable, and a missing file is a build problem, not a
-## reason to lose the tile.
-static func backdrop_for(env: String, variant: String, layout := 1) -> Texture2D:
-	var path := AREA_PATH % [env, variant, clampi(layout, 1, AREA_LAYOUTS)]
-	if not ResourceLoader.exists(path):
+## A place's backdrop as its layers from the back, each `[texture, rate]` -- the share of
+## `WALK_SPEED` it slides at: the sky, still; the land's bands from `BAND_SLOWEST` to
+## `BAND_FASTEST`; the ground, at the whole of it. Terrain the art does not cover falls back to the
+## fallback's place rather than failing: a fight with no picture behind it would be unplayable, and
+## a missing file is a build problem, not a reason to lose the tile. So does a sky with no name.
+static func backdrop_layers(env: String, variant: String, layout: int, sky: String) -> Array:
+	layout = clampi(layout, 1, AREA_LAYOUTS)
+	var ground := AREA_PATH % [env, variant, layout]
+	if not ResourceLoader.exists(ground):
 		push_warning("No backdrop for %s/%s/%d" % [env, variant, layout])
-		path = AREA_FALLBACK
-	return load(path)
+		ground = AREA_FALLBACK
+		var named := ground.get_file().get_basename().split("_")
+		env = named[0]
+		layout = int(named[2])
+	var bands: Array[Texture2D] = []
+	while ResourceLoader.exists(LAND_PATH % [env, layout, bands.size() + 1]):
+		bands.append(load(LAND_PATH % [env, layout, bands.size() + 1]))
+	var out := [[load(SKY_PATH % (sky if SKY_LIGHT.has(sky) else SKY_HOURS[0][1])), 0.0]]
+	for i in bands.size():
+		out.append([bands[i], lerpf(BAND_SLOWEST, BAND_FASTEST, i / maxf(1.0, bands.size() - 1.0))])
+	out.append([load(ground), 1.0])
+	return out
+
+
+## The sky over a fight that opens at `hour` (0-23, the player's own clock): the last of
+## `SKY_HOURS` to have come up, and before the first of them the last, still up from the night before.
+static func sky_at(hour: int) -> String:
+	var sky: String = SKY_HOURS[-1][1]
+	for entry in SKY_HOURS:
+		if hour >= int(entry[0]):
+			sky = entry[1]
+	return sky
+
+
+## One layer of a backdrop: a region of a texture that repeats, so sliding the region along (`_scroll`)
+## is land with no end to it. Placed by `fit_layer`.
+static func layer_sprite(art: Texture2D) -> Sprite2D:
+	var sprite := Sprite2D.new()
+	sprite.texture = art
+	sprite.centered = false
+	sprite.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	sprite.region_enabled = true
+	sprite.region_rect = Rect2(Vector2.ZERO, art.get_size())
+	return sprite
+
+
+## Scales and centres a layer to cover `view` whatever its shape, `bleed` over so a shake never shows
+## an edge; the ground band stays across the bottom. Returns one of its pixels in screen pixels.
+static func fit_layer(sprite: Sprite2D, view: Vector2, bleed: float) -> float:
+	var art := Vector2(sprite.texture.get_size())
+	var cover := maxf(view.x / art.x, view.y / art.y) * bleed
+	sprite.scale = Vector2(cover, cover)
+	sprite.position = (view - art * cover) / 2.0
+	return cover
 
 
 ## Which of a place's layouts a cell fights on. Seeded from the cell, like the tile's enemies, so a
@@ -505,19 +591,13 @@ func _build() -> void:
 	if fight != null and fight.dungeon:
 		_build_cave(arena, view)
 	else:
-		var art := backdrop_for(fight.env if fight != null else "", area_variant, area_layout)
-		var backdrop := Sprite2D.new()
-		backdrop.texture = art
-		backdrop.centered = false
-		# Cover the viewport whatever its shape; the ground band stays across the bottom.
-		# A little over, so a shake never shows the edge.
-		var cover := maxf(view.x / art.get_width(), view.y / art.get_height()) * BACKDROP_BLEED
-		backdrop.scale = Vector2(cover, cover)
-		backdrop.position = (view - Vector2(art.get_size()) * cover) / 2.0
-		arena.add_child(backdrop)
-		_pixel = cover * AREA_UPSCALE
+		var backdrop := backdrop_layers(fight.env if fight != null else "", area_variant, area_layout,
+				area_sky)
+		for i in backdrop.size():
+			# The sky's light falls on everything but the sky.
+			_add_layer(arena, view, backdrop[i][0], backdrop[i][1]).modulate = 					SKY_LIGHT[area_sky] if i > 0 else Color.WHITE
 
-	var light := Color.WHITE.lerp(HAZE.get(_light_key(), Color.WHITE), SCENE_LIGHT)
+	var light := Color.WHITE.lerp(_light(), SCENE_LIGHT)
 	_player = CombatActor.new()
 	_player.name = "Player"
 	arena.add_child(_player)
@@ -533,6 +613,10 @@ func _build() -> void:
 	# The cave's nearest rock goes on after them both, so it is what they stand behind.
 	if fight != null and fight.dungeon:
 		_add_cave_layer(arena, view, CAVE_NEAREST)
+
+	_ground_drops = Node2D.new()
+	_ground_drops.name = "Drops"
+	add_child(_ground_drops)
 
 	_sound = AudioStreamPlayer.new()
 	_sound.bus = Settings.SFX_BUS
@@ -553,11 +637,11 @@ func _sfx_player(stream: AudioStream) -> AudioStreamPlayer:
 	return player
 
 
-## Which `HAZE` the fighters stand in; a place with none leaves them as drawn.
-func _light_key() -> String:
-	if fight == null:
-		return ""
-	return "cave" if fight.dungeon else fight.env
+## The light the fighters stand in: the cave's gloom, or the sky's.
+func _light() -> Color:
+	if fight != null and fight.dungeon:
+		return CAVE_HAZE
+	return SKY_LIGHT.get(area_sky, Color.WHITE)
 
 
 ## How tall an ordinary fighter stands in `view`, in screen pixels (`ACTOR_HEIGHT`, `ACTOR_WIDE`).
@@ -572,9 +656,20 @@ func _snap(view: Vector2) -> float:
 	return _pixel / 2.0 if UITheme.narrow(view, _ui_scale) else _pixel
 
 
-## Where the fighters' feet are, as a share of the view's height.
+## Where the fighters' feet are, as a share of the view's height: on the backdrop's ground line, or held
+## upright `GROUND_UPRIGHT`, the scene lifted to meet them.
 func _ground() -> float:
+	return GROUND_UPRIGHT if UITheme.narrow(_size(), _ui_scale) else _art_ground()
+
+
+## Where a backdrop covering the view draws its ground line, as a share of the view's height.
+func _art_ground() -> float:
 	return CAVE_GROUND if fight != null and fight.dungeon else GROUND
+
+
+## How far above where `fit_layer` puts it every layer is drawn, in screen pixels: none across a monitor.
+func _lift(view: Vector2) -> float:
+	return (_art_ground() - _ground()) * view.y
 
 
 ## The cave behind the fighters, back to front; `_build` adds the nearest rock once they are in.
@@ -583,33 +678,75 @@ func _build_cave(arena: Node2D, view: Vector2) -> void:
 		_add_cave_layer(arena, view, n)
 
 
-## One layer of the cave: it covers the view the way a backdrop does, and is a region of a texture
-## that repeats, so sliding the region along (`_scroll_cave`) is a cave with no end to it.
+## One layer of the cave, numbered from the nearest, sliding the faster the nearer it is.
 func _add_cave_layer(arena: Node2D, view: Vector2, n: int) -> void:
-	var art: Texture2D = load(CAVE_PATH % n)
-	var layer := Sprite2D.new()
-	layer.texture = art
-	layer.centered = false
-	layer.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
-	layer.region_enabled = true
-	layer.region_rect = Rect2(Vector2.ZERO, art.get_size())
-	var cover := maxf(view.x / art.get_width(), view.y / art.get_height()) * BACKDROP_BLEED
-	layer.scale = Vector2(cover, cover)
-	layer.position = (view - Vector2(art.get_size()) * cover) / 2.0
-	arena.add_child(layer)
-	_pixel = cover
-	_cave.append(layer)
+	_add_layer(arena, view, load(CAVE_PATH % n),
+			float(CAVE_FARTHEST - n) / (CAVE_FARTHEST - CAVE_NEAREST))
 
 
-## The hero walking on: while the next floor's body is coming in the cave slides past, the near rock
-## fastest. Only for show, so it asks the animation level, and the fight knows nothing of it.
-func _scroll_cave(delta: float) -> void:
-	if _cave.is_empty() or fight.phase != Encounter.Phase.WALKING_IN \
-			or Settings.animations == Settings.Anim.NONE:
+## Lays a backdrop layer on the arena over what is there, sliding at `rate` of `WALK_SPEED`. Every
+## layer is drawn on the same grid, so any of them gives the pixel the fighters snap to.
+func _add_layer(arena: Node2D, view: Vector2, art: Texture2D, rate: float) -> Sprite2D:
+	var sprite := layer_sprite(art)
+	_pixel = fit_layer(sprite, view, BACKDROP_BLEED)
+	sprite.position.y -= _lift(view)
+	arena.add_child(sprite)
+	_layers.append(sprite)
+	_rates.append(rate)
+	_underfoot(sprite, view, rate)
+	return sprite
+
+
+## A lifted layer stops short of the window's foot: its own bottom rows (`UNDERFOOT_ROWS`) repeat on down
+## from its foot to the window's, a child drawn straight after it and sliding with it.
+func _underfoot(layer: Sprite2D, view: Vector2, rate: float) -> void:
+	var foot := layer.position.y + layer.texture.get_height() * layer.scale.y
+	if foot >= view.y:
 		return
-	# `_cave` runs from the farthest, which stays still, to the nearest, which goes at the full speed.
-	for i in _cave.size():
-		_cave[i].region_rect.position.x += CAVE_SPEED * delta * i / (_cave.size() - 1)
+	var art := layer.texture.get_image()
+	var rows := art.get_region(Rect2i(0, art.get_height() - UNDERFOOT_ROWS, art.get_width(), UNDERFOOT_ROWS))
+	var under := layer_sprite(ImageTexture.create_from_image(rows))
+	under.position = Vector2(0.0, art.get_height())
+	under.region_rect.size.y = ceilf((view.y - foot) / layer.scale.y)
+	layer.add_child(under)
+	_layers.append(under)
+	_rates.append(rate)
+
+
+## The hero walking on: while the next body is coming in the backdrop slides past, the nearest layer
+## fastest and the farthest not at all, and what lies on the ground goes with the ground. Only for
+## show, so it asks the animation level, and the fight knows nothing of it. Each layer is wrapped
+## round its width, which is where it repeats anyway.
+func _scroll(delta: float) -> void:
+	if fight.phase != Encounter.Phase.WALKING_IN or Settings.animations == Settings.Anim.NONE 			or not _walks_on():
+		return
+	for i in _layers.size():
+		var region := _layers[i].region_rect
+		region.position.x = fposmod(region.position.x + WALK_SPEED * delta * _rates[i], region.size.x)
+		_layers[i].region_rect = region
+	# Brought back home whenever the ground is bare, so a run of hours never piles up an offset.
+	if _ground_drops.get_child_count() == 0:
+		_ground_drops.position.x = 0.0
+	_ground_drops.position.x -= WALK_SPEED * delta * _pixel
+	var reach := _player.position.x + _player.drawn_size().x / 2.0
+	for thing: Node2D in _ground_drops.get_children():
+		if thing.has_meta(THROWN) and thing.global_position.x <= reach:
+			_pick_up(thing)
+
+
+## Whether the hero walks on to meet each enemy: everywhere but a settlement, which he holds,
+## standing his ground while its defenders come at him over a backdrop that stays still.
+func _walks_on() -> bool:
+	return Encounter.PROFILES.get(area_variant) != Encounter.SETTLEMENT
+
+
+## A piece the hero has walked into: whatever was left of its throw and its rest is cut short, and it
+## goes into the counter at once. Only the picture: what it is worth was banked as it dropped.
+func _pick_up(thing: Node2D) -> void:
+	var arc: Tween = thing.get_meta(THROWN)
+	if arc.is_valid():
+		arc.kill()
+	_fly_to_counter(thing)
 
 
 func _build_hud() -> void:
@@ -1074,9 +1211,10 @@ func _throw(node: Node2D, index: int, from: Vector2, spread: float, rest: float,
 		collect := Callable()) -> void:
 	node.z_index = 1
 	node.scale = Vector2(_ui_scale, _ui_scale)
-	node.position = from
-	add_child(node)
-	var to := from.x + randf_range(-spread, spread)
+	# On the ground, which may have gone by since it was last bare: `from` is a place on the screen.
+	node.position = from - _ground_drops.position
+	_ground_drops.add_child(node)
+	var to := node.position.x + randf_range(-spread, spread)
 	var top := from.y - THROW_RISE
 	# An arc, not a rise: across at a steady rate while the height goes up and comes back down.
 	# Two hops on y rather than one tween of the whole position, which is what makes it a jump
@@ -1091,6 +1229,7 @@ func _throw(node: Node2D, index: int, from: Vector2, spread: float, rest: float,
 			.set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	arc.tween_property(node, "position:y", _size().y * _ground(), THROW_TIME / 2.0) \
 			.set_delay(delay + THROW_TIME / 2.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	node.set_meta(THROWN, arc)
 	# It lies where it fell and then goes.
 	arc.chain().tween_interval(rest)
 	arc.set_parallel(false)
@@ -1101,14 +1240,17 @@ func _throw(node: Node2D, index: int, from: Vector2, spread: float, rest: float,
 	arc.tween_callback(node.queue_free)
 
 
-## A coin or a find that has lain its moment flies into the loot counter, gathering speed and
-## shrinking, and the counter flashes as it lands. A find leaves its beam behind on the ground, to
-## sink back into it (`LootBeam.collapse`), drawn at the find's depth as it was.
+## A coin or a find that has lain its moment, or been picked up, flies into the loot counter,
+## gathering speed and shrinking, and the counter flashes as it lands. It leaves the ground for the
+## screen, so the walk no longer carries it. A find leaves its beam behind on the ground, to sink back
+## into it (`LootBeam.collapse`), drawn at the find's depth as it was.
 func _fly_to_counter(thing: Node2D) -> void:
+	thing.remove_meta(THROWN)
 	for beam: Node2D in thing.get_children():
 		beam.z_index = thing.z_index
-		beam.reparent(self)
+		beam.reparent(_ground_drops)
 		LootBeam.collapse(beam)
+	thing.reparent(self)
 	var into := _loot_button.position + _loot_button.size * _ui_scale / 2.0
 	var fly := create_tween()
 	fly.set_parallel(true)
@@ -1266,8 +1408,8 @@ func _on_enemy_coming(_index: int, enemy_name: String, _hp: float) -> void:
 	_enemy_scale = _enemy.scale
 	_enemy.position = Vector2(view.x * OFFSCREEN_X, view.y * _ground())
 	_enemy.play("walk")
-	# Down the dungeon the hero walks on to meet it, and the cave goes by (`_scroll_cave`).
-	if fight.dungeon and Settings.animations != Settings.Anim.NONE:
+	# The hero walks on to meet it, and the backdrop goes by (`_scroll`) -- but holds a settlement.
+	if Settings.animations != Settings.Anim.NONE and _walks_on():
 		_player.play("walk")
 	_dress_nameplate()
 
@@ -1360,7 +1502,8 @@ func _refresh() -> void:
 
 func _on_enemy_spawned(_index: int, _enemy_name: String, _hp: float) -> void:
 	_enemy.play("idle")
-	if fight.dungeon:
+	# Arrived; a swing struck up on the way in plays out.
+	if _player.animation == "walk":
 		_player.play("idle")
 	_slide_enemy()
 
@@ -1509,7 +1652,11 @@ func _place_corners(view: Vector2) -> void:
 	# side keeps the channel where it was, which is what HealthBar's own TROUGH is for.
 	_enemy_panel.scale = Vector2.ONE * _ui_scale * _plate_pop
 	var plate := _enemy_panel.get_combined_minimum_size() * _enemy_panel.scale
-	_enemy_panel.position = Vector2((view.x - plate.x) / 2.0, safe.end.y - plate.y - HUD_MARGIN)
+	var plate_y := safe.end.y - plate.y - HUD_MARGIN
+	# Held upright the fight stands mid-window, and its nameplate under its feet, not at the window's foot.
+	if UITheme.narrow(view, _ui_scale):
+		plate_y = view.y * _ground() + PLATE_UNDER * _ui_scale
+	_enemy_panel.position = Vector2((view.x - plate.x) / 2.0, plate_y)
 	# The counter in the bottom right, out at the corner so the nameplate has the middle.
 	var loot := _loot_button.get_combined_minimum_size() * _ui_scale
 	_loot_button.position = Vector2(safe.end.x - loot.x - HUD_MARGIN, safe.end.y - loot.y - HUD_MARGIN)
@@ -1657,7 +1804,9 @@ func _fit_window(panel: Control, drops: DropsView) -> void:
 	var over := panel.get_combined_minimum_size().y - (_size().y / _ui_scale - 2.0 * RESULT_GAP)
 	if over > 0.0 and drops.visible:
 		drops.fit_rows(over)
-		panel.reset_size()
+	# And never bigger than what it holds: a find opened is shorter than the grid it was opened from, and
+	# the panel kept the grid's height under its button until this.
+	panel.reset_size()
 
 
 func _on_back_pressed() -> void:

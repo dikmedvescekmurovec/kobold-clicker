@@ -22,11 +22,10 @@ const BASE_SIGHT := 2
 ## the interface smaller is to draw its pixels smaller, not to shrink the font. 0 is picked from the
 ## window as the game starts (`UITheme.pick_scale`): 2 on the default window.
 @export var ui_scale := 0.0
-## Held upright (`UITheme.narrow`), the tile panel is a sheet along the foot this share of the room tall,
-## the map above it -- a column would cover the tile it describes -- and a town is its page over the bag,
-## the page this share of the room.
-const TILE_SHEET := 0.45
+## Held upright (`UITheme.narrow`) a town is its page over the bag, the page this share of the room, and
+## the map takes this long, in seconds, to bring a tile up out from under the tile panel's sheet.
 const TOWN_SPLIT := 0.5
+const CAMERA_LIFT := 0.25
 ## Where the inventory is kept. The tests and the screenshot scripts point this somewhere else
 ## before the scene enters the tree, so they never read or overwrite the player's own inventory.
 @export var inventory_path := Inventory.SAVE_PATH
@@ -260,7 +259,8 @@ var _combat: CombatScene
 ## written over: overwriting is how a save gets eaten, and the build that wrote it can still read it.
 var _save_blocked := false
 
-## The hero's name on his box, a stand-in until he has one.
+## What marks a tip as the hero's: his box is titled with the name the player has given him
+## (`Inventory.hero`).
 const HERO := "Adventurer"
 
 ## First-time pop-ups, in the order they are shown: id, title, what it says. Each is shown once for the
@@ -752,6 +752,7 @@ func _build_character() -> void:
 	_character = CharacterPanel.new()
 	_character.scale = Vector2(ui_scale, ui_scale)
 	_character.position = Vector2(8, 8)
+	_character.set_player_name(inventory.hero())
 	layer.add_child(_character)
 	_sync_character()
 
@@ -900,6 +901,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 	for key: int in HOTKEYS:
 		(get(HOTKEYS[key]) as Button).set_meta(TipCard.KEY, OS.get_keycode_string(key).to_lower())
 	character_page = CharacterPage.new(inventory, ui_scale)
+	character_page.rename_pressed.connect(_on_rename_pressed)
 	collection_page = CollectionPage.new(inventory, ui_scale)
 	collection_page.seen.connect(_on_unique_seen)
 	achievements_page = AchievementsPage.new(inventory, ui_scale)
@@ -910,7 +912,6 @@ func _build_pages(layer: CanvasLayer) -> void:
 	bag_page = BagPage.new(inventory, inventory_path, ui_scale)
 	heirloom_page = BagPage.new(inventory, inventory_path, ui_scale, true)
 	bounty_page = BountyList.new(inventory, view, inventory_path, ui_scale)
-	bounty_page.show_cell.connect(_on_show_cell)
 	settings_page = SettingsPage.new(ui_scale)
 	settings_page.cloud = cloud
 	settings_page.inventory = inventory
@@ -1132,7 +1133,8 @@ func _place_toast() -> void:
 	if _toast == null:
 		return
 	var view_size := get_viewport_rect().size
-	var top: float = (_combat.hud_bottom() if _combat != null else CombatScene.HUD_MARGIN) + BANNER_GAP
+	# Off a fight, at the window's top -- or held upright, under the character panel it would cover.
+	var top: float = (_combat.hud_bottom() if _combat != null else _fight_top()) + BANNER_GAP
 	if _banner != null:
 		top = _banner.position.y + _banner.get_combined_minimum_size().y * ui_scale + BANNER_GAP
 	_toast.size = _toast.get_combined_minimum_size()
@@ -1251,7 +1253,8 @@ func _place_banner(spark := false) -> void:
 	if _banner == null:
 		return
 	var view_size := get_viewport_rect().size
-	var top: float = (_combat.hud_bottom() if _combat != null else CombatScene.HUD_MARGIN) + BANNER_GAP
+	# Off a fight, at the window's top -- or held upright, under the character panel it would cover.
+	var top: float = (_combat.hud_bottom() if _combat != null else _fight_top()) + BANNER_GAP
 	_banner.size = _banner.get_combined_minimum_size()
 	var side := _banner.size * ui_scale
 	# It springs in about its middle, so that is where the pivot goes -- and a Control is scaled about
@@ -1459,7 +1462,7 @@ func _layout_ui() -> void:
 	if _narrow() and _town_cell != HexMap.NO_CELL:
 		# The counter gives up what the bag under it needs -- the doll too, at the smith -- but keeps what
 		# its own tabs and buttons need.
-		var top := floorf(minf(room.size.y * TOWN_SPLIT, room.size.y - _counter_page().least_height(room.size.x)))
+		var top := floorf(minf(room.size.y * TOWN_SPLIT, room.size.y - _counter_page().least_height()))
 		top = maxf(top, (town_page.get_child(0) as Control).get_combined_minimum_size().y * ui_scale
 				+ 2 * UITheme.EDGE * ui_scale)
 		town_page.area = Rect2(room.position, Vector2(room.size.x, top))
@@ -1486,6 +1489,10 @@ func _layout_ui() -> void:
 
 
 func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
+	# A tile chosen has the screen to itself: any page closes, as opening a page drops the tile
+	# (`_toggle_left_page`). Not in a town, whose page keeps the map's edge and the tile panel hidden.
+	if _town_cell == HexMap.NO_CELL and _left_page_up():
+		_on_left_page_closed()
 	_update_buttons()
 	# The map is still clickable behind an open town page, which has this edge until the player leaves
 	# it -- and `_close_town` is what brings the panel back, already filled in for whatever was clicked.
@@ -1517,6 +1524,7 @@ func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
 	# The rows are filled after _layout_ui ran, and the level line can be wider than the environment
 	# rows that pin the panel's width, so the panel is measured again now that it holds everything.
 	_layout_ui()
+	_keep_above_sheet(cell)
 
 
 ## Dragging moves the camera the other way, so the map follows the cursor.
@@ -2002,11 +2010,26 @@ func _update_buttons() -> void:
 ## or goes, because the column's width is its contents'.
 func _place_panel() -> void:
 	_panel.reset_size()
-	var room := _pages_room()
-	if _narrow():
-		var tall := floorf(room.size.y * TILE_SHEET)
-		room = Rect2(room.position.x, room.end.y - tall, room.size.x, tall)
-	UITheme.dock(_panel, room, ui_scale, UITheme.Dock.RIGHT)
+	UITheme.dock(_panel, _pages_room(), ui_scale, UITheme.Dock.RIGHT, _place_panel)
+
+
+## Held upright the sheet covers the foot of the map: a tile chosen under it is brought up into the
+## middle of what the sheet leaves, so the panel never hides the tile it describes.
+func _keep_above_sheet(cell: Vector2i) -> void:
+	if not _narrow() or not _panel.visible:
+		return
+	var at := map.ground_layer.map_to_local(cell)
+	var view_size := get_viewport().get_visible_rect().size
+	var foot := at.y + map.ground_layer.tile_set.tile_size.y / 2.0
+	if (foot - camera.position.y) * camera.zoom.y + view_size.y / 2.0 <= _panel.position.y:
+		return
+	var lift := (_panel.position.y - view_size.y) / 2.0 / camera.zoom.y
+	var to := _clamp_to_map(Vector2(camera.position.x, at.y - lift))
+	if Settings.animations == Settings.Anim.NONE:
+		camera.position = to
+	else:
+		var tween := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		tween.tween_property(camera, "position", to, CAMERA_LIFT)
 
 
 ## Where a fight's top-centre column stands, in window pixels: at the top of the safe part of the
@@ -2282,7 +2305,9 @@ func _show_next_tip() -> void:
 	if _combat != null:
 		_combat.process_mode = Node.PROCESS_MODE_DISABLED
 	if tip.size() > 3:
-		var box := DialogueBox.new(tip[1], tip[2], load(DialogueBox.PORTRAITS % tip[3]),
+		# The hero speaks under the name the player gave them.
+		var box := DialogueBox.new(inventory.hero() if tip[1] == HERO else tip[1], tip[2],
+				load(DialogueBox.PORTRAITS % tip[3]),
 				tip[3] == DialogueBox.PLAYER)
 		box.finished.connect(_on_tip_closed)
 		_tip_panel = box
@@ -2479,7 +2504,7 @@ func _on_collection_pressed() -> void:
 	_toggle_left_page(collection_page)
 
 
-## The first press stills the medal for good. Opening the page is seeing what was earned.
+## The first press stills the trophy for good. Opening the page is seeing what was earned.
 func _on_achievements_pressed() -> void:
 	_stop_flash("opened_achievements")
 	_toggle_left_page(achievements_page)
@@ -2537,17 +2562,24 @@ func _on_character_pressed() -> void:
 	_toggle_left_page(character_page)
 
 
+## The character page's pencil: the system's own text box, holding the name as it is.
+func _on_rename_pressed() -> void:
+	DisplayServer.dialog_input_text("Rename", "Your character's name", inventory.hero(), _on_name_entered)
+
+
+## What the text box handed back: the character's name from now on, unless it leaves nothing. It can
+## come back late, so it asks what every save asks: never over a refused save, a reset or the black screen.
+func _on_name_entered(text: String) -> void:
+	if _save_blocked or _resetting or _transcend_page != null or not inventory.rename(text):
+		return
+	inventory.save(inventory_path)
+	_character.set_player_name(inventory.hero())
+	if character_page.visible:
+		character_page.open()
+
+
 func _on_settings_pressed() -> void:
 	_toggle_left_page(settings_page)
-
-
-## A bounty said where its monster lives and the player asked to be shown: every page gets out of the
-## way, the tile is selected and the camera walks over to it, so what happens next is the tile panel's
-## own Move here, Farm or Chart rather than a third way of doing those.
-func _on_show_cell(cell: Vector2i) -> void:
-	_on_left_page_closed()
-	map.select_cell(cell)
-	camera.position = _clamp_to_map(map.ground_layer.map_to_local(cell))
 
 
 ## Inside the settlement the player is standing on: the town page takes the tile panel's edge and the

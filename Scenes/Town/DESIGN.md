@@ -111,7 +111,8 @@ the answer a player wants is which way to walk from here. So the two corrections
 -- the line answers the question it is actually being asked. **Show** closes the page,
 selects that tile and takes the camera to it, and then stops: what happens next is the tile panel's own
 Move here, Farm or Chart, so the board hands the player back to the interface they already know rather
-than growing a fourth way to travel.
+than growing a fourth way to travel. (The Nearest line and Show went on 2026-10-01: see *The lands, for
+nothing* at the end of this file.)
 
 **Three postings, two of the rabble and one elite.** The pair of commons are something a walk works
 off by itself; the elite is the one worth going out of the way for, and it is the one that pays an orb
@@ -120,8 +121,8 @@ ground will not hand over. `NEED_COMMON` 5 is a tile's fighting or less and `NEE
 or so of looking, since a tile fields one elite in ten. (Cut from 24 and 5 on 2026-09-21 at the
 user's call: postings should be quick errands, paying what they paid before.)
 
-The reward is quoted the way everything else in a town is, in bodies: `REWARD_COMMON` 72 and
-`REWARD_ELITE` 15 purses of that monster (`Encounter.gold_of` at the town's cell). So a board out at
+The reward is quoted the way everything else in a town is, in bodies: `REWARD_COMMON` 100 and
+`REWARD_ELITE` 20 purses of that monster (72 and 15 until 2026-09-23, when the user raised them) (`Encounter.gold_of` at the town's cell). So a board out at
 the frontier pays frontier money with no second curve to keep in step. Those were first `REWARD_MULT`
 3.0 times `need` -- three times the purses a posting was earned from -- with the old counts of 24 and
 5; when `need` was cut the payout was held where it was rather than cut with it, so a posting now pays
@@ -140,7 +141,8 @@ its base is one of eight, and "a unique amulet" would narrow twenty-seven to fou
 boss's own draw, the elite posting taking the better of two, the way a vendor's shelf takes the better
 of two levels; the piece's level is the town's ceiling for the posting's tier, as a shelf piece's is,
 so no board hands out gear the ground would not. `ITEM_CHANCE` (a common posting one in two, an elite
-always), `UNIQUE_CHANCE` (one in twenty, one in five) and `PLUS_CHANCE` (one in four) are unplayed
+always), `UNIQUE_CHANCE` (one in twenty, one in five) and `PLUS_CHANCES` (at least +1, +2, +3, +4 at
+25, 5, 1 and 0.1%, then `PLUS_TAIL` a tenth as likely each step; it was one +1 in four) are unplayed
 dials. A promised piece has to fit in the bag, and the Claim greys over a full one by the vendor's
 rule rather than paying the gold and dropping the piece: the two are one reward.
 
@@ -254,7 +256,7 @@ Three of the six are things the game gave away until she arrived, and the user m
 
   **2026-09-25:** the winds and walks came off (the user: "Remove the direction and distance from roads. Just tell the player that all towns are now visible on the map"), and with them `bearing`, `walk_time`, `nearest_towns` and `road_lines`. The answer is one sentence; the map already shows where each settlement lies.
 - **Treasure** (20, 2 fights): the star goes over the chest nearest the player when she is paid and stays on that chest until its tile is charted. One chest a fee, by the user's choice over a permanent unlock: a chest is a mimic with a boss's drop, and two fights for a pointer at one is a trade worth making every time. Refused while a star is out, and when the generated map holds no chest.
-- **Quarry** (5, half a fight): `located` on the accepted posting, and the board opens on that card with Info already folded out -- that is what was bought. It is still `nearest_env`, so it still never names land under the fog: she sells the answer the board used to give, not a better one.
+- **Quarry** (removed 2026-10-01 -- see *The lands, for nothing*; kept here as history) (5, half a fight): `located` on the accepted posting, and the board opens on that card with Info already folded out -- that is what was bought. It is still `nearest_env`, so it still never names land under the fog: she sells the answer the board used to give, not a better one.
 - **Relic** (removed 2026-09-28, when achievements took over telling the player what to hunt -- `Scenes/Items/DESIGN.md`, *Achievements unlock uniques*; kept here as history) (50, 5 fights): one unique neither found nor shown, raised in the collection log's own banner headed "Unique Revealed" (`main_scene._announce_unique`) and written out in full -- the first time the game says what a missing unique *is* -- with the ground it drops on. The log's card for it says the same from then on (`write_hint` is the one place it is written). Unpeeked, the log says "Not found yet" and who to ask.
 - **Appraise** (5): the whole pool the open piece's kind can roll, each line with its band at the piece's level and its share of the weight, commonest first. The game has no modifier tiers; the band at the item's level is what a tier would be. The whole pool rather than the pool less what the piece carries, because a reroll draws from all of it and an Exalted's smaller pool is this list less what is on the card. A unique is refused: its lines are its row's.
 - **Homecoming** (200, twenty fights, **once a settlement**, labelled **Return** because "Homecoming" is two letters wider than a shelf square): the player is put down in any settlement they have charted, with no walk and no route (`MapBuilder.jump_to`, which runs `_on_player_arrived` so everything an arrival does still happens). Aimed at the map the way the scour is, one tile rather than a patch, and charged only where the tile was a charted settlement that is not the one underfoot -- so the town's one casting cannot be spent on empty ground. It is the only thing in the game that moves the player without crossing what is between, which is why it is a great spell and not a reading: the walk is the map's whole cost, and buying past it should be a decision, not a habit. Twenty fights against a walk of a week or more is meant to be worth it every time it is offered, and there is only ever one on offer per town.
@@ -312,3 +314,15 @@ The user: "Instead of opening a new panel after a reading, simply show a popup w
 - **The way out is a square and a popup too** (the user: "Use this icon for transcending. Remove the button. Show this spell under the same limitations"): the user's own cracked orb, cut on her badge frame like the others (`tools/ui_kit.py` `FORTUNE_SYMBOLS`), stands third among the great spells, and only once a wall has fallen, as the button did. Asking is free and never greyed; its question is a popup (`_ask_way_out`, no wash -- it is a warning, not a reward) with Cancel and Transcend.
 
 **Tooltips say the outcome** (the user: "descriptive of exactly what the spell does. Not how it's used, just the outcome"), each after the spell's name: "Scour: Brings a tile and the two rings of land around it, nineteen tiles, out of the fog", not "Uncover a patch of the map you choose".
+
+## The lands, for nothing (2026-10-01)
+The user removed the Quarry reading: a bounty card says which lands its monster lives on -- the tile panel's own
+swatches -- for nothing, on the board and on the journal alike, and **never which tile**. The Nearest line and the
+journal's Show went with it (the user: "Don't show the nearest, just show the environments"), and with them
+`MapBuilder.nearest_env`, `BountyBoard.locate` / `located` and the main scene's `_on_show_cell`. What came before:
+the board said where the monster lived for nothing until 2026-09-25, when it moved behind her at half a fight. The
+review of 2026-10-01 pointed out that a fee that small is a click rather than a decision, and that it sold the one
+thing the board was said to be for. Finding a tile of that land is now the map's business, which is what charting
+is for. A save's `located` key on a posting is read by nothing, and her `quarry` count in `inventory.fortunes` is
+never asked again. The same day the swatches became hexagons, a quarter of the map tile ringed in the cards' slot
+brown -- the user's pick of four mockups (`HexTileset.ENV_HEX_ROWS`), on the tile panel's rows as well.

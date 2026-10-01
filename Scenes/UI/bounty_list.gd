@@ -1,7 +1,7 @@
 class_name BountyList
 extends Control
 ## The bounty the player has taken on, as a page against the left edge: what the board wants, how
-## far along it is, what it pays, and -- the whole point of it -- where that monster lives.
+## far along it is, what it pays, and -- the whole point of it -- the lands that monster lives on.
 ##
 ## The same rows the town page's board draws, because they are built here and it calls them: a bounty
 ## reads the same standing at the board that posted it and standing ten tiles away from it. What this
@@ -15,9 +15,6 @@ extends Control
 
 ## The page's X was pressed.
 signal closed
-## A Show button was pressed: put the map on this cell. The page cannot do it itself -- the map, the
-## camera and the pages that have to get out of the way are the main scene's.
-signal show_cell(cell: Vector2i)
 ## Cancel gave the work up (and saved): a board open on the other edge has to be drawn again.
 signal abandoned
 
@@ -50,6 +47,8 @@ const PORTRAIT_PAD := 2
 const CARD_PORTRAIT := ItemSlot.SIDE - PORTRAIT_PAD * 2
 ## The promised piece on a card, at half an item square: the orbs' size, drawn at its own pixels.
 const REWARD_SQUARE := ItemSlot.SIDE / 2
+## The row of lands a monster lives on, named so the tests can find it.
+const LANDS_NAME := "Lands"
 
 var inventory: Inventory
 var view: MapBuilder
@@ -105,7 +104,7 @@ func open() -> void:
 			listed += 1
 			# A finished bounty is paid for where it was taken on, which is the one thing this page
 			# cannot do and so the one thing it has to say.
-			var card := BountyList.row(bounty, view, WIDTH, _on_show_pressed,
+			var card := BountyList.row(bounty, view, WIDTH, true,
 					"Finished. Claim it at %s." % town if BountyBoard.ready(bounty) else "")
 			BountyList.actions_of(card).add_child(_cancel_button(bounty))
 			_rows.add_child(card)
@@ -119,22 +118,21 @@ var area := Rect2()
 
 ## Full window height against the left edge, where the other pages stand.
 func layout() -> void:
-	UITheme.dock(_panel, area, _ui_scale)
+	UITheme.dock(_panel, area, _ui_scale, UITheme.Dock.LEFT, layout)
 
 
 ## One posting as a card, for this page and for the board that posted it: the monster's picture in a
 ## frame, its name and how many, what it pays, and a row of buttons along the foot -- **Info** and
-## whatever the caller adds through `actions_of` (the board's Accept or Claim) or the Show built here.
+## whatever the caller adds through `actions_of` (the board's Accept or Claim, the journal's Give up).
 ## An accepted posting carries its progress bar; `note` is one leaf-green line over the buttons.
 ##
 ## Info folds out the part a wanted poster has no room for: the level of land a kill has to fall on,
-## and -- once a fortuneteller has been paid for it (`BountyBoard.located`) -- the land that monster
-## lives on as the tile panel's own swatches and the nearest piece of it the player has seen. Until
-## then the fold says who to ask, and there is no Show. It starts open on the journal (a valid
-## `on_show`), which is read for exactly that, and shut on the board, where three postings have to
-## share a 284 px column.
+## and the lands that monster lives on as the tile panel's own swatches -- which lands, never which
+## tile: finding one is the map's business (the user's, 2026-10-01). It starts `unfolded` on the
+## journal, which is read for exactly that, and shut on the board, where three postings have to share
+## a 284 px column.
 static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
-		on_show: Callable, note := "") -> PanelContainer:
+		unfolded: bool, note := "") -> PanelContainer:
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", flat(Color.TRANSPARENT, CARD_PAD))
 	var inner := width - CARD_PAD * 2
@@ -177,27 +175,18 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 		lines.add_child(progress_bar(int(bounty.get(BountyBoard.HAVE, 0)), need, inner))
 
 	var details := UITheme.vbox(LINE_GAP, inner)
-	# Open on the journal, and on the board once the land has been paid for: that is what was bought.
-	details.visible = on_show.is_valid() or (taken and BountyBoard.located(bounty))
+	details.visible = unfolded
 	lines.add_child(details)
 	var depth := int(bounty.get(BountyBoard.LEVEL, 0))
 	if depth > 1:
 		details.add_child(wrapped("On level %d land or deeper." % depth, inner, Palette.TEXT_SOFT))
-	var near := HexMap.NO_CELL
-	# Where it lives is a fortuneteller's to sell (`BountyBoard.locate`); until she has been paid the
-	# card says who to ask and nothing about the land.
-	if not BountyBoard.located(bounty):
-		details.add_child(wrapped("A fortuneteller could say where it lives.", inner, Palette.TEXT_SOFT))
-	elif map_view != null and known:
-		var envs := EnemyRoster.environments_of(enemy)
+	if map_view != null and known:
 		var swatches := HBoxContainer.new()
+		swatches.name = LANDS_NAME
 		swatches.add_theme_constant_override("separation", 2)
-		for env: String in envs:
+		for env: String in EnemyRoster.environments_of(enemy):
 			swatches.add_child(map_view.map.tileset.env_icon(env))
 		details.add_child(swatches)
-		near = map_view.nearest_env(envs, depth)
-		details.add_child(wrapped("Nearest: %s" % (map_view.name_of(near) if near != HexMap.NO_CELL
-				else "none you have seen yet."), inner, Palette.TEXT_SOFT))
 	if not note.is_empty():
 		lines.add_child(wrapped(note, inner, Palette.LEAF))
 
@@ -210,12 +199,6 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.pressed.connect(func() -> void: details.visible = not details.visible)
 	actions.add_child(info)
-	# The board passes no callable: it offers Accept instead, and Show is the journal's.
-	if on_show.is_valid() and near != HexMap.NO_CELL:
-		var button := UITheme.button("Show", "SmallButton", "Put the map on %s" % map_view.name_of(near))
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.pressed.connect(on_show.bind(near))
-		actions.add_child(button)
 	return card
 
 
@@ -403,6 +386,3 @@ func _cancel_button(bounty: Dictionary) -> Button:
 		open.call_deferred())
 	return button
 
-
-func _on_show_pressed(cell: Vector2i) -> void:
-	show_cell.emit(cell)

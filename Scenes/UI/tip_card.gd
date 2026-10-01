@@ -62,7 +62,11 @@ func _process(delta: float) -> void:
 		_held = 0.0
 		hide()
 	_held += delta
-	if visible or (_held < DELAY and not over.has_meta(NOW)):
+	# Up, it keeps beside its control, which may still be moving: a popup settling into its place.
+	if visible:
+		_place()
+		return
+	if _held < DELAY and not over.has_meta(NOW):
 		return
 	# As wide as its words up to the cards' width, and wrapped from there.
 	_line.autowrap_mode = TextServer.AUTOWRAP_OFF

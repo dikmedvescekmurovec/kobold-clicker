@@ -69,7 +69,8 @@ const SAVE_PATH := "user://inventory.json"
 ## the walls it has broken this world start the lifetime count Thaw now asks for (`tally.walls`).
 ## 30 adds `skill_bursts`, how often every tree has been filled and burst this world, and drops the
 ## ranks past a skill's most: a version 29 save's are cut to the most and their points are free again.
-const VERSION := 30
+## 31 adds `name`, what the player calls their character; a version 30 save's is unnamed (`DEFAULT_NAME`).
+const VERSION := 31
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -124,6 +125,14 @@ var first_orb_taken := false
 ## The first-time pop-ups already shown, and the buttons already pressed once, by id. The main scene
 ## decides what they mean; this only keeps them, so each is once for the player rather than per launch.
 var tips: Array[String] = []
+
+## What the player has called their character, through the character panel's pencil; empty is
+## `DEFAULT_NAME`. `hero()` is what is shown. The player's, so it is carried through a transcension.
+var hero_name := ""
+## What an unnamed character is called, and the most letters a name keeps (the panel's band cuts a
+## long one short with an ellipsis well before this).
+const DEFAULT_NAME := "Adventurer"
+const NAME_MOST := 24
 
 ## What the player has earned. Not in the bag and not against its cap: a purse is a number rather
 ## than a thing, so it never weighs the bag down. It lives
@@ -293,6 +302,21 @@ func capacity() -> int:
 ## beside it, or the Nightwalkers' reach at the player's rank while they are worn on either doll.
 func dark_reach() -> int:
 	return int(_dial("nightwalkers", "tiles")) if "nightwalker" in effects() else 1
+
+
+## What the character is called: the player's name for them, or `DEFAULT_NAME`.
+func hero() -> String:
+	return hero_name if not hero_name.is_empty() else DEFAULT_NAME
+
+
+## Names the character `text`, trimmed and cut to `NAME_MOST`. False, and nothing changed, when that
+## leaves nothing or the name it already has.
+func rename(text: String) -> bool:
+	var called := text.strip_edges().left(NAME_MOST)
+	if called.is_empty() or called == hero_name:
+		return false
+	hero_name = called
+	return true
 
 
 ## How many more loose items fit. Never negative, even for a bag over the cap.
@@ -902,6 +926,7 @@ func make_heirloom(item: Item) -> bool:
 func transcended(lost := false) -> Inventory:
 	var next := Inventory.new()
 	next.tips = tips.duplicate()
+	next.hero_name = hero_name
 	next.uniques_found = uniques_found.duplicate()
 	next.uniques_new = uniques_new.duplicate()
 	next.uniques_doubled = uniques_doubled.duplicate()
@@ -1001,6 +1026,7 @@ func save(path := SAVE_PATH) -> bool:
 		"first_sword_taken": first_sword_taken,
 		"first_orb_taken": first_orb_taken,
 		"tips": tips,
+		"name": hero_name,
 		"gold": gold,
 		"kills": kills,
 		"play_seconds": play_seconds,
@@ -1116,6 +1142,10 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	if typeof(farthest) in [TYPE_INT, TYPE_FLOAT]:
 		inventory.farthest_land = maxi(MapBuilder.START_LAND_RADIUS, int(farthest))
 	inventory.seeing_stone = data.get("seeing_stone", false) == true
+	# Version 30 knew no name: an unnamed character, as a name that is not a string is.
+	var called: Variant = data.get("name", "")
+	if typeof(called) == TYPE_STRING:
+		inventory.rename(called)
 	# Version 7 knew nothing about levels: an absent key reads as a fresh level 1. A level below 1 or
 	# experience below nothing in a hand-edited file is clamped rather than guessed at, and experience
 	# already worth a level is paid out, so the file comes back obeying the curve.

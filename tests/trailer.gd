@@ -92,6 +92,10 @@ func _run() -> void:
 ## The lands the kills cut between, one a kill, in turn, and the backdrop each is fought on.
 const LANDS_FOUGHT := [["ice", "town"], ["desert", "village"], ["forest", "fortress"],
 		["mountains", "town"], ["dirt", "fortress"], ["grass", "village"]]
+## The sky over each land in the cut: the one it was drawn under, rather than whatever hour the
+## trailer happens to be recorded at.
+const SKIES := {"grass": "morning", "forest": "morning", "dirt": "golden", "desert": "noon",
+		"mountains": "alpine", "ice": "twilight"}
 ## From this beat each kill throws a find, and after the first kill past `GRYPHON_FROM` the cut is
 ## to the Gryphon, who falls on `GRYPHON_FALLS` -- the hit at 30 -- and drops `PRIZE`.
 const LOOT_FROM := 14.0
@@ -762,7 +766,7 @@ func _open(fight: Encounter, cell: Vector2i, variant: String, layout: int, env :
 	_main.add_child(_combat)
 	_combat.place = place if place != "" else TileNames.generate(cell, env, MAP_SEED, "small")
 	_combat.xp_target = _main._character.xp_point()
-	_combat.begin(fight, cell, _main.ui_scale, variant, layout)
+	_combat.begin(fight, cell, _main.ui_scale, variant, layout, SKIES.get(env, "morning"))
 	while fight.phase != Encounter.Phase.WAITING:
 		fight.advance(0.05)
 

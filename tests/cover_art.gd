@@ -12,14 +12,13 @@ extends "res://tests/harness.gd"
 
 const COVERS := ["horde_day", "horde_dusk", "haul", "clash", "aftermath", "leap", "boss"]
 const SIZE := Vector2i(2304, 1296)
-## One backdrop pixel on the cover: the backdrop drawn at its own size.
-const PIXEL := CombatScene.AREA_UPSCALE * 1.0
+## One backdrop pixel on the cover: the backdrop's 384x216 grid drawn to the cover's size.
+const PIXEL := 6.0
 ## The fight's `ui_scale` at this size: 2 in its 1152-wide window, and this is twice that.
 const UI := 4.0
 ## Where the fight stands everyone's feet: the top of the backdrop's ground strip.
 const G := SIZE.y * CombatScene.GROUND
 const DUSK := Color(0.86, 0.6, 0.68)
-const AREA := "res://Assets/Area/%s.png"
 const UNIQUE_ICON := "res://Assets/Gear/Unique/%s.png"
 const TITLE := "Kobold Clicker"
 const SUBTITLE := "An Idle Loot RPG"
@@ -109,7 +108,7 @@ func _horde_dusk(stage: Node2D) -> void:
 ## The hero, sword out, facing a line of monsters, the ground between them lit by what the last
 ## ones dropped; the cursor rests on the unique's name.
 func _horde(stage: Node2D, dusk: bool) -> void:
-	_backdrop(stage, AREA % "grass_plain_3", DUSK if dusk else Color.WHITE)
+	_backdrop(stage, "grass_plain_3", DUSK if dusk else Color.WHITE)
 	var light := Color.WHITE.lerp(DUSK, 0.5) if dusk else Color.WHITE
 	var line := [["Stone Golem", 2150.0], ["Skeleton Warrior", 1930.0], ["Imp", 1760.0],
 			["Goblin", 1610.0]]
@@ -128,7 +127,7 @@ func _horde(stage: Node2D, dusk: bool) -> void:
 ## The hero walking the road under a tower of loot; ahead, the cursor clicks an imp and what it drops
 ## arcs up onto the top of the pile, while more monsters wait their turn.
 func _haul(stage: Node2D) -> void:
-	_backdrop(stage, AREA % "grass_road_1")
+	_backdrop(stage, "grass_road_1")
 	var hero := _fighter(stage, "", Vector2(560, G), Color.WHITE, "walk", 2)
 	hero.z_index = 5
 	var px := hero.scale.x
@@ -175,7 +174,7 @@ func _haul(stage: Node2D) -> void:
 ## Mid-fight: the hero's slash knocks a goblin off its feet in a burst of coin and a unique, while
 ## the rest of the line comes on swinging, the golem at the back splitting the ground.
 func _clash(stage: Node2D) -> void:
-	_backdrop(stage, AREA % "grass_plain_2")
+	_backdrop(stage, "grass_plain_2")
 	# What went down before this one, lying in its light behind him.
 	_fighter(stage, "Masked Orc", Vector2(150, G), Color.WHITE, "death", 9)
 	_find(stage, _gear("Iron Helmet"), ItemRarity.Rarity.RARE, Vector2(180, G + 12))
@@ -213,7 +212,7 @@ func _clash(stage: Node2D) -> void:
 ## After the blow: the hero follows through over a field of the fallen, each lying in its beam, the
 ## cursor on the unique's name, while the next wave is already coming at a run.
 func _aftermath(stage: Node2D) -> void:
-	_backdrop(stage, AREA % "grass_plain_3")
+	_backdrop(stage, "grass_plain_3")
 	var fallen := [
 		["Goblin", 800.0, "death", 9, _gear("Jade Ring"), ItemRarity.Rarity.RARE],
 		["Skeleton Warrior", 1040.0, "death", 5, _gear("Golden Kris"), ItemRarity.Rarity.ELITE],
@@ -243,7 +242,7 @@ func _aftermath(stage: Node2D) -> void:
 ## The hero in the air, bringing his blade down on an imp that bursts into ash, coin and a unique;
 ## a harpy dives, a goblin charges and a cyclops winds up behind it.
 func _leap(stage: Node2D) -> void:
-	_backdrop(stage, AREA % "grass_road_3")
+	_backdrop(stage, "grass_road_3")
 	_fighter(stage, "Masked Orc", Vector2(200, G), Color.WHITE, "death", 9)
 	_find(stage, _gear("Golden Kris"), ItemRarity.Rarity.ELITE, Vector2(225, G + 14))
 	_find(stage, _gear("Iron Helmet"), ItemRarity.Rarity.RARE, Vector2(420, G + 8))
@@ -277,7 +276,7 @@ func _leap(stage: Node2D) -> void:
 
 ## The hero dashing through the last of the guard at a Huge Knight with his blade raised over his head.
 func _boss(stage: Node2D) -> void:
-	_backdrop(stage, AREA % "grass_plain_4")
+	_backdrop(stage, "grass_plain_4")
 	_find(stage, _unique("stonebreaker"), ItemRarity.Rarity.UNIQUE, Vector2(2210, G + 10))
 	var knight := _fighter(stage, "Huge Knight", Vector2(1790, G), Color.WHITE, "attack", 4)
 	knight.z_index = 5
@@ -297,12 +296,16 @@ func _boss(stage: Node2D) -> void:
 
 # ---- the pieces
 
-func _backdrop(stage: Node2D, path: String, tint := Color.WHITE) -> void:
-	var art := Sprite2D.new()
-	art.texture = load(path)
-	art.centered = false
-	art.modulate = tint
-	stage.add_child(art)
+## The backdrop of `place` ("grass_plain_3": environment, variant, layout) under the morning sky.
+func _backdrop(stage: Node2D, place: String, tint := Color.WHITE) -> void:
+	var named := place.split("_")
+	for layer in CombatScene.backdrop_layers(named[0], named[1], int(named[2]), "morning"):
+		var art := Sprite2D.new()
+		art.texture = layer[0]
+		art.centered = false
+		art.scale = Vector2(PIXEL, PIXEL)
+		art.modulate = tint
+		stage.add_child(art)
 
 
 ## A fighter -- `who` from EnemyRoster, or "" for the hero -- one backdrop pixel a pixel (`px` of

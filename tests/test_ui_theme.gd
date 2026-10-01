@@ -550,34 +550,54 @@ func _labels_in(slot: OrbSlot) -> int:
 	return found
 
 
-## The character panel: every bar lies inside the frame, the portrait inside it too, and the XP bar
-## empties by whole sprite pixels, never to nothing while there is anything to show.
+## The character panel: the bar and the portrait lie inside the frame, the XP bar empties by whole
+## sprite pixels, never to nothing while there is anything to show, and the frame widens to a long
+## name but not past a cut-short one.
 func _test_character_panel() -> bool:
 	var frame := CharacterPanel.FRAME.get_size()
 	var portrait := CharacterPanel.PORTRAIT.get_size()
 	_check(Vector2(CharacterPanel.PORTRAIT_AT) + portrait <= frame, "the portrait fits in the frame")
-	for bar: String in CharacterPanel.BARS:
-		var texture: Texture2D = load(CharacterPanel.ROOT + "ui_char_bar_%s.png" % bar)
-		_check(texture != null, "the %s bar exists" % bar)
-		var end := Vector2(CharacterPanel.BARS[bar]) + texture.get_size()
-		_check(end.x <= frame.x and end.y <= frame.y, "the %s bar lies inside the frame" % bar)
+	var end := Vector2(CharacterPanel.XP_AT) + CharacterPanel.XP_BAR.get_size()
+	_check(end.x <= frame.x and end.y <= frame.y, "the bar lies inside the frame")
+	_check(CharacterPanel.STRETCH_AT > CharacterPanel.XP_AT.x and CharacterPanel.STRETCH_AT < end.x,
+			"the bar widens at the frame's column")
 	var gem: Texture2D = load("res://Assets/UI/xp_gem.png")
 	_check(gem != null and gem.get_size() == Vector2(6, 6), "the gem is the 6 px cut")
 
 	var panel := CharacterPanel.new()
 	root.add_child(panel)
-	var full: int = roundi(load(CharacterPanel.ROOT + "ui_char_bar_xp.png").get_width())
-	_check(panel.shown_pixels("xp") == 0, "no experience shows no bar")
-	_check(panel.shown_pixels("hp") == roundi(load(CharacterPanel.ROOT + "ui_char_bar_hp.png").get_width()),
-			"health stands full")
+	var plain := panel.size
+	_check(plain == frame * CharacterPanel.PIXEL,
+			"the name sits in the frame at its own width, nothing over it: %s" % plain)
+	# The bar widens by as many columns as the frame.
+	var full := CharacterPanel.XP_BAR.get_width() + int(plain.x / CharacterPanel.PIXEL - frame.x)
+	_check(panel.shown_pixels() == 0, "no experience shows no bar")
 	# A level deep enough that one point is far under half a pixel, which would round to nothing.
 	panel.set_state(10, 1)
-	_check(panel.shown_pixels("xp") == 1, "one point still shows one pixel")
+	_check(panel.shown_pixels() == 1, "one point still shows one pixel")
 	panel.set_state(1, PlayerLevel.xp_to_next(1) / 2)
-	_check(absi(panel.shown_pixels("xp") - full / 2) <= 1, "half shows half: %d of %d"
-			% [panel.shown_pixels("xp"), full])
+	_check(absi(panel.shown_pixels() - full / 2) <= 1, "half shows half: %d of %d"
+			% [panel.shown_pixels(), full])
 	_check(panel.absorb(PlayerLevel.xp_to_next(1)) == 1 and panel.level == 2, "absorbing a level levels up")
-	_check(panel.size.y > frame.y * CharacterPanel.PIXEL, "the name line stands over the frame")
+	panel.set_state(10 ** 6, 0)
+	_check(panel.size.x > plain.x, "a long level widens the frame")
+	panel.set_state(1, PlayerLevel.xp_to_next(1) / 2)
+	_check(panel.size == plain, "and a short one narrows it back")
+	panel.set_player_name("Sir Adventurer")
+	var long := panel.size.x
+	_check(long > plain.x, "a long name widens the frame")
+	_check(absi(panel.shown_pixels() - int(long / CharacterPanel.PIXEL - frame.x
+			+ CharacterPanel.XP_BAR.get_width()) / 2) <= 1, "and the bar under it, still half full")
+	panel.set_player_name("Adventurer".repeat(5))
+	var cut := panel.size.x
+	panel.set_player_name("Adventurer".repeat(50))
+	_check(cut > long and panel.size.x == cut, "a name past the room is cut short: %d, %d" % [cut, panel.size.x])
+	# At its widest, it stays clear of a settlement fight's centred column on the narrowest window not
+	# held upright, where it stands 8 px in at ui_scale 1.
+	panel.set_state(9999, 0)
+	var column := (UITheme.MIN_LONG - KillPips.width_for(Encounter.SETTLEMENT["enemies"])) / 2.0
+	_check(8 + panel.size.x + 4 <= column, "the widest panel ends at %d, the fight's column starts at %d"
+			% [8 + panel.size.x, column])
 	_check(panel.mouse_filter == Control.MOUSE_FILTER_IGNORE, "the panel never takes the mouse")
 	panel.queue_free()
 	return true
@@ -741,24 +761,54 @@ func _test_responsive() -> bool:
 	UITheme.dock(panel, room, 2.0)
 	_check(panel.position.y == 200 + UITheme.EDGE * 2.0 and panel.size.y == 200 - 2 * UITheme.EDGE,
 			"a room given is the height it takes")
-	# At 4 the headless window is under the budget across: narrow, and centred.
+	# At 4 the headless window is under the budget across: narrow, a sheet along the foot of the room.
 	UITheme.dock(panel, Rect2(), 4.0, UITheme.Dock.RIGHT)
-	_check(panel.position.x == floorf((whole.x - 100 * 4.0) / 2.0), "a narrow window centres it")
+	_check(panel.position.x == floorf((whole.x - 100 * 4.0) / 2.0) and panel.size.x == 100.0
+			and panel.size.y == 50.0 and panel.position.y == whole.y - (50.0 + UITheme.EDGE) * 4.0,
+			"held upright a page is a sheet along the foot, centred at its own width and as tall as what it holds")
+	var scroll := ScrollContainer.new()
+	var long := Control.new()
+	long.custom_minimum_size = Vector2(10, 1000)
+	scroll.add_child(long)
+	panel.add_child(scroll)
+	UITheme.dock(panel, Rect2(), 4.0)
+	_check(panel.size.y == whole.y / 2.0 / 4.0 - 2 * UITheme.EDGE,
+			"and never taller than half the window, its scroll taking the rest")
 	page.queue_free()
 
-	var bag := BagPage.new(Inventory.new(), "", 2.0)
+	var bag := BagPage.new(Inventory.new(), "", 4.0)
 	root.add_child(bag)
 	await process_frame
-	bag.area = Rect2(0, 0, 330 * 2.0, whole.y)
 	bag.layout()
 	var worn: Control = bag._worn_panel
-	_check(worn.visible and worn.position.y + worn.size.y * 2.0 <= bag._panel.position.y,
-			"a room too narrow for the doll beside the bag puts it on top")
-	bag.area = Rect2()
+	_check(worn.visible and is_equal_approx(worn.position.y + (worn.size.y + BagPage.WORN_GAP) * 4.0, bag._panel.position.y)
+			and is_equal_approx(worn.position.x + worn.size.x * 2.0, whole.x / 2.0),
+			"held upright the doll stands straight over the bag, centred")
+	bag._ui_scale = 2.0
 	bag.layout()
 	_check(worn.position.x > bag._panel.position.x and worn.position.y > bag._panel.position.y,
-			"and the whole window has it beside the bag again")
+			"and across a monitor it stands beside the bag again")
 	bag.queue_free()
+
+	# The skills, narrow: one tree up between the arrows, nothing to scroll, and an arrow turns to the next.
+	var skills := SkillsPage.new(Inventory.new(), "", 4.0)
+	root.add_child(skills)
+	await process_frame
+	skills.layout()
+	var shown := func() -> Array:
+		return skills._trees.get_children().filter(func(column: Control) -> bool: return column.visible)
+	_check(skills._switcher.visible and shown.call().size() == 1 and shown.call()[0] == skills._trees.get_child(0)
+			and skills._scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED,
+			"held upright the skills page stands one tree at a time, with nothing to scroll")
+	skills._turn(-1)
+	_check(shown.call() == [skills._trees.get_child(skills._trees.get_child_count() - 1)]
+			and skills._shown_name.text == SkillTree.TREES[SkillTree.trees()[-1]]["label"],
+			"and the arrow before the first tree goes round to the last, named between them")
+	skills._ui_scale = 2.0
+	skills.layout()
+	_check(not skills._switcher.visible and shown.call().size() == skills._trees.get_child_count(),
+			"across a monitor every tree stands, and no arrows")
+	skills.queue_free()
 	return true
 
 

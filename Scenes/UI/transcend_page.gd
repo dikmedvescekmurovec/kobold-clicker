@@ -322,6 +322,8 @@ func _place_back(page: BagPage) -> void:
 	if page.visible:
 		_back.position = page.panel_corner() - Vector2(
 				(_back.get_combined_minimum_size().x + BagPage.WORN_GAP) * _ui_scale, 0.0)
+		# A page as wide as the window leaves it nowhere to stand; the page's X is the same way back.
+		_back.visible = _back.position.x >= 0.0
 
 
 func _layout() -> void:

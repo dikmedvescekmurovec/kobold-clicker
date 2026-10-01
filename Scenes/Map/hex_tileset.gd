@@ -6,8 +6,12 @@ extends RefCounted
 const SHEET_JSON := SheetMeta.SHEET_JSON
 const SOURCE_ID := 0
 const CUSTOM_DATA := ["name", "group", "env", "kind"]
-## Side of the terrain swatch the interface shows beside an environment's name, in sprite pixels.
-const ENV_ICON := 16
+## The terrain swatch the interface shows for an environment: a pointy-top hexagon a quarter of the
+## map tile's 56x64, each row's width from the point down -- the slants step two pixels a row, as the
+## tile's own edge does -- ringed one pixel in the slot brown every card is framed in (the user's pick
+## of four, 2026-10-01: the light lands kept apart from the cream they stand on).
+const ENV_HEX_ROWS := [2, 6, 10, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 10, 6, 2]
+const ENV_HEX_EDGE := Palette.SLOT_TAN_DK
 
 var tile_set: TileSet
 var tile_size: Vector2i
@@ -24,6 +28,7 @@ var _adjacency: Dictionary[String, PackedStringArray] = {}
 var _sheet_path: String
 var _sheet_image: Image
 var _masks: Dictionary[String, PackedByteArray] = {}
+var _env_icons: Dictionary[String, Texture2D] = {}
 
 
 func _init() -> void:
@@ -46,21 +51,44 @@ func atlas_coords(tile_name: String) -> Vector2i:
 	return _coords[tile_name]
 
 
-## A swatch of one environment, cut from the middle of that environment's own tile on the sheet, so
-## the icon always shows the terrain the player sees on the map and there is no second set of art to
-## keep in step. It lives here rather than in a panel because the sheet and its grid do: the tile
-## panel and the bounty board both ask for one, and two cuts of the same square would drift.
+## A swatch of one environment: the middle of that environment's own tile on the sheet, cut to a
+## hexagon (`ENV_HEX_ROWS`), so the icon always shows the terrain the player sees on the map and there
+## is no second set of art to keep in step. It lives here rather than in a panel because the sheet and
+## its grid do: the tile panel and the bounty cards both ask for one, and two cuts would drift.
 func env_icon(env: String) -> TextureRect:
-	var side := Vector2i(ENV_ICON, ENV_ICON)
-	@warning_ignore("integer_division")  # 56 and 64 less 16 are both even, so the swatch is centred
-	var origin := atlas_coords("env_%s_v1" % env) * tile_size + (tile_size - side) / 2
-	var atlas := AtlasTexture.new()
-	atlas.atlas = (tile_set.get_source(SOURCE_ID) as TileSetAtlasSource).texture
-	atlas.region = Rect2(origin, side)
+	if not _env_icons.has(env):
+		_env_icons[env] = _env_hex(env)
 	var icon := TextureRect.new()
-	icon.texture = atlas
-	icon.custom_minimum_size = Vector2(side)
+	icon.texture = _env_icons[env]
+	icon.custom_minimum_size = _env_icons[env].get_size()
 	return icon
+
+
+## The hexagon itself, its edge one pixel outside it all round.
+func _env_hex(env: String) -> Texture2D:
+	if _sheet_image == null:
+		_sheet_image = _load_sheet_image()
+	var hex := Vector2i(ENV_HEX_ROWS.max(), ENV_HEX_ROWS.size())
+	@warning_ignore("integer_division")  # 56 less 14 and 64 less 16 are both even, so the cut is centred
+	var origin := atlas_coords("env_%s_v1" % env) * tile_size + (tile_size - hex) / 2
+	var swatch := Image.create(hex.x + 2, hex.y + 2, false, Image.FORMAT_RGBA8)
+	for y in swatch.get_height():
+		for x in swatch.get_width():
+			if _in_hex(x - 1, y - 1):
+				swatch.set_pixel(x, y, _sheet_image.get_pixelv(origin + Vector2i(x - 1, y - 1)))
+			elif _in_hex(x, y - 1) or _in_hex(x - 2, y - 1) or _in_hex(x - 1, y) or _in_hex(x - 1, y - 2):
+				swatch.set_pixel(x, y, ENV_HEX_EDGE)
+	return ImageTexture.create_from_image(swatch)
+
+
+## Whether (x, y) of the hexagon's own box is inside it.
+static func _in_hex(x: int, y: int) -> bool:
+	if y < 0 or y >= ENV_HEX_ROWS.size():
+		return false
+	var width: int = ENV_HEX_ROWS[y]
+	@warning_ignore("integer_division")
+	var from: int = (int(ENV_HEX_ROWS.max()) - width) / 2
+	return x >= from and x < from + width
 
 
 ## Road overlay connecting exactly these HexGrid.Edge values (any order), or "" if no such sprite exists.

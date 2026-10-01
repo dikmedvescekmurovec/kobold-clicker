@@ -17,8 +17,9 @@ signal broke_camp
 
 ## The layer a fight is drawn on, so a camp stands exactly where a fight would.
 const LAYER := 2
-## Dusk over the tile's own backdrop: a camp is what the hours away look like.
-const NIGHT := Color(0.45, 0.52, 0.72)
+## The tile's own place under the night sky, whatever the clock says: a camp is what the hours away
+## look like.
+const SKY := "night"
 ## A little over the viewport, the way a fight's backdrop is, so no edge can show.
 const BACKDROP_BLEED := 1.02
 ## How wide the panel is, in panel pixels. Fixed, because its one long sentence has no width of its
@@ -29,6 +30,8 @@ var _camp := {}
 var _earned := {}
 var _ui_scale := 2.0
 var _panel: VBoxContainer
+## The backdrop's layers, back to front, which `_layout` fits to the window.
+var _backdrop: Node2D
 
 
 ## Puts the camp on the screen. `camp` is what `Camp.make` built and `earned` what `Camp.earned` said
@@ -45,14 +48,16 @@ func begin(camp: Dictionary, earned: Dictionary, env: String, variant: String, s
 
 
 func _build(env: String, variant: String) -> void:
-	var art := CombatScene.backdrop_for(env, variant,
-			CombatScene.layout_for(Camp.cell_of(_camp)))
-	var backdrop := Sprite2D.new()
-	backdrop.name = "Backdrop"
-	backdrop.texture = art
-	backdrop.centered = false
-	backdrop.modulate = NIGHT
-	add_child(backdrop)
+	_backdrop = Node2D.new()
+	_backdrop.name = "Backdrop"
+	add_child(_backdrop)
+	var layers := CombatScene.backdrop_layers(env, variant,
+			CombatScene.layout_for(Camp.cell_of(_camp)), SKY)
+	for i in layers.size():
+		var sprite := CombatScene.layer_sprite(layers[i][0])
+		# The night's light falls on everything but the sky.
+		sprite.modulate = CombatScene.SKY_LIGHT[SKY] if i > 0 else Color.WHITE
+		_backdrop.add_child(sprite)
 
 	_panel = UITheme.titled_panel("Camp", "Go back to the map", _on_break_pressed)
 	_panel.scale = Vector2(_ui_scale, _ui_scale)
@@ -104,11 +109,8 @@ func _build(env: String, variant: String) -> void:
 
 func _layout() -> void:
 	var size := Vector2(get_viewport().get_visible_rect().size)
-	var backdrop: Sprite2D = get_node("Backdrop")
-	var art := backdrop.texture.get_size()
-	var cover := maxf(size.x / art.x, size.y / art.y) * BACKDROP_BLEED
-	backdrop.scale = Vector2(cover, cover)
-	backdrop.position = (size - art * cover) / 2.0
+	for sprite in _backdrop.get_children():
+		CombatScene.fit_layer(sprite, size, BACKDROP_BLEED)
 	_panel.size = _panel.get_combined_minimum_size()
 	_panel.position = (size - _panel.size * _ui_scale) / 2.0
 

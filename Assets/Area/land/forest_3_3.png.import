@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://8rw05e82n7ob"
-path="res://.godot/imported/quarry.png-d7b4caeaabab85f1ec55200084544576.ctex"
+uid="uid://dqem180r2xxh8"
+path="res://.godot/imported/forest_3_3.png-d24d61e207645fbb225a746ff635b3c1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Fortune/quarry.png"
-dest_files=["res://.godot/imported/quarry.png-d7b4caeaabab85f1ec55200084544576.ctex"]
+source_file="res://Assets/Area/land/forest_3_3.png"
+dest_files=["res://.godot/imported/forest_3_3.png-d24d61e207645fbb225a746ff635b3c1.ctex"]
 
 [params]
 

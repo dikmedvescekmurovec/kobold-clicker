@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://btb2sjtwxej4m"
-path="res://.godot/imported/ui_char_bar_hp.png-a3bff960aa28de28bceaaa55d101fc2f.ctex"
+uid="uid://c5c35j5q2ho6w"
+path="res://.godot/imported/mountains_3_2.png-890d0923124f46f6ee626673ffc5be1f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/UI/ui_char_bar_hp.png"
-dest_files=["res://.godot/imported/ui_char_bar_hp.png-a3bff960aa28de28bceaaa55d101fc2f.ctex"]
+source_file="res://Assets/Area/land/mountains_3_2.png"
+dest_files=["res://.godot/imported/mountains_3_2.png-890d0923124f46f6ee626673ffc5be1f.ctex"]
 
 [params]
 

@@ -1387,6 +1387,7 @@ def grid(w, h, scale):
 
 FINAL = "slash_glass_edge"
 STORE = "../store/"
+LANDING = "../Assets/Landing/"
 ## The GIF's size against the grid: 4x is 1024x576, small enough to post; the MP4 is the full 9x.
 GIF_SCALE = 4
 
@@ -1431,6 +1432,12 @@ def export():
     frames = animation()
     write_gif(frames, STORE + "cover.gif", GIF_SCALE)
     write_mp4(frames, STORE + "cover.mp4")
+    # The game's landing page plays the same loop, and Godot plays only Ogg Theora.
+    os.makedirs(LANDING, exist_ok=True)
+    import subprocess
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", STORE + "cover.mp4", "-vf", "fps=10",
+                    "-c:v", "libtheora", "-q:v", "8", LANDING + "cover.ogv"], check=True)
+    print(LANDING + "cover.ogv")
 
 
 def main(names):

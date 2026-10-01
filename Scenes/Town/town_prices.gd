@@ -59,7 +59,6 @@ const REROLL_GROWTH := 2.0
 const FORTUNE_BODIES := {
 	"roads": 50.0,
 	"treasure": 20.0,
-	"quarry": 5.0,
 	"appraise": 5.0,
 	"scour": 1000.0,
 	"homecoming": 200.0,

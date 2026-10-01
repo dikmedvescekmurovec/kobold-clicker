@@ -10,13 +10,11 @@ The rules are measured off that pack, the fighters' own artist's world:
 - whatever stands on it is inked and shaded in three tones lit from the upper left, and a crown
   or a bush is mottled, not built of lit lobes.
 
-The grid is 384x216 drawn 6x into a 2304x1296 file (`CombatScene.AREA_UPSCALE`), so on screen one
-backdrop pixel is one of the hero's pixels. The landscapes, the ground, the plains' landmarks and
-the road are here; the six peoples' settlements are `sideview_kits.py`.
-
-`python sideview.py <tag> [env...] [variant...] [layout...]` writes `qa/side_<tag>_<env>.png`, a
-sheet per place (variants down, layouts across) with the hero and a Masked Orc stood where the
-fight puts them; one scene alone comes out at the game's 3x.
+A place is drawn as parallax layers -- its land's bands and the ground, each repeating round its
+width -- under any of the skies (`SKIES`), whose light tints the land (`LIGHT`). Every layer ships
+at its 384x216 grid and `CombatScene` scales it to cover the view, so on screen one backdrop pixel
+is one of the hero's pixels. The landscapes, the skies, the ground, the plains' landmarks and the
+road are here; the six peoples' settlements are `sideview_kits.py`. The previews are at the foot.
 """
 import math
 import random
@@ -26,7 +24,6 @@ import numpy as np
 from PIL import Image
 
 W, H = 384, 216
-SCALE = 6
 ## The row under the fighters' feet: CombatScene.GROUND (0.86) seen through the backdrop's bleed.
 FEET = 182
 ## Where the fight stands them, in backdrop pixels (PLAYER_X 0.24, ENEMY_X 0.72 through the bleed).
@@ -37,8 +34,32 @@ def rgb(h):
     return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
 
 
+## Whether what is drawn repeats across the grid's width, so that a layer scrolled round shows no
+## join: on while `layers` and `sky_layer` draw, off for the cover (`cover.py`), whose land was
+## picked as drawn and must come out the same.
+WRAP = False
+
+
+def dx(cx):
+    """Each column's offset from cx: the shorter way round while the layer repeats."""
+    d = XX - cx
+    return (d + W / 2) % W - W / 2 if WRAP else d
+
+
+def copies(x):
+    """Where a shape at x is drawn: once, or a width either side as well while the layer repeats,
+    so whatever hangs off one edge comes back in at the other."""
+    return (x - W, x, x + W) if WRAP else (x,)
+
+
+def gradient(line):
+    """A line's slope per column, taken round the join while the layer repeats."""
+    return (np.roll(line, -1) - np.roll(line, 1)) / 2 if WRAP else np.gradient(line)
+
+
 def smooth(seed, n, k):
-    """1D value noise over n samples with k lattice points, smoothstepped between them."""
+    """1D value noise over n samples with k lattice points, smoothstepped between them; while the
+    layer repeats, the last lattice point is the first, so it comes round to where it began."""
     rng = random.Random(seed)
     pts = [rng.random() for _ in range(k + 2)]
     out = np.empty(n)
@@ -47,7 +68,7 @@ def smooth(seed, n, k):
         a = int(t)
         f = t - a
         f = f * f * (3 - 2 * f)
-        out[i] = pts[a] * (1 - f) + pts[a + 1] * f
+        out[i] = pts[a] * (1 - f) + pts[(a + 1) % k if WRAP else a + 1] * f
     return out
 
 
@@ -65,6 +86,8 @@ def noise2(seed, w, h, cell):
     """Smooth 2D value noise, 0..1."""
     rng = np.random.default_rng(seed)
     g = rng.random((h // cell + 2, w // cell + 2))
+    if WRAP:
+        g[:, w // cell] = g[:, 0]
     ys, xs = np.arange(h) / cell, np.arange(w) / cell
     y0, x0 = ys.astype(int), xs.astype(int)
     fy, fx = ys - y0, xs - x0
@@ -105,8 +128,11 @@ def grow(m):
     g = m.copy()
     g[1:] |= m[:-1]
     g[:-1] |= m[1:]
-    g[:, 1:] |= m[:, :-1]
-    g[:, :-1] |= m[:, 1:]
+    if WRAP:
+        g |= np.roll(m, 1, axis=1) | np.roll(m, -1, axis=1)
+    else:
+        g[:, 1:] |= m[:, :-1]
+        g[:, :-1] |= m[:, 1:]
     return g
 
 
@@ -117,7 +143,7 @@ def inked(a, m, ink=INK):
 
 
 def disc(cx, cy, r, sy=1.0):
-    return (XX - cx) ** 2 + ((YY - cy) * sy) ** 2 <= r * r
+    return dx(cx) ** 2 + ((YY - cy) * sy) ** 2 <= r * r
 
 
 # ---------------------------------------------------------------- far layers: flat, no ink
@@ -192,9 +218,10 @@ def ridge_line(seed, base, height, count, slope=(0.6, 1.0)):
     that owns it."""
     rng = random.Random(seed)
     xs = np.arange(W, dtype=float)
+    spread, start = (W, 0) if WRAP else (W + 80, -40)
     summits = []
     for i in range(count):
-        px = (i + rng.uniform(0.2, 0.8)) / count * (W + 80) - 40
+        px = (i + rng.uniform(0.2, 0.8)) / count * spread + start
         h = height * rng.uniform(0.55, 1.0)
         sl, sr = rng.uniform(*slope), rng.uniform(*slope)
         summits.append((px, h, sl, sr))
@@ -205,14 +232,15 @@ def ridge_line(seed, base, height, count, slope=(0.6, 1.0)):
                                 pitch * rng.uniform(1.1, 1.6), pitch * rng.uniform(1.1, 1.6)))
     best = np.full(W, float(H))
     ax, ay = np.zeros(W), np.zeros(W)
-    for (px, h, sl, sr) in summits:
-        run = np.abs(xs - px) * np.where(xs < px, sl, sr) / h
-        bow = np.where(xs < px, rng.uniform(0.7, 1.35), rng.uniform(0.7, 1.35))
-        y = base - h + h * np.clip(run, 0, None) ** bow
-        take = y < best
-        best = np.where(take, y, best)
-        ax = np.where(take, px, ax)
-        ay = np.where(take, base - h, ay)
+    for (p0, h, sl, sr) in summits:
+        bl, br = rng.uniform(0.7, 1.35), rng.uniform(0.7, 1.35)
+        for px in copies(p0):
+            run = np.abs(xs - px) * np.where(xs < px, sl, sr) / h
+            y = base - h + h * np.clip(run, 0, None) ** np.where(xs < px, bl, br)
+            take = y < best
+            best = np.where(take, y, best)
+            ax = np.where(take, px, ax)
+            ay = np.where(take, base - h, ay)
     alt = np.clip((base - best) / height, 0, 1)
     rough = (fbm(seed + 3, W, ((16, 1.0), (40, 0.55), (100, 0.3))) - 0.5) * height * 0.24 * alt
     return best + rough, ax, ay
@@ -232,7 +260,7 @@ def ranges(a, seed, base, height, count, body, lit, snow=None, snowline=0, slope
         (depth < height * 0.45)
     # every slope that faces the upper left catches a band of light under the crest
     top = np.floor(line)
-    slope_ = np.gradient(line)
+    slope_ = gradient(line)
     rim = (YY - top[None, :] < np.clip(-slope_, 0, 2.5)[None, :] * 3 + 1) & (slope_[None, :] < -0.15)
     a[m & (face | streak | rim)] = lit
     if snow is not None:
@@ -253,7 +281,7 @@ def hills(a, seed, base, amp, body, lit, octaves=((2, 1.0), (5, 0.4), (11, 0.12)
     top = np.floor(line).astype(int)
     m = YY >= top[None, :]
     a[m] = body
-    slope = np.gradient(line)
+    slope = gradient(line)
     reach = np.clip(-slope, 0, None) * 30 + 1
     a[m & (YY - top[None, :] < reach[None, :]) & (slope[None, :] < -0.05)] = lit
     return line
@@ -263,10 +291,11 @@ def wood(a, seed, base, r, body, lit, gap=(0.7, 1.2)):
     """A wall of round crowns in two colours, the lit cap toward the upper left, filled solid below:
     a wood seen from a clearing."""
     rng = random.Random(seed)
-    x = rng.uniform(-r, 0)
+    x = first = rng.uniform(-r, 0)
     m = YY >= base
     caps = np.zeros((H, W), bool)
-    while x < W + r:
+    # Round the join, the last crown is the one before the first comes back in.
+    while x < (W + first - r * 0.6 if WRAP else W + r):
         rr = r * rng.uniform(0.7, 1.15)
         y = base - rr * rng.uniform(0.2, 0.9)
         d = disc(x, y, rr)
@@ -285,15 +314,17 @@ def mesas(a, seed, base, count, tops, widths, body, lit, strata=None):
     best = np.full(W, float(base))
     who = np.full(W, -1)
     spans = []
+    spread, start = (W, 0) if WRAP else (W + 60, -30)
     for i in range(count):
-        cx = (i + rng.uniform(0.2, 0.8)) / count * (W + 60) - 30
+        c0 = (i + rng.uniform(0.2, 0.8)) / count * spread + start
         hw, top, cliff = rng.uniform(*widths) / 2, rng.uniform(*tops), rng.uniform(8, 16)
-        d = np.maximum(0, np.abs(xs - cx) - hw)
-        y = np.where(d * 5 < cliff, top + d * 5, top + cliff + (d - cliff / 5) * 0.55)
-        y = np.minimum(y, base)
-        take = y < best
-        best, who = np.where(take, y, best), np.where(take, i, who)
-        spans.append((cx, hw, top, cliff))
+        for cx in copies(c0):
+            d = np.maximum(0, np.abs(xs - cx) - hw)
+            y = np.where(d * 5 < cliff, top + d * 5, top + cliff + (d - cliff / 5) * 0.55)
+            y = np.minimum(y, base)
+            take = y < best
+            best, who = np.where(take, y, best), np.where(take, len(spans), who)
+            spans.append((cx, hw, top, cliff))
     top_row = np.floor(best).astype(int)
     m = YY >= top_row[None, :]
     a[m] = body
@@ -312,16 +343,18 @@ def dunes(a, seed, base, count, height, body, lit, wl=(90, 170)):
     xs = np.arange(W, dtype=float)
     best = np.full(W, float(base))
     cx_of, ty_of = np.full(W, 1e9), np.zeros(W)
+    spread, start = (W, 0) if WRAP else (W + 120, -60)
     for i in range(count):
-        cx = (i + rng.uniform(0.1, 0.9)) / count * (W + 120) - 60
+        c0 = (i + rng.uniform(0.1, 0.9)) / count * spread + start
         h = height * rng.uniform(0.55, 1.0)
         wlh = rng.uniform(*wl)
         wr = wlh * rng.uniform(0.3, 0.4)
-        d = np.where(xs < cx, (cx - xs) / wlh, (xs - cx) / wr)
-        y = np.where(d < 1, base - h + h * np.where(xs < cx, d ** 1.4, d ** 0.8), base)
-        take = y < best
-        best = np.where(take, y, best)
-        cx_of, ty_of = np.where(take, cx, cx_of), np.where(take, base - h, ty_of)
+        for cx in copies(c0):
+            d = np.where(xs < cx, (cx - xs) / wlh, (xs - cx) / wr)
+            y = np.where(d < 1, base - h + h * np.where(xs < cx, d ** 1.4, d ** 0.8), base)
+            take = y < best
+            best = np.where(take, y, best)
+            cx_of, ty_of = np.where(take, cx, cx_of), np.where(take, base - h, ty_of)
     m = YY >= np.floor(best)[None, :]
     a[m] = lit
     lean = cx_of[None, :] - (YY - ty_of[None, :]) * 0.8 - (YY - ty_of[None, :]) ** 2 * 0.03
@@ -397,18 +430,19 @@ def crown_mask(seed, lobes, rough=0.3, sy=1.1):
     """A leafy silhouette: the union of the lobes with a frayed edge, as the pack's crowns."""
     d = np.full((H, W), 9.0)
     for (x, y, r) in lobes:
-        d = np.minimum(d, np.sqrt((XX - x) ** 2 + ((YY - y) * sy) ** 2) / r)
+        d = np.minimum(d, np.sqrt(dx(x) ** 2 + ((YY - y) * sy) ** 2) / r)
     m = d < 1 + (noise2(seed, W, H, 2) - 0.5) * rough
     # a frayed edge leaves specks; a pixel with fewer than two neighbours in the crown goes
     held = sum(np.roll(m, k, axis=ax) for k in (1, -1) for ax in (0, 1))
     return m & (held >= 2)
 
 
-def mottle(a, m, seed, cx, cy, r, tones):
+def mottle(a, m, seed, cx, cy, r, tones, lean=0.55):
     """Fills a crown the pack's way: the light tone, clusters of the middle tone breaking it up,
-    shade gathering to the lower right, the darkest tone along the bottom."""
+    shade gathering to the lower right, the darkest tone along the bottom. `lean` is how far the
+    shade leans right; a canopy that repeats round the layer has none, or the join would show."""
     lt, mid, dk = tones
-    s = ((XX - cx) * 0.55 + (YY - cy) * 0.85) / r
+    s = (dx(cx) * lean + (YY - cy) * 0.85) / r
     n = noise2(seed + 1, W, H, 4)
     n2 = noise2(seed + 2, W, H, 3)
     a[m] = lt
@@ -522,8 +556,8 @@ def tufts(a, seed, count, x0=0, x1=W, top=FEET, tones=(LEAF[1], LEAF[2])):
             lean = rng.choice((-1, 0, 1))
             for k in range(hh):
                 xx = bx + (lean if k > hh * 0.6 else 0)
-                if 0 <= xx < W:
-                    m[top - k, xx] = True
+                if WRAP or 0 <= xx < W:
+                    m[top - k, xx % W] = True
         inked(a, m)
         a[m] = tones[1]
         a[m & ~np.roll(m, 1, axis=0) & (YY < top - 2)] = tones[0]
@@ -936,34 +970,38 @@ SAND_ROCK = WARM_STONE
 ROAD = (rgb("e69c69"), rgb("bf6f4a"), rgb("8a4836"), rgb("5d2c28"))
 
 
-def back_grass(a, rng, s):
-    """A bright morning: the pack's two blues, heaped cloud, a blue-grey range, green hills
-    darkening forward."""
+# ---------------------------------------------------------------- the skies
+# Any sky goes over any land: each is a layer of its own, the backmost, standing still while the
+# land slides past. One file a sky, drawn once from the seed beside it in `SKIES`.
+
+
+def sky_morning(a, rng):
+    """A bright morning: the pack's two blues, heaped cloud, a bank of haze on the horizon."""
     sky(a, ((rgb("0098dc"), 0), (rgb("00cdf9"), 96)))
     cloud(a, rng, rng.uniform(170, 230), 138, 260, 48, lit=PALE, body=PALE)
+    # The bank runs on down behind the land, which may dip lower than the hills it was drawn for.
+    a[(YY > 138) & (a[138] == PALE).all(axis=1)[None, :]] = PALE
     cloud(a, rng, rng.uniform(20, 70), rng.uniform(124, 136), rng.uniform(100, 130), rng.uniform(52, 66))
     cloud(a, rng, rng.uniform(300, 360), rng.uniform(120, 132), rng.uniform(110, 140), rng.uniform(48, 60))
     cloud(a, rng, rng.uniform(120, 280), rng.uniform(34, 50), rng.uniform(36, 56), rng.uniform(12, 18))
-    ranges(a, s + 1, 150, 62, 5, rgb("657392"), rgb("92a1b9"))
-    hills(a, s + 2, 164, 26, rgb("1e6f50"), rgb("33984b"))
-    return hills(a, s + 3, 176, 12, rgb("134c4c"), rgb("1e6f50"), ((3, 1.0), (7, 0.5), (15, 0.15)))
 
 
-def back_forest(a, rng, s):
-    """A clearing in the wood: pale morning over three walls of crowns darkening forward, the
-    canopy hanging over the top edge (drawn last, by `dress_forest`)."""
-    sky(a, ((rgb("00cdf9"), 0), (rgb("94fdff"), 120)))
-    cloud(a, rng, rng.uniform(270, 330), rng.uniform(106, 116), rng.uniform(90, 120), rng.uniform(36, 46))
-    cloud(a, rng, rng.uniform(40, 90), rng.uniform(98, 108), rng.uniform(80, 100), rng.uniform(30, 38))
-    wood(a, s + 1, 132, 20, rgb("33984b"), rgb("5ac54f"))
-    wood(a, s + 2, 152, 18, rgb("1e6f50"), rgb("33984b"))
-    wood(a, s + 3, 170, 15, rgb("134c4c"), rgb("1e6f50"))
-    return None
+def sky_alpine(a, rng):
+    """A crisp day: deep blue overhead, a little cloud."""
+    sky(a, ((rgb("0069aa"), 0), (rgb("0098dc"), 58), (rgb("00cdf9"), 112)))
+    cloud(a, rng, rng.uniform(40, 120), rng.uniform(62, 76), rng.uniform(80, 110), rng.uniform(26, 32))
+    cloud(a, rng, rng.uniform(260, 340), rng.uniform(46, 58), rng.uniform(70, 90), rng.uniform(20, 24))
 
 
-def back_dirt(a, rng, s):
-    """Golden hour on the steppe: a low sun in bands of plum, rose and amber, buttes of red rock
-    darkening forward."""
+def sky_noon(a, rng):
+    """Noon: a hard blue fading to a cream haze, a small white sun high up."""
+    sky(a, ((rgb("0098dc"), 0), (rgb("00cdf9"), 76), (rgb("94fdff"), 128), (rgb("f9e6cf"), 150)))
+    sun(a, rng.uniform(40, 340), rng.uniform(24, 40), 8, WHITE, rgb("ffeb57"), halo=PALE)
+    cloud(a, rng, rng.uniform(60, 320), rng.uniform(50, 66), rng.uniform(50, 70), 14, bump=(4, 7))
+
+
+def sky_golden(a, rng):
+    """Golden hour: a low sun in bands of plum, rose and amber."""
     sky(a, ((rgb("622461"), 0), (rgb("93388f"), 34), (rgb("c85086"), 70), (rgb("f68187"), 100),
             (rgb("edab50"), 124), (rgb("ffc825"), 142)))
     sun(a, rng.uniform(60, 324), 114, 14, rgb("ffeb57"), rgb("f9e6cf"), halo=rgb("ffc825"))
@@ -971,57 +1009,56 @@ def back_dirt(a, rng, s):
           body=rgb("f68187"), bump=(5, 9))
     cloud(a, rng, rng.uniform(230, 320), rng.uniform(34, 46), 90, 16, lit=rgb("fdd2ed"),
           body=rgb("f68187"), bump=(5, 8))
-    mesas(a, s + 1, 162, 4, (112, 136), (50, 110), rgb("93388f"), rgb("c85086"))
-    mesas(a, s + 2, 172, 3, (130, 150), (40, 80), rgb("8e251d"), rgb("c64524"), rgb("571c27"))
-    return hills(a, s + 3, 178, 8, rgb("571c27"), rgb("8e251d"))
 
 
-def back_desert(a, rng, s):
-    """Noon over the dunes: a hard blue fading to a cream haze, a small white sun, dunes darkening
-    forward."""
-    sky(a, ((rgb("0098dc"), 0), (rgb("00cdf9"), 76), (rgb("94fdff"), 128), (rgb("f9e6cf"), 150)))
-    sun(a, rng.uniform(40, 340), rng.uniform(24, 40), 8, WHITE, rgb("ffeb57"), halo=PALE)
-    cloud(a, rng, rng.uniform(60, 320), rng.uniform(50, 66), rng.uniform(50, 70), 14, bump=(4, 7))
-    dunes(a, s + 1, 164, 4, 30, rgb("e69c69"), rgb("f9e6cf"))
-    dunes(a, s + 2, 174, 3, 24, rgb("bf6f4a"), rgb("f6ca9f"))
-    dunes(a, s + 3, 180, 3, 12, rgb("8a4836"), rgb("e69c69"))
-    return None
-
-
-def back_mountains(a, rng, s):
-    """A crisp alpine valley: deep blue over two snowy ranges, fir slopes, a meadow."""
-    sky(a, ((rgb("0069aa"), 0), (rgb("0098dc"), 58), (rgb("00cdf9"), 112)))
-    cloud(a, rng, rng.uniform(40, 120), rng.uniform(62, 76), rng.uniform(80, 110), rng.uniform(26, 32))
-    cloud(a, rng, rng.uniform(260, 340), rng.uniform(46, 58), rng.uniform(70, 90), rng.uniform(20, 24))
-    snow = (WHITE, rgb("c7cfdd"))
-    ranges(a, s + 1, 160, 120, 4, rgb("657392"), rgb("92a1b9"), snow=snow, snowline=92,
-           slope=(0.8, 1.3))
-    ranges(a, s + 2, 170, 64, 5, rgb("424c6e"), rgb("657392"), snow=snow, snowline=128,
-           slope=(0.9, 1.4))
-    x = -4.0
-    while x < W + 6:
-        fir(a, int(s + x), int(x), 176, rng.randint(14, 24), (LEAF[3], LEAF[4], rgb("0c2e44")),
-            ink=False)
-        x += rng.uniform(4, 9)
-    return hills(a, s + 3, 178, 6, rgb("1e6f50"), rgb("33984b"))
-
-
-def back_ice(a, rng, s):
-    """Twilight on the snowfield: night coming down in bands over a rose horizon, stars, the aurora,
-    peaks in alpenglow, snowbound firs."""
+def sky_twilight(a, rng):
+    """Twilight: night coming down in bands over a rose horizon, stars, the aurora."""
     sky(a, ((rgb("1a1932"), 0), (rgb("2a2f4e"), 34), (rgb("3b1443"), 70), (rgb("622461"), 98),
             (rgb("93388f"), 120), (rgb("c85086"), 138), (rgb("f68187"), 152)))
-    stars(a, s, 110, 110)
-    aurora(a, s + 1, rng.uniform(52, 70), 40, (rgb("99e65f"), rgb("5ac54f"), rgb("1e6f50")))
-    ranges(a, s + 2, 164, 70, 5, rgb("424c6e"), rgb("657392"),
-           snow=(rgb("fdd2ed"), rgb("92a1b9")), snowline=130)
-    x = -4.0
-    while x < W + 6:
-        fir(a, int(s + x), int(x), 174, rng.randint(12, 22),
-            (rgb("2a2f4e"), rgb("1a1932"), rgb("0e071b")), snow=(rgb("c7cfdd"), rgb("92a1b9")),
-            ink=False)
-        x += rng.uniform(5, 11)
-    return hills(a, s + 3, 180, 8, rgb("92a1b9"), rgb("c7cfdd"))
+    stars(a, rng.randrange(1 << 30), 110, 110)
+    aurora(a, rng.randrange(1 << 30), rng.uniform(52, 70), 40,
+           (rgb("99e65f"), rgb("5ac54f"), rgb("1e6f50")))
+
+
+def sky_night(a, rng):
+    """Night: deep blue thinning to slate at the horizon, a full moon, stars, a thin dark cloud."""
+    sky(a, ((rgb("0e071b"), 0), (rgb("1a1932"), 48), (rgb("2a2f4e"), 104), (rgb("424c6e"), 146)))
+    stars(a, rng.randrange(1 << 30), 140, 150)
+    mx, my = rng.uniform(250, 330), rng.uniform(34, 50)
+    sun(a, mx, my, 9, rgb("f9e6cf"), rgb("c7cfdd"), halo=rgb("2a2f4e"))
+    a[disc(mx + 3, my - 2, 2.2)] = rgb("c7cfdd")
+    a[disc(mx - 2, my + 3, 1.6)] = rgb("c7cfdd")
+    cloud(a, rng, rng.uniform(60, 180), rng.uniform(78, 92), 120, 14, lit=rgb("424c6e"),
+          body=rgb("2a2f4e"), bump=(4, 7))
+
+
+## The skies through the day, each with the seed it is drawn from. Which one is up is the player's
+## own clock (`CombatScene.SKY_HOURS`), so the names must agree with that and with `LIGHT`.
+SKIES = {"morning": (sky_morning, 7), "noon": (sky_noon, 10), "alpine": (sky_alpine, 9),
+         "golden": (sky_golden, 11), "twilight": (sky_twilight, 12), "night": (sky_night, 13)}
+## What each sky's light does to the land and the fighters under it: a multiply, at run time, so
+## one land serves every sky (the fighters take `FIGHTER_LIGHT` of it, `CombatScene.SCENE_LIGHT`).
+## Must agree with `CombatScene.SKY_LIGHT`.
+LIGHT = {"morning": (1.0, 1.0, 1.0), "noon": (1.0, 1.0, 1.0), "alpine": (1.0, 1.0, 1.0),
+         "golden": (1.0, 0.86, 0.74), "twilight": (0.74, 0.68, 0.9), "night": (0.45, 0.52, 0.72)}
+FIGHTER_LIGHT = 0.4
+
+
+# ---------------------------------------------------------------- the lands
+# Each place's land is bands from far to near, each a layer that slides at its own speed.
+
+SNOW = (WHITE, rgb("c7cfdd"))
+FAR_FIR = (LEAF[3], LEAF[4], rgb("0c2e44"))
+
+
+def fir_row(a, rng, s, base, tall, step, tones, snow=None):
+    """A far row of flat firs along `base`, `tall` (lo, hi) high and `step` (lo, hi) apart."""
+    x = 0.0
+    while x < W - step[0]:
+        h = rng.randint(*tall)
+        for cx in copies(int(x)):
+            fir(a, int(s + x), cx, base, h, tones, snow=snow, ink=False)
+        x += rng.uniform(*step)
 
 
 def dress_grass(a, rng, s, variant):
@@ -1044,7 +1081,7 @@ def dress_forest(a, rng, s, variant):
         lobes.append((x, rng.uniform(-8, -2) + edge * 8, rng.uniform(9, 13) + edge * 8))
     can = crown_mask(s + 9, lobes, rough=0.35)
     inked(a, can)
-    mottle(a, can, s + 9, W / 2, -40, 60, (LEAF[1], LEAF[2], LEAF[3]))
+    mottle(a, can, s + 9, W / 2, -40, 60, (LEAF[1], LEAF[2], LEAF[3]), lean=0 if WRAP else 0.55)
 
 
 def dress_dirt(a, rng, s, variant):
@@ -1106,15 +1143,24 @@ def ice_field(a, rng, s):
     rock(a, 252, FEET, 8, 4)
 
 
+## Each place: the sky it was drawn under (what the previews show it in; a fight's is the player's
+## clock), its land's bands far to near, its ground and road, four plains and its dressing.
 PLACES = {
     "grass": dict(
-        back=back_grass, dress=dress_grass, ground={}, road=ROAD,
+        sky="morning", dress=dress_grass,
+        lands=(lambda a, rng, s: ranges(a, s + 1, 150, 62, 5, rgb("657392"), rgb("92a1b9")),
+               lambda a, rng, s: hills(a, s + 2, 164, 26, rgb("1e6f50"), rgb("33984b")),
+               lambda a, rng, s: hills(a, s + 3, 176, 12, rgb("134c4c"), rgb("1e6f50"),
+                                       ((3, 1.0), (7, 0.5), (15, 0.15)))), ground={}, road=ROAD,
         plains=(grass_trio,
                 lambda a, rng, s: pond(a, rng, 192, 44),
                 lambda a, rng, s: standing_stones(a, rng, 192),
                 lambda a, rng, s: ruin(a, rng, 192))),
     "forest": dict(
-        back=back_forest, dress=dress_forest,
+        sky="morning", dress=dress_forest,
+        lands=(lambda a, rng, s: wood(a, s + 1, 132, 20, rgb("33984b"), rgb("5ac54f")),
+               lambda a, rng, s: wood(a, s + 2, 152, 18, rgb("1e6f50"), rgb("33984b")),
+               lambda a, rng, s: wood(a, s + 3, 170, 15, rgb("134c4c"), rgb("1e6f50"))),
         ground=dict(grass=(LEAF[1], LEAF[2], LEAF[3], LEAF[4], rgb("0c2e44"))),
         road=(rgb("bf6f4a"), rgb("8a4836"), rgb("5d2c28"), rgb("391f21")),
         plains=(lambda a, rng, s: log(a, rng, 156, 70),
@@ -1122,7 +1168,14 @@ PLACES = {
                 lambda a, rng, s: standing_stones(a, rng, 192, lichen=LEAF[2]),
                 lambda a, rng, s: tree(a, s + 5, 190, FEET, 100, 86))),
     "dirt": dict(
-        back=back_dirt, dress=dress_dirt,
+        sky="golden", dress=dress_dirt,
+        # Terracotta far off, not the plum and rose the golden hour gave them: the light is the
+        # sky's now (`LIGHT`), and under a day sky those read pink.
+        lands=(lambda a, rng, s: mesas(a, s + 1, 162, 4, (112, 136), (50, 110), rgb("bf6f4a"),
+                                       rgb("e69c69")),
+               lambda a, rng, s: mesas(a, s + 2, 172, 3, (130, 150), (40, 80), rgb("8e251d"),
+                                       rgb("c64524"), rgb("571c27")),
+               lambda a, rng, s: hills(a, s + 3, 178, 8, rgb("571c27"), rgb("8e251d"))),
         ground=dict(grass=(rgb("f6ca9f"), rgb("e69c69"), rgb("bf6f4a"), rgb("8a4836"), None),
                     earth=(rgb("f6ca9f"), rgb("bf6f4a"), rgb("8a4836"), rgb("5d2c28"), rgb("391f21"))),
         road=(rgb("f6ca9f"), rgb("e69c69"), rgb("bf6f4a"), rgb("8a4836")),
@@ -1131,7 +1184,10 @@ PLACES = {
                 lambda a, rng, s: standing_stones(a, rng, 192, stone=WARM_STONE),
                 lambda a, rng, s: ruin(a, rng, 192, stone=WARM_STONE))),
     "desert": dict(
-        back=back_desert, dress=dress_desert,
+        sky="noon", dress=dress_desert,
+        lands=(lambda a, rng, s: dunes(a, s + 1, 164, 4, 30, rgb("e69c69"), rgb("f9e6cf")),
+               lambda a, rng, s: dunes(a, s + 2, 174, 3, 24, rgb("bf6f4a"), rgb("f6ca9f")),
+               lambda a, rng, s: dunes(a, s + 3, 180, 3, 12, rgb("8a4836"), rgb("e69c69"))),
         ground=dict(grass=(rgb("f9e6cf"), rgb("f6ca9f"), rgb("e69c69"), rgb("bf6f4a"), None),
                     earth=(rgb("f9e6cf"), rgb("e69c69"), rgb("bf6f4a"), rgb("8a4836"), rgb("5d2c28")),
                     streaks=False),
@@ -1142,7 +1198,13 @@ PLACES = {
                 lambda a, rng, s: dead_tree(a, rng, 190, 90, bark=(rgb("f6ca9f"), rgb("bf6f4a"),
                                                                    rgb("8a4836"))))),
     "mountains": dict(
-        back=back_mountains, dress=dress_mountains,
+        sky="alpine", dress=dress_mountains,
+        lands=(lambda a, rng, s: ranges(a, s + 1, 160, 120, 4, rgb("657392"), rgb("92a1b9"),
+                                        snow=SNOW, snowline=92, slope=(0.8, 1.3)),
+               lambda a, rng, s: ranges(a, s + 2, 170, 64, 5, rgb("424c6e"), rgb("657392"),
+                                        snow=SNOW, snowline=128, slope=(0.9, 1.4)),
+               lambda a, rng, s: (fir_row(a, rng, s, 176, (14, 24), (4, 9), FAR_FIR),
+                                  hills(a, s + 3, 178, 6, rgb("1e6f50"), rgb("33984b")))),
         ground=dict(earth=(rgb("c7cfdd"), rgb("92a1b9"), rgb("657392"), rgb("424c6e"), rgb("2a2f4e"))),
         road=(rgb("c7cfdd"), rgb("92a1b9"), rgb("657392"), rgb("424c6e")), paved=True,
         plains=(cairns(STONE),
@@ -1150,7 +1212,14 @@ PLACES = {
                 lambda a, rng, s: fir(a, s + 5, 192, FEET, 104),
                 lambda a, rng, s: ruin(a, rng, 192))),
     "ice": dict(
-        back=back_ice, dress=dress_ice,
+        sky="twilight", dress=dress_ice,
+        # White snow and green firs, not the alpenglow and navy they were drawn in: the twilight
+        # is the sky's light now (`LIGHT`), and this land goes under a noon as well.
+        lands=(lambda a, rng, s: ranges(a, s + 2, 164, 70, 5, rgb("424c6e"), rgb("657392"),
+                                        snow=SNOW, snowline=130),
+               lambda a, rng, s: (fir_row(a, rng, s, 174, (12, 22), (5, 11), FAR_FIR,
+                                          snow=(rgb("c7cfdd"), rgb("92a1b9"))),
+                                  hills(a, s + 3, 180, 8, rgb("92a1b9"), rgb("c7cfdd")))),
         ground=dict(grass=(WHITE, rgb("c7cfdd"), rgb("92a1b9"), rgb("657392"), None),
                     earth=(PALE, rgb("657392"), rgb("424c6e"), rgb("2a2f4e"), rgb("1a1932")),
                     streaks=False),
@@ -1183,29 +1252,101 @@ def road_side(a, rng, layout, wood=EARTH, stone=STONE):
         milestone(a, 228, stone)
 
 
-def render(env, variant="plain", layout=1, seed=0):
-    """One backdrop, 384x216. Every (variant, layout) is seeded apart, so each has its own sky and
-    land, not only its own settlement."""
+# ---------------------------------------------------------------- the layers
+
+## Not in ENDESGA 64: what a layer has not painted, which comes out clear.
+KEY = (1, 2, 3)
+
+
+def _drawn(draw):
+    """What `draw(a)` paints on an empty grid, as RGBA, clear wherever it painted nothing. Drawn to
+    repeat round its width (`WRAP`) and held to ENDESGA 64."""
+    global WRAP
+    a = np.empty((H, W, 3), np.uint8)
+    a[:] = KEY
+    WRAP = True
+    try:
+        draw(a)
+    finally:
+        WRAP = False
+    seen = (a != KEY).any(axis=2)
+    stray = {tuple(c) for c in np.unique(a[seen], axis=0)} - PALETTE
+    assert not stray, f"colours outside ENDESGA 64: {sorted(stray)[:5]}"
+    return np.dstack([a, seen.astype(np.uint8) * 255])
+
+
+def sky_layer(name):
+    """The sky `name`: the backmost layer, which stands still."""
+    draw, seed = SKIES[name]
+    return _drawn(lambda a: draw(a, random.Random(seed)))
+
+
+def layers(env, variant="plain", layout=1, seed=0):
+    """A place as the layers that slide past while the hero walks, far to near: its land's bands --
+    one set a layout, whatever stands on the ground -- then the ground and all that stands on it.
+    Each repeats round its width. The sky goes behind them (`sky_layer`)."""
     import sideview_kits as kits
-    s = seed + layout * 101 + VARIANTS.index(variant) * 17
     P = PLACES[env]
-    a = np.zeros((H, W, 3), np.uint8)
-    P["back"](a, random.Random(s), s)
-    if variant in ("village", "town", "fortress"):
-        kits.settle(a, env, variant, layout, s, "back")
-    road = dict(road=P["road"], paved=P.get("paved", False)) if variant == "road" else {}
-    ground(a, s + 4, **P["ground"], **road)
-    rng = random.Random(s + 5)
-    if variant == "plain":
-        P["plains"][layout - 1](a, rng, s)
-    elif variant == "road":
-        road_side(a, rng, layout, stone=WARM_STONE if env in ("dirt", "desert") else STONE)
-    else:
-        kits.settle(a, env, variant, layout, s, "front")
-    P["dress"](a, random.Random(s + 6), s, variant)
-    stray = {tuple(c) for c in np.unique(a.reshape(-1, 3), axis=0)} - PALETTE
-    assert not stray, f"{env} {variant} {layout}: colours outside ENDESGA 64: {sorted(stray)[:5]}"
-    return Image.fromarray(a, "RGB")
+    land = seed + layout * 101
+    s = land + VARIANTS.index(variant) * 17
+    out = [_drawn(lambda a, i=i, f=f: f(a, random.Random(land + i), land))
+           for i, f in enumerate(P["lands"])]
+
+    def near(a):
+        if variant in ("village", "town", "fortress"):
+            kits.settle(a, env, variant, layout, s, "back")
+        road = dict(road=P["road"], paved=P.get("paved", False)) if variant == "road" else {}
+        ground(a, s + 4, **P["ground"], **road)
+        rng = random.Random(s + 5)
+        if variant == "plain":
+            P["plains"][layout - 1](a, rng, s)
+        elif variant == "road":
+            road_side(a, rng, layout, stone=WARM_STONE if env in ("dirt", "desert") else STONE)
+        else:
+            kits.settle(a, env, variant, layout, s, "front")
+        P["dress"](a, random.Random(s + 6), s, variant)
+    out.append(_drawn(near))
+    return out
+
+
+def speeds(env):
+    """How fast each of a place's `layers` goes by, as a share of the ground's: the far bands from a
+    fifth to three fifths, the ground in full. The sky stands still."""
+    n = len(PLACES[env]["lands"])
+    return [0.2 + 0.4 * i / max(1, n - 1) for i in range(n)] + [1.0]
+
+
+def flatten(sky_, stack, rates, offset=0.0, light=(1.0, 1.0, 1.0)):
+    """The layers over the sky as the fight shows them `offset` pixels into a walk -- each slid left
+    by its own rate, the land multiplied by the sky's light -- as RGB. Whatever scale the arrays
+    are at, the offset is in their pixels."""
+    out = sky_[..., :3].astype(float)
+    tint = np.array(light, float)
+    for layer, v in zip(stack, rates):
+        lay = np.roll(layer, -int(round(offset * v)), axis=1)
+        out = np.where(lay[..., 3:] > 0, lay[..., :3] * tint, out)
+    return out.round().astype(np.uint8)
+
+
+def render(env, variant="plain", layout=1, seed=0, sky=None):
+    """One backdrop, 384x216, as the fight first shows it: the place's layers under its own sky or
+    `sky`, in that sky's light."""
+    sky = sky or PLACES[env]["sky"]
+    return Image.fromarray(flatten(sky_layer(sky), layers(env, variant, layout, seed), speeds(env),
+                                   light=LIGHT[sky]), "RGB")
+
+
+## Where `seam` calls a join a seam: a busy texture (a fortress wall, the aurora) scores up to 1.07
+## round a join that does not show (checked with every join turned to the middle of the frame).
+SEAM = 1.2
+
+
+def seam(layer, k=12):
+    """How much a layer's join shows: the rows that change across it, over the most that change
+    between any two neighbouring columns within `k` of it. Above `SEAM`, the join is busier than
+    the picture round it (the same land drawn unwrapped mostly scores 2 to 35)."""
+    change = (layer != np.roll(layer, 1, axis=1)).any(axis=2).sum(axis=0)
+    return change[0] / max(1, np.r_[change[1:k + 1], change[-k:]].max())
 
 
 # ---------------------------------------------------------------- preview
@@ -1223,43 +1364,149 @@ def _idle(path):
     return f.crop(f.getbbox())
 
 
-def with_fighters(scene):
+def _lit(f, light):
+    """A fighter in the sky's light: `FIGHTER_LIGHT` of the way toward it."""
+    a = np.array(f).astype(float)
+    a[..., :3] *= 1 - FIGHTER_LIGHT * (1 - np.array(light))
+    return Image.fromarray(a.round().astype(np.uint8), "RGBA")
+
+
+def _shadow(bg, cx, w, zoom=1):
+    """The fight's contact shadow under a figure `w` wide standing at cx."""
+    sw, sh = int(w * 0.55), max(2, int(w * 0.55 / 4))
+    yy, xx = np.mgrid[0:sh, 0:sw]
+    sa = np.zeros((sh, sw, 4), np.uint8)
+    sa[((xx - sw / 2 + 0.5) / (sw / 2)) ** 2 + ((yy - sh / 2 + 0.5) / (sh / 2)) ** 2 <= 1] = \
+        (15, 10, 23, 82)
+    bg.alpha_composite(Image.fromarray(sa, "RGBA"), (int(cx - sw / 2), FEET * zoom - sh // 2))
+
+
+def with_fighters(scene, light=(1.0, 1.0, 1.0)):
     """The hero and a Masked Orc at one backdrop pixel a pixel -- what CombatActor's snap gives
     both on this grid -- their feet on FEET, each over the fight's contact shadow."""
     bg = scene.convert("RGBA")
     for path, cx, flip in (("../Assets/Player/idle.png", PLAYER_X, False),
                            ("../Assets/Enemies/Masked Orc/Sprites/IDLE.png", ENEMY_X, True)):
-        f = _idle(path)
+        f = _lit(_idle(path), light)
         if flip:
             f = f.transpose(Image.FLIP_LEFT_RIGHT)
-        sw, sh = int(f.width * 0.55), max(2, int(f.width * 0.55 / 4))
-        shadow = Image.new("RGBA", (sw, sh))
-        sa = np.zeros((sh, sw, 4), np.uint8)
-        yy, xx = np.mgrid[0:sh, 0:sw]
-        sa[((xx - sw / 2 + 0.5) / (sw / 2)) ** 2 + ((yy - sh / 2 + 0.5) / (sh / 2)) ** 2 <= 1] = \
-            (15, 10, 23, 82)
-        shadow = Image.fromarray(sa, "RGBA")
-        bg.alpha_composite(shadow, (int(cx - sw / 2), FEET - sh // 2))
+        _shadow(bg, cx, f.width)
         bg.alpha_composite(f, (int(cx - f.width / 2), FEET - f.height))
     return bg.convert("RGB")
 
 
+def _label(im, text, xy):
+    from PIL import ImageDraw
+    d = ImageDraw.Draw(im)
+    x, y = xy
+    for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+        d.text((x + ox, y + oy), text, fill=(19, 19, 19))
+    d.text(xy, text, fill=(255, 255, 255))
+
+
+def sky_sheet(tag, variant="plain", layout=1):
+    """Every place's land down, every sky across, each in that sky's light with the fighters."""
+    skies = list(SKIES)
+    out = Image.new("RGB", (W * len(skies) + 4 * (len(skies) - 1),
+                            H * len(ENVS) + 4 * (len(ENVS) - 1)), (20, 20, 20))
+    cache = {k: sky_layer(k) for k in skies}
+    for r, env in enumerate(ENVS):
+        stack, rates = layers(env, variant, layout), speeds(env)
+        for c, k in enumerate(skies):
+            im = with_fighters(Image.fromarray(flatten(cache[k], stack, rates, light=LIGHT[k]),
+                                               "RGB"), LIGHT[k])
+            _label(im, f"{env} / {k}" + (" (own)" if PLACES[env]["sky"] == k else ""), (6, 4))
+            out.paste(im, (c * (W + 4), r * (H + 4)))
+    path = f"qa/side_{tag}_skies.png"
+    out.save(path)
+    print(path)
+
+
+## The hero's run strip: frames this wide.
+RUN_FRAME = 74
+
+
+def scroll_gif(tag, env, variant="plain", layout=1, sky=None, zoom=2, fps=20, speed=90.0):
+    """The hero running through a place for one turn of its ground, every layer sliding at its own
+    rate as they do while an enemy walks in (`speed` backdrop pixels a second, the cave's)."""
+    sky = sky or PLACES[env]["sky"]
+
+    def up(x):
+        return x.repeat(zoom, 0).repeat(zoom, 1)
+    sky_, stack, rates = up(sky_layer(sky)), [up(x) for x in layers(env, variant, layout)], speeds(env)
+    strip = Image.open("../Assets/Player/run.png").convert("RGBA")
+    run = [strip.crop((i * RUN_FRAME, 0, (i + 1) * RUN_FRAME, strip.height))
+           for i in range(strip.width // RUN_FRAME)]
+    boxes = [f.getbbox() for f in run]
+    box = (min(b[0] for b in boxes), min(b[1] for b in boxes),
+           max(b[2] for b in boxes), max(b[3] for b in boxes))
+    run = [_lit(f.crop(box), LIGHT[sky]) for f in run]
+    run = [f.resize((f.width * zoom, f.height * zoom), Image.NEAREST) for f in run]
+    step = speed / fps
+    out = []
+    for i in range(int(W / step)):
+        bg = Image.fromarray(flatten(sky_, stack, rates, i * step * zoom, LIGHT[sky]), "RGB")
+        bg = bg.convert("RGBA")
+        f = run[i % len(run)]
+        _shadow(bg, PLAYER_X * zoom, f.width, zoom)
+        bg.alpha_composite(f, (int(PLAYER_X * zoom - f.width / 2), FEET * zoom - f.height))
+        out.append(bg.convert("RGB").quantize(colors=255, method=Image.Quantize.MEDIANCUT,
+                                              dither=Image.Dither.NONE))
+    path = f"qa/side_{tag}_{env}_{variant}.gif"
+    out[0].save(path, save_all=True, append_images=out[1:], duration=int(1000 / fps), loop=0)
+    print(path)
+
+
+def seams():
+    """Checks every sky and every layer of every scene for a join that shows; True if none does."""
+    bad = [f"sky {k}: {seam(sky_layer(k)):.2f}" for k in SKIES if seam(sky_layer(k)) > SEAM]
+    for env in ENVS:
+        for variant in VARIANTS:
+            for layout in range(1, LAYOUTS + 1):
+                stack = layers(env, variant, layout)
+                # The land is the same under every variant, so it is checked with the plain.
+                named = enumerate(stack) if variant == "plain" else [("ground", stack[-1])]
+                for i, lay in named:
+                    if seam(lay) > SEAM:
+                        bad.append(f"{env} {variant} {layout} layer {i}: {seam(lay):.2f}")
+    print("\n".join(bad) or "no seams")
+    return not bad
+
+
 if __name__ == "__main__":
-    # sideview.py <tag> [env ...] [variant ...] [layout ...]: a sheet per place, variants down and
-    # layouts across; one scene alone comes out at the game's 3x
-    tag = sys.argv[1] if len(sys.argv) > 1 else "t"
-    args = sys.argv[2:]
+    # sideview.py <tag> [env ...] [variant ...] [layout ...] [sky]: a sheet per place, variants down
+    #   and layouts across, under the place's own sky or the one named; one scene alone at 3x
+    # sideview.py skies <tag> [variant] [layout]: every land under every sky
+    # sideview.py scroll <tag> [env ...] [variant] [layout] [sky]: a GIF a place, the hero running
+    # sideview.py seams: every layer's join checked
+    mode = sys.argv[1] if len(sys.argv) > 1 else "t"
+    if mode == "seams":
+        raise SystemExit(0 if seams() else 1)
+    if mode in ("skies", "scroll"):
+        tag, args = (sys.argv[2] if len(sys.argv) > 2 else "t"), sys.argv[3:]
+    else:
+        tag, args = mode, sys.argv[2:]
     envs = [x for x in args if x in PLACES] or list(PLACES)
     variants = [x for x in args if x in VARIANTS] or list(VARIANTS)
     layouts = [int(x) for x in args if x.isdigit()] or list(range(1, LAYOUTS + 1))
-    for e in envs:
-        cells = [[with_fighters(render(e, vv, l)) for l in layouts] for vv in variants]
-        out = Image.new("RGB", (W * len(layouts) + 4 * (len(layouts) - 1),
-                                H * len(variants) + 4 * (len(variants) - 1)), (20, 20, 20))
-        for r, line in enumerate(cells):
-            for c, im in enumerate(line):
-                out.paste(im, (c * (W + 4), r * (H + 4)))
-        if len(variants) * len(layouts) == 1:
-            out = out.resize((out.width * 3, out.height * 3), Image.NEAREST)
-        out.save(f"qa/side_{tag}_{e}.png")
-        print(f"qa/side_{tag}_{e}.png")
+    pick = next((x for x in args if x in SKIES), None)
+    one = variants[0] if len(variants) == 1 else "plain"
+    if mode == "skies":
+        sky_sheet(tag, one, layouts[0])
+    elif mode == "scroll":
+        for e in envs:
+            scroll_gif(tag, e, one, layouts[0], pick)
+    else:
+        for e in envs:
+            k = pick or PLACES[e]["sky"]
+            cells = [[with_fighters(render(e, vv, l, sky=k), LIGHT[k]) for l in layouts]
+                     for vv in variants]
+            out = Image.new("RGB", (W * len(layouts) + 4 * (len(layouts) - 1),
+                                    H * len(variants) + 4 * (len(variants) - 1)), (20, 20, 20))
+            for r, line in enumerate(cells):
+                for c, im in enumerate(line):
+                    out.paste(im, (c * (W + 4), r * (H + 4)))
+            if len(variants) * len(layouts) == 1:
+                out = out.resize((out.width * 3, out.height * 3), Image.NEAREST)
+            out.save(f"qa/side_{tag}_{e}.png")
+            print(f"qa/side_{tag}_{e}.png")

@@ -37,6 +37,7 @@ func _run() -> void:
 	_check(_test_rank_four() == true, "rank IV tests ran to the end")
 	_check(_test_backdrops() == true, "backdrop tests ran to the end")
 	_check(_test_backdrop_layouts() == true, "backdrop layout tests ran to the end")
+	_check(_test_skies() == true, "sky tests ran to the end")
 	_check(_test_a_farm_run_never_ends() == true, "farm run tests ran to the end")
 	_check(_test_a_settlement_is_a_set_piece() == true, "settlement fight tests ran to the end")
 	_check(_test_a_chest_is_a_mimic() == true, "chest fight tests ran to the end")
@@ -55,6 +56,7 @@ func _run() -> void:
 	await _test_the_longest_stop_wins()
 	await _test_settings()
 	await _test_the_nameplate_wears_the_tier()
+	await _test_the_backdrop_goes_by()
 	await _test_the_map_hands_over_and_takes_back()
 	await _test_the_nightwalkers_fight_their_way()
 	await _test_a_world_under_the_fog()
@@ -396,8 +398,8 @@ func _test_capstone_effects() -> bool:
 	return true
 
 
-## Every place the world can send the player to has a backdrop, and anything else falls back rather
-## than leaving a fight with nothing behind it.
+## Every place the world can send the player to has a backdrop -- a sky, its land and its ground --
+## and anything else falls back rather than leaving a fight with nothing behind it.
 func _test_backdrops() -> bool:
 	for env in _environments():
 		var fight := Encounter.for_tile(Vector2i(1, 2), env)
@@ -407,21 +409,51 @@ func _test_backdrops() -> bool:
 				var path: String = CombatScene.AREA_PATH % [env, variant, layout]
 				_check(ResourceLoader.exists(path),
 						"%s has a %s backdrop (%d)" % [env, variant, layout])
-				# One at a time, and never cached: a backdrop is 2304x1296, and holding all of them
-				# at once would be over a gigabyte of texture for a size check.
-				var art: Texture2D = ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
-				# The fighters are placed as a share of the picture, so every backdrop is the same
-				# shape: one that was not would stand them off the ground.
-				_check(art != null and art.get_size() == Vector2(2304, 1296),
-						"%s/%s/%d is the standard size" % [env, variant, layout])
-			_check(CombatScene.backdrop_for(env, variant) != null, "%s/%s loads" % [env, variant])
+				var layers := CombatScene.backdrop_layers(env, variant, layout, "noon")
+				_check(layers.size() >= 4 and layers[-1][0] == load(path),
+						"%s/%s/%d is a sky, two bands of land or more, and its ground in front"
+								% [env, variant, layout])
+				# The fighters are placed as a share of the picture and snap to its pixel, so every
+				# layer is the one grid: one that was not would stand them off the ground.
+				var grid := true
+				var rising := true
+				for i in layers.size():
+					grid = grid and layers[i][0] != null and layers[i][0].get_size() == Vector2(384, 216)
+					rising = rising and (i == 0 or float(layers[i][1]) > float(layers[i - 1][1]))
+				_check(grid, "%s/%s/%d: every layer on the fighters' grid" % [env, variant, layout])
+				# Nearer goes faster, or the depth reads inside out.
+				_check(rising and layers[0][1] == 0.0 and layers[-1][1] == 1.0,
+						"%s/%s/%d: from the still sky to the ground at walking pace" % [env, variant, layout])
 
-	var fallback := CombatScene.backdrop_for("swamp", "plain")
-	_check(fallback == load(CombatScene.AREA_FALLBACK), "terrain with no art falls back")
+	var fallback := CombatScene.backdrop_layers("swamp", "plain", 1, "noon")
+	_check(fallback[-1][0] == load(CombatScene.AREA_FALLBACK) and fallback.size() >= 4,
+			"terrain with no art falls back, land and all")
 	# A layout number that was never drawn is clamped rather than left as a missing file: the number
 	# comes out of a hash, and a fight with no picture behind it would be unplayable.
-	_check(CombatScene.backdrop_for("grass", "village", 99) != null, "a layout past the end clamps")
-	_check(CombatScene.backdrop_for("grass", "village", 0) != null, "and so does one before it")
+	_check(CombatScene.backdrop_layers("grass", "village", 99, "noon")[-1][0]
+			== load(CombatScene.AREA_PATH % ["grass", "village", CombatScene.AREA_LAYOUTS]),
+			"a layout past the end clamps")
+	_check(CombatScene.backdrop_layers("grass", "village", 0, "noon")[-1][0]
+			== load(CombatScene.AREA_PATH % ["grass", "village", 1]), "and so does one before it")
+	_check(CombatScene.backdrop_layers("grass", "plain", 1, "purple")[0][0]
+			== load(CombatScene.SKY_PATH % CombatScene.SKY_HOURS[0][1]), "and a sky with no picture")
+	return true
+
+
+## The sky is the player's clock's: each comes up at its hour and holds until the next, the small
+## hours are still the night before, and every sky has its picture and its light.
+func _test_skies() -> bool:
+	var hours := CombatScene.SKY_HOURS
+	_check(CombatScene.sky_at(0) == hours[-1][1] and CombatScene.sky_at(int(hours[0][0]) - 1) == hours[-1][1],
+			"the small hours are still the last sky of the day before")
+	for i in hours.size():
+		var sky: String = hours[i][1]
+		var next := int(hours[i + 1][0]) if i + 1 < hours.size() else 24
+		_check(CombatScene.sky_at(int(hours[i][0])) == sky and CombatScene.sky_at(next - 1) == sky,
+				"%s is up from %d until %d" % [sky, hours[i][0], next])
+		_check(ResourceLoader.exists(CombatScene.SKY_PATH % sky) and CombatScene.SKY_LIGHT.has(sky),
+				"%s has its picture and its light" % sky)
+	_check(CombatScene.SKY_LIGHT.size() == hours.size(), "and every sky with a light comes up at some hour")
 	return true
 
 
@@ -683,6 +715,86 @@ func _test_coins() -> bool:
 	return true
 
 
+## A fight is drawn under the sky it is given, its light on the land and a little on the fighters but
+## never on the sky itself; while an enemy walks in the hero walks to meet it and the backdrop goes
+## by, the nearer the faster, carrying what lies on the ground into his hands; once the enemy stands
+## nothing moves, and in a settlement nothing moves at all.
+func _test_the_backdrop_goes_by() -> void:
+	var animations := Settings.animations
+	Settings.animations = Settings.Anim.DEFAULT
+	var cell := Vector2i(4, 0)
+	var combat: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
+	root.add_child(combat)
+	var fight := Encounter.for_tile(cell, "grass")
+	combat.begin(fight, cell, 2.0, "plain", 1, "night")
+	await process_frame
+	var night: Color = CombatScene.SKY_LIGHT["night"]
+	var layers := combat._layers
+	_check(layers[0].texture == load(CombatScene.SKY_PATH % "night") and layers[0].modulate == Color.WHITE,
+			"the night sky at the back, as drawn")
+	_check(layers[1].modulate == night and layers[-1].modulate == night, "its light on the land")
+	_check(combat._player.self_modulate == Color.WHITE.lerp(night, CombatScene.SCENE_LIGHT),
+			"and some of it on the hero")
+	_check(fight.phase == Encounter.Phase.WAITING or combat._player.animation == "walk",
+			"who walks on to meet the first enemy")
+
+	fight.phase = Encounter.Phase.WALKING_IN
+	var before: Array[float] = []
+	for layer in layers:
+		before.append(layer.region_rect.position.x)
+	combat._scroll(0.1)
+	var moved: Array[float] = []
+	for i in layers.size():
+		moved.append(fposmod(layers[i].region_rect.position.x - before[i], 384.0))
+	_check(moved[0] == 0.0, "the sky stands still")
+	_check(is_equal_approx(moved[-1], CombatScene.WALK_SPEED * 0.1), "the ground goes at walking pace")
+	var nearer := true
+	for i in range(1, moved.size()):
+		nearer = nearer and moved[i] > moved[i - 1]
+	_check(nearer, "and each band of land between them the faster the nearer it is (%s)" % [moved])
+
+	# What lies on the ground goes with it, and the hero picks up what he walks into.
+	combat._show_find(load(CombatScene.SKY_PATH % "noon"), -1)
+	var find: Node2D = combat._ground_drops.get_child(combat._ground_drops.get_child_count() - 1)
+	var lying := find.global_position.x
+	combat._scroll(0.1)
+	_check(is_equal_approx(lying - find.global_position.x, CombatScene.WALK_SPEED * 0.1 * combat._pixel),
+			"a find on the ground goes by with it")
+	_check(find.get_parent() == combat._ground_drops, "and lies there while the hero is short of it")
+	find.position.x = combat._player.position.x - combat._ground_drops.position.x
+	combat._scroll(0.01)
+	_check(find.get_parent() == combat and not find.has_meta(CombatScene.THROWN),
+			"the moment he reaches it, it is picked up and flies to the counter")
+
+	fight.phase = Encounter.Phase.WAITING
+	var held := layers[-1].region_rect.position.x
+	combat._scroll(0.1)
+	_check(layers[-1].region_rect.position.x == held, "while an enemy stands, nothing moves")
+	Settings.animations = Settings.Anim.NONE
+	fight.phase = Encounter.Phase.WALKING_IN
+	combat._scroll(0.1)
+	_check(layers[-1].region_rect.position.x == held, "nor with the animations off")
+	Settings.animations = Settings.Anim.DEFAULT
+	combat.queue_free()
+	await process_frame
+
+	# A settlement is held, not walked through: the hero stands, its defenders come to him, and the
+	# backdrop stays where it is.
+	var town: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
+	root.add_child(town)
+	var siege := Encounter.for_tile(cell, "grass", "village")
+	town.begin(siege, cell, 2.0, "village", 1, "noon")
+	await process_frame
+	_check(siege.phase == Encounter.Phase.WALKING_IN and town._player.animation != "walk",
+			"the hero stands his ground in a settlement while an enemy comes in")
+	var still := town._layers[-1].region_rect.position.x
+	town._scroll(0.1)
+	_check(town._layers[-1].region_rect.position.x == still, "and the settlement stays still behind him")
+	Settings.animations = animations
+	town.queue_free()
+	await process_frame
+
+
 ## The nameplate's bar drains with the enemy and wears that enemy's tier. Needs a scene rather than an
 ## Encounter: the encounter knows the hit points and the view is what turns them into a width.
 ##
@@ -780,24 +892,24 @@ func _test_thrown_finds() -> void:
 
 	# A common piece: the icon and nothing else. Counted by what is on the scene rather than only by
 	# the tally, so this fails if the throw ever stops reaching the tree.
-	var before := combat.get_child_count()
+	var before := combat._ground_drops.get_child_count()
 	combat._on_loot_dropped(0, _thrown_piece(ItemRarity.Rarity.COMMON))
 	_check(combat._finds_shown == 1, "a kept find is thrown")
-	_check(combat.get_child_count() == before + 1, "and it is a node in the arena")
-	var plain := combat.get_child(combat.get_child_count() - 1) as Node2D
+	_check(combat._ground_drops.get_child_count() == before + 1, "and it lies on the ground")
+	var plain := combat._ground_drops.get_child(combat._ground_drops.get_child_count() - 1) as Node2D
 	_check(plain is Sprite2D, "drawn as a sprite, like a coin")
 	_check(plain.get_child_count() == 0, "with no beam over a common piece")
 
 	# Uncommon is thrown plain too: a beam is for rare and better.
 	combat._on_loot_dropped(1, _thrown_piece(ItemRarity.Rarity.UNCOMMON))
-	_check(combat.get_child(combat.get_child_count() - 1).get_child_count() == 0,
+	_check(combat._ground_drops.get_child(combat._ground_drops.get_child_count() - 1).get_child_count() == 0,
 			"with no beam over an uncommon piece")
 
 	# A rare one carries a beam of its own colour behind it.
 	var rare := _thrown_piece(ItemRarity.Rarity.RARE)
 	combat._on_loot_dropped(2, rare)
 	_check(combat._finds_shown == 3, "and so is the next")
-	var lit := combat.get_child(combat.get_child_count() - 1) as Node2D
+	var lit := combat._ground_drops.get_child(combat._ground_drops.get_child_count() - 1) as Node2D
 	_check(lit.scale.x > plain.scale.x and lit.z_index > plain.z_index,
 			"drawn bigger than a common one, and over it")
 	_check(lit.get_child_count() == 1, "a rare piece is thrown with a beam over it")
@@ -838,20 +950,20 @@ func _test_thrown_finds() -> void:
 	# A cheap orb is thrown plain; a good one stands the beam its table names.
 	combat._on_orb_dropped(3, "Orb of Transmutation")
 	_check(combat._finds_shown == 4, "an orb is thrown too")
-	_check(combat.get_child(combat.get_child_count() - 1).get_child_count() == 0,
+	_check(combat._ground_drops.get_child(combat._ground_drops.get_child_count() - 1).get_child_count() == 0,
 			"and a cheap one carries no beam")
 	combat._on_orb_dropped(4, "Orb of Exaltation")
-	var orb := combat.get_child(combat.get_child_count() - 1) as Node2D
+	var orb := combat._ground_drops.get_child(combat._ground_drops.get_child_count() - 1) as Node2D
 	_check(orb.get_child_count() == 1, "but a good one does")
 
 	# Its two layers share one seed, or a ribbon's turns would not meet; picked up, the find leaves
-	# its beam on the arena to sink away and free itself.
+	# its beam on the ground to sink away and free itself, going by with it as it does.
 	if orb.get_child_count() == 1:
 		var beam := orb.get_child(0) as Node2D
 		_check(beam.get_node("Back").material.get_shader_parameter("seed")
 				== beam.get_node("Front").material.get_shader_parameter("seed"), "one seed a beam")
 		combat._fly_to_counter(orb)
-		_check(beam.get_parent() == combat and orb.get_child_count() == 0,
+		_check(beam.get_parent() == combat._ground_drops and orb.get_child_count() == 0,
 				"a find picked up leaves its beam behind")
 		# Polled rather than timed to `FALL`: a headless run's tweens can lag the timer's clock.
 		for i in 40:
@@ -930,11 +1042,12 @@ func _test_settings() -> void:
 	combat._on_loot_dropped(0, piece)
 	combat._show_damage(5.0, true)
 	_check(absorbed == [25], "with animations off the bar takes its experience at once")
-	_check(combat.get_child_count() == before and combat._finds_shown == 0, "and nothing is thrown")
+	_check(combat.get_child_count() == before and combat._ground_drops.get_child_count() == 0
+			and combat._finds_shown == 0, "and nothing is thrown")
 	_check(combat._drops.size() == 1, "though the find is still kept")
 	Settings.animations = Settings.Anim.LOW
 	combat._on_gold_dropped(0, 1000.0)
-	_check(combat.get_child_count() == before + 1, "on low a purse is one coin")
+	_check(combat._ground_drops.get_child_count() == 1, "on low a purse is one coin")
 	combat.queue_free()
 	await process_frame
 	Settings.sfx = true

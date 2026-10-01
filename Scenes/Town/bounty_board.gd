@@ -13,7 +13,7 @@ extends RefCounted
 ## town they belong to rather than worked out from a seed again. A caller hands in the environments
 ## and the town's cell rather than a map, so the rules can be read with no world around them.
 ##
-## A posting is `{enemy, need, have, gold, orb, item, accepted, done, level, located}`. Only an **accepted** posting counts
+## A posting is `{enemy, need, have, gold, orb, item, accepted, done, level}`. Only an **accepted** posting counts
 ## kills, and only one posting anywhere may be accepted at a time -- a bounty is a job taken on, not a
 ## tally that runs by itself -- until it is handed in. `have` stops at `need`; `done` is a bounty
 ## handed in, which stays on the board, spent, until the whole board is `cleared` and posted afresh.
@@ -47,9 +47,6 @@ const ACCEPTED := "accepted"
 ## The level of the town that posted it. A kill counts only on land of that level or deeper, so a
 ## deep town's work cannot be done on the doorstep slimes. Absent (an older save) asks nothing.
 const LEVEL := "level"
-## Whether a fortuneteller has been paid to say where this monster lives, which is what puts the
-## land and the nearest tile of it on the card. Absent is not.
-const LOCATED := "located"
 
 ## How many of each tier a board posts. Two of the rabble and one elite: the pair are something to
 ## work through while walking, the elite is the one worth going out of the way for.
@@ -204,27 +201,12 @@ static func accept(state: TownState, bounty: Dictionary) -> bool:
 
 
 ## Gives the work up: the posting goes back on its board unaccepted and its kills are lost, so
-## another can be taken on. A fortuneteller's word on where it lives is kept -- it was paid for.
-## False when it was not out.
+## another can be taken on. False when it was not out.
 static func abandon(bounty: Dictionary) -> bool:
 	if not is_active(bounty):
 		return false
 	bounty.erase(ACCEPTED)
 	bounty[HAVE] = 0
-	return true
-
-
-## Whether the card may say where the monster lives.
-static func located(bounty: Dictionary) -> bool:
-	return bool(bounty.get(LOCATED, false))
-
-
-## A fortuneteller has said where it lives. False when there was nothing to tell: only work that is
-## out can be asked about, and only once.
-static func locate(bounty: Dictionary) -> bool:
-	if not is_active(bounty) or located(bounty):
-		return false
-	bounty[LOCATED] = true
 	return true
 
 

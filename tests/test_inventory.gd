@@ -1146,6 +1146,19 @@ func _test_saving() -> bool:
 	kept = Inventory.load_from(TEST_PATH)
 	_check(kept.farthest_land == MapBuilder.START_LAND_RADIUS and not kept.seeing_stone,
 			"a save from before them has been no further than the start's land, and holds no stone")
+	_check(kept.hero() == Inventory.DEFAULT_NAME, "and an unnamed character, as a save before names is")
+
+	# The character's name: trimmed, cut to its most, never nothing, kept and carried like the kills.
+	_check(played.hero() == Inventory.DEFAULT_NAME, "a character nobody has named is the default")
+	_check(not played.rename("   ") and played.hero() == Inventory.DEFAULT_NAME, "a blank name changes nothing")
+	_check(played.rename("  Cobalt ") and played.hero() == "Cobalt", "a name is trimmed")
+	_check(not played.rename("Cobalt"), "and the same name again changes nothing")
+	played.rename("x".repeat(Inventory.NAME_MOST + 5))
+	_check(played.hero().length() == Inventory.NAME_MOST, "a long name is cut to %d letters" % Inventory.NAME_MOST)
+	played.rename("Cobalt")
+	played.save(TEST_PATH)
+	_check(Inventory.load_from(TEST_PATH).hero() == "Cobalt" and played.transcended().hero() == "Cobalt",
+			"the name comes back off the save and is carried through a transcension")
 	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
 	file.store_string('{"version": 15, "items": []}')
 	file.close()
@@ -1279,11 +1292,14 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	main.inventory.items.clear()
 	main.inventory.save(TEST_PATH)
 	main.bag_page._select_item(-1)
-	main._on_left_page_closed()
 
-	# A first fight, whose elite is promised a drop.
+	# A first fight, whose elite is promised a drop. Choosing its tile puts the bag away: a tile chosen
+	# has the screen to itself.
+	_check(main.bag_page.visible, "the bag is up as the tile is chosen")
 	var target := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
 	main.map.select_cell(target)
+	_check(not main._left_page_up() and main._panel.visible,
+			"choosing a tile closes the page and brings the tile's panel up")
 	main._on_chart_pressed()
 	main.map.player.finish_walk()
 	_check(not main._bag_button.visible, "the button is out of the way of the fight")
@@ -4617,6 +4633,19 @@ func _test_character_page() -> bool:
 		said += (label as Label).text + "|"
 	_check(said.contains("Damage|5|"), "a stat that is something is a row, name then number (%s)" % said)
 	_check(not said.contains("Armour"), "and one that is nothing is not")
+	# Renaming is the system's own text box, which a headless run has not got: its answer is what is
+	# handed in here. The page wears the name on its bar, as the corner and the hero's tips do.
+	main._on_name_entered("  Cobalt  ")
+	_check(main.inventory.hero() == "Cobalt" and Inventory.load_from(TEST_PATH).hero() == "Cobalt",
+			"a name handed back is the character's, and saved")
+	_check(main.character_page._title.text == "Cobalt", "the page's bar says it")
+	_check(main._character._name_label.text == "Cobalt", "and so does the corner")
+	main._on_name_entered("")
+	_check(main.inventory.hero() == "Cobalt", "an empty answer leaves the name as it was")
+	var pencils: Array = main.character_page.find_children("", "Button", true, false).filter(
+			func(b: Button) -> bool: return b.tooltip_text == "Rename")
+	_check(pencils.size() == (1 if DisplayServer.has_feature(DisplayServer.FEATURE_NATIVE_DIALOG_INPUT) else 0),
+			"the pencil is there exactly where the system has a text box to open")
 	main._on_left_page_closed()
 	_check(not main.character_page.visible and main._character_button.visible, "the X puts it away")
 	main.queue_free()

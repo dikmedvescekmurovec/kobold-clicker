@@ -70,6 +70,28 @@ func _test_tileset(tileset: HexTileset) -> bool:
 			var tile := source.get_tile_data(coords, 0)
 			_check(tile.get_custom_data("name") == entry["name"] and tile.get_custom_data("group") == entry["group"],
 					"%s custom data" % entry["name"])
+
+	# The terrain swatch is a hexagon of the tile's own middle, ringed one pixel in the slot brown.
+	var swatch := tileset.env_icon("grass")
+	var image := swatch.texture.get_image()
+	var wide: int = HexTileset.ENV_HEX_ROWS.max()
+	var tall: int = HexTileset.ENV_HEX_ROWS.size()
+	_check(image.get_size() == Vector2i(wide + 2, tall + 2) and swatch.custom_minimum_size == Vector2(image.get_size()),
+			"a swatch is the hexagon and its edge (%s)" % image.get_size())
+	_check(image.get_pixel(0, 0).a == 0.0 and image.get_pixel(image.get_width() - 1, image.get_height() - 1).a == 0.0,
+			"its corners are clear")
+	@warning_ignore("integer_division")
+	var top := Vector2i(image.get_width() / 2, 0)
+	_check(image.get_pixelv(top).is_equal_approx(HexTileset.ENV_HEX_EDGE) and image.get_pixel(0, tall / 2)
+			.is_equal_approx(HexTileset.ENV_HEX_EDGE), "its edge is the slot brown at the point and the side")
+	var sheet := Image.load_from_file(HexTileset.SHEET_JSON.get_base_dir().path_join(
+			SheetMeta.meta()["image"]))
+	@warning_ignore("integer_division")
+	var middle := tileset.atlas_coords("env_grass_v1") * tileset.tile_size + tileset.tile_size / 2
+	@warning_ignore("integer_division")
+	_check(image.get_pixel(1 + wide / 2, 1 + tall / 2).is_equal_approx(sheet.get_pixelv(middle)),
+			"and inside it is the tile's own middle")
+	_check(tileset.env_icon("grass").texture == swatch.texture, "cut once and kept")
 	return true
 
 

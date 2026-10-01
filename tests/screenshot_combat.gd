@@ -12,7 +12,7 @@ extends "res://tests/harness.gd"
 ## `combat_bounty_elite.png`). Also
 ## saves a contact sheet of every enemy's idle frame at the size the fight draws it, which is what
 ## catches a frame or crop measured wrong in EnemyRoster, and one shot per environment on its own
-## backdrop (combat_area_<env>_<variant>.png), and the dungeon: a floor of it, its boss and the
+## backdrop, each under a different sky (combat_area_<env>_<variant>_<layout>_<sky>.png), and the dungeon: a floor of it, its boss and the
 ## verdict a descent ends on (combat_dungeon.png, combat_dungeon_boss.png, combat_dungeon_end.png).
 
 const MAP_SEED := 1
@@ -67,8 +67,9 @@ func _shoot_camp() -> void:
 	await process_frame
 
 
-## One shot per environment, each on a different variant, so all six places and all five variants
-## are seen with fighters standing on them -- the check that the ground line survived the swap.
+## One shot per environment, each on a different variant and under a different sky, so all six
+## places, all five variants and every sky are seen with fighters standing on them -- the check that
+## the ground line survived the swap.
 func _shoot_backdrops() -> void:
 	# The fight shots leave their scenes standing, and a CanvasLayer left behind draws over these.
 	for child in root.get_children():
@@ -91,15 +92,16 @@ func _shoot_backdrops() -> void:
 		var env: String = envs[i]
 		var variant: String = variants[i % variants.size()]
 		var layout: int = 1 + i % CombatScene.AREA_LAYOUTS
+		var sky: String = CombatScene.SKY_HOURS[i % CombatScene.SKY_HOURS.size()][1]
 		var fight := Encounter.for_tile(CELL, env)
 		var combat: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 		main.add_child(combat)
 		combat.place = TileNames.generate(CELL, env, MAP_SEED)
 		combat.hud_top = main._fight_top()
-		combat.begin(fight, CELL, main.ui_scale, variant, layout)
+		combat.begin(fight, CELL, main.ui_scale, variant, layout, sky)
 		while fight.phase != Encounter.Phase.WAITING:
 			fight.advance(0.05)
-		await _save(combat, "combat_area_%s_%s_%d.png" % [env, variant, layout])
+		await _save(combat, "combat_area_%s_%s_%d_%s.png" % [env, variant, layout, sky])
 		combat.queue_free()
 		await process_frame
 
@@ -111,7 +113,7 @@ func _shoot_backdrops() -> void:
 		main.add_child(combat)
 		combat.place = TileNames.generate(CELL, LAYOUT_ENV, MAP_SEED, "small")
 		combat.hud_top = main._fight_top()
-		combat.begin(fight, CELL, main.ui_scale, LAYOUT_VARIANT, layout)
+		combat.begin(fight, CELL, main.ui_scale, LAYOUT_VARIANT, layout, "morning")
 		while fight.phase != Encounter.Phase.WAITING:
 			fight.advance(0.05)
 		await _save(combat, "combat_layout_%s_%s_%d.png" % [LAYOUT_ENV, LAYOUT_VARIANT, layout])

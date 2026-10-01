@@ -635,6 +635,23 @@ ICONS_DRAWN = {
         .ooooooooooo..
         oo............
     """,
+    # Rename, beside the name on the character page: a pencil, eraser up and point down.
+    "ui_icon_pencil": """
+        ..........oo..
+        .........o44o.
+        ........o4443o
+        .......o1143o.
+        ......o4311o..
+        .....o4322o...
+        ....o4322o....
+        ...o4322o.....
+        ..o4422o......
+        .o4433o.......
+        .o44oo........
+        o11o..........
+        o1o...........
+        .o............
+    """,
     # Terminate: a flag on its pole -- leave the field and keep the haul.
     "ui_icon_flag": """
         ooo..........
@@ -1003,7 +1020,7 @@ SKILL_TINTS = {
 # Her spells' pixellab symbols (`Fortune/<reading>.png`), laid on the same frame in the "teller" tint; a reading not
 # listed keeps its pack icon.
 FORTUNE_PIXELLAB = "Fortune/"
-FORTUNE_SYMBOLS = {"roads", "treasure", "quarry", "relic", "appraise", "scour", "homecoming", "transcend"}
+FORTUNE_SYMBOLS = {"roads", "treasure", "relic", "appraise", "scour", "homecoming", "transcend"}
 # How far from each corner the frame's near-black rounding is cleared, and how dark a pixel must be to go.
 SKILL_CORNER_REACH = 3
 SKILL_CORNER_DARKEST = 0.09
@@ -1017,7 +1034,6 @@ FORTUNE_OUT = "Assets/Fortune"
 FORTUNE = {
     "roads": "Purple12",
     "treasure": "Purple14",
-    "quarry": "Purple6",
     "relic": "Purple1",
     "appraise": "Purple15",
     "scour": "Purple8",
@@ -1075,7 +1091,7 @@ BONE_RAMP = {
 # scissors in both colourways: 603928 -> 2c4645, 70492a -> 3f7168, 88682d -> 50a978, a07f2d ->
 # 57c767 -- the outline to the close button's teal family and the ramp to the bar's green.
 BARE = ["ui_icon_auto", "ui_icon_filter", "ui_icon_trash", "ui_icon_coins", "ui_icon_scroll", "ui_icon_sword", "ui_icon_chest",
-        "ui_icon_gem", "ui_icon_anvil", "ui_icon_crystal", "ui_icon_kills"]
+        "ui_icon_gem", "ui_icon_anvil", "ui_icon_crystal", "ui_icon_kills", "ui_icon_pencil"]
 GREEN_TABS = ["ui_icon_auto", "ui_icon_filter", "ui_icon_scroll", "ui_icon_sword", "ui_icon_gem", "ui_icon_anvil",
               "ui_icon_crystal"]
 GREEN_KEY = {"#3e1f1d": "#2c4645", "#603928": "#3f7168", "#70492a": "#478773", "#825c2f": "#50a978",
@@ -1090,10 +1106,19 @@ GREEN_KEY = {"#3e1f1d": "#2c4645", "#603928": "#3f7168", "#70492a": "#478773", "
 #
 # Every x and y here is measured: the frame's bbox in its 96x32 block, and each bar by diffing the
 # empty panel against the filled one -- exactly the pixels that change.
+#
+# The pack's top two troughs are health and mana, which the player has neither of, so they are painted
+# into one dark band that holds the name and level (mockup: qa/char_panel_m1.png, A): the light line
+# between them and the second trough's stepped end are filled with the trough's own dark, rows
+# CHAR_BAND_ROWS from x CHAR_BAND_LEFT to just inside the rim, the rim being each row's last three
+# pixels.
 CHAR_SHEET = "2D Pixel UI/PNG/character_panel"
 CHAR_FRAME = (2, 34, 84, 30)
 # name -> (x, y, w) in the frame; every bar is two pixels tall. The filled panel is 96 px to the right.
-CHAR_BARS = {"hp": (28, 8, 52), "mana": (30, 13, 43), "xp": (29, 18, 38)}
+CHAR_BARS = {"xp": (29, 18, 38)}
+CHAR_BAND_ROWS = range(11, 16)
+CHAR_BAND_LEFT = 29
+CHAR_RIM = 3
 CHAR_BAR_HEIGHT = 2
 CHAR_FILLED_DX = 96
 # A point inside the portrait circle; the circle is whatever transparent run is joined to it.
@@ -2185,6 +2210,11 @@ def character():
     sheet = Image.open(os.path.join(POTENTIAL, CHAR_SHEET + ".png")).convert("RGBA")
     fx, fy, fw, fh = CHAR_FRAME
     frame = sheet.crop((fx, fy, fx + fw, fy + fh))
+    dark = frame.getpixel((CHAR_BAND_LEFT, CHAR_BAND_ROWS[0] - 1))
+    for y in CHAR_BAND_ROWS:
+        last = max(x for x in range(fw) if frame.getpixel((x, y))[3])
+        for x in range(CHAR_BAND_LEFT, last - CHAR_RIM + 1):
+            frame.putpixel((x, y), dark)
     out = {"ui_char_frame": frame}
     for name, (x, y, w) in CHAR_BARS.items():
         sx, sy = fx + CHAR_FILLED_DX + x, fy + y

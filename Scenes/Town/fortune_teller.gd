@@ -3,15 +3,14 @@ extends RefCounted
 ## The fortuneteller: what she can be asked, and what she answers.
 ##
 ## Every settlement has her, and she is the one counter that sells nothing to carry: what she sells is
-## knowledge the game used to give away or never gave at all. Four **readings** -- where the nearest
-## settlements lie, where a chest is, where the accepted bounty's monster lives, and what a piece could
-## still roll -- each asked as often as the
+## knowledge the game used to give away or never gave at all. Three **readings** -- where the nearest
+## settlements lie, where a chest is, and what a piece could still roll -- each asked as often as the
 ## player will pay for it, the price doubling every time; and two **great spells**, one a settlement:
 ## a patch of the map lifted out of the dark, and the road home walked in no time at all.
 ##
 ## Static and node-free like `Blacksmith`, so the tests need no interface. What a spell costs is
 ## `TownPrices.fortune_price`'s business. What was bought is written where it belongs: what a town has
-## sold in that town's drawer (`ASKED`), the bounty's location on the posting, and what belongs to the
+## sold in that town's drawer (`ASKED`), and what belongs to the
 ## player rather than to a town -- the chest, and how often each reading has been
 ## asked -- in `inventory.fortunes`, a plain Dictionary this file holds the keys of, because
 ## `Inventory` must not name a class that names `Item`'s tables back at it.
@@ -19,7 +18,6 @@ extends RefCounted
 ## The readings, which are also the keys of `TownPrices.FORTUNE_BODIES`.
 const ROADS := "roads"
 const TREASURE := "treasure"
-const QUARRY := "quarry"
 const APPRAISE := "appraise"
 const SCOUR := "scour"
 const HOMECOMING := "homecoming"
@@ -32,7 +30,7 @@ const TRANSCEND := "transcend"
 ## once this world has a cave, and it is priced like the way out, the same in every town.
 const STONE := "stone"
 ## The order her buttons stand in: the readings first, then the great spells, the stone and the way out.
-const READINGS := [ROADS, TREASURE, QUARRY, APPRAISE, SCOUR, HOMECOMING, STONE, TRANSCEND]
+const READINGS := [ROADS, TREASURE, APPRAISE, SCOUR, HOMECOMING, STONE, TRANSCEND]
 
 ## Her list is in two halves, and which half a spell is in is the whole of its rule.
 ##
@@ -43,14 +41,13 @@ const READINGS := [ROADS, TREASURE, QUARRY, APPRAISE, SCOUR, HOMECOMING, STONE, 
 ##
 ## Written out rather than derived from `READINGS`, which is the grid's order; `test_town` holds the
 ## three lists together.
-const COMMON := [ROADS, TREASURE, QUARRY, APPRAISE]
+const COMMON := [ROADS, TREASURE, APPRAISE]
 const GREAT := [SCOUR, HOMECOMING]
 
 ## What each reading's button says.
 const LABELS := {
 	ROADS: "Roads",
 	TREASURE: "Treasure",
-	QUARRY: "Quarry",
 	APPRAISE: "Appraise",
 	SCOUR: "Scour",
 	# "Homecoming" is two letters wider than a shelf square, and a name on her grid is clipped rather

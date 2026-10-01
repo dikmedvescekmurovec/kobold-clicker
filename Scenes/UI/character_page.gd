@@ -6,10 +6,16 @@ extends Control
 ## is exactly what a fight is armed with.
 ##
 ## Built like the other left-hand pages (`CollectionPage`): `open()` redraws it, `layout()` fits it to
-## the window, `closed` is its X. It changes nothing and so saves nothing.
+## the window, `closed` is its X. It changes nothing and so saves nothing: the pencil beside the name
+## on its bar only asks the main scene to rename the character (`rename_pressed`).
 
 ## The page's X was pressed.
 signal closed
+## The pencil beside the name was pressed: the main scene asks the system for a new one.
+signal rename_pressed
+
+## The pencil's mark, in the pack's brown: dark on the green bar, as the name beside it is.
+const PENCIL_ICON := "res://Assets/UI/ui_icon_pencil_brown.png"
 
 ## The three attributes, in the order they stand, and the colour of each one's disc.
 const ATTRIBUTES := {
@@ -28,6 +34,9 @@ const CARD_GAP := 8
 var inventory: Inventory
 var _ui_scale: float
 var _panel: VBoxContainer
+## The name on the bar, which `open()` writes: kept, since beside a pencil it is not where
+## `UITheme.title_of` looks.
+var _title: Label
 var _rows: VBoxContainer
 
 
@@ -39,9 +48,15 @@ func _init(player_inventory: Inventory, ui_scale: float) -> void:
 
 
 func _ready() -> void:
-	_panel = UITheme.titled_panel(CharacterPanel.PLAYER_NAME, "Close", closed.emit)
+	_panel = UITheme.titled_panel(inventory.hero(), "Close", closed.emit)
 	_panel.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_panel)
+	_title = UITheme.title_of(_panel)
+	# The system's own text box is the whole of renaming (`DisplayServer.dialog_input_text`), so a
+	# platform with none has no pencil.
+	# ponytail: no text box of the game's own; add one if a platform without a native one ships.
+	if DisplayServer.has_feature(DisplayServer.FEATURE_NATIVE_DIALOG_INPUT):
+		_add_pencil()
 	# Scrolled, like the log: a late set carries more stats than a 648 px window holds.
 	var scroll := UITheme.scroll()
 	UITheme.body_of(_panel).add_child(scroll)
@@ -50,8 +65,28 @@ func _ready() -> void:
 	open()
 
 
-## Redraws the page: who, then the attributes, then the rest as a table.
+## The pencil straight after the name, the two centred on the bar as one, where the name alone was.
+func _add_pencil() -> void:
+	var bar := _title.get_parent()
+	var pair := HBoxContainer.new()
+	pair.alignment = BoxContainer.ALIGNMENT_CENTER
+	pair.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pair.add_theme_constant_override("separation", 4)
+	bar.add_child(pair)
+	bar.move_child(pair, _title.get_index())
+	_title.reparent(pair)
+	_title.size_flags_horizontal = Control.SIZE_FILL
+	var pencil := UITheme.button("", UITheme.BARE_BUTTON, "Rename")
+	pencil.icon = load(PENCIL_ICON)
+	pencil.focus_mode = Control.FOCUS_NONE
+	pencil.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	pencil.pressed.connect(rename_pressed.emit)
+	pair.add_child(pencil)
+
+
+## Redraws the page: who, then the attributes, then the rest as a table, under the character's name.
 func open() -> void:
+	_title.text = inventory.hero()
 	UITheme.clear(_rows)
 	var totals := inventory.stats()
 	_rows.add_child(_who())
@@ -199,4 +234,4 @@ var area := Rect2()
 
 ## Full window height against the left edge, where the other pages stand.
 func layout() -> void:
-	UITheme.dock(_panel, area, _ui_scale)
+	UITheme.dock(_panel, area, _ui_scale, UITheme.Dock.LEFT, layout)

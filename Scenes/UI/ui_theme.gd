@@ -117,6 +117,8 @@ const MIN_SHORT := 324.0
 const MIN_LONG := 576.0
 ## Which edge of its room a page's panel stands against (`dock`). A narrow window centres it.
 enum Dock { LEFT, RIGHT }
+## The meta a panel carries between asking `dock` to lay its page out again and that happening.
+const SETTLING := "settling"
 
 static var _theme: Theme
 ## How big each icon button's sprite is. A Button with no text and no content margin has no minimum
@@ -157,19 +159,52 @@ static func safe_rect(viewport: Viewport) -> Rect2:
 
 
 ## Stands a page's `panel` in `room` (window pixels; an empty one is the whole window): its full height
-## less `EDGE` at the top and foot, at the panel's own width, against the room's `side` -- or centred in
-## it, where the window is narrow and there is no other panel to stand beside.
-static func dock(panel: Control, room: Rect2, ui_scale: float, side := Dock.LEFT) -> void:
+## less `EDGE` at the top and foot, at the panel's own width, against the room's `side`. **Held upright**
+## (`narrow`) it is a sheet along the foot of the room instead: centred at its own width, as tall as what
+## it holds (`natural_height`) and never more than half the window, scrolling past that (the user's call).
+## `again` is the caller's whole layout, run once more the next frame: a flow (a grid of squares, the
+## trees) measures how tall it is only as it lays out, a frame after it was made wider.
+static func dock(panel: Control, room: Rect2, ui_scale: float, side := Dock.LEFT,
+		again := Callable()) -> void:
 	if not room.has_area():
 		room = panel.get_viewport_rect()
+	var window := panel.get_viewport_rect().size
+	if narrow(window, ui_scale):
+		var most := minf(room.size.y, window.y / 2.0) / ui_scale - 2 * EDGE
+		var across := panel.get_combined_minimum_size().x
+		panel.size = Vector2(across, minf(natural_height(panel), most))
+		panel.position = Vector2(floorf(room.position.x + (room.size.x - across * ui_scale) / 2.0),
+				room.end.y - (panel.size.y + EDGE) * ui_scale)
+		_settle(panel, again)
+		return
 	var width := panel.get_combined_minimum_size().x
 	panel.size = Vector2(width, room.size.y / ui_scale - 2 * EDGE)
 	var x := room.position.x + EDGE * ui_scale
-	if narrow(panel.get_viewport_rect().size, ui_scale):
-		x = floorf(room.position.x + (room.size.x - width * ui_scale) / 2.0)
-	elif side == Dock.RIGHT:
+	if side == Dock.RIGHT:
 		x = room.end.x - (width + EDGE) * ui_scale
 	panel.position = Vector2(x, room.position.y + EDGE * ui_scale)
+
+
+## Runs `again` the next frame, once however often it is asked for meanwhile -- the run itself docks
+## the panel again, which asks for no other.
+static func _settle(panel: Control, again: Callable) -> void:
+	if not again.is_valid() or panel.has_meta(SETTLING) or not panel.is_inside_tree():
+		return
+	panel.set_meta(SETTLING, true)
+	panel.get_tree().process_frame.connect(func() -> void:
+		if is_instance_valid(panel) and again.is_valid():
+			again.call()
+			panel.remove_meta(SETTLING), CONNECT_ONE_SHOT)
+
+
+## How tall `panel` would be with nothing in it scrolled: its minimum, which counts a scroll as nothing,
+## and everything each of its scrolls holds. A scroll that does not scroll is in the minimum already.
+static func natural_height(panel: Control) -> float:
+	var tall := panel.get_combined_minimum_size().y
+	for scroll: ScrollContainer in panel.find_children("*", "ScrollContainer", true, false):
+		if scroll.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED and scroll.get_child_count() > 0:
+			tall += (scroll.get_child(0) as Control).get_combined_minimum_size().y
+	return tall
 
 
 ## A finger is broader than the pack's 9 px X: on a touchscreen the X is pressed anywhere in

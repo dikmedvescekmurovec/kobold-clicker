@@ -923,9 +923,15 @@ func _test_wall(map: HexMap, view: MapBuilder) -> bool:
 			before[cell] = [view.env_at(cell), info["name"], info["road"]]
 	var was := view.rect
 	_check(view.can_chart(wall), "a wall tile beside the land can be charted, which is fighting it")
+	# The land past it generating on another thread, as walking onto it to fight sets off (`walk_onto`).
+	var envs_before := view._envs.duplicate()
+	view._generate_ahead()
 	var start := Time.get_ticks_msec()
 	_check(view.chart(wall) >= 0, "beating it charts it")
 	var fall_ms := Time.get_ticks_msec() - start
+	EnvironmentGenerator.extend(envs_before, view.rect, hash([view.env_seed, view.rect]))
+	_check(view._ahead_task == -1 and view._envs == envs_before,
+			"the land generated while the wall was fought for is the land its fall would have generated")
 	map.player.finish_walk()
 	_check(view.land_radius == MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP, "the land reaches ten rings further")
 	_check(view.charted(wall) and view.player_cell == wall and not view.is_wall(wall),

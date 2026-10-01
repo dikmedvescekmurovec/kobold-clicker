@@ -96,6 +96,11 @@ var _chartable: Dictionary[Vector2i, bool] = {}
 var _chartable_reach := 0
 
 var _envs: Dictionary[Vector2i, String] = {}
+## The land past the wall being fought for, generated on another thread (`_generate_ahead`): the
+## WorkerThreadPool task (-1 when there is none), the area it fills and the copy of `_envs` it fills.
+var _ahead_task := -1
+var _ahead_area := Rect2i()
+var _ahead_envs: Dictionary[Vector2i, String] = {}
 var _tiles: Dictionary[Vector2i, String] = {}  # ground tile name per cell
 ## What each tile the player has seen is called, from the moment they first saw it. Not derived and
 ## not regenerated: see `name_of`.
@@ -428,37 +433,6 @@ func envs_within(cell: Vector2i, steps: int) -> PackedStringArray:
 	return found
 
 
-## The closest tile to the player whose land is one of `envs`, and NO_CELL when they have seen none.
-## Only tiles they have laid eyes on: pointing at land under the fog of war would be telling them
-## about a place they have not found. A **charted** tile wins a tie, because a charted one can be
-## walked to and farmed where a merely seen one is only somewhere to head for.
-##
-## Measured from where the player stands rather than from whoever is asking, and **never a
-## settlement**: a town is a set piece rather than hunting ground, and the one the player is standing
-## in would otherwise be the nearest tile of its own land every time it was asked.
-##
-## `min_level` leaves out land shallower than that: a bounty counts kills only on land as deep as the
-## town that posted it, and pointing at a tile that would not count is worse than pointing at none.
-## ponytail: scans every seen cell, like `nearest_chest`; it is asked when a page is drawn.
-func nearest_env(envs: PackedStringArray, min_level := 0) -> Vector2i:
-	var best := HexMap.NO_CELL
-	var best_steps := -1
-	var best_charted := false
-	for cell in _states:
-		if not seen(cell) or not is_land(cell) or not (env_at(cell) in envs) or towns.has_town(_spot(cell)) \
-				or level_of(cell) < min_level:
-			continue
-		var steps := HexGrid.distance(player_cell, cell)
-		var is_charted := charted(cell)
-		if best_steps != -1 and (steps > best_steps
-				or (steps == best_steps and not (is_charted and not best_charted))):
-			continue
-		best = cell
-		best_steps = steps
-		best_charted = is_charted
-	return best
-
-
 ## Every cell's chest again, for when the dev's `Settings.show_all_chests` changes.
 ## ponytail: scans every cell, like `nearest_chest`; only a settings tick and start-up ask.
 func redraw_chests() -> void:
@@ -754,6 +728,8 @@ func walk_onto(cell: Vector2i) -> Array[Vector2i]:
 	var route := route_to(path[0])
 	route.append(cell)
 	map.player.walk(route)
+	if is_wall(cell):
+		_generate_ahead()
 	return route
 
 
@@ -788,8 +764,7 @@ func _on_player_arrived(cell: Vector2i) -> void:
 ## on it) without touching what is already there, and redrawing the blends and roads of drawn tiles the new
 ## land touches. Returns whether the map grew.
 func _cover() -> bool:
-	var reach := land_radius + 1 + WASTE_DEPTH
-	var area := Rect2i(-reach, -reach, 2 * reach + 1, 2 * reach + 1)
+	var area := _cover_area(land_radius)
 	if rect.encloses(area):
 		return false
 	var was := rect
@@ -805,6 +780,26 @@ func _cover() -> bool:
 		if _drawn_roads.has(cell) and _drawn_roads[cell] != road_at(cell):
 			_draw_road(cell)
 	return true
+
+
+## The square of cells the map must reach while the land reaches `radius`: WASTE_DEPTH past the wall.
+static func _cover_area(radius: int) -> Rect2i:
+	var reach := radius + 1 + WASTE_DEPTH
+	return Rect2i(-reach, -reach, 2 * reach + 1, 2 * reach + 1)
+
+
+## Sets the land the next wall's fall uncovers generating on another thread, so the walk to the wall
+## and the fight for it are spent on what is otherwise seconds of pause when it falls (`_generate`
+## picks it up). Only the environments, which are nearly all of the time and touch nothing but a copy
+## of `_envs`; a fight lost leaves the copy waiting for the next try, since `_envs` cannot change
+## while the wall stands.
+func _generate_ahead() -> void:
+	if _ahead_task != -1:
+		return
+	_ahead_area = rect.merge(_cover_area(land_radius + wall_step))
+	_ahead_envs = _envs.duplicate()
+	_ahead_task = WorkerThreadPool.add_task(EnvironmentGenerator.extend.bind(_ahead_envs, _ahead_area,
+			hash([env_seed, _ahead_area])))
 
 
 ## Brings the whole ice wall down: the land reaches WALL_STEP rings further, the next wall stands at its
@@ -836,7 +831,15 @@ func _break_wall() -> void:
 ## each one is drawn with, and the roads of the town links it brings into reach. Cells already generated are
 ## left exactly as they are, so the land the player has seen never changes under them.
 func _generate(area: Rect2i) -> void:
-	EnvironmentGenerator.extend(_envs, area, hash([env_seed, area]))
+	var ahead := _ahead_task != -1 and _ahead_area == area
+	if _ahead_task != -1:
+		# Long done by now, unless the fight was quicker than the generating.
+		WorkerThreadPool.wait_for_task_completion(_ahead_task)
+		_ahead_task = -1
+	if ahead:
+		_envs = _ahead_envs
+	else:
+		EnvironmentGenerator.extend(_envs, area, hash([env_seed, area]))
 	for y in range(area.position.y, area.end.y):
 		for x in range(area.position.x, area.end.x):
 			var cell := Vector2i(x, y)

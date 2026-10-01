@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cafwlsitdlbg4"
-path="res://.godot/imported/ui_char_bar_mana.png-1dfbecf86852e11f2b273a2e23c00f3a.ctex"
+uid="uid://58j32of2mlgw"
+path="res://.godot/imported/forest_1_2.png-b9fb6302beb49daa71770fb615b2ebe9.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/UI/ui_char_bar_mana.png"
-dest_files=["res://.godot/imported/ui_char_bar_mana.png-1dfbecf86852e11f2b273a2e23c00f3a.ctex"]
+source_file="res://Assets/Area/land/forest_1_2.png"
+dest_files=["res://.godot/imported/forest_1_2.png-b9fb6302beb49daa71770fb615b2ebe9.ctex"]
 
 [params]
 

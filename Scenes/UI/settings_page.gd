@@ -353,5 +353,5 @@ var area := Rect2()
 
 ## Full window height against the left edge, where the other pages stand.
 func layout() -> void:
-	UITheme.dock(_panel, area, _ui_scale)
+	UITheme.dock(_panel, area, _ui_scale, UITheme.Dock.LEFT, layout)
 	laid_out.emit()

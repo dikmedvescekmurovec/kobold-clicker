@@ -42,8 +42,15 @@ var _save_path: String
 var _ui_scale: float
 var _panel: VBoxContainer
 var _points: Label
-## The trees, as many to a row as the page's room takes: all three across a monitor, fewer on a phone.
+## The trees, as many to a row as the page's room takes: all three across a monitor, fewer in a window
+## too narrow for them. Held upright they stand one at a time instead (`_switcher`).
 var _trees: HFlowContainer
+var _scroll: ScrollContainer
+## Held upright (`UITheme.narrow`): the arrows either side of the name of the one tree up, `_shown`,
+## which stand in for the scroll three trees would need -- the user's call: scrolling trees felt off.
+var _switcher: HBoxContainer
+var _shown_name: Label
+var _shown := 0
 var _skill_views := {}
 var _respec_buttons := {}
 var _card: SkillCard
@@ -74,16 +81,34 @@ func _ready() -> void:
 	_points = UITheme.label()
 	_points.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	rows.add_child(_points)
+	# The previous tree's arrow, the name, the next's: the item generator's stepper.
+	_switcher = HBoxContainer.new()
+	for step: int in [-1, 1]:
+		var turn := UITheme.button("", "BrownIconButton", "Previous tree" if step < 0 else "Next tree")
+		turn.icon = load(BagPage.HIDE_ICON if step < 0 else BagPage.SHOW_ICON)
+		turn.pressed.connect(_turn.bind(step))
+		_switcher.add_child(turn)
+	_shown_name = UITheme.label()
+	_shown_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_shown_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_switcher.add_child(_shown_name)
+	_switcher.move_child(_shown_name, 1)
+	_switcher.hide()
+	rows.add_child(_switcher)
 
 	# Scrolled under the points, which stay pinned: the trees fit a 648 px window and no more.
 	# Padded by what a skill draws past its square (the ring, the count), which the scroll would clip.
-	var scroll := UITheme.scroll()
-	rows.add_child(scroll)
+	_scroll = UITheme.scroll()
+	rows.add_child(_scroll)
 	var pad := MarginContainer.new()
 	pad.add_theme_constant_override("margin_left", SkillSlot.RING)
 	pad.add_theme_constant_override("margin_right", SkillSlot.COUNT_OVERHANG)
-	scroll.add_child(pad)
+	# Across the page, which a long points line can make wider than a tree, so the tree centres in it.
+	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scroll.add_child(pad)
 	_trees = HFlowContainer.new()
+	# Centred, one tree or three, in a page as wide as a phone held upright.
+	_trees.alignment = FlowContainer.ALIGNMENT_CENTER
 	_trees.add_theme_constant_override("h_separation", TREE_GAP)
 	_trees.add_theme_constant_override("v_separation", TREE_GAP)
 	pad.add_child(_trees)
@@ -151,14 +176,34 @@ var area := Rect2()
 
 ## Full window height against the left edge.
 func layout() -> void:
-	# The trees wrap at what the room leaves them, and never at less than one tree.
-	var room := area if area.has_area() else get_viewport_rect()
-	var across := -float(TREE_GAP)
-	for column: Control in _trees.get_children():
-		across += column.get_combined_minimum_size().x + TREE_GAP
-	var chrome := _panel.get_combined_minimum_size().x - _trees.get_combined_minimum_size().x
-	_trees.custom_minimum_size.x = minf(across, room.size.x / _ui_scale - 2 * UITheme.EDGE - chrome)
-	UITheme.dock(_panel, area, _ui_scale)
+	# Held upright one tree stands at a time, named between the arrows and with nothing to scroll;
+	# otherwise every tree, wrapping at what the room leaves them, and never at less than one tree.
+	var narrow := UITheme.narrow(get_viewport_rect().size, _ui_scale)
+	_switcher.visible = narrow
+	_scroll.vertical_scroll_mode = (ScrollContainer.SCROLL_MODE_DISABLED if narrow
+			else ScrollContainer.SCROLL_MODE_SHOW_NEVER)
+	_shown_name.text = SkillTree.TREES[SkillTree.trees()[_shown]]["label"]
+	for i in _trees.get_child_count():
+		var column := _trees.get_child(i) as Control
+		column.visible = not narrow or i == _shown
+		# Its own name, which the switcher says in its place.
+		(column.get_child(0) as Control).visible = not narrow
+	_trees.custom_minimum_size.x = 0.0
+	if not narrow:
+		var room := area if area.has_area() else get_viewport_rect()
+		var across := -float(TREE_GAP)
+		for column: Control in _trees.get_children():
+			across += column.get_combined_minimum_size().x + TREE_GAP
+		var chrome := _panel.get_combined_minimum_size().x - _trees.get_combined_minimum_size().x
+		_trees.custom_minimum_size.x = minf(across, room.size.x / _ui_scale - 2 * UITheme.EDGE - chrome)
+	UITheme.dock(_panel, area, _ui_scale, UITheme.Dock.LEFT, layout)
+
+
+## An arrow beside the tree's name: the next tree round, or the one before.
+func _turn(step: int) -> void:
+	_shown = posmod(_shown + step, _trees.get_child_count())
+	_hide_card()
+	layout()
 
 
 ## One point into a skill. A refused press does nothing: the card already says why.

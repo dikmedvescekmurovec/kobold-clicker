@@ -985,7 +985,6 @@ FORTUNE_COLOUR = "pale muted purple, shaded with deeper purple"
 FORTUNE_SYMBOLS = [
  ("roads", "Where the nearest settlements lie", "A signpost with two arrows pointing opposite ways."),
  ("treasure", "Where a chest is", "A closed treasure chest."),
- ("quarry", "Where the accepted bounty's monster lives", "A single large paw print."),
  ("relic", "What one unfound unique is, and where it drops", "A small crown."),
  ("appraise", "What a piece could still roll", "A pair of balance scales."),
  ("scour", "A patch of the map lifted out of the dark", "A crystal ball on a small stand."),

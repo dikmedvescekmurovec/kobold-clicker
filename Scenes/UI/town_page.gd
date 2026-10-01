@@ -112,7 +112,6 @@ const COUNTERS := [TownServices.BOUNTIES, TownServices.GEAR, TownServices.ORBS, 
 const FORTUNE_ICONS := {
 	FortuneTeller.ROADS: "res://Assets/Fortune/roads.png",
 	FortuneTeller.TREASURE: "res://Assets/Fortune/treasure.png",
-	FortuneTeller.QUARRY: "res://Assets/Fortune/quarry.png",
 	FortuneTeller.APPRAISE: "res://Assets/Fortune/appraise.png",
 	FortuneTeller.SCOUR: "res://Assets/Fortune/scour.png",
 	FortuneTeller.HOMECOMING: "res://Assets/Fortune/homecoming.png",
@@ -134,7 +133,6 @@ const HOVER_LIFT := Color(1.2, 1.2, 1.2)
 const FORTUNE_TIPS := {
 	FortuneTeller.ROADS: "Brings every settlement between the ice walls around you out of the fog",
 	FortuneTeller.TREASURE: "Puts a star over the nearest chest you have not seen. It stays until that chest is opened",
-	FortuneTeller.QUARRY: "Shows the lands your bounty's monster lives on, and the nearest tile of them you have seen",
 	FortuneTeller.APPRAISE: "Lists every modifier the open item can roll, the range it rolls in at the item's level, and how often it comes up",
 	FortuneTeller.SCOUR: "Brings a tile and the two rings of land around it, nineteen tiles, out of the fog",
 	FortuneTeller.HOMECOMING: "Moves you to a settlement you have already charted",
@@ -333,7 +331,7 @@ var area := Rect2()
 
 ## Full window height against the right edge, where the tile panel stands when no town is open.
 func layout() -> void:
-	UITheme.dock(_panel, area, _ui_scale, UITheme.Dock.RIGHT)
+	UITheme.dock(_panel, area, _ui_scale, UITheme.Dock.RIGHT, layout)
 
 
 func _fill() -> void:
@@ -620,7 +618,7 @@ func _fill_offer() -> void:
 
 
 ## The board. Three postings, each saying who, how far along, what it pays and -- the whole reason a
-## board is worth walking up to -- where that monster lives, which `BountyList` writes so that a
+## board is worth walking up to -- the lands that monster lives on, which `BountyList` writes so that a
 ## posting reads the same here as it does on the journal ten tiles away.
 ##
 ## Each posting carries **Accept**, and only one bounty anywhere may be out at a time: kills count
@@ -637,7 +635,7 @@ func _fill_board() -> void:
 	# Work taken on at another board heads this one: which bounty is out, and where it is handed in --
 	# a board that only said "no" left the player to go and find out both.
 	if busy and active_at != TownState.key(_spot):
-		var away := BountyList.row(BountyBoard.active(inventory.towns), view, BODY_WIDTH, Callable(),
+		var away := BountyList.row(BountyBoard.active(inventory.towns), view, BODY_WIDTH, false,
 				"Taken at %s. Claim it there." % _town_at(active_at))
 		body.add_child(away)
 	# The one taken on here first, then the rest -- still shown while work is out, dimmed and with Accept
@@ -648,9 +646,8 @@ func _fill_board() -> void:
 			return not BountyBoard.is_active(b) and not bool(b.get(BountyBoard.DONE, false))))
 	for bounty: Dictionary in postings:
 		posted += 1
-		# No Show here: the board is where work is taken on, and the journal is where it is followed.
 		var taken := BountyBoard.is_active(bounty)
-		var row := BountyList.row(bounty, view, BODY_WIDTH, Callable(),
+		var row := BountyList.row(bounty, view, BODY_WIDTH, false,
 				"Accepted." if taken and not BountyBoard.ready(bounty) else "")
 		var action: Button
 		if not taken:
@@ -986,6 +983,8 @@ func _open_told(title: String) -> VBoxContainer:
 	_told = Control.new()
 	_told.size = get_viewport_rect().size
 	add_child(_told)
+	# Over the bag too, which a window held upright stands under this page (`BagPage._ask` does the same).
+	move_to_front()
 	var panel := UITheme.titled_panel(title, "", Callable())
 	panel.name = TOLD_PANEL
 	_told.add_child(panel)
@@ -1046,27 +1045,6 @@ func _answer(reading: String, lines: VBoxContainer) -> void:
 					TOLD_WIDTH))
 			lines.add_child(BountyList.wrapped("It stays until that chest is opened.", TOLD_WIDTH,
 					Palette.TEXT_SOFT))
-		FortuneTeller.QUARRY:
-			# The monster as its card draws it, the land it lives on as the tile panel's swatches and
-			# the nearest piece of that land seen so far: what the bounty card says from now on.
-			var bounty := BountyBoard.active(inventory.towns)
-			var enemy := str(bounty.get(BountyBoard.ENEMY, ""))
-			var elite := EnemyRoster.ENEMIES.has(enemy) and EnemyRoster.tier_of(enemy) == EnemyRoster.Tier.ELITE
-			var face := BountyList.portrait_box(enemy, BountyList.CARD_PORTRAIT,
-					ItemRarity.frame(ItemRarity.Rarity.ELITE) if elite else null)
-			face.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-			lines.add_child(face)
-			lines.add_child(BountyList.wrapped("The %s lives on:" % enemy, TOLD_WIDTH))
-			var envs := EnemyRoster.environments_of(enemy)
-			var swatches := HBoxContainer.new()
-			swatches.add_theme_constant_override("separation", 2)
-			swatches.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-			for env: String in envs:
-				swatches.add_child(view.map.tileset.env_icon(env))
-			lines.add_child(swatches)
-			var near := view.nearest_env(envs, int(bounty.get(BountyBoard.LEVEL, 0)))
-			lines.add_child(BountyList.wrapped("Nearest: %s" % (view.name_of(near) if near != HexMap.NO_CELL
-					else "none you have seen yet."), TOLD_WIDTH, Palette.TEXT_SOFT))
 		FortuneTeller.STONE:
 			lines.add_child(BountyList.wrapped("The Seeing Stone is yours, in this world and every one after it.",
 					TOLD_WIDTH))
@@ -1225,12 +1203,6 @@ func _fortune_why_not(reading: String) -> String:
 				return "The star is already out"
 			if _near_chest == HexMap.NO_CELL:
 				return "She sees no hidden chest"
-		FortuneTeller.QUARRY:
-			var bounty := BountyBoard.active(inventory.towns)
-			if bounty.is_empty():
-				return "No bounty is out"
-			if BountyBoard.located(bounty):
-				return "Already told"
 		FortuneTeller.APPRAISE:
 			var why := FortuneTeller.why_not_appraise(_bag_piece)
 			if not why.is_empty():
@@ -1274,8 +1246,6 @@ func _on_reading_pressed(reading: String) -> void:
 			var spot := view.origin + _near_chest
 			inventory.fortunes[FortuneTeller.CHEST] = [spot.x, spot.y]
 			chest_bought.emit(_near_chest)
-		FortuneTeller.QUARRY:
-			BountyBoard.locate(BountyBoard.active(inventory.towns))
 		FortuneTeller.STONE:
 			inventory.seeing_stone = true
 			stone_bought.emit()

@@ -1319,30 +1319,6 @@ func _test_entering() -> void:
 	_check(main.view.town_tier(MapBuilder.CENTER) == -1, "and the middle of the map is not a town")
 	_check(not main._bounty_button.visible, "no journal in the corner before a board has been read")
 
-	# Where a monster lives is only ever somewhere the player has been shown: never a cell still under
-	# the fog, and a charted one before a merely seen one at the same distance, because a charted tile
-	# can be farmed where a seen one is only somewhere to head for. Measured from where the player
-	# stands, which at the start is the middle of the map. Two neighbours of the start are given land
-	# of their own for it, and given it back afterwards.
-	var ring := HexGrid.neighbors(MapBuilder.CENTER)
-	var was := [main.view._envs[ring[0]], main.view._envs[ring[1]]]
-	var made_up := PackedStringArray(["bounty_test_land"])
-	main.view._envs[ring[0]] = made_up[0]
-	main.view._envs[ring[1]] = made_up[0]
-	main.view._states[ring[1]] = MapBuilder.State.CHARTED
-	_check(main.view.nearest_env(made_up) == ring[1],
-			"a charted tile is offered before a seen one the same distance out")
-	main.view._states[ring[1]] = MapBuilder.State.UNCHARTED
-	_check(main.view.nearest_env(made_up) in ring,
-			"a seen tile is offered when no charted one has that land")
-	main.view._states.erase(ring[0])
-	main.view._states.erase(ring[1])
-	_check(main.view.nearest_env(made_up) == HexMap.NO_CELL,
-			"and land nobody has laid eyes on is never offered")
-	main.view._envs[ring[0]] = was[0]
-	main.view._envs[ring[1]] = was[1]
-	main.view._states[ring[0]] = MapBuilder.State.UNCHARTED
-	main.view._states[ring[1]] = MapBuilder.State.UNCHARTED
 	_check(main.view.envs_within(MapBuilder.CENTER, BountyBoard.BOUNTY_RANGE).size() > 0,
 			"there is land around the middle of the map to post monsters from")
 
@@ -1366,20 +1342,6 @@ func _test_entering() -> void:
 				"and each row names its counter beside its mark")
 	_check(main._level_label.text.begins_with(main.SETTLEMENT_KINDS[main.view.town_tier(town)] + " · "),
 			"and the line under the name says what kind of place it is (%s)" % main._level_label.text)
-
-	# A settlement is never where a monster lives, not even the one the player is standing in: the
-	# board would otherwise answer "where does it live" with the ground under their own feet. The town
-	# and the middle of the map are given one made-up land between them, and the middle has to win.
-	var town_was: String = main.view._envs[town]
-	var mid_was: String = main.view._envs[MapBuilder.CENTER]
-	main.view._envs[town] = made_up[0]
-	main.view._envs[MapBuilder.CENTER] = made_up[0]
-	_check(main.view.nearest_env(made_up, MapBuilder.level_of(MapBuilder.CENTER) + 1) == HexMap.NO_CELL,
-			"land shallower than the bounty asks for is never pointed at")
-	_check(main.view.nearest_env(made_up) == MapBuilder.CENTER,
-			"a settlement is never offered as where a monster lives, the one underfoot least of all")
-	main.view._envs[town] = town_was
-	main.view._envs[MapBuilder.CENTER] = mid_was
 
 	# Standing on a charted settlement is what the first tip about towns waits for, and reading its
 	# board is what the second one waits for.
@@ -1441,7 +1403,7 @@ func _test_entering() -> void:
 			"the bag is not a shop any more")
 
 	# The journal: a corner button of its own once a board has been read, listing the same postings
-	# away from the town, and a Show that puts the map on the land the monster lives on.
+	# away from the town, with the lands the monster lives on.
 	_check(main._bounty_button.visible, "the journal is in the corner once a board has been read")
 	# Accepting is pressing the board's own button, and it shuts the rest until that one is handed in.
 	main._on_town_pressed()
@@ -1463,9 +1425,14 @@ func _test_entering() -> void:
 	main._on_bounty_pressed()
 	await process_frame
 	_check(main.bounty_page.visible, "and it opens the bounty page")
-	# Where it lives is a fortuneteller's to sell: until she is paid the journal has no Show, and once
-	# she is, the board opens on the card with the land on it and the journal can point at it.
-	_check(_deep_button(main.bounty_page, "Show") == null, "which does not say where it lives for nothing")
+	# Which lands it lives on, for nothing -- and never which tile: finding one is the map's business.
+	var accepted: String = BountyBoard.active(main.inventory.towns)[BountyBoard.ENEMY]
+	var lands: Node = main.bounty_page.find_child(BountyList.LANDS_NAME, true, false)
+	_check(lands != null and lands.visible and lands.is_visible_in_tree()
+			and lands.get_child_count() == EnemyRoster.environments_of(accepted).size(),
+			"the journal shows a swatch for every land the monster lives on")
+	_check(not _said(main.bounty_page).contains("Nearest"), "and names no tile")
+	_check(_deep_button(main.bounty_page, "Show") == null, "nor has a Show to take the map to one")
 	main._on_left_page_closed()
 	main.inventory.gold = 1.0e9
 	main.map.select_cell(town)
@@ -1503,31 +1470,6 @@ func _test_entering() -> void:
 	main.town_page._on_tab_pressed(TownServices.BOUNTIES)
 	main.town_page._on_tab_pressed(TownServices.FORTUNE)
 	_check(main._tip_panel == null, "and she says it only once")
-	await process_frame
-	_check(not _dead(main, FortuneTeller.QUARRY), "the fortuneteller will say where a bounty's monster lives")
-	_ask(main, FortuneTeller.QUARRY)
-	await process_frame
-	_check(BountyBoard.located(BountyBoard.active(main.inventory.towns)), "which is written on the posting")
-	_check(BountyBoard.located(BountyBoard.active(Inventory.load_from(TEST_PATH).towns)), "and saved")
-	_check(main.inventory.gold < 1.0e9, "and paid for")
-	var quarry: String = BountyBoard.active(main.inventory.towns)[BountyBoard.ENEMY]
-	_check(main.town_page.open_tab() == TownServices.FORTUNE and main.town_page._told != null
-			and _said(main.town_page._told).contains(quarry), "and told in a popup, over her own counter")
-	main.town_page._close_told()
-	await process_frame
-	_check(_dead(main, FortuneTeller.QUARRY), "and is not sold twice")
-	main.town_page.closed.emit()
-	await process_frame
-	main._on_bounty_pressed()
-	await process_frame
-	var shown := _deep_button(main.bounty_page, "Show")
-	_check(shown != null, "after which the journal says where to find what is wanted")
-	if shown != null:
-		shown.pressed.emit()
-		await process_frame
-	_check(not main.bounty_page.visible, "Show puts the page away")
-	_check(main.view.seen(main.map.selected_cell), "and selects a tile the player has seen")
-	_check(main._panel.visible, "with the tile panel on it, which is where the walking is done from")
 	main.queue_free()
 	await process_frame
 
@@ -1613,17 +1555,6 @@ func _test_fortune() -> bool:
 	_check(FortuneTeller.asked(drawer, FortuneTeller.SCOUR)
 			and not FortuneTeller.asked(drawer, FortuneTeller.HOMECOMING),
 			"and one spent here says nothing about the next")
-
-	# Only work that is out can be asked about, and only once.
-	var state := TownState.new()
-	var posting := {BountyBoard.ENEMY: "Slime", BountyBoard.NEED: 3, BountyBoard.HAVE: 0}
-	state.visit(Vector2i(1, 1))[BountyBoard.BOUNTIES] = [posting]
-	_check(not BountyBoard.locate(posting), "a posting not taken on cannot be located")
-	BountyBoard.accept(state, posting)
-	_check(BountyBoard.locate(posting) and BountyBoard.located(posting), "an accepted one can")
-	_check(not BountyBoard.locate(posting), "once")
-	var kept := TownState.from_dict(state.to_dict())
-	_check(BountyBoard.located(BountyBoard.active(kept)), "and it is saved with the town")
 	return true
 
 
@@ -1663,8 +1594,7 @@ func _test_fortune_page() -> void:
 			_check(_spell(main, reading) == null, "nor the stone, with no cave in this world to feel for")
 			continue
 		_check(_spell(main, reading) != null, "she offers %s" % reading)
-	_check(_dead(main, FortuneTeller.QUARRY), "no bounty is out, so there is none to find")
-	_check(_dead(main, FortuneTeller.APPRAISE), "and no piece is open to read")
+	_check(_dead(main, FortuneTeller.APPRAISE), "no piece is open to read")
 
 	# The roads: three sentences, and free in this town from then on.
 	var purse: float = main.inventory.gold

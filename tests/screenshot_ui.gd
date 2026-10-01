@@ -650,9 +650,8 @@ func _shoot_town() -> void:
 	root.get_texture().get_image().save_png("user://ui_town_broken.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_town_broken.png"))
 
-	# The fortuneteller: what she can be asked with its prices, then three of her answers in the list's
-	# place -- the roads, a whole piece read (the rare amulet), and the quarry found. The bounty that is out
-	# is located on the way, so the journal below has the land on its card.
+	# The fortuneteller: what she can be asked with its prices, then two of her answers in the list's
+	# place -- the roads and a whole piece read (the rare amulet).
 	main.inventory.gold = 1.0e9
 	main.town_page._on_tab_pressed(TownServices.FORTUNE)
 	main.bag_page._select_item(6)
@@ -684,8 +683,7 @@ func _shoot_town() -> void:
 	print("Saved ", ProjectSettings.globalize_path("user://ui_player_dialogue.png"))
 	main._on_tip_closed()
 	await create_timer(Juice.LEAVE_TIME + 0.1).timeout
-	for shot: Array in [[FortuneTeller.ROADS, "ui_town_roads"], [FortuneTeller.APPRAISE, "ui_town_appraise"],
-			[FortuneTeller.QUARRY, "ui_town_quarry"]]:
+	for shot: Array in [[FortuneTeller.ROADS, "ui_town_roads"], [FortuneTeller.APPRAISE, "ui_town_appraise"]]:
 		main.town_page._on_reading_pressed(shot[0])
 		for i in 2:
 			await process_frame
@@ -694,7 +692,6 @@ func _shoot_town() -> void:
 		print("Saved ", ProjectSettings.globalize_path("user://%s.png" % shot[1]))
 		main.town_page._close_told()
 		main._close_banner()
-	BountyBoard.locate(BountyBoard.active(main.inventory.towns))
 
 	# A wall down: the way out joins her list, and asked for it is a question before it is a deed.
 	main.view.land_radius += MapBuilder.WALL_STEP
