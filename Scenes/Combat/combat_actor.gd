@@ -167,6 +167,18 @@ func _lay_shadow() -> void:
 			span = low + Vector2(bounds.position.x, bounds.position.x)
 	var shift := (span.x + span.y) / 2.0 - (standing.position.x + standing.size.x / 2.0)
 	var wide := maxi(4, roundi(minf((span.y - span.x) * SHADOW_WIDE, standing.size.y * SHADOW_MOST_WIDE)))
+	if _shadow == null:
+		_shadow = Sprite2D.new()
+		_shadow.show_behind_parent = true
+		add_child(_shadow)
+	_shadow.texture = shadow_texture(wide)
+	# A child is not mirrored with its parent's picture, so the shift is.
+	_shadow.position.x = -shift if flip_h else shift
+
+
+## A hard-edged ellipse `wide` pixels across and a quarter as deep, in `colour`. The map's token
+## lays the same one under its feet.
+static func shadow_texture(wide: int, colour := SHADOW_COLOUR) -> ImageTexture:
 	var deep := maxi(2, roundi(wide / 4.0))
 	var shade := Image.create(wide, deep, false, Image.FORMAT_RGBA8)
 	var half := Vector2(wide, deep) / 2.0
@@ -174,14 +186,8 @@ func _lay_shadow() -> void:
 		for x in wide:
 			var at := (Vector2(x, y) + Vector2(0.5, 0.5) - half) / half
 			if at.length_squared() <= 1.0:
-				shade.set_pixel(x, y, SHADOW_COLOUR)
-	if _shadow == null:
-		_shadow = Sprite2D.new()
-		_shadow.show_behind_parent = true
-		add_child(_shadow)
-	_shadow.texture = ImageTexture.create_from_image(shade)
-	# A child is not mirrored with its parent's picture, so the shift is.
-	_shadow.position.x = -shift if flip_h else shift
+				shade.set_pixel(x, y, colour)
+	return ImageTexture.create_from_image(shade)
 
 
 ## Plays a one-shot animation and returns to idling when it finishes. Looping ones just play.

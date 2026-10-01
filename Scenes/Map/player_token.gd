@@ -20,6 +20,12 @@ const FPS := 8.0
 const SCALE := 0.5
 ## How far below the middle of the tile the character's feet stand, in map pixels.
 const FOOT_OFFSET := 6
+## The shadow under the feet, in the sheet's pixels: about the span of the idle stance's feet, which
+## stand SHADOW_SHIFT right of the crop's middle (the tail fills the left). Darker than a fighter's, to
+## read on the map's busy ground.
+const SHADOW_WIDE := 36
+const SHADOW_SHIFT := 7
+const SHADOW_COLOUR := Color(0.06, 0.04, 0.09, 0.5)
 ## How long the character takes to cross one tile with no Move Speed.
 const SECONDS_PER_TILE := 2.0
 ## A puff of dust kicked up every DUST_EVERY seconds while walking, drawn under the character.
@@ -59,6 +65,7 @@ var _footsteps: Array[AudioStream] = []
 var _footstep := 0
 var _footstep_left := 0.0
 var _sound: AudioStreamPlayer
+var _shadow: Sprite2D
 
 
 func setup(map: HexMap) -> void:
@@ -69,6 +76,12 @@ func setup(map: HexMap) -> void:
 	# FOOT_OFFSET map pixels below the middle of the tile.
 	offset = Vector2(0, FOOT_OFFSET / SCALE - BOUNDS.size.y / 2.0)
 	play("idle")
+	# A child, so it walks, hides and scales with the token, and behind it, so the feet stand on it.
+	_shadow = Sprite2D.new()
+	_shadow.texture = CombatActor.shadow_texture(SHADOW_WIDE, SHADOW_COLOUR)
+	_shadow.show_behind_parent = true
+	_shadow.position = Vector2(SHADOW_SHIFT, FOOT_OFFSET / SCALE)
+	add_child(_shadow)
 	for i in FOOTSTEPS:
 		_footsteps.append(load("res://Sounds/Footsteps/footstep%02d.ogg" % i))
 	_sound = AudioStreamPlayer.new()
@@ -174,6 +187,8 @@ func _start_step() -> void:
 	_step = 0.0
 	# The art faces east, so a step that leads west is mirrored.
 	flip_h = _to.x < _from.x
+	# A child is not mirrored with its parent's picture, so the shadow's shift is.
+	_shadow.position.x = -SHADOW_SHIFT if flip_h else SHADOW_SHIFT
 
 
 func _finish_step() -> void:
