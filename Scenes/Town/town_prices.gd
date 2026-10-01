@@ -46,10 +46,9 @@ const ORB_BODIES := 4.0
 const REROLL_BODIES := 30.0
 const REROLL_GROWTH := 2.0
 
-## What the fortuneteller asks for a spell the **first** time, in bodies at the town's level
-## (`FortuneTeller`'s own names; a test holds the two lists together). A fight is about ten bodies.
-## Where a bounty's monster lives is half a fight against the five and a half the bounty pays; a chest
-## is two, against the boss's drop it points at; one unique shown is five; the scour is a hundred and
+## What the fortuneteller asks for a spell, in bodies at the town's level, the same every time it is
+## asked (`FortuneTeller`'s own names; a test holds the two lists together). A fight is about ten
+## bodies: the roads fifteen fights, a chest six, an appraisal one and a half; the scour a hundred and
 ## the road home twenty, both bought once a settlement.
 ##
 ## **Transcending is the one that is not at the town's level:** it is bodies on the ground just
@@ -57,20 +56,14 @@ const REROLL_GROWTH := 2.0
 ## only just brought that wall down, and a purse the second ring's monsters fill for anyone who stays
 ## to farm them. Two hundred fights' worth there; see `DESIGN.md` for the table it was set against.
 const FORTUNE_BODIES := {
-	"roads": 50.0,
-	"treasure": 20.0,
-	"appraise": 5.0,
+	"roads": 150.0,
+	"treasure": 60.0,
+	"appraise": 15.0,
 	"scour": 1000.0,
 	"homecoming": 200.0,
 	"stone": 1000.0,
 	"transcend": 2000.0,
 }
-
-## What every casting of a reading multiplies the next one by. The shelf reroll's own dial and for the
-## same reason: her four readings are asked as often as the player likes now, so what stops a purse
-## being stood in front of her and turned into an answer a minute is that the eighth asking costs
-## what a hundred and twenty-eight firsts do.
-const FORTUNE_GROWTH := 2.0
 
 ## What each rarity step multiplies a piece's price by, indexed by `ItemRarity.Rarity`'s own order:
 ## common, uncommon, rare, elite, unique. A list rather than a Dictionary keyed by the enum, because a
@@ -144,18 +137,15 @@ static func reroll_price(town_cell: Vector2i, rerolls: int) -> float:
 			* pow(REROLL_GROWTH, maxi(rerolls, 0))))
 
 
-## What the fortuneteller in the town on `town_cell` asks for `reading`, having been asked for it
-## `cast` times already. Pegged to the town, as an orb is: knowledge has no level of its own -- and
-## climbing with the casting, as a shelf reroll does, which is the whole of what makes a reading a
-## gold sink rather than a walk between villages. 0 for a reading this build does not have.
-static func fortune_price(reading: String, town_cell: Vector2i, cast := 0) -> float:
+## What the fortuneteller in the town on `town_cell` asks for `reading`. Pegged to the town, as an orb
+## is: knowledge has no level of its own. 0 for a reading this build does not have.
+static func fortune_price(reading: String, town_cell: Vector2i) -> float:
 	if not FORTUNE_BODIES.has(reading):
 		return 0.0
 	# The way out and the stone are the same everywhere: bodies on the ground behind the first wall.
 	if reading == "transcend" or reading == "stone":
 		return maxf(1.0, roundf(Encounter.gold_at_steps(transcend_steps()) * float(FORTUNE_BODIES[reading])))
-	return maxf(1.0, roundf(gold_at_level(MapBuilder.level_of(town_cell)) * float(FORTUNE_BODIES[reading])
-			* pow(FORTUNE_GROWTH, maxi(cast, 0))))
+	return maxf(1.0, roundf(gold_at_level(MapBuilder.level_of(town_cell)) * float(FORTUNE_BODIES[reading])))
 
 
 ## How far from the middle of the map the ground is that transcending is priced on: one step past

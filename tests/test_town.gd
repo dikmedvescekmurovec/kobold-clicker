@@ -1525,11 +1525,6 @@ func _test_fortune() -> bool:
 			continue
 		_check(TownPrices.fortune_price(reading, TOWN_CELL) > TownPrices.fortune_price(reading, Vector2i(1, 0)),
 				"%s is dearer in a deeper town" % reading)
-		# And dearer again every time it has been asked for, whichever half it is in: what stops a
-		# reading being asked for ever is the price, and `fortune_price` is the one place that knows.
-		_check(TownPrices.fortune_price(reading, TOWN_CELL, 3) == roundf(TownPrices.fortune_price(reading,
-				TOWN_CELL) * pow(TownPrices.FORTUNE_GROWTH, 3)),
-				"%s doubles with every casting" % reading)
 	_check(TownPrices.fortune_price("retired_reading", TOWN_CELL) == 0.0, "a reading this build lacks costs nothing")
 
 	var patch := FortuneTeller.scour_cells(Vector2i(3, 3))
@@ -1538,15 +1533,11 @@ func _test_fortune() -> bool:
 	# What she sold the player is saved with the player, and comes back as it was written.
 	var inventory := Inventory.new()
 	inventory.fortunes[FortuneTeller.CHEST] = [12, 34]
-	FortuneTeller.note_cast(inventory.fortunes, FortuneTeller.ROADS)
-	FortuneTeller.note_cast(inventory.fortunes, FortuneTeller.ROADS)
 	inventory.save(TEST_PATH)
 	var back := Inventory.load_from(TEST_PATH)
-	_check(FortuneTeller.chest(back.fortunes) == Vector2i(12, 34)
-			and FortuneTeller.cast(back.fortunes, FortuneTeller.ROADS) == 2,
+	_check(FortuneTeller.chest(back.fortunes) == Vector2i(12, 34),
 			"what she sold survives the save (%s)" % [back.fortunes])
-	_check(FortuneTeller.chest({}) == TownWorld.NO_SPOT and FortuneTeller.cast({}, FortuneTeller.ROADS) == 0,
-			"and a save that bought nothing has nothing")
+	_check(FortuneTeller.chest({}) == TownWorld.NO_SPOT, "and a save that bought nothing has nothing")
 
 	# A great spell is one a settlement, which is the drawer's key and not the player's count.
 	var drawer := {}
@@ -1636,8 +1627,8 @@ func _test_fortune_page() -> void:
 	main.town_page.redraw()
 	await process_frame
 	_check(not _dead(main, FortuneTeller.TREASURE), "and the star can be bought again")
-	_check(_price(main, FortuneTeller.TREASURE) == TownPrices.fortune_price(FortuneTeller.TREASURE, town)
-			* TownPrices.FORTUNE_GROWTH, "for double what the first one cost")
+	_check(_price(main, FortuneTeller.TREASURE) == TownPrices.fortune_price(FortuneTeller.TREASURE, town),
+			"for what the first one cost")
 
 	# A piece read: the bag's open piece, as the smith's is.
 	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, RandomNumberGenerator.new())
@@ -1657,8 +1648,8 @@ func _test_fortune_page() -> void:
 	main.town_page.bag_changed(sword)
 	await process_frame
 	_check(not _dead(main, FortuneTeller.APPRAISE)
-			and _price(main, FortuneTeller.APPRAISE) == TownPrices.fortune_price(FortuneTeller.APPRAISE, town)
-			* TownPrices.FORTUNE_GROWTH, "and the same piece is read again, dearer")
+			and _price(main, FortuneTeller.APPRAISE) == TownPrices.fortune_price(FortuneTeller.APPRAISE, town),
+			"and the same piece is read again, at the same price")
 	main.town_page.bag_changed(null)
 	await process_frame
 
@@ -1677,7 +1668,6 @@ func _test_fortune_page() -> void:
 			and Inventory.load_from(TEST_PATH).seeing_stone, "bought, paid for and saved")
 	_check(main.town_page._told != null and _said(main.town_page._told).contains("Seeing Stone is yours"),
 			"and she says it is the player's for good")
-	_check(FortuneTeller.cast(main.inventory.fortunes, FortuneTeller.STONE) == 0, "a thing sold, not a reading cast")
 	main.town_page._close_told()
 	main.town_page.redraw()
 	await process_frame

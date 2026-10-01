@@ -5,14 +5,14 @@ extends RefCounted
 ## Every settlement has her, and she is the one counter that sells nothing to carry: what she sells is
 ## knowledge the game used to give away or never gave at all. Three **readings** -- where the nearest
 ## settlements lie, where a chest is, and what a piece could still roll -- each asked as often as the
-## player will pay for it, the price doubling every time; and two **great spells**, one a settlement:
+## player will pay for it; and two **great spells**, one a settlement:
 ## a patch of the map lifted out of the dark, and the road home walked in no time at all.
 ##
 ## Static and node-free like `Blacksmith`, so the tests need no interface. What a spell costs is
 ## `TownPrices.fortune_price`'s business. What was bought is written where it belongs: what a town has
 ## sold in that town's drawer (`ASKED`), and what belongs to the
-## player rather than to a town -- the chest, and how often each reading has been
-## asked -- in `inventory.fortunes`, a plain Dictionary this file holds the keys of, because
+## player rather than to a town -- the chest -- in `inventory.fortunes`, a plain Dictionary this file
+## holds the keys of, because
 ## `Inventory` must not name a class that names `Item`'s tables back at it.
 
 ## The readings, which are also the keys of `TownPrices.FORTUNE_BODIES`.
@@ -34,9 +34,8 @@ const READINGS := [ROADS, TREASURE, APPRAISE, SCOUR, HOMECOMING, STONE, TRANSCEN
 
 ## Her list is in two halves, and which half a spell is in is the whole of its rule.
 ##
-## A **reading** is asked as often as the player likes, anywhere: the price starts at the town's own
-## level and doubles with every casting in this world (`TownPrices.FORTUNE_GROWTH`, the count in
-## `inventory.fortunes` under `CAST`). A **great spell** is one a settlement, the way every reading
+## A **reading** is asked as often as the player likes, anywhere, at the town's own price every time.
+## A **great spell** is one a settlement, the way every reading
 ## used to be: it is written in that town's drawer under `ASKED` and refused there from then on.
 ##
 ## Written out rather than derived from `READINGS`, which is the grid's order; `test_town` holds the
@@ -63,8 +62,6 @@ const LABELS := {
 const ASKED := "fortune_"
 ## `inventory.fortunes`' keys.
 const CHEST := "chest"
-## reading -> how many times it has been asked in this world, which is what doubles a reading's price.
-const CAST := "cast"
 
 ## What the stone says, coldest first, and the most steps from the cave each warmer word is said
 ## within: Burning at two or fewer, Hot at five, Warm at ten, Cool at sixteen, Cold past that. Bands
@@ -137,17 +134,3 @@ static func chest(fortunes: Dictionary) -> Vector2i:
 ## the roads already told here and so told again for nothing.
 static func asked(drawer: Dictionary, reading: String) -> bool:
 	return bool(drawer.get(ASKED + reading, false))
-
-
-## How many times `reading` has been asked in this world. Read through `int()`, because JSON hands
-## whole numbers back as floats.
-static func cast(fortunes: Dictionary, reading: String) -> int:
-	var counts: Variant = fortunes.get(CAST, {})
-	return int((counts as Dictionary).get(reading, 0)) if typeof(counts) == TYPE_DICTIONARY else 0
-
-
-## One more casting of `reading`, which is what makes the next one dearer.
-static func note_cast(fortunes: Dictionary, reading: String) -> void:
-	if typeof(fortunes.get(CAST, null)) != TYPE_DICTIONARY:
-		fortunes[CAST] = {}
-	fortunes[CAST][reading] = cast(fortunes, reading) + 1

@@ -928,7 +928,7 @@ func _fill_fortune() -> void:
 	# Her spells on the shelf's own grid, each with its price under it: what she sells is bought the way
 	# everything else in a town is, and words in a column read as a menu rather than a shop. Two grids,
 	# because her list is in two halves and which half a spell is in is its whole rule: a reading is
-	# asked again for double, a great spell is one a settlement. Why a square is dead is only ever in
+	# asked as often as it is paid for, a great spell is one a settlement. Why a square is dead is only ever in
 	# its tooltip.
 	body.add_child(_spell_grid(FORTUNE_HEADINGS["common"], FortuneTeller.COMMON))
 	# The way out stands with the great spells, as a square of its own, once a wall has fallen: before
@@ -1179,14 +1179,12 @@ func _odds_row(row: Dictionary, striped: bool, width: float) -> PanelContainer:
 	return line
 
 
-## What a spell costs here: the town's level, doubled once for every time this world has heard the
-## reading already. The roads, once told in this town, are told again for nothing -- they are read off
-## the world, and the world has not moved -- and a free telling is not a casting, so it never moves
-## the count either.
+## What a spell costs here, off the town's level. The roads, once told in this town, are told again for
+## nothing -- they are read off the world, and the world has not moved.
 func _fortune_price(reading: String) -> float:
 	if reading == FortuneTeller.ROADS and FortuneTeller.asked(_drawer, reading):
 		return 0.0
-	return TownPrices.fortune_price(reading, _cell, FortuneTeller.cast(inventory.fortunes, reading))
+	return TownPrices.fortune_price(reading, _cell)
 
 
 ## Why she will not give this spell, or "" when she will. A great spell is sold once a settlement; a
@@ -1231,10 +1229,6 @@ func _on_reading_pressed(reading: String) -> void:
 		_ask_way_out()
 		return
 	inventory.gold -= price
-	# A reading's count is what doubles its price, and only a paid telling moves it: the roads told
-	# again for nothing in a town that has already bought them are the same sentence, not a casting.
-	if price > 0.0 and reading in FortuneTeller.COMMON:
-		FortuneTeller.note_cast(inventory.fortunes, reading)
 	match reading:
 		FortuneTeller.ROADS:
 			# The one drawer key a reading still writes, and it means the opposite of a great spell's:
