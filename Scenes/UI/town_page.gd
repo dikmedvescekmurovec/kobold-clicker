@@ -1165,6 +1165,7 @@ func _spell_square(reading: String) -> Control:
 	square.gui_input.connect(func(event: InputEvent) -> void:
 		if (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT
 				and event.pressed):
+			square.accept_event()  # Before the redraw frees it, which would let the press through to the map.
 			_on_reading_pressed(reading))
 	return square
 
@@ -1350,6 +1351,7 @@ func _on_shelf_input(event: InputEvent, at: int) -> void:
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT
 			and event.pressed):
 		return
+	accept_event()  # Before the redraw frees the cell, which would let the press through to the map.
 	var shelf := VendorStock.items(_drawer)
 	if at < 0 or at >= shelf.size() or shelf[at] == null:
 		return

@@ -108,6 +108,7 @@ func _redraw() -> void:
 		var press := event as InputEventMouseButton
 		if press == null or not press.pressed or press.button_index != MOUSE_BUTTON_LEFT:
 			return
+		tier_row.accept_event()  # Before `pick` redraws it out of the tree, which would let the press through.
 		var pitch := ItemSlot.SIDE + BagPage.SLOT_GAP
 		var at := int(press.position.y / pitch) * BagPage.GRID_COLS + int(press.position.x / pitch)
 		if at < tiers.size() and tiers[at] != item.type:

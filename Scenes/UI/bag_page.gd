@@ -1073,6 +1073,9 @@ func _on_doll_input(event: InputEvent) -> void:
 	Cursors.over_squares(_doll, event, _armed != "")
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed):
 		return
+	# Before anything redraws the doll out of the tree: freed under its own press, it would let the press
+	# through to the map behind it (`OrbSlot`'s reason).
+	_doll.accept_event()
 	var press := event as InputEventMouseButton
 	for slot: Control in _doll.get_children():
 		if not slot.has_meta("socket") or not Rect2(slot.position, slot.size).has_point(event.position):

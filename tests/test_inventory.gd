@@ -3082,6 +3082,22 @@ func _test_comparing() -> bool:
 		main.bag_page._on_doll_input(press)
 		_check(main.bag_page._worn_selected == Equipment.Socket.WEAPON,
 				"and a press on it opens the greatsword")
+	# A real press, through the viewport: the doll is redrawn under it, and a Control freed in its own
+	# gui_input never marks the press handled, so the map behind it took the click.
+	for slot: Control in _socket_squares(main):
+		if slot.get_meta("socket") != Equipment.Socket.WEAPON:
+			continue
+		var at: Vector2 = slot.get_global_transform_with_canvas() * (slot.size / 2.0)
+		for down: bool in [true, false]:
+			var click := InputEventMouseButton.new()
+			click.button_index = MOUSE_BUTTON_LEFT
+			click.pressed = down
+			click.position = at
+			click.global_position = at
+			root.push_input(click, true)
+			if down:
+				_check(main.bag_page._worn_selected == -1 and not main.map._pressing,
+						"a press on the doll closes the piece and never reaches the map")
 	main._on_left_page_closed()
 	main.queue_free()
 	_clear_save()
