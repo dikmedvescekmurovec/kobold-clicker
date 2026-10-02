@@ -1303,10 +1303,31 @@ def cast(a, who, f):
         paste_cell(a, enemy_cell(name, "idle", k, turned), origin)
 
 
-def tavern(pose, seed=63, unique="stonebreaker", f=None):
+def winking(a, spots, f):
+    """The sparkles round the find, each (x, y, colour): on the still at full, and on frame `f` of
+    the loop each winking on and off on its own beat, growing to full and back."""
+    for n, (x, y, c) in enumerate(spots):
+        if f is None:
+            glint(a, x, y, c)
+            continue
+        beat = (f + n * 7) % 20
+        if beat < 12:
+            glint(a, x, y, c, arm=(0, 1, 2, 2, 1, 0)[beat // 2])
+
+
+def hero_swing(a, f, anim, i, x, foot):
+    """The hero on frame `f` of the loop, in the cell where the still's (anim, i) stands on
+    (x, foot): idling, and on the `SWING` frames swinging."""
+    origin = cell_origin(hero_cell(anim, i), x, foot)
+    idle = hero_cell("idle", idle_frame(6, f, 0, cycle=9))
+    paste_cell(a, hero_cell("attack", SWING[f]) if f in SWING else idle, origin)
+
+
+def tavern(pose, seed=63, unique="stonebreaker", f=None, front=True):
     """The tavern cover. `f` (a frame of the `LOOP`) draws the animated one's frame instead of the
     still: the cast idling, the beams alive, the sword's sparkles winking, and once a loop the
-    pointer clicks and the hero swings."""
+    pointer clicks and the hero swings. `front` False leaves off the blades along the bottom, for a
+    canvas that goes on below it."""
     rng = random.Random(seed)
     a = np.zeros((H, W, 3), np.uint8)
     bright_sky(a, rng, seed, horizon=96)
@@ -1319,22 +1340,13 @@ def tavern(pose, seed=63, unique="stonebreaker", f=None):
     cast(a, CAST_FRONT, f)
     # the unique the beam stands over, lying in the grass at its foot
     paste(a, the_find(unique), 112, 139)
-    for n, (x, yy, c) in enumerate(((96, 112, WHITE), (128, 106, rgb("ffeb57")), (124, 128, WHITE))):
-        if f is None:
-            glint(a, x, yy, c)
-        else:
-            # each winks on and off on its own beat, growing to full and back
-            beat = (f + n * 7) % 20
-            if beat < 12:
-                glint(a, x, yy, c, arm=(0, 1, 2, 2, 1, 0)[beat // 2])
+    winking(a, ((96, 112, WHITE), (128, 106, rgb("ffeb57")), (124, 128, WHITE)), f)
     if f is None:
         pose(a)
     else:
-        anim, i, x, foot = HERO_STILL
-        origin = cell_origin(hero_cell(anim, i), x, foot)
-        idle = hero_cell("idle", idle_frame(6, f, 0, cycle=9))
-        paste_cell(a, hero_cell("attack", SWING[f]) if f in SWING else idle, origin)
-    grass_front(a, seed + 6, 50, tones=(rgb("5ac54f"), rgb("33984b")))
+        hero_swing(a, f, *HERO_STILL)
+    if front:
+        grass_front(a, seed + 6, 50, tones=(rgb("5ac54f"), rgb("33984b")))
     check(a, "tavern " + pose.__name__)
     return a
 
@@ -1360,15 +1372,165 @@ FINDS = ("crown_of_accord", "glass_edge", "headsman", "dreadmask", "overflowing_
 TAVERN.update({"slash_" + u: (lambda u=u: tavern(slash, unique=u)) for u in FINDS})
 
 
+# ---------------------------------------------------------------- the cover upright, for phones
+# Asked 2026-10-01: held upright, a phone letterboxes the 16:9 loop to a strip a quarter of its
+# height. Each of these is drawn for 9:19.5 (the narrow layout's 360x780); a 9:16 phone shows its
+# middle (`crop_916`).
+
+def tall_sky(a, rng, horizon, shafts=((22, 10), (70, 6), (118, 14), (176, 8), (228, 12))):
+    """`bright_sky` over a taller sky: its bands where it puts them, measured up from the horizon,
+    and over them the deep blue of the zenith; its shafts of light, fading in from the top."""
+    sv.sky(a, ((rgb("0069aa"), 0), (rgb("0098dc"), horizon - 170), (rgb("00cdf9"), horizon - 62),
+               (rgb("0cf1ff"), horizon - 26), (rgb("94fdff"), horizon + 2)))
+    for x, wide in shafts:
+        off = np.abs(XX - (x + YY * 0.18))
+        shaft = (off < wide / 2) & (YY < horizon) & (BY < 1.1 - YY / horizon)
+        lighten(a, shaft & ~((off > wide / 2 - 1.5) & (BY < 0.5)))
+    for cx in range(20, W + 40, 70):
+        sv.cloud(a, rng, cx + rng.randint(-10, 10), horizon + 4, rng.randint(70, 110), rng.randint(20, 30),
+                 lit=WHITE, body=rgb("94fdff"), bump=(4, 7))
+
+
+def deep_grass(a, top):
+    """The hill on below where `round_hill` stops darkening: a step darker again past `top`."""
+    m = (a == rgb("33984b")).all(-1) & (YY > top) & (BY < (YY - top) / 40)
+    a[m] = rgb("1e6f50")
+
+
+def tall_stage(seed=63):
+    """The cover as it is, untouched, in the middle of a taller sky and a deeper hill: the ropes run
+    on up to the top, the shafts of light fade in from it, the grass darkens toward the bottom."""
+    grid(256, 144, 9)
+    scene = tavern(slash, unique="glass_edge", front=False)
+    grid(*GRIDS["tall_stage"])
+    # a whole number of the ropes' 3-row pattern and the dither's 4, so both run on unbroken
+    oy = 204
+    rng = random.Random(seed)
+    a = np.zeros((H, W, 3), np.uint8)
+    tall_sky(a, rng, oy + 96, shafts=())
+    # the scene's shafts, carried on up and fading in from the top as they come down to it
+    for x, wide in ((22, 10), (70, 6), (118, 14), (176, 8), (228, 12)):
+        off = np.abs(XX - (x + (YY - oy) * 0.18))
+        shaft = (off < wide / 2) & (BY < 1.1 * YY / oy)
+        lighten(a, shaft & ~((off > wide / 2 - 1.5) & (BY < 0.5)))
+    for rx in (128 - 75 + 24, 128 + 75 - 26):
+        for yy in range(oy):
+            a[yy, rx] = rgb("e69c69") if (yy - oy) % 3 else rgb("8a4836")
+            a[yy, rx + 1] = rgb("bf6f4a") if (yy - oy) % 3 else rgb("5d2c28")
+    # the hill on under it, banded as the scene's is, so the seam falls between like rows
+    round_hill(a, random.Random(seed + 1), top=oy + 84, radius=420)
+    deep_grass(a, oy + 170)
+    a[oy: oy + 144] = scene
+    grass_front(a, seed + 6, 60, tones=(rgb("5ac54f"), rgb("33984b")))
+    check(a, "tall_stage")
+    return a
+
+
+## Who stands where, upright: as `CAST_BACK` and `CAST_FRONT`, each (name, animation, frame,
+## turned round, x, foot); the sign's centre and top; the unique (x, foot); the hero's slash (x, foot).
+UPRIGHT = {
+    # The name high on short ropes, the whole cast under it down a taller hill.
+    "tall_poster": dict(
+        horizon=150, sign=(90, 40),
+        beams=((14, 146, "rare"), (36, 142, "uncommon"), (148, 142, "elite"), (170, 146, "uncommon")),
+        back=(("Masked Orc", "attack", 0, True, 36, 206), ("Stone Golem", "idle", 0, False, 110, 214),
+              ("Baby Dragon", "idle", 1, False, 158, 180), ("Werewolf", "attack", 1, False, 146, 278)),
+        find=(66, 278),
+        front=(("Goblin", "attack", 1, False, 106, 324), ("Imp", "idle", 0, False, 166, 306),
+               ("Mimic", "idle", 0, False, 146, 348)),
+        hero=(25.5, 346),
+        glints=((50, 248, WHITE), (82, 242, rgb("ffeb57")), (78, 266, WHITE))),
+    # The name in the middle of the horde, as the cover has it: over its top, at its sides, below.
+    "tall_crowd": dict(
+        horizon=150, sign=(90, 150),
+        beams=((14, 146, "rare"), (36, 142, "uncommon"), (148, 142, "elite"), (170, 146, "uncommon")),
+        back=(("Masked Orc", "attack", 0, True, 20, 170), ("Stone Golem", "idle", 0, False, 132, 176),
+              ("Werewolf", "attack", 1, False, 140, 282)),
+        find=(62, 280),
+        # the dragon flies nearer than the ropes
+        front=(("Baby Dragon", "idle", 1, False, 140, 100), ("Goblin", "attack", 1, False, 108, 324),
+               ("Imp", "idle", 0, False, 168, 306), ("Mimic", "idle", 0, False, 146, 348)),
+        hero=(25.5, 346),
+        glints=((46, 250, WHITE), (78, 244, rgb("ffeb57")), (74, 268, WHITE))),
+}
+
+
+def upright(name, seed=63, unique="glass_edge", f=None):
+    """An upright cover from its `UPRIGHT` layout, drawn in the tavern's order; `f` draws frame `f`
+    of its loop, animated as the tavern's is."""
+    L = UPRIGHT[name]
+    rng = random.Random(seed)
+    a = np.zeros((H, W, 3), np.uint8)
+    tall_sky(a, rng, L["horizon"])
+    round_hill(a, rng, top=L["horizon"] - 12, radius=420)
+    deep_grass(a, L["horizon"] + 120)
+    for x, foot, kind in L["beams"]:
+        beam(a, x, foot, 0, BEAMS[kind], rng=rng, f=f)
+    cast(a, L["back"], f)
+    fx, ffoot = L["find"]
+    beam(a, fx, ffoot - 3, 0, BEAMS["unique"], w=3, rng=rng, f=f)
+    logo_sign(a, *L["sign"], press=f in CLICK, tilt=TILT.get(f, 0))
+    cast(a, L["front"], f)
+    paste(a, the_find(unique), fx, ffoot)
+    winking(a, L["glints"], f)
+    if f is None:
+        paste(a, hero("attack", 2), *L["hero"])
+    else:
+        hero_swing(a, f, "attack", 2, *L["hero"])
+    grass_front(a, seed + 6, 36, tones=(rgb("5ac54f"), rgb("33984b")))
+    check(a, name)
+    return a
+
+
+UPRIGHTS = {"tall_stage": tall_stage, **{n: (lambda n=n: upright(n)) for n in UPRIGHT}}
+
+
+def crop_916(h, w):
+    """The rows of an upright cover a 9:16 phone shows: its middle."""
+    keep = w * 16 // 9
+    return (h - keep) // 2, (h - keep) // 2 + keep
+
+
+def phones(path="qa/cover_phones.png"):
+    """Every upright cover as a 360x780 phone shows it, beside today's letterboxed loop, the rows a
+    9:16 phone keeps ticked at each frame's sides."""
+    grid(*GRIDS[FINAL])
+    today = Image.new("RGB", (360, 780))
+    shot = Image.fromarray(COVERS[FINAL](), "RGB").resize((360, 202), Image.LANCZOS)
+    today.paste(shot, (0, (780 - 202) // 2))
+    shots = [("today", today)]
+    for name in UPRIGHTS:
+        grid(*GRIDS[name])
+        shots.append((name, Image.fromarray(UPRIGHTS[name](), "RGB").resize((360, 780), Image.NEAREST)))
+    gap, label = 40, 40
+    sheet = Image.new("RGB", (gap + len(shots) * (360 + gap), gap + 780 + label), rgb("1a1932"))
+    d = ImageDraw.Draw(sheet)
+    d.fontmode = "1"
+    for i, (name, img) in enumerate(shots):
+        x = gap + i * (360 + gap)
+        d.rectangle((x - 6, gap - 6, x + 360 + 5, gap + 780 + 5), fill=rgb("2a2f4e"))
+        sheet.paste(img, (x, gap))
+        y0, y1 = crop_916(780, 360)
+        for y in (y0, y1):
+            d.line((x - 14, gap + y, x - 7, gap + y), fill=rgb("ffc825"), width=2)
+            d.line((x + 366, gap + y, x + 373, gap + y), fill=rgb("ffc825"), width=2)
+        d.text((x, gap + 780 + 12), name, font=PIXELLARI, fill=rgb("f9e6cf"))
+    sheet.save(path)
+    print(path)
+
+
 LOGOS = {"logo_beam": showcase(logo_beam, 30), "logo_mascot": showcase(logo_mascot, 50),
          "logo_rarity": showcase(logo_rarity, 36), "logo_sign": showcase(logo_sign, 26),
          "logo_chest": showcase(logo_chest, 12), "logo_crest": showcase(logo_crest, 22)}
 COVERS = {"ridge": ridge, "wall": wall, "valley": valley, "standoff": standoff, "crowd": crowd,
           "crowd2": crowd2, "crowd3": crowd3,
-          "crowd3_small": lambda: crowd3(doubled=False), **TAVERN, **LOGOS}
+          "crowd3_small": lambda: crowd3(doubled=False), **TAVERN, **LOGOS, **UPRIGHTS}
 # The plaque covers and the logos are drawn on their own grid (set in `main`): the vistas' 288x162
 # at 8x, these 256x144 at 9x -- both 2304x1296.
 GRIDS = {name: (256, 144, 9) for name in ("standoff", "crowd", "crowd2", "crowd3", "crowd3_small", *TAVERN, *LOGOS)}
+# The upright covers: 9:19.5, the stage at the landscape's own width, the others narrower so the
+# cast stands bigger on the phone.
+GRIDS.update({"tall_stage": (256, 555, 5), "tall_poster": (180, 390, 6), "tall_crowd": (180, 390, 6)})
 
 
 def grid(w, h, scale):
@@ -1386,14 +1548,18 @@ def grid(w, h, scale):
 # writes it and its animation to store/ (a .gdignore keeps Godot from importing them).
 
 FINAL = "slash_glass_edge"
+## The user's pick for a phone held upright (2026-10-01).
+FINAL_TALL = "tall_crowd"
 STORE = "../store/"
 LANDING = "../Assets/Landing/"
 ## The GIF's size against the grid: 4x is 1024x576, small enough to post; the MP4 is the full 9x.
 GIF_SCALE = 4
 
 
-def animation():
-    grid(*GRIDS[FINAL])
+def animation(tall=False):
+    grid(*GRIDS[FINAL_TALL if tall else FINAL])
+    if tall:
+        return [upright(FINAL_TALL, f=f) for f in range(LOOP)]
     return [tavern(slash, unique="glass_edge", f=f) for f in range(LOOP)]
 
 
@@ -1423,21 +1589,23 @@ def write_mp4(frames, path):
 
 def export():
     import os
+    import subprocess
     os.makedirs(STORE, exist_ok=True)
     open(STORE + ".gdignore", "a").close()
-    grid(*GRIDS[FINAL])
-    still = COVERS[FINAL]()
-    Image.fromarray(still, "RGB").resize((W * SCALE, H * SCALE), Image.NEAREST).save(STORE + "cover.png")
-    print(STORE + "cover.png")
-    frames = animation()
-    write_gif(frames, STORE + "cover.gif", GIF_SCALE)
-    write_mp4(frames, STORE + "cover.mp4")
-    # The game's landing page plays the same loop, and Godot plays only Ogg Theora.
     os.makedirs(LANDING, exist_ok=True)
-    import subprocess
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", STORE + "cover.mp4", "-vf", "fps=10",
-                    "-c:v", "libtheora", "-q:v", "8", LANDING + "cover.ogv"], check=True)
-    print(LANDING + "cover.ogv")
+    for name, tall in (("cover", False), ("cover_tall", True)):
+        grid(*GRIDS[FINAL_TALL if tall else FINAL])
+        still = COVERS[FINAL_TALL if tall else FINAL]()
+        Image.fromarray(still, "RGB").resize((W * SCALE, H * SCALE), Image.NEAREST).save(f"{STORE}{name}.png")
+        print(f"{STORE}{name}.png")
+        frames = animation(tall)
+        if not tall:
+            write_gif(frames, STORE + "cover.gif", GIF_SCALE)
+        write_mp4(frames, f"{STORE}{name}.mp4")
+        # The game's landing page plays the same loop, and Godot plays only Ogg Theora.
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", f"{STORE}{name}.mp4", "-vf", "fps=10",
+                        "-c:v", "libtheora", "-q:v", "8", f"{LANDING}{name}.ogv"], check=True)
+        print(f"{LANDING}{name}.ogv")
 
 
 def main(names):
@@ -1445,8 +1613,11 @@ def main(names):
         export()
         return
     for name in names or COVERS:
-        if name == "animated":
-            write_gif(animation(), "qa/cover_animated.gif", GIF_SCALE)
+        if name in ("animated", "animated_tall"):
+            write_gif(animation(name == "animated_tall"), f"qa/cover_{name}.gif", GIF_SCALE)
+            continue
+        if name == "phones":
+            phones()
             continue
         grid(*GRIDS.get(name, (288, 162, 8)))
         a = COVERS[name]()
