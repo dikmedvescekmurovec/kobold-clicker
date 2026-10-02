@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://bip2k8uic3ryo"
+path="res://.godot/imported/slash critical.mp3-db0475cc9f2249edac5f952ef2eef990.mp3str"
+
+[deps]
+
+source_file="res://Sounds/Selected/slash critical.mp3"
+dest_files=["res://.godot/imported/slash critical.mp3-db0475cc9f2249edac5f952ef2eef990.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

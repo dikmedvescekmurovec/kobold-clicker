@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://bs31i8lxm66my"
+path="res://.godot/imported/anvil hit.mp3-d5b524956d91a0d9cf028b1dda7d464e.mp3str"
+
+[deps]
+
+source_file="res://Sounds/Selected/anvil hit.mp3"
+dest_files=["res://.godot/imported/anvil hit.mp3-d5b524956d91a0d9cf028b1dda7d464e.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

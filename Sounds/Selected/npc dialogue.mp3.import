@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://bdro4drmc7uv2"
+path="res://.godot/imported/npc dialogue.mp3-6829b8449d7d3e2ad3e8ee47e5422f8a.mp3str"
+
+[deps]
+
+source_file="res://Sounds/Selected/npc dialogue.mp3"
+dest_files=["res://.godot/imported/npc dialogue.mp3-6829b8449d7d3e2ad3e8ee47e5422f8a.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4
