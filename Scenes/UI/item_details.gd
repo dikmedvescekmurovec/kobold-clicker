@@ -13,6 +13,27 @@ extends RefCounted
 ## ramp is chosen to be read on the white panel, not on wood.
 
 const PEAK_ICON := "res://Assets/UI/ui_icon_trophy.png"
+## The bar over a piece's name that says how far it is to its next plus: its name, for tests, and its
+## height in panel pixels, the 1 px rim of the trough included.
+const ASCENSION_BAR := "AscensionBar"
+const ASCENSION_HEIGHT := 4
+
+
+## How far `item` is to its next plus, as the bar over its name: a socket's tan, filling with its brown.
+static func _ascension_bar(item: Item, width: float) -> ColorRect:
+	var trough := ColorRect.new()
+	trough.name = ASCENSION_BAR
+	trough.color = Palette.SLOT_TAN
+	trough.custom_minimum_size = Vector2(width, ASCENSION_HEIGHT)
+	trough.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fill := ColorRect.new()
+	fill.color = Palette.SLOT_TAN_DK
+	fill.position = Vector2.ONE
+	fill.size = Vector2(floorf((width - 2.0) * float(item.ascension) / item.ascension_cost()), ASCENSION_HEIGHT - 2)
+	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	trough.add_child(fill)
+	return trough
+
 
 ## Empties `rows` and writes `item` into it. `width` is what a line may use before it wraps.
 ##
@@ -32,6 +53,10 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 		every_rank := false, base := true) -> void:
 	for child: Node in rows.get_children():
 		child.queue_free()
+	# On its way to the next plus, over the name the plus is written after: the Orbs of Ascension fed
+	# in against what that plus takes (`Item.ascension_cost`), a socket's tan filling with its brown.
+	if item.plus > 0 or item.ascension > 0:
+		rows.add_child(_ascension_bar(item, width))
 	rows.add_child(line(item.display_name(), item.text_color(), width))
 	# Rarity and level on one line: they are the two things that say what a piece is worth, and they
 	# are rolled together off the same body. A piece that needs both hands says so here as well: it

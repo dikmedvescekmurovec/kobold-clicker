@@ -43,8 +43,14 @@ var safe_level := 0
 ## Its modifiers roll, reroll and rescale as if the piece were `PLUS_LEVELS` levels higher for each
 ## (`mod_level`); its base stats do not move.
 var plus := 0
+## Orbs of Ascension fed toward the next plus, which takes `ascension_cost()` of them (the user's,
+## 2026-10-03: +1 one, +2 two, +3 three). Saved only above 0.
+var ascension := 0
 ## An Orb of Expansion has gone into it: one modifier more than its rarity allows, once per piece.
 var extra_slot := false
+## The player's padlock: a level's Sell all and bin pass it by (`Inventory.discard_level`). Not the
+## smith's Lock, which holds one modifier (`locked_mod`).
+var locked := false
 
 ## What one `plus` is worth to a piece's modifiers, in item levels. A percent band grows 12% a level,
 ## so three levels is about +40% a plus. A dial, unplayed.
@@ -151,6 +157,11 @@ func _set_tier(mod: Dictionary, from: int, tier: int) -> void:
 ## Everything that rolls, rerolls or writes a band for a piece already made asks this, never `level`.
 func mod_level() -> int:
 	return level + plus * PLUS_LEVELS
+
+
+## How many Orbs of Ascension the next plus takes: one more for every plus already on the piece.
+func ascension_cost() -> int:
+	return plus + 1
 
 
 ## One plus more: every modifier keeps its place in its band as the band moves up `PLUS_LEVELS`
@@ -384,8 +395,12 @@ func to_dict() -> Dictionary:
 		out["safe_level"] = safe_level
 	if plus > 0:
 		out["plus"] = plus
+	if ascension > 0:
+		out["ascension"] = ascension
 	if extra_slot:
 		out["extra_slot"] = true
+	if locked:
+		out["locked"] = true
 	return out
 
 
@@ -432,7 +447,9 @@ static func from_dict(data: Variant) -> Item:
 	item.broken = bool(saved.get("broken", false))
 	item.safe_level = maxi(0, int(saved.get("safe_level", 0)))
 	item.plus = maxi(0, int(saved.get("plus", 0)))
+	item.ascension = maxi(0, int(saved.get("ascension", 0)))
 	item.extra_slot = bool(saved.get("extra_slot", false))
+	item.locked = bool(saved.get("locked", false))
 	# A save written before pieces carried their own numbers has none to read, and what such a
 	# piece was worth when it was written is exactly the table unscaled -- so that is what it keeps.
 	var saved_stats: Variant = saved.get("stats", null)

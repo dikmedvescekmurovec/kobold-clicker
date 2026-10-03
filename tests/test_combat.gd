@@ -26,6 +26,7 @@ func _run() -> void:
 	_check(_test_hits_only_land_on_a_waiting_enemy() == true, "hit timing tests ran to the end")
 	_check(_test_what_a_hit_is_worth() == true, "damage tests ran to the end")
 	_check(_test_the_weapon_swings_itself() == true, "attack speed tests ran to the end")
+	_check(_test_the_hand_is_capped() == true, "click cap tests ran to the end")
 	_check(_test_spawn_speed() == true, "spawn speed tests ran to the end")
 	_check(_test_bleed() == true, "bleed tests ran to the end")
 	_check(_test_capstone_effects() == true, "capstone effect tests ran to the end")
@@ -211,6 +212,38 @@ func _test_the_weapon_swings_itself() -> bool:
 	for i in int(Encounter.SECONDS / 0.05):
 		idle.advance(0.05)
 	_check(idle.finished and idle.victory, "a fast weapon wins the first ring on its own")
+
+	var piled := Encounter.for_tile(Vector2i(1, 0), "grass")
+	piled.arm({"attack_speed": Encounter.SWING_CAP * 4.0})
+	_check(piled.attack_speed == Encounter.SWING_CAP, "speed past the cap swings at the cap")
+	return true
+
+
+## The hand's allowance: a burst lands whole, then it fills at `CLICK_CAP` a second, so a hand a
+## click a second too fast loses only the clicks past the cap and one under it loses nothing.
+## `hit()` is never capped. Counted by the tally, which counts every click that gets through.
+func _test_the_hand_is_capped() -> bool:
+	var spam := Encounter.farm(Vector2i(0, 0), "grass")
+	spam.start()
+	for i in 10:
+		spam.click()
+	_check(spam.tally.get("clicks") == int(Encounter.CLICK_BURST),
+			"a burst gets its allowance through, not %d" % spam.tally.get("clicks"))
+	for i in 10:
+		spam.hit()
+	_check(spam.tally.get("clicks") == int(Encounter.CLICK_BURST) + 10, "and a hit is never capped")
+
+	for rate: float in [Encounter.CLICK_CAP - 1.0, Encounter.CLICK_CAP + 1.0]:
+		var hand := Encounter.farm(Vector2i(0, 0), "grass")
+		hand.start()
+		var n := int(rate * 60.0)
+		for i in n:
+			hand.click()
+			hand.advance(1.0 / rate)
+		var through: int = hand.tally.get("clicks")
+		var most := mini(n, int(Encounter.CLICK_BURST + Encounter.CLICK_CAP * (n - 1) / rate))
+		_check(absi(through - most) <= 1, "%d a second for a minute: %d of %d through, not %d"
+				% [rate, most, n, through])
 	return true
 
 

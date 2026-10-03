@@ -189,7 +189,7 @@ var _armed := "":
 		if orb == _armed:
 			return
 		_armed = orb
-		var mark: Texture2D = null if orb == "" else OrbTable.icon(orb)
+		var mark: Texture2D = null if orb == "" 				else SuperOrbTable.icon(orb) if SuperOrbTable.has(orb) else OrbTable.icon(orb)
 		Cursors.hold(mark)
 		held_changed.emit(orb)
 
@@ -498,10 +498,12 @@ func _section_heading(level: int) -> HBoxContainer:
 
 	# In a town that buys gear the same button sells the handful instead of destroying it: it is the
 	# same act -- being done with a level -- and the merchant is simply a better way to do it.
-	var held := inventory.count_at(level)
+	# What the press would take: a locked piece stays.
+	var loose := inventory.items.filter(
+			func(item: Item) -> bool: return item.level == level and not item.locked)
+	var held := loose.size()
 	var selling := _buys(TownServices.GEAR)
-	var worth := TownPrices.sell_total(inventory.items.filter(
-			func(item: Item) -> bool: return item.level == level)) if selling else 0.0
+	var worth := TownPrices.sell_total(loose) if selling else 0.0
 	# A mark either way, coins for selling and a bin for discarding; the tooltip says the sum.
 	var things := "item" if held == 1 else "items"
 	var clear := UITheme.button("", UITheme.BARE_BUTTON,
@@ -704,7 +706,7 @@ func _drop_level(level: int, selling: bool) -> void:
 	var deed := _sell_level if selling else _clear_level
 	deed.call(level, Settings.uniques == Settings.Uniques.SELL)
 	var uniques := inventory.items.filter(func(item: Item) -> bool:
-		return item.level == level and not item.unique.is_empty())
+		return item.level == level and not item.unique.is_empty() and not item.locked)
 	if Settings.uniques != Settings.Uniques.ASK or uniques.is_empty():
 		return
 	var names := ", ".join(uniques.map(func(item: Item) -> String: return item.display_name()))
@@ -872,6 +874,25 @@ func _show_item(index: int) -> void:
 			discard.pressed.connect(_on_discard_pressed.bind(item))
 		discard.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_action_box.add_child(discard)
+	# The padlock, held down and green while the piece is locked, as Auto is (the pressed pixel alone is
+	# too quiet): a level's Sell all and bin pass it by. Never "Lock", which is the smith's on a
+	# modifier. Not on the heirlooms, which are never thrown away by the handful.
+	if not _heirlooms:
+		var lock := UITheme.button("Never sell", UITheme.GO_BUTTON if item.locked else "LightButton",
+				"Let Sell all and the bin take this again" if item.locked
+				else "Sell all and the bin pass this by")
+		lock.icon = ItemSlot.lock_texture()
+		lock.toggle_mode = true
+		lock.button_pressed = item.locked
+		lock.toggled.connect(_on_lock_toggled.bind(item))
+		lock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_action_box.add_child(lock)
+
+
+func _on_lock_toggled(on: bool, item: Item) -> void:
+	item.locked = on
+	_save()
+	refresh()
 
 
 ## A worn piece's one button. No Discard: the cap is the bag's alone, so nothing pushes the player to
@@ -1145,20 +1166,18 @@ func _open_piece() -> Item:
 	return null
 
 
-## Every orb held, lit, whatever is open: an orb is picked up, never spent on the open piece. The super
-## orbs are the exception -- they have no hand to be held in -- lit only for the heirloom open.
+## Every orb held, lit, whatever is open: an orb is picked up, never spent on the open piece -- the
+## super orbs too, since 2026-10-03 (the user's: "first click orb, then gear").
 func refresh_orbs() -> void:
 	UITheme.clear(_orb_tray)
-	var against := _open_piece()
 	if _transcending:
 		# Over the bag there is no tray at all, and over the heirlooms it is the super orbs: one count
 		# for the six of them (said in the corner, `_count`), so no square wears a number.
 		_orb_tray.visible = _heirlooms
 		_orb_rule.visible = _heirlooms
 		for orb: String in SuperOrbTable.orbs() if _heirlooms else []:
-			var slot := OrbSlot.make(orb, mini(_purse.super_orbs, 1),
-					against != null and SuperOrbTable.can_apply(orb, against))
-			slot.pressed.connect(_on_super_orb_pressed)
+			var slot := OrbSlot.make(orb, mini(_purse.super_orbs, 1), true, orb == _armed)
+			slot.pressed.connect(_on_orb_pressed)
 			slot.hovered.connect(_on_orb_hovered.bind(slot))
 			slot.unhovered.connect(_hide_orb_card)
 			_orb_tray.add_child(slot)
@@ -1181,7 +1200,7 @@ func refresh_orbs() -> void:
 ## it (`_craft`). With a piece open the press shuts it first (the user's rule, 2026-10-01): an orb is
 ## never spent on the open piece. Orbs are never sold: a vendor only sells them.
 func _on_orb_pressed(orb: String) -> void:
-	if _purse.orb_count(orb) <= 0:
+	if _count_of(orb) <= 0:
 		return
 	if _open_piece() != null:
 		# Which puts down whatever was held, so the press always picks this one up.
@@ -1190,15 +1209,18 @@ func _on_orb_pressed(orb: String) -> void:
 	refresh()
 
 
-## A super orb pressed with a piece open. An aimed one asks which modifier, and that answer is the
-## only question it asks; the rest ask whether, every time: a wall was broken for each.
-func _on_super_orb_pressed(orb: String) -> void:
-	var item := _open_piece()
+## How many of `orb` the player has to spend: the one count all six super orbs share, or the orb's own.
+func _count_of(orb: String) -> int:
+	return _purse.super_orbs if SuperOrbTable.has(orb) else _purse.orb_count(orb)
+
+
+## A held super orb pressed on a piece. An aimed one asks which modifier, the only question any of them
+## asks; the rest are spent at once, as an ordinary orb is.
+func _super_press(orb: String, item: Item) -> void:
 	if _purse.super_orbs <= 0 or not SuperOrbTable.can_apply(orb, item):
 		return
 	if not SuperOrbTable.aimed(orb):
-		_ask("super_orb", orb, "Use it on %s? It cannot be taken back." % item.display_name(),
-				"Use", "LightButton", _super_craft.bind(orb, item, -1), false)
+		_super_craft(orb, item, -1)
 		return
 	_close_confirm()
 	_confirm = Control.new()
@@ -1233,6 +1255,8 @@ func _super_craft(orb: String, item: Item, index: int) -> void:
 		return
 	_purse.super_orbs -= 1
 	print("Spent %s on %s (%s, level %d)" % [orb, item.display_name(), item.rarity_name(), item.level])
+	if _purse.super_orbs <= 0:
+		_armed = ""
 	refresh()
 	_orb_applied()
 	crafted.emit(orb)
@@ -1249,6 +1273,9 @@ func craft_held(item: Item, written: Callable) -> void:
 ## An orb that would take a piece down a rarity asks first, with a tick to stop asking (the user's,
 ## 2026-10-02): one misplaced Transmutation is an epic gone. Anything else is done at once.
 func _craft(orb: String, item: Item, written := Callable()) -> void:
+	if SuperOrbTable.has(orb):
+		_super_press(orb, item)
+		return
 	var to: int = OrbTable.RARITY_OF.get(orb, item.rarity)
 	if to < item.rarity and OrbTable.can_apply(orb, item):
 		_ask("lower_rarity", orb, "Make the %s %s %s? It cannot be taken back." % [
@@ -1317,14 +1344,14 @@ static func _upgrade_mark() -> TextureRect:
 
 ## A square the held orb can do nothing to goes as grey as an orb with nothing to do (`OrbSlot.DIM`).
 func _dim_for_orb(slot: Control, item: Item) -> void:
-	if _armed != "" and item != null and not OrbTable.can_apply(_armed, item):
+	if _armed != "" and item != null and not (SuperOrbTable.can_apply(_armed, item) if SuperOrbTable.has(_armed)
+			else OrbTable.can_apply(_armed, item)):
 		slot.modulate = OrbSlot.DIM
 
 
 ## Placed now and again deferred: the first pass measures labels that have not laid out yet.
 func _on_orb_hovered(orb: String, slot: OrbSlot) -> void:
-	_orb_card.fill(orb, _purse.super_orbs if SuperOrbTable.has(orb) else _purse.orb_count(orb),
-			_open_piece())
+	_orb_card.fill(orb, _count_of(orb))
 	_orb_card.show()
 	_place_orb_card(slot.get_global_rect())
 	_place_orb_card.call_deferred(slot.get_global_rect())

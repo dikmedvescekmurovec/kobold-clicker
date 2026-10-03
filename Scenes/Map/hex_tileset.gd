@@ -12,6 +12,8 @@ const CUSTOM_DATA := ["name", "group", "env", "kind"]
 ## of four, 2026-10-01: the light lands kept apart from the cream they stand on).
 const ENV_HEX_ROWS := [2, 6, 10, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 10, 6, 2]
 const ENV_HEX_EDGE := Palette.SLOT_TAN_DK
+## A terrain's name where its key capitalised is not a word for land.
+const TERRAIN_NAMES := {"grass": "Grassland", "dirt": "Barrens"}
 
 var tile_set: TileSet
 var tile_size: Vector2i
@@ -62,6 +64,11 @@ func env_icon(env: String) -> TextureRect:
 	icon.texture = _env_icons[env]
 	icon.custom_minimum_size = _env_icons[env].get_size()
 	return icon
+
+
+## What the interface calls an environment: the tile panel's row and a swatch's tooltip.
+static func env_name(env: String) -> String:
+	return str(TERRAIN_NAMES.get(env, env.capitalize()))
 
 
 ## The hexagon itself, its edge one pixel outside it all round.

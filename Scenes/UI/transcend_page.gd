@@ -22,6 +22,7 @@ extends Control
 signal finished
 
 const CROWN_ICON := "res://Assets/UI/ui_icon_crown.png"
+const CHEST_ICON := "res://Assets/UI/ui_icon_chest.png"
 const SKULL_ICON := "res://Assets/UI/ui_icon_skull.png"
 ## The curses' table, in panel pixels a column: the tick box and the name, the skulls, what it costs
 ## and what it pays. A budget, like every width here: the four and their gaps stay inside a 576 px window.
@@ -55,6 +56,10 @@ var _choice: VBoxContainer
 var _create_page: BagPage
 var _upgrade_page: BagPage
 var _back: Button
+## Under the arrow on the make-an-heirloom screen, while heirlooms are held: the crown turns the page to
+## the heirlooms, to weigh the piece against them, and the chest turns it back to the items.
+var _swap: Button
+var _swapping := false
 ## The curses' face, built again at every press the way the choice is.
 var _curse_face: VBoxContainer
 ## The table's rows and the scroll they stand in: `_layout` gives the scroll what the window has left,
@@ -98,6 +103,11 @@ func _ready() -> void:
 	_back.pressed.connect(_show_choice)
 	_back.hide()
 	add_child(_back)
+	_swap = UITheme.icon_button(load(CROWN_ICON), "Your heirlooms", _ui_scale)
+	_swap.pressed.connect(func() -> void:
+		_open(_upgrade_page if _create_page.visible else _create_page, true))
+	_swap.hide()
+	add_child(_swap)
 	get_viewport().size_changed.connect(_layout)
 	if Settings.animations == Settings.Anim.NONE:
 		_show_choice()
@@ -113,6 +123,8 @@ func _show_choice() -> void:
 	_create_page.hide()
 	_upgrade_page.hide()
 	_back.hide()
+	_swapping = false
+	_swap.hide()
 	if _curse_face != null:
 		_curse_face.queue_free()
 		_curse_face = null
@@ -131,7 +143,7 @@ func _show_choice() -> void:
 	var orbs := _inventory.super_orbs
 	cards.add_child(_card("Create an heirloom", load(CROWN_ICON), not _made and not lost,
 			"Lost to No Second Chances" if lost else "Done" if _made else "",
-			_open.bind(_create_page)))
+			_open.bind(_create_page, true)))
 	cards.add_child(_card("Upgrade an heirloom", SuperOrbTable.icon(SuperOrbTable.ASCENSION),
 			held > 0 and orbs > 0,
 			"None held" if held == 0 else "No orbs left" if orbs == 0 else "%d to spend" % orbs,
@@ -305,11 +317,16 @@ func _on_curse_toggled(on: bool, id: String) -> void:
 	_show_curses()
 
 
-func _open(page: BagPage) -> void:
+## `swap`: the page is the make-an-heirloom screen's, items or heirlooms, and wears the crown or the chest.
+func _open(page: BagPage, swap := false) -> void:
 	_warned = false
 	_choice.hide()
 	_create_page.hide()
 	_upgrade_page.hide()
+	_swapping = swap and _inventory.stash().total() + _inventory.stash().equipment.worn.size() > 0
+	_swap.icon = load(CROWN_ICON if page == _create_page else CHEST_ICON)
+	_swap.tooltip_text = "Your heirlooms" if page == _create_page else "Items"
+	_swap.visible = _swapping
 	page.open()
 	page.show()
 	page.layout()
@@ -323,6 +340,11 @@ func _place_back(page: BagPage) -> void:
 				(_back.get_combined_minimum_size().x + BagPage.WORN_GAP) * _ui_scale, 0.0)
 		# A page as wide as the window leaves it nowhere to stand; the page's X is the same way back.
 		_back.visible = _back.position.x >= 0.0
+		_swap.position = _back.position + Vector2(0.0,
+				(_back.get_combined_minimum_size().y + BagPage.WORN_GAP) * _ui_scale)
+		# ponytail: where the arrow has no room (a phone held upright) the crown goes with it; give it a
+		# place in the page's own bar if that turns out to matter.
+		_swap.visible = _swapping and _back.visible
 
 
 func _layout() -> void:

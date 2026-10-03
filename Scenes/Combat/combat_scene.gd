@@ -556,8 +556,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		get_viewport().set_input_as_handled()
+		# Swings whether or not the hand's allowance lets the blow through, so a click past the cap
+		# still feels heard.
 		_swing()
-		fight.hit()
+		fight.click()
 		_refresh()
 
 

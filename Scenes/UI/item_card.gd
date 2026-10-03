@@ -39,6 +39,9 @@ const SHINE_TIME := Vector2(0.4, 1.0)
 const SHINE_REACH := 40.0
 ## The child `shine` adds.
 const SHINE_NAME := "Shine"
+## How bright the light behind the card stands while the orb in hand could go into the piece under
+## it (`lights`): `shine`'s light held low and still, with no rays.
+const HOVER_LIFE := 0.3
 ## The keys' pictures, cut from the keyboard pack by `tools/ui_kit.py`.
 const KEY_ICONS := {
 	"alt": "res://Assets/UI/ui_key_alt.png",
@@ -61,6 +64,11 @@ var _alt := false
 ## new `Item`s too (`VendorStock.items`), so nothing pressed is still there to be compared with.
 var _muted := Rect2()
 var _pressed_at := Vector2.INF
+## The orb in a bag page's hand, or "" (`BagPage.held_changed`, wired in the main scene).
+var held := ""
+## The light `lights` stands behind the card, a `Node2D` for `shine`'s reasons, and drawn under it.
+var _hover := Node2D.new()
+var _hover_glow := ShaderMaterial.new()
 
 
 func _init(ui_scale: float) -> void:
@@ -83,6 +91,16 @@ func _init(ui_scale: float) -> void:
 	_worn_rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_worn.add_child(_worn_rows)
 	_worn.hide()
+	_hover_glow.shader = ORB_SHINE
+	_hover_glow.set_shader_parameter("reach", SHINE_REACH)
+	_hover.material = _hover_glow
+	_hover.show_behind_parent = true
+	_hover.hide()
+	_hover.draw.connect(func() -> void:
+		_hover_glow.set_shader_parameter("card", size)
+		_hover.draw_rect(Rect2(-Vector2.ONE * SHINE_REACH, size + Vector2.ONE * SHINE_REACH * 2.0), Color.WHITE))
+	resized.connect(_hover.queue_redraw)
+	add_child(_hover)
 	hide()
 
 
@@ -101,6 +119,14 @@ func _process(_delta: float) -> void:
 	# the card of a square that is gone standing: a vendor's shelf does exactly that on a press.
 	# A finger has no Alt to hold: under one the worn piece is always the second card.
 	var alt := Input.is_key_pressed(KEY_ALT) or Cursors.touched
+	var lit := lights(slot)
+	if lit != _hover.visible:
+		_hover.visible = lit
+		if lit:
+			_hover_glow.set_shader_parameter("colour",
+					(SuperOrbTable.ORBS if SuperOrbTable.has(held) else OrbTable.ORBS)[held].glow)
+			_hover.create_tween().tween_method(func(life: float) -> void:
+				_hover_glow.set_shader_parameter("life", life), 0.0, HOVER_LIFE, SHINE_RISE)
 	if alt == _alt and (is_instance_valid(_shown) and slot == _shown or (slot == null and not visible)):
 		return
 	_alt = alt
@@ -154,6 +180,16 @@ func hovered(at: Vector2, pressed: bool) -> ItemSlot:
 	_muted = Rect2()
 	_pressed_at = Vector2.INF
 	return slot
+
+
+## Whether the card over `slot` wears a faint, still light in the held orb's colour: the orb would go
+## into its piece. Not on a square with a `hint`, which is no piece of the player's.
+func lights(slot: ItemSlot) -> bool:
+	if slot == null or held == "" or slot.hint.is_valid() or Settings.animations == Settings.Anim.NONE:
+		return false
+	if SuperOrbTable.has(held):
+		return SuperOrbTable.can_apply(held, slot.item)
+	return OrbTable.can_apply(held, slot.item)
 
 
 ## Light from behind the card in `orb`'s colour (`glow`, `orb_shine.gdshader`), swelling in and dying

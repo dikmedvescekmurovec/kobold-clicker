@@ -35,7 +35,7 @@ const ORBS := {
 	ASCENSION: {
 		"glow": Color("ffc825"),
 		"aimed": false,
-		"does": "Makes the item +1 for good: every modifier on it rolls as if the item were %d levels higher. It can be done again and again.",
+		"does": "Takes the item toward its next +1: +1 takes one, +2 two more, +3 three more, and so on. Each + rolls every modifier on it as if the item were %d levels higher, for good.",
 	},
 	PERFECTION: {
 		"glow": Color("c7cfdd"),
@@ -156,7 +156,11 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator, index := 
 				return false
 			item.mods[index] = fresh
 		ASCENSION:
-			item.ascend()
+			# One orb fed in; the plus comes when the last of its cost is, and the next costs one more.
+			item.ascension += 1
+			if item.ascension >= item.ascension_cost():
+				item.ascension = 0
+				item.ascend()
 		PERFECTION:
 			item.mods[index]["perfect"] = true
 			item.refresh_perfect()

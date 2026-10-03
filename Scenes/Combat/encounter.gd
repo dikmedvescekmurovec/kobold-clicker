@@ -143,9 +143,9 @@ const DUNGEON := {"enemies": 15, "seconds": 60.0, "elite_every": 5, "boss_last":
 ## Where its creatures live (`EnemyRoster`) and what is drawn behind them: no land on the map.
 const DUNGEON_ENV := "cave"
 ## What one floor down multiplies a body's health by: a depth is fifteen of them, so the next Gollux
-## wants about eight times the damage the last one did -- slower than the walls' sixteen (the user's,
-## 2026-10-03), and steeper than the 1.12 they first found too gentle. The dial for how far apart the depths are.
-const DUNGEON_GROWTH := 1.15
+## wants nine times the damage the last one did (1.1578 ^ 15 = 9.0) -- slower than the walls' sixteen
+## (the user's, 2026-10-03). The dial for how far apart the depths are.
+const DUNGEON_GROWTH := 1.1578
 ## What the first Gollux's health is rounded to (`gollux_hp`).
 const GOLLUX_ROUND := 500000.0
 ## What a floor's body is worth by its tier, and nothing else about it: the roster's sizes and its
@@ -329,6 +329,10 @@ var crit_damage := 0.0
 ## Swings a second the weapon takes on its own. Zero with nothing equipped, so a bare-handed fight is
 ## exactly the clicking game this was before gear meant anything.
 var attack_speed := 0.0
+## The ceiling on `attack_speed`, after everything that multiplies it (the user's dial, 2026-10-03):
+## past about ten a second the swings, numbers and sounds are a smear, and the hand's share of the
+## damage -- clicks over clicks and swings -- falls under a third at an attentive five clicks.
+const SWING_CAP := 10.0
 ## What a blow leaves behind, as a percentage of it: 20 means the body goes on losing a fifth of that
 ## blow every second it stands there. A mace's, and nothing else's. Wounds do not stack -- a blow
 ## either deepens the one wound or does nothing to it -- so a fast weapon cannot pile them up.
@@ -430,6 +434,13 @@ var _one_blow := 0
 const KNUCKLE_WINDOW := 1.0
 var _click_streak := 0
 var _since_click := 0.0
+## The hand's allowance (`click`), the user's dials (2026-10-03): it fills at `CLICK_CAP` a second on the
+## fight's own time and holds `CLICK_BURST`, so a hand at sixteen a second loses one click in sixteen
+## and an autoclicker gets `CLICK_CAP`. Not a least gap between clicks: a hand's gaps wander, and a
+## gap of a fifteenth of a second would halve a steady sixteen to eight.
+const CLICK_CAP := 15.0
+const CLICK_BURST := 3.0
+var _clicks_left := CLICK_BURST
 ## What a blow has to leave an enemy under, as a share of its health, for the Assassin capstone to
 ## finish it; the Headsman's share (`UniqueTable`) adds to it.
 const EXECUTE_SHARE := 0.1
@@ -980,6 +991,15 @@ func hit() -> bool:
 	return landed
 
 
+## A click from the player's hand: `hit()`, unless the hand has outrun its allowance (`CLICK_CAP`). One
+## past it is no click at all -- no blow, no streak, no count. The camp and the tests call `hit()`.
+func click() -> bool:
+	if _clicks_left < 1.0:
+		return false
+	_clicks_left -= 1.0
+	return hit()
+
+
 ## What the player's gear and skills are worth, from `Inventory.stats()`. Called before the fight starts,
 ## and again whenever the gear changes in the bag mid-fight, so everything here is worked out afresh
 ## from `stats` and the clock moves by the difference. A fight nobody arms is a bare-handed one, which
@@ -1036,7 +1056,7 @@ func arm(stats: Dictionary) -> void:
 	dodge *= TileMods.factor(mods, "dodge")
 	block *= TileMods.factor(mods, "block")
 	time_on_hit *= TileMods.factor(mods, "time_on_hit")
-	attack_speed *= TileMods.factor(mods, "swing")
+	attack_speed = minf(attack_speed * TileMods.factor(mods, "swing"), SWING_CAP)
 	# From the const rather than from `walk_in`, so arming twice does not take the share off twice.
 	spawn_speed = clampf(float(stats.get("spawn_speed", 0.0)), 0.0, 100.0)
 	walk_in = WALK_IN * TileMods.factor(mods, "walk_in") * (1.0 - spawn_speed / 100.0)
@@ -1448,6 +1468,7 @@ func advance(delta: float) -> void:
 			spent *= HOME_CLOCK
 		time_left = maxf(time_left - spent, 0.0)
 	_since_click += delta
+	_clicks_left = minf(_clicks_left + delta * CLICK_CAP, CLICK_BURST)
 	if _since_click > KNUCKLE_WINDOW:
 		_click_streak = 0
 	while not finished and phase != Phase.WAITING and delta > 0.0:

@@ -2179,19 +2179,33 @@ func _test_heirlooms() -> bool:
 	_check(not FileAccess.file_exists(TEST_PATH), "and writes nothing")
 	choosing.queue_free()
 
-	# Over the heirlooms the tray is the super orbs: an aimed one asks which line, the rest whether.
+	# Over the heirlooms the tray is the super orbs, used as an ordinary orb is: picked up, then pressed
+	# on a piece. An aimed one asks which line; the rest are spent at once.
+	owner.super_orbs = 2
 	var upgrading := BagPage.new(owner, "", 2.0, true, true)
 	root.add_child(upgrading)
 	await process_frame
 	_check(upgrading._orb_tray.get_child_count() == SuperOrbTable.orbs().size(), "six super orbs in the tray")
-	upgrading._select_item(0)
-	upgrading._on_super_orb_pressed(SuperOrbTable.PERFECTION)
+	var heirloom_square := func() -> Control:
+		for section: Node in upgrading._sections.get_children():
+			if section is GridContainer and section.get_child_count() > 0:
+				return section.get_child(0)
+		return null
+	upgrading._on_orb_pressed(SuperOrbTable.PERFECTION)
+	_check(upgrading._armed == SuperOrbTable.PERFECTION and owner.super_orbs == 2, "a super orb is picked up, not spent")
+	upgrading._on_clicked(_square_spot(heirloom_square.call()))
 	_check(upgrading._confirm != null and _deep_button(upgrading._confirm,
-			ModifierTable.line(treasure.mods[0])) != null, "Perfection asks which modifier")
+			ModifierTable.line(treasure.mods[0])) != null, "and pressed on an heirloom Perfection asks which modifier")
 	_deep_button(upgrading._confirm, ModifierTable.line(treasure.mods[0])).pressed.emit()
-	_check(bool(treasure.mods[0].get("perfect", false)) and owner.super_orbs == 0, "and spends the orb on it")
-	upgrading._on_super_orb_pressed(SuperOrbTable.ASCENSION)
-	_check(upgrading._confirm == null and treasure.plus == 0, "with none left nothing happens")
+	_check(bool(treasure.mods[0].get("perfect", false)) and owner.super_orbs == 1, "and spends the orb on it")
+	_check(upgrading._armed == SuperOrbTable.PERFECTION, "still held while any are left")
+	upgrading._on_orb_pressed(SuperOrbTable.ASCENSION)
+	upgrading._on_clicked(_square_spot(heirloom_square.call()))
+	_check(upgrading._confirm == null and treasure.plus == 1 and owner.super_orbs == 0,
+			"Ascension asks nothing: +1 for its one orb")
+	_check(upgrading._armed == "", "and with none left the hand is empty")
+	upgrading._on_orb_pressed(SuperOrbTable.ASCENSION)
+	_check(upgrading._armed == "", "none to pick up")
 	_check(not FileAccess.file_exists(TEST_PATH), "and none of it is written")
 	upgrading.queue_free()
 	var page := BagPage.new(owner, TEST_PATH, 2.0, true)
@@ -2313,9 +2327,26 @@ func _test_super_orbs() -> bool:
 				maxi(1, 10 - int(before[i].get("under", 0))), sword.tier_of(sword.mods[i])),
 				"%s moved with its band" % id)
 	_check(sword.display_name() == "Wooden Sword +1", "and it is written after the name")
-	_check(SuperOrbTable.apply(SuperOrbTable.ASCENSION, sword, rng) and sword.plus == 2, "and it can be done again")
-	_check(Item.from_dict(sword.to_dict()).plus == 2 and not _piece(ItemRarity.Rarity.RARE, 1).to_dict().has("plus"),
-			"saved with the piece, and only where there is one")
+	# Each plus takes one orb more than the last (the user's): +2 is two, fed in one at a time.
+	_check(SuperOrbTable.apply(SuperOrbTable.ASCENSION, sword, rng) and sword.plus == 1 and sword.ascension == 1,
+			"+2 takes two: the first is fed in and the piece is still +1")
+	var card := VBoxContainer.new()
+	ItemDetails.fill(card, sword, 200.0)
+	var bar := card.get_node_or_null(ItemDetails.ASCENSION_BAR)
+	_check(bar != null and card.get_child(0) == bar and _said_by(bar).is_empty()
+			and is_equal_approx((bar.get_child(0) as Control).size.x, floorf((200.0 - 2.0) / 2.0)),
+			"the card's bar over its name is half full, with no words on it")
+	card.free()
+	_check(Item.from_dict(sword.to_dict()).ascension == 1, "and the save keeps how far")
+	_check(SuperOrbTable.apply(SuperOrbTable.ASCENSION, sword, rng) and sword.plus == 2 and sword.ascension == 0,
+			"and the second makes it +2")
+	_check(sword.ascension_cost() == 3, "the next takes three")
+	_check(Item.from_dict(sword.to_dict()).plus == 2 and not _piece(ItemRarity.Rarity.RARE, 1).to_dict().has("plus")
+			and not sword.to_dict().has("ascension"), "saved with the piece, and only where there is one")
+	var bare_card := VBoxContainer.new()
+	ItemDetails.fill(bare_card, _piece(ItemRarity.Rarity.RARE, 1), 200.0)
+	_check(bare_card.get_node_or_null(ItemDetails.ASCENSION_BAR) == null, "a piece with no plus has no bar")
+	bare_card.free()
 
 	# Perfection: the top of the band, through a Divine, the smith and the end of a world.
 	_check(not SuperOrbTable.apply(SuperOrbTable.PERFECTION, sword, rng), "an aimed orb needs a line to aim at")
@@ -2329,7 +2360,7 @@ func _test_super_orbs() -> bool:
 	_check(sword.mods[0]["value"] == top.call(), "a Divine leaves it there")
 	_check(Blacksmith.upgrade(sword, 99, _never_breaks()) and sword.mods[0]["value"] == top.call(),
 			"the smith's upgrade carries it to the new top")
-	SuperOrbTable.apply(SuperOrbTable.ASCENSION, sword, rng)
+	sword.ascend()
 	_check(sword.mods[0]["value"] == top.call(), "so does another +1")
 	sword.transcend()
 	_check(sword.plus == 3 and sword.mod_level() == 1 + 3 * Item.PLUS_LEVELS
@@ -2354,7 +2385,7 @@ func _test_super_orbs() -> bool:
 	var written := sword.fast_lines(true)
 	var bound: Dictionary = sword.mods.filter(func(mod: Dictionary) -> bool: return mod.get("bound", false))[0]
 	var held := bound.duplicate()
-	SuperOrbTable.apply(SuperOrbTable.ASCENSION, sword, rng)
+	sword.ascend()
 	_check(bound == held and sword.fast_lines(true) == written, "an Ascension leaves a held line, band and all")
 	_check(Item.from_dict(sword.to_dict()).fast_lines(true) == written, "and the save keeps its band")
 	var heir := Item.from_dict(sword.to_dict())
@@ -2602,6 +2633,15 @@ func _test_autodiscard() -> bool:
 	_check(bag.levels() == [7, 3], "a level with a rule and nothing in it keeps its heading")
 	bag.set_autodiscard(3, false)
 	_check(bag.levels() == [7], "and loses it once the rule goes too")
+
+	# A locked piece is passed by, and stays locked across a save.
+	var kept := _piece(ItemRarity.Rarity.COMMON, 7)
+	kept.locked = true
+	bag.add(kept)
+	gone = bag.discard_level(7)
+	_check(gone.size() == 1 and bag.items == [kept], "Clear and Sell all leave a locked piece")
+	_check(Item.from_dict(kept.to_dict()).locked, "and the lock is saved")
+	_check(not Item.from_dict(gone[0].to_dict()).locked, "an unlocked one reads back unlocked")
 	return true
 
 
@@ -3632,6 +3672,8 @@ func _test_crafting_from_the_bag() -> bool:
 	var sword_square: Control = squares.filter(func(s: ItemSlot) -> bool: return s.item == sword)[0]
 	_check(sword_square.modulate == OrbSlot.DIM and plain_square.modulate == Color.WHITE,
 			"the square it can do nothing to is grey and the other is not")
+	_check(main._item_card.lights(plain_square) and not main._item_card.lights(sword_square),
+			"and only the one it would go into lights the card")
 	# A press on the grey one costs nothing and opens nothing; the orb is still held.
 	main.bag_page._on_clicked(_square_spot(sword_square))
 	_check(main.inventory.orb_count("Orb of Transmutation") == 1 and main.bag_page._selected == -1

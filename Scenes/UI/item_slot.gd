@@ -41,6 +41,21 @@ const SHADOW := Color(0.65, 0.65, 0.65)
 const KNOWN_SOCKET := Color(1, 1, 1, 0.4)
 const GREY := preload("res://Scenes/UI/grey.gdshader")
 static var _grey: ShaderMaterial
+## A locked piece's padlock (`Item.locked`), in the corner across from its `+n`: bone over an ink
+## outline, as the `+n` is. The child's name is how a test finds it.
+const LOCK: Array[String] = [
+	"..ooo..",
+	".o###o.",
+	"o#ooo#o",
+	"o#o.o#o",
+	"ooooooo",
+	"o#####o",
+	"o##o##o",
+	"o#####o",
+	"ooooooo",
+]
+const LOCK_NAME := "Lock"
+static var _lock: ImageTexture
 
 ## What the square holds (null for an empty socket) and whether it is the one its page has open.
 var item: Item
@@ -89,6 +104,26 @@ func setup(held: Item, open := false, translucent := false) -> void:
 	# Last, over the frame, in the orb tray's corner numeral: every square that shows a piece is this one.
 	if item.plus > 0:
 		add_child(OrbSlot.count_label("+%d" % item.plus))
+	if item.locked:
+		var lock := TextureRect.new()
+		lock.name = LOCK_NAME
+		lock.texture = lock_texture()
+		lock.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lock.position = Vector2(1, SIDE - LOCK.size() - 1)
+		add_child(lock)
+
+
+## The padlock, drawn once: the square's corner mark and the bag's Lock button wear it.
+static func lock_texture() -> ImageTexture:
+	if _lock == null:
+		var image := Image.create(LOCK[0].length(), LOCK.size(), false, Image.FORMAT_RGBA8)
+		for y in LOCK.size():
+			for x in LOCK[y].length():
+				match LOCK[y][x]:
+					"#": image.set_pixel(x, y, Palette.BONE)
+					"o": image.set_pixel(x, y, Palette.INK)
+		_lock = ImageTexture.create_from_image(image)
+	return _lock
 
 
 ## The glint on `target`: `SHINES` sweeps, one a `period`, and then it lies still. The tween is bound

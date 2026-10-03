@@ -753,7 +753,7 @@ func _shoot_town() -> void:
 	var animations := Settings.animations
 	Settings.animations = Settings.Anim.NONE
 	# Budget enough for the two curses the shot takes, and some left over: six depths won are six skulls.
-	var depth := main.inventory.dungeon_depth
+	var depth: int = main.inventory.dungeon_depth
 	main.inventory.dungeon_depth = 6
 	var black := TranscendPage.new(main.inventory, main.ui_scale)
 	main.inventory.dungeon_depth = depth
@@ -762,12 +762,18 @@ func _shoot_town() -> void:
 	var black_shots: Array[Array] = [
 		[func() -> void: pass, "ui_transcend_choice"],
 		[func() -> void:
-			black._open(black._create_page)
+			black._open(black._create_page, true)
 			black._create_page._select_item(1), "ui_transcend_create"],
 		[func() -> void:
 			black._open(black._upgrade_page)
+			# One Ascension fed into a +1 piece, so its card wears the bar toward +2.
+			var shown: Item = black._upgrade_page.inventory.items[0]
+			shown.plus = maxi(shown.plus, 1)
+			shown.ascension = 1
 			black._upgrade_page._select_item(0), "ui_transcend_upgrade"],
-		[func() -> void: black._upgrade_page._on_super_orb_pressed(SuperOrbTable.PERFECTION),
+		[func() -> void:
+			black._upgrade_page._on_orb_pressed(SuperOrbTable.PERFECTION)
+			black._upgrade_page._craft(SuperOrbTable.PERFECTION, black._upgrade_page.inventory.items[0]),
 			"ui_transcend_aim"],
 		# The curses behind the third card, two of them taken.
 		[func() -> void:

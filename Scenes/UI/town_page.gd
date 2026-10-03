@@ -215,6 +215,12 @@ var _smith_face: AtlasTexture
 ## Her answer, over the whole window while it is up (null otherwise), and the scroll it is written in.
 var _told: Control
 var _told_scroll: ScrollContainer
+## The counter's one scroll and what it holds, kept through every redraw (`_scrolled` empties and
+## refills them) so a purchase, a blow or an orb picked up leaves it where the player had it; another
+## counter or another piece off the shelf puts it back at the top (`_scroll_for`).
+var _scroll: ScrollContainer
+var _scroll_lines: VBoxContainer
+var _scroll_for := []
 ## The last reading cast whose answer is not shown any more (ticked "Don't show this again"): the page
 ## says it in one line under her grids instead, until another counter is opened.
 var _cast := ""
@@ -244,6 +250,12 @@ func _ready() -> void:
 	_title = UITheme.title_of(_panel)
 	_rows = UITheme.body_of(_panel)
 	_rows.add_theme_constant_override("separation", ROW_GAP)
+	_scroll = UITheme.scroll()
+	_rows.add_child(_scroll)
+	_scroll_lines = UITheme.vbox(0, BODY_WIDTH)
+	# At least as tall as the scroll, so a row that asks to expand (an accepted bounty's card) can.
+	_scroll_lines.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroll.add_child(_scroll_lines)
 	# After the panel, so it is drawn over it.
 	_orb_card = OrbCard.new()
 	_orb_card.scale = Vector2(_ui_scale, _ui_scale)
@@ -283,6 +295,7 @@ func open(town_name: String, services: PackedStringArray, cell: Vector2i, spot: 
 	# Nothing is open in the bag until it says so, and last town's hammer blow is not news here.
 	_bag_piece = null
 	_smith_note = ""
+	_scroll_for = []
 	_close_offer(false)
 
 
@@ -336,7 +349,9 @@ func layout() -> void:
 
 
 func _fill() -> void:
-	UITheme.clear(_rows)
+	UITheme.clear(_rows, _scroll)
+	UITheme.clear(_scroll_lines)
+	_scroll.hide()
 	# Folder tabs standing on a line: the line runs under every shut tab, through the gaps and out to
 	# the page's edge, and breaks under the open one, which is drawn in the page's own cream -- so the
 	# counter below reads as that tab's page. No gap between the tabs and the line: they are one thing.
@@ -471,13 +486,13 @@ func _upscales() -> GridContainer:
 ## is how an open piece's modifiers can run past the foot of the window while its Buy button cannot.
 ## No bar is drawn, the way the bag's own stat block draws none.
 func _scrolled(gap: int) -> VBoxContainer:
-	var scroll := UITheme.scroll()
-	_rows.add_child(scroll)
-	var lines := UITheme.vbox(gap, BODY_WIDTH)
-	# At least as tall as the scroll, so a row that asks to expand (an accepted bounty's card) can.
-	lines.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.add_child(lines)
-	return lines
+	_rows.move_child(_scroll, _rows.get_child_count() - 1)
+	_scroll.show()
+	_scroll_lines.add_theme_constant_override("separation", gap)
+	if [_open_tab, _offer] != _scroll_for:
+		_scroll_for = [_open_tab, _offer]
+		_scroll.scroll_vertical = 0
+	return _scroll_lines
 
 
 ## One square with what it costs under it. The price is on the shelf rather than behind a click
@@ -1314,7 +1329,7 @@ func _smith_done() -> void:
 ## redrawn by a purchase) takes the card with it.
 func _card_for(square: OrbSlot, note: String, tone: Color) -> void:
 	square.hovered.connect(func(orb: String) -> void:
-		_orb_card.fill(orb, inventory.orb_count(orb), null, note, tone)
+		_orb_card.fill(orb, inventory.orb_count(orb), note, tone)
 		_orb_card.show()
 		_place_orb_card(square)
 		_place_orb_card.call_deferred(square))

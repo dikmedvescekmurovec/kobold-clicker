@@ -1056,11 +1056,22 @@ func _test_buying() -> void:
 	page._on_buy_orb(orb, 0)
 	_check(inventory.orb_count(orb) == 0 and not VendorStock.orbs(drawer)[0].is_empty(),
 			"a short purse buys no orb either")
+	# Made taller than the page, so there is somewhere to scroll to.
+	page._scroll_lines.custom_minimum_size.y = 4000
+	await process_frame
+	page._scroll.scroll_vertical = 100
 	inventory.gold = orb_price
 	page._on_buy_orb(orb, 0)
 	_check(inventory.orb_count(orb) == 1 and inventory.gold == 0,
 			"paid for one orb (%d held, %d left)" % [inventory.orb_count(orb), inventory.gold])
 	_check(VendorStock.orbs(drawer)[0].is_empty(), "and its square is empty")
+	await process_frame
+	_check(page._scroll.scroll_vertical == 100,
+			"and the shelf is still scrolled where it was (%d)" % page._scroll.scroll_vertical)
+	page._on_tab_pressed(TownServices.GEAR)
+	page._on_tab_pressed(TownServices.ORBS)
+	_check(page._scroll.scroll_vertical == 0, "another counter starts at the top")
+	page._scroll_lines.custom_minimum_size.y = 0
 
 	# Trading up: three of the orb before it in the tray for one, and nothing short of three.
 	inventory.orbs = {"Orb of Transmutation": 2}
@@ -1429,6 +1440,10 @@ func _test_entering() -> void:
 	_check(lands != null and lands.visible and lands.is_visible_in_tree()
 			and lands.get_child_count() == EnemyRoster.environments_of(accepted).size(),
 			"the journal shows a swatch for every land the monster lives on")
+	if lands != null and lands.get_child_count() > 0:
+		var first_land: String = EnemyRoster.environments_of(accepted)[0]
+		_check((lands.get_child(0) as Control).tooltip_text == HexTileset.env_name(first_land),
+				"and each swatch names its land on hover")
 	_check(not _said(main.bounty_page).contains("Nearest"), "and names no tile")
 	_check(_deep_button(main.bounty_page, "Show") == null, "nor has a Show to take the map to one")
 	main._on_left_page_closed()
@@ -1779,16 +1794,28 @@ func _test_fortune_page() -> void:
 	_check(not _deep_button(black, "Create an heirloom").disabled and _deep_button(black, "Upgrade an heirloom").disabled,
 			"an heirloom can be made, and with none held there is nothing to upgrade")
 	_deep_button(black, "Create an heirloom").pressed.emit()
+	_check(not black._swap.visible, "with no heirloom held the crown under the arrow is not there")
 	black._create_page._select_item(main.inventory.items.find(kept))
 	black._create_page._on_make_pressed()
 	_deep_button(black._create_page._confirm, "Keep").pressed.emit()
 	await process_frame
 	_check(main.inventory.stash().items.has(kept) and black._choice.visible
 			and _deep_button(black, "Create an heirloom").disabled, "one piece is kept, and only one")
+	# With one held, the make-an-heirloom screen's crown turns to the heirlooms and its chest back.
+	black._open(black._create_page, true)
+	await process_frame
+	_check(black._swap.visible and black._swap.tooltip_text == "Your heirlooms", "the crown stands under the arrow")
+	black._swap.pressed.emit()
+	await process_frame
+	_check(black._upgrade_page.visible and not black._create_page.visible and black._swap.visible
+			and black._swap.tooltip_text == "Items", "and turns the page to the heirlooms, the chest to go back")
+	black._swap.pressed.emit()
+	_check(black._create_page.visible and not black._upgrade_page.visible, "which turns it back to the items")
+	black._show_choice()
+	_check(not black._swap.visible, "and the choice has neither")
 	_deep_button(black, "Upgrade an heirloom").pressed.emit()
-	black._upgrade_page._select_item(0)
-	black._upgrade_page._on_super_orb_pressed(SuperOrbTable.ASCENSION)
-	_deep_button(black._upgrade_page._confirm, "Use").pressed.emit()
+	black._upgrade_page._on_orb_pressed(SuperOrbTable.ASCENSION)
+	black._upgrade_page._craft(black._upgrade_page._armed, kept)
 	_check(kept.plus == 1 and main.inventory.super_orbs == 0, "and the wall's orb goes into it")
 	_check(FileAccess.get_file_as_string(TEST_PATH) == written and FileAccess.file_exists(TEST_MAP_PATH),
 			"none of which has been written: a game closed here never left")

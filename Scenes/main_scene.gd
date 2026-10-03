@@ -76,8 +76,6 @@ const TILE_PAD := 4
 const TILE_GAP := 8
 ## What the tile panel calls a settlement, by `TownWorld.Tier`, ahead of the tile's level.
 const SETTLEMENT_KINDS: Array[String] = ["Village", "Town", "Fortress"]
-## A terrain's name on the tile panel where its key capitalised is not a word for land.
-const TERRAIN_NAMES := {"grass": "Grassland", "dirt": "Barrens"}
 ## The music: one of the pack's ten `Ambient` tracks on the map -- not its `Dark Ambient` or `Light
 ## Ambient` ones, which start otherwise -- and one of its five `Action` tracks while a fight or the
 ## dungeon is on the screen, picked at random each time the one gives way to the other (the user's
@@ -885,8 +883,9 @@ func _build_pages(layer: CanvasLayer) -> void:
 	_item_card = ItemCard.new(ui_scale)
 	_item_card.equipment = inventory.equipment
 	_character.get_parent().add_child(_item_card)
-	bag_page.crafted.connect(_item_card.shine)
-	heirloom_page.crafted.connect(_item_card.shine)
+	for page: BagPage in [bag_page, heirloom_page]:
+		page.crafted.connect(_item_card.shine)
+		page.held_changed.connect(func(orb: String) -> void: _item_card.held = orb)
 	# Every `tooltip_text` there is, on the same cream card and the same layer.
 	_character.get_parent().add_child(TipCard.new(ui_scale))
 
@@ -1291,7 +1290,7 @@ func _show_environments(weights: Dictionary) -> void:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 6)
 		row.add_child(map.tileset.env_icon(env))
-		var terrain := UITheme.label(str(TERRAIN_NAMES.get(env, env.capitalize())), Palette.TEXT, true)
+		var terrain := UITheme.label(HexTileset.env_name(env), Palette.TEXT, true)
 		if envs.size() > 1:
 			terrain.text += " %d%%" % round(weights[env] * 100.0)
 		terrain.size_flags_vertical = Control.SIZE_SHRINK_CENTER

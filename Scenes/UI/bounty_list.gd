@@ -185,7 +185,9 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 		swatches.name = LANDS_NAME
 		swatches.add_theme_constant_override("separation", 2)
 		for env: String in EnemyRoster.environments_of(enemy):
-			swatches.add_child(map_view.map.tileset.env_icon(env))
+			var swatch := map_view.map.tileset.env_icon(env)
+			swatch.tooltip_text = HexTileset.env_name(env)
+			swatches.add_child(swatch)
 		details.add_child(swatches)
 	if not note.is_empty():
 		lines.add_child(wrapped(note, inner, Palette.LEAF))
