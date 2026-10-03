@@ -752,9 +752,9 @@ func _shoot_town() -> void:
 	# animations, so it is black at once.
 	var animations := Settings.animations
 	Settings.animations = Settings.Anim.NONE
-	# Budget enough for the two curses the shot takes, and some left over: three depths won are six skulls.
+	# Budget enough for the two curses the shot takes, and some left over: six depths won are six skulls.
 	var depth := main.inventory.dungeon_depth
-	main.inventory.dungeon_depth = 3
+	main.inventory.dungeon_depth = 6
 	var black := TranscendPage.new(main.inventory, main.ui_scale)
 	main.inventory.dungeon_depth = depth
 	main._ui_layer.add_child(black)

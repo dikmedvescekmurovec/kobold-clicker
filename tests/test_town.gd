@@ -1766,9 +1766,9 @@ func _test_fortune_page() -> void:
 	main.inventory.gold = full_purse
 	_ask(main, FortuneTeller.TRANSCEND)
 	await process_frame
-	# Six skulls to spend on the black screen, three depths of the dungeon won (a wall earns none): the
+	# Six skulls to spend on the black screen, six depths of the dungeon won (a wall earns none): the
 	# budget is read as the screen opens.
-	main.inventory.dungeon_depth = 3
+	main.inventory.dungeon_depth = 6
 	var written := FileAccess.get_file_as_string(TEST_PATH)
 	_deep_button(main.town_page._told, "Transcend").pressed.emit()
 	await process_frame

@@ -143,15 +143,17 @@ const DUNGEON := {"enemies": 15, "seconds": 60.0, "elite_every": 5, "boss_last":
 ## Where its creatures live (`EnemyRoster`) and what is drawn behind them: no land on the map.
 const DUNGEON_ENV := "cave"
 ## What one floor down multiplies a body's health by: a depth is fifteen of them, so the next Gollux
-## wants about fifteen times the damage the last one did. The dial for how far apart the depths are.
-const DUNGEON_GROWTH := 1.2
+## wants about eight times the damage the last one did -- slower than the walls' sixteen (the user's,
+## 2026-10-03), and steeper than the 1.12 they first found too gentle. The dial for how far apart the depths are.
+const DUNGEON_GROWTH := 1.15
+## What the first Gollux's health is rounded to (`gollux_hp`).
+const GOLLUX_ROUND := 500000.0
 ## What a floor's body is worth by its tier, and nothing else about it: the roster's sizes and its
-## own tiers are for land, where a boss is 24 bodies -- here that would be a wall every fifteenth
-## floor that every score piled up against. A rat and a crab on one floor are the same health.
+## own tiers are for land. A rat and a crab on one floor are the same health. Gollux is not here: he is
+## his depth's wall (`gollux_hp`).
 const DUNGEON_TIER_HP := {
 	EnemyRoster.Tier.COMMON: 1.0,
 	EnemyRoster.Tier.ELITE: 2.0,
-	EnemyRoster.Tier.BOSS: 5.0,
 }
 const PROFILES := {
 	"plain": ORDINARY,
@@ -380,6 +382,10 @@ var always_orb := false
 ## this player. The main scene sets it; zero, the default, means orbs drop from the first body.
 var orbs_after := 0
 
+## Walls down in this world, which decides the orbs that can drop here (`OrbTable.unlocked`). The main
+## scene sets it; a fight nobody tells drops every orb.
+var walls_down := OrbTable.EVERY_WALL
+
 ## Whether the first body to fall here leaves `OrbTable.FIRST_ORB`, past `orbs_after` and the chance.
 ## The main scene turns it on for every fight after the player's first until that orb has dropped
 ## (`Inventory.first_orb_taken`), and the first kill here spends it.
@@ -601,6 +607,13 @@ static func for_dungeon(won := 0) -> Encounter:
 	return fight
 
 
+## The first Gollux's health: the second ice wall's, whatever the wall is tuned to, rounded to the
+## nearest `GOLLUX_ROUND` and never under it (the user's, 2026-10-03).
+static func gollux_hp() -> float:
+	var wall := for_wall(MapBuilder.CENTER + Vector2i(MapBuilder.START_LAND_RADIUS + 1 + MapBuilder.WALL_STEP, 0)).hp
+	return maxf(GOLLUX_ROUND, snappedf(wall, GOLLUX_ROUND))
+
+
 ## The depth the player is in, from 1. It moves only as a Gollux goes down: he is the last floor of
 ## his depth, so the floor after him is the first of the next.
 func depth() -> int:
@@ -669,8 +682,11 @@ func _health_of(enemy: String, position := -1) -> float:
 		# The floor and the tier and nothing else: no tile's modifier and no world's curse reaches down
 		# here. Asked as a body joins, the floor is how many are already built; `_take_curses`, sizing
 		# them again, says which.
-		var at := health.size() if position < 0 else position
-		return maxf(1.0, roundf(BASE_HP * pow(DUNGEON_GROWTH, first_floor + at)
+		var floor_at := first_floor + (health.size() if position < 0 else position)
+		if EnemyRoster.tier_of(enemy) == EnemyRoster.Tier.BOSS:
+			# Gollux: the first is the second ice wall, and each after it a depth's growth on.
+			return roundf(gollux_hp() * pow(DUNGEON_GROWTH, floor_at - (enemies - 1)))
+		return maxf(1.0, roundf(BASE_HP * pow(DUNGEON_GROWTH, floor_at)
 				* float(DUNGEON_TIER_HP[EnemyRoster.tier_of(enemy)])))
 	if enemy == WALL_NAME:
 		# `hp_of` at WALL_GROWTH carries a step for every wall inside this one, and a wall's own ring
@@ -1401,7 +1417,7 @@ func _kill(swung := false) -> void:
 		# Raw Finds, and the Gravedigger's Charm at IV on dirt: factors on the finished chance.
 		orb = OrbTable.roll(lineup[index], orb_rng, always_orb, _lifted(orb_find + drop_rate,
 				(RAW_ORBS if _cursed_with(Curses.RAW_FINDS) else 1.0)
-				* (HOME_ORBS if env == "dirt" and _home_peak() else 1.0)))
+				* (HOME_ORBS if env == "dirt" and _home_peak() else 1.0)), walls_down)
 	if not orb.is_empty():
 		var count := 2 if "transmute" in effects and orb_rng.randf() < 0.25 else 1
 		for i in count:
@@ -1425,10 +1441,6 @@ func advance(delta: float) -> void:
 		return
 	if not endless:
 		var spent := delta
-		# In the dungeon a walk-in and a death cost nothing: a floor's comings and goings are the same
-		# second for everybody, and charged for they would be most of what a strong descent is scored on.
-		if dungeon and phase != Phase.WAITING:
-			spent -= minf(delta, phase_left)
 		# The Glass Edge's price, and the Glass World's: each is a third faster, and both are both.
 		spent *= pow(GLASS_CLOCK, _glass())
 		# Rimeplate at IV: on ice the clock runs slower.

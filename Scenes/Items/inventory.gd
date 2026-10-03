@@ -761,7 +761,7 @@ func salvage(item: Item) -> float:
 func salvage_orb(rng := RandomNumberGenerator.new()) -> String:
 	if not ("salvage" in effects() and _peak("rag_and_bone_sack")) or rng.randf() >= SALVAGE_ORB:
 		return ""
-	return OrbTable.roll("", rng, true)
+	return OrbTable.roll("", rng, true, 0.0, walls_credited)
 
 
 ## One of a unique's numbers at the rank the player has of it (`Achievements.rank`), rank I for one
@@ -861,11 +861,11 @@ func reach(radius: int) -> bool:
 
 
 ## The skulls the black screen may spend on the next world (`Curses.fits`), and **only Gollux pays
-## them** (the user's, 2026-10-03: walls broken pay none): depth n won is n skulls and every depth down
-## to the deepest adds up, so depth 4 is 1 + 2 + 3 + 4 = 10. Won once, not once a descent, and handed
-## out whole at every transcension, a world lost to No Second Chances included.
+## them** (the user's, 2026-10-03: walls broken pay none): each depth won is exactly one skull. Won
+## once, not once a descent, and kept with the depth through every transcension, a world lost to No
+## Second Chances included.
 func skull_allowance() -> int:
-	return dungeon_depth * (dungeon_depth + 1) / 2
+	return dungeon_depth
 
 
 ## Where `item` is worn on the ordinary doll, or -1.

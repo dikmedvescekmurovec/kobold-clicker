@@ -37,11 +37,11 @@ const REROLLS := "rerolls"
 ## `tier` is a `TownWorld.Tier` and `cell` the town's own cell (what it is worth is what the ground
 ## around it is worth).
 static func restock(drawer: Dictionary, tier: int, cell: Vector2i,
-		rng: RandomNumberGenerator) -> bool:
+		rng: RandomNumberGenerator, walls := OrbTable.EVERY_WALL) -> bool:
 	if drawer.has(ITEMS):
 		return false
-	_fill(drawer, ITEMS, tier, cell, rng)
-	_fill(drawer, ORBS, tier, cell, rng)
+	_fill(drawer, ITEMS, tier, cell, rng, walls)
+	_fill(drawer, ORBS, tier, cell, rng, walls)
 	return true
 
 
@@ -49,8 +49,8 @@ static func restock(drawer: Dictionary, tier: int, cell: Vector2i,
 ## again. That shelf's own count goes up, which is what makes its next one dearer (`TownPrices.reroll_price`). The other vendor's shelf and
 ## price are untouched. The caller takes the gold; the purse is not this file's business.
 static func reroll(drawer: Dictionary, key: String, tier: int, cell: Vector2i,
-		rng: RandomNumberGenerator) -> void:
-	_fill(drawer, key, tier, cell, rng)
+		rng: RandomNumberGenerator, walls := OrbTable.EVERY_WALL) -> void:
+	_fill(drawer, key, tier, cell, rng, walls)
 	var counts: Variant = drawer.get(REROLLS, null)
 	if typeof(counts) != TYPE_DICTIONARY:
 		counts = {}
@@ -68,12 +68,13 @@ static func rerolls(drawer: Dictionary, key: String) -> int:
 
 
 ## Six of one kind. One shelf at a time, in a fixed order on the first stocking, so a seed deals the
-## same town twice.
+## same town twice. The orbs are those `walls` (down in this world) unlocks.
 static func _fill(drawer: Dictionary, key: String, tier: int, cell: Vector2i,
-		rng: RandomNumberGenerator) -> void:
+		rng: RandomNumberGenerator, walls: int) -> void:
 	var shelf := []
 	for i in SIZE:
-		shelf.append(roll_item(tier, cell, rng).to_dict() if key == ITEMS else OrbTable.roll_favoured(rng))
+		shelf.append(roll_item(tier, cell, rng).to_dict() if key == ITEMS
+				else OrbTable.roll_favoured(rng, walls))
 	drawer[key] = shelf
 
 

@@ -1678,12 +1678,15 @@ func _test_the_dungeon() -> bool:
 	var cursed := Encounter.for_dungeon(2)
 	cursed.wear([Curses.effect(Curses.IRON_FOES)])
 	_check(is_equal_approx(cursed.hp, deep.hp), "Iron Foes does not reach down the dungeon")
-	# The player's own hand lands as it does anywhere, and nothing strikes the clock.
+	# The player's own hand lands as it does anywhere, and nothing strikes the clock -- which runs as it
+	# does anywhere, through a walk-in too (the user's, 2026-10-03).
 	fight.start()
 	fight.advance(Encounter.WALK_IN)
+	_check(is_equal_approx(fight.time_left, float(Encounter.DUNGEON["seconds"]) - Encounter.WALK_IN),
+			"the walk-in costs its seconds down here")
 	_check(fight.hit() and fight.hp < Encounter.BASE_HP, "a click lands down here")
-	# The clock only runs while a body stands, so with no swing at all the whole minute is seen out
-	# on the first floor -- and running out is an end, not a loss.
+	# With no swing at all the whole minute is seen out on the first floor -- and running out is an
+	# end, not a loss.
 	var bare := _descended(0.0, 0.0)
 	_check(bare.finished and bare.victory and bare.depth() == 1 and bare.cleared() == 0 and bare.index == 0,
 			"nobody swinging ends on the first floor of the first depth, not lost")
@@ -1715,19 +1718,29 @@ func _test_the_dungeon() -> bool:
 		under.advance(Encounter.DEATH)
 	_check(under.enemy_name() == "Gollux" and under.depth() == 1 and under.cleared() == 0,
 			"fourteen floors down is Gollux, and still the first depth")
+	var wall := Encounter.for_wall(Vector2i(MapBuilder.START_LAND_RADIUS + 1 + MapBuilder.WALL_STEP, 0)).hp
+	_check(is_equal_approx(under.hp, Encounter.gollux_hp())
+			and is_zero_approx(fmod(under.hp, Encounter.GOLLUX_ROUND))
+			and absf(under.hp - wall) <= Encounter.GOLLUX_ROUND / 2.0,
+			"and he is the second ice wall rounded to the nearest 500k (%s for %s)"
+			% [BigNumber.format(under.hp), BigNumber.format(wall)])
 	under.advance(Encounter.WALK_IN)
 	under.hit()
 	_check(under.depth() == 1 and under.cleared() == 0, "he is not dead until he has fallen")
 	under.advance(Encounter.DEATH)
 	_check(under.depth() == 2 and under.cleared() == 1 and not under.finished,
 			"with him dead it is the second depth, and the descent goes on")
+	_check(is_equal_approx(Encounter.for_dungeon(1)._health_of("Gollux", block - 1),
+			roundf(Encounter.gollux_hp() * pow(Encounter.DUNGEON_GROWTH, block))),
+			"and the next Gollux is a depth's growth on")
 	# More damage gets deeper, and a depth is a real step: DUNGEON_GROWTH ^ 15 of it.
-	var weak := _descended(100.0, 2.0)
-	var strong := _descended(100.0 * pow(Encounter.DUNGEON_GROWTH, block), 2.0)
+	var damage := Encounter.gollux_hp() / 100.0
+	var weak := _descended(damage, 2.0)
+	var strong := _descended(damage * pow(Encounter.DUNGEON_GROWTH, block), 2.0)
 	_check(strong.cleared() > weak.cleared(),
 			"a depth's worth more damage wins more depths (%d against %d)" % [strong.cleared(), weak.cleared()])
-	print("The dungeon: 100 damage at 2 swings/s wins %d depth(s) from the top, %s damage %d"
-			% [weak.cleared(), BigNumber.format(100.0 * pow(Encounter.DUNGEON_GROWTH, block)), strong.cleared()])
+	print("The dungeon: %s damage at 2 swings/s wins %d depth(s) from the top, %s damage %d"
+			% [BigNumber.format(damage), weak.cleared(), BigNumber.format(damage * pow(Encounter.DUNGEON_GROWTH, block)), strong.cleared()])
 	return true
 
 

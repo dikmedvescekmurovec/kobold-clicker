@@ -132,7 +132,7 @@ const FORTUNE_TIPS := {
 	FortuneTeller.TREASURE: "Puts a star over the nearest chest you have not seen. It stays until that chest is opened",
 	FortuneTeller.APPRAISE: "Lists every modifier the open item can roll, the range it rolls in at the item's level, and how often it comes up",
 	FortuneTeller.SCOUR: "Brings a tile and the two rings of land around it, nineteen tiles, out of the fog",
-	FortuneTeller.HOMECOMING: "Moves you to a settlement you have already charted",
+	FortuneTeller.HOMECOMING: "Moves you to a settlement or the Gollux cave you have already charted",
 	FortuneTeller.TRANSCEND: "Ends this world and starts a new one, worth far more",
 }
 ## What stands over each half of her list. A reading is asked again and again at a climbing price; a
@@ -270,8 +270,8 @@ func open(town_name: String, services: PackedStringArray, cell: Vector2i, spot: 
 	_drawer = inventory.towns.visit(spot)
 	# The shelves are filled once and the board whenever all its work has been handed in. Both are
 	# asked, so not `or`, which would skip the board whenever the shelves had news.
-	var stocked := VendorStock.restock(_drawer, tier, cell, _stock_rng)
-	var posted := BountyBoard.restock(_drawer, _board_land(), cell, _stock_rng)
+	var stocked := VendorStock.restock(_drawer, tier, cell, _stock_rng, inventory.walls_credited)
+	var posted := BountyBoard.restock(_drawer, _board_land(), cell, _stock_rng, inventory.walls_credited)
 	if stocked or posted:
 		inventory.save(_save_path)
 	_tabs = PackedStringArray()
@@ -442,15 +442,15 @@ func _shelf() -> GridContainer:
 	return grid
 
 
-## The orb vendor's trades: every orb but the first, each for `OrbTable.UPSCALE_COST` of the orb
-## before it in the tray, with that orb and the count under it where a price would be. Lit while the
-## player holds enough.
+## The orb vendor's trades: every unlocked orb but the first, each for `OrbTable.UPSCALE_COST` of the
+## orb before it in the tray, with that orb and the count under it where a price would be. Lit while
+## the player holds enough.
 func _upscales() -> GridContainer:
 	var grid := GridContainer.new()
 	grid.columns = STOCK_COLS
 	grid.add_theme_constant_override("h_separation", STOCK_GAP)
 	grid.add_theme_constant_override("v_separation", STOCK_GAP)
-	for orb: String in OrbTable.orbs():
+	for orb: String in OrbTable.unlocked(inventory.walls_credited):
 		var from := OrbTable.upscale_from(orb)
 		if from.is_empty():
 			continue
@@ -723,7 +723,7 @@ func _on_claim_pressed(bounty: Dictionary) -> void:
 		inventory.note_unique(piece.unique)
 		inventory.add(piece)
 	# The last one handed in is what brings new work, there and then.
-	BountyBoard.restock(_drawer, _board_land(), _cell, _stock_rng)
+	BountyBoard.restock(_drawer, _board_land(), _cell, _stock_rng, inventory.walls_credited)
 	print("Claimed the bounty on %s for %s gold, %d experience and %s" % [str(bounty.get(BountyBoard.ENEMY, "")),
 			BigNumber.format(reward), xp, orbs])
 	var counted := {}
@@ -750,7 +750,7 @@ func _on_reroll_pressed() -> void:
 	if inventory.gold < price:
 		return
 	inventory.gold -= price
-	VendorStock.reroll(_drawer, _shelf_key(), _tier, _cell, _stock_rng)
+	VendorStock.reroll(_drawer, _shelf_key(), _tier, _cell, _stock_rng, inventory.walls_credited)
 	print("Restocked the %s shelf for %s gold" % [_shelf_key(), BigNumber.format(price)])
 	inventory.save(_save_path)
 	_fill()
@@ -1413,7 +1413,8 @@ func _on_buy_orb(orb: String, at: int) -> void:
 ## `OrbTable.UPSCALE_COST` of the orb before this one traded for one of it. No gold changes hands.
 func _on_upscale(orb: String) -> void:
 	var from := OrbTable.upscale_from(orb)
-	if from.is_empty() or inventory.orb_count(from) < OrbTable.UPSCALE_COST:
+	if from.is_empty() or inventory.orb_count(from) < OrbTable.UPSCALE_COST \
+			or orb not in OrbTable.unlocked(inventory.walls_credited):
 		return
 	for i in OrbTable.UPSCALE_COST:
 		inventory.spend_orb(from)

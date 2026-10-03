@@ -353,7 +353,7 @@ func _transcend() -> void:
 	_main._resetting = true
 	view.land_radius += MapBuilder.WALL_STEP
 	_main._credit_walls()
-	_main.inventory.dungeon_depth = 3
+	_main.inventory.dungeon_depth = 6
 	var heirloom := LootTable.roll("Imp", _rng, true, 8, 0.0, 0.0, ItemRarity.Rarity.ELITE)
 	_main.inventory.add(heirloom)
 	_main.inventory.make_heirloom(heirloom)

@@ -54,6 +54,8 @@ static func current(orb: String) -> String:
 ## The weights are relative and flat -- no depth gating. Fighting deeper buys better *modifiers*,
 ## which is what a tile's level ceiling already decides; an orb rate that climbed with it would make
 ## the frontier the only place worth farming, and the frontier is the part the player cannot reach.
+## What does move is which orbs exist at all: the walls down in this world unlock them two at a time
+## (`unlocked`), anywhere on the land once they are.
 const ORBS := {
 	"Orb of Transmutation": {
 		"icon": "Orb of Transmutation.png", "glow": Color("0069aa"), "weight": 24,
@@ -120,6 +122,15 @@ const RARITY_OF := {
 	"Orb of Exaltation": ItemRarity.Rarity.ELITE,
 }
 
+## How many orbs each wall down in this world unlocks, in tray order: Transmutation and Augmentation
+## from the start, Alchemy and Divinity behind the first wall, Chaos and Exaltation behind the second
+## (the user's ruling, 2026-10-03). Every way an orb is had -- a body, a shelf, a bounty, the Sack, a
+## trade up -- draws only from `unlocked`.
+const ORBS_A_WALL := 2
+
+## Walls down by which every orb is unlocked: the default for a caller no world stands behind (tests).
+const EVERY_WALL := 2
+
 ## How many of the orb before it in the tray the orb vendor takes for one orb (`upscale_from`).
 const UPSCALE_COST := 3
 
@@ -129,6 +140,11 @@ static var _icons := {}
 ## Every orb, in the tray's order.
 static func orbs() -> Array:
 	return ORBS.keys()
+
+
+## The orbs that can be had with `walls` walls down in this world, in the tray's order.
+static func unlocked(walls: int) -> Array:
+	return orbs().slice(0, ORBS_A_WALL * (maxi(walls, 0) + 1))
 
 
 static func icon_path(orb: String) -> String:
@@ -298,29 +314,30 @@ static func chance_for(enemy_name: String, orb_find := 0.0) -> float:
 ## and on its own, so a kill that leaves nothing costs exactly one draw -- LootTable.roll's rule, and
 ## what keeps the two rates independently tunable.
 static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := false,
-		orb_find := 0.0) -> String:
+		orb_find := 0.0, walls := EVERY_WALL) -> String:
 	if not guaranteed and rng.randf() >= chance_for(enemy_name, orb_find):
 		return ""
-	return _weighted(rng)
+	return _weighted(rng, walls)
 
 
 ## An orb a vendor would have on its shelf: two draws, and the rarer of the two. What a shop is for
 ## is the orb nobody has seen fall, so the shelf leans up the table -- and it leans by drawing twice
 ## rather than by carrying a second set of weights, so tuning a drop rate tunes the shelf with it.
-static func roll_favoured(rng: RandomNumberGenerator) -> String:
-	var first := _weighted(rng)
-	var second := _weighted(rng)
+static func roll_favoured(rng: RandomNumberGenerator, walls := EVERY_WALL) -> String:
+	var first := _weighted(rng, walls)
+	var second := _weighted(rng, walls)
 	return first if int(ORBS[first]["weight"]) <= int(ORBS[second]["weight"]) else second
 
 
-## An orb picked by weight. Integer weights, so walking the table cannot drift.
-static func _weighted(rng: RandomNumberGenerator) -> String:
+## An orb picked by weight among those `walls` unlocks. Integer weights, so walking the table cannot drift.
+static func _weighted(rng: RandomNumberGenerator, walls := EVERY_WALL) -> String:
+	var pool := unlocked(walls)
 	var total := 0
-	for orb: String in ORBS:
+	for orb: String in pool:
 		total += int(ORBS[orb]["weight"])
 	var pick := rng.randi_range(0, total - 1)
-	for orb: String in ORBS:
+	for orb: String in pool:
 		pick -= int(ORBS[orb]["weight"])
 		if pick < 0:
 			return orb
-	return orbs()[0]
+	return pool[0]

@@ -1606,6 +1606,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	fight.first_sword = not inventory.first_sword_taken
 	fight.guarantee_elite = fight.first_sword
 	fight.orbs_after = maxi(0, OrbTable.FIRST_ORB_KILLS - inventory.kills)
+	fight.walls_down = inventory.walls_credited
 	# The second fight is promised a Transmutation and the first is not: a player with no kills yet
 	# is in their first.
 	fight.first_orb = not inventory.first_orb_taken and inventory.kills > 0
@@ -1928,7 +1929,7 @@ func _update_buttons() -> void:
 	_was_encumbered = heavy
 	_town_button.visible = view.can_visit(cell)
 	_cave_button.visible = view.can_enter_cave(cell)
-	_cave_button.tooltip_text = "Go down to depth %d. Kill Gollux to go deeper: each depth won is as many skulls for your curses as its number" % (inventory.dungeon_depth + 1)
+	_cave_button.tooltip_text = "Go down to depth %d. Kill Gollux to go deeper: each depth won is a skull for your curses" % (inventory.dungeon_depth + 1)
 	_place_panel()
 
 
@@ -2568,7 +2569,7 @@ func _on_spell_aimed(reading: String, price: float, spot: Vector2i) -> void:
 
 
 ## Land chosen. A spell that could do nothing with it -- a patch with nothing left to show, all seen
-## already or past the edge of what the map has made; a tile that is no settlement the player has
+## already or past the edge of what the map has made; a tile that is no settlement or cave the player has
 ## charted -- is refused and the aim stays up, so the town's one casting is never spent on nothing.
 func _on_cell_aimed(cell: Vector2i) -> void:
 	if _aiming.is_empty() or _aim_price <= 0.0 or inventory.gold < _aim_price:

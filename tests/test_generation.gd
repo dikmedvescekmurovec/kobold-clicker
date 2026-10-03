@@ -1164,6 +1164,7 @@ func _test_the_cave() -> bool:
 			% [cave, steps])
 	_check(not view.place_cave(reach + 30) and view.cave == cave, "and only one a world")
 
+	_check(not view.is_home(cave), "a homecoming cannot land on it unseen")
 	# The wall down, so the cave's land is the player's, and all of it charted.
 	view.land_radius = reach
 	view._cover()
@@ -1173,6 +1174,7 @@ func _test_the_cave() -> bool:
 			"a set piece: no run, no chest, no modifiers, no road through it")
 	_check(view.name_of(cave).get_slice(" ", 1) in TileNames.CAVE_FEATURES,
 			"named for the cave (%s)" % view.name_of(cave))
+	_check(view.is_home(cave) and cave in view.homes(), "charted, the fortuneteller's homecoming can land on it")
 	_check(not view.can_enter_cave(cave), "entered only by the player standing on it")
 	view.player_cell = cave
 	_check(view.can_enter_cave(cave) and not view.can_enter_cave(MapBuilder.CENTER), "and then only there")

@@ -3138,6 +3138,20 @@ func _test_orb_tables() -> bool:
 		_check(OrbTable.ORBS.has(orb), "a drawn orb is one of the six")
 		seen[orb] = true
 	_check(seen.size() == 6, "every orb can be drawn, saw %d" % seen.size())
+	# The walls down in this world unlock them two at a time, in the tray's order, for a body and a shelf alike.
+	for walls in 3:
+		var pool := OrbTable.unlocked(walls)
+		_check(pool == OrbTable.orbs().slice(0, 2 * walls + 2), "%d walls unlock %s" % [walls, pool])
+		var drawn := {}
+		for i in 2000:
+			drawn[OrbTable.roll("Skeleton Warrior", rng, true, 0.0, walls)] = true
+			drawn[OrbTable.roll_favoured(rng, walls)] = true
+		_check(drawn.size() == pool.size() and drawn.keys().all(func(orb: String) -> bool: return orb in pool),
+				"with %d walls down only those drop: %s" % [walls, drawn.keys()])
+	_check(OrbTable.unlocked(0) == ["Orb of Transmutation", "Orb of Augmentation"]
+			and OrbTable.unlocked(1).slice(2) == ["Orb of Alchemy", "Orb of Divinity"]
+			and OrbTable.unlocked(5).slice(4) == ["Orb of Chaos", "Orb of Exaltation"],
+			"no wall, then Alchemy and Divinity, then Chaos and Exaltation")
 	return true
 
 
@@ -4964,8 +4978,8 @@ func _test_more_curses() -> bool:
 	heir.items.append(plain_kept)
 	_check(heir.make_heirloom(plain_kept) and plain_kept.plus == 0, "and no other world's is")
 
-	# The skulls are Gollux's alone: walls broken and curses carried pay none, and depth n won is n
-	# skulls, every depth adding up, handed out whole again after a transcension.
+	# The skulls are Gollux's alone: walls broken and curses carried pay none, each depth won is one
+	# skull, and the depth and its skulls are kept through a transcension.
 	var climber := Inventory.new()
 	climber.walls_credited = 3
 	climber.curses = [Curses.BLOODTHIRST, Curses.IRON_FOES]
@@ -4974,8 +4988,8 @@ func _test_more_curses() -> bool:
 	delver.walls_credited = 1
 	delver.dungeon_depth = 4
 	delver.curses = [Curses.BLOODTHIRST, Curses.IRON_FOES, Curses.LONG_WINTER]
-	_check(delver.skull_allowance() == 10 and delver.transcended().skull_allowance() == 10,
-			"four depths won are 1 + 2 + 3 + 4 skulls, and again in the next world (%d)" % delver.skull_allowance())
+	_check(delver.skull_allowance() == 4 and delver.transcended().skull_allowance() == 4,
+			"four depths won are four skulls, and again in the next world (%d)" % delver.skull_allowance())
 	_check(Curses.skulls_of([Curses.LONG_WINTER, Curses.IRON_FOES]) == 4
 			and Curses.fits(Curses.IRON_FOES, [Curses.LONG_WINTER], 4)
 			and not Curses.fits(Curses.BLOODTHIRST, [Curses.LONG_WINTER], 4)

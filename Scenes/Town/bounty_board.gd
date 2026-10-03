@@ -92,7 +92,7 @@ const BOUNTY_RANGE := 4
 ## `envs` is the land near the town (`MapBuilder.envs_within`) and `cell` the town's own cell, which
 ## is what the reward is priced against.
 static func restock(drawer: Dictionary, envs: PackedStringArray, cell: Vector2i,
-		rng: RandomNumberGenerator) -> bool:
+		rng: RandomNumberGenerator, walls := OrbTable.EVERY_WALL) -> bool:
 	if not cleared(drawer):
 		return false
 	var posted := []
@@ -103,7 +103,7 @@ static func restock(drawer: Dictionary, envs: PackedStringArray, cell: Vector2i,
 			if enemy.is_empty():
 				continue
 			taken[enemy] = true
-			posted.append(_posting(enemy, tier, cell, rng))
+			posted.append(_posting(enemy, tier, cell, rng, walls))
 	drawer[BOUNTIES] = posted
 	return not posted.is_empty()
 
@@ -279,11 +279,11 @@ static func xp_reward_of(tier: int) -> int:
 ## way a vendor's shelf draws one: what a bounty is for is the thing the ground will not hand over on
 ## its own.
 static func _posting(enemy: String, tier: int, cell: Vector2i,
-		rng: RandomNumberGenerator) -> Dictionary:
+		rng: RandomNumberGenerator, walls: int) -> Dictionary:
 	var need := NEED_ELITE if tier == EnemyRoster.Tier.ELITE else NEED_COMMON
 	var orbs := []
 	for i in int(ORBS[tier]):
-		orbs.append(OrbTable.roll_favoured(rng))
+		orbs.append(OrbTable.roll_favoured(rng, walls))
 	return {
 		ENEMY: enemy,
 		NEED: need,
