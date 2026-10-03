@@ -1,14 +1,13 @@
 extends "res://tests/harness.gd"
-## The game's side of the cloud: what `Cloud` decides without calling anyone, its account file, the
-## question it raises, and that the server's two copies of the game's numbers still agree with it.
+## The game's side of the cloud: what `Cloud` decides without calling anyone, its account file and the
+## question it raises.
 
 const ACCOUNT := "user://test_cloud.cfg"
-const CHECKS_JS := "res://backend/leaderboard/src/checks.js"
 
 
 func _run() -> void:
 	for passed: Variant in [_test_decide(), _test_summary(), _test_score(), _test_account(), _test_off(),
-			_test_server_mirrors(), await _test_question()]:
+			await _test_question()]:
 		_check(passed == true, "a test function finished")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(ACCOUNT))
 	_report("cloud")
@@ -75,36 +74,20 @@ func _test_off() -> bool:
 	return true
 
 
-## checks.js cannot read the game, so it copies two numbers; a change to either here must reach it.
-func _test_server_mirrors() -> bool:
-	var source := FileAccess.get_file_as_string(CHECKS_JS)
-	_check("FLOORS_PER_DEPTH = %d;" % Encounter.DUNGEON.enemies in source,
-			"the server's depth is Encounter.DUNGEON's %d floors" % Encounter.DUNGEON.enemies)
-	var seconds := RegEx.create_from_string("SECONDS_PER_FLOOR = ([0-9.]+);").search(source)
-	_check(seconds != null and float(seconds.get_string(1)) <= Encounter.DEATH,
-			"no floor falls faster than the server allows (Encounter.DEATH %s)" % Encounter.DEATH)
-	return true
-
-
 func _test_question() -> bool:
 	var summary := {"level": 3, "play_seconds": 60, "saved_at": 1790000000, "dungeon_floors": 20}
 	var answers: Array = []
-	for kind: String in ["conflict", "refused"]:
-		var question := CloudQuestion.new({"kind": kind, "local": summary, "cloud": {}, "reason": "Kills went down"}, 1.0)
-		question.answered.connect(func(keep_cloud: bool) -> void: answers.append([kind, keep_cloud]))
-		root.add_child(question)
-		await process_frame
-		var buttons := question.find_children("*", "Button", true, false)
-		var faces := buttons.map(func(made: Button) -> String: return made.text)
-		_check(faces == (["Keep this device's", "Keep the cloud's"] if kind == "conflict"
-				else ["Start over from this device", "Keep the cloud's"]), "%s asks with two answers %s" % [kind, faces])
-		var labels := question.find_children("*", "Label", true, false).map(func(made: Label) -> String: return made.text)
-		_check("Unknown" in labels and "Depth 2, floor 5" in labels, "each side shows what is known of it")
-		if kind == "refused":
-			_check(labels.any(func(text: String) -> bool: return "Kills went down" in text), "and a refusal says why")
-		(buttons[0] as Button).pressed.emit()
-		(buttons[1] as Button).pressed.emit()
-		question.queue_free()
-	_check(answers == [["conflict", false], ["conflict", true], ["refused", false], ["refused", true]],
-			"the left keeps this device's and the right the cloud's (%s)" % [answers])
+	var question := CloudQuestion.new({"local": summary, "cloud": {}}, 1.0)
+	question.answered.connect(func(keep_cloud: bool) -> void: answers.append(keep_cloud))
+	root.add_child(question)
+	await process_frame
+	var buttons := question.find_children("*", "Button", true, false)
+	var faces := buttons.map(func(made: Button) -> String: return made.text)
+	_check(faces == ["Keep this device's", "Keep the cloud's"], "two saves ask with two answers %s" % [faces])
+	var labels := question.find_children("*", "Label", true, false).map(func(made: Label) -> String: return made.text)
+	_check("Unknown" in labels and "Depth 2, floor 5" in labels, "each side shows what is known of it")
+	(buttons[0] as Button).pressed.emit()
+	(buttons[1] as Button).pressed.emit()
+	question.queue_free()
+	_check(answers == [false, true], "the left keeps this device's and the right the cloud's (%s)" % [answers])
 	return true

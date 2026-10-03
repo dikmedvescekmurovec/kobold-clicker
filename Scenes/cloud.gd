@@ -1,7 +1,7 @@
 class_name Cloud
 extends Node
 ## The player's account and cloud save, and the Gollux leaderboard, against the Worker in
-## `backend/leaderboard/` (its README holds the API, the sign-in flow and every rule the server checks).
+## `backend/leaderboard/` (its README holds the API, the sign-in flow and what the server keeps).
 ##
 ## Signing in is optional. `sign_in` opens the browser at the server's sign-in page, where the player
 ## picks Google or Discord; the game polls until the server hands it a session token, and shows the
@@ -9,9 +9,9 @@ extends Node
 ## the cloud together: this device's files are the cloud's `revision`, as they were when their hash was
 ## `synced`. A change here alone is uploaded; a change in the cloud alone is downloaded over the files
 ## and the main scene reloads (`replaced`); both is a question (`asked`) the player answers with
-## `keep_cloud` or `keep_device`. The server refuses a save its checks turn down (422), and that is a
-## question too. Nothing here ever blocks the game: a call that fails is a sentence (`problem`) and the
-## next tick tries again.
+## `keep_cloud` or `keep_device`. The server takes every save at its word: the player is trusted not
+## to cheat. Nothing here ever blocks the game: a call that fails is a sentence (`problem`) and the next
+## tick tries again.
 ##
 ## One lives under the root for the whole run (`NODE`), outliving the reloads a download or a
 ## transcension makes; the main scene finds it again each time. Off (`path` empty) everywhere but the
@@ -66,8 +66,8 @@ var synced := ""
 var synced_at := 0.0
 ## The four letters a sign-in under way shows, "" when none is.
 var signing_check := ""
-## What waits for the player's answer, `{kind, local, cloud, reason}`, kind being "conflict" or
-## "refused"; empty when nothing does. `sync` holds back while it waits.
+## Two saves that both moved on, waiting for the player to keep one, `{local, cloud}` (each a
+## `summary_of`); empty when nothing waits. `sync` holds back while it waits.
 var question := {}
 ## The board as last read: `{rank, name, floors, reached_at}` a row, best first.
 var top: Array = []
@@ -162,7 +162,7 @@ static func decide(here_changed: bool, cloud_changed: bool) -> Action:
 
 
 ## What the question between two saves shows of one, read from its inventory file: the server's own
-## `summary` (checks.js) worked out here for this device's side.
+## `summary` (src/index.js) worked out here for this device's side.
 static func summary_of(inventory_text: String) -> Dictionary:
 	var reader := JSON.new()
 	var save: Dictionary = reader.data if reader.parse(inventory_text) == OK and reader.data is Dictionary else {}
@@ -335,7 +335,7 @@ func sync(now := false) -> void:
 							await _download()
 					Action.ASK:
 						if _calm():
-							_ask("conflict", saved, cloud.get("summary", {}), "")
+							_ask(saved, cloud.get("summary", {}))
 	_syncing = false
 	changed.emit()
 
@@ -368,21 +368,14 @@ func keep_cloud() -> void:
 	await _download()
 
 
-## The question answered for this device's save. Over a conflict it goes up in the cloud's place,
-## checked against the revision it grew from; over a refusal the cloud starts again from it, as a first
-## save the board does not count.
+## The question answered for this device's save: it goes up in the cloud's place.
 func keep_device() -> void:
-	var kind := str(question.get("kind", ""))
 	question = {}
 	changed.emit()
 	var saved := files()
 	if saved.is_empty():
 		return
-	if kind == "refused":
-		await forget_save()
-		await _upload(saved, false)
-	else:
-		await _upload(saved, true)
+	await _upload(saved, true)
 
 
 ## Reset save: the cloud's copy goes too, and this device starts from none of it. Awaited before the
@@ -411,10 +404,6 @@ func _upload(saved: Dictionary, replace: bool) -> void:
 		409:
 			# Another device got there first; the next sync finds out and asks.
 			problem = ""
-		422:
-			var cloud: Variant = me.get("save")
-			_ask("refused", saved, cloud.get("summary", {}) if cloud is Dictionary else {},
-					str(reply.data.get("error", "")))
 
 
 ## The cloud's save written over this device's files, and `replaced` for the main scene to reload. Not
@@ -437,9 +426,9 @@ func _download() -> void:
 	replaced.emit()
 
 
-func _ask(kind: String, saved: Dictionary, cloud_summary: Variant, reason: String) -> void:
-	question = {"kind": kind, "local": summary_of(saved.inventory),
-			"cloud": cloud_summary if cloud_summary is Dictionary else {}, "reason": reason}
+func _ask(saved: Dictionary, cloud_summary: Variant) -> void:
+	question = {"local": summary_of(saved.inventory),
+			"cloud": cloud_summary if cloud_summary is Dictionary else {}}
 	asked.emit()
 
 

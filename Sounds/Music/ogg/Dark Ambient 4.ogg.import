@@ -1,0 +1,19 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+uid="uid://wthqqps0r8i1"
+path="res://.godot/imported/Dark Ambient 4.ogg-ee098b63f042bb892cdf01b441ab927e.oggvorbisstr"
+
+[deps]
+
+source_file="res://Sounds/Music/ogg/Dark Ambient 4.ogg"
+dest_files=["res://.godot/imported/Dark Ambient 4.ogg-ee098b63f042bb892cdf01b441ab927e.oggvorbisstr"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

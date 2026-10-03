@@ -132,6 +132,7 @@
     },
     "env_adjacency": {
       "grass": [
+        "desert",
         "dirt",
         "forest",
         "grass",
@@ -143,22 +144,29 @@
         "dirt",
         "forest",
         "grass",
+        "ice",
         "mountains"
       ],
       "desert": [
         "desert",
         "dirt",
+        "forest",
+        "grass",
         "mountains"
       ],
       "ice": [
+        "dirt",
+        "forest",
         "grass",
         "ice",
         "mountains"
       ],
       "forest": [
+        "desert",
         "dirt",
         "forest",
         "grass",
+        "ice",
         "mountains"
       ],
       "mountains": [

@@ -61,8 +61,9 @@ func _shoot_main_scene() -> void:
 	await process_frame
 
 
-## The Gollux cave: the Seeing Stone answering a few steps from a cave still in the dark
-## (`ui_seeing_stone.png`), then the cave itself, lit, with its tile panel and Enter cave (`ui_cave.png`),
+## The Gollux cave: what the hero says as it is put down (`ui_sense_dialogue.png`), the red light at the
+## map's edge the way it lies, from the start far off (`ui_cave_sense_far.png`) and four steps off it
+## (`ui_cave_sense.png`), then the cave itself, lit, with its tile panel and Enter cave (`ui_cave.png`),
 ## and the pit on its own with the hero beside it (`ui_cave_map.png`).
 func _shoot_cave() -> void:
 	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
@@ -77,26 +78,37 @@ func _shoot_cave() -> void:
 	main.inventory.farthest_land = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
 	main._credit_walls()
 	var cave: Vector2i = view.cave
-	main.inventory.seeing_stone = true
-	main._show_corner(true)
+	# The wall in front of it broken, which is when the hero first feels it.
+	view.land_radius = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
+	view._cover()
+	# Every other tip read, so the hero's about the cave is the one that comes due.
+	for tip: Array in main.TIPS:
+		if tip[0] != "first_sense" and not str(tip[0]) in main.inventory.tips:
+			main.inventory.tips.append(str(tip[0]))
+	main._check_tips()
+	await create_timer(Juice.POP_TIME + 0.1).timeout
+	await _save_window("ui_sense_dialogue.png")
+	main._on_tip_closed()
+	await create_timer(Juice.LEAVE_TIME + 0.1).timeout
+	await _save_window("ui_cave_sense_far.png")
 	var near := cave
 	for step in 4:
 		near = HexGrid.neighbor(near, HexGrid.Edge.W)
+	# The hero's own patch of the land out there shown, the cave still two steps past it.
 	view.player_cell = near
-	main._on_stone_pressed()
-	for i in 2:
-		await process_frame
-	await _save_window("ui_seeing_stone.png")
+	main.map.set_player_cell(near)
+	main.camera.position = main.map.ground_layer.map_to_local(near)
+	view._reveal_around(near, 2)
+	# The fog lifts as a front sweeping out from the hero (`EdgeFog`), whatever the animation level.
+	await create_timer(1.5).timeout
+	await _save_window("ui_cave_sense.png")
 
-	view.land_radius = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
-	view._cover()
 	view.reveal_all()
 	view.player_cell = cave
 	main.map.set_player_cell(cave)
 	main.map.select_cell(cave)
 	main._on_tile_clicked(cave, main.map.get_tile_info(cave))
 	main.camera.position = main.map.ground_layer.map_to_local(cave)
-	main._sync_stone()
 	for i in 3:
 		await process_frame
 	await _save_window("ui_cave.png")
@@ -740,9 +752,11 @@ func _shoot_town() -> void:
 	# animations, so it is black at once.
 	var animations := Settings.animations
 	Settings.animations = Settings.Anim.NONE
-	# Budget enough for the two curses the shot takes, and some left over.
-	main.inventory.skull_budget = 6
+	# Budget enough for the two curses the shot takes, and some left over: three depths won are six skulls.
+	var depth := main.inventory.dungeon_depth
+	main.inventory.dungeon_depth = 3
 	var black := TranscendPage.new(main.inventory, main.ui_scale)
+	main.inventory.dungeon_depth = depth
 	main._ui_layer.add_child(black)
 	main._character.hide()
 	var black_shots: Array[Array] = [

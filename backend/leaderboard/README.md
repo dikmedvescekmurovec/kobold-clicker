@@ -4,14 +4,14 @@ One **Cloudflare Worker** (a small JavaScript program run on Cloudflare's server
 **Cloudflare D1** database (managed SQLite) give the game three things:
 
 - **Signing in with Google or Discord.** It's optional; the game plays exactly the same without it.
-- **Cloud saves.** Play on one computer and carry on on another. Each upload is checked by the server,
-  and if two devices both played offline, the player is asked which save to keep.
+- **Cloud saves.** Play on one computer and carry on on another. If two devices both played offline,
+  the player is asked which save to keep. A save is taken at its word: the player is trusted not to cheat.
 - **The Gollux leaderboard.** It shows each signed-in player's deepest descent as **`depth.floor`**
-  (**3.14** is depth 3, 14 of its floors beaten). The score comes only from checked saves, and of two
+  (**3.14** is depth 3, 14 of its floors beaten): the deepest any of their saves reached. Of two
   equal scores, whoever reached it first stands higher.
 
-At this game's scale it costs **$0 a month**, with no servers to patch. The Worker is two JavaScript
-files, the database two migrations.
+At this game's scale it costs **$0 a month**, with no servers to patch. The Worker is one JavaScript
+file, the database two migrations.
 
 **Live:** `https://gollux-leaderboard.kobold-clicker.workers.dev`, on the Cloudflare account
 *Dik.med.mur@gmail.com's Account*, workers.dev subdomain `kobold-clicker`. The Worker keeps the name
@@ -28,7 +28,7 @@ Mermaid Support* extension (`bierner.markdown-mermaid`) and open the preview (Ct
 1. [How it fits together](#1-how-it-fits-together)
 2. [Signing in](#2-signing-in)
 3. [Cloud saves](#3-cloud-saves)
-4. [What the server checks, and what it cannot](#4-what-the-server-checks-and-what-it-cannot)
+4. [Cheating](#4-cheating)
 5. [The leaderboard](#5-the-leaderboard)
 6. [The API](#6-the-api)
 7. [The database](#7-the-database)
@@ -37,7 +37,7 @@ Mermaid Support* extension (`bierner.markdown-mermaid`) and open the preview (Ct
 10. [Run it on your own machine](#10-run-it-on-your-own-machine)
 11. [Set up the sign-in providers](#11-set-up-the-sign-in-providers)
 12. [Deploy](#12-deploy)
-13. [Running it: logs, flags, cheaters, backups](#13-running-it-logs-flags-cheaters-backups)
+13. [Running it: logs, cheaters, backups](#13-running-it-logs-cheaters-backups)
 14. [What it costs](#14-what-it-costs)
 15. [Security](#15-security)
 16. [Customising it](#16-customising-it)
@@ -64,7 +64,7 @@ flowchart LR
     subgraph CF["Cloudflare (free plan)"]
         Edge["Edge network<br/>HTTPS, DDoS protection"]
         RL["Rate limiters<br/>60 requests/min per IP<br/>10 sign-ins/min per IP"]
-        W["Worker<br/>src/index.js + src/checks.js"]
+        W["Worker<br/>src/index.js"]
         D1[("D1 database<br/>players, identities, sessions,<br/>logins, saves")]
         Edge --> RL --> W --> D1
     end
@@ -86,8 +86,7 @@ flowchart LR
   plugin or SDK.
 - **The browser** is where the player signs in, so the game never sees a password. The same flow works
   on Windows, Mac, Linux, Android, iOS and the web.
-- **The Worker** is the only thing that touches the database. `src/checks.js` holds the save checks, as
-  pure functions.
+- **The Worker** is the only thing that touches the database.
 - **Google and Discord** only tell the Worker a stable id for the account. The Worker never asks for
   an email, a name or a picture.
 
@@ -141,7 +140,7 @@ sequenceDiagram
   one player with two sessions (one per device). Google and Discord are separate accounts: there is
   no linking of the two.
 - **The old anonymous leaderboard name** (from before accounts) goes to the device's first sign-in.
-  Its old score was never checked, so it starts again from zero.
+  Its old score starts again from zero, and the first upload sets it from the save.
 - **Sign out** deletes this device's session only. **Delete cloud account** deletes the player, their
   identities, sessions and saves. Both keep the save files on the device.
 
@@ -191,8 +190,7 @@ saving over them (`_on_cloud_replaced` sets `_resetting`).
 replaced until the player picks:
 
 - *Keep the cloud's*: the cloud's save is downloaded.
-- *Keep this device's*: it's uploaded with `replace`, and still **checked against the revision it grew
-  from**, not against the other device's.
+- *Keep this device's*: it's uploaded with `replace`, in the cloud's place.
 
 ```mermaid
 sequenceDiagram
@@ -211,7 +209,7 @@ sequenceDiagram
     A->>W: GET /me, cloud is 6, A has 5, and A changed
     A-->>A: question: this device's or the cloud's?
     alt keep this device's
-        A->>W: PUT /save base 5, replace, checked against rev 5 (rev 7)
+        A->>W: PUT /save base 5, replace (rev 7)
     else keep the cloud's
         A->>W: GET /save, rev 6 over A's files
     end
@@ -223,53 +221,15 @@ cloud is concerned.
 
 ---
 
-## 4. What the server checks, and what it cannot
+## 4. Cheating
 
-The game decides everything on the player's own computer, so the server can't replay a game. It checks
-what the game itself guarantees. The rules are in `src/checks.js`, and every refusal is written on the
-player (`players.flag`) for you to look at.
+**The server takes every save at its word** (since 2026-10-02): the player is trusted not to cheat. An
+upload is turned away only when it isn't a save at all (400) or is far too big (413). The checks it once
+made of a save against itself and against the one it grew from were removed: they turned down honest
+saves.
 
-**A save on its own** (`consistent`, every upload):
-
-- It's a save file, with its numbers numbers.
-- Depth and floors agree: `dungeon_depth = floor(dungeon_floors / 15)`.
-- It has no more floors than its play time allows. No floor falls faster than `Encounter.DEATH`
-  (0.5 s) of play.
-- It wasn't saved in the future.
-
-**A save against the one it grew from** (`follows`, every upload with a base the cloud still keeps):
-
-- Nothing a transcension carries goes down: kills, time played, the dungeon's depth and floors, the
-  farthest land reached. The same goes for any achievement's rank or any tally, the uniques found, and
-  the Seeing Stone.
-- **It wasn't played faster than time passed.** Time played may rise by at most the real time since the
-  base was uploaded, times 1.05, plus 2 minutes of slack.
-- The floors gained fit in the time played gained.
-
-`tests/test_cloud.gd` fails if `FLOORS_PER_DEPTH` or `SECONDS_PER_FLOOR` stop agreeing with
-`Encounter`. The two numbers are copied into checks.js because JavaScript can't read the game.
-
-**On a refusal** (422), the game asks the player: keep the cloud's save, or **start the cloud over from
-this device**. Starting over deletes the cloud's saves and uploads this one as a first save. The board
-keeps its best, and only floors beaten from then on add to it.
-
-**What it stops:**
-
-- Editing the save to go back or skip ahead in time.
-- Copying in an old backup and carrying on as if it had never happened.
-- Turning a number up by hand once a history exists.
-- Putting edited floors on the board.
-
-**What it cannot stop** (this is level 2, not a server that runs the game):
-
-- **An edited first save.** A first upload has no history to be checked against. That's why its floors
-  count for **nothing** on the board (see §5), but the rest of it (gold, gear, level) is taken as is.
-- **Slow forgery.** Someone who edits the save a little each session, within real time, stays inside
-  every rule. For floors that's up to one every half second of real play.
-- **An item that could exist but was never found.** Gear isn't checked at all yet. The next step would
-  be the game exporting its modifier tables to JSON for the server, so every item's rolls could be
-  checked against its level.
-- **Bots and autoclickers.** Clicks land, so a program clicking at human speed is a human, to any server.
+What that leaves open: an edited save, its floors included, goes to the cloud and onto the board as it
+is. The way to deal with a cheater is by hand: **take them off the board** (§13).
 
 ---
 
@@ -279,16 +239,8 @@ A score is a number of dungeon floors, shown as depth and floor. 44 is 2 × 15 +
 and killing depth 3's Gollux is 45, shown as **4.00**. `Cloud.score_text` formats it, with two digits
 after the dot (`3.05`, never `3.5`).
 
-**Only floors beaten under the checks count.** Every saved revision records **`vouched`** floors:
-
-- A first save vouches for 0 of its floors.
-- A checked save vouches for its base's number plus what it gained over its base.
-
-A player's board score is the most any of their saves vouched for.
-
-For a player who signs in from the start of a game, that's their real score. For one who played long
-before signing in, it counts from sign-in, so their row can read less than their save's best. Without this rule,
-editing the floors before the first upload would reach the board one upload later.
+**A player's score is the deepest any of their saves reached:** an upload's own `dungeon_floors`. It
+only ever rises, so a restored backup or a reset never takes it down.
 
 **Who is on it:** signed-in players with a board name and a score above 0, not `hidden`.
 
@@ -324,7 +276,7 @@ sentence as it is. "Bearer" means `Authorization: Bearer <session token>`.
 | `DELETE /me` | Bearer | – | `{deleted}`: everything about the player gone | 401 |
 | `DELETE /sessions/me` | Bearer | – | `{signed_out}`: this device's session gone | 401 |
 | `GET /save` | Bearer | – | `{revision, uploaded_at, summary, inventory, map}` (the two files as text) | 401, 404 none |
-| `PUT /save` | Bearer | `{base_revision, replace?, inventory, map}` | **200** `{revision, checked, ...standing}` | 400 not a save, **409** `{revision, summary}` the cloud is newer, **422** refused by the checks, 413 |
+| `PUT /save` | Bearer | `{base_revision, replace?, inventory, map}` | **200** `{revision, ...standing}` | 400 not a save, **409** `{revision, summary}` the cloud is newer, 413 |
 | `DELETE /save` | Bearer | – | `{deleted}`: the cloud's saves gone, the board untouched | 401 |
 | `GET /leaderboard?limit=50` | optional Bearer | – | `{top: [{rank, name, floors, reached_at}], me}` | 401 if a token is sent and unknown |
 | `GET /privacy` | – | – | the privacy page (HTML) | – |
@@ -349,12 +301,12 @@ erDiagram
     PLAYERS {
         INTEGER id PK
         TEXT name UK "board name, NULL until chosen"
-        INTEGER floors "board score, the most vouched"
+        INTEGER floors "board score, the deepest save"
         INTEGER reached_at "server ms when floors last rose"
         INTEGER created_at
         INTEGER hidden "1 is off the board, silently"
         INTEGER linked "1 once signed in"
-        TEXT flag "the last refusal, for review"
+        TEXT flag "unused: the last refusal, from when saves were checked"
     }
     IDENTITIES {
         TEXT provider PK "google or discord"
@@ -382,8 +334,8 @@ erDiagram
         BLOB data "gzip of both files"
         TEXT summary "level, time, saved, floors"
         INTEGER uploaded_at
-        INTEGER checked "1 if checked against its base"
-        INTEGER vouched "floors that count"
+        INTEGER checked "unused, always 0"
+        INTEGER vouched "unused, always 0"
     }
 ```
 
@@ -401,7 +353,7 @@ applied to the live database (`npx wrangler d1 migrations list DB --remote` show
 | Piece | What it does |
 |---|---|
 | `Scenes/cloud.gd` (`Cloud`) | Everything above, from the game's side. Signing in, out and deleting (`sign_in`, `cancel_sign_in`, `sign_out`, `delete_account`), the board name (`choose_name`), the board (`refresh`), syncing (`sync`, `push`, `leave`, `keep_cloud`, `keep_device`, `forget_save`), and `decide`, `summary_of`, `hash_of`, `score_text`. One lives under the root (`NODE`), so it outlives the scene's reloads. Off (`path` empty) anywhere but the player's own save. |
-| `Scenes/UI/cloud_question.gd` (`CloudQuestion`) | The question over the whole window: two saves side by side, or a refusal and its reason, and two answers. |
+| `Scenes/UI/cloud_question.gd` (`CloudQuestion`) | The question over the whole window: two saves side by side, and two answers. |
 | `Scenes/UI/settings_page.gd` | **Cloud save** section: Sign in, the four letters and Cancel while signing in, then "Signed in with Google", when it last saved, Sign out, and Delete cloud account (asked in place). Reset's question says "here and in the cloud" while signed in. |
 | `Scenes/UI/leaderboard_page.gd` | Sign in, a name to choose, or the player's row, over the board anyone may read. No explanatory sentences on the game's pages: what a button does is in its tooltip. |
 | `Scenes/main_scene.gd` | `_find_cloud` (made or found again, `launched`, `calm`, the signals), a sync at the end of start-up and after a descent, `_on_cloud_replaced` (reload), `_on_cloud_asked` (the question), quitting through `Cloud.leave`, and Reset through `forget_save`. |
@@ -450,13 +402,12 @@ servers**, so the real sign-in code runs end to end. It covers:
 - expired codes refused;
 - names;
 - a save round-tripping byte for byte;
-- only checked floors counting;
-- conflicts, and replace checked against its own base;
-- every refusal, and the flag;
+- the board taking a save's floors, and never going down;
+- conflicts, and replace;
+- a save taken at its word, and only a non-save turned away;
 - the board's order;
 - signing out and deleting;
-- the sign-in rate limit;
-- the checks on their own.
+- the sign-in rate limit.
 
 The stand-in is switched on only by `PROVIDER_ORIGIN`, which only the tests set.
 
@@ -535,7 +486,7 @@ npm run deploy      # = migrations to the live database, then the Worker
 
 ---
 
-## 13. Running it: logs, flags, cheaters, backups
+## 13. Running it: logs, cheaters, backups
 
 **Live logs** (every request and every `console.error`, including a failed token exchange with a
 provider):
@@ -547,17 +498,9 @@ npx wrangler tail
 **Look at the data:**
 
 ```sh
-npx wrangler d1 execute DB --remote --command "SELECT id, name, floors, linked, hidden, flag FROM players ORDER BY floors DESC LIMIT 20"
+npx wrangler d1 execute DB --remote --command "SELECT id, name, floors, linked, hidden FROM players ORDER BY floors DESC LIMIT 20"
 npx wrangler d1 execute DB --remote --command "SELECT COUNT(*) AS players, SUM(linked) AS signed_in, SUM(floors > 0 AND name IS NOT NULL AND linked = 1) AS on_board FROM players"
 ```
-
-**Refused uploads to review:**
-
-```sh
-npx wrangler d1 execute DB --remote --command "SELECT id, name, flag FROM players WHERE flag IS NOT NULL ORDER BY flag DESC LIMIT 20"
-```
-
-A flag is the time and the reason. One or two flags are usually a restored backup or a reset.
 
 **Take a player off the board** (a cheater, a rude name), silently:
 
@@ -576,7 +519,7 @@ The player then chooses another from the leaderboard page.
 **A player's save history:**
 
 ```sh
-npx wrangler d1 execute DB --remote --command "SELECT revision, checked, vouched, summary, datetime(uploaded_at/1000,'unixepoch') FROM saves WHERE player_id = 12 ORDER BY revision"
+npx wrangler d1 execute DB --remote --command "SELECT revision, summary, datetime(uploaded_at/1000,'unixepoch') FROM saves WHERE player_id = 12 ORDER BY revision"
 ```
 
 **Backups:**
@@ -626,7 +569,7 @@ plays on, and syncs later. Nothing is lost, because the files on the device are 
 | Replaying a login code | A login gives out its token once and is deleted. Codes expire after 10 minutes. |
 | The code leaking to the provider | Every page is sent with `Referrer-Policy: no-referrer`, a CSP of `default-src 'none'`, and `X-Frame-Options: DENY`. |
 | Spam | Per-IP rate limits and Cloudflare's DDoS protection. The body limit is 4 MB. |
-| Junk data | Names are whitelisted; saves are parsed and checked; all SQL is parameterised. |
+| Junk data | Names are whitelisted; saves are parsed; all SQL is parameterised. |
 | Personal data | Only a provider's id, the chosen name, the save and its times are kept. `/privacy` says so, and **Delete cloud account** removes all of it (GDPR's right to erasure). |
 
 Cheating is §4.
@@ -640,7 +583,6 @@ Cheating is §4.
 | Apple sign-in (for iOS) | Needs the Apple Developer Program ($99/yr). Add an `apple` entry to `PROVIDERS` in `src/index.js`. Apple's client secret is a signed JWT (ES256, made from its key) rather than a string, and it answers with `id_token` instead of a user endpoint. Add the route to the regex, a button appears |
 | Link Google and Discord into one account | A signed-in `POST /logins` that attaches the new identity to the caller's player instead of finding or making one |
 | Rename from the game | `PUT /me/name` already renames. The leaderboard page only asks while there is no name |
-| Check items | Export the modifier tables from Godot to JSON, bundle them with the Worker, and check each item's rolls against its level in `checks.js` |
 | Replay descents on a server | Headless Godot in a container (level 3). Out of reach of Workers |
 | A web build | Add CORS headers (`Access-Control-Allow-Origin`, and an `OPTIONS` answer for `Authorization`) to `json()`. Sign-in already works in a browser tab |
 | Keep more revisions | `KEEP_REVISIONS` |
@@ -655,11 +597,11 @@ The brief was cloud-hosted, as simple as possible, cheap, and customisable.
 | Option | Why not (or why) |
 |---|---|
 | **Cloudflare Workers + D1** ✅ | Real code and real SQL you own; no server; no cold starts; never pauses; local dev and tests run on the same runtime. |
-| Supabase (Postgres + Auth) | Its free projects pause after a week idle. The save checks would be SQL functions and row-level security instead of plain code. |
+| Supabase (Postgres + Auth) | Its free projects pause after a week idle. The rules would be SQL functions and row-level security instead of plain code. |
 | Firebase (Auth + Firestore) | Billed per document read. Community-made Godot SDKs. The rules become a second language. |
 | A rented server | ~$5/mo from day one, and you patch the OS, renew TLS and keep it running. It's needed only for level 3 (running the game). |
 | Steam Cloud and leaderboards | Free and the right answer *if* the game ships on Steam, for Steam players only. |
-| PlayFab, Nakama, SilentWolf | Faster to start, but the ranking, checks and pricing are theirs. |
+| PlayFab, Nakama, SilentWolf | Faster to start, but the ranking and pricing are theirs. |
 
 A hosted sign-in service (Auth0, Clerk, Firebase Auth) wasn't worth it for two providers asking only
 for an id: the OAuth code is about 80 lines in `src/index.js`.
@@ -676,7 +618,6 @@ for an id: the OAuth code is about 80 lines in `src/index.js`.
 | "The sign-in did not go through" | The token exchange failed: a wrong or missing secret. `npx wrangler tail` shows the provider's answer. |
 | "Signing in ran out of time" | The browser step took over 10 minutes, or the page was closed. Start again. |
 | The same question every start-up | Something writes the save before `_find_cloud` runs `launched()`. Keep `launched()` ahead of every write in `_ready`. |
-| "The cloud did not take this device's save" | A check failed; the reason is in the question and in `players.flag`. Restoring an old backup does this; *Start over from this device* is the way through. |
 | "The cloud cannot be reached" | Offline, or the free limit is used up for today. It syncs on its own later. |
 | `no such table` | `npx wrangler d1 migrations apply DB --remote`. |
 | `npm test` hangs on Windows | An old `wrangler dev` holds the port or `.wrangler`. Stop it and delete `.wrangler/test`. |
@@ -696,8 +637,7 @@ backend/
     │   ├── 0001_players.sql   the anonymous leaderboard
     │   └── 0002_accounts.sql  accounts, sessions, sign-ins in progress, saves
     ├── src/
-    │   ├── index.js           the routes: sign-in, account, saves, board, pages
-    │   └── checks.js          what a save must satisfy (pure functions)
+    │   └── index.js           the routes: sign-in, account, saves, board, pages
     └── test.mjs               end to end on a local D1 with stand-in providers (npm test)
 
 Scenes/cloud.gd                  the game's client

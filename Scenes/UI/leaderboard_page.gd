@@ -2,8 +2,8 @@ class_name LeaderboardPage
 extends Control
 ## The Gollux leaderboard as a page against the left edge, opened from the corner and the cave's tile
 ## panel: the player's own place -- or Sign in, or a name to choose, until they have one -- over the top
-## of the board, which anyone may read. A score is what the player's cloud saves vouched for (the
-## server's `saves.vouched`), so floors beaten before signing in are not on it.
+## of the board, which anyone may read. A score is the deepest any of the player's cloud saves has
+## reached, taken at its word.
 ##
 ## Built like the other left-hand pages (`SettingsPage`): `open()` redraws it, syncs and reads the board
 ## again, `layout()` fits it to the window, `closed` is its X. Everything it shows is the `Cloud`'s, and
@@ -83,7 +83,7 @@ func _draw() -> void:
 		_rows.add_child(cancel)
 	elif not _board.signed_in():
 		var sign_in := UITheme.button("Sign in", UITheme.GO_BUTTON,
-				"Put your descents on the board: your save goes to the cloud, where it is checked. You sign in with Google or Discord, in your browser")
+				"Put your descents on the board: your save goes to the cloud. You sign in with Google or Discord, in your browser")
 		sign_in.disabled = _board.busy()
 		sign_in.pressed.connect(func() -> void: _board.sign_in())
 		_rows.add_child(sign_in)

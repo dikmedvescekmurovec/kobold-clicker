@@ -32,6 +32,9 @@ const HOT := {
 const RISE := 0.3
 ## Seconds it takes to sink back into the ground once the find is picked up (`collapse`).
 const FALL := 0.15
+## The hum every beam stands with, for as long as it stands: a loop (`tools/sound_levels.py` cuts it
+## from whole pulses, and its `.import` loops it).
+const HUM := preload("res://Sounds/Sfx/loot_beam.ogg")
 
 
 ## Whether `rarity` stands a beam at all.
@@ -74,13 +77,28 @@ static func make(rarity: int, colour: Color, landed: float, cover: Vector2, pixe
 		beam.add_child(layer)
 		layer.tree_entered.connect(func() -> void:
 			layer.create_tween().tween_property(material, "shader_parameter/grow", 1.0, RISE) 					.set_delay(landed).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT), CONNECT_ONE_SHOT)
+	# Its hum swells as it shoots up and fades as it sinks (`collapse`), every beam its own -- each
+	# from somewhere else in the loop, so beams standing together do not pulse in step. A fade is not
+	# a volume: it ends at the file's own level, which `sound_levels.py` sets.
+	var hum := AudioStreamPlayer.new()
+	hum.name = "Hum"
+	hum.stream = HUM
+	hum.bus = Settings.SFX_BUS
+	hum.volume_linear = 0.0
+	beam.add_child(hum)
+	hum.tree_entered.connect(func() -> void:
+		hum.play(randf() * HUM.get_length())
+		hum.create_tween().tween_property(hum, "volume_linear", 1.0, RISE).set_delay(landed), CONNECT_ONE_SHOT)
 	return beam
 
 
-## Sinks a beam `make` built back into its foot over `FALL`, then frees it.
+## Sinks a beam `make` built back into its foot over `FALL`, its hum fading with it, then frees it.
 static func collapse(beam: Node2D) -> void:
 	var fall := beam.create_tween().set_parallel(true)
-	for layer: Polygon2D in beam.get_children():
-		fall.tween_property(layer.material, "shader_parameter/grow", 0.0, FALL) \
-				.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	for part: Node in beam.get_children():
+		if part is AudioStreamPlayer:
+			fall.tween_property(part, "volume_linear", 0.0, FALL)
+		else:
+			fall.tween_property((part as Polygon2D).material, "shader_parameter/grow", 0.0, FALL) \
+					.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	fall.chain().tween_callback(beam.queue_free)

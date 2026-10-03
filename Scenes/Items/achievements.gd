@@ -45,7 +45,7 @@ const DOMINO_STREAK := 10
 const ACHIEVEMENTS := {
 	# --- I: the first hour.
 	"knucklebone_ring": {"name": "Drumroll", "text": "Click {need} times.",
-			"tier": 1, "key": "clicks", "need": [100, 1000, 10000, 100000]},
+			"tier": 1, "key": "clicks", "need": [1000, 10000, 100000, 1000000]},
 	"duelists_buckler": {"name": "Sharp Eye", "text": "Land {need} crits.",
 			"tier": 1, "key": "crits", "need": [100, 1000, 10000, 100000]},
 	"serpents_eye": {"name": "Cold Streak", "text": "Land {need} blows in a row without a crit.",

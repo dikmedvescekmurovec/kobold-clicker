@@ -130,19 +130,19 @@ Godot skips this folder because of `.gdignore`.
 - **The blue original is the source, not an enemy.** It has no roster entry; `EnemyRoster` lists the six, each on its own environment.
 
 ### Environment adjacency
-Which environments may border each other (`terrain.ADJACENT`, exported as `env_adjacency`). The table is symmetric, and the same environment is always allowed. Maps, QA layouts and demos must only use allowed borders. `ENV_CHAIN` (desert, dirt, forest, grass, ice, mountains) is a legal order for side-by-side bands.
+Which environments may border each other (`terrain.ADJACENT`, exported as `env_adjacency`): every pair but desert and ice (2026-10-03; the old table also kept desert off grass and forest and ice off dirt and forest, which left mountains with three times the land desert and ice had -- `Scenes/Map/DESIGN.md`). The table is symmetric, and the same environment is always allowed. Maps, QA layouts and demos must only use allowed borders. `ENV_CHAIN` (desert, dirt, forest, grass, ice, mountains) is a legal order for side-by-side bands.
 
 | | grass | dirt | desert | ice | forest | mountains |
 |---|---|---|---|---|---|---|
-| grass | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
-| dirt | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ |
-| desert | ✗ | ✓ | ✓ | ✗ | ✗ | ✓ |
-| ice | ✓ | ✗ | ✗ | ✓ | ✗ | ✓ |
-| forest | ✓ | ✓ | ✗ | ✗ | ✓ | ✓ |
+| grass | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| dirt | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| desert | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ |
+| ice | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
+| forest | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | mountains | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 ### Blend overlays (soft transitions)
-- **Precedence:** `blends.PRIORITY` (exported as `blend_priority`) is dirt < grass < desert < ice < forest < mountains. Where env A borders a lower-priority tile, A's overlay is drawn on that tile. Allowed spreads: grass→dirt, desert→dirt, ice→grass, forest→grass/dirt, mountains→all.
+- **Precedence:** `blends.PRIORITY` (exported as `blend_priority`) is dirt < grass < desert < ice < forest < mountains. Where env A borders a lower-priority tile, A's overlay is drawn on that tile. Allowed spreads: grass→dirt, desert→dirt/grass, ice→dirt/grass, forest→dirt/grass/desert/ice, mountains→all.
 - **Sprites:** `blends/blend_<env>_<edges>.png` (e.g. `blend_forest_E_SE`) names the edges that touch A, and the JSON entries carry `env` and `edges`. All 63 edge sets are pre-rendered for each env except dirt (315). Draw order: environment, then overlays in priority order, then roads.
 - **Seams:** covered pixels copy A's `"base"` tile at the same local pixel. Coverage depends only on the distance to A's hexes plus lattice-periodic noise, so both sides of every seam and corner agree. Forest trees are drawn whole, copied from `forest_shared_trees()` in the same order as the forest tile. Fringe details must fit inside the hex.
 - **Towns** never receive overlays, but their environment still spreads into weaker neighbours.

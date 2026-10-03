@@ -27,6 +27,10 @@ const BESIDE := "beside"
 ## writes beside that key's picture: `{"shift": "equip", "ctrl": "sell"}`. The page that draws the
 ## square sets it, since only it knows what its buttons do; Alt is the card's own.
 const KEYS := "keys"
+## The meta a square may carry holding a second card of its own for Alt, a `func(rows, width)` like its
+## `hint`: an achievement's square writes the unique it unlocks there, and a unique's square in the log
+## its achievement (the user's, 2026-10-02). The word Alt is offered under goes in its `KEYS`.
+const ALT_CARD := "alt_card"
 const ORB_SHINE := preload("res://Scenes/UI/orb_shine.gdshader")
 ## How long the light behind the card takes to swell in, and to die after the least orb and after the
 ## best, in seconds (`shine`); and the most it reaches past the card's edges, in the card's pixels.
@@ -110,24 +114,13 @@ func _process(_delta: float) -> void:
 		slot.hint.call(_rows, WIDTH)
 	else:
 		ItemDetails.fill(_rows, slot.item, WIDTH)
-		# And no keys to press, so none are offered.
-		var hints := {} if Cursors.touched else hints_for(slot, alt)
-		if not hints.is_empty():
-			_rows.add_child(UITheme.rule())
-			_rows.add_child(key_row(hints))
-		var worn := worn_for(slot.item) if alt else null
-		if worn != null:
-			UITheme.clear(_worn_rows)
-			ItemDetails.fill(_worn_rows, worn, WIDTH)
-			# Said on the rarity line, the fill's second, rather than over the name: a heading would
-			# push every row a line below its fellow on the first card.
-			(_worn_rows.get_child(1) as Label).text += " · worn"
-			_worn.show()
-		elif alt and bare_for(slot.item):
-			# Alt answered, so a bare socket does not read as a key that did nothing.
-			UITheme.clear(_worn_rows)
-			_worn_rows.add_child(ItemDetails.line(bare_text(slot.item), Palette.TEXT_SOFT, WIDTH, true))
-			_worn.show()
+	# And no keys to press, so none are offered.
+	var hints := {} if Cursors.touched else hints_for(slot, alt)
+	if not hints.is_empty():
+		_rows.add_child(UITheme.rule())
+		_rows.add_child(key_row(hints))
+	if alt and write_second(slot):
+		_worn.show()
 	show()
 	var anchor := slot.get_global_rect()
 	if slot.has_meta(BESIDE) and (slot.get_meta(BESIDE) as Control).visible:
@@ -205,7 +198,12 @@ func shine(orb: String) -> void:
 ## The square under `at` (in viewport pixels), or null. A square scrolled out of its box is still
 ## where it was as far as its own rect knows, so every clipping ancestor has to hold the point too.
 func slot_at(at: Vector2) -> ItemSlot:
-	for slot: ItemSlot in get_tree().get_nodes_in_group(ItemSlot.GROUP):
+	return square_at(get_tree(), at)
+
+
+## `slot_at` for whoever has no card to ask: the bag, putting a held orb down off any square.
+static func square_at(tree: SceneTree, at: Vector2) -> ItemSlot:
+	for slot: ItemSlot in tree.get_nodes_in_group(ItemSlot.GROUP):
 		if slot.item == null or not slot.is_visible_in_tree() \
 				or not slot.get_global_rect().has_point(at):
 			continue
@@ -245,14 +243,41 @@ func bare_text(item: Item) -> String:
 	return BARE % str(Equipment.LABELS[equipment.sockets_for(item)[0]]).to_lower()
 
 
+## The second card for `slot`, written into its rows: the square's own (`ALT_CARD`), or else -- for a
+## piece rather than a square with a `hint` -- the piece worn where it would go, or that the socket is
+## bare. False when there is nothing to say, and the card stays down.
+func write_second(slot: ItemSlot) -> bool:
+	UITheme.clear(_worn_rows)
+	if slot.has_meta(ALT_CARD):
+		(slot.get_meta(ALT_CARD) as Callable).call(_worn_rows, WIDTH)
+		return true
+	if slot.hint.is_valid():
+		return false
+	var worn := worn_for(slot.item)
+	if worn != null:
+		ItemDetails.fill(_worn_rows, worn, WIDTH)
+		# Said on the rarity line, the fill's second, rather than over the name: a heading would push
+		# every row a line below its fellow on the first card.
+		(_worn_rows.get_child(1) as Label).text += " · worn"
+		return true
+	if bare_for(slot.item):
+		# Alt answered, so a bare socket does not read as a key that did nothing.
+		_worn_rows.add_child(ItemDetails.line(bare_text(slot.item), Palette.TEXT_SOFT, WIDTH, true))
+		return true
+	return false
+
+
 ## The keys a press or a hold on `slot` would answer, for the card's foot: Alt while it is not held
 ## (held, the second card is the answer) and the card has something to say under it, then whatever
 ## the square's page says a click does (`KEYS`).
 func hints_for(slot: ItemSlot, alt: bool) -> Dictionary:
 	var hints := {}
-	if not alt and (worn_for(slot.item) != null or bare_for(slot.item)):
+	# A square with a `hint` is not the player's piece, so it is held against nothing worn.
+	if not alt and not slot.hint.is_valid() and (worn_for(slot.item) != null or bare_for(slot.item)):
 		hints["alt"] = "compare"
 	hints.merge(slot.get_meta(KEYS, {}))
+	if alt:
+		hints.erase("alt")
 	return hints
 
 

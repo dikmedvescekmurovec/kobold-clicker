@@ -20,7 +20,7 @@ const PLAYER := "player"
 ## How wide the words wrap, in panel pixels.
 const TEXT_WIDTH := 220
 ## How fast the words come in, in letters a second.
-const LETTERS_PER_SECOND := 60.0
+const LETTERS_PER_SECOND := 30.0
 ## Seconds a portrait frame is held.
 const FRAME_TIME := 0.15
 ## Air round the face inside its socket: the shoulders run down to its foot, the hat has room above.
@@ -29,6 +29,14 @@ const SOCKET_PAD := Vector4i(6, 11, 6, 1)  # left, top, right, bottom
 const FOOT_GAP := 8
 ## The shade over everything behind the box.
 const SHADE := Color(Palette.INK, 0.5)
+## The speaker's babble while a page comes in: a syllable every `LETTERS_PER_SYLLABLE` letters, each
+## cutting off the last, so it chatters in quick succession (the user's ask) -- one at least, even when
+## the page comes in whole. The hero's is pitched `PLAYER_PITCH` lower.
+const VOICE := [preload("res://Sounds/Sfx/voice_1.ogg"), preload("res://Sounds/Sfx/voice_2.ogg"),
+		preload("res://Sounds/Sfx/voice_3.ogg"), preload("res://Sounds/Sfx/voice_4.ogg"),
+		preload("res://Sounds/Sfx/voice_5.ogg")]
+const PLAYER_PITCH := 0.8
+const LETTERS_PER_SYLLABLE := 3
 
 var _pages: Array
 var _page := 0
@@ -41,6 +49,9 @@ var _face: AtlasTexture
 var _frames := 1
 var _clock := 0.0
 var _ui_scale := 1.0
+var _voice: AudioStreamPlayer
+## How many of the page's letters had come in at the last syllable.
+var _voiced := 0
 
 
 func _init(speaker: String, pages: Array, portrait: Texture2D, left := false) -> void:
@@ -100,6 +111,11 @@ func _init(speaker: String, pages: Array, portrait: Texture2D, left := false) ->
 	if left:
 		row.move_child(socket, 0)
 		row.move_child(rule, 1)
+	_voice = AudioStreamPlayer.new()
+	_voice.stream = Juice.takes(VOICE)
+	_voice.bus = Settings.SFX_BUS
+	_voice.pitch_scale = PLAYER_PITCH if left else 1.0
+	add_child(_voice)
 	# Every click is the shade's, wherever it lands, the box included.
 	for child: Node in find_children("*", "Control", true, false):
 		(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -162,6 +178,8 @@ func _settle() -> void:
 ## drawn change), so the box does not grow line by line.
 func _show_page() -> void:
 	_words.text = str(_pages[_page])
+	_voiced = 0
+	_voice.play()
 	var letters := _words.text.length()
 	if Settings.animations == Settings.Anim.NONE or letters == 0:
 		_typed()
@@ -186,6 +204,9 @@ func _gui_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	if typing() and _words.visible_characters >= _voiced + LETTERS_PER_SYLLABLE:
+		_voiced = _words.visible_characters
+		_voice.play()
 	if _frames < 2 or Settings.animations == Settings.Anim.NONE:
 		return
 	_clock += delta

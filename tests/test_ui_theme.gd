@@ -427,6 +427,19 @@ func _test_item_card() -> bool:
 	var worn_square := ItemSlot.make(other)
 	_check(card.hints_for(worn_square, false) == {}, "the worn piece itself has no Alt to offer")
 	worn_square.free()
+	# A square may carry a second card of its own: what Alt brings up beside an achievement or a unique.
+	var told := ItemSlot.make(sword)
+	told.hint = func(rows: VBoxContainer, _width: float) -> void: rows.add_child(Label.new())
+	_check(not card.write_second(told) and card.hints_for(told, false) == {},
+			"a square with a hint is held against nothing worn")
+	told.set_meta(ItemCard.ALT_CARD, func(rows: VBoxContainer, width: float) -> void:
+		rows.add_child(ItemDetails.line("Drumroll", Palette.TEXT, width)))
+	told.set_meta(ItemCard.KEYS, {"alt": "achievement"})
+	_check(card.hints_for(told, false) == {"alt": "achievement"} and card.hints_for(told, true) == {},
+			"its foot names Alt by what it brings up, until Alt is held")
+	_check(card.write_second(told) and (card._worn_rows.get_child(0) as Label).text == "Drumroll",
+			"and held, Alt writes that card")
+	told.free()
 	row.free()
 	for node: Node in [box, open, card]:
 		node.queue_free()

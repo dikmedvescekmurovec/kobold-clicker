@@ -48,7 +48,7 @@ const REROLL_GROWTH := 2.0
 
 ## What the fortuneteller asks for a spell, in bodies at the town's level, the same every time it is
 ## asked (`FortuneTeller`'s own names; a test holds the two lists together). A fight is about ten
-## bodies: the roads fifteen fights, a chest six, an appraisal one and a half; the scour a hundred and
+## bodies: the roads thirty fights, a chest six, an appraisal one and a half; the scour a hundred and
 ## the road home twenty, both bought once a settlement.
 ##
 ## **Transcending is the one that is not at the town's level:** it is bodies on the ground just
@@ -56,12 +56,11 @@ const REROLL_GROWTH := 2.0
 ## only just brought that wall down, and a purse the second ring's monsters fill for anyone who stays
 ## to farm them. Two hundred fights' worth there; see `DESIGN.md` for the table it was set against.
 const FORTUNE_BODIES := {
-	"roads": 150.0,
+	"roads": 300.0,
 	"treasure": 60.0,
 	"appraise": 15.0,
 	"scour": 1000.0,
 	"homecoming": 200.0,
-	"stone": 1000.0,
 	"transcend": 2000.0,
 }
 
@@ -142,8 +141,8 @@ static func reroll_price(town_cell: Vector2i, rerolls: int) -> float:
 static func fortune_price(reading: String, town_cell: Vector2i) -> float:
 	if not FORTUNE_BODIES.has(reading):
 		return 0.0
-	# The way out and the stone are the same everywhere: bodies on the ground behind the first wall.
-	if reading == "transcend" or reading == "stone":
+	# The way out is the same everywhere: bodies on the ground behind the first wall.
+	if reading == "transcend":
 		return maxf(1.0, roundf(Encounter.gold_at_steps(transcend_steps()) * float(FORTUNE_BODIES[reading])))
 	return maxf(1.0, roundf(gold_at_level(MapBuilder.level_of(town_cell)) * float(FORTUNE_BODIES[reading])))
 

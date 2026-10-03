@@ -1,0 +1,19 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+uid="uid://bt2stvg3cqj6m"
+path="res://.godot/imported/orb applied.ogg-59edced8af0034c03d01da55548dc53a.oggvorbisstr"
+
+[deps]
+
+source_file="res://Sounds/Selected/orb applied.ogg"
+dest_files=["res://.godot/imported/orb applied.ogg-59edced8af0034c03d01da55548dc53a.oggvorbisstr"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

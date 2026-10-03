@@ -1,7 +1,7 @@
 class_name Curses
 extends RefCounted
 ## The curses a player may take into a new world: any whose skulls add up to no more than the player's
-## `Inventory.skull_budget`, chosen on the black screen of a transcension (`TranscendPage`), each a
+## `Inventory.skull_allowance` (Gollux's depths won), chosen on the black screen of a transcension (`TranscendPage`), each a
 ## handicap on the whole world for a bonus on the whole world.
 ## A table and nothing else -- `Inventory.curses` holds the ids, `Inventory.effects()` hands each to
 ## the fight as `"curse:<id>"` (`effect`), where it is one `if` like a worn unique's, and

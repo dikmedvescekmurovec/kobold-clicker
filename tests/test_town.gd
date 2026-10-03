@@ -679,8 +679,8 @@ func _test_bounties() -> bool:
 	return true
 
 
-## The bank-or-pouch rule, on the boards: a tile fight counts a body as it falls, a run holds its own
-## until it banks, and banking twice cannot count one goblin twice.
+## The ledger on the boards: every fight counts a body as it falls; a tile fight writes it down at once
+## and a run as its kills are banked.
 func _test_bounty_kills() -> bool:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = WORLD_SEED
@@ -716,7 +716,6 @@ func _test_bounty_kills() -> bool:
 	hear.call(shallow_run)
 	shallow_run.tile_level = 4
 	shallow_run.add_kill(target)
-	shallow_run.bank()
 	_check(_have(drawer, 0) == 1, "and neither does a run's")
 	_check(said.size() == 1, "and neither is said (%s)" % [said])
 
@@ -725,15 +724,12 @@ func _test_bounty_kills() -> bool:
 	run.tile_level = 5
 	for i in 3:
 		run.add_kill(target)
-	_check(_have(drawer, 0) == 1, "a run's bodies wait in its pouch (%d)" % _have(drawer, 0))
+	_check(_have(drawer, 0) == 4, "a run's bodies count as they fall (%d)" % _have(drawer, 0))
 	_check(said.slice(1) == [[target, 2, 5], [target, 3, 5], [target, 4, 5]],
-			"but each is said as it falls, counted on top of the board's (%s)" % [said])
-	_check(run.bank(), "the run banks")
-	_check(_have(drawer, 0) == 4, "and they all count at once (%d)" % _have(drawer, 0))
-	_check(said.size() == 4, "banking says nothing over again (%s)" % [said])
-	_check(not run.bank(), "a second bank has nothing to do")
-	_check(_have(drawer, 0) == 4, "and counts nothing twice (%d)" % _have(drawer, 0))
-	_check(_have(Inventory.load_from(TEST_PATH).towns.visit(spot), 0) == 4, "the run's kills were saved")
+			"and each is said as it falls (%s)" % [said])
+	_check(_have(Inventory.load_from(TEST_PATH).towns.visit(spot), 0) == 1, "but nothing is written while the run goes on")
+	run.bank_kills(3)
+	_check(_have(Inventory.load_from(TEST_PATH).towns.visit(spot), 0) == 4, "until its kills are banked")
 
 	# The body that fills the job is said with `have == need`; one past it is nothing to say.
 	var last := FightLedger.new(inventory, TEST_PATH, true)
@@ -742,7 +738,6 @@ func _test_bounty_kills() -> bool:
 	last.add_kill(target)
 	last.add_kill(target)
 	_check(said.slice(4) == [[target, 5, 5]], "the filling body is said and the one past it is not (%s)" % [said])
-	last.bank()
 	_check(_have(drawer, 0) == 5, "and the board stops at the job (%d)" % _have(drawer, 0))
 	return true
 
@@ -928,8 +923,10 @@ func _test_orb_on_a_shelf() -> void:
 	_check(TownPrices.buy_price(after) > before, "the vendor asks more for what it has become")
 	var saved: Item = VendorStock.items(Inventory.load_from(TEST_PATH).towns.visit(Vector2i(140, 128)))[0]
 	_check(saved.rarity == ItemRarity.Rarity.UNCOMMON, "and the save holds the shelf as it now stands")
-	# A rare is past what it makes: a press there costs nothing and still opens nothing.
-	VendorStock.put(drawer, 0, Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 3))
+	# A broken piece is one no orb can touch: a press there costs nothing and still opens nothing.
+	var ruined := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 3)
+	ruined.broken = true
+	VendorStock.put(drawer, 0, ruined)
 	page._on_shelf_input(_press(), 0)
 	_check(inventory.orb_count("Orb of Transmutation") == 1 and page._offer == null,
 			"a refused shelf piece spends nothing")
@@ -1501,23 +1498,23 @@ func _test_fortune() -> bool:
 
 	# Her list is in two halves and every spell is in exactly one of them -- the lists are written out
 	# separately, so this is what holds them together.
-	var halves := (FortuneTeller.COMMON + FortuneTeller.GREAT + [FortuneTeller.STONE, FortuneTeller.TRANSCEND]).duplicate()
+	var halves := (FortuneTeller.COMMON + FortuneTeller.GREAT + [FortuneTeller.TRANSCEND]).duplicate()
 	halves.sort()
 	var every := FortuneTeller.READINGS.duplicate()
 	every.sort()
 	_check(halves == every, "every spell is a reading or a great spell and never both (%s)" % [halves])
 
-	# The stone's hot and cold: its bands, coldest first, by the steps to the cave.
+	# How near the cave feels: its bands, coldest first, by the steps to it.
 	var bands := []
 	for steps in [0, 2, 3, 5, 6, 10, 11, 16, 17, 60]:
 		bands.append(FortuneTeller.warmth(steps))
-	_check(bands == [4, 4, 3, 3, 2, 2, 1, 1, 0, 0], "the stone burns within two steps and is cold past sixteen (%s)" % [bands])
+	_check(bands == [4, 4, 3, 3, 2, 2, 1, 1, 0, 0], "the cave burns within two steps and is cold past sixteen (%s)" % [bands])
 
 	for reading: String in FortuneTeller.READINGS:
 		_check(TownPrices.FORTUNE_BODIES.has(reading) and FortuneTeller.LABELS.has(reading),
 				"%s has a price and a name" % reading)
-		# The way out and the stone are priced on the ground behind the first wall, wherever they are asked for.
-		if reading == FortuneTeller.TRANSCEND or reading == FortuneTeller.STONE:
+		# The way out is priced on the ground behind the first wall, wherever it is asked for.
+		if reading == FortuneTeller.TRANSCEND:
 			_check(TownPrices.fortune_price(reading, TOWN_CELL) == TownPrices.fortune_price(reading, Vector2i(1, 0)),
 					"%s costs the same in every town" % reading)
 			_check(TownPrices.fortune_price(reading, TOWN_CELL) == roundf(TownPrices.FORTUNE_BODIES[reading]
@@ -1582,13 +1579,10 @@ func _test_fortune_page() -> void:
 		if reading == FortuneTeller.TRANSCEND:
 			_check(_spell(main, reading) == null, "the way out is not offered yet")
 			continue
-		if reading == FortuneTeller.STONE:
-			_check(_spell(main, reading) == null, "nor the stone, with no cave in this world to feel for")
-			continue
 		_check(_spell(main, reading) != null, "she offers %s" % reading)
 	_check(_dead(main, FortuneTeller.APPRAISE), "no piece is open to read")
 
-	# The roads: three sentences, and free in this town from then on.
+	# The roads: three sentences, and not sold in this town again.
 	var purse: float = main.inventory.gold
 	_ask(main, FortuneTeller.ROADS)
 	await process_frame
@@ -1601,13 +1595,9 @@ func _test_fortune_page() -> void:
 	_deep_button(main.town_page._told, "Dismiss").pressed.emit()
 	await process_frame
 	_check(main.town_page._told == null, "a Dismiss puts it away")
-	purse = main.inventory.gold
-	_ask(main, FortuneTeller.ROADS)
-	await process_frame
-	_check(main.inventory.gold == purse, "and told again for nothing")
-	_check(main.town_page._told == null and _said(main.town_page._rows).contains("You cast Roads"),
-			"and, not to be shown again, said in one line (%s)" % _said(main.town_page._rows))
 	_check(TownPage.SKIP_TOLD + FortuneTeller.ROADS in Inventory.load_from(TEST_PATH).tips, "and saved")
+	_check(_dead(main, FortuneTeller.ROADS) and _said(_spell(main, FortuneTeller.ROADS).get_parent())
+			.contains("Bought"), "the roads, bought here, are greyed with Bought where the price was")
 
 	# The star.
 	var chest: Vector2i = main.view.nearest_chest(true)
@@ -1621,6 +1611,10 @@ func _test_fortune_page() -> void:
 	_check(main._chest_pointer.visible, "and it is up at once, under the open town")
 	_check(FortuneTeller.chest(Inventory.load_from(TEST_PATH).fortunes) == main.view.origin + chest, "and saved")
 	_check(_dead(main, FortuneTeller.TREASURE), "and not sold again while it is out")
+	# Dismissed with its tick: that reading's answer is one line on the page from then on.
+	main.town_page._told.find_child(BagPage.TICK_NAME, true, false).button_pressed = true
+	_deep_button(main.town_page._told, "Dismiss").pressed.emit()
+	await process_frame
 	main.view._states[chest] = MapBuilder.State.CHARTED
 	main._sync_chest()
 	_check(main._chest_pointer.target == HexMap.NO_CELL and FortuneTeller.chest(main.inventory.fortunes)
@@ -1630,6 +1624,10 @@ func _test_fortune_page() -> void:
 	_check(not _dead(main, FortuneTeller.TREASURE), "and the star can be bought again")
 	_check(_price(main, FortuneTeller.TREASURE) == TownPrices.fortune_price(FortuneTeller.TREASURE, town),
 			"for what the first one cost")
+	_ask(main, FortuneTeller.TREASURE)
+	await process_frame
+	_check(main.town_page._told == null and _said(main.town_page._rows).contains("You cast Treasure"),
+			"and, not to be shown again, said in one line (%s)" % _said(main.town_page._rows))
 
 	# A piece read: the bag's open piece, as the smith's is.
 	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, RandomNumberGenerator.new())
@@ -1654,25 +1652,11 @@ func _test_fortune_page() -> void:
 	main.town_page.bag_changed(null)
 	await process_frame
 
-	# The Seeing Stone: sold once this world has a cave, once and for good.
+	# A world with a cave in it, as the rest of her spells are asked in.
 	main.inventory.farthest_land = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
 	main._credit_walls()
 	main.town_page.redraw()
 	await process_frame
-	var stone_price := TownPrices.fortune_price(FortuneTeller.STONE, town)
-	_check(_spell(main, FortuneTeller.STONE) != null and not _dead(main, FortuneTeller.STONE)
-			and _price(main, FortuneTeller.STONE) == stone_price, "with a cave in the world, she sells the stone")
-	purse = main.inventory.gold
-	_ask(main, FortuneTeller.STONE)
-	await process_frame
-	_check(main.inventory.seeing_stone and main.inventory.gold == purse - stone_price
-			and Inventory.load_from(TEST_PATH).seeing_stone, "bought, paid for and saved")
-	_check(main.town_page._told != null and _said(main.town_page._told).contains("Seeing Stone is yours"),
-			"and she says it is the player's for good")
-	main.town_page._close_told()
-	main.town_page.redraw()
-	await process_frame
-	_check(_spell(main, FortuneTeller.STONE) == null, "and never sold again")
 
 	# The scour: the town closes, the map is aimed at, Escape costs nothing, a click pays once.
 	_ask(main, FortuneTeller.SCOUR)
@@ -1782,9 +1766,9 @@ func _test_fortune_page() -> void:
 	main.inventory.gold = full_purse
 	_ask(main, FortuneTeller.TRANSCEND)
 	await process_frame
-	# Five skulls to spend on the black screen, more than the one wall down earns: the budget is read as
-	# the screen opens.
-	main.inventory.skull_budget = 5
+	# Six skulls to spend on the black screen, three depths of the dungeon won (a wall earns none): the
+	# budget is read as the screen opens.
+	main.inventory.dungeon_depth = 3
 	var written := FileAccess.get_file_as_string(TEST_PATH)
 	_deep_button(main.town_page._told, "Transcend").pressed.emit()
 	await process_frame
@@ -1816,23 +1800,23 @@ func _test_fortune_page() -> void:
 	await process_frame
 	_check(black._curse_face != null and not black._choice.visible and black._back.visible,
 			"the third card opens the curses, with the arrow back")
-	for id: String in [Curses.THICK_FOG, Curses.NO_REST]:
+	for id: String in [Curses.THICK_FOG, Curses.NO_REST, Curses.BLOODTHIRST]:
 		(black._curse_face.find_child(id, true, false) as Button).toggled.emit(true)
 		await process_frame
 	var winter := black._curse_face.find_child(Curses.LONG_WINTER, true, false) as Button
-	_check(main.inventory.pending_curses.size() == 2 and winter.disabled
+	_check(main.inventory.pending_curses.size() == 3 and winter.disabled
 			and not (black._curse_face.find_child(Curses.IRON_FOES, true, false) as Button).disabled
 			and not (black._curse_face.find_child(Curses.NO_REST, true, false) as Button).disabled
-			and "Skulls: 3 of 5" in _said(black._curse_face),
-			"three skulls of five taken: a curse of three greys, one of one does not")
+			and "Skulls: 5 of 6" in _said(black._curse_face),
+			"five skulls of six taken: a curse of three greys, one of one does not")
 	winter.toggled.emit(true)
 	await process_frame
-	_check(main.inventory.pending_curses.size() == 2, "and a greyed one pressed anyway is refused")
-	(black._curse_face.find_child(Curses.NO_REST, true, false) as Button).toggled.emit(false)
+	_check(main.inventory.pending_curses.size() == 3, "and a greyed one pressed anyway is refused")
+	(black._curse_face.find_child(Curses.BLOODTHIRST, true, false) as Button).toggled.emit(false)
 	await process_frame
 	(black._curse_face.find_child(Curses.LONG_WINTER, true, false) as Button).toggled.emit(true)
 	await process_frame
-	_check(main.inventory.pending_curses == [Curses.THICK_FOG, Curses.LONG_WINTER],
+	_check(main.inventory.pending_curses == [Curses.THICK_FOG, Curses.NO_REST, Curses.LONG_WINTER],
 			"one let go makes room again, to the last skull")
 	_check(main.inventory.curses.is_empty() and FileAccess.get_file_as_string(TEST_PATH) == written,
 			"the world being left is under none of them, and nothing is written")
@@ -1852,7 +1836,7 @@ func _test_fortune_page() -> void:
 	_check(after.kills == 321 and after.first_sword_taken and "first_town" in after.tips,
 			"and so does what the player knows, so no helping hand is dealt twice")
 	_check(after.walls_credited == 0, "the new world's walls have paid nothing yet")
-	_check(after.curses == [Curses.THICK_FOG, Curses.LONG_WINTER], "the new world is under what was chosen (%s)" % [after.curses])
+	_check(after.curses == [Curses.NO_REST, Curses.THICK_FOG, Curses.LONG_WINTER], "the new world is under what was chosen (%s)" % [after.curses])
 	_check(after.total() == 1 and after.items[0].type == LootTable.BROKEN_TORCH, "and the fog's torch is in its bag")
 	# The scene would have been loaded again; here it is only told it may not write the old world back.
 	main.queue_free()
@@ -1970,7 +1954,6 @@ func _test_curses_the_world_feels() -> void:
 	var after := Inventory.load_from(TEST_PATH)
 	_check(after.curses.is_empty() and after.stash().total() == 0 and after.total() == 0,
 			"the next world begins under nothing, with nothing")
-	_check(after.skull_budget == 0, "and eight skulls carried into a lost world earn none (%d)" % after.skull_budget)
 	main.queue_free()
 	await process_frame
 	_clear_scratch()

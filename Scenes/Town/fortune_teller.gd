@@ -25,12 +25,8 @@ const HOMECOMING := "homecoming"
 ## (`Inventory.transcended`). She offers it only once a wall has fallen, and it is priced against the
 ## ground behind the first wall rather than the town's (`TownPrices.fortune_price`).
 const TRANSCEND := "transcend"
-## Not a reading either but a thing she sells, once and for good: the Seeing Stone, which feels for the
-## Gollux cave (`warmth`) and is kept through every transcension (`Inventory.seeing_stone`). She has it
-## once this world has a cave, and it is priced like the way out, the same in every town.
-const STONE := "stone"
-## The order her buttons stand in: the readings first, then the great spells, the stone and the way out.
-const READINGS := [ROADS, TREASURE, APPRAISE, SCOUR, HOMECOMING, STONE, TRANSCEND]
+## The order her buttons stand in: the readings first, then the great spells and the way out.
+const READINGS := [ROADS, TREASURE, APPRAISE, SCOUR, HOMECOMING, TRANSCEND]
 
 ## Her list is in two halves, and which half a spell is in is the whole of its rule.
 ##
@@ -52,31 +48,31 @@ const LABELS := {
 	# "Homecoming" is two letters wider than a shelf square, and a name on her grid is clipped rather
 	# than allowed to widen the page.
 	HOMECOMING: "Return",
-	STONE: "Seeing Stone",
 	TRANSCEND: "Transcend",
 }
 
 ## The town drawer's key, before a spell's name: a `GREAT` spell is sold once a settlement and refused
-## there from then on. The roads write it too, and it means the other thing there: paid for once, they
-## are told again for nothing.
+## there from then on. The roads write it too: bought once a town, the same way.
 const ASKED := "fortune_"
 ## `inventory.fortunes`' keys.
 const CHEST := "chest"
 
-## What the stone says, coldest first, and the most steps from the cave each warmer word is said
-## within: Burning at two or fewer, Hot at five, Warm at ten, Cool at sixteen, Cold past that. Bands
-## rather than the distance, so the stone is a game of hot and cold and never a compass.
+## How near the hero feels the Gollux cave (`CaveSense`), coldest first, and the most steps from it each
+## warmer band holds: Burning at two or fewer, Hot at five, Warm at ten, Cool at sixteen, Cold past that.
+## Bands rather than the distance, so the light at the map's edge says roughly how far and never which tile.
 const WARMTH := ["Cold", "Cool", "Warm", "Hot", "Burning"]
 const WARMTH_STEPS := [16, 10, 5, 2]
 
 ## How far round the chosen tile the scour reaches: the tile and two rings, nineteen in all.
 const SCOUR_RADIUS := 2
+## How far round each settlement the roads show: the town and the six beside it (the user's, 2026-10-02).
+const ROADS_RADIUS := 1
 
 ## What she says about a piece whose modifiers are its row's and nothing else's.
 const WRITTEN := "Its lines are already written"
 
 
-## How warm the stone is `steps` from the cave: an index into `WARMTH`, 0 the coldest.
+## How warm the cave feels `steps` from it: an index into `WARMTH`, 0 the coldest.
 static func warmth(steps: int) -> int:
 	var band := 0
 	for most: int in WARMTH_STEPS:
@@ -131,6 +127,6 @@ static func chest(fortunes: Dictionary) -> Vector2i:
 
 
 ## Whether `reading` has been paid for in the town whose drawer this is: a great spell spent here, or
-## the roads already told here and so told again for nothing.
+## the roads already bought here.
 static func asked(drawer: Dictionary, reading: String) -> bool:
 	return bool(drawer.get(ASKED + reading, false))

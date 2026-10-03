@@ -21,14 +21,17 @@ signal finished(won: bool)
 ## Retry under a lost verdict: leave as `finished(false)` would, and open the same tile's fight again.
 signal retry
 ## A find that is being kept. This, and not `Encounter.loot_dropped`, is what the rest of the game
-## hears: the autodiscard rule is applied here and nowhere else, so the counter, the pouch and the
-## bag can never come to different answers about what a run found.
+## hears: the autodiscard rule is applied here and nowhere else, so the counter and the bag can never
+## come to different answers about what a fight found.
 signal loot_kept(index: int, item: Item)
 ## A find thrown away on sight by the player's own rule. It is counted and named here for whoever is
 ## keeping the promise of a first elite drop, and it is never drawn.
 signal loot_discarded(index: int, item: Item)
-## A find the player threw away by hand, from the verdict panel or the mid-run popup.
+## A find the player threw away by hand, from the verdict panel.
 signal drop_discarded(item: Item)
+## The loot popup or the verdict has come up in the middle of the window. The main scene puts its bag
+## away, which would otherwise stand over either: the pages are drawn on a layer above the fight's.
+signal panel_up
 ## A body's purse. Re-emitted from `Encounter.gold_dropped` rather than left for the main scene to
 ## hear directly, for the reason `loot_kept` is: the fight is the one thing downstream listens to,
 ## so the first rule that is ever applied to gold has one place to live.
@@ -130,10 +133,43 @@ const PLATE_UNDER := 16.0
 ## of the depth.
 const WALK_SPEED := 90.0
 const ATTACK_SOUND := preload("res://Assets/Player/attack.mp3")
-## A blow landing on the enemy, over the swing.
+## A blow landing on the enemy, over the swing: the punch for bare hands and a blade, `BLUNT_HIT` for a
+## weapon of a `BLUNT` kind (the user's ruling, 2026-10-02).
 const HIT_SOUND := preload("res://Sounds/universfield-punch-03-352040.mp3")
+const BLUNT_HIT := preload("res://Sounds/Sfx/blunt_hit.ogg")
+## A crit, in place of the blow: blunt for bare hands and a `BLUNT` weapon, a slash for every blade.
+const BLUNT_CRIT := preload("res://Sounds/Sfx/blunt_crit.ogg")
+const SLASH_CRIT := preload("res://Sounds/Sfx/slash_crit.ogg")
+## The kinds of weapon (`LootTable.KINDS`) that strike blunt.
+const BLUNT := ["mace"]
 ## A body going down.
 const DEATH_SOUND := preload("res://Sounds/universfield-character-fall-impact-352287.mp3")
+## An enemy's blow that took time off the clock; a dodged or blocked one is silent.
+const STRUCK_SOUND := preload("res://Sounds/Sfx/player_hit.ogg")
+## A lost fight's verdict (`_on_finished`). A won one is silent: its fanfare was annoying (the user's
+## ruling, 2026-10-02).
+const DEFEAT_SOUND := preload("res://Sounds/Sfx/defeat.ogg")
+## A find landing, by what it is (`drop_sound_of`), each a pool of takes. `base` is the fallback for
+## whatever the others do not name (the user's ruling): plate, helms, greaves, shields and torches.
+const DROP_SOUNDS := {
+	"unique": [preload("res://Sounds/Sfx/unique_drop.ogg")],
+	"weapon": [preload("res://Sounds/Sfx/weapon_drop_1.ogg"), preload("res://Sounds/Sfx/weapon_drop_2.ogg"),
+			preload("res://Sounds/Sfx/weapon_drop_3.ogg"), preload("res://Sounds/Sfx/weapon_drop_4.ogg"),
+			preload("res://Sounds/Sfx/weapon_drop_5.ogg")],
+	"jewel": [preload("res://Sounds/Sfx/jewel_drop.ogg")],
+	"cloth": [preload("res://Sounds/Sfx/cloth_drop.ogg")],
+	"base": [preload("res://Sounds/Sfx/base_drop_1.ogg"), preload("res://Sounds/Sfx/base_drop_2.ogg")],
+}
+## The kinds of armour (`LootTable.KINDS`) that land as cloth: the dexterity line's.
+const CLOTH := ["hood", "boot", "jerkin"]
+## A coin landing: every one a purse throws, each as it lands (the user's ask), quiet for it.
+const COIN_SOUND := preload("res://Sounds/Sfx/coin_drop.ogg")
+const ORB_DROP_SOUNDS := [preload("res://Sounds/Sfx/orb_drop_1.ogg"), preload("res://Sounds/Sfx/orb_drop_2.ogg"),
+		preload("res://Sounds/Sfx/orb_drop_3.ogg"), preload("res://Sounds/Sfx/orb_drop_4.ogg"),
+		preload("res://Sounds/Sfx/orb_drop_5.ogg"), preload("res://Sounds/Sfx/orb_drop_6.ogg")]
+## A body's experience reaching the bar (`xp_absorbed`).
+const XP_SOUNDS := [preload("res://Sounds/Sfx/xp_1.ogg"), preload("res://Sounds/Sfx/xp_2.ogg"),
+		preload("res://Sounds/Sfx/xp_3.ogg"), preload("res://Sounds/Sfx/xp_4.ogg"), preload("res://Sounds/Sfx/xp_5.ogg")]
 ## Where a swing re-triggered mid-swing cuts back in: past the wind-up, at the blow. Two frames at
 ## CombatActor.FPS is 0.2s, so the picture and the sound come back in at the same instant -- move one
 ## and move the other.
@@ -361,7 +397,14 @@ var _enemy_scale := Vector2.ONE
 var _enemy_hit: Tween
 var _sound: AudioStreamPlayer
 var _hit_sound: AudioStreamPlayer
+var _crit_sound: AudioStreamPlayer
 var _death_sound: AudioStreamPlayer
+var _struck_sound: AudioStreamPlayer
+## `DROP_SOUNDS`' keys -> each one's player.
+var _drop_sounds := {}
+var _coin_sound: AudioStreamPlayer
+var _orb_sound: AudioStreamPlayer
+var _xp_sound: AudioStreamPlayer
 
 var _hud: Control
 var _clock: VBoxContainer
@@ -417,12 +460,18 @@ var bag_size := Inventory.CAPACITY
 ## Asked of each find's level: whether the player has told the game to stop bringing that level.
 ## An unset Callable keeps everything, so a fight nobody has told anything behaves as it always did.
 var autodiscard := Callable()
+## Asked as Escape is pressed: whether a page of the main scene's (the bag) stands over the fight. The
+## key is then the page's -- an orb put down, a selection cleared, the page closed -- never Terminate.
+var page_up := Callable()
 ## Whether a won tile fight takes its loot and leaves by itself, `AUTO_COLLECT_SECONDS` after its verdict
 ## is up, as Collect would: the main scene's, while the Nightwalkers are worn, so a way into the dark is
 ## fought through with nobody at the keys. A Timer child, so a pause (a tip) holds it and a scene freed
 ## first takes it along.
 var auto_collect := false
 const AUTO_COLLECT_SECONDS := 1.5
+## The kind of weapon the hero swings (`LootTable.KINDS`), "" bare-handed: the main scene's, set before
+## `begin`, which picks the blow and the crit a hit lands with.
+var weapon_kind := ""
 ## How many finds that rule has thrown away. Said once, at the end, and never drawn as a square:
 ## the whole point of the rule is not having to look at them.
 var _auto_discarded := 0
@@ -490,12 +539,14 @@ func _process(delta: float) -> void:
 ## hit a moving sprite as well would be a second difficulty on top of the one the fight is about.
 ##
 ## Escape is the fight's own X: the loot popup if it is up, else Terminate on a run, else Back under a
-## verdict. A tile fight is given up only by its button, so a stray Escape cannot throw one away.
+## verdict. A tile fight is given up only by its button, so a stray Escape cannot throw one away. With
+## the bag up over the fight (`page_up`) the key is the bag's.
 func _unhandled_input(event: InputEvent) -> void:
-	if fight != null and event.is_action_pressed("ui_cancel"):
+	if (fight != null and event.is_action_pressed("ui_cancel")
+			and not (page_up.is_valid() and page_up.call())):
 		get_viewport().set_input_as_handled()
 		if _loot_panel.visible:
-			_on_loot_closed()
+			close_loot()
 		elif fight.finished:
 			_leave(_on_back_pressed)
 		elif fight.endless:
@@ -622,8 +673,16 @@ func _build() -> void:
 	_sound.bus = Settings.SFX_BUS
 	_sound.stream = ATTACK_SOUND
 	add_child(_sound)
-	_hit_sound = _sfx_player(HIT_SOUND)
+	_hit_sound = _sfx_player(BLUNT_HIT if weapon_kind in BLUNT else HIT_SOUND)
+	_crit_sound = _sfx_player(SLASH_CRIT if weapon_kind != "" and weapon_kind not in BLUNT else BLUNT_CRIT)
 	_death_sound = _sfx_player(DEATH_SOUND)
+	_struck_sound = _sfx_player(STRUCK_SOUND)
+	for key: String in DROP_SOUNDS:
+		_drop_sounds[key] = _sfx_player(Juice.takes(DROP_SOUNDS[key]))
+	_coin_sound = _sfx_player(COIN_SOUND)
+	_orb_sound = _sfx_player(Juice.takes(ORB_DROP_SOUNDS))
+	_xp_sound = _sfx_player(Juice.takes(XP_SOUNDS))
+	xp_absorbed.connect(_xp_sound.play.unbind(1))
 
 	_build_hud()
 
@@ -952,9 +1011,9 @@ func _build_hud() -> void:
 	again.pressed.connect(_leave.bind(retry.emit))
 	_lost_row.add_child(again)
 
-	# The same list again, on its own panel, for the counter in the corner to open mid-run. A farm
-	# run has no verdict to wait for, so this is the only way to see what it has found.
-	# Built as the verdict is -- the word on the green bar, the sums, the finds and orbs, the way out
+	# The same list again, on its own panel, for the counter in the corner to open mid-fight: a
+	# summary and nothing more, since every find is in the bag already and the bag is where it is
+	# handled (the user's ruling, 2026-10-02). Built as the verdict is -- the word on the green bar, the sums, the finds and orbs, the way out
 	# at the foot -- so the haul mid-fight and the haul at the end read as the same panel.
 	_loot_panel = UITheme.titled_panel("Loot", "", Callable())
 	_loot_panel.scale = Vector2(_ui_scale, _ui_scale)
@@ -971,20 +1030,17 @@ func _build_hud() -> void:
 	_loot_kills = _sum(so_far, KILLS_MARK, Vector2(Coins.SIZE, Coins.SIZE))
 	# What the counter's reddening face means, in words, in the one place the player has already
 	# asked what the run is carrying -- and over the list rather than under it, because it is about
-	# the whole of it. Here rather than out in the arena because this is where something can be done
-	# about it: every square below carries a Discard.
+	# the whole of it.
 	_warning = ItemDetails.line(
 			"Bag full: more items will leave you too laden to fight", Palette.RUST, WARNING_WIDTH)
 	_warning.hide()
 	found.add_child(_warning)
 	_loot_drops = DropsView.new()
-	_loot_drops.discardable = true
-	_loot_drops.discarded.connect(_on_drop_discarded)
 	_loot_drops.resized_contents.connect(_centre_loot)
 	found.add_child(_loot_drops)
 	var close := UITheme.button("Close", "LightButton", "Back to the fight")
 	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	close.pressed.connect(_on_loot_closed)
+	close.pressed.connect(close_loot)
 	found.add_child(close)
 
 
@@ -1054,7 +1110,7 @@ func _on_hit_landed(amount: float, crit: bool, automatic: bool) -> void:
 		_swing()
 	_show_damage(amount, crit)
 	_jolt_enemy()
-	_hit_sound.play()
+	(_crit_sound if crit else _hit_sound).play()
 	if crit:
 		Juice.shake(_arena, SHAKE_CRIT)
 
@@ -1122,6 +1178,7 @@ func _on_player_hit(taken: float, dodged: bool, blocked: bool) -> void:
 		_float_text("-%ss" % _seconds_written(taken), BAR_HEALTH, DAMAGE_FONT, PLAYER_X, 1.0,
 				STRUCK_HEIGHT, true)
 		_flash_clock()
+		_struck_sound.play()
 
 
 ## Seconds as a blow's number says them: a tenth while it is small enough for a tenth to matter.
@@ -1271,8 +1328,10 @@ func _bump_counter() -> void:
 ## richer body visibly pays more without the arena filling up -- the count is the log of the amount,
 ## not the amount. They are the only thing thrown that spins: a coin is drawn turning and gear is not.
 func _show_coins(amount: float) -> void:
-	# The amount has already gone to the ledger; the coins only say so. LOW says it with one.
+	# The amount has already gone to the ledger; the coins only say so. LOW says it with one, and NONE
+	# with one coin's ring and nothing to see.
 	if Settings.animations == Settings.Anim.NONE:
+		_land(_coin_sound)
 		return
 	var from := _drop_origin()
 	for i in Coins.count_for(amount) if Settings.animations == Settings.Anim.DEFAULT else 1:
@@ -1280,6 +1339,7 @@ func _show_coins(amount: float) -> void:
 		coin.sprite_frames = Coins.frames()
 		coin.play("spin")
 		_throw(coin, i, from, THROW_SPREAD, COIN_REST, _fly_to_counter)
+		_land(_coin_sound, i * THROW_STAGGER)
 
 
 ## A body's experience, as gems that pop out of it and fly into the character panel. As many as a
@@ -1557,6 +1617,7 @@ func _on_loot_dropped(index: int, item: Item) -> void:
 	# bone panel, and a find is thrown against a snowfield or a noon desert, which is exactly what the
 	# square's border colour was picked for.
 	_show_find(item.icon(), item.rarity, item.border_color())
+	_land(_drop_sounds[drop_sound_of(item)])
 	# The best finds slow the fight, so the beam coming up is watched rather than glimpsed.
 	if item.rarity == ItemRarity.Rarity.UNIQUE:
 		Juice.hit_stop(get_tree(), STOP_UNIQUE, STOP_UNIQUE_SPEED, STOP_UNIQUE_EASE)
@@ -1574,14 +1635,36 @@ func _on_gold_dropped(_index: int, amount: float) -> void:
 	gold_gained.emit(amount)
 
 
+## Which of `DROP_SOUNDS` a find lands with: a unique its own boom, anything else by where it is worn
+## and armour by whether it is cloth, with `base` for whatever none of those names.
+static func drop_sound_of(item: Item) -> String:
+	if item.rarity == ItemRarity.Rarity.UNIQUE:
+		return "unique"
+	match LootTable.slot_of(item.type):
+		"weapon":
+			return "weapon"
+		"ring", "amulet":
+			return "jewel"
+	return "cloth" if LootTable.kind_of(item.type) in CLOTH else "base"
+
+
+## A drop's sound as it lands: a throw's length on (and `after` more, for one held back in a burst), on
+## a tween, so a unique's slow motion slows it with the find and a tip that holds the fight holds it too
+## -- or at once, when nothing is thrown at all.
+func _land(sound: AudioStreamPlayer, after := 0.0) -> void:
+	if Settings.animations == Settings.Anim.NONE:
+		sound.play()
+	else:
+		create_tween().tween_callback(sound.play).set_delay(THROW_TIME + after)
+
+
 ## A body's experience: gems off it, and the amount on to the ledger straight away.
 func _on_xp_dropped(_index: int, amount: int) -> void:
 	_show_xp(amount)
 	xp_gained.emit(amount)
 
 
-## A find thrown away by hand, from either list. Both show the same drops, so both are filled again
-## rather than the one that was clicked.
+## A find thrown away by hand from the verdict. The popup shows the same drops, so it is filled again too.
 func _on_drop_discarded(item: Item) -> void:
 	_drops.erase(item)
 	_refresh_loot_button()
@@ -1672,6 +1755,7 @@ func _place_corners(view: Vector2) -> void:
 func _on_orb_dropped(_index: int, orb: String) -> void:
 	var beam: int = OrbTable.ORBS[orb].get("beam", -1)
 	_show_find(OrbTable.icon(orb), beam, OrbTable.ORBS[orb].get("glow", Color.WHITE))
+	_land(_orb_sound)
 	if _loot_panel.visible:
 		_fill_loot()
 	orb_gained.emit(orb)
@@ -1683,6 +1767,7 @@ func _on_loot_pressed() -> void:
 	_loot_panel.show()
 	Juice.pop_in(_loot_panel, _ui_scale)
 	_centre_loot()
+	panel_up.emit()
 
 
 func _refresh_loot_sums() -> void:
@@ -1691,7 +1776,7 @@ func _refresh_loot_sums() -> void:
 	_loot_kills.text = str(fight.kills())
 
 
-func _on_loot_closed() -> void:
+func close_loot() -> void:
 	_loot_panel.hide()
 
 
@@ -1722,6 +1807,8 @@ func _on_finished(won: bool) -> void:
 	# Only a loss has anything to add: the word says a win, and a run has no second line. A descent's
 	# is whether it got any deeper, which only a dead Gollux makes it.
 	var lost := not won and not fight.endless
+	if lost:
+		Juice.sound(DEFEAT_SOUND)
 	_result_detail.text = "Given up" if _gave_up else "Out of time"
 	if fight.dungeon:
 		_result_detail.text = "Gollux still stands" if fight.cleared() == 0 \
@@ -1736,6 +1823,7 @@ func _on_finished(won: bool) -> void:
 	_collect.visible = not lost
 	_lost_row.visible = lost
 	_loot_panel.hide()
+	panel_up.emit()
 	if fight.gold > 0.0:
 		_gold_row.show()
 		Juice.count_up(_gold_label, fight.gold, _gold_coin)

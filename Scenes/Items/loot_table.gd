@@ -521,6 +521,11 @@ static func slot_of(item: String) -> String:
 	return ITEMS[item]["slot"]
 
 
+## Which of `KINDS` the piece is.
+static func kind_of(item: String) -> String:
+	return ITEMS[item]["kind"]
+
+
 ## How much of `stat` this piece is worth for being the kind and the material it is: the kind's own
 ## factor -- a dagger's 0.6 of a sword's damage -- times `TIER_POWER` more for every material above
 ## the plainest.

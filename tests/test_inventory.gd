@@ -1130,22 +1130,20 @@ func _test_saving() -> bool:
 	_check(Inventory.load_from(TEST_PATH).dungeon_floors == played.dungeon_floors
 			and played.transcended().dungeon_floors == played.dungeon_floors,
 			"the floors beaten come back and are carried over")
-	# So is how far the land has ever reached, which bounds every world's cave, and the Seeing Stone.
+	# So is how far the land has ever reached, which bounds every world's cave.
 	_check(played.farthest_land == MapBuilder.START_LAND_RADIUS and not played.reach(MapBuilder.START_LAND_RADIUS),
 			"no land further than the start's before a wall falls")
 	_check(played.reach(30) and not played.reach(20) and played.farthest_land == 30, "the furthest reach only rises")
-	played.seeing_stone = true
 	played.save(TEST_PATH)
 	var kept := Inventory.load_from(TEST_PATH)
-	_check(kept.farthest_land == 30 and kept.seeing_stone, "both come back off the save")
-	_check(played.transcended().farthest_land == 30 and played.transcended().seeing_stone,
-			"and a transcension carries both over")
+	_check(kept.farthest_land == 30, "it comes back off the save")
+	_check(played.transcended().farthest_land == 30, "and a transcension carries it over")
 	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
 	file.store_string('{"version": 24, "items": []}')
 	file.close()
 	kept = Inventory.load_from(TEST_PATH)
-	_check(kept.farthest_land == MapBuilder.START_LAND_RADIUS and not kept.seeing_stone,
-			"a save from before them has been no further than the start's land, and holds no stone")
+	_check(kept.farthest_land == MapBuilder.START_LAND_RADIUS,
+			"a save from before it has been no further than the start's land")
 	_check(kept.hero() == Inventory.DEFAULT_NAME, "and an unnamed character, as a save before names is")
 
 	# The character's name: trimmed, cut to its most, never nothing, kept and carried like the kills.
@@ -1302,7 +1300,8 @@ func _test_the_map_keeps_what_dropped() -> bool:
 			"choosing a tile closes the page and brings the tile's panel up")
 	main._on_chart_pressed()
 	main.map.player.finish_walk()
-	_check(not main._bag_button.visible, "the button is out of the way of the fight")
+	_check(main._bag_button.visible and not main._settings_button.visible and not main._character_button.visible,
+			"the bag's is the one corner button a fight leaves")
 	var fight: Encounter = main._combat.fight
 	_check(fight.guarantee_elite, "the first elite is promised a drop")
 	fight.loot_rng.seed = WORLD_SEED
@@ -1581,9 +1580,8 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	return true
 
 
-## A farm run's finds wait in the pouch and go into the bag in one write when the run ends. It is
-## the one place the game holds loot back, and the reason is that a run has no end of its own: a
-## charting fight is over in a minute and writes each find as it lands, and a run could go an hour.
+## A farm run's finds go into the bag as they land, as every fight's do, and the bag can be opened
+## over the fight to see them; a run still writes to disk only as it ends, since it could go an hour.
 func _test_a_farm_run_holds_its_loot() -> bool:
 	_clear_save()
 	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
@@ -1600,6 +1598,9 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 	var next_door := HexGrid.neighbor(here, HexGrid.Edge.E)
 	_check(main.view.can_farm(here), "the tile under the player can be farmed")
 	_check(not main.view.can_farm(next_door), "and one that has not been taken cannot")
+	# The bag's button is there once the first find has been spoken of; and no tip about the run
+	# itself, which Escape would close before anything else.
+	main.inventory.tips.append_array(["first_item", "first_farm"])
 	main.map.select_cell(here)
 	main._on_farm_pressed()
 	_check(main._combat != null, "a run starts")
@@ -1610,10 +1611,11 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 	var combat: CombatScene = main._combat
 	_check(fight.endless, "and it is endless")
 	_check(combat._terminate != null, "with a way out of it on the screen")
-	_check(not main._bag_button.visible, "and the bag out of the way, as in any fight")
+	_check(main._bag_button.visible and not main._settings_button.visible,
+			"and the bag the one corner button left standing")
 	fight.loot_rng.seed = WORLD_SEED
 	# Every body carries something, so three finds is three kills. What is under test is where a
-	# run's finds wait, not how often one falls -- at the real 3% this would be a hundred-odd kills.
+	# run's finds go, not how often one falls -- at the real 3% this would be a hundred-odd kills.
 	fight.always_drop = true
 
 	var guard := 0
@@ -1624,79 +1626,80 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 	_check(main.ledger.drops.size() >= 3, "a run long enough turns up several things: %d"
 			% main.ledger.drops.size())
 	_check(not fight.finished, "and it is still going")
-	_check(main.inventory.total() == 0, "none of which is in the bag yet: %d" % main.inventory.total())
-	_check(not FileAccess.file_exists(TEST_PATH), "and nothing has been written to disk")
-	# The gold waits with them, and for the same reason: a run has no end of its own to write at.
-	_check(main.ledger.gold > 0, "the run has earned something: %d" % main.ledger.gold)
-	_check(main.ledger.gold == fight.gold, "and the fight agrees what: %d" % fight.gold)
-	_check(main.inventory.gold == 0, "none of it in the purse yet: %d" % main.inventory.gold)
+	_check(main.inventory.total() == main.ledger.drops.size(),
+			"every one of them in the bag already: %d" % main.inventory.total())
+	_check(fight.gold > 0 and main.inventory.gold == fight.gold,
+			"and the gold in the purse: %s of %s" % [main.inventory.gold, fight.gold])
+	_check(not FileAccess.file_exists(TEST_PATH), "but nothing written to disk while the run goes on")
 	_check(combat._loot_button.text == str(main.ledger.drops.size()),
 			"the counter has been keeping score all along")
 
-	# The counter opens the same list the verdict shows, and one of them opens properly.
+	# The counter opens a summary of the same finds, and nothing in it throws one away.
 	combat._on_loot_pressed()
 	await process_frame
 	_check(combat._loot_panel.visible, "the counter opens the popup")
 	_check(combat._loot_drops.count() == main.ledger.drops.size(), "holding every find")
-	var found: Item = main.ledger.drops[0]
-	combat._loot_drops.inspect(0)
-	await process_frame
-	_check(combat._loot_drops.inspecting(), "and a square in it opens the item")
-	var lines := PackedStringArray()
-	for line: Node in _labels_under(combat._loot_drops):
-		lines.append((line as Label).text)
-	_check(found.display_name() in lines, "which names it")
-	_check("%s · Level %d" % [found.rarity_label(), found.level] in lines,
-			"and its rarity and level")
-	# Throwing one away from the popup, which is the promised way out of a run that has found more
-	# than the bag can hold. The run is still holding its pouch, so this is the whole of it.
-	var before: int = main.ledger.drops.size()
-	var doomed: Item = main.ledger.drops[0]
-	combat._loot_drops.inspect(0)
-	combat._loot_drops._on_discard_pressed()
-	await process_frame
-	_check(not main.ledger.drops.has(doomed), "Discard takes a find out of the run's pouch")
-	_check(main.ledger.drops.size() == before - 1, "and only that one")
-	_check(combat._drops.size() == main.ledger.drops.size(), "the fight agrees about what is left")
-	_check(combat._loot_button.text == str(main.ledger.drops.size()), "and so does the counter")
-	_check(main.inventory.total() == 0, "nothing was in the bag to take it out of")
-
-	combat._on_loot_closed()
+	_check(not combat._loot_drops.discardable, "as a summary: the bag is where a find is thrown away")
+	combat.close_loot()
 	await process_frame
 	_check(not combat._loot_panel.visible, "and Close puts it away")
 
-	# Terminating is the end of the run, and the moment the pouch goes into the bag.
-	var pouch: Array[Item] = main.ledger.drops.duplicate()
-	var earned: float = main.ledger.gold
+	# The bag opens over the run, on a layer above the fight's, and nothing else of the corner comes with it.
+	main._on_bag_pressed()
+	await process_frame
+	_check(main.bag_page.visible and main._combat == combat, "the bag opens over the run")
+	_check(main._ui_layer.layer > combat.layer, "drawn over the fight")
+	_check(not main._skills_button.visible and not main._settings_button.visible,
+			"with no other page to be had")
+	# A piece put on mid-fight counts from the next blow.
+	var bare: float = fight.damage
+	var sword := _piece(ItemRarity.Rarity.RARE, 1)
+	main.inventory.add(sword)
+	main.bag_page.refresh()
+	main.bag_page._on_equip_pressed(sword, Equipment.Socket.WEAPON)
+	await process_frame
+	_check(main.inventory.equipment.item_at(Equipment.Socket.WEAPON) == sword, "a sword put on from the bag")
+	_check(fight.damage > bare, "hits harder at once: %s over %s" % [fight.damage, bare])
+	# Escape is the bag's while it is up: it closes the page and leaves the run going.
+	var escape := InputEventAction.new()
+	escape.action = "ui_cancel"
+	escape.pressed = true
+	root.push_input(escape)
+	await process_frame
+	_check(not main.bag_page.visible and not fight.finished, "Escape puts the bag away and not the run")
+	# The bag and the loot popup never stand together: each puts the other away.
+	main._on_bag_pressed()
+	combat._on_loot_pressed()
+	await process_frame
+	_check(combat._loot_panel.visible and not main.bag_page.visible, "the popup puts the bag away")
+	main._on_bag_pressed()
+	await process_frame
+	_check(main.bag_page.visible and not combat._loot_panel.visible, "and the bag the popup")
+
+	# Terminating is the end of the run, and the moment it is written down.
+	var found: Array[Item] = main.ledger.drops.duplicate()
+	var earned: float = main.inventory.gold
 	combat._on_terminate_pressed()
 	await process_frame
 	_check(fight.finished and fight.victory, "terminating ends the run, and not as a loss")
+	_check(not main.bag_page.visible and not main._bag_button.visible, "the verdict puts the bag and its button away")
 	main._combat._on_back_pressed()
 	await process_frame
-	_check(main.inventory.total() == pouch.size(),
-			"every find the run made went into the bag at once: %d of %d"
-					% [main.inventory.total(), pouch.size()])
-	for i in mini(main.inventory.total(), pouch.size()):
-		_check(_fingerprint(main.inventory.items[i]) == _fingerprint(pouch[i]),
-				"and it is the same item %d, modifiers and all" % i)
-	_check(main.inventory.gold == earned,
-			"and so did its gold, in one go: %d of %d" % [main.inventory.gold, earned])
-	_check(main.ledger.gold == 0, "leaving the pouch empty, so the next run starts from nothing")
+	var saved := Inventory.load_from(TEST_PATH)
+	_check(saved.total() == found.size(), "the file on disk holds every find: %d of %d" % [saved.total(), found.size()])
+	_check(saved.gold == earned, "and the gold with them: %s of %s" % [saved.gold, earned])
 	_check(main.bag_page._gold.text == BigNumber.format(earned),
 			"the bag's footer says so: %s" % main.bag_page._gold.text)
-	var saved := Inventory.load_from(TEST_PATH)
-	_check(saved.total() == pouch.size(), "the file on disk holds them too")
-	_check(saved.gold == earned, "and the gold with them: %d of %d" % [saved.gold, earned])
 
 	# Nothing about the map moved. A run is fought on a tile that is already the player's.
 	_check(main.view.charted(here), "the tile stays the player's")
 	_check(not main.view.charted(next_door), "and the run charted nothing")
-	_check(main._bag_button.visible, "the bag is back with the map")
+	_check(main._bag_button.visible and main._settings_button.visible, "the corner is back with the map")
 	main.queue_free()
 	return true
 
 
-## A level the player is done with never reaches them: not the pouch, not the counter, not either
+## A level the player is done with never reaches them: not the bag, not the counter, not either
 ## list. It is counted, and the count is said once at the end -- which is the whole of "noted, but
 ## not shown". And a bag with no room says so while the run is going, in time to do something about it.
 func _test_a_rule_keeps_finds_off_the_screen() -> bool:
@@ -1754,7 +1757,7 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 	_check(combat._loot_filled == 1.0, "and the counter's face is at the red end of its ramp")
 	combat._on_loot_pressed()
 	_check(combat._warning.visible, "opening the counter is what says why")
-	combat._on_loot_closed()
+	combat.close_loot()
 
 	var guard := 0
 	while combat._auto_discarded < 3 and guard < 2000:
@@ -1763,7 +1766,7 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 			fight.advance(1.0 / 8.0)
 	_check(combat._auto_discarded >= 3, "the rule threw several away: %d" % combat._auto_discarded)
 	# None of them touched anything the player can see.
-	_check(main.ledger.drops.is_empty(), "none of them reached the pouch")
+	_check(main.ledger.drops.is_empty(), "none of them reached the ledger")
 	_check(combat._drops.is_empty(), "or the fight's own list")
 	_check(combat._loot_button.text == "0" and not combat._loot_button.disabled,
 			"the counter never moved, and still opens")
@@ -1775,7 +1778,7 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 	_check(main.inventory.total() == Inventory.CAPACITY, "and the bag is exactly as it was")
 	# The rule is about finds. A purse is a number rather than a square, so nothing filters it and a
 	# run that kept nothing still earned its way.
-	_check(main.ledger.gold > 0, "the gold came all the same: %d" % main.ledger.gold)
+	_check(fight.gold > 0, "the gold came all the same: %s" % fight.gold)
 
 	# Said once, at the end, as a number.
 	var thrown := combat._auto_discarded
@@ -1802,6 +1805,13 @@ func _press_bin(main: Node) -> void:
 
 
 ## A button of the question standing over the bag, by its words.
+## Whether `names` stand in alphabetical order, as the pages sort them.
+func _by_name(names: Array) -> bool:
+	var sorted := names.duplicate()
+	sorted.sort_custom(func(a: String, b: String) -> bool: return a.naturalnocasecmp_to(b) < 0)
+	return names == sorted
+
+
 func _confirm_button(main: Node, text: String) -> Button:
 	for button: Button in main.bag_page._confirm.find_children("", "Button", true, false):
 		if button.text == text:
@@ -3162,16 +3172,21 @@ func _test_orb_verbs() -> bool:
 	_check(climbing.rarity == ItemRarity.Rarity.RARE, "alchemy makes it rare in one step")
 	_check(OrbTable.apply("Orb of Alchemy", climbing, rng), "alchemy rerolls a rare")
 	_check(climbing.rarity == ItemRarity.Rarity.RARE, "and it stays rare")
-	_check(not OrbTable.can_apply("Orb of Transmutation", climbing), "no orb lowers a rare to uncommon")
-	_check(not OrbTable.why_not("Orb of Transmutation", climbing).is_empty(),
-			"a refused transmutation says why")
+	# Down as well as up (the user's ruling, 2026-10-02): a rarity orb makes its own rarity from above, and
+	# the piece carries what that rarity allows.
+	var falling := Item.rolled("Leather Boots", ItemRarity.Rarity.ELITE, rng, 2)
+	_check(OrbTable.apply("Orb of Transmutation", falling, rng), "transmutation lands on an epic")
+	_check(falling.rarity == ItemRarity.Rarity.UNCOMMON
+			and falling.mods.size() <= int(ItemRarity.MOD_COUNT[ItemRarity.Rarity.UNCOMMON][1]) + int(falling.extra_slot),
+			"and makes it uncommon, with an uncommon's modifiers")
 
 	# --- Exalted: straight to elite, a reroll at elite, and never as far as unique ---
 	_check(OrbTable.apply("Orb of Exaltation", climbing, rng), "exalted lands on a rare")
 	_check(climbing.rarity == ItemRarity.Rarity.ELITE, "exalted makes it elite")
 	_check(OrbTable.apply("Orb of Exaltation", climbing, rng), "exalted rerolls an elite")
 	_check(climbing.rarity == ItemRarity.Rarity.ELITE, "and it stays elite, never unique")
-	_check(not OrbTable.can_apply("Orb of Alchemy", climbing), "alchemy refuses an elite")
+	_check(OrbTable.apply("Orb of Alchemy", climbing, rng) and climbing.rarity == ItemRarity.Rarity.RARE,
+			"alchemy takes an elite back down to rare")
 	var bare := Item.rolled("Wooden Armour", ItemRarity.Rarity.COMMON, rng, 1)
 	_check(not OrbTable.can_apply("Orb of Chaos", bare), "a common has nothing to chaos")
 
@@ -3260,7 +3275,7 @@ func _test_locks_and_breaks() -> bool:
 	var landed := {}
 	for run in RUNS:
 		rng.seed = run
-		# Half start uncommon: nothing lowers a rarity, so that is the only way Transmutation meets a lock.
+		# Half start uncommon and half rare, so every rarity orb meets a lock from below and from above.
 		var start := ItemRarity.Rarity.UNCOMMON if run % 2 == 0 else ItemRarity.Rarity.RARE
 		var piece := Item.rolled("Wooden Sword", start, rng, 7)
 		_check(Blacksmith.lock(piece, rng), "a piece with modifiers takes a lock")
@@ -3505,18 +3520,20 @@ func _test_crafting_from_the_bag() -> bool:
 	_check(_card_lit(main) == OrbTable.ORBS["Orb of Transmutation"].glow,
 			"the hover card is lit from behind in the orb's colour")
 
-	# Alchemy takes it to rare, and then Transmutation has nothing to do: no orb lowers a rarity, and
-	# pressing it must not cost the player the second one. The square is grey and ignores the click;
-	# the handler is checked too, because the guarantee is apply first and spend only if it landed.
+	# Alchemy takes it to rare. Then a press that does nothing must not cost the player the orb: broken,
+	# the sword is a piece every orb refuses. The square is grey and ignores the click; the handler is
+	# checked too, because the guarantee is apply first and spend only if it landed.
 	main.inventory.add_orb("Orb of Alchemy")
 	main.bag_page._on_orb_pressed("Orb of Alchemy")
 	_check(main.bag_page._armed == "Orb of Alchemy", "another orb pressed takes the first one's place")
 	craft.call(sword)
 	_check(sword.rarity == ItemRarity.Rarity.RARE, "alchemy made it rare")
+	sword.broken = true
 	main.bag_page._on_orb_pressed("Orb of Transmutation")
 	craft.call(sword)
 	_check(main.inventory.orb_count("Orb of Transmutation") == 1, "a refused orb is not spent")
 	_check(sword.rarity == ItemRarity.Rarity.RARE, "and the piece did not change again")
+	sword.broken = false
 
 	# Divine works now that there are modifiers to reroll.
 	main.bag_page._on_orb_pressed("Orb of Divinity")
@@ -3525,6 +3542,32 @@ func _test_crafting_from_the_bag() -> bool:
 		await process_frame
 	_check(sword.rarity == ItemRarity.Rarity.RARE, "divine kept the rarity")
 	_check(main.inventory.orb_count("Orb of Divinity") == 0, "the divine orb was spent")
+
+	# An orb that would take a piece down a rarity asks first, and nothing moves until it is answered:
+	# Cancel keeps the piece and the orb, Use with the tick spends it and stops the asking.
+	main.inventory.add_orb("Orb of Transmutation", 2)
+	main.bag_page._on_orb_pressed("Orb of Transmutation")
+	craft.call(sword)
+	_check(main.bag_page._confirm != null and sword.rarity == ItemRarity.Rarity.RARE
+			and main.inventory.orb_count("Orb of Transmutation") == 3, "transmuting a rare asks first")
+	_check("uncommon" in _confirm_text(main), "and says what it will make of it (%s)" % _confirm_text(main))
+	_confirm_button(main, "Cancel").pressed.emit()
+	_check(sword.rarity == ItemRarity.Rarity.RARE and main.inventory.orb_count("Orb of Transmutation") == 3,
+			"Cancel keeps the piece and the orb")
+	craft.call(sword)
+	(main.bag_page._confirm.find_child(BagPage.TICK_NAME, true, false) as Button).button_pressed = true
+	_confirm_button(main, "Use").pressed.emit()
+	_check(sword.rarity == ItemRarity.Rarity.UNCOMMON and main.inventory.orb_count("Orb of Transmutation") == 2,
+			"Use takes it down and spends the orb")
+	await process_frame
+	sword.rarity = ItemRarity.Rarity.RARE
+	craft.call(sword)
+	_check(main.bag_page._confirm == null and sword.rarity == ItemRarity.Rarity.UNCOMMON
+			and main.inventory.orb_count("Orb of Transmutation") == 1, "and with the tick it is never asked again")
+	main.bag_page._on_orb_pressed("Orb of Transmutation")
+	# The tray is drawn again by that, and the card below is placed off its squares.
+	for i in 2:
+		await process_frame
 
 	# The card says what it is looking at, in all three of the states it can find an orb in. Hovered
 	# over the last square rather than the first, because that is the one the card cannot fit beside:
@@ -3560,9 +3603,11 @@ func _test_crafting_from_the_bag() -> bool:
 	_check(back.items.size() == 1, "the sword came back")
 	_check(back.items[0].to_dict() == before, "the crafted sword round-trips exactly")
 
-	# From the grid: the orb picked up with nothing open, and the piece pressed where it lies.
+	# From the grid: the orb picked up with nothing open, and the piece pressed where it lies. The sword
+	# broken first, so the grid holds a square the orb can do nothing to.
 	var plain := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 4)
 	main.inventory.add(plain)
+	sword.broken = true
 	main.bag_page._select_item(-1)
 	main.bag_page._on_orb_pressed("Orb of Transmutation")
 	await process_frame
@@ -3598,6 +3643,23 @@ func _test_crafting_from_the_bag() -> bool:
 	main.bag_page._input(right)
 	_check(main.bag_page._armed == "" and main.inventory.orb_count("Orb of Divinity") == 2,
 			"a right click puts it down too, unspent")
+	# So does a left press on anything but a piece or the tray, which leave it in hand.
+	main.bag_page._on_orb_pressed("Orb of Divinity")
+	var left := InputEventMouseButton.new()
+	left.button_index = MOUSE_BUTTON_LEFT
+	left.pressed = true
+	for spot: Vector2 in [_bag_squares(main)[0].get_global_rect().get_center(),
+			main.bag_page._orb_tray.get_child(0).get_global_rect().get_center()]:
+		left.position = spot
+		main.bag_page._input(left)
+	_check(main.bag_page._armed == "Orb of Divinity", "a press on a piece or the tray keeps the orb in hand")
+	left.position = Vector2(1, 1)
+	main.bag_page._input(left)
+	_check(main.bag_page._armed == "", "a left press anywhere else puts it down")
+	left.pressed = false
+	main.bag_page._input(left)
+	await process_frame
+	_check(not main.bag_page._put_down, "and the bag is redrawn once the press is released")
 	main.bag_page._on_orb_pressed("Orb of Divinity")
 	main.bag_page._select_item(0)
 	_check(main.bag_page._armed == "", "and so does opening a piece")
@@ -3788,16 +3850,13 @@ func _test_unique_items() -> bool:
 	bag.note_unique("rimeplate")
 	_check(is_equal_approx(float(bag.stats()["damage"]), worn * 1.02), "and two are 2%")
 
-	# The ledger is what writes the log: at once for a tile fight, at the bank for a run.
+	# The ledger is what writes the log, as a unique lands, in any fight.
 	var tile_bag := Inventory.new()
 	FightLedger.new(tile_bag, TEST_PATH).add_loot(Item.rolled_unique("rimeplate", rng, 2))
 	_check(tile_bag.uniques_found == ["rimeplate"], "a tile fight logs a unique as it lands")
 	var run_bag := Inventory.new()
-	var run := FightLedger.new(run_bag, TEST_PATH, true)
-	run.add_loot(Item.rolled_unique("stonebreaker", rng, 2))
-	_check(run_bag.uniques_found.is_empty(), "a run holds it in the pouch")
-	run.bank()
-	_check(run_bag.uniques_found == ["stonebreaker"], "and logs it at the bank")
+	FightLedger.new(run_bag, TEST_PATH, true).add_loot(Item.rolled_unique("stonebreaker", rng, 2))
+	_check(run_bag.uniques_found == ["stonebreaker"], "and so does a run")
 	_clear_save()
 	return true
 
@@ -4127,12 +4186,9 @@ func _test_unique_stats() -> bool:
 	_check(bag.salvage(junk) == maxf(1.0, roundf(TownPrices.sell_price(junk)
 			* UniqueTable.dial("rag_and_bone_sack", "share", UniqueTable.PEAK) / 100.0)), "and more at rank IV")
 	bag.achievements.erase("rag_and_bone_sack")
-	# A run pouches it like any gold; the bag pays for its own discards at once.
-	var run := FightLedger.new(bag, TEST_PATH, true)
-	run.add_gold(paid)
-	_check(bag.gold == 0.0, "a run holds its salvage in the pouch")
-	run.bank()
-	_check(bag.gold == paid, "and banks it")
+	# A run's salvage reaches the purse like any gold; the bag pays for its own discards at once.
+	FightLedger.new(bag, TEST_PATH, true).add_gold(paid)
+	_check(bag.gold == paid, "a run pays its salvage into the purse")
 	var page := BagPage.new(bag, TEST_PATH, 2.0)
 	root.add_child(page)
 	await process_frame
@@ -4395,6 +4451,14 @@ func _test_achievements() -> bool:
 			and not main._flashes.has("opened_achievements"), "the page opens and the pulse stops for good")
 	var tiles: Array = main.achievements_page.find_children("*", "ItemSlot", true, false)
 	_check(tiles.size() == Achievements.ACHIEVEMENTS.size(), "one square an achievement (%d)" % tiles.size())
+	_check(_by_name(tiles.map(func(slot: ItemSlot) -> String:
+			return str(Achievements.ACHIEVEMENTS[slot.item.unique]["name"]))), "the squares stand by the achievement's name")
+	var buckler: ItemSlot = tiles.filter(func(s: ItemSlot) -> bool: return s.item.unique == "duelists_buckler")[0]
+	var unique_card := VBoxContainer.new()
+	(buckler.get_meta(ItemCard.ALT_CARD) as Callable).call(unique_card, 150.0)
+	_check(_said_by(unique_card).contains("Duelist's Buckler") and buckler.get_meta(ItemCard.KEYS) == {"alt": "unique"},
+			"under Alt a square shows the unique it unlocks (%s)" % _said_by(unique_card))
+	unique_card.free()
 	var lit := tiles.filter(func(slot: ItemSlot) -> bool: return slot.modulate == Color.WHITE)
 	_check(lit.size() == 1 and lit[0].item.unique == "duelists_buckler", "the earned one lit, the rest dimmed")
 	_check(_said_by(lit[0]).contains("II"), "with its rank on its corner (%s)" % _said_by(lit[0]))
@@ -4415,7 +4479,7 @@ func _test_achievements() -> bool:
 	AchievementsPage.write_card(rows, 150.0, main.inventory, "knucklebone_ring", Achievements.state(main.inventory))
 	var said := _said_by(rows)
 	_check(said.contains("Drumroll") and said.contains(Achievements.text("knucklebone_ring", 1))
-			and said.contains("Progress: 0 / %d (0%%)" % int(Achievements.need_at("knucklebone_ring", 1)))
+			and said.contains("Progress: 0 / %s (0%%)" % BigNumber.format(Achievements.need_at("knucklebone_ring", 1)))
 			and said.contains("Unlocks Knucklebone Ring"), "a square's card says what, how far and what for (%s)" % said)
 	AchievementsPage.write_card(rows, 150.0, main.inventory, "duelists_buckler", Achievements.state(main.inventory))
 	said = _said_by(rows)
@@ -4486,6 +4550,11 @@ func _test_collection() -> bool:
 	_check(main.collection_page.visible and main._collection_button.visible, "the page opens, its button beside it")
 	_check(not main._flashes.has("opened_collection"), "opening the log stills the button for good")
 	var squares: Array = main.collection_page.find_children("*", "ItemSlot", true, false)
+	var logged: Array = squares.map(func(slot: ItemSlot) -> String: return str(UniqueTable.UNIQUES[slot.item.unique]["name"]))
+	var starting := Achievements.STARTERS.size()
+	_check(squares.slice(0, starting).all(func(slot: ItemSlot) -> bool: return slot.item.unique in Achievements.STARTERS)
+			and _by_name(logged.slice(0, starting)) and _by_name(logged.slice(starting)),
+			"the log is the starters, then the rest, each by name")
 	var fresh: Array = squares.filter(func(slot: ItemSlot) -> bool: return slot.has_node(ItemSlot.GLINT_NAME))
 	_check(fresh.size() == 1 and fresh[0].item.unique == "metronome", "the new find glints (%d)" % fresh.size())
 	fresh[0].hint.call(VBoxContainer.new(), 100.0)
@@ -4498,6 +4567,15 @@ func _test_collection() -> bool:
 	main.inventory.uniques_found.erase("brawlers_wraps")
 	main.inventory.uniques_new.erase("brawlers_wraps")
 	_check(squares.size() == UniqueTable.UNIQUES.size(), "one square a unique (%d)" % squares.size())
+	var achievement_card := VBoxContainer.new()
+	var earned: ItemSlot = squares.filter(func(s: ItemSlot) -> bool: return s.item.unique == "duelists_buckler")[0]
+	(earned.get_meta(ItemCard.ALT_CARD) as Callable).call(achievement_card, 150.0)
+	_check(_said_by(achievement_card).contains(str(Achievements.ACHIEVEMENTS["duelists_buckler"]["name"]))
+			and earned.get_meta(ItemCard.KEYS) == {"alt": "achievement"},
+			"and in the log Alt shows the achievement that unlocks it (%s)" % _said_by(achievement_card))
+	achievement_card.free()
+	_check(squares.filter(func(s: ItemSlot) -> bool: return s.has_meta(ItemCard.ALT_CARD)).size()
+			== Achievements.ACHIEVEMENTS.size(), "every square but a starter's")
 	# The foot, under the scroll: what the log adds and how full it is, in the body font.
 	var bonus: Label = main.collection_page.find_child(CollectionPage.BONUS_NAME, true, false)
 	var tally: Label = main.collection_page.find_child(CollectionPage.COUNT_NAME, true, false)
@@ -4678,8 +4756,8 @@ func _test_character_page() -> bool:
 	return true
 
 
-## The bank-or-pouch rule on its own, with no scene: a tile fight banks each gain as it lands and a
-## run holds all of it until `bank`, which is safe to call twice.
+## The ledger on its own, with no scene: every gain reaches the inventory as it lands; a tile fight
+## writes each one down and a run writes at `bank_kills`, as it ends.
 func _test_fight_ledger() -> bool:
 	_clear_save()
 	var sword := Item.new()
@@ -4696,27 +4774,22 @@ func _test_fight_ledger() -> bool:
 	_check(bag.items.has(sword) and bag.gold == 7 and bag.orb_count(orb) == 1 and bag.xp + bag.level > 1,
 			"a tile fight banks every gain as it lands")
 	_check(on_disk.total() == 1 and on_disk.gold == 7 and on_disk.first_sword_taken, "and writes it down")
-	_check(tile.pending_xp() == 0 and not tile.bank(), "so it has nothing pending and nothing to bank")
 	_check(tile.discard(sword) and bag.total() == 0, "a find thrown away comes back out of the bag")
+	_check(not tile.discard(sword), "and one no longer there is not thrown away twice")
 
+	_clear_save()
 	bag = Inventory.new()
 	var run := FightLedger.new(bag, TEST_PATH, true)
 	run.add_loot(sword)
 	run.add_gold(7)
 	run.add_orb(orb)
 	run.add_xp(1)
-	_check(bag.total() == 0 and bag.gold == 0 and bag.total_orbs() == 0, "a run holds what it earns")
-	_check(run.pending_xp() == 1 and run.room_left() == Inventory.CAPACITY - 1,
-			"and counts its pouch against the panel and the bag's room")
-	_check(run.bank() and bag.items.has(sword) and bag.gold == 7 and bag.orb_count(orb) == 1,
-			"banking empties the pouch into the bag")
-	_check(not run.bank() and bag.gold == 7 and bag.total() == 1, "and a second call repeats none of it")
-	_check(Inventory.load_from(TEST_PATH).gold == 7, "in one write")
-
-	bag = Inventory.new()
-	var purse := FightLedger.new(bag, TEST_PATH, true)
-	purse.add_gold(3)
-	_check(purse.bank() and bag.gold == 3, "a run that found only gold is still paid")
+	_check(bag.items.has(sword) and bag.gold == 7 and bag.orb_count(orb) == 1 and bag.first_sword_taken,
+			"a run puts what it earns in the bag at once")
+	_check(not FileAccess.file_exists(TEST_PATH), "and writes none of it while it goes on")
+	run.bank_kills(1)
+	var written := Inventory.load_from(TEST_PATH)
+	_check(written.total() == 1 and written.gold == 7 and written.kills == 1, "until its kills are banked, in one write")
 	_clear_save()
 	return true
 
@@ -4891,39 +4964,18 @@ func _test_more_curses() -> bool:
 	heir.items.append(plain_kept)
 	_check(heir.make_heirloom(plain_kept) and plain_kept.plus == 0, "and no other world's is")
 
-	# The skull budget: this world's depth plus the skulls carried in, never lower than it was, and
-	# nothing at all from a world lost to No Second Chances.
+	# The skulls are Gollux's alone: walls broken and curses carried pay none, and depth n won is n
+	# skulls, every depth adding up, handed out whole again after a transcension.
 	var climber := Inventory.new()
 	climber.walls_credited = 3
-	climber.skull_budget = 3
 	climber.curses = [Curses.BLOODTHIRST, Curses.IRON_FOES]
-	_check(climber.skulls_earned() == 6 and climber.transcended().skull_budget == 6,
-			"three walls carrying three skulls earn six (%d)" % climber.skulls_earned())
-	climber.skull_budget = 9
-	_check(climber.skulls_earned() == 9, "and a budget already past that stays where it is")
-	climber.skull_budget = 2
-	_check(climber.skulls_earned(true) == 2 and climber.transcended(true).skull_budget == 2,
-			"a lost world raises nothing")
-	var ringed := Inventory.new()
-	ringed.walls_credited = 6
-	ringed.skull_budget = Curses.skulls_of([Curses.RING_OF_WALLS])
-	ringed.curses = [Curses.RING_OF_WALLS]
-	_check(ringed.skulls_earned() == 3 + ringed.skull_budget,
-			"six walls five rings apart are three deep, plus the skulls carried (%d)" % ringed.skulls_earned())
-	# The dungeon: depth n is n skulls and every depth won adds up, on top of the budget and never carried into it.
+	_check(climber.skull_allowance() == 0, "three walls and three skulls carried earn nothing")
 	var delver := Inventory.new()
 	delver.walls_credited = 1
 	delver.dungeon_depth = 4
-	_check(delver.skull_allowance() == 11 and delver.skull_allowance(true) == 10,
-			"four depths won are 1 + 2 + 3 + 4 skulls beside the one wall's (%d)" % delver.skull_allowance())
-	delver.skull_budget = 1
 	delver.curses = [Curses.BLOODTHIRST, Curses.IRON_FOES, Curses.LONG_WINTER]
-	_check(delver.skulls_earned() == 2 and delver.transcended().skull_allowance() == 12,
-			"skulls the dungeon paid for are not carried: 1 wall + 1 of the budget, then the 10 again (%d)"
-			% delver.skulls_earned())
-	climber.skull_budget = 7
-	climber.save(TEST_PATH)
-	_check(Inventory.load_from(TEST_PATH).skull_budget == 7, "and the budget comes back off the save")
+	_check(delver.skull_allowance() == 10 and delver.transcended().skull_allowance() == 10,
+			"four depths won are 1 + 2 + 3 + 4 skulls, and again in the next world (%d)" % delver.skull_allowance())
 	_check(Curses.skulls_of([Curses.LONG_WINTER, Curses.IRON_FOES]) == 4
 			and Curses.fits(Curses.IRON_FOES, [Curses.LONG_WINTER], 4)
 			and not Curses.fits(Curses.BLOODTHIRST, [Curses.LONG_WINTER], 4)

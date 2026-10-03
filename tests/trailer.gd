@@ -68,7 +68,10 @@ func _run() -> void:
 		_main.inventory.tips.append(tip[0])
 	_main.inventory.level = 42
 	_main._sync_character()
-	_start = Engine.get_process_frames()
+	# The film moves the camera off the hero on purpose: no badge calling it back.
+	_main._hero_pointer.process_mode = Node.PROCESS_MODE_DISABLED
+	_main._hero_pointer.hide()
+	_start =Engine.get_process_frames()
 	print("TRAILER_START ", Engine.get_frames_drawn())
 	# `-- --until=<beat>` (`tools/trailer.py --opening`) stops the film there, to work on one part.
 	for arg in OS.get_cmdline_user_args():
@@ -350,7 +353,7 @@ func _transcend() -> void:
 	_main._resetting = true
 	view.land_radius += MapBuilder.WALL_STEP
 	_main._credit_walls()
-	_main.inventory.skull_budget = 6
+	_main.inventory.dungeon_depth = 3
 	var heirloom := LootTable.roll("Imp", _rng, true, 8, 0.0, 0.0, ItemRarity.Rarity.ELITE)
 	_main.inventory.add(heirloom)
 	_main.inventory.make_heirloom(heirloom)

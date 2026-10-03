@@ -90,6 +90,29 @@ static func shake(node: Node2D, strength: float, time := 0.2) -> void:
 	tween.tween_property(node, "position", home, time / (STEPS + 1))
 
 
+## A sound played once and freed when it ends, for a moment rather than a run of them (a level, a
+## verdict, the smith's hammer). On the tree's root rather than under whoever asked, so the page or the
+## fight that asked can close under it without cutting it off; added deferred, so it can be asked for
+## while the tree is busy laying out a scene.
+static func sound(stream: AudioStream, pitch := 1.0) -> void:
+	var player := AudioStreamPlayer.new()
+	player.stream = stream
+	player.bus = Settings.SFX_BUS
+	player.pitch_scale = pitch
+	player.autoplay = true
+	player.finished.connect(player.queue_free)
+	(Engine.get_main_loop() as SceneTree).root.add_child.call_deferred(player)
+
+
+## Several takes of one sound as one stream, a different take each play -- `AudioStreamRandomizer`
+## never plays the same one twice running -- so a sound heard every kill does not wear a groove.
+static func takes(streams: Array) -> AudioStreamRandomizer:
+	var pool := AudioStreamRandomizer.new()
+	for stream: AudioStream in streams:
+		pool.add_stream(-1, stream)
+	return pool
+
+
 ## How a reward panel (a fight's verdict, a bounty's pay) comes and goes: it swells in from
 ## `POP_FROM` of its size past its own and settles, then shrinks away as it leaves. Its sums count up
 ## from nothing, its finds pop in one after another, and a win washes the screen warm and throws

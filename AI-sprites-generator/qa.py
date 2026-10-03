@@ -195,7 +195,8 @@ def blends(tag):
         return [cell]
 
     pairs = [("forest", "grass"), ("grass", "dirt"), ("desert", "dirt"), ("mountains", "desert"), ("ice", "grass"),
-             ("mountains", "ice")]
+             ("mountains", "ice"), ("desert", "grass"), ("ice", "dirt"), ("forest", "desert"),
+             ("forest", "ice")]
     shots, illegal = [], {}
     for i, (hi, lo) in enumerate(pairs):
         def env_at(r, c, hi=hi, lo=lo):

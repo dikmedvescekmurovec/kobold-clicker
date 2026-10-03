@@ -2,7 +2,7 @@ class_name AchievementsPage
 extends Control
 ## The achievements, as a page against the left edge -- simple, after the user's reference (2026-09-28):
 ## a bar across the top saying how much of the list is earned, rank by rank, and under it one grid of
-## squares in `Achievements.ACHIEVEMENTS`' order, the easiest first. A square is the unique it unlocks:
+## squares by the achievement's name (the user's, 2026-10-02). A square is the unique it unlocks:
 ## lit once earned, with the rank reached on its corner, the same square dimmed until then. Its card,
 ## the item card's own (`ItemSlot.hint`), says the achievement's name and rank, what the next rank
 ## asks, how far the player is, and which unique it unlocks or strengthens.
@@ -66,10 +66,11 @@ func open() -> void:
 	grid.add_theme_constant_override("h_separation", BagPage.SLOT_GAP)
 	grid.add_theme_constant_override("v_separation", BagPage.SLOT_GAP)
 	_rows.add_child(grid)
-	for tier in range(1, Achievements.TIER_NAMES.size()):
-		for id: String in Achievements.ACHIEVEMENTS:
-			if int(Achievements.ACHIEVEMENTS[id]["tier"]) == tier:
-				grid.add_child(tile(inventory, id, known))
+	var ids := Achievements.ACHIEVEMENTS.keys()
+	ids.sort_custom(func(a: String, b: String) -> bool:
+		return str(Achievements.ACHIEVEMENTS[a]["name"]).naturalnocasecmp_to(str(Achievements.ACHIEVEMENTS[b]["name"])) < 0)
+	for id: String in ids:
+		grid.add_child(tile(inventory, id, known))
 
 
 ## The bar across the top: an ink trough filling with leaf, the share earned written over its middle.
@@ -101,10 +102,14 @@ static func share_bar(have: int, need: int) -> Control:
 
 
 ## One achievement's square: the unique it unlocks, lit once earned with the rank reached on its corner
-## and dimmed until then, its card written by `write_card`.
+## and dimmed until then, its card written by `write_card` -- and under Alt, the unique's own card as
+## the collection log writes it.
 static func tile(player: Inventory, id: String, known: Dictionary) -> ItemSlot:
 	var slot := ItemSlot.make(CollectionPage.specimen(id))
 	slot.hint = AchievementsPage.write_card.bind(player, id, known)
+	slot.set_meta(ItemCard.ALT_CARD, CollectionPage.write_hint.bind(slot.item, Achievements.is_unlocked(player, id),
+			Settings.show_all_uniques() or player.uniques_found.has(id)))
+	slot.set_meta(ItemCard.KEYS, {"alt": "unique"})
 	# No rarity frame: a square here is an achievement, not a piece (the user's call, 2026-09-28).
 	var frame := slot.get_node_or_null(ItemSlot.FRAME_NAME)
 	if frame != null:

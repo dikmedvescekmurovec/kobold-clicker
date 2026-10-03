@@ -384,7 +384,21 @@ func _shoot_farm() -> void:
 	combat._loot_drops.inspect(0)
 	await _save(combat, "combat_farm_drop.png")
 	combat._loot_drops.inspect(-1)
-	combat._on_loot_closed()
+	combat.close_loot()
+
+	# The bag opened over the run, where its finds are. Told it is the main scene's fight, so the bag
+	# stands as it does in play; seen tips, so the button is there and opening it writes nothing.
+	main._combat = combat
+	main.inventory.tips.append_array(["first_item", "opened_bag"])
+	var carried: Array[Item] = combat._drops.slice(0, 9)
+	main.inventory.items.append_array(carried)
+	main._on_bag_pressed()
+	await create_timer(Juice.POP_TIME + 0.1).timeout
+	await _save(combat, "combat_bag.png")
+	main._on_left_page_closed()
+	for item: Item in carried:
+		main.inventory.items.erase(item)
+	main._combat = null
 
 	# And what the run says for itself once the player has had enough.
 	combat._on_terminate_pressed()

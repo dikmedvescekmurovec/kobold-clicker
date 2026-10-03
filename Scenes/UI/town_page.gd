@@ -50,8 +50,6 @@ signal spell_aimed(reading: String, price: float, spot: Vector2i)
 ## The way out of the world was asked for, and the question under it answered yes. Nothing has been
 ## charged and nothing need be: the purse is one of the things left behind. The main scene does it.
 signal transcend_pressed
-## The Seeing Stone has been bought, and is the player's in every world from now on.
-signal stone_bought
 
 ## How wide the page's contents run before they wrap, in panel pixels. It shares a 1152 px window
 ## with the bag and the doll beside it, so this is a width budget rather than a matter of taste
@@ -115,7 +113,6 @@ const FORTUNE_ICONS := {
 	FortuneTeller.APPRAISE: "res://Assets/Fortune/appraise.png",
 	FortuneTeller.SCOUR: "res://Assets/Fortune/scour.png",
 	FortuneTeller.HOMECOMING: "res://Assets/Fortune/homecoming.png",
-	FortuneTeller.STONE: "res://Assets/Fortune/stone.png",
 	FortuneTeller.TRANSCEND: "res://Assets/Fortune/transcend.png",
 }
 ## A spell's mark, at the 16 px it is drawn at doubled -- a whole-number step, as a skill's is.
@@ -131,12 +128,11 @@ const HOVER_LIFT := Color(1.2, 1.2, 1.2)
 ## What each of the fortuneteller's squares says when hovered, after its name: what the spell does,
 ## as an outcome -- never how it is asked for (the user's rule, 2026-09-25).
 const FORTUNE_TIPS := {
-	FortuneTeller.ROADS: "Brings every settlement between the ice walls around you out of the fog",
+	FortuneTeller.ROADS: "Brings every settlement between the ice walls around you, and the land beside it, out of the fog",
 	FortuneTeller.TREASURE: "Puts a star over the nearest chest you have not seen. It stays until that chest is opened",
 	FortuneTeller.APPRAISE: "Lists every modifier the open item can roll, the range it rolls in at the item's level, and how often it comes up",
 	FortuneTeller.SCOUR: "Brings a tile and the two rings of land around it, nineteen tiles, out of the fog",
 	FortuneTeller.HOMECOMING: "Moves you to a settlement you have already charted",
-	FortuneTeller.STONE: "A stone that grows warm the nearer you stand to the Gollux cave. Yours in every world from now on",
 	FortuneTeller.TRANSCEND: "Ends this world and starts a new one, worth far more",
 }
 ## What stands over each half of her list. A reading is asked again and again at a climbing price; a
@@ -208,6 +204,11 @@ var _smith_note := ""
 ## when he stands still), strikes pressed for while it played, still owed, and the face the bench on
 ## screen now shows. An owed strike starts `SWING_OVERLAP` frames before the one playing would end.
 const SWING_OVERLAP := 3
+## The anvil's ring as the hammer meets it -- on the strike's third frame -- and the crack of a piece
+## it breaks in its place.
+const STRIKE_LANDS := 2 * DialogueBox.FRAME_TIME
+const ANVIL_SOUND := preload("res://Sounds/Sfx/anvil_hit.ogg")
+const BREAK_SOUND := preload("res://Sounds/Sfx/anvil_break.ogg")
 var _swing_clock := -1.0
 var _swings_owed := 0
 var _smith_face: AtlasTexture
@@ -483,11 +484,6 @@ func _scrolled(gap: int) -> VBoxContainer:
 ## because six squares with no numbers on them are six questions, and a shop that has to be opened
 ## six times to be read is a shop nobody reads.
 func _price_cell(square: Control, price: float) -> VBoxContainer:
-	# Nothing to pay carries no coin, the way a priced button with no price does: the roads, once
-	# bought in a town, are told again for nothing, and a coin beside a nought reads as a price of zero
-	# gold rather than as no price at all.
-	if price <= 0.0:
-		return _cost_cell(square, "Free", null, true)
 	return _cost_cell(square, BigNumber.format(price), Coins.icon(), inventory.gold >= price)
 
 
@@ -855,10 +851,13 @@ func _smith_bench(body: VBoxContainer, square: Control) -> void:
 	_show_swing()
 
 
-## An Upgrade or a Lock went through: he strikes now, or once the strike playing is nearly done.
-func _strike() -> void:
+## An Upgrade or a Lock went through: he strikes now, or once the strike playing is nearly done, and
+## `sound` rings out as the hammer lands -- at once when he does not move.
+func _strike(sound: AudioStream) -> void:
 	if Settings.animations == Settings.Anim.NONE:
+		Juice.sound(sound)
 		return
+	create_tween().tween_callback(func() -> void: Juice.sound(sound)).set_delay(STRIKE_LANDS)
 	if _swing_clock >= 0.0:
 		_swings_owed += 1
 	else:
@@ -934,9 +933,6 @@ func _fill_fortune() -> void:
 	# The way out stands with the great spells, as a square of its own, once a wall has fallen: before
 	# that there is nothing yet to take along (the user, 2026-09-25, in place of a full-width button).
 	var great: Array = FortuneTeller.GREAT.duplicate()
-	# The stone once there is a cave in this world to feel for, and never again once it is held.
-	if view != null and view.cave != HexMap.NO_CELL and not inventory.seeing_stone:
-		great.append(FortuneTeller.STONE)
 	if view != null and view.walls_fallen() > 0:
 		great.append(FortuneTeller.TRANSCEND)
 	body.add_child(_spell_grid(FORTUNE_HEADINGS["great"], great))
@@ -1045,11 +1041,6 @@ func _answer(reading: String, lines: VBoxContainer) -> void:
 					TOLD_WIDTH))
 			lines.add_child(BountyList.wrapped("It stays until that chest is opened.", TOLD_WIDTH,
 					Palette.TEXT_SOFT))
-		FortuneTeller.STONE:
-			lines.add_child(BountyList.wrapped("The Seeing Stone is yours, in this world and every one after it.",
-					TOLD_WIDTH))
-			lines.add_child(BountyList.wrapped("Press it on the map and it grows warm or cold with the way down to Gollux.",
-					TOLD_WIDTH, Palette.TEXT_SOFT))
 		FortuneTeller.APPRAISE:
 			lines.add_child(ItemDetails.line(_bag_piece.display_name(), _bag_piece.text_color(), TOLD_WIDTH))
 			# What the table is, since a column of lines and percentages says nothing on its own: the
@@ -1116,7 +1107,10 @@ func _spell_grid(heading: String, readings: Array) -> VBoxContainer:
 	grid.add_theme_constant_override("h_separation", STOCK_GAP)
 	grid.add_theme_constant_override("v_separation", STOCK_GAP)
 	for reading: String in readings:
-		grid.add_child(_price_cell(_spell_square(reading), _fortune_price(reading)))
+		var square := _spell_square(reading)
+		# The roads, once bought in this town, say so where the price was, and no coin.
+		grid.add_child(_cost_cell(square, "Bought", null, true) if _roads_bought(reading)
+				else _price_cell(square, _fortune_price(reading)))
 	box.add_child(grid)
 	return box
 
@@ -1180,12 +1174,14 @@ func _odds_row(row: Dictionary, striped: bool, width: float) -> PanelContainer:
 	return line
 
 
-## What a spell costs here, off the town's level. The roads, once told in this town, are told again for
-## nothing -- they are read off the world, and the world has not moved.
+## What a spell costs here, off the town's level.
 func _fortune_price(reading: String) -> float:
-	if reading == FortuneTeller.ROADS and FortuneTeller.asked(_drawer, reading):
-		return 0.0
 	return TownPrices.fortune_price(reading, _cell)
+
+
+## Whether this town has sold the roads already: once a town, as a great spell is.
+func _roads_bought(reading: String) -> bool:
+	return reading == FortuneTeller.ROADS and FortuneTeller.asked(_drawer, reading)
 
 
 ## Why she will not give this spell, or "" when she will. A great spell is sold once a settlement; a
@@ -1195,6 +1191,8 @@ func _fortune_why_not(reading: String) -> String:
 		return "She sees nothing here"
 	if reading in FortuneTeller.GREAT and FortuneTeller.asked(_drawer, reading):
 		return "That spell is spent here"
+	if _roads_bought(reading):
+		return "Already bought here"
 	match reading:
 		FortuneTeller.TREASURE:
 			var told := FortuneTeller.chest(inventory.fortunes)
@@ -1232,8 +1230,7 @@ func _on_reading_pressed(reading: String) -> void:
 	inventory.gold -= price
 	match reading:
 		FortuneTeller.ROADS:
-			# The one drawer key a reading still writes, and it means the opposite of a great spell's:
-			# this town has paid for the roads, so it tells them again for nothing from now on.
+			# The one drawer key a reading still writes: this town has sold the roads, and sells them no more.
 			_drawer[FortuneTeller.ASKED + reading] = true
 			if view.reveal_ring_towns(_cell) > 0:
 				towns_revealed.emit()
@@ -1241,9 +1238,6 @@ func _on_reading_pressed(reading: String) -> void:
 			var spot := view.origin + _near_chest
 			inventory.fortunes[FortuneTeller.CHEST] = [spot.x, spot.y]
 			chest_bought.emit(_near_chest)
-		FortuneTeller.STONE:
-			inventory.seeing_stone = true
-			stone_bought.emit()
 	print("The fortuneteller read %s for %s gold" % [reading, BigNumber.format(price)])
 	inventory.save(_save_path)
 	_tell(reading)
@@ -1277,8 +1271,9 @@ func _on_upgrade_pressed() -> void:
 	if not _smith_why_not(Blacksmith.why_not_upgrade(_bag_piece, cap), price).is_empty():
 		return
 	inventory.gold -= price
-	_strike()
-	if Blacksmith.upgrade(_bag_piece, cap, _smith_rng):
+	var upgraded := Blacksmith.upgrade(_bag_piece, cap, _smith_rng)
+	_strike(ANVIL_SOUND if upgraded else BREAK_SOUND)
+	if upgraded:
 		_smith_note = ""
 		print("Upgraded %s to level %d for %s gold"
 				% [_bag_piece.display_name(), _bag_piece.level, BigNumber.format(price)])
@@ -1297,7 +1292,7 @@ func _on_lock_pressed() -> void:
 	inventory.gold -= price
 	if not Blacksmith.lock(_bag_piece, _smith_rng):
 		return
-	_strike()
+	_strike(ANVIL_SOUND)
 	print("Locked %s on %s for %s gold" % [ModifierTable.line(_bag_piece.locked_mod()),
 			_bag_piece.display_name(), BigNumber.format(price)])
 	_smith_done()
@@ -1356,11 +1351,12 @@ func _on_shelf_input(event: InputEvent, at: int) -> void:
 	if at < 0 or at >= shelf.size() or shelf[at] == null:
 		return
 	# With an orb in hand the press spends it on the piece where it stands, the player's gamble on a
-	# piece that is not theirs yet: the price under it is read off the rarity and moves with it.
+	# piece that is not theirs yet: the price under it is read off the rarity and moves with it. The
+	# shelf is drawn again when the orb lands, which a question about lowering it may put off.
 	if _held != "":
-		craft_held.call(shelf[at], VendorStock.put.bind(_drawer, at, shelf[at]))
-		_fill()
-		layout()
+		craft_held.call(shelf[at], func() -> void:
+			VendorStock.put(_drawer, at, shelf[at])
+			redraw())
 		return
 	_offer = shelf[at]
 	_offer_at = at

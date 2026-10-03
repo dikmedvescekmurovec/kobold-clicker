@@ -38,6 +38,12 @@ const SWAP_ICON :="res://Assets/UI/ui_icon_swap.png"
 ## Hide points back at the bag the doll folds into, Show out to where it opens.
 const HIDE_ICON := "res://Assets/UI/ui_icon_caret_left.png"
 const SHOW_ICON := "res://Assets/UI/ui_icon_caret_right.png"
+## An orb taking to a piece, a super orb's included -- its knock and its swell together, the user's
+## pairing; one that has nothing to do to it is silent.
+const ORB_APPLIED_SOUNDS := [preload("res://Sounds/Sfx/orb_applied.ogg"),
+		preload("res://Sounds/Sfx/orb_applied_layer.ogg")]
+## A piece put on or taken off.
+const EQUIP_SOUND := preload("res://Sounds/Sfx/equip.ogg")
 ## What goes in front of a question's id in `inventory.tips` once the player has said not to ask it
 ## again, how wide the question is set, and its tick box: the node's name and the mark it wears.
 const SKIP_CONFIRM := "skip_confirm_"
@@ -175,8 +181,9 @@ var _orb_card: OrbCard
 var _craft_rng := RandomNumberGenerator.new()
 ## The orb pressed with no piece open, or "". The next square or worn socket pressed is crafted with
 ## it where it lies, unopened, and it stays held while any are left. Opening a piece, a press on
-## bare panel, the same orb again, Escape or the bag going away puts it down. While it is held it is
-## the cursor, at the 32 px it is cut at -- which is the tray's 16 at `ui_scale` 2.
+## anything but a piece or the tray (`_input`), the same orb again, Escape, a right click or the bag
+## going away puts it down. While it is held it is the cursor, at the 32 px it is cut at -- which is
+## the tray's 16 at `ui_scale` 2.
 var _armed := "":
 	set(orb):
 		if orb == _armed:
@@ -185,6 +192,9 @@ var _armed := "":
 		var mark: Texture2D = null if orb == "" else OrbTable.icon(orb)
 		Cursors.hold(mark)
 		held_changed.emit(orb)
+
+## A left press off any piece put the held orb down, and the bag waits for its release to redraw.
+var _put_down := false
 
 
 func _init(player_inventory: Inventory, save_path: String, ui_scale: float, heirlooms := false,
@@ -600,14 +610,30 @@ func _unhandled_input(event: InputEvent) -> void:
 		_select_item(-1)
 
 
-## A right click anywhere puts a held orb down, as Escape does. `_input` rather than `_unhandled_input`:
-## a press over a panel is handled by the panel and would never reach the other.
+## A right click anywhere puts a held orb down, as Escape does, and so does a left press on anything
+## but a piece or the tray -- the map, a button, bare panel -- which still goes on to do its own work:
+## so that press is not redrawn under (a heading's button freed before its release lands), and the
+## bag is redrawn once the release has been and gone (`_put_down`). Not under a question, whose Use
+## spends the orb. `_input` rather than `_unhandled_input`: a press over a panel is handled by the
+## panel and would never reach the other.
 func _input(event: InputEvent) -> void:
-	if _armed != "" and event is InputEventMouseButton and event.pressed \
-			and event.button_index == MOUSE_BUTTON_RIGHT:
+	if not event is InputEventMouseButton:
+		return
+	if _put_down and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_put_down = false
+		refresh.call_deferred()
+	if _armed == "" or not event.pressed:
+		return
+	if event.button_index == MOUSE_BUTTON_RIGHT:
 		get_viewport().set_input_as_handled()
 		_armed = ""
 		refresh()
+	elif event.button_index == MOUSE_BUTTON_LEFT and _confirm == null \
+			and ItemCard.square_at(get_tree(), event.position) == null \
+			and not _orb_tray.get_children().any(func(orb: Control) -> bool:
+				return orb.get_global_rect().has_point(event.position)):
+		_armed = ""
+		_put_down = true
 
 
 ## Whether one of the page's questions stands over the window, for a banner to wait behind.
@@ -938,12 +964,14 @@ func _unequip_button(action: Callable) -> Button:
 
 func _on_equip_pressed(item: Item, socket: Equipment.Socket) -> void:
 	if inventory.equip(item, socket):
+		Juice.sound(EQUIP_SOUND)
 		_save()
 	_select_item(-1)
 
 
 func _on_unequip_pressed(socket: Equipment.Socket) -> void:
 	if inventory.unequip(socket):
+		Juice.sound(EQUIP_SOUND)
 		_save()
 	_select_socket(-1)
 
@@ -1206,6 +1234,7 @@ func _super_craft(orb: String, item: Item, index: int) -> void:
 	_purse.super_orbs -= 1
 	print("Spent %s on %s (%s, level %d)" % [orb, item.display_name(), item.rarity_name(), item.level])
 	refresh()
+	_orb_applied()
 	crafted.emit(orb)
 
 
@@ -1217,8 +1246,20 @@ func craft_held(item: Item, written: Callable) -> void:
 		_craft(_armed, item, written)
 
 
-## Applied first and spent second: nothing is spent when the orb has nothing to do to the piece.
+## An orb that would take a piece down a rarity asks first, with a tick to stop asking (the user's,
+## 2026-10-02): one misplaced Transmutation is an epic gone. Anything else is done at once.
 func _craft(orb: String, item: Item, written := Callable()) -> void:
+	var to: int = OrbTable.RARITY_OF.get(orb, item.rarity)
+	if to < item.rarity and OrbTable.can_apply(orb, item):
+		_ask("lower_rarity", orb, "Make the %s %s %s? It cannot be taken back." % [
+				item.rarity_label().to_lower(), item.display_name(), ItemRarity.label_of(to).to_lower()],
+				"Use", "LightDangerButton", _apply_orb.bind(orb, item, written))
+		return
+	_apply_orb(orb, item, written)
+
+
+## Applied first and spent second: nothing is spent when the orb has nothing to do to the piece.
+func _apply_orb(orb: String, item: Item, written: Callable) -> void:
 	if not OrbTable.apply(orb, item, _craft_rng):
 		return
 	if written.is_valid():
@@ -1231,7 +1272,13 @@ func _craft(orb: String, item: Item, written := Callable()) -> void:
 	if _purse.orb_count(_armed) <= 0:
 		_armed = ""
 	refresh()
+	_orb_applied()
 	crafted.emit(orb)
+
+
+func _orb_applied() -> void:
+	for layer: AudioStream in ORB_APPLIED_SOUNDS:
+		Juice.sound(layer)
 
 
 ## Whether wearing `item` loses nothing and gains something: against what Equip would take off (the

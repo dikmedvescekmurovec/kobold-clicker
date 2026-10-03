@@ -31,6 +31,14 @@ const VERSION := 4
 const STATE_NAMES := ["hidden", "uncharted", "charted"]
 ## What the states were called before "discover" became "chart", so older saves still read.
 const OLD_STATE_NAMES := {"undiscovered": "uncharted", "discovered": "charted"}
+## Sheets a save may have been drawn with, each against the one sheet that still reads it. Only
+## `env_adjacency` was widened between the two (every border but desert-ice allowed, 2026-10-03),
+## and a map drawn under fewer borders keeps to the wider table. An entry stops matching as soon
+## as the sheet changes again, which brings the refusal back.
+const WIDENED_SHEETS := {
+	"68ae2d02da88d387f09c030963a2938907542675f6f4d407f189209359d20018":
+			"82b7069bb4bdaef41496c6c17e76f44817cbb211f6aba52cf5def990a1ad4675",
+}
 
 ## Indexes the legends, one character per cell. Six environments and three states need ten of
 ## these; the encoder is given sixty-two so it has no ceiling to walk into later.
@@ -157,7 +165,7 @@ static func load_from(path := SAVE_PATH, problem: Array = [], expect_sheet := ""
 
 	var save := MapSave.new()
 	save.sheet = str(data.get("sheet", ""))
-	if expect_sheet != "" and save.sheet != expect_sheet:
+	if expect_sheet != "" and save.sheet != expect_sheet and WIDENED_SHEETS.get(save.sheet) != expect_sheet:
 		problem.append("it was drawn with a different set of tiles")
 		return null
 	save.world_seed = int(data.get("world_seed", 0))

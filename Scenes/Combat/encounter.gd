@@ -499,6 +499,8 @@ var xp_more := 0.0
 var _cursed := false
 ## Whether `wear` has already sent the Dreadmask's commons away, which it must do once as well.
 var _dreaded := false
+## The seconds `arm` last added to the clock for the gear, so arming again moves it by the difference.
+var _clock_more := 0.0
 ## What keeps a blow off the clock (`taken`, `_struck_by`): two ratings, seconds off each blow, and
 ## seconds a landed hit of the player's wins back of what the blows took.
 var armor := 0.0
@@ -962,8 +964,10 @@ func hit() -> bool:
 	return landed
 
 
-## What the player's gear and skills are worth, from `Inventory.stats()`. Called before the fight starts; a
-## fight nobody arms is a bare-handed one, which is what every test that does not care gets.
+## What the player's gear and skills are worth, from `Inventory.stats()`. Called before the fight starts,
+## and again whenever the gear changes in the bag mid-fight, so everything here is worked out afresh
+## from `stats` and the clock moves by the difference. A fight nobody arms is a bare-handed one, which
+## is what every test that does not care gets.
 func arm(stats: Dictionary) -> void:
 	damage = maxf(BARE_DAMAGE, roundf(float(stats.get("damage", 0.0))) + BARE_DAMAGE)
 	# Clamped, because a chance is not a quantity: eight pieces each adding crit chance can total
@@ -988,14 +992,18 @@ func arm(stats: Dictionary) -> void:
 	_pure_pieces = maxi(0, int(stats.get("pure_pieces", 0)))
 	# Heartwood Plate: armour buys clock, and stops buying it at its rank's most -- armour grows with
 	# every level, and a clock that grew with it would be no clock. A run has none to add to.
+	var more := 0.0
 	if "heartwood" in effects and not endless:
-		seconds += minf(floorf(armor / HEARTWOOD_ARMOUR), _dial("heartwood_plate", "most"))
-		time_left = seconds
+		more += minf(floorf(armor / HEARTWOOD_ARMOUR), _dial("heartwood_plate", "most"))
 	# The Fight Clock on the gear, on the same terms: capped, and nothing on a run.
 	var clock := LootTable.seconds_of("fight_clock", float(stats.get("fight_clock", 0.0)))
 	if clock > 0.0 and not endless:
-		seconds += minf(clock, CLOCK_MOST)
-		time_left = seconds
+		more += minf(clock, CLOCK_MOST)
+	# By the difference, so arming again mid-fight -- a piece put on in the bag -- gives or takes what
+	# changed and never fills the clock again.
+	seconds += more - _clock_more
+	time_left += more - _clock_more
+	_clock_more = more
 	attack_speed = maxf(0.0, float(stats.get("attack_speed", 0.0)))
 	bleed = maxf(0.0, float(stats.get("bleed", 0.0)))
 	drop_rate = maxf(0.0, float(stats.get("drop_rate", 0.0)))
@@ -1112,7 +1120,9 @@ func _strike(automatic: bool, riposte := false) -> bool:
 	if crit:
 		_count("crits")
 		_dry = 0
-	else:
+	# Cold Streak's: only a blow that could have crit is one without a crit. At no chance at all every
+	# blow would be, and the first fight would earn every rank (the user's ruling, 2026-10-02).
+	elif chance > 0.0:
 		_dry += 1
 		_best("dry_streak", _dry)
 	# The Serpent's Eye: one on each doll builds twice as fast, and at IV a crit keeps some of it.

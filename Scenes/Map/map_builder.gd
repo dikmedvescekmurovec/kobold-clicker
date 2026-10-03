@@ -38,6 +38,8 @@ const WASTE_DEPTH := 5
 ## name once the wall is down.
 const WALL_NAME := "The Ice Wall"
 const WASTE_NAME := "Frozen Wasteland"
+## The whole wall coming down (`_break_wall`).
+const WALL_FALL_SOUND := preload("res://Sounds/Sfx/ice_wall_fall.ogg")
 ## Cell the map is centered on, and the only one visible together with its neighbors at the start.
 const CENTER := Vector2i.ZERO
 ## About 1 in 10 environment tiles use an accent sprite (JSON meta accent_frequency: 1 in 8-12). The
@@ -806,6 +808,7 @@ func _generate_ahead() -> void:
 ## edge, and the wasteland the player has already seen inside that thaws into the land it always was,
 ## uncharted under the fog.
 func _break_wall() -> void:
+	Juice.sound(WALL_FALL_SOUND)
 	var old_wall := land_radius + 1
 	land_radius += wall_step
 	_chartable.clear()
@@ -947,16 +950,16 @@ func ring_of(cell: Vector2i) -> int:
 	return maxi(0, ceili(float(HexGrid.distance(CENTER, cell) - START_LAND_RADIUS) / wall_step))
 
 
-## The fortuneteller's roads: every settlement in the same ring of land as `cell` that is still in the
-## dark comes out of it as uncharted, the way the scour shows land. Returns how many did.
+## The fortuneteller's roads: every settlement in the same ring of land as `cell`, and the land
+## `FortuneTeller.ROADS_RADIUS` round it, comes out of the dark as uncharted, the way the scour shows
+## land. Returns how many tiles did.
 func reveal_ring_towns(cell: Vector2i) -> int:
 	var ring := ring_of(cell)
 	var shown := 0
 	for spot in towns.towns():
 		var town := spot - origin
-		if is_land(town) and ring_of(town) == ring and _tiles.has(town) and not seen(town):
-			_show(town, State.UNCHARTED, true)
-			shown += 1
+		if is_land(town) and ring_of(town) == ring and _tiles.has(town):
+			shown += _reveal_around(town, FortuneTeller.ROADS_RADIUS)
 	return shown
 
 

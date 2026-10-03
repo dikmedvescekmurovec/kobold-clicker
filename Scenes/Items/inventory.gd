@@ -51,7 +51,7 @@ const SAVE_PATH := "user://inventory.json"
 ## neither.
 ## 20 adds what two of the curses have to remember: `homeland`, the two lands that still leave gear,
 ## and `uniques_doubled`, the finds a Forgotten world made count twice; a version 19 save has neither.
-## 21 adds `skull_budget`; a version 20 save has none, and earns it at its next transcension.
+## 21 adds `skull_budget`, read by nothing since 2026-10-03: only Gollux pays skulls (`skull_allowance`).
 ## 22 adds `dungeon_depth`; a version 21 save has won no depth of the dungeon.
 ## 23 drops `camp` for `saved_at`, the hour the save was written, which a camp is paid from now; a
 ## version 22 save camped somewhere counts from that camp's hour, and one camped nowhere is owed none.
@@ -170,9 +170,6 @@ var dungeon_floors := 0
 ## wall ever broken opened. The Gollux cave of every world after is put down no further out than this
 ## (`MapBuilder.place_cave`). It only rises (`reach`), and every transcension carries it over.
 var farthest_land := MapBuilder.START_LAND_RADIUS
-## Whether the fortuneteller has sold the player the Seeing Stone, which feels for the Gollux cave. Bought
-## once and kept through every transcension.
-var seeing_stone := false
 
 ## What currency the player is holding: orb name -> how many. Counts rather than objects, because an
 ## orb has nothing to tell apart -- two Orbs of Chaos are the same orb, which is exactly what gear
@@ -245,9 +242,6 @@ var walls_credited := 0
 ## theirs until the next transcension. The fight hears of them through `effects()`, the numbers they
 ## pay are added by `stats()`.
 var curses: Array[String] = []
-## How many skulls of curses the player may take into a new world (`Curses.fits`). Raised at every
-## transcension to this world's depth plus the skulls carried into it (`skulls_earned`), and never lowered.
-var skull_budget := 0
 ## The ones chosen on the black screen for the world to come. **In memory only**, like everything
 ## `TranscendPage` does: `transcended()` is what makes them the next world's.
 var pending_curses: Array[String] = []
@@ -866,25 +860,12 @@ func reach(radius: int) -> bool:
 	return true
 
 
-## The budget the next world is given: this world's depth -- walls broken, counted in ordinary walls
-## of `MapBuilder.WALL_STEP` rings, so the Ring of Walls' twice as many count as many as they reach --
-## plus the skulls carried into it, or the budget as it was if that is more. **A world lost to No
-## Second Chances raises nothing** (`lost`): the gamble is all or nothing, the user's ruling. Only the
-## skulls this world's own budget paid for are carried: any past it were the dungeon's (`skull_allowance`),
-## which is handed out again whole at every transcension and so must never compound into the budget.
-func skulls_earned(lost := false) -> int:
-	if lost:
-		return skull_budget
-	var step := MapBuilder.RING_OF_WALLS_STEP if Curses.RING_OF_WALLS in curses else MapBuilder.WALL_STEP
-	var depth := walls_credited * step / MapBuilder.WALL_STEP
-	return maxi(skull_budget, depth + mini(Curses.skulls_of(curses), skull_budget))
-
-
-## The skulls the black screen may spend on the next world: the budget earned, plus the dungeon's --
-## depth n won is n skulls and every depth down to the deepest adds up, so depth 4 is 1 + 2 + 3 + 4 = 10
-## (the user's ruling). Won once, not once a descent.
-func skull_allowance(lost := false) -> int:
-	return skulls_earned(lost) + dungeon_depth * (dungeon_depth + 1) / 2
+## The skulls the black screen may spend on the next world (`Curses.fits`), and **only Gollux pays
+## them** (the user's, 2026-10-03: walls broken pay none): depth n won is n skulls and every depth down
+## to the deepest adds up, so depth 4 is 1 + 2 + 3 + 4 = 10. Won once, not once a descent, and handed
+## out whole at every transcension, a world lost to No Second Chances included.
+func skull_allowance() -> int:
+	return dungeon_depth * (dungeon_depth + 1) / 2
 
 
 ## Where `item` is worn on the ordinary doll, or -1.
@@ -920,10 +901,10 @@ func make_heirloom(item: Item) -> bool:
 ## What is left of the player when the world is left behind: the heirlooms, each gone through
 ## `Item.transcend`, the super orbs not yet spent, and what the player *knows* -- the collection log, the
 ## tips already read, and the kills, which with `first_sword_taken` is what keeps a second world from
-## handing out the first one's helping hands again, and the skull budget, raised by this world unless it
-## was `lost` (`skulls_earned`) -- and what the dungeon asks to be kept: the depth won, how far the land
-## has ever reached, and the Seeing Stone. Everything else is a fresh start.
-func transcended(lost := false) -> Inventory:
+## handing out the first one's helping hands again -- and what the dungeon asks to be kept: the depth
+## won (the skulls, `skull_allowance`), how far the land
+## has ever reached. Everything else is a fresh start.
+func transcended() -> Inventory:
 	var next := Inventory.new()
 	next.tips = tips.duplicate()
 	next.hero_name = hero_name
@@ -939,11 +920,9 @@ func transcended(lost := false) -> Inventory:
 	next.dungeon_depth = dungeon_depth
 	next.dungeon_floors = dungeon_floors
 	next.farthest_land = farthest_land
-	next.seeing_stone = seeing_stone
 	next.first_sword_taken = true
 	next.first_orb_taken = true
 	next.super_orbs = super_orbs
-	next.skull_budget = skulls_earned(lost)
 	# What was chosen on the black screen is the new world's, and the old world's curses end with it.
 	next.curses = Curses.known(pending_curses)
 	if Curses.THICK_FOG in next.curses:
@@ -1033,7 +1012,6 @@ func save(path := SAVE_PATH) -> bool:
 		"dungeon_depth": dungeon_depth,
 		"dungeon_floors": dungeon_floors,
 		"farthest_land": farthest_land,
-		"seeing_stone": seeing_stone,
 		"level": level,
 		"xp": xp,
 		"skills": skills.to_dict(),
@@ -1051,7 +1029,6 @@ func save(path := SAVE_PATH) -> bool:
 		"super_orbs": super_orbs,
 		"walls_credited": walls_credited,
 		"curses": curses,
-		"skull_budget": skull_budget,
 		"homeland": homeland,
 		"uniques_doubled": uniques_doubled,
 		"achievements": achievements,
@@ -1137,11 +1114,11 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var floors: Variant = data.get("dungeon_floors", 0)
 	inventory.dungeon_floors = maxi(inventory.dungeon_depth * Encounter.DUNGEON.enemies,
 			int(floors) if typeof(floors) in [TYPE_INT, TYPE_FLOAT] else 0)
-	# Version 24 knew nothing of either: no further than the start's land, and no stone.
+	# Version 24 knew nothing of it: no further than the start's land. (Its `seeing_stone` went with the
+	# stone on 2026-10-03, and a save that still holds it is read past it.)
 	var farthest: Variant = data.get("farthest_land", MapBuilder.START_LAND_RADIUS)
 	if typeof(farthest) in [TYPE_INT, TYPE_FLOAT]:
 		inventory.farthest_land = maxi(MapBuilder.START_LAND_RADIUS, int(farthest))
-	inventory.seeing_stone = data.get("seeing_stone", false) == true
 	# Version 30 knew no name: an unnamed character, as a name that is not a string is.
 	var called: Variant = data.get("name", "")
 	if typeof(called) == TYPE_STRING:
@@ -1218,7 +1195,6 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var cursed: Variant = data.get("curses", [])
 	if typeof(cursed) == TYPE_ARRAY:
 		inventory.curses = Curses.known(cursed)
-	inventory.skull_budget = maxi(0, int(data.get("skull_budget", 0)))
 	# Version 19 knew nothing of either: no land chosen, no find counted twice. A name that is not a
 	# unique's is dropped, and one that is not a land's simply never matches a fight's.
 	for entry: Variant in _strings(data.get("homeland", [])):

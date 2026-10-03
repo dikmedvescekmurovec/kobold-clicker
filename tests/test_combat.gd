@@ -52,6 +52,7 @@ func _run() -> void:
 	_check(_test_tile_mods() == true, "tile modifier tests ran to the end")
 	_check(_test_curses() == true, "curse tests ran to the end")
 	_check(_test_more_curses() == true, "second batch curse tests ran to the end")
+	_check(_test_sounds() == true, "sound tests ran to the end")
 	await _test_thrown_finds()
 	await _test_the_longest_stop_wins()
 	await _test_settings()
@@ -928,6 +929,8 @@ func _test_thrown_finds() -> void:
 			_check(back.material.get_shader_parameter("cover").x >= 16.0,
 					"wide enough at the foot to cover the piece")
 			heights.append(back.material.get_shader_parameter("height"))
+		var hum := beam.get_node_or_null("Hum") as AudioStreamPlayer
+		_check(hum != null and hum.stream.loop, "and hums on a loop while it stands")
 
 	# Each step up stands a taller beam, and a unique's dwarfs the rest.
 	for rarity in [ItemRarity.Rarity.ELITE, ItemRarity.Rarity.UNIQUE]:
@@ -1054,6 +1057,38 @@ func _test_settings() -> void:
 	Settings.animations = Settings.Anim.DEFAULT
 	Settings.item_details = false
 	Settings.apply_audio()
+
+
+## What a fight sounds like is chosen by rule: a find lands by what it is, and a blow and a crit land
+## by the weapon in hand.
+func _test_sounds() -> bool:
+	var first := {}
+	for type: String in LootTable.items():
+		if not first.has(LootTable.kind_of(type)):
+			first[LootTable.kind_of(type)] = type
+	var lands := {"sword": "weapon", "mace": "weapon", "gold_ring": "jewel", "ruby_amulet": "jewel",
+			"hood": "cloth", "boot": "cloth", "jerkin": "cloth",
+			"helm": "base", "greaves": "base", "plate": "base", "shield": "base", "torch": "base"}
+	for kind: String in lands:
+		var piece := _thrown_piece(ItemRarity.Rarity.RARE)
+		piece.type = first[kind]
+		_check(CombatScene.drop_sound_of(piece) == lands[kind], "a %s lands as %s" % [kind, lands[kind]])
+	_check(CombatScene.drop_sound_of(_thrown_piece(ItemRarity.Rarity.UNIQUE)) == "unique",
+			"and a unique with its own, whatever it is")
+
+	var blows := [["", CombatScene.HIT_SOUND, CombatScene.BLUNT_CRIT],
+			["mace", CombatScene.BLUNT_HIT, CombatScene.BLUNT_CRIT],
+			["sword", CombatScene.HIT_SOUND, CombatScene.SLASH_CRIT],
+			["dagger", CombatScene.HIT_SOUND, CombatScene.SLASH_CRIT]]
+	for blow: Array in blows:
+		var combat: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
+		combat.weapon_kind = blow[0]
+		root.add_child(combat)
+		combat.begin(Encounter.for_tile(Vector2i(4, 0), "grass"), Vector2i(4, 0), 2.0)
+		_check(combat._hit_sound.stream == blow[1] and combat._crit_sound.stream == blow[2],
+				"a hit with %s lands and crits as it should" % ("bare hands" if blow[0] == "" else "a " + blow[0]))
+		combat.free()
+	return true
 
 
 func _thrown_piece(rarity: ItemRarity.Rarity) -> Item:
@@ -2250,6 +2285,16 @@ func _test_more_unique_effects() -> bool:
 	var clocked_run := Encounter.farm(cell, "grass")
 	clocked_run.arm({"fight_clock": 25.0})
 	_check(clocked_run.seconds == Encounter.SECONDS, "and a run's clock is not lengthened")
+	# Armed again mid-fight (gear changed in the bag): the clock moves by what changed, never refills.
+	var rearmed := Encounter.for_tile(cell, "grass")
+	rearmed.arm({"fight_clock": 25.0})
+	rearmed.time_left -= 10.0
+	rearmed.arm({"fight_clock": 25.0})
+	_check(rearmed.seconds == Encounter.SECONDS + 2.5 and rearmed.time_left == rearmed.seconds - 10.0,
+			"arming again with the same gear leaves the clock where it was (%s)" % rearmed.time_left)
+	rearmed.arm({})
+	_check(rearmed.seconds == Encounter.SECONDS and rearmed.time_left == Encounter.SECONDS - 10.0,
+			"and taking the piece off takes its seconds back (%s)" % rearmed.time_left)
 
 	# Magpie's Band: some purses are gear instead -- unless a Tithe says there is no gear.
 	for worn: Array in [["magpie"], ["magpie", "tithe"]]:
@@ -2938,6 +2983,10 @@ func _test_fight_tally() -> bool:
 	dry.advance(Encounter.WALK_IN)
 	for i in 12:
 		dry.hit()
+	_check(not dry.tally.has("dry_streak"), "a blow that could not crit is no blow without one (%s)" % [dry.tally])
+	dry.crit_chance = 1.0e-9
+	for i in 12:
+		dry.hit()
 	_check(dry.tally.get("dry_streak") == 12 and not dry.tally.has("crits"), "twelve blows with no crit (%s)" % [dry.tally])
 
 	var bled := Encounter.for_tile(Vector2i(1, 0), "grass")
@@ -3268,7 +3317,7 @@ func _test_curses() -> bool:
 
 
 ## The dungeon from the main scene: no way down until a wall has fallen in some world, then the world's
-## cave, entered stood on; the Seeing Stone says how warm the ground is from it; a descent pays nothing
+## cave, entered stood on; the hero feels it at the map's edge until it is seen; a descent pays nothing
 ## and counts no kill, and a depth is written down only once its Gollux is dead.
 func _test_the_way_down() -> void:
 	_clear_saves()
@@ -3289,22 +3338,20 @@ func _test_the_way_down() -> void:
 	_check(cave != HexMap.NO_CELL and MapSave.load_from(SCRATCH_MAP).cave == cave,
 			"the furthest land ever reached puts the world's cave down, and the map is saved with it (%s)" % cave)
 
-	# The Seeing Stone, bought: top right, and a game of hot and cold with the cave.
-	_check(not main._stone.visible, "no stone before it is bought")
-	main.inventory.seeing_stone = true
-	main._show_corner(true)
-	_check(main._stone.visible, "bought, it stands on the map")
-	var far := FortuneTeller.warmth(HexGrid.distance(view.player_cell, cave))
-	_check(main._on_stone_pressed() == FortuneTeller.WARMTH[far], "it says how warm the ground underfoot is (%s)"
-			% FortuneTeller.WARMTH[far])
-	var near := cave
-	for step in 4:
-		near = HexGrid.neighbor(near, HexGrid.Edge.W)
-	var home := view.player_cell
-	view.player_cell = near
-	_check(main._on_stone_pressed() == "Hot\nWarmer", "four steps off it is hot, and warmer than before")
-	view.player_cell = home
-	_check(main._on_stone_pressed() == FortuneTeller.WARMTH[far] + "\nColder", "and colder again walking away")
+	# The cave felt from the hero: nothing while the wall in front of it stands, then a red light at the
+	# map's edge, and the hero says so.
+	_check(not main._cave_sense.shown() and not main._tip_due("first_sense"),
+			"a cave behind a wall still standing is not felt")
+	view.land_radius = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
+	_check(main._cave_sense.shown(), "with the wall in front of it broken, the hero feels the cave at the map's edge")
+	_check(main._tip_due("first_sense"), "and says so")
+	# From the hero out: the light stands where the line toward the cave leaves the map.
+	var area := Rect2(0, 0, 100, 60)
+	_check(CaveSense.leaving(Vector2(50, 30), Vector2(1, 0), area) == Vector2(100, 30), "a cave east lights the right edge")
+	_check(CaveSense.leaving(Vector2(50, 30), Vector2(-1, -1), area) == Vector2(20, 0),
+			"one up and to the left the top edge, where the line from the hero meets it")
+	_check(CaveSense.leaving(Vector2(-40, 30), Vector2(0, 1), area) == Vector2(0, 60),
+			"and a hero panned off the map feels it from the edge nearest them")
 
 	# The wall down and the land charted, stood on the cave: Enter cave, and nowhere else.
 	view.land_radius = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
@@ -3319,11 +3366,11 @@ func _test_the_way_down() -> void:
 	_check(main._cave_button.visible and "depth 1" in main._cave_button.tooltip_text
 			and main._level_label.text.begins_with("Cave"),
 			"stood on the cave, Enter cave goes down to depth 1 (%s)" % main._cave_button.tooltip_text)
-	_check(main._on_stone_pressed() == "Still", "and the stone has nothing left to feel for")
+	_check(not main._cave_sense.shown() and not main._tip_due("first_sense"), "and seen, the light goes out")
 	main._on_cave_pressed()
 	var fight: Encounter = main._combat.fight if main._combat != null else null
-	_check(fight != null and fight.dungeon and main._combat.place == main.DUNGEON_NAME and not main.map.visible
-			and not main._stone.visible, "it opens the dungeon over the map, the stone out of its way")
+	_check(fight != null and fight.dungeon and main._combat.place == main.DUNGEON_NAME and not main.map.visible,
+			"it opens the dungeon over the map")
 	if fight == null:
 		return
 	var kills_before: int = main.inventory.kills

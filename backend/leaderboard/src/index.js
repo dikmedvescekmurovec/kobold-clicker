@@ -1,13 +1,11 @@
-// Kobold Clicker's backend: signing in with Google or Discord, cloud saves checked on every upload,
-// and the Gollux leaderboard, whose scores come only from those checked saves. The API, the sign-in
-// flow and how it is deployed: ../README.md.
-
-import { consistent, follows, summary } from "./checks.js";
+// Kobold Clicker's backend: signing in with Google or Discord, cloud saves, and the Gollux
+// leaderboard, scored from those saves. A save is taken at its word: the player is trusted not to
+// cheat. The API, the sign-in flow and how it is deployed: ../README.md.
 
 const NAME = /^[A-Za-z0-9 _-]{3,16}$/;
 const TOP = 100;
 const LOGIN_MS = 10 * 60 * 1000;
-// Revisions kept a player: a device that played offline is checked against the one it grew from.
+// Revisions kept a player, for putting an older one back by hand.
 const KEEP_REVISIONS = 10;
 // A save is ~140 KB of JSON; a body past this is not one.
 const MOST_BODY = 4_000_000;
@@ -147,8 +145,8 @@ async function callback(env, url, key) {
     .bind(key, subject).first();
   let playerId = known?.player_id;
   if (!playerId) {
-    // The device's anonymous player keeps its name on its first sign-in. Its score was never checked,
-    // so it starts again from the first checked save.
+    // The device's anonymous player keeps its name on its first sign-in, and its score starts again
+    // from its first save.
     const legacy = login.player_id && !(await env.DB.prepare("SELECT 1 FROM identities WHERE player_id = ?")
       .bind(login.player_id).first()) ? login.player_id : null;
     if (legacy) {
@@ -265,8 +263,7 @@ async function signOut(request, env, url, player) {
 
 // ---------------------------------------------------------------------------------------------------
 // Cloud saves. Every upload names the revision it grew from. One that is not the newest is a conflict
-// the player settles (409), unless they already chose this device's save (`replace`); either way the
-// save is checked against the revision it grew from, while the cloud still keeps it.
+// the player settles (409), unless they already chose this device's save (`replace`).
 
 async function getSave(request, env, url, player) {
   const row = await env.DB.prepare(
@@ -288,10 +285,9 @@ async function putSave(request, env, url, player) {
   } catch {
     return json({ error: "That is not a save" }, 400);
   }
+  if (typeof save !== "object" || save === null || Array.isArray(save)) return json({ error: "That is not a save" }, 400);
   if (typeof body.map !== "string") return json({ error: "That save has no map" }, 400);
   const now = Date.now();
-  const problems = consistent(save, now);
-  if (problems.length > 0) return refuse(env, player, problems);
   const latest = await env.DB.prepare(
     "SELECT revision, summary FROM saves WHERE player_id = ? ORDER BY revision DESC LIMIT 1",
   ).bind(player.id).first();
@@ -300,33 +296,20 @@ async function putSave(request, env, url, player) {
   if (baseRevision !== current && body.replace !== true) {
     return json({ error: "The cloud has a newer save", revision: current, summary: JSON.parse(latest.summary) }, 409);
   }
-  // The save this one grew from. None -- a first upload, one after Start over, or a base the cloud no
-  // longer keeps -- and there is nothing to check it against, so it moves nothing on the board.
-  const base = baseRevision > 0 ? await env.DB.prepare(
-    "SELECT data, uploaded_at, vouched FROM saves WHERE player_id = ? AND revision = ?",
-  ).bind(player.id, baseRevision).first() : null;
-  // A first save's floors were beaten where nothing watched, so none of them count; a checked save
-  // adds what it gained on top of its base. Otherwise a first save with its floors written in by hand
-  // would reach the board one upload later.
-  let vouched = 0;
-  if (base) {
-    const before = JSON.parse(JSON.parse(await gunzip(base.data)).inventory);
-    const grown = follows(before, save, (now - base.uploaded_at) / 1000);
-    if (grown.length > 0) return refuse(env, player, grown);
-    vouched = base.vouched + Math.max(0, Number(save.dungeon_floors ?? 0) - Number(before.dungeon_floors ?? 0));
-  }
+  const floors = number(save, "dungeon_floors");
   const revision = current + 1;
+  // `checked` and `vouched` are left from when uploads were checked, and no longer read.
   const writes = [
     env.DB.prepare(
-      "INSERT INTO saves (player_id, revision, data, summary, uploaded_at, checked, vouched) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO saves (player_id, revision, data, summary, uploaded_at, checked) VALUES (?, ?, ?, ?, ?, 0)",
     ).bind(player.id, revision, await gzip(JSON.stringify({ inventory: body.inventory, map: body.map })),
-      JSON.stringify(summary(save)), now, base ? 1 : 0, vouched),
+      JSON.stringify(summary(save)), now),
     env.DB.prepare("DELETE FROM saves WHERE player_id = ? AND revision <= ?")
       .bind(player.id, revision - KEEP_REVISIONS),
   ];
   // The board moves only upwards, and only a rise moves `reached_at`.
   writes.push(env.DB.prepare("UPDATE players SET floors = ?, reached_at = ? WHERE id = ? AND floors < ?")
-    .bind(vouched, now, player.id, vouched));
+    .bind(floors, now, player.id, floors));
   try {
     await env.DB.batch(writes);
   } catch (error) {
@@ -334,15 +317,23 @@ async function putSave(request, env, url, player) {
     if (String(error).includes("UNIQUE")) return json({ error: "The cloud has a newer save", revision }, 409);
     throw error;
   }
-  return json({ revision, checked: Boolean(base), ...(await standing(env, player.id)) });
+  return json({ revision, ...(await standing(env, player.id)) });
 }
 
-// A save the checks turned down: said to the game, and written on the player for a person to review.
-async function refuse(env, player, problems) {
-  const reason = problems.join(". ");
-  await env.DB.prepare("UPDATE players SET flag = ? WHERE id = ?")
-    .bind(`${new Date().toISOString()} ${reason}`, player.id).run();
-  return json({ error: reason }, 422);
+// A whole number a save holds, 0 when it holds none or something that is not one.
+function number(save, key) {
+  const value = Math.floor(Number(save[key] ?? 0));
+  return Number.isSafeInteger(value) && value > 0 ? value : 0;
+}
+
+// What the question between two saves shows of each.
+function summary(save) {
+  return {
+    level: number(save, "level"),
+    play_seconds: number(save, "play_seconds"),
+    saved_at: number(save, "saved_at"),
+    dungeon_floors: number(save, "dungeon_floors"),
+  };
 }
 
 // Reset save, or Start over from this device: the cloud's saves go and the next upload is a first one.
@@ -353,7 +344,7 @@ async function deleteSave(request, env, url, player) {
 }
 
 // ---------------------------------------------------------------------------------------------------
-// The board: signed-in players with a name, scored from checked saves.
+// The board: signed-in players with a name, scored by the deepest of their saves.
 
 async function board(request, env, url) {
   const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit"), 10) || TOP, 1), TOP);

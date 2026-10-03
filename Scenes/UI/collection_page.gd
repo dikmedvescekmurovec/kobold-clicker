@@ -1,7 +1,8 @@
 class_name CollectionPage
 extends Control
-## The collection log, as a page against the left edge: every unique the game has, one square each in
-## `UniqueTable`'s order. One the player has found is drawn as the piece it is; one unlocked and not
+## The collection log, as a page against the left edge: every unique the game has, one square each, in
+## two sections -- the starters (`Achievements.STARTERS`), then the ones achievements unlock -- each by
+## name (the user's, 2026-10-02). One the player has found is drawn as the piece it is; one unlocked and not
 ## yet found (`Achievements.is_unlocked`) is the same piece darkened; one still locked is its outline in
 ## black -- either with no socket or ring, the sprite alone -- and its card says only "Locked".
 ##
@@ -85,23 +86,38 @@ func open() -> void:
 	_foot.add_child(count)
 	# Last in the row, so its card stands past the panel and not over the two figures it explains.
 	_foot.add_child(help)
-	var grid := GridContainer.new()
-	grid.columns = BagPage.GRID_COLS
-	grid.add_theme_constant_override("h_separation", BagPage.SLOT_GAP)
-	grid.add_theme_constant_override("v_separation", BagPage.SLOT_GAP)
-	_rows.add_child(grid)
-	for id: String in UniqueTable.ids():
-		# Dev (`Settings.show_all_uniques`): every square as found. The count and the bonus stay the save's.
-		var found := Settings.show_all_uniques() or inventory.uniques_found.has(id)
-		var slot := CollectionPage.square(id, found, Achievements.is_unlocked(inventory, id))
-		grid.add_child(slot)
-		if found and id in inventory.uniques_new:
-			slot.keep_shining()
-			# The card writes the hint as the cursor comes onto the square, which is when it is seen.
-			var write := slot.hint
-			slot.hint = func(rows: VBoxContainer, width: float) -> void:
-				write.call(rows, width)
-				_on_seen(id, slot)
+	var known := Achievements.state(inventory)
+	for starters: bool in [true, false]:
+		_rows.add_child(UITheme.section("Starters" if starters else "Trophies"))
+		var grid := GridContainer.new()
+		grid.columns = BagPage.GRID_COLS
+		grid.add_theme_constant_override("h_separation", BagPage.SLOT_GAP)
+		grid.add_theme_constant_override("v_separation", BagPage.SLOT_GAP)
+		_rows.add_child(grid)
+		var ids := UniqueTable.ids().filter(func(id: String) -> bool: return (id in Achievements.STARTERS) == starters)
+		ids.sort_custom(func(a: String, b: String) -> bool:
+			return str(UniqueTable.UNIQUES[a]["name"]).naturalnocasecmp_to(str(UniqueTable.UNIQUES[b]["name"])) < 0)
+		for id: String in ids:
+			_add_square(grid, id, known)
+
+
+## One unique's square in `grid`, glinting while it is a find new to the log, with the achievement
+## that unlocks it under Alt (none for a starter).
+func _add_square(grid: GridContainer, id: String, known: Dictionary) -> void:
+	# Dev (`Settings.show_all_uniques`): every square as found. The count and the bonus stay the save's.
+	var found := Settings.show_all_uniques() or inventory.uniques_found.has(id)
+	var slot := CollectionPage.square(id, found, Achievements.is_unlocked(inventory, id))
+	if Achievements.ACHIEVEMENTS.has(id):
+		slot.set_meta(ItemCard.ALT_CARD, AchievementsPage.write_card.bind(inventory, id, known))
+		slot.set_meta(ItemCard.KEYS, {"alt": "achievement"})
+	grid.add_child(slot)
+	if found and id in inventory.uniques_new:
+		slot.keep_shining()
+		# The card writes the hint as the cursor comes onto the square, which is when it is seen.
+		var write := slot.hint
+		slot.hint = func(rows: VBoxContainer, width: float) -> void:
+			write.call(rows, width)
+			_on_seen(id, slot)
 
 
 func _on_seen(id: String, slot: ItemSlot) -> void:

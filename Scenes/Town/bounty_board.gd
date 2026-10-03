@@ -227,8 +227,7 @@ static func count_kill(state: TownState, enemy: String, times := 1, tile_level :
 
 
 ## Whether a posting wants this body at all: its monster, on land at least as deep as its town. What
-## `count_kill` asks before it moves anything, and what a run's ledger asks to say what a pouched body
-## will count as without moving anything.
+## `count_kill` asks before it moves anything.
 static func takes(bounty: Dictionary, enemy: String, tile_level := -1) -> bool:
 	if bounty.is_empty() or str(bounty.get(ENEMY, "")) != enemy:
 		return false

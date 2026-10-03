@@ -20,8 +20,9 @@ extends RefCounted
 ## frozen; rarity and modifiers are what an orb exists to change. (A blacksmith's upgrade does move
 ## them, which is the one exception in the game and lives in `Scenes/Town/blacksmith.gd`.)
 ##
-## One job an orb: Transmutation, Alchemy and Exalted each make a piece their rarity or reroll one
-## already there, Augmentation adds a modifier, Divine rerolls the numbers and Chaos the tiers.
+## One job an orb: Transmutation, Alchemy and Exalted each make a piece their rarity -- from below or
+## from above -- or reroll one already there, Augmentation adds a modifier, Divine rerolls the numbers
+## and Chaos the tiers.
 ##
 ## Two things a smith leaves on a piece are the orbs' business, and both are handled in one place
 ## each. A **broken** piece refuses every orb, so the branches below never see one. A **locked**
@@ -168,8 +169,9 @@ static func can_apply(orb: String, item: Item) -> bool:
 		return false
 	match orb:
 		"Orb of Transmutation", "Orb of Alchemy", "Orb of Exaltation":
-			# No orb lowers a rarity: each makes its own, or rerolls a piece already there.
-			return item.rarity <= RARITY_OF[orb]
+			# Each makes its own rarity whatever the piece was, lower as well as higher (the user's ruling,
+			# 2026-10-02): an epic transmuted is an uncommon with an uncommon's modifiers.
+			return true
 		"Orb of Augmentation":
 			return item.mods.size() < _room(item)
 		"Orb of Divinity", "Orb of Chaos":
@@ -191,9 +193,6 @@ static func why_not(orb: String, item: Item) -> String:
 	if item.rarity == ItemRarity.Rarity.UNIQUE:
 		return "Only an Orb of Divinity or Chaos can change a unique"
 	match orb:
-		"Orb of Transmutation", "Orb of Alchemy", "Orb of Exaltation":
-			return "A %s item cannot be made %s" % [item.rarity_label().to_lower(),
-					ItemRarity.label_of(RARITY_OF[orb]).to_lower()]
 		"Orb of Augmentation":
 			if _room(item) == 0:
 				return "A common item cannot carry a modifier"

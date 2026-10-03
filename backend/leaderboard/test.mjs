@@ -1,5 +1,5 @@
 // The Worker end to end on a local D1 made fresh each run (`npm test`), with a stand-in for Google's
-// and Discord's servers so the real sign-in code runs; and the save checks on their own.
+// and Discord's servers so the real sign-in code runs.
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -7,7 +7,6 @@ import { rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { after, before, test } from "node:test";
 import { unstable_dev } from "wrangler";
-import { consistent, follows } from "./src/checks.js";
 
 const STATE = ".wrangler/test";
 const LEGACY_TOKEN = "legacy-token-from-before-accounts";
@@ -98,7 +97,7 @@ async function signIn(subject, key = "google", legacy = undefined) {
   return polled.data.token;
 }
 
-// A save as the game writes it, with the numbers the checks read.
+// A save as the game writes it, with the numbers the server reads.
 function save({ kills = 10, play = 1000, floors = 0, uniques = ["headsman"], achievements = { headsman: 1 } } = {}) {
   return JSON.stringify({
     version: 30, level: 20, saved_at: Date.now() / 1000, kills, play_seconds: play,
@@ -144,75 +143,53 @@ test("names are checked and unique whatever their case", async () => {
   }
 });
 
-test("a save goes up and comes back byte for byte, and only a checked one moves the board", async () => {
+test("a save goes up and comes back byte for byte, and the board keeps the deepest", async () => {
   const token = await signIn("google-saver");
   await read("/me/name", { method: "PUT", token, body: { name: "Saver" } });
   const first = save({ floors: 44 });
   const put = await upload(token, 0, first);
-  assert.deepEqual([put.status, put.data.revision, put.data.checked, put.data.floors], [200, 1, false, 0],
-    "a first save has nothing to be checked against and moves nothing");
+  assert.deepEqual([put.status, put.data.revision, put.data.floors], [200, 1, 44], "a first save counts in full");
   const got = await read("/save", { token });
   assert.deepEqual([got.data.revision, got.data.inventory, got.data.map], [1, first, "{\"map\":1}"]);
-  const grown = await upload(token, 1, save({ floors: 50, play: 1050 }));
-  assert.deepEqual([grown.status, grown.data.checked, grown.data.floors], [200, true, 6],
-    "the board counts the six floors beaten under the checks, not the 44 before them");
-  const again = await upload(token, 2, save({ floors: 53, play: 1100 }));
-  assert.equal(again.data.floors, 9, "and adds each checked save's gain");
+  const shallower = await upload(token, 1, save({ floors: 40 }));
+  assert.deepEqual([shallower.status, shallower.data.floors], [200, 44], "the board never goes down");
   const me = (await read("/me", { token })).data;
-  assert.deepEqual([me.save.revision, me.save.summary.dungeon_floors], [3, 53]);
+  assert.deepEqual([me.save.revision, me.save.summary.dungeon_floors], [2, 40]);
 });
 
-test("a stale save is a conflict until this device's is chosen, and is checked against its own base", async () => {
+test("a stale save is a conflict until this device's is chosen", async () => {
   const token = await signIn("google-two-devices");
-  await upload(token, 0, save({ kills: 10, uniques: ["a"] }));
-  await upload(token, 1, save({ kills: 20, uniques: ["a", "b"] })); // the other device
-  const stale = await upload(token, 1, save({ kills: 15, uniques: ["a"] }));
+  await upload(token, 0, save({ kills: 10 }));
+  await upload(token, 1, save({ kills: 20 })); // the other device
+  const stale = await upload(token, 1, save({ kills: 15 }));
   assert.deepEqual([stale.status, stale.data.revision], [409, 2]);
-  // Chosen: it grew from revision 1, where it lost nothing, so the cloud takes it.
-  const replaced = await upload(token, 1, save({ kills: 15, uniques: ["a"] }), { replace: true });
-  assert.deepEqual([replaced.status, replaced.data.revision, replaced.data.checked], [200, 3, true]);
+  const replaced = await upload(token, 1, save({ kills: 15 }), { replace: true });
+  assert.deepEqual([replaced.status, replaced.data.revision], [200, 3]);
 });
 
-test("a save that lost what is never lost, or played faster than time, is refused and flagged", async () => {
-  const token = await signIn("google-cheat");
+test("a save is taken at its word, and only one that is not a save is turned away", async () => {
+  const token = await signIn("google-trusted");
   await upload(token, 0, save({ kills: 100, play: 1000, floors: 15 }));
-  for (const [what, next] of [
-    ["kills went down", save({ kills: 50, play: 1000, floors: 15 })],
-    ["a unique lost", save({ kills: 100, play: 1000, floors: 15, uniques: [] })],
-    ["an achievement fell", save({ kills: 100, play: 1000, floors: 15, achievements: { headsman: 0 } })],
-    ["an hour played in a moment", save({ kills: 100, play: 4600, floors: 15 })],
-    ["a thousand floors in a minute", save({ kills: 100, play: 1060, floors: 1015 })],
-  ]) {
-    assert.equal((await upload(token, 1, next)).status, 422, what);
+  const less = await upload(token, 1, save({ kills: 50, play: 10, floors: 1015, uniques: [], achievements: {} }));
+  assert.deepEqual([less.status, less.data.floors], [200, 1015], "less of everything, and floors faster than time");
+  for (const inventory of ["[]", "5", "null", "not json"]) {
+    assert.equal((await upload(token, 2, inventory)).status, 400, inventory);
   }
-  const disagreeing = JSON.parse(save({ kills: 100, play: 1000, floors: 16 }));
-  disagreeing.dungeon_depth = 2;
-  assert.equal((await upload(token, 1, JSON.stringify(disagreeing))).status, 422,
-    "and a save that disagrees with itself: depth 1 is floors 15 to 29");
-  const flag = execSync(`npx wrangler d1 execute DB --local --persist-to ${STATE} --json --command `
-    + `"SELECT flag FROM players p JOIN identities i ON i.player_id = p.id WHERE i.subject = 'google-cheat'"`).toString();
-  assert.match(flag, /depth and floors disagree/, "the last refusal is written on the player for review");
-  // Start over from this device: the cloud forgets, and the next upload is a first one again.
+  // Reset save: the cloud forgets, and the next upload is a first one again.
   assert.equal((await read("/save", { method: "DELETE", token })).status, 200);
   assert.equal((await upload(token, 0, save({ kills: 1, play: 10 }))).data.revision, 1);
 });
 
 test("the board is signed-in players with a name, by floors then by who got there first", async () => {
-  const players = [];
+  // In order, so Early reaches 1000 before Late does.
   for (const [name, floors] of [["Early", 1000], ["Late", 1000], ["Deep", 1001]]) {
     const token = await signIn(`google-board-${name}`);
     await read("/me/name", { method: "PUT", token, body: { name } });
-    await upload(token, 0, save({ play: 1000 }));
-    await upload(token, 1, save({ play: 1000, floors: 100 }));
-    players.push([token, floors]);
-  }
-  // Their floors rise in order, so Early reaches 1000 before Late does.
-  for (const [token, floors] of players) {
-    await upload(token, 2, save({ play: 1000 + 110, floors: floors - 900 }));
+    await upload(token, 0, save({ floors }));
   }
   const { top } = (await read("/leaderboard")).data;
   const scores = top.filter((row) => ["Early", "Late", "Deep"].includes(row.name)).map((row) => [row.name, row.floors]);
-  assert.deepEqual(scores, [["Deep", 101], ["Early", 100], ["Late", 100]]);
+  assert.deepEqual(scores, [["Deep", 1001], ["Early", 1000], ["Late", 1000]]);
   assert.ok(!top.some((row) => row.name === "Oldtimer" || row.name === null), "no anonymous or nameless rows");
 });
 
@@ -235,18 +212,4 @@ test("one address may start ten sign-ins a minute", async () => {
   const first = statuses.indexOf(429);
   assert.ok(first >= 10, `none refused before the tenth (${statuses})`);
   assert.ok(statuses.slice(0, first).every((status) => status === 201));
-});
-
-test("the checks on their own", () => {
-  const now = Date.now();
-  const base = JSON.parse(save({ kills: 10, play: 1000, floors: 20 }));
-  assert.deepEqual(consistent(base, now), []);
-  assert.deepEqual(consistent([], now), ["It is not a save file"]);
-  assert.deepEqual(consistent({ ...base, saved_at: now / 1000 + 3600 }, now), ["It was saved in the future"]);
-  assert.deepEqual(consistent({ ...base, dungeon_floors: 5000, dungeon_depth: 333 }, now),
-    ["More dungeon floors than the time played allows"]);
-  assert.deepEqual(follows(base, { ...base, play_seconds: 1100, tally: { clicks: 6 } }, 100), []);
-  assert.deepEqual(follows(base, { ...base, tally: { clicks: 4 } }, 100), ["A tally went down"]);
-  assert.deepEqual(follows(base, { ...base, seeing_stone: false }, 100), []);
-  assert.deepEqual(follows({ ...base, seeing_stone: true }, base, 100), ["The Seeing Stone was lost"]);
 });

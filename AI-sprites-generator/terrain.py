@@ -22,19 +22,12 @@ ENV_ORDER = ["grass", "dirt", "desert", "ice", "forest", "mountains"]
 ENV_SEED = {"grass": 100, "dirt": 200, "desert": 300, "ice": 400, "forest": 500, "mountains": 600}
 
 # Which environments may border each other (symmetric; the same environment is always allowed).
-_BORDERS = {
-    "grass": ("dirt", "ice", "forest", "mountains"),
-    "dirt": ("grass", "desert", "forest", "mountains"),
-    "desert": ("dirt", "mountains"),
-    "ice": ("grass", "mountains"),
-    "forest": ("grass", "dirt", "mountains"),
-    "mountains": ("grass", "dirt", "desert", "ice", "forest"),
-}
-ADJACENT = {env: {env} for env in ENV_ORDER}
-for _env, _others in _BORDERS.items():
-    for _other in _others:
-        ADJACENT[_env].add(_other)
-        ADJACENT[_other].add(_env)
+# Every environment may border every other but desert and ice (2026-10-03). The old table also kept desert off
+# grass and forest, and ice off dirt and forest; mountains, the one environment allowed next to all, then took
+# every seam between the others and covered three times the land desert and ice did.
+_APART = {("desert", "ice")}
+ADJACENT = {env: {other for other in ENV_ORDER if (env, other) not in _APART and (other, env) not in _APART}
+            for env in ENV_ORDER}
 ENV_CHAIN = ["desert", "dirt", "forest", "grass", "ice", "mountains"]   # a legal order for side-by-side bands
 
 

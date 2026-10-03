@@ -84,6 +84,7 @@ func _test_environments() -> bool:
 	var same_pairs := 0
 	var total_envs := 0
 	var total_regions := 0
+	var shares := {}
 	var start := Time.get_ticks_msec()
 	for seed_value in range(1, ENV_SEEDS + 1):
 		var envs := EnvironmentGenerator.generate(cells, seed_value)
@@ -102,16 +103,24 @@ func _test_environments() -> bool:
 		var distinct := {}
 		for env in envs.values():
 			distinct[env] = true
+			shares[env] = shares.get(env, 0) + 1
 		total_envs += distinct.size()
 
 	print("Environments over %d maps: %.1f ms/map, %.2f environments and %.2f regions per map, %.1f%% same-env neighbors, %d small regions" % [
 		ENV_SEEDS, float(Time.get_ticks_msec() - start) / ENV_SEEDS, float(total_envs) / ENV_SEEDS,
 		float(total_regions) / ENV_SEEDS, 100.0 * same_pairs / pairs, small_regions])
 	_check(forbidden == 0, "no forbidden neighbors (found %d)" % forbidden)
+	# Every environment covers about a sixth of the land, whichever borders the table allows it.
+	var cells_total := cells.get_area() * ENV_SEEDS
+	for env: String in EnvironmentGenerator.allowed():
+		var share := float(shares.get(env, 0)) / cells_total
+		print("  %s %.1f%%" % [env, 100.0 * share])
+		_check(absf(share - 1.0 / 6.0) < 0.03, "%s covers about a sixth of the land (%.1f%%)" % [env, 100.0 * share])
 	# Cleanup can't merge a small region wedged between environments that may not touch each other (e.g. grass
-	# between ice and dirt), so allow it on at most 1% of maps.
+	# between desert and ice), so allow it on at most 1% of maps.
 	_check(small_regions <= ENV_SEEDS / 100, "at most 1%% of maps keep a region under MIN_REGION_SIZE (found %d)" % small_regions)
-	_check(float(same_pairs) / pairs > 0.8, "neighbors mostly share an environment")
+	# About 82% under the old adjacency table; allowing every border but desert-ice made regions smaller (77%).
+	_check(float(same_pairs) / pairs > 0.75, "neighbors mostly share an environment")
 	_check(EnvironmentGenerator.generate(cells, 7) == EnvironmentGenerator.generate(cells, 7), "same seed gives the same map")
 	_check(EnvironmentGenerator.generate(cells, 7) != EnvironmentGenerator.generate(cells, 8), "different seeds give different maps")
 	return true
@@ -178,13 +187,24 @@ func _test_region_weights() -> bool:
 	var weights := _weights_for(cell, layout)
 	_check(weights.get("mountains", 0.0) > weights.get("desert", 0.0), "the smaller neighboring region gets more weight")
 	_check(weights.get("desert", 0.0) > weights.get("grass", 0.0), "neighboring environments beat new ones")
-	_check(not weights.has("grass") and not weights.has("forest") and not weights.has("ice"), "environments that can't border desert are excluded")
+	_check(not weights.has("ice"), "ice, which can't border desert, is excluded")
 
-	# Touching forest and ice leaves only environments allowed next to both.
-	var mixed: Dictionary[Vector2i, String] = {HexGrid.neighbor(cell, HexGrid.Edge.W): "forest", HexGrid.neighbor(cell, HexGrid.Edge.E): "ice"}
+	# Touching desert and ice leaves only environments allowed next to both.
+	var mixed: Dictionary[Vector2i, String] = {HexGrid.neighbor(cell, HexGrid.Edge.W): "desert", HexGrid.neighbor(cell, HexGrid.Edge.E): "ice"}
 	var mixed_options := _weights_for(cell, mixed).keys()
 	mixed_options.sort()
-	_check(mixed_options == ["grass", "mountains"], "forest + ice neighbors allow only grass and mountains (got %s)" % [mixed_options])
+	_check(mixed_options == ["dirt", "forest", "grass", "mountains"],
+			"desert + ice neighbors allow everything but those two (got %s)" % [mixed_options])
+
+	# The environment the new land has least of is pulled up, the one it has most of held back.
+	var counts: Dictionary[String, int] = {}
+	for env: String in EnvironmentGenerator.allowed():
+		counts[env] = 100
+	counts["dirt"] = 10
+	counts["grass"] = 300
+	var nothing: Dictionary[Vector2i, String] = {}
+	var open := EnvironmentGenerator.choice_weights(cell, nothing, EnvironmentGenerator.Regions.new(), counts)
+	_check(open["dirt"] > open["forest"] and open["forest"] > open["grass"], "an even share is what the weights pull towards (got %s)" % [open])
 	return true
 
 
@@ -874,7 +894,7 @@ func _test_start_town(map: HexMap, world: TownWorld, origin: Vector2i, start_tow
 
 ## The ice wall: ring 11 round a land of radius 10, snow past it, and beating one wall tile brings the
 ## whole ring down and pushes the wall ten rings out. Run on a map revealed end to end.
-## The roads reading: every settlement in the ring comes out of the dark, uncharted, and nothing else does.
+## The roads reading: every settlement in the ring and the tiles beside it come out of the dark, uncharted.
 func _test_ring_towns() -> bool:
 	var map: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
 	root.add_child(map)
@@ -888,9 +908,13 @@ func _test_ring_towns() -> bool:
 	var hidden := ring.filter(func(cell: Vector2i) -> bool: return not view.seen(cell))
 	_check(not hidden.is_empty(), "some of the ring's settlements start in the dark (%d of %d)" % [hidden.size(), ring.size()])
 	_check(not hidden.any(func(cell: Vector2i) -> bool: return map.has_town(cell)), "a hidden settlement has no buildings drawn")
-	_check(view.reveal_ring_towns(MapBuilder.CENTER) == hidden.size(), "the roads show every one still hidden")
+	_check(view.reveal_ring_towns(MapBuilder.CENTER) > hidden.size(), "the roads show every one still hidden, and more")
 	_check(hidden.all(func(cell: Vector2i) -> bool: return view.state(cell) == MapBuilder.State.UNCHARTED),
 			"each comes out uncharted")
+	var beside := ring.all(func(town: Vector2i) -> bool:
+		return FortuneTeller.scour_cells(town, FortuneTeller.ROADS_RADIUS).all(func(cell: Vector2i) -> bool:
+			return view.seen(cell) or not view._tiles.has(cell)))
+	_check(beside, "and so does every tile beside every one of them")
 	_check(hidden.all(func(cell: Vector2i) -> bool: return map.has_town(cell)), "and its buildings are drawn over the fog")
 	var dimmed := hidden.all(func(cell: Vector2i) -> bool:
 		return (map.towns.get_node(map._town_node(cell)) as Sprite2D).modulate == HexMap.TOWN_UNCHARTED)
@@ -1370,6 +1394,18 @@ func _test_save_refusals(map: HexMap) -> bool:
 				"%s is refused" % bad[1])
 		_check(FileAccess.get_file_as_string(TEST_MAP_PATH) == str(bad[0]),
 				"and left on disk untouched")
+
+	# A map drawn before the borders were widened reads under the sheet that widened them, and no other.
+	var older: String = MapSave.WIDENED_SHEETS.keys()[0]
+	var widened_file := FileAccess.open(TEST_MAP_PATH, FileAccess.WRITE)
+	widened_file.store_string(good.replace(sheet, older))
+	widened_file.close()
+	problem = []
+	_check(MapSave.load_from(TEST_MAP_PATH, problem, MapSave.WIDENED_SHEETS[older]) != null and problem.is_empty(),
+			"a save from before the borders were widened still loads")
+	problem = []
+	_check(MapSave.load_from(TEST_MAP_PATH, problem, "0" + sheet.substr(1)) == null and not problem.is_empty(),
+			"but not under any other sheet")
 	_clear_map_save()
 	return true
 
@@ -1401,6 +1437,19 @@ func _test_the_map_comes_back() -> bool:
 	var before := _map_fingerprint(main.map, main.view)
 	var was_rect: Rect2i = main.view.rect
 	_check(main.view.player_cell == taken, "the player took a tile before the game was closed")
+
+	# The hero's badge: down while they are on screen, up once the map is dragged off them, and its
+	# press brings the camera back.
+	_check(not main._hero_pointer.visible, "no badge points at a hero on screen")
+	main._on_map_dragged(Vector2(-5000, 0))
+	await process_frame
+	_check(main._hero_pointer.visible, "the hero's badge is up once the map is dragged off them")
+	var animations := Settings.animations
+	Settings.animations = Settings.Anim.NONE
+	(main._hero_pointer.get_child(main._hero_pointer.get_child_count() - 1) as Button).pressed.emit()
+	Settings.animations = animations
+	await process_frame
+	_check(not main._hero_pointer.visible, "and pressing it brings the camera back over them")
 
 	main.queue_free()  # _exit_tree writes the map.
 	await process_frame
