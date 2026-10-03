@@ -137,8 +137,28 @@ func _shine(target: TextureRect, side: int, period: float) -> void:
 		func(at: float) -> void: glint.set_shader_parameter("progress", at), 0.0, 1.0, period)
 
 
-## Glints over the icon without end, until `stop_shining`: a unique new to the collection log. A copy
-## of the icon over it carries the glint, so the tween dies with the copy.
+## Takes the glint off the icon and the frame: on a log page only what is new glints.
+func still() -> void:
+	(get_child(0) as TextureRect).material = null
+	var frame := get_node_or_null(FRAME_NAME) as TextureRect
+	if frame != null:
+		frame.material = null
+
+
+## Glints without end until the card is first written beside it -- the cursor coming onto it -- and
+## then calls `seen`: something new on a log page. The page being closed is the other way it stops,
+## and that is the page's to say.
+func shine_until_hovered(seen: Callable) -> void:
+	keep_shining()
+	var write := hint
+	hint = func(rows: VBoxContainer, width: float) -> void:
+		write.call(rows, width)
+		stop_shining()
+		seen.call()
+
+
+## Glints over the icon without end, until `stop_shining`. A copy of the icon over it carries the
+## glint, so the tween dies with the copy.
 func keep_shining() -> void:
 	var glint := TextureRect.new()
 	glint.name = GLINT_NAME
@@ -150,6 +170,8 @@ func keep_shining() -> void:
 	shader.set_shader_parameter("side", float(ICON))
 	glint.material = shader
 	add_child(glint)
+	# Straight over the icon, under the frame and whatever is on the corners.
+	move_child(glint, 1)
 	glint.create_tween().set_loops().tween_method(
 		func(at: float) -> void: shader.set_shader_parameter("progress", at), 0.0, 1.0, 1.5)
 

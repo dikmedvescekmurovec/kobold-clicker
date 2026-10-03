@@ -41,7 +41,7 @@ const SHINE_REACH := 40.0
 const SHINE_NAME := "Shine"
 ## How bright the light behind the card stands while the orb in hand could go into the piece under
 ## it (`lights`): `shine`'s light held low and still, with no rays.
-const HOVER_LIFE := 0.3
+const HOVER_LIFE := 1
 ## The keys' pictures, cut from the keyboard pack by `tools/ui_kit.py`.
 const KEY_ICONS := {
 	"alt": "res://Assets/UI/ui_key_alt.png",

@@ -1,7 +1,7 @@
 class_name SkillCard
 extends PanelContainer
-## What a skill does, shown while the cursor is over it: its name, what one point buys, what the points
-## in it add up to, and whether another can go in.
+## What a skill does, shown while the cursor is over it: its name, what the points in it add up to (what
+## a first would give, before there is one), and whether another can go in.
 ##
 ## Not a Godot tooltip, for OrbCard's reason -- see the gotcha in CLAUDE.md. The item card's cream
 ## page and the same three kinds of line, so every card reads as one kind of thing.
@@ -32,16 +32,14 @@ func fill(id: String, skills: Skills, level: int, worth := 1.0, refused: Variant
 	var rank := skills.rank_of(id)
 	var most := int(entry["max_rank"])
 	_rows.add_child(ItemDetails.line(str(entry["name"]), Palette.TEXT, WIDTH))
-	_rows.add_child(ItemDetails.line("Per point:
-" + SkillTree.describe(id, worth), Palette.TEXT_SOFT, WIDTH, true))
+	# What the fight is armed with: the burnt trees' ranks in with this one's. Unlearned, what a first
+	# point would give, in the soft ink; the player works out the rest.
+	var total := skills.total_of(id)
+	_rows.add_child(ItemDetails.line(SkillTree.describe(id, maxi(total, 1) * worth),
+			Palette.LEAF if total > 0 else Palette.TEXT_SOFT, WIDTH, true))
 	# A capstone's effect is the first tree's: a burnt one already gave it, and the next gives numbers.
 	if entry.has("effect_text") and skills.bursts == 0:
 		_rows.add_child(ItemDetails.line(str(entry["effect_text"]), Palette.SLOT_TAN_DK, WIDTH, true))
-	# The burnt trees' ranks in with this one's: what the fight is armed with.
-	if skills.total_of(id) > 0:
-		_rows.add_child(ItemDetails.line("Now:
-" + SkillTree.describe(id, skills.total_of(id) * worth),
-				Palette.LEAF, WIDTH, true))
 	# `refused` is whoever owns the skills saying why not, where there is more to it than the trees'
 	# own rules (`Inventory.why_not_skill`: the Specialist's one tree).
 	var refusal: String = skills.why_not(id, level) if refused == null else str(refused)

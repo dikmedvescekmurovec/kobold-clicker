@@ -14,15 +14,16 @@ extends Control
 ##
 ## Built like the other left-hand pages (`BountyList`): `open()` redraws it, `layout()` fits it to the
 ## window, `closed` is its X, and it carries `UITheme.theme()` because it hangs off a `CanvasLayer`.
-## It changes one thing and saves nothing: a find new to the log (`Inventory.uniques_new`) glints until
-## the cursor has been over it, and then `seen` asks the main scene to save and still the button.
+## It changes one thing and saves nothing: a find new to the log (`Inventory.uniques_new`) is the only
+## square that glints, until the cursor has been over it or the page is closed, and then `seen` asks
+## the main scene to save.
 ##
 ## Every square is an `ItemSlot`, so the one `ItemCard` the main scene built describes these too --
 ## every one of them through the `hint` it carries, a locked one's saying only that.
 
 ## The page's X was pressed.
 signal closed
-## A new find was hovered for the first time and left `Inventory.uniques_new`.
+## A new find was hovered, or the page closed over one, and it left `Inventory.uniques_new`.
 signal seen
 
 const HELP_ICON := "res://Assets/UI/ui_icon_info.png"
@@ -59,6 +60,7 @@ func _ready() -> void:
 	_foot = HBoxContainer.new()
 	_foot.add_theme_constant_override("separation", 4)
 	UITheme.body_of(_panel).add_child(_foot)
+	visibility_changed.connect(_on_visibility_changed)
 	open()
 
 
@@ -112,20 +114,20 @@ func _add_square(grid: GridContainer, id: String, known: Dictionary) -> void:
 		slot.set_meta(ItemCard.KEYS, {"alt": "achievement"})
 	grid.add_child(slot)
 	if found and id in inventory.uniques_new:
-		slot.keep_shining()
-		# The card writes the hint as the cursor comes onto the square, which is when it is seen.
-		var write := slot.hint
-		slot.hint = func(rows: VBoxContainer, width: float) -> void:
-			write.call(rows, width)
-			_on_seen(id, slot)
+		slot.shine_until_hovered(_on_seen.bind(id))
 
 
-func _on_seen(id: String, slot: ItemSlot) -> void:
-	if not inventory.uniques_new.has(id):
-		return
-	inventory.uniques_new.erase(id)
-	slot.stop_shining()
-	seen.emit()
+func _on_seen(id: String) -> void:
+	if inventory.uniques_new.has(id):
+		inventory.uniques_new.erase(id)
+		seen.emit()
+
+
+## Closing the page is seeing what was new on it, hovered or not.
+func _on_visibility_changed() -> void:
+	if not visible and not inventory.uniques_new.is_empty():
+		inventory.uniques_new.clear()
+		seen.emit()
 
 
 ## One unique's square. A specimen rather than the player's own: the log says what the thing *is*, at
@@ -133,8 +135,10 @@ func _on_seen(id: String, slot: ItemSlot) -> void:
 static func square(id: String, found: bool, unlocked := false) -> ItemSlot:
 	var piece := CollectionPage.specimen(id)
 	if found:
-		# The piece as it is, and the card still says whether it is locked.
+		# The piece as it is, and the card still says whether it is locked. Still: only a find new to the
+		# log glints.
 		var slot := ItemSlot.make(piece)
+		slot.still()
 		slot.hint = CollectionPage.write_hint.bind(piece, unlocked)
 		return slot
 	return ItemSlot.shadow(piece, CollectionPage.write_hint.bind(piece if unlocked else null, unlocked,

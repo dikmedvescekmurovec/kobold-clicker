@@ -34,9 +34,11 @@ const BROKEN := "This item is broken"
 
 
 ## Whether this piece can be taken one level higher here. `cap` is the deepest level this town's
-## wall circle allows, which is what keeps a smith from walking gear past the next wall.
+## wall circle allows, which is what keeps a smith from walking gear past the next wall. An heirloom
+## under the level it had before its world ended is not his: it climbs there by itself as the land is
+## charted (`Inventory.raise_heirlooms`), and past it the hammer is the hammer.
 static func can_upgrade(item: Item, cap: int) -> bool:
-	return item != null and not item.broken and item.level < cap
+	return item != null and not item.broken and item.level < cap and item.level >= item.safe_level
 
 
 ## Why the hammer is grey, or "" when it is not. Short sentences: the counter is three shelf squares
@@ -46,14 +48,9 @@ static func why_not_upgrade(item: Item, cap: int) -> String:
 		return ""
 	if item.broken:
 		return BROKEN
+	if item.level < item.safe_level:
+		return "It climbs to level %d on its own" % item.safe_level
 	return "Level %d is the most here" % maxi(cap, 1)
-
-
-## How likely the next blow is to ruin this piece. Nothing while an heirloom is being walked back up
-## to the level it had in the world it came out of (`Item.safe_level`): that road was paid for once.
-## Past it, and for every piece that never was an heirloom, the hammer is the hammer.
-static func break_chance(item: Item) -> float:
-	return 0.0 if item.level < item.safe_level else BREAK_CHANCE
 
 
 ## One blow. True when the piece came out a level higher, false when it broke -- and **the caller
@@ -62,9 +59,7 @@ static func break_chance(item: Item) -> float:
 static func upgrade(item: Item, cap: int, rng: RandomNumberGenerator) -> bool:
 	if not can_upgrade(item, cap):
 		return false
-	# No roll at all where nothing can break, so a seeded rng is spent only on a real risk.
-	var risk := break_chance(item)
-	if risk > 0.0 and rng.randf() < risk:
+	if rng.randf() < BREAK_CHANCE:
 		item.broken = true
 		return false
 	item.level_up()

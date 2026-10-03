@@ -9,8 +9,8 @@ extends Control
 ## repeating one of its own, so a longer name buys a longer bar. A name past NAME_ROOM is cut short
 ## with an ellipsis.
 ##
-## Parts are cut loose by `tools/ui_kit.py` and drawn at PIXEL, the pips' scale, so a sprite pixel here
-## is the same size as one on the fight's HUD. The bar empties by being **clipped**, never stretched,
+## Parts are cut loose by `tools/ui_kit.py` and drawn at PIXEL, two panel pixels a sprite pixel -- the
+## scale the fight's kill pips had until 2026-10-03. The bar empties by being **clipped**, never stretched,
 ## and the clip is snapped to whole sprite pixels -- the frame's empty trough shows through what is
 ## left. Everything ignores the mouse: this stands over the map and over a fight, and a Control that
 ## took a press would eat a tile click or a swing.
@@ -33,17 +33,24 @@ const TEXT_AT := Vector2(61, 17)
 ## slant's nearest step beside a descender (sprite x 77), less the same air.
 const TEXT_ROOM := 90
 ## How wide a name is let run, in panel pixels, before it is cut short: with "Lvl 9999" beside it the
-## frame is then 212 panel pixels at most, which keeps it clear of a fight's centred pips and clock
-## (15 pips, 128 px) on the narrowest window not held upright, 576 panel pixels.
+## frame then keeps clear of a fight's centred pips and clock (never more than ten pips, 90 px) on the
+## narrowest window not held upright, 576 panel pixels.
 const NAME_ROOM := 88
 ## Space between the name and the level: one of the small font's spaces.
 const NAME_GAP := 5
 ## What the experience bar brightens to as gems land in it, and how long that takes to fade.
 const FLASH := Color(1.8, 1.8, 1.8)
 const FLASH_TIME := 0.25
+## The "+n" that rises off the bar's filled end as gems land in it: how far, in panel pixels, and how long.
+const GAIN_RISE := 8.0
+const GAIN_TIME := 0.9
 
 var level := 1
 var xp := 0
+## Over the experience bar, carrying its "held / needed" tooltip. The panel takes no mouse, so the
+## owner parents this under whatever does (the main scene's `_character_button`, which is out of a
+## fight's way); `_lay_out` keeps its rect, in the owner's pixels, and its text.
+var xp_hover := Control.new()
 
 var _plate: NinePatchRect
 var _line: HBoxContainer
@@ -92,6 +99,12 @@ func _ready() -> void:
 	_lay_out()
 
 
+## The hover is the owner's to parent; one never parented (a test's panel) goes with the panel.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE and xp_hover.get_parent() == null:
+		xp_hover.free()
+
+
 ## Shows the player at `level` holding `new_xp` towards the next one.
 func set_state(new_level: int, new_xp: int) -> void:
 	level = maxi(new_level, 1)
@@ -117,7 +130,25 @@ func absorb(amount: int) -> int:
 	_fill.modulate = FLASH
 	_flash = create_tween()
 	_flash.tween_property(_fill, "modulate", Color.WHITE, FLASH_TIME)
+	_float_gain(amount)
 	return after["gained"]
+
+
+## "+n" in green, centred on the bar's filled end, rising and fading. None at `Anim.NONE`, as a fight's
+## damage numbers.
+func _float_gain(amount: int) -> void:
+	if Settings.animations == Settings.Anim.NONE:
+		return
+	var label := UITheme.label("+" + BigNumber.format(float(amount)), Palette.LEAF_LT, true)
+	label.add_theme_color_override("font_outline_color", Palette.INK)
+	label.add_theme_constant_override("outline_size", 4)
+	add_child(label)
+	var shown := label.get_minimum_size()
+	label.position = (_fill.position + Vector2(_fill.size.x - shown.x / 2.0, -shown.y)).round()
+	var tween := label.create_tween().set_parallel(true)
+	tween.tween_property(label, "position:y", label.position.y - GAIN_RISE, GAIN_TIME).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "modulate:a", 0.0, GAIN_TIME).set_ease(Tween.EASE_IN)
+	tween.chain().tween_callback(label.queue_free)
 
 
 ## Where on the screen the experience bar's filled end is, which is where a gem flies to.
@@ -146,6 +177,10 @@ func _lay_out() -> void:
 	if xp > 0:
 		pixels = maxi(pixels, 1)
 	_fill.size = Vector2(pixels, _bar.size.y) * PIXEL
+	xp_hover.position = Vector2(XP_AT * PIXEL) * scale
+	xp_hover.size = _bar.size * PIXEL * scale
+	xp_hover.tooltip_text = "%s / %s XP" % [BigNumber.format(float(xp)),
+			BigNumber.format(float(PlayerLevel.xp_to_next(level)))]
 
 
 ## A sprite drawn at PIXEL that widens by repeating its column `at` -- a plain one, so the repeat

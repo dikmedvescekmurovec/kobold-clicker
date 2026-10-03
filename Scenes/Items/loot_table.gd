@@ -461,9 +461,12 @@ const LEVEL_FLAT := {
 ## the end of a fight can hand over something the rabble on the same tile never could.
 const TIER_LEVEL := {
 	EnemyRoster.Tier.COMMON: 0,
-	EnemyRoster.Tier.ELITE: 1,
-	EnemyRoster.Tier.BOSS: 2,
+	EnemyRoster.Tier.ELITE: 2,
+	EnemyRoster.Tier.BOSS: 3,
 }
+## How often a common body's drop comes out a level past its tile anyway (the user's "rarely",
+## 2026-10-03): the rabble's one way over its ceiling.
+const COMMON_REACH := 0.1
 
 ## Icons are loaded once and kept, the way UITheme keeps its Theme: the panel rebuilds every square
 ## whenever something drops, and reloading four textures each time would be work for nothing. Kept by
@@ -697,12 +700,20 @@ static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := f
 		return null
 	var tier := EnemyRoster.tier_of(enemy_name)
 	var rarity := ItemRarity.roll(tier, rng, item_rarity) if forced < 0 else forced as ItemRarity.Rarity
-	# The tile's level and the body's tier give a ceiling; the piece rolls its own level under it,
-	# so a deep tile is a better place to fight rather than a guaranteed prize. What it is made of is
-	# the tile's alone.
-	var ceiling := maxi(1, tile_level + int(TIER_LEVEL[tier]))
-	var level := ItemRarity.roll_level(rarity, ceiling, rng)
+	var level := drop_level(tier, tile_level, rarity, rng)
+	# What it is made of is the tile's alone.
 	return Item.rolled(_weighted(rng, tile_level), rarity, rng, level)
+
+
+## The level a body's drop comes out at. The tile's level and the body's tier give a ceiling and the
+## piece rolls its own level under it, rarity lifting the floor, so a deep tile is a better place to
+## fight rather than a guaranteed prize -- except that `COMMON_REACH` of a common body's drops are a
+## level past its tile outright. `UniqueTable.roll` asks it too.
+static func drop_level(tier: EnemyRoster.Tier, tile_level: int, rarity: ItemRarity.Rarity,
+		rng: RandomNumberGenerator) -> int:
+	if tier == EnemyRoster.Tier.COMMON and rng.randf() < COMMON_REACH:
+		return maxi(1, tile_level + 1)
+	return ItemRarity.roll_level(rarity, maxi(1, tile_level + int(TIER_LEVEL[tier])), rng)
 
 
 ## A piece picked by weight: which kind, and then which of its materials. Integer weights, so walking
@@ -733,7 +744,8 @@ static func roll_kind(rng: RandomNumberGenerator) -> String:
 ## is what keeps the shallow game costing exactly the rolls it always did. A kind whose first
 ## material `level` has not reached (the greaves, which begin at iron) is dealt as its slot's
 ## plainest piece, so the slot drops as often as ever and never a material under the piece's level.
-static func _tier_at(kind: String, level: int, rng: RandomNumberGenerator) -> String:
+## `draws` is how many draws the material is the best of: a cleared board's high piece is lucky.
+static func _tier_at(kind: String, level: int, rng: RandomNumberGenerator, draws := 1) -> String:
 	var row: Dictionary = KINDS[kind]
 	var tiers: Array = row["tiers"]
 	var levels: Array = row.get("tier_levels", TIER_MIN_LEVEL)
@@ -745,7 +757,10 @@ static func _tier_at(kind: String, level: int, rng: RandomNumberGenerator) -> St
 			unlocked = tier + 1
 	if unlocked == 1:
 		return str(tiers[0])
-	return str(tiers[rng.randi_range(0, unlocked - 1)])
+	var best := 0
+	for i in draws:
+		best = maxi(best, rng.randi_range(0, unlocked - 1))
+	return str(tiers[best])
 
 
 ## Every kind's materials written out as the rows the rest of the game reads. A tier's own `stats`

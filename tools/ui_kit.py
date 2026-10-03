@@ -1131,45 +1131,6 @@ CHAR_DISC = (120, 124, 195, 255)
 # The XP gem: row 8, column 6 of Icons.png, its whole 6x6 extent.
 XP_GEM = ("2D Pixel UI/PNG/Icons", 85, 117, 6, 6, 1)
 
-# The combat HUD's kill-pip bar, and the one thing here off a second bought pack -- "Pixel UI pack
-# 3", whose 06.png draws a capsule bar the 2D Pixel UI pack has no equivalent of. The game needs that
-# capsule ten pips long and the pack ships it at five, so what is cut here is not the bar but the
-# pieces it is built from, and KillPips butts them together at runtime.
-#
-# The capsule (27x8, the full one at x=66 and the empty one at x=226) is laid out on a rigid 4 px
-# segment pitch, which is what makes that possible. Measured off the pixels and checked against both
-# the 1/5 and the 5/5 step -- an n-segment fill is always columns 1 .. 4n+1:
-#
-#     col 0        the black left edge
-#     cols 1-4     segment 1, which carries the rounded left shoulder
-#     cols 5-8 ..  the repeating interior segment, each with its own left divider
-#     col 4n+1     the column that closes the fill off
-#     cols 25-26   the rounded right end
-#
-# So three parts make a bar of any length: a head, a body repeated, and a tail. Each is cut in the
-# three tier colourways and in the pack's empty grey, which is the state a pip takes once its enemy
-# is down. Named by the tier each stands for rather than by its colour: which tier is brown is a fact
-# about the game, and a table saying "brown" would have to be read against a second table saying what
-# brown meant.
-#
-# The pack's fill steps are not used -- a pip is a whole enemy, not a fraction of one -- and neither
-# is the silver colourway, because there is no fourth tier.
-PIP_SHEET = "Pixel UI pack 3/06"
-PIP_HEIGHT = 8
-# Where each colourway's capsule row starts, and where the full and the empty one sit along it.
-PIP_BANDS = {"common": 116, "elite": 148, "boss": 180}
-PIP_FULL_X = 66
-PIP_EMPTY_X = 226
-# part -> (columns off the capsule, width). The tail is the odd one: its first column is the full
-# capsule's closing column and its other two are the rounded right end, which is taken off the EMPTY
-# capsule for every colourway -- that is how the pack draws the right-hand end of its own full bar.
-PIP_HEAD = (0, 5)
-PIP_BODY = (5, 4)
-PIP_TAIL_CLOSE = 21
-PIP_TAIL_END = (25, 2)
-PIP_WIDTHS = {"head": 5, "body": 4, "tail": 3}
-
-
 def _rgb(text):
     """One "#rrggbb" as the opaque RGBA tuple the images are keyed by."""
     return tuple(int(text[i:i + 2], 16) for i in (1, 3, 5)) + (255,)
@@ -1363,8 +1324,8 @@ def _cut(entry, trim=True):
     Nothing cut this way is checked for tiling: it is drawn at its own size and never stretched, so
     it has no nine-slice and no rows to keep uniform -- the same reason the close button skips check().
 
-    `trim` is what an icon wants and a pip does not: the pips stand in a row and every one of them
-    has to be the same width, whether or not its own art reaches the edge of the rectangle.
+    `trim` is what an icon wants and a frame or a notch does not: those have to keep the rectangle's
+    own size, whether or not their art reaches its edge.
     """
     src, x, y, w, h, scale = entry
     if ".zip!" in src:
@@ -2273,79 +2234,6 @@ def character_preview(cut, portrait_at):
     return out.resize((out.width * 4, out.height * 4), Image.NEAREST)
 
 
-def pips():
-    """The three parts a kill-pip bar is built from, in each tier's colourway and in empty grey.
-
-    A tier is cut off the full capsule and "empty" off the empty one, at the same columns: the pack
-    draws both to the same geometry, so the parts line up whichever state a pip is in.
-    """
-    out = {}
-    # The empty capsule is the same grey in every band, so it is cut once, off the first one.
-    wanted = [(tier, PIP_FULL_X, band) for tier, band in PIP_BANDS.items()]
-    wanted.append(("empty", PIP_EMPTY_X, list(PIP_BANDS.values())[0]))
-    for key, x, band in wanted:
-        out["ui_pip_head_" + key] = _column(x + PIP_HEAD[0], band, PIP_HEAD[1])
-        out["ui_pip_body_" + key] = _column(x + PIP_BODY[0], band, PIP_BODY[1])
-        out["ui_pip_tail_" + key] = _tail(x, band)
-    for name, image in out.items():
-        want = PIP_WIDTHS[name.split("_")[2]]
-        if image.size != (want, PIP_HEIGHT):
-            raise SystemExit("%s is %dx%d, not %dx%d -- the bar would not join up"
-                             % (name, image.width, image.height, want, PIP_HEIGHT))
-    return out
-
-
-def _column(x, y, width):
-    """A slice of the capsule, full height and never trimmed."""
-    return _cut((PIP_SHEET, x, y, width, PIP_HEIGHT, 1), trim=False)
-
-
-def _tail(x, band):
-    """The column that closes a fill off, then the pack's rounded right end behind it.
-
-    The end always comes off the empty capsule, whatever colourway the fill is: the pack leaves that
-    stub grey even on its own full bar, and copying it is what makes an assembled bar look drawn
-    rather than extended.
-    """
-    out = Image.new("RGBA", (PIP_WIDTHS["tail"], PIP_HEIGHT), (0, 0, 0, 0))
-    out.paste(_column(x + PIP_TAIL_CLOSE, band, 1), (0, 0))
-    out.paste(_column(PIP_EMPTY_X + PIP_TAIL_END[0], band, PIP_TAIL_END[1]), (1, 0))
-    return out
-
-
-def pip_bar(cut, tiers):
-    """One assembled bar, the way KillPips assembles it: head, bodies, tail.
-
-    `tiers` is one entry a pip, a tier name or None for a pip whose enemy is down.
-    """
-    parts = [cut["ui_pip_%s_%s" % ("head" if i == 0 else "body", t if t else "empty")]
-             for i, t in enumerate(tiers)]
-    parts.append(cut["ui_pip_tail_%s" % (tiers[-1] if tiers[-1] else "empty")])
-    out = Image.new("RGBA", (sum(p.width for p in parts), PIP_HEIGHT), (0, 0, 0, 0))
-    x = 0
-    for part in parts:
-        out.paste(part, (x, 0))
-        x += part.width
-    return out
-
-
-def pip_preview(cut):
-    """The assembled bar draining, every state from ten pips down to none.
-
-    The question only eyes can answer is whether the parts butt together without a seam, and whether
-    the elite's green at the far end still reads once there is one pip left. Drawn on the wood
-    panel's own brown, which is what the HUD stands it on.
-    """
-    line = ["common"] * 9 + ["elite"]
-    bars = [pip_bar(cut, [None] * k + line[k:]) for k in range(len(line) + 1)]
-    pad, gap = 4, 2
-    out = Image.new("RGBA", (2 * pad + bars[0].width, 2 * pad + len(bars) * (PIP_HEIGHT + gap) - gap),
-                    (0x6B, 0x4A, 0x32, 0xFF))
-    for i, bar in enumerate(bars):
-        out.alpha_composite(bar, (pad, pad + i * (PIP_HEIGHT + gap)))
-    return out.resize((out.width * 5, out.height * 5), Image.NEAREST)
-
-
 def pack(sprites, margins):
     """One grid, cells as wide and tall as the largest sprite. Panels first, then the buttons."""
     order = sorted(sprites, key=lambda n: (not n.startswith("ui_panel"), n))
@@ -2533,13 +2421,6 @@ def main():
             spell = _cut((SKILL_ROOT + src, 0, 0, SKILL_SIDE, SKILL_SIDE, 1), trim=False)
         spell.save(os.path.join(FORTUNE_OUT, name + ".png"))
 
-    # Loose, like the parts: a pip is drawn at its own size and never stretched, so it has no
-    # nine-slice and no business in the theme sheet.
-    pip = {name: _e64(image) for name, image in pips().items()}
-    pip_preview(pip).save(os.path.join(QA, "ui_kit_pips.png"))
-    for name, image in pip.items():
-        image.save(os.path.join(OUT, name + ".png"))
-
     # Loose as well: the frame and its bars are drawn at their own size, and the bars are clipped
     # rather than stretched as they empty.
     char, portrait_at = character()
@@ -2580,7 +2461,6 @@ def main():
           % (len(unique), "to %s/" % UNIQUE_OUT if UNIQUE_EXPORT else "to the preview only", QA))
     print("wrote %d base icons %s and %s/ui_kit_bases.png"
           % (len(bases), "to %s/" % GEAR_OUT if BASES_EXPORT else "to the preview only", QA))
-    print("wrote %d kill pips to %s/ and %s/ui_kit_pips.png" % (len(pip), OUT, QA))
     print("wrote %d orb icons to %s/ and %s/ui_kit_orbs.png" % (len(orb), ORB_OUT, QA))
     print("wrote %d button marks to %s/ and %s/ui_kit_icons.png" % (len(mark), OUT, QA))
     print("wrote %d keys to %s/ and %s/ui_kit_keys.png" % (len(key), OUT, QA))

@@ -3,7 +3,7 @@ class_name Coins
 ##
 ## Everywhere gold is said wants it -- the purse, every price, the fight's verdict and the burst a
 ## body throws out -- and the sheet's geometry is measured rather than guessed, so it lives in one place for the reason
-## KillPips owns its pip parts. The two UI rows take a single resting frame; only the coins in the
+## KillPips owns its pip sprites. The two UI rows take a single resting frame; only the coins in the
 ## air spin, because a widget that never stops moving is furniture that fidgets.
 
 const SHEET := preload("res://Assets/coin4_16x16.png")

@@ -860,6 +860,20 @@ func reach(radius: int) -> bool:
 	return true
 
 
+## Every heirloom under the level of the deepest land charted climbs to it by itself, a smith's level
+## at a time (`Item.level_up`, so its lines climb back towards their peak tiers too), and never past
+## the level it had before its world ended (`Item.safe_level`). The smith no longer walks it there
+## (`Blacksmith.can_upgrade`), so it is never ahead of the land. A broken one stays where it broke.
+## True when one moved.
+func raise_heirlooms(land_level: int) -> bool:
+	var moved := false
+	for piece: Item in stash().items + stash().equipment.items():
+		while not piece.broken and piece.level < mini(piece.safe_level, land_level):
+			piece.level_up()
+			moved = true
+	return moved
+
+
 ## The skulls the black screen may spend on the next world (`Curses.fits`), and **only Gollux pays
 ## them** (the user's, 2026-10-03: walls broken pay none): each depth won is exactly one skull. Won
 ## once, not once a descent, and kept with the depth through every transcension, a world lost to No

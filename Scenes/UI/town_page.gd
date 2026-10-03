@@ -40,6 +40,8 @@ signal xp_claimed(amount: int)
 ## bag: `orbs` is name -> count and `piece` null for none. The main scene says so, as a fight's
 ## verdict does.
 signal bounty_paid(enemy: String, gold: float, xp: int, orbs: Dictionary, piece: Item)
+## The board's Reward was pressed: the main scene puts the three options of a cleared board back up.
+signal choice_asked
 ## The roads lifted settlements out of the dark: the map has changed and wants saving.
 signal towns_revealed
 ## A spell that is aimed at the map was asked for, at `price`, in the town on `spot`. Nothing has been
@@ -640,6 +642,26 @@ func _fill_board() -> void:
 	if BountyBoard.see(_drawer):
 		inventory.save(_save_path)
 	var body := _scrolled(ROW_GAP)
+	var heading := UITheme.section("Tier " + Achievements.RANK_NAMES[BountyBoard.board_tier(_drawer)])
+	body.add_child(heading)
+	# How far the board is to its reward, at the heading's end: a round pip lit for each posting handed
+	# in, and the gift in the last place, lit while a cleared board's reward waits.
+	var board := BountyBoard.bounties(_drawer)
+	if not board.is_empty():
+		var done := board.filter(func(b: Dictionary) -> bool: return bool(b.get(BountyBoard.DONE, false))).size()
+		var waiting := not pending_choice().is_empty()
+		var pips := KillPips.new(board.size())
+		pips.show_board(done, waiting)
+		pips.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		pips.mouse_filter = Control.MOUSE_FILTER_PASS
+		pips.tooltip_text = ("Your reward is waiting" if waiting
+				else "%d of %d handed in. Clear the board for a reward" % [done, board.size()])
+		heading.add_child(pips)
+	# A cleared board's reward put away untaken is brought back from here, at the head of the board.
+	if not pending_choice().is_empty():
+		var reward := UITheme.button("Reward", "SmallGoButton", "Choose your reward for clearing this board")
+		reward.pressed.connect(choice_asked.emit)
+		body.add_child(reward)
 	var posted := 0
 	var active_at := BountyBoard.active_spot(inventory.towns)
 	var busy := not active_at.is_empty()
@@ -737,7 +759,9 @@ func _on_claim_pressed(bounty: Dictionary) -> void:
 		item_claimed.emit(piece)
 		inventory.note_unique(piece.unique)
 		inventory.add(piece)
-	# The last one handed in is what brings new work, there and then.
+	# The last one handed in clears the board, which offers its reward and raises the town's tier, and
+	# brings new work there and then -- in that order, so the new work is posted at the new tier.
+	BountyBoard.clear(_drawer, _cell, _stock_rng, Achievements.unlocked(inventory), inventory.walls_credited)
 	BountyBoard.restock(_drawer, _board_land(), _cell, _stock_rng, inventory.walls_credited)
 	print("Claimed the bounty on %s for %s gold, %d experience and %s" % [str(bounty.get(BountyBoard.ENEMY, "")),
 			BigNumber.format(reward), xp, orbs])
@@ -751,6 +775,50 @@ func _on_claim_pressed(bounty: Dictionary) -> void:
 	# Nothing is open, but the bag still has to hear: the purse it draws and the tray it counts have
 	# both just moved.
 	offer_changed.emit(null)
+
+
+## The options this town's cleared board has offered and the player has not taken (`BountyBoard.choice`).
+func pending_choice() -> Array:
+	return BountyBoard.choice(_drawer)
+
+
+## Why option `index` of the cleared board cannot be taken now, or "": a piece needs room in the bag.
+func why_not_take(index: int) -> String:
+	var offered := pending_choice()
+	if index < 0 or index >= offered.size():
+		return "Nothing to take"
+	return _why_not(0.0, offered[index].has(BountyBoard.CHOICE_ITEM))
+
+
+## Takes option `index` of the cleared board, the claim's way: a piece is said before the log and the bag
+## hear of it, orbs go to the tray, gold to the purse and experience to the bar. The other two are gone.
+## False when it was refused.
+func take_choice(index: int) -> bool:
+	if not why_not_take(index).is_empty():
+		return false
+	var option := BountyBoard.take_choice(_drawer, index)
+	var piece: Item = option.get(BountyBoard.CHOICE_ITEM)
+	if piece != null:
+		item_claimed.emit(piece)
+		inventory.note_unique(piece.unique)
+		inventory.add(piece)
+		print("Took %s for clearing the board" % piece.display_name())
+	elif option.has(BountyBoard.CHOICE_GOLD):
+		inventory.gold += float(option[BountyBoard.CHOICE_GOLD])
+		print("Took %s gold for clearing the board" % BigNumber.format(float(option[BountyBoard.CHOICE_GOLD])))
+	elif option.has(BountyBoard.CHOICE_XP):
+		inventory.add_xp(int(option[BountyBoard.CHOICE_XP]))
+		xp_claimed.emit(int(option[BountyBoard.CHOICE_XP]))
+		print("Took %d experience for clearing the board" % int(option[BountyBoard.CHOICE_XP]))
+	else:
+		inventory.add_orb(str(option[BountyBoard.CHOICE_ORB]), int(option[BountyBoard.CHOICE_COUNT]))
+		print("Took %d %s for clearing the board" % [int(option[BountyBoard.CHOICE_COUNT]),
+				option[BountyBoard.CHOICE_ORB]])
+	inventory.save(_save_path)
+	_fill()
+	layout()
+	offer_changed.emit(null)
+	return true
 
 
 ## Which of the drawer's two shelves the open tab is.
@@ -803,9 +871,7 @@ func _fill_smith() -> void:
 				Palette.TEXT_SOFT, true)
 		step.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		odds.add_child(step)
-		var risk := Blacksmith.break_chance(_bag_piece)
-		odds.add_child(UITheme.label("Break %d%%" % roundi(risk * 100.0), Palette.BRICK, true) if risk > 0.0
-				else UITheme.label("Safe", Palette.LEAF, true))
+		odds.add_child(UITheme.label("Break %d%%" % roundi(Blacksmith.BREAK_CHANCE * 100.0), Palette.BRICK, true))
 		_rows.add_child(odds)
 	_rows.add_child(_smith_button("Upgrade", up_price, up_why,
 			"Take this to level %d for %s gold. Its modifiers stay as they are"
@@ -1015,16 +1081,14 @@ func _show_told(win: bool) -> void:
 
 
 ## The way out, asked before it is done: what is lost and what it costs, over Cancel and Transcend. The
-## price is only on the square that brought the player here and in the sentence; the button carries the
-## coin and no figure, as Claim does. A short purse greys the deed, never the asking.
+## price is only on the square that brought the player here; the button carries the coin and no figure,
+## as Claim does. A short purse greys the deed, never the asking.
 func _ask_way_out() -> void:
 	var body := _open_told(FortuneTeller.LABELS[FortuneTeller.TRANSCEND])
 	var lines: VBoxContainer = _told_scroll.get_child(0)
 	for line: String in TRANSCEND_LINES:
 		lines.add_child(BountyList.wrapped(line, TOLD_WIDTH))
 	var price := _fortune_price(FortuneTeller.TRANSCEND)
-	lines.add_child(BountyList.wrapped("She asks %s gold." % BigNumber.format(price), TOLD_WIDTH,
-			Palette.TEXT_SOFT))
 	var answers := HBoxContainer.new()
 	answers.add_theme_constant_override("separation", ROW_GAP)
 	body.add_child(answers)
@@ -1271,11 +1335,12 @@ func _smith_why_not(rule: String, price: float) -> String:
 	return _why_not(price, false)
 
 
-## The deepest level the smith here may take a piece to: what a boss on the deepest land of this
-## town's wall circle could drop (`MapBuilder.circle_level`). Gated by the circle, not the town's own
-## tile, so every fortress between the same two walls works to the same ceiling.
+## The deepest level the smith here may take a piece to: the level of the deepest land in this town's
+## wall circle (`MapBuilder.circle_level`), 3 inside the first wall -- a boss's tier rode on top of it
+## until the user's 2026-10-03. Gated by the circle, not the town's own tile, so every fortress
+## between the same two walls works to the same ceiling.
 func _upgrade_cap() -> int:
-	return maxi(1, MapBuilder.circle_level(_cell) + int(LootTable.TIER_LEVEL[EnemyRoster.Tier.BOSS]))
+	return MapBuilder.circle_level(_cell)
 
 
 ## One blow of the hammer. The gold goes whichever way it falls -- that is what the break chance is --

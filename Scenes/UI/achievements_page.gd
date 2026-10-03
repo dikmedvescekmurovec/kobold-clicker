@@ -9,10 +9,14 @@ extends Control
 ##
 ## Built like the collection log beside it: `open()` redraws it, `layout()` fits it to the window,
 ## `closed` is its X, and it carries `UITheme.theme()` because it hangs off a `CanvasLayer`. It saves
-## nothing: the main scene clears what was new when it opens the page.
+## nothing: an achievement new since the last look (`Inventory.achievements_new`) is the only square
+## that glints, until the cursor has been over it or the page is closed, and then `seen` asks the main
+## scene to save.
 
 ## The page's X was pressed.
 signal closed
+## A new achievement was hovered, or the page closed over one, and it left `Inventory.achievements_new`.
+signal seen
 
 ## The bar's label, for the tests.
 const SHARE_NAME := "Share"
@@ -49,6 +53,7 @@ func _ready() -> void:
 	UITheme.body_of(_panel).add_child(scroll)
 	_rows = UITheme.vbox(BountyList.ROW_GAP, BagPage.WIDTH)
 	scroll.add_child(_rows)
+	visibility_changed.connect(_on_visibility_changed)
 	open()
 
 
@@ -70,7 +75,23 @@ func open() -> void:
 	ids.sort_custom(func(a: String, b: String) -> bool:
 		return str(Achievements.ACHIEVEMENTS[a]["name"]).naturalnocasecmp_to(str(Achievements.ACHIEVEMENTS[b]["name"])) < 0)
 	for id: String in ids:
-		grid.add_child(tile(inventory, id, known))
+		var slot := tile(inventory, id, known)
+		grid.add_child(slot)
+		if id in inventory.achievements_new:
+			slot.shine_until_hovered(_on_seen.bind(id))
+
+
+func _on_seen(id: String) -> void:
+	if inventory.achievements_new.has(id):
+		inventory.achievements_new.erase(id)
+		seen.emit()
+
+
+## Closing the page is seeing what was new on it, hovered or not.
+func _on_visibility_changed() -> void:
+	if not visible and not inventory.achievements_new.is_empty():
+		inventory.achievements_new.clear()
+		seen.emit()
 
 
 ## The bar across the top: an ink trough filling with leaf, the share earned written over its middle.
@@ -115,13 +136,13 @@ static func tile(player: Inventory, id: String, known: Dictionary) -> ItemSlot:
 	if frame != null:
 		slot.remove_child(frame)
 		frame.free()
+	# Still: only what is new glints, and the page decides that.
+	slot.still()
 	var rank := Achievements.rank(player, id)
 	# Before the rank's numeral, which is drawn over it.
 	slot.add_child(progress_bar(player, id, rank, known))
 	if rank <= 0:
 		slot.modulate = ItemSlot.SHADOW
-		# No glint: that is for a piece in hand.
-		(slot.get_child(0) as TextureRect).material = null
 	else:
 		slot.add_child(OrbSlot.count_label(Achievements.RANK_NAMES[rank]))
 	return slot

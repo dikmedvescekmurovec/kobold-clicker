@@ -79,9 +79,9 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 	# changed again. In the colour a loss is written in, so it is not read as a line it rolled.
 	if item.broken:
 		rows.add_child(line("Broken", Palette.RUST, width, true))
-	# An heirloom on its way back up: how far the smith can take it for nothing but gold.
+	# An heirloom on its way back up: how far it climbs by itself as the land is charted.
 	elif item.safe_level > item.level:
-		rows.add_child(line("Cannot break until level %d" % item.safe_level, Palette.TEXT_SOFT, width, true))
+		rows.add_child(line("Climbs to level %d" % item.safe_level, Palette.TEXT_SOFT, width, true))
 	# What a unique is worn for, straight under what it is: the one line on the block that is a rule
 	# rather than a number. In the pack's wood brown and not the unique's own gold, which carries a
 	# name at 16 px and is too pale on cream for a sentence at 10.

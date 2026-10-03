@@ -53,10 +53,11 @@ const LEVEL := "level"
 const COMMONS := 2
 const ELITES := 1
 
-## How many bodies a posting asks for. Five commons is a tile's fighting or less; one elite is a
-## tile or so of looking, since a tile fields one elite in ten.
-const NEED_COMMON := 5
-const NEED_ELITE := 1
+## How many bodies a posting asks for, by the board's tier (`board_tier`, indexed from 1). At tier I
+## five commons is a tile's fighting or less and one elite is a tile or so of looking, since a tile
+## fields one elite in ten; a town that trusts the player asks for more.
+const TIER_NEED_COMMON := [5, 8, 12]
+const TIER_NEED_ELITE := [1, 2, 3]
 
 ## What a board pays, in purses of the monster it asks for. Quoted in the monster's own worth rather
 ## than in gold, so a deep town's board pays deep-town money without a second curve to keep in step.
@@ -70,15 +71,74 @@ const XP_ELITE := 10
 const ORBS := {EnemyRoster.Tier.COMMON: 1, EnemyRoster.Tier.ELITE: 3}
 
 ## How often a posting carries a piece of gear besides its gold, by the posting's tier; then how often
-## that piece is a unique. The rarity is otherwise a boss's own draw (`ItemRarity.roll` on the BOSS
-## row), the best of `RARITY_ROLLS` of them. Dials, unplayed.
+## that piece is a unique, by the board's tier I to III (the user's, 2026-10-03). The rarity is
+## otherwise a boss's own draw (`ItemRarity.roll` on the BOSS row), the best of `RARITY_ROLLS` of them.
+## Dials, unplayed.
 const ITEM_CHANCE := {EnemyRoster.Tier.COMMON: 0.5, EnemyRoster.Tier.ELITE: 1.0}
-const UNIQUE_CHANCE := {EnemyRoster.Tier.COMMON: 0.05, EnemyRoster.Tier.ELITE: 0.2}
+const UNIQUE_CHANCE := {EnemyRoster.Tier.COMMON: [0.02, 0.03, 0.05], EnemyRoster.Tier.ELITE: [0.1, 0.15, 0.25]}
 const RARITY_ROLLS := {EnemyRoster.Tier.COMMON: 2, EnemyRoster.Tier.ELITE: 3}
 ## How likely a promised piece is to be at least +1, +2, +3, ...: past the list, each step is
 ## `PLUS_TAIL` as likely as the one before, with no ceiling.
 const PLUS_CHANCES := [0.25, 0.05, 0.01, 0.001]
 const PLUS_TAIL := 0.1
+
+## A board's tier, I to `BOARD_TIERS`: one more for every board this town has cleared (`CLEARS`), a
+## record kept per town (the user's, 2026-10-03). A higher tier asks for more bodies and pays better
+## on every line: these multiply or add to the dials above, indexed by `board_tier - 1`. Dials, unplayed.
+const BOARD_TIERS := 3
+const TIER_PAY := [1.0, 2.5, 6.0]
+const TIER_ORBS := [0, 1, 2]
+const TIER_RARITY_ROLLS := [0, 1, 2]
+## Divides the draw `plus_of` reads, which multiplies the chance of every ascension step: at least +1
+## at 25%, 33% and 50% (the user's, 2026-10-03).
+const TIER_PLUS := [1.0, 4.0 / 3.0, 2.0]
+
+## The drawer's count of boards this town has cleared, and the reward a clear has offered and the
+## player has not yet taken: three options, one of which is kept (`clear`, `choice`, `take_choice`).
+const CLEARS := "boards_cleared"
+const CHOICE := "choice"
+
+## What a clear may offer, three different ones a time: an epic piece at the town's ceiling, an epic
+## piece above it, a unique, an ascended unique, a rare piece rolled lucky, a handful of one of the
+## three dearest orbs, a pile of gold and a pile of experience. Every one is good; the board's tier
+## makes most of them better. "Lucky" is rolled twice and the better kept (`_lucky`, `LootTable._tier_at`).
+const ASCENDED := "ascended"
+const HIGH := "high"
+const UNIQUE := "unique"
+const ASCENDED_UNIQUE := "ascended_unique"
+const RARE := "rare"
+const ORB_BUNDLE := "orbs"
+const GOLD_PILE := "gold_pile"
+const XP_PILE := "xp_pile"
+const CHOICE_KINDS := [ASCENDED, HIGH, UNIQUE, ASCENDED_UNIQUE, RARE, ORB_BUNDLE, GOLD_PILE, XP_PILE]
+const CHOICES := 3
+## An option's own keys: a piece as `Item.to_dict`, an orb and how many, or a pile of gold or of experience.
+const CHOICE_ITEM := "item"
+const CHOICE_ORB := "orb"
+const CHOICE_COUNT := "count"
+const CHOICE_GOLD := "gold"
+const CHOICE_XP := "xp"
+## Dials, by tier, unplayed (the user's, 2026-10-03). The epic at the ceiling: its ascensions and how
+## many times each modifier is rolled, the best kept -- a plain +1 at I, a lucky +1 at II, a lucky +2 at III. The
+## high epic: the levels it stands above the ceiling and how many draws its material is the best of
+## (lucky, twice lucky, three times lucky). The ascended unique's ascensions. The rare is lucky at every
+## tier. How many of each orb the bundle holds: only an orb this world has unlocked
+## (`OrbTable.unlocked`) is ever offered, and with none of the three unlocked there is no bundle. And
+## the piles, in bodies at the town's level: filler, so that not every clear is an epic reward -- one
+## common posting's gold or experience at that tier (`REWARD_COMMON` / `XP_COMMON` times `TIER_PAY`).
+const EPIC_PLUS := [1, 1, 2]
+const EPIC_ROLLS := [1, 2, 2]
+const CHOICE_LEVELS := [1, 2, 3]
+const HIGH_DRAWS := [2, 3, 4]
+const UNIQUE_PLUS := [1, 1, 2]
+const RARE_ROLLS := 2
+const CHOICE_ORBS := {
+	"Orb of Divinity": [6, 10, 15],
+	"Orb of Chaos": [4, 7, 10],
+	"Orb of Exaltation": [2, 4, 6],
+}
+const PILE_GOLD := [100.0, 250.0, 600.0]
+const PILE_XP := [50, 125, 300]
 
 ## How far from the town its board looks for land to post monsters from, in hex steps. Far enough
 ## that a town has several environments to draw on, near enough that "where it lives" is a walk rather
@@ -103,9 +163,133 @@ static func restock(drawer: Dictionary, envs: PackedStringArray, cell: Vector2i,
 			if enemy.is_empty():
 				continue
 			taken[enemy] = true
-			posted.append(_posting(enemy, tier, cell, rng, walls))
+			posted.append(_posting(enemy, tier, cell, rng, walls, board_tier(drawer)))
 	drawer[BOUNTIES] = posted
 	return not posted.is_empty()
+
+
+## This town's board tier, I to `BOARD_TIERS`: one more for every board it has cleared.
+static func board_tier(drawer: Dictionary) -> int:
+	return clampi(1 + int(drawer.get(CLEARS, 0)), 1, BOARD_TIERS)
+
+
+## The board has just been cleared by the hand-in of its last posting: three options are written into
+## the drawer for the player to take one of, rolled at the tier the board was, and the town's count
+## goes up -- so the caller asks this **before** `restock`, which posts the next board at the new tier.
+## False, and nothing written, on a board with work still out or with nothing posted at all: a board
+## that never had work on it pays nothing for being empty.
+static func clear(drawer: Dictionary, cell: Vector2i, rng: RandomNumberGenerator,
+		unlocked: Array = Achievements.STARTERS, walls := OrbTable.EVERY_WALL) -> bool:
+	if bounties(drawer).is_empty() or not cleared(drawer):
+		return false
+	drawer[CHOICE] = roll_choice(board_tier(drawer), cell, rng, unlocked, walls)
+	drawer[CLEARS] = int(drawer.get(CLEARS, 0)) + 1
+	return true
+
+
+## `CHOICES` options of different kinds, as they are saved. The pieces are rolled whole here, so the
+## player chooses between things they can open and read, at the boss's ceiling for the town's cell.
+static func roll_choice(tier: int, cell: Vector2i, rng: RandomNumberGenerator,
+		unlocked: Array = Achievements.STARTERS, walls := OrbTable.EVERY_WALL) -> Array:
+	var orbs := CHOICE_ORBS.keys().filter(func(orb: String) -> bool:
+			return orb in OrbTable.unlocked(walls))
+	var kinds := CHOICE_KINDS.duplicate()
+	if orbs.is_empty():
+		kinds.erase(ORB_BUNDLE)
+	var at := clampi(tier, 1, BOARD_TIERS) - 1
+	var ceiling := maxi(1, MapBuilder.level_of(cell) + int(LootTable.TIER_LEVEL[EnemyRoster.Tier.BOSS]))
+	var options := []
+	# Drawn by the caller's rng, not `shuffle`, which would ignore it.
+	for i in mini(CHOICES, kinds.size()):
+		var kind: String = kinds.pop_at(rng.randi_range(0, kinds.size() - 1))
+		if kind == ORB_BUNDLE:
+			var orb: String = orbs[rng.randi_range(0, orbs.size() - 1)]
+			options.append({CHOICE_ORB: orb, CHOICE_COUNT: int(CHOICE_ORBS[orb][at])})
+			continue
+		if kind == GOLD_PILE:
+			options.append({CHOICE_GOLD: pile_gold(tier, cell)})
+			continue
+		if kind == XP_PILE:
+			options.append({CHOICE_XP: pile_xp(tier, cell)})
+			continue
+		var piece: Item
+		if kind == UNIQUE or kind == ASCENDED_UNIQUE:
+			piece = Item.rolled_unique(str(unlocked[rng.randi_range(0, unlocked.size() - 1)]), rng, ceiling)
+			if kind == ASCENDED_UNIQUE:
+				for n in int(UNIQUE_PLUS[at]):
+					piece.ascend()
+		else:
+			var level: int = ceiling + (int(CHOICE_LEVELS[at]) if kind == HIGH else 0)
+			var base := LootTable.roll_kind(rng)
+			var rarity := ItemRarity.Rarity.RARE if kind == RARE else ItemRarity.Rarity.ELITE
+			piece = Item.rolled(LootTable._tier_at(base, maxi(level, LootTable.first_level(base)), rng,
+					int(HIGH_DRAWS[at]) if kind == HIGH else 1), rarity, rng, level)
+			if kind == ASCENDED:
+				_lucky(piece, int(EPIC_ROLLS[at]), rng)
+				for n in int(EPIC_PLUS[at]):
+					piece.ascend()
+			elif kind == RARE:
+				_lucky(piece, RARE_ROLLS, rng)
+		options.append({CHOICE_ITEM: piece.to_dict()})
+	return options
+
+
+## Every modifier on a fresh piece rolled `rolls` times in all, tier and number, and the higher number
+## kept: 2 is lucky. Every modifier is better the higher it is.
+static func _lucky(piece: Item, rolls: int, rng: RandomNumberGenerator) -> void:
+	for i in piece.mods.size():
+		for n in rolls - 1:
+			var again := ModifierTable.rolled_mod(str(piece.mods[i]["id"]), rng, piece.mod_level())
+			if int(again["value"]) > int(piece.mods[i]["value"]):
+				piece.mods[i] = again
+
+
+## The pile of gold a clear of a tier `tier` board offers, at the town on `cell`.
+static func pile_gold(tier: int, cell: Vector2i) -> float:
+	return maxf(1.0, roundf(TownPrices.gold_at_level(MapBuilder.level_of(cell))
+			* float(PILE_GOLD[clampi(tier, 1, BOARD_TIERS) - 1])))
+
+
+## The pile of experience, the same way.
+static func pile_xp(tier: int, cell: Vector2i) -> int:
+	return Encounter.base_xp(cell) * int(PILE_XP[clampi(tier, 1, BOARD_TIERS) - 1])
+
+
+## The options a clear has offered and the player has not taken, read back: `{item: Item}`,
+## `{orb, count}`, `{gold}` or `{xp}`. One this build cannot read is stepped over, never a crash.
+static func choice(drawer: Dictionary) -> Array:
+	var offered := []
+	var saved: Variant = drawer.get(CHOICE, null)
+	if typeof(saved) != TYPE_ARRAY:
+		return offered
+	for entry: Variant in saved as Array:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		if entry.has(CHOICE_ITEM):
+			var piece := Item.from_dict(entry[CHOICE_ITEM])
+			if piece != null:
+				offered.append({CHOICE_ITEM: piece})
+		elif entry.has(CHOICE_GOLD):
+			if float(entry[CHOICE_GOLD]) > 0.0:
+				offered.append({CHOICE_GOLD: float(entry[CHOICE_GOLD])})
+		elif entry.has(CHOICE_XP):
+			if int(entry[CHOICE_XP]) > 0:
+				offered.append({CHOICE_XP: int(entry[CHOICE_XP])})
+		else:
+			var orb := OrbTable.current(str(entry.get(CHOICE_ORB, "")))
+			if OrbTable.ORBS.has(orb) and int(entry.get(CHOICE_COUNT, 0)) > 0:
+				offered.append({CHOICE_ORB: orb, CHOICE_COUNT: int(entry[CHOICE_COUNT])})
+	return offered
+
+
+## Takes option `index` and lets the other two go. Returns it read back, or `{}` when there is no such
+## option -- and then nothing is spent. The caller pays it, because the bag is not this file's business.
+static func take_choice(drawer: Dictionary, index: int) -> Dictionary:
+	var offered := choice(drawer)
+	if index < 0 or index >= offered.size():
+		return {}
+	drawer.erase(CHOICE)
+	return offered[index]
 
 
 ## Whether every posting on the board has been handed in, which is what brings new work. A board
@@ -279,34 +463,38 @@ static func xp_reward_of(tier: int) -> int:
 ## way a vendor's shelf draws one: what a bounty is for is the thing the ground will not hand over on
 ## its own.
 static func _posting(enemy: String, tier: int, cell: Vector2i,
-		rng: RandomNumberGenerator, walls: int) -> Dictionary:
-	var need := NEED_ELITE if tier == EnemyRoster.Tier.ELITE else NEED_COMMON
+		rng: RandomNumberGenerator, walls: int, board := 1) -> Dictionary:
+	var at := clampi(board, 1, BOARD_TIERS) - 1
+	var elite := tier == EnemyRoster.Tier.ELITE
+	var need: int = TIER_NEED_ELITE[at] if elite else TIER_NEED_COMMON[at]
 	var orbs := []
-	for i in int(ORBS[tier]):
+	for i in int(ORBS[tier]) + int(TIER_ORBS[at]):
 		orbs.append(OrbTable.roll_favoured(rng, walls))
 	return {
 		ENEMY: enemy,
 		NEED: need,
 		HAVE: 0,
-		GOLD: maxf(1.0, roundf(Encounter.gold_of(enemy, cell) * reward_of(tier))),
-		XP: Encounter.xp_of(enemy, cell) * xp_reward_of(tier),
+		GOLD: maxf(1.0, roundf(Encounter.gold_of(enemy, cell) * reward_of(tier) * float(TIER_PAY[at]))),
+		XP: roundi(Encounter.xp_of(enemy, cell) * xp_reward_of(tier) * float(TIER_PAY[at])),
 		ORB: orbs,
-		ITEM: _item_promise(tier, rng),
+		ITEM: _item_promise(tier, rng, board),
 		DONE: false,
 		LEVEL: MapBuilder.level_of(cell),
 	}
 
 
 ## What the card promises of a piece, or `{}`: the kind and the rarity, and whether it is ascended.
-## Drawn at posting so the card can say it; the piece is drawn at the hand-in.
-static func _item_promise(tier: int, rng: RandomNumberGenerator) -> Dictionary:
+## Drawn at posting so the card can say it; the piece is drawn at the hand-in. A higher board tier
+## draws the rarity more times and makes a unique and every ascension likelier.
+static func _item_promise(tier: int, rng: RandomNumberGenerator, board := 1) -> Dictionary:
+	var at := clampi(board, 1, BOARD_TIERS) - 1
 	if rng.randf() >= float(ITEM_CHANCE[tier]):
 		return {}
-	var plus := plus_of(rng.randf())
-	if rng.randf() < float(UNIQUE_CHANCE[tier]):
+	var plus := plus_of(rng.randf() / float(TIER_PLUS[at]))
+	if rng.randf() < float(UNIQUE_CHANCE[tier][at]):
 		return {ITEM_KIND: "", ITEM_RARITY: ItemRarity.name_of(ItemRarity.Rarity.UNIQUE), ITEM_PLUS: plus}
 	var rarity := ItemRarity.Rarity.COMMON
-	for i in int(RARITY_ROLLS[tier]):
+	for i in int(RARITY_ROLLS[tier]) + int(TIER_RARITY_ROLLS[at]):
 		rarity = maxi(rarity, ItemRarity.roll(EnemyRoster.Tier.BOSS, rng)) as ItemRarity.Rarity
 	return {ITEM_KIND: LootTable.roll_kind(rng), ITEM_RARITY: ItemRarity.name_of(rarity), ITEM_PLUS: plus}
 

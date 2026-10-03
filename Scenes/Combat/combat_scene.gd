@@ -191,7 +191,7 @@ const BAR_BORDER := 2
 ## the pixel.
 const LABEL_OUTLINE := 4
 ## How tall the clock's bar is drawn, in panel pixels. Taller than it was: it stands under a pip bar
-## that is now drawn at KillPips.PIXEL, and a six-pixel ribbon under that reads as an afterthought.
+## whose crown stands 13 px, and a six-pixel ribbon under that reads as an afterthought.
 const CLOCK_HEIGHT := 8
 ## Where the clock's colour turns. Above CLOCK_GREEN it is simply green -- a fight that has barely
 ## started must not look like one in trouble -- then it ambers through the middle and reddens over
@@ -346,9 +346,6 @@ const COIN_FLY := 0.45
 const BUMP_FLASH := Color(1.6, 1.6, 1.6)
 ## How far the HUD's panels stand off the window edge, in screen pixels.
 const HUD_MARGIN := 8.0
-## How wide the full-bag warning may run before it wraps, in panel pixels. It is a sentence rather
-## than a word, so it is given room to be one.
-const WARNING_WIDTH := 130.0
 
 var fight: Encounter
 ## The cell being fought for, so the main scene knows what was won.
@@ -475,8 +472,6 @@ var weapon_kind := ""
 ## How many finds that rule has thrown away. Said once, at the end, and never drawn as a square:
 ## the whole point of the rule is not having to look at them.
 var _auto_discarded := 0
-## The line inside the counter's own panel, while the bag has no room left.
-var _warning: Label
 ## The counter's four faces, one per button state, each a copy of the theme's own box that this
 ## scene is free to tint. And the fill they are tinted for, so they are only touched when it moves.
 var _loot_faces: Array[StyleBox] = []
@@ -816,6 +811,9 @@ func _build_hud() -> void:
 	hud.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.theme = UITheme.theme()
+	# Over everything the fight throws -- finds (`z_index` climbing with the rarity) and their beams,
+	# coins, gems, numbers, bursts -- so nothing is ever drawn across the HUD or its popups.
+	hud.z_index = RenderingServer.CANVAS_ITEM_Z_MAX
 	add_child(hud)
 	_hud = hud
 
@@ -1030,13 +1028,6 @@ func _build_hud() -> void:
 	_loot_gold = _sum(so_far, Coins.icon(), Vector2(Coins.SIZE, Coins.SIZE))
 	_loot_xp = _sum(so_far, XP_GEM, Vector2(XP_GEM.get_width(), XP_GEM.get_height()) * XP_GEM_SCALE)
 	_loot_kills = _sum(so_far, KILLS_MARK, Vector2(Coins.SIZE, Coins.SIZE))
-	# What the counter's reddening face means, in words, in the one place the player has already
-	# asked what the run is carrying -- and over the list rather than under it, because it is about
-	# the whole of it.
-	_warning = ItemDetails.line(
-			"Bag full: more items will leave you too laden to fight", Palette.RUST, WARNING_WIDTH)
-	_warning.hide()
-	found.add_child(_warning)
 	_loot_drops = DropsView.new()
 	_loot_drops.resized_contents.connect(_centre_loot)
 	found.add_child(_loot_drops)
@@ -1691,16 +1682,6 @@ func _tint_loot_button() -> void:
 		(face as StyleBoxTexture).modulate_color = tint
 
 
-## The full-bag line inside the counter's panel. Flipped through here rather than set straight,
-## because it changes the panel's height and the panel is centred on what it holds.
-func _show_warning(showing: bool) -> void:
-	if _warning.visible == showing:
-		return
-	_warning.visible = showing
-	if _loot_panel.visible:
-		_centre_loot()
-
-
 ## The counter in the corner: the sack and how many finds there are. Always live, even at 0: the
 ## popup also says the purse, experience and bodies so far.
 func _refresh_loot_button() -> void:
@@ -1746,7 +1727,6 @@ func _place_corners(view: Vector2) -> void:
 	var loot := _loot_button.get_combined_minimum_size() * _ui_scale
 	_loot_button.position = Vector2(safe.end.x - loot.x - HUD_MARGIN, safe.end.y - loot.y - HUD_MARGIN)
 	_tint_loot_button()
-	_show_warning(bag_room == 0)
 	if _terminate != null:
 		var leave := _terminate.get_combined_minimum_size() * _ui_scale
 		_terminate.position = Vector2(safe.end.x - leave.x - HUD_MARGIN, safe.position.y + HUD_MARGIN)

@@ -126,7 +126,9 @@ func _ready() -> void:
 			_hide_card())
 		column.add_child(view)
 		_skill_views[tree] = view
-		var reset := UITheme.priced_button("Reset", 0.0, "LightButton",
+		# Small, so the widest figure BigNumber writes still leaves it narrower than the tree: wider, it
+		# widened the column and wrapped a tree onto the next row as the price grew under a held press.
+		var reset := UITheme.priced_button("Reset", 0.0, "SmallButton",
 				"Take back every point in %s, for gold" % name_label.text)
 		reset.pressed.connect(_on_respec_pressed.bind(tree))
 		column.add_child(reset)

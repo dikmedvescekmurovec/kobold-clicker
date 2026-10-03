@@ -596,7 +596,13 @@ func _test_character_panel() -> bool:
 	panel.set_state(1, PlayerLevel.xp_to_next(1) / 2)
 	_check(absi(panel.shown_pixels() - full / 2) <= 1, "half shows half: %d of %d"
 			% [panel.shown_pixels(), full])
+	_check(panel.xp_hover.tooltip_text == "%d / %d XP" % [PlayerLevel.xp_to_next(1) / 2,
+			PlayerLevel.xp_to_next(1)], "the bar's hover says %s" % panel.xp_hover.tooltip_text)
+	_check(panel.xp_hover.size.x == full * CharacterPanel.PIXEL, "the hover covers the whole bar")
 	_check(panel.absorb(PlayerLevel.xp_to_next(1)) == 1 and panel.level == 2, "absorbing a level levels up")
+	var gains := panel.get_children().filter(func(child: Node) -> bool:
+			return child is Label and child.text == "+%d" % PlayerLevel.xp_to_next(1))
+	_check(gains.size() == 1, "absorbing floats the amount off the bar")
 	panel.set_state(10 ** 6, 0)
 	_check(panel.size.x > plain.x, "a long level widens the frame")
 	panel.set_state(1, PlayerLevel.xp_to_next(1) / 2)

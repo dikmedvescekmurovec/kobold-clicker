@@ -11,7 +11,6 @@
 
 ### Interface
 - **CraftPix.net** ([Free Basic Pixel Art UI for RPG](https://craftpix.net/freebies/free-basic-pixel-art-ui-for-rpg/)): panels, buttons, the character panel. Licence: [CraftPix file licence](https://craftpix.net/file-licenses/).
-- **BDragon1727** ([Basic Pixel Health bar and Scroll bar](https://bdragon1727.itch.io/basic-pixel-health-bar-and-scroll-bar), "Pixel UI pack 3"): the kill pips. Licence: free for non-commercial games; a commercial game asks for a contribution; may be modified; no resale or redistribution.
 - **Cainos** ([Pixel Art Icon Pack - RPG](https://cainos.itch.io/pixel-art-icon-pack-rpg)): gear icons, socket marks and button marks. Licence: free and commercial projects, may be modified.
 - **jfranci_px** (Ability Icons): skill icons and the fortuneteller's fallback icons. Licence: free and commercial projects, may be modified; not to be redistributed or resold as standalone files or asset packs; credit appreciated, not required.
 - **Kelano Studio** ([Ore & Gem — 50 Minerals | 32x32](https://kelano-studio.itch.io/ore-gem-50-minerals-32x32)): the orbs.

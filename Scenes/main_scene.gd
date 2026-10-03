@@ -104,8 +104,9 @@ const LEVEL_UP_TIME := 1.6
 const LEVEL_UP_FONT := 48
 
 ## The banner a unique new to the collection log raises. It wears its X from the start and goes by
-## itself after `BANNER_HOLD`; `BANNER_GAP` is the air it keeps under the fight's own top-centre
-## column, in screen pixels.
+## itself after `BANNER_HOLD` while the mouse is off it -- never under a finger, where only its X or a
+## tap off it once `BANNER_HOLD` has passed puts it down; `BANNER_GAP` is the air it keeps under the
+## fight's own top-centre column, in screen pixels.
 const BANNER_HOLD := 3.0
 const BANNER_WIDTH := ItemCard.WIDTH * 1.5
 const BANNER_FADE := 0.4
@@ -217,11 +218,19 @@ var _character: CharacterPanel
 ## The banner under the fight's column, while one is up; null otherwise: a unique the log has never
 ## held, or a bounty filled. `_banner_head` is the row its heading sits in, the X at its end.
 var _banner: Control
+## Seconds until the banner may go (`BANNER_HOLD` as it rises), counted down in `_process`.
+var _banner_left := 0.0
 ## A banner raised while a pop-up was up, as `_raise_banner`'s four arguments; empty with none waiting.
 var _held_banner: Array = []
 ## What a bounty handed in paid, up over the town until Collect: a screen-wide catch with the verdict's
 ## wood panel in the middle of it.
 var _paid: Control
+## A cleared board's options, up over the town until one is taken or they are put away; null otherwise.
+var _choice: Control
+## Each option's column on it, and the gap between them, in panel pixels: three and two gaps inside the
+## narrowest window's 324.
+const CHOICE_WIDTH := 92.0
+const CHOICE_GAP := 8
 var _banner_head: HBoxContainer
 ## The toast over the last counted bounty kill, while it is up. The next one puts it down.
 var _toast: Control
@@ -292,6 +301,11 @@ const TIPS := [
 		"Put it on the anvil. Don't touch anything else.",
 		"I can make it better quality. Whatever's on it stays on it.",
 		"Now and then the metal gives. That's the metal's fault, not mine. You still pay.",
+	], "blacksmith"],
+	["first_board_cleared", "Blacksmith", [
+		"Cleared the whole board, did you. Fine. You'll do.",
+		"Here. Some of my best work. Pick one. One.",
+		"I'll tell them you're ready for the nasty jobs. Nasty pays better.",
 	], "blacksmith"],
 ]
 const FLASH_BRIGHT := Color(1.6, 1.6, 1.6)
@@ -629,6 +643,15 @@ func _process(delta: float) -> void:
 		var held := _held_banner
 		_held_banner = []
 		_raise_banner(held[0], held[1], held[2], held[3])
+	if _banner != null:
+		_banner_left -= delta
+		if _banner_left <= 0.0 and not Cursors.touched and not _over_banner(get_viewport().get_mouse_position()):
+			_close_banner()
+
+
+## Whether `at` (window pixels) is on the banner, which takes no mouse of its own.
+func _over_banner(at: Vector2) -> bool:
+	return _banner != null and _banner.get_global_rect().has_point(at)
 
 
 ## Whether a page's question or the fortuneteller's answer stands over the window.
@@ -800,13 +823,18 @@ func _build_pages(layer: CanvasLayer) -> void:
 	_character_button.tooltip_text = "Character"
 	_character_button.pressed.connect(_on_character_pressed)
 	layer.add_child(_character_button)
+	# Passes its press up, so the bar opens the character page as the rest of the panel does -- and in a
+	# fight, where the button takes no mouse, on to the swing (`_show_corner`).
+	_character.xp_hover.mouse_filter = Control.MOUSE_FILTER_PASS
+	_character_button.add_child(_character.xp_hover)
 	for key: int in HOTKEYS:
 		(get(HOTKEYS[key]) as Button).set_meta(TipCard.KEY, OS.get_keycode_string(key).to_lower())
 	character_page = CharacterPage.new(inventory, ui_scale)
 	character_page.rename_pressed.connect(_on_rename_pressed)
 	collection_page = CollectionPage.new(inventory, ui_scale)
-	collection_page.seen.connect(_on_unique_seen)
+	collection_page.seen.connect(_on_log_seen)
 	achievements_page = AchievementsPage.new(inventory, ui_scale)
+	achievements_page.seen.connect(_on_log_seen)
 	# Everything that changes the player ends in a save, so a save is where an achievement is noticed.
 	inventory.save_written.connect(_check_achievements, CONNECT_DEFERRED)
 	# And so is where a piece put on, taken off or crafted in the bag mid-fight reaches the fight.
@@ -845,6 +873,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 	town_page.transcend_pressed.connect(_on_transcend_pressed)
 	town_page.xp_claimed.connect(_on_xp_absorbed)
 	town_page.bounty_paid.connect(_show_bounty_paid)
+	town_page.choice_asked.connect(_show_board_choice)
 	# A bounty's piece is announced as a body's would be: only a unique the log has never held.
 	town_page.item_claimed.connect(func(item: Item) -> void:
 		if _is_new_unique(item):
@@ -1068,7 +1097,7 @@ func _tier_mark(tier: EnemyRoster.Tier) -> TextureRect:
 
 ## A banner under the fight's own column: `square` beside `lines` under a heading, on the cards'
 ## cream, on the character's layer so it stands over the fight. Its X is up at once and it goes by
-## itself after `BANNER_HOLD`. Raised by a unique new to the log, a bounty filled and an achievement.
+## itself after `BANNER_HOLD` (`_process`, `_input`: see the const). Raised by a unique new to the log, a bounty filled and an achievement.
 ##
 ## While a question or an answer stands over the window (`_popup_up`) it waits instead: raised then,
 ## it lay over the pop-up's title. The latest one waiting goes up once the window is clear (`_process`).
@@ -1138,12 +1167,7 @@ func _raise_banner(title: String, colour: Color, square: Control, lines: Array[C
 		var spring := create_tween()
 		spring.tween_property(panel, "scale", Vector2(ui_scale, ui_scale), 0.25).set_trans(
 				Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	# Through a weak reference, not `bind(panel)`: a banner put down early has been freed by then, and a
-	# freed Object captured by a lambda is an error logged; a weak reference to it is null and nothing else.
-	var held: WeakRef = weakref(panel)
-	get_tree().create_timer(BANNER_HOLD).timeout.connect(func() -> void:
-		if _banner != null and _banner == held.get_ref():
-			_close_banner())
+	_banner_left = BANNER_HOLD
 
 
 ## Centred under the fight's top column, which is the one thing it must not cover. Run again whenever
@@ -1178,16 +1202,8 @@ func _place_banner(spark := false) -> void:
 ## it from being pressed; the item card and the tooltips are lifted back over it.
 func _show_bounty_paid(enemy: String, gold: float, xp: int, orbs: Dictionary, piece: Item) -> void:
 	_close_bounty_paid()
-	var layer := _character.get_parent()
-	_paid = Control.new()
-	_paid.theme = UITheme.theme()
-	_paid.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_paid.mouse_filter = Control.MOUSE_FILTER_STOP
-	layer.add_child(_paid)
-	var panel := UITheme.titled_panel("Bounty claimed", "", Callable())
-	# Named, because the win's wash goes in under it and it is no longer the first child.
-	panel.name = "Panel"
-	_paid.add_child(panel)
+	_paid = _catch("Bounty claimed", Callable())
+	var panel := _paid.get_node("Panel") as VBoxContainer
 	var body := UITheme.body_of(panel)
 	body.add_theme_constant_override("separation", 8)
 	var whom := UITheme.label(enemy)
@@ -1212,11 +1228,6 @@ func _show_bounty_paid(enemy: String, gold: float, xp: int, orbs: Dictionary, pi
 	collect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	collect.pressed.connect(_leave_bounty_paid)
 	body.add_child(collect)
-	# The cards are on this layer too, and a later child draws over an earlier one.
-	layer.move_child(_item_card, -1)
-	for card: Node in layer.get_children():
-		if card is TipCard:
-			layer.move_child(card, -1)
 	var centre := func() -> void:
 		if is_instance_valid(panel):
 			Juice.centre(panel, get_viewport_rect().size)
@@ -1254,16 +1265,136 @@ func _paid_sum(mark: TextureRect, amount: float) -> HBoxContainer:
 	return row
 
 
-## Collect and Escape: the panel shrinks away, then goes.
+## Collect and Escape: the panel shrinks away, then goes -- and a board the claim cleared puts up its
+## reward in its place.
 func _leave_bounty_paid() -> void:
 	if _paid != null:
-		Juice.pop_out(_paid.get_node("Panel"), _close_bounty_paid)
+		Juice.pop_out(_paid.get_node("Panel"), func() -> void:
+			_close_bounty_paid()
+			_show_board_choice())
 
 
 func _close_bounty_paid() -> void:
 	if _paid != null:
 		_paid.queue_free()
 		_paid = null
+
+
+## A screen-wide catch on the character panel's layer, so the town under it cannot be pressed, with a
+## titled panel in it named "Panel" (`close` its X; none where it is empty) and the item card and the
+## tooltips lifted back over it.
+func _catch(title: String, close: Callable) -> Control:
+	var layer := _character.get_parent()
+	var catch := Control.new()
+	catch.theme = UITheme.theme()
+	catch.set_anchors_preset(Control.PRESET_FULL_RECT)
+	catch.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(catch)
+	var panel := UITheme.titled_panel(title, "", close)
+	# Named, because the win's wash goes in under it and it is no longer the first child.
+	panel.name = "Panel"
+	catch.add_child(panel)
+	# The cards are on this layer too, and a later child draws over an earlier one.
+	layer.move_child(_item_card, -1)
+	for card: Node in layer.get_children():
+		if card is TipCard:
+			layer.move_child(card, -1)
+	return catch
+
+
+## A cleared board's reward, Hearthstone's way: its options side by side, each its square (a piece opens
+## its card under the cursor, as anywhere), its name and Take. One is taken and the rest go. The X and
+## Escape put them away untaken, to come back from the board's Reward (`TownPage.choice_asked`).
+## The first time, the smith says why over it (`first_board_cleared`).
+func _show_board_choice() -> void:
+	_close_board_choice()
+	var offered := town_page.pending_choice() if town_page.visible else []
+	if offered.is_empty():
+		return
+	_choice = _catch("Board cleared", _leave_board_choice)
+	var panel := _choice.get_node("Panel") as VBoxContainer
+	var cards := HBoxContainer.new()
+	cards.add_theme_constant_override("separation", CHOICE_GAP)
+	UITheme.body_of(panel).add_child(cards)
+	var squares := []
+	for i in offered.size():
+		var option: Dictionary = offered[i]
+		var piece: Item = option.get(BountyBoard.CHOICE_ITEM)
+		var card := UITheme.vbox(6, CHOICE_WIDTH)
+		cards.add_child(card)
+		var square: Control
+		var called: Label
+		if piece != null:
+			square = ItemSlot.make(piece)
+			called = UITheme.label(piece.display_name(), piece.text_color(), true)
+		elif option.has(BountyBoard.CHOICE_GOLD):
+			square = _pile_square(Coins.icon())
+			called = UITheme.label("%s gold" % BigNumber.format(float(option[BountyBoard.CHOICE_GOLD])), Palette.TEXT, true)
+		elif option.has(BountyBoard.CHOICE_XP):
+			square = _pile_square(BountyList.XP_GEM)
+			called = UITheme.label("%s experience" % BigNumber.format(float(option[BountyBoard.CHOICE_XP])),
+					Palette.TEXT, true)
+		else:
+			var orb := str(option[BountyBoard.CHOICE_ORB])
+			square = OrbSlot.make(orb, int(option[BountyBoard.CHOICE_COUNT]), true, false, ItemSlot.SIDE)
+			# Read, not pressed: Take is what takes it.
+			Cursors.wear(square, Cursors.ARROW)
+			square.tooltip_text = OrbTable.describe(orb)
+			called = UITheme.label(orb, Palette.TEXT, true)
+		square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		card.add_child(square)
+		squares.append(square)
+		called.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		called.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		called.custom_minimum_size.x = CHOICE_WIDTH
+		# The names wrap to different heights, and the three Takes still stand on one line.
+		called.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		card.add_child(called)
+		var why := town_page.why_not_take(i)
+		var take := UITheme.button("Take", "SmallGoButton", why if not why.is_empty() else "Take this one")
+		take.disabled = not why.is_empty()
+		take.pressed.connect(_on_choice_taken.bind(i))
+		card.add_child(take)
+	var centre := func() -> void:
+		if is_instance_valid(panel):
+			Juice.centre(panel, get_viewport_rect().size)
+	panel.resized.connect(centre)
+	Juice.pop_in(panel, ui_scale)
+	Juice.reveal(squares)
+	# The smith's word, over the three, the first time a board is cleared.
+	_check_tips()
+	await get_tree().process_frame
+	if not is_instance_valid(panel):
+		return
+	centre.call()
+	Juice.celebrate(_choice, panel, ui_scale, (panel.get_child(0) as Control).size.y)
+
+
+## A pile of gold or experience as a square: its mark on a plain socket at the largest whole scale the
+## icon's room takes, so a pixel stays square (the coin at 2x, the gem at 5x).
+static func _pile_square(mark: Texture2D) -> ItemSlot:
+	var square := ItemSlot.teaser(mark, ItemRarity.Rarity.COMMON, 0, "")
+	var icon := square.get_child(0) as TextureRect
+	icon.size = mark.get_size() * floorf(ItemSlot.ICON / mark.get_size().x)
+	icon.position = (square.custom_minimum_size - icon.size) / 2.0
+	return square
+
+
+func _on_choice_taken(index: int) -> void:
+	if town_page.take_choice(index):
+		_leave_board_choice()
+
+
+## Take, the X and Escape: the three shrink away, then go. Untaken, they wait in the town's drawer.
+func _leave_board_choice() -> void:
+	if _choice != null:
+		Juice.pop_out(_choice.get_node("Panel"), _close_board_choice)
+
+
+func _close_board_choice() -> void:
+	if _choice != null:
+		_choice.queue_free()
+		_choice = null
 
 
 func _close_banner() -> void:
@@ -1654,8 +1785,8 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# Before the panel is hidden: leaving a town brings the tile panel back, which a fight then takes away.
 	_close_town()
 	_panel.hide()
-	# Every button but the bag's goes, not just covered: a Control takes the mouse before the fight
-	# sees it, so one left in that corner would quietly eat the player's swings.
+	# Every button but the bag's and the settings' goes, not just covered: a Control takes the mouse
+	# before the fight sees it, so one left in that corner would quietly eat the player's swings.
 	_close_left_pages()
 	_show_corner(false)
 	_character.show()
@@ -1823,14 +1954,19 @@ func _on_combat_finished(won: bool, cell: Vector2i, retrying := false) -> void:
 
 
 ## Every wall down in this world that has not yet paid its super orb pays it, and the save says
-## so; the land's furthest reach is written down, and the world's cave is put down if it is due. Asked wherever a wall can have fallen -- a tile charted -- and once at start-up, which is what
+## so; the heirlooms climb to the land charted, the land's furthest reach is written down, and the world's cave is put down if it is due. Asked wherever a wall can have fallen -- a tile charted -- and once at start-up, which is what
 ## pays a save from before there were heirlooms for the walls it already has down.
 func _credit_walls() -> void:
 	var paid := inventory.credit_walls(view.walls_fallen())
 	if paid:
 		print("A wall is down: %d super orb(s) to spend at a transcension" % inventory.super_orbs)
+	# The heirlooms climb with the land charted; a page already up shows the new levels.
+	var climbed := inventory.raise_heirlooms(view.charted_level())
+	if climbed and bag_page != null:
+		bag_page.refresh()
+		heirloom_page.refresh()
 	# How far the land has ever reached is the cave's bound in every world after this one.
-	if inventory.reach(view.land_radius) or paid:
+	if inventory.reach(view.land_radius) or paid or climbed:
 		inventory.save(inventory_path)
 	# One cave a world, once any wall in any world has fallen: now, or the moment the first one does.
 	if view.place_cave(inventory.farthest_land):
@@ -2146,8 +2282,8 @@ func _move_corner(button: Button, at: Vector2) -> void:
 ## Every corner button at once. They come and go together because what takes them away is never
 ## about one of them: a fight that must see every click, or a town, whose three panels leave the
 ## window no room. A page does not -- they stand beside it (`_place_corner`) -- but it does cover the
-## character panel, and the see-through button over that goes with it. **A fight leaves the bag's**
-## until its verdict (`_fight_up`): the bag can be opened over every fight (the user's, 2026-10-02).
+## character panel, and the see-through button over that goes with it. **A fight leaves the bag's and
+## the settings'** until its verdict (`_fight_up`): both open over every fight (the user's, 2026-10-02, 2026-10-03).
 func _show_corner(shown: bool) -> void:
 	shown = shown and _combat == null
 	# The one button a town leaves standing, because it is the only way to hold an heirloom up to a
@@ -2162,9 +2298,14 @@ func _show_corner(shown: bool) -> void:
 	# The journal has nothing in it until the player has stood at a board, which is also when their
 	# kills start counting towards one.
 	_bounty_button.visible = shown and BountyBoard.any_seen(inventory.towns)
-	# Nothing earns the settings: they are there from the first step.
-	_settings_button.visible = shown
-	_character_button.visible = shown and _left_page() == null
+	# Nothing earns the settings: they are there from the first step, and over a fight as the bag is.
+	_settings_button.visible = shown or _fight_up()
+	_character_button.visible = (shown or _combat != null) and _left_page() == null
+	# Over a fight it stays only for the experience bar's tooltip (`xp_hover`, which lets every press
+	# through): the button itself takes no mouse there, no key and no hand.
+	_character_button.disabled = not shown
+	_character_button.mouse_filter = Control.MOUSE_FILTER_STOP if shown else Control.MOUSE_FILTER_IGNORE
+	Cursors.wear(_character.xp_hover, Cursors.HAND if shown else Cursors.ARROW)
 	# The log is a thing to be found, like what it lists: it is not there until the first unique is.
 	_collection_button.visible = shown and (Settings.show_all_uniques()
 			or not inventory.uniques_found.is_empty())
@@ -2214,6 +2355,9 @@ func _tip_due(id: String) -> bool:
 			return town_page.visible and town_page.open_tab() == TownServices.FORTUNE
 		"first_smith":
 			return town_page.visible and town_page.open_tab() == TownServices.SMITH
+		"first_board_cleared":
+			# Over the reward it is about, so he is handing it over as he says so.
+			return _choice != null
 		"first_cave":
 			return view != null and view.cave != HexMap.NO_CELL and view.seen(view.cave) and view.is_land(view.cave)
 		"first_sense":
@@ -2330,8 +2474,11 @@ func _skill_point_free() -> bool:
 	return false
 
 
-## A new unique hovered in the log: kept.
-func _on_unique_seen() -> void:
+## Something new on the collection or achievements page hovered, or the page closed over it: kept.
+## Never on the black screen, where nothing may save, nor over a refused or reset save.
+func _on_log_seen() -> void:
+	if _resetting or _save_blocked or _transcend_page != null:
+		return
 	inventory.save(inventory_path)
 
 
@@ -2444,19 +2591,18 @@ func _on_bounty_pressed() -> void:
 	_toggle_left_page(bounty_page)
 
 
-## The first press stills the trophy for good; a new find glints in the log itself until hovered.
+## The first press stills the book for good; a new find glints in the log itself until hovered or
+## the page is closed.
 func _on_collection_pressed() -> void:
 	_stop_flash("opened_collection")
 	_toggle_left_page(collection_page)
 
 
-## The first press stills the trophy for good. Opening the page is seeing what was earned.
+## The first press stills the trophy for good; a new achievement glints on the page until hovered or
+## the page is closed.
 func _on_achievements_pressed() -> void:
 	_stop_flash("opened_achievements")
 	_toggle_left_page(achievements_page)
-	if achievements_page.visible and not inventory.achievements_new.is_empty():
-		inventory.achievements_new.clear()
-		inventory.save(inventory_path)
 
 
 ## After every save: earns what the player has reached (`Achievements.earn`), keeps it, and raises the
@@ -2710,6 +2856,10 @@ func _input(event: InputEvent) -> void:
 	Cursors.feel(event)
 	Cursors.twitch(get_tree(), event)
 	_pinch(event)
+	# Let through, so the press still swings or picks what it landed on.
+	if _banner_left <= 0.0 and event is InputEventMouseButton and event.pressed \
+			and not _over_banner(event.position):
+		_close_banner()
 
 
 ## Two fingers spread or pinched over bare map zoom it a whole step at a time (`PINCH_STEP` of spread
@@ -2777,6 +2927,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_on_tip_closed()
 	elif _paid != null:
 		_leave_bounty_paid()
+	elif _choice != null:
+		_leave_board_choice()
 	elif not _aiming.is_empty():
 		_end_aim()
 	# A fight answers for itself unless the bag stands over it (`CombatScene.page_up`).

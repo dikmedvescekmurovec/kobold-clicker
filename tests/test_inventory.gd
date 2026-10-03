@@ -1300,8 +1300,12 @@ func _test_the_map_keeps_what_dropped() -> bool:
 			"choosing a tile closes the page and brings the tile's panel up")
 	main._on_chart_pressed()
 	main.map.player.finish_walk()
-	_check(main._bag_button.visible and not main._settings_button.visible and not main._character_button.visible,
-			"the bag's is the one corner button a fight leaves")
+	_check(main._bag_button.visible and main._settings_button.visible and not main._skills_button.visible
+			and main._character_button.mouse_filter == Control.MOUSE_FILTER_IGNORE
+			and main._character_button.disabled, "the bag's and the settings' are the corner buttons a fight leaves")
+	_check(main._character.xp_hover.is_visible_in_tree()
+			and main._character.xp_hover.mouse_filter == Control.MOUSE_FILTER_PASS,
+			"the experience bar's tooltip stays over a fight, letting every press through to the swing")
 	var fight: Encounter = main._combat.fight
 	_check(fight.guarantee_elite, "the first elite is promised a drop")
 	fight.loot_rng.seed = WORLD_SEED
@@ -1611,8 +1615,8 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 	var combat: CombatScene = main._combat
 	_check(fight.endless, "and it is endless")
 	_check(combat._terminate != null, "with a way out of it on the screen")
-	_check(main._bag_button.visible and not main._settings_button.visible,
-			"and the bag the one corner button left standing")
+	_check(main._bag_button.visible and main._settings_button.visible and not main._skills_button.visible,
+			"and the bag and the settings the corner buttons left standing")
 	fight.loot_rng.seed = WORLD_SEED
 	# Every body carries something, so three finds is three kills. What is under test is where a
 	# run's finds go, not how often one falls -- at the real 3% this would be a hundred-odd kills.
@@ -1644,13 +1648,13 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 	await process_frame
 	_check(not combat._loot_panel.visible, "and Close puts it away")
 
-	# The bag opens over the run, on a layer above the fight's, and nothing else of the corner comes with it.
+	# The bag opens over the run, on a layer above the fight's, and of the rest of the corner only the settings come with it.
 	main._on_bag_pressed()
 	await process_frame
 	_check(main.bag_page.visible and main._combat == combat, "the bag opens over the run")
 	_check(main._ui_layer.layer > combat.layer, "drawn over the fight")
-	_check(not main._skills_button.visible and not main._settings_button.visible,
-			"with no other page to be had")
+	_check(not main._skills_button.visible and main._settings_button.visible,
+			"with the settings the one other page to be had")
 	# A piece put on mid-fight counts from the next blow.
 	var bare: float = fight.damage
 	var sword := _piece(ItemRarity.Rarity.RARE, 1)
@@ -1682,7 +1686,8 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 	combat._on_terminate_pressed()
 	await process_frame
 	_check(fight.finished and fight.victory, "terminating ends the run, and not as a loss")
-	_check(not main.bag_page.visible and not main._bag_button.visible, "the verdict puts the bag and its button away")
+	_check(not main.bag_page.visible and not main._bag_button.visible and not main._settings_button.visible,
+			"the verdict puts the bag and its button away, and the settings'")
 	main._combat._on_back_pressed()
 	await process_frame
 	var saved := Inventory.load_from(TEST_PATH)
@@ -1750,14 +1755,9 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 	# As above: every body carries something, so the rule has something to throw away at once.
 	fight.always_drop = true
 	_check(combat.bag_room == 0, "a full bag leaves the fight no room")
-	# Which is said by the counter's own face and nowhere else until it is opened: the warning is a
-	# line inside its panel now, not a sign standing in the arena.
+	# Which is said by the counter's own face and nowhere else.
 	combat._refresh()
-	_check(not combat._warning.is_visible_in_tree(), "the warning stays inside the counter's panel")
-	_check(combat._loot_filled == 1.0, "and the counter's face is at the red end of its ramp")
-	combat._on_loot_pressed()
-	_check(combat._warning.visible, "opening the counter is what says why")
-	combat.close_loot()
+	_check(combat._loot_filled == 1.0, "the counter's face is at the red end of its ramp")
 
 	var guard := 0
 	while combat._auto_discarded < 3 and guard < 2000:
@@ -2134,6 +2134,8 @@ func _test_heirlooms() -> bool:
 			"the stash goes along, at level 1")
 	var still_on: Item = next.stash().equipment.items()[0]
 	_check(still_on.level == 1 and still_on.safe_level == 18, "and the heirlooms' doll stays dressed")
+	_check(next.raise_heirlooms(16) and next.stash().items[0].level == 15 and still_on.level == 16,
+			"both climb with the land charted, the stash's and the doll's, each no further than it had been")
 	_check(held.level == 15 and on_doll.level == 18, "the inventory that was left is untouched, should the write fail")
 
 	# A version 14 save's unspent picks are orbs now.
@@ -2699,6 +2701,15 @@ func _test_level_rolls() -> bool:
 	for i in floors.size() - 1:
 		_check(floors[i] <= floors[i + 1], "rarity %d starts no higher up the range than %d" % [i, i + 1])
 	_check(floors[0] == 0.0, "a common piece can roll the bottom of the range")
+
+	# A body's drop: never past its tile and its tier, but a common body now and then one level past
+	# its tile outright -- and only that one.
+	for tier: EnemyRoster.Tier in LootTable.TIER_LEVEL:
+		var most := 0
+		for i in ROLLS:
+			most = maxi(most, LootTable.drop_level(tier, 3, ItemRarity.Rarity.COMMON, rng))
+		var want_most := 3 + maxi(int(LootTable.TIER_LEVEL[tier]), 1 if tier == EnemyRoster.Tier.COMMON else 0)
+		_check(most == want_most, "a tier-%d body on a level-3 tile drops up to %d, not %d" % [tier, want_most, most])
 	return true
 
 
@@ -4503,9 +4514,13 @@ func _test_achievements() -> bool:
 	main._close_banner()
 	main._on_achievements_pressed()
 	await process_frame
-	_check(main.achievements_page.visible and main.inventory.achievements_new.is_empty()
+	_check(main.achievements_page.visible and main.inventory.achievements_new == ["duelists_buckler"]
 			and not main._flashes.has("opened_achievements"), "the page opens and the pulse stops for good")
 	var tiles: Array = main.achievements_page.find_children("*", "ItemSlot", true, false)
+	var glinting := tiles.filter(func(s: ItemSlot) -> bool: return s.has_node(ItemSlot.GLINT_NAME))
+	_check(glinting.size() == 1 and glinting[0].item.unique == "duelists_buckler"
+			and tiles.all(func(s: ItemSlot) -> bool: return (s.get_child(0) as TextureRect).material == null),
+			"only the new one glints (%d)" % glinting.size())
 	_check(tiles.size() == Achievements.ACHIEVEMENTS.size(), "one square an achievement (%d)" % tiles.size())
 	_check(_by_name(tiles.map(func(slot: ItemSlot) -> String:
 			return str(Achievements.ACHIEVEMENTS[slot.item.unique]["name"]))), "the squares stand by the achievement's name")
@@ -4542,6 +4557,12 @@ func _test_achievements() -> bool:
 	_check(said.contains("Rank II of IV") and said.contains(Achievements.text("duelists_buckler", 3))
 			and said.contains("Strengthens Duelist's Buckler"), "an earned one's says its rank and asks the next (%s)" % said)
 	rows.free()
+	_check(glinting[0].has_node(ItemSlot.GLINT_NAME), "and it glints on until hovered")
+	# Closed without a hover: the page closing is seeing it.
+	main._on_left_page_closed()
+	await process_frame
+	_check(main.inventory.achievements_new.is_empty() and Inventory.load_from(TEST_PATH).achievements_new.is_empty(),
+			"closing the page stills it, and that is saved")
 	# A corner key presses its button: O opens the settings (always there) in the page's place, and the
 	# button's tip card names the key. A key whose button has not come yet does nothing: K, before a level.
 	var key := InputEventKey.new()
@@ -4613,6 +4634,14 @@ func _test_collection() -> bool:
 			"the log is the starters, then the rest, each by name")
 	var fresh: Array = squares.filter(func(slot: ItemSlot) -> bool: return slot.has_node(ItemSlot.GLINT_NAME))
 	_check(fresh.size() == 1 and fresh[0].item.unique == "metronome", "the new find glints (%d)" % fresh.size())
+	var shining := 0
+	for square: ItemSlot in squares:
+		var frame := square.get_node_or_null(ItemSlot.FRAME_NAME) as TextureRect
+		var icon := square.get_child(0) as TextureRect
+		if (frame != null and frame.material != null) or (icon.material is ShaderMaterial
+				and (icon.material as ShaderMaterial).shader == ItemSlot.SHINE):
+			shining += 1
+	_check(shining == 0, "and nothing else on the page does (%d)" % shining)
 	fresh[0].hint.call(VBoxContainer.new(), 100.0)
 	await process_frame
 	_check(not fresh[0].has_node(ItemSlot.GLINT_NAME), "hovering it stills its glint")
@@ -4708,8 +4737,11 @@ func _test_collection() -> bool:
 			func(square: ItemSlot) -> bool: return square.modulate == Color.WHITE and square.get_node_or_null(ItemSlot.FRAME_NAME) != null),
 			"the dev setting shows every unique as found (%d)" % squares.size())
 	Settings.all_uniques = false
+	main.inventory.uniques_new.append("metronome")
 	main._on_left_page_closed()
 	_check(not main.collection_page.visible and main._collection_button.visible, "the X puts it away")
+	_check(main.inventory.uniques_new.is_empty() and Inventory.load_from(TEST_PATH).uniques_new.is_empty(),
+			"and a new find it closes over unhovered is seen, and that is saved")
 	# The banner: raised by a unique the log has never held, and by nothing else.
 	var drop_rng := RandomNumberGenerator.new()
 	drop_rng.seed = 7
@@ -4723,8 +4755,31 @@ func _test_collection() -> bool:
 	swing.pressed = true
 	main._input(swing)
 	_check(main._banner != null, "a swing leaves it up")
+	# The mouse on it holds it past its seconds (a headless run has no mouse to move, so it is asked).
+	_check(main._over_banner(main._banner.get_global_rect().get_center()) and not main._over_banner(Vector2.ZERO),
+			"the mouse is on it over its middle and off it in the corner")
 	await create_timer(main.BANNER_HOLD + 0.1).timeout
-	_check(main._banner == null, "and it goes by itself after its seconds")
+	_check(main._banner == null, "and it goes by itself after its seconds with the mouse off it")
+	# Under a finger it never goes by itself: only a tap off it, once its seconds are up.
+	var tap := InputEventMouseButton.new()
+	tap.button_index = MOUSE_BUTTON_LEFT
+	tap.pressed = true
+	tap.device = InputEvent.DEVICE_ID_EMULATION
+	main._input(tap)
+	main._on_loot_dropped(0, Item.rolled_unique("brawlers_wraps", drop_rng, 5))
+	await process_frame
+	main._input(tap)
+	_check(main._banner != null, "under a finger a tap off it before its seconds leaves it up")
+	await create_timer(main.BANNER_HOLD + 0.1).timeout
+	_check(main._banner != null, "and it never goes by itself")
+	tap.position = main._banner.get_global_rect().get_center()
+	main._input(tap)
+	_check(main._banner != null, "a tap on it leaves it up")
+	tap.position = Vector2.ZERO
+	main._input(tap)
+	_check(main._banner == null, "a tap off it after its seconds puts it down")
+	main._input(swing)
+	_check(not Cursors.touched, "a mouse press puts the finger's rule away")
 	main._on_loot_dropped(0, Item.rolled_unique("stonebreaker", drop_rng, 5))
 	_check(main._banner == null, "a second copy of one already logged raises nothing")
 	main._on_loot_dropped(0, LootTable.roll("Baby Dragon", drop_rng, true, 5))

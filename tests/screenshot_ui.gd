@@ -480,6 +480,40 @@ func _shoot_town() -> void:
 		print("Saved ", ProjectSettings.globalize_path("user://ui_town_claimed.png"))
 		main._close_bounty_paid()
 
+	# What clearing a board offers, at tier III: three side by side, one to take. Written into the drawer
+	# straight, and taken out again after, so the board's shots below have no Reward on them.
+	var here_drawer: Dictionary = main.inventory.towns.visit(main.view.origin + town)
+	var choice_rng := RandomNumberGenerator.new()
+	choice_rng.seed = WORLD_SEED
+	# The first as rolled, then the two piles, which have squares of their own.
+	var offered := BountyBoard.roll_choice(3, town, choice_rng)
+	offered[1] = {BountyBoard.CHOICE_GOLD: BountyBoard.pile_gold(3, town)}
+	offered[2] = {BountyBoard.CHOICE_XP: BountyBoard.pile_xp(3, town)}
+	here_drawer[BountyBoard.CHOICE] = offered
+	# One posting handed in behind it, so the board's heading shows a gold pip and the chest lit.
+	if board.size() > 1:
+		board[0][BountyBoard.DONE] = true
+		main.town_page._fill()
+		main.town_page.layout()
+	main._show_board_choice()
+	await create_timer(Juice.REVEAL_DELAY + Juice.REVEAL_MOST + Juice.REVEAL_TIME + 0.2).timeout
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_board_choice.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_board_choice.png"))
+	# And the smith over it, as the first board a player clears has him: that tip unseen again.
+	main.inventory.tips.erase("first_board_cleared")
+	main._check_tips()
+	await create_timer(Juice.POP_TIME + 0.1).timeout
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_board_dialogue.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_board_dialogue.png"))
+	main._on_tip_closed()
+	main._close_board_choice()
+	here_drawer.erase(BountyBoard.CHOICE)
+	if board.size() > 1:
+		board[0][BountyBoard.DONE] = false
+	await create_timer(Juice.LEAVE_TIME + 0.1).timeout
+
 	# The same board with the work out taken at another town instead: that bounty's card first, saying
 	# where it is handed in, and this board's own postings under it, dimmed. Put back after, so the
 	# journal's shots below see the work they always did.

@@ -37,7 +37,8 @@ var broken := false
 ## second answer.
 var unique := ""
 ## The level an heirloom had when the world was last left behind, 0 for every piece that never was one.
-## The smith walks it back up to here without a chance of breaking it (`Blacksmith.break_chance`).
+## It climbs back up to here by itself as the land is charted (`Inventory.raise_heirlooms`), and the
+## smith will not take it there sooner (`Blacksmith.can_upgrade`).
 var safe_level := 0
 ## How many Orbs of Ascension have gone into it (`SuperOrbTable`), written after its name as "+2".
 ## Its modifiers roll, reroll and rescale as if the piece were `PLUS_LEVELS` levels higher for each
@@ -112,7 +113,7 @@ static func scaled_stats(item_type: String, item_level: int) -> Dictionary:
 ## run never costs a piece what a long one earned. Rarity, locks, `broken` and `unique` do not move.
 ## The one hand that moves a held-fast line: from its own band to the new level's, and held there.
 ## Each line remembers the best tier it has had (`"peak"`) and drops only as far as level 1 makes it;
-## the smith walks it back up (`level_up`).
+## it climbs back up as the land is charted (`Inventory.raise_heirlooms`, a `level_up` a level).
 func transcend() -> void:
 	safe_level = maxi(safe_level, level)
 	var was := mods.map(tier_of)
@@ -128,7 +129,7 @@ func transcend() -> void:
 	stats = scaled_stats(type, 1)
 
 
-## The smith's upgrade: one level, the base stats a fresh roll there would carry, and every modifier
+## The smith's upgrade, and an heirloom's climb with the land: one level, the base stats a fresh roll there would carry, and every modifier
 ## kept at its tier and number (the user's ruling) -- but an heirloom's line climbs a tier a level
 ## back towards the one it had before its world ended (`"peak"`), never past what the level allows,
 ## its number keeping its place in the band. Held-fast lines read their band at `"at"` and do not move.

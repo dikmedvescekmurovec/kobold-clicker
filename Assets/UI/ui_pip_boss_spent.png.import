@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://r0lnneadkmsp"
-path="res://.godot/imported/ui_pip_head_common.png-9ac5c3011dcad03148934ff84bcdcf0c.ctex"
+uid="uid://doa1kd2o3oyuo"
+path="res://.godot/imported/ui_pip_boss_spent.png-06a475d70935a6e364ea5195640d571f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/UI/ui_pip_head_common.png"
-dest_files=["res://.godot/imported/ui_pip_head_common.png-9ac5c3011dcad03148934ff84bcdcf0c.ctex"]
+source_file="res://Assets/UI/ui_pip_boss_spent.png"
+dest_files=["res://.godot/imported/ui_pip_boss_spent.png-06a475d70935a6e364ea5195640d571f.ctex"]
 
 [params]
 

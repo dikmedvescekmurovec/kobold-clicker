@@ -76,7 +76,7 @@ A fortress is the only settlement with one, which is the whole of what makes the
 
 The upgrade **can break the piece**, one time in twenty. That is what stops the smith being a gold-for-levels machine with nothing to think about: a piece walked five levels is a piece that survived five real chances of ruin, and it is worth something for that reason as much as for its numbers. A break is deliberately not a loss of the piece -- it is still worn, still sold, and simply never changed again -- because destroying what the player was carrying would make the button one nobody presses. There is no safer, dearer upgrade to buy instead: two buttons would turn every press into a sum, and the whole of the design here is a press you can make without one.
 
-The **cap** is `MapBuilder.circle_level(town cell) + LootTable.TIER_LEVEL[BOSS]`: what a boss on the deepest land of the town's wall circle could drop. It was `level_of(town cell)`, the town's own tile, until the user asked (2026-09-28) for it to be gated per wall tier instead: every fortress between the same two walls now works to the same ceiling, so which one the player happens to find first stops mattering, and the ceiling rises when a wall falls -- the frontier the game is actually built around. A fortress near the inner wall can take a piece a few levels past what its own tile drops, never past what its circle does. The cap is handed to `Blacksmith` rather than worked out in it, because what a level means on a map is the map's business.
+The **cap** is `MapBuilder.circle_level(town cell)`: the level of the deepest land of the town's wall circle, 3 inside the first wall. Until 2026-10-03 a boss's `TIER_LEVEL` rode on top -- what a boss there could drop -- and the user took it off: the smith takes a piece as far as the land goes, and only a body past its tile's level hands over more. It was `level_of(town cell)`, the town's own tile, until the user asked (2026-09-28) for it to be gated per wall tier instead: every fortress between the same two walls now works to the same ceiling, so which one the player happens to find first stops mattering, and the ceiling rises when a wall falls -- the frontier the game is actually built around. A fortress near the inner wall can take a piece a few levels past what its own tile drops, never past what its circle does. The cap is handed to `Blacksmith` rather than worked out in it, because what a level means on a map is the map's business.
 
 **Lock** pins one modifier to a piece for good: every orb then rerolls around it, and a Divine steps over its value. No orb takes a piece down a rarity, so a locked piece is never a common, which would be a contradiction in `ItemRarity.MOD_COUNT`. The locked line is one of the rarity's handful and never an extra on top, so the ceilings all still hold -- which is what keeps a lock from being a back door to a seven-modifier elite.
 
@@ -289,7 +289,7 @@ Transcending is sold by the fortuneteller (the user's choice over a button in th
 
 **Asked, then done, and never charged.** The first press only turns her list into her answer -- what stays, what goes, and the price -- over a back arrow and the button that does it, the settings' Reset pattern rather than a new dialog. A short purse greys the deed and not the asking, since the asking is where the price is said. Nothing is deducted: the purse is one of the things left behind. Both buttons wear a coin and no figure, as Claim does -- with the figure on it the button under her answer widened the page by some fifty panel pixels, into the room the comparison and the crown stand in (the first screenshots showed it).
 
-**The smith and an heirloom.** `Blacksmith.break_chance` is nothing under `Item.safe_level`, and the ground's cap still holds: an heirloom that was level 30 is walked back to 30 only where the ground allows 30. To hold one up to him at all, the heirlooms' page has to stand at the counter, so the crown is the one corner button a town leaves standing, and pressed there it swaps the two bag pages. The window had room: the crown stands past the comparison at 745-785 px and the town page begins at 833 (`ui_town_heirloom_smith.png`).
+**The smith and an heirloom.** ~~`Blacksmith.break_chance` is nothing under `Item.safe_level`, and the ground's cap still holds: an heirloom that was level 30 is walked back to 30 only where the ground allows 30.~~ Since 2026-10-03 he does not walk it back at all: it climbs by itself with the land charted, and he takes it only from its `safe_level` on, at the ordinary risk (`Scenes/Items/DESIGN.md`, "Heirlooms climb with the land"). To hold one up to him at all, the heirlooms' page has to stand at the counter, so the crown is the one corner button a town leaves standing, and pressed there it swaps the two bag pages. The window had room: the crown stands past the comparison at 745-785 px and the town page begins at 833 (`ui_town_heirloom_smith.png`).
 
 **Reworked 2026-09-20:** her answer no longer says what goes along. The user wanted a warning that all progress is lost and that the reward is great, without saying what it is; the black screen after it (`TranscendPage`) is where the player finds out. See the last section of `Scenes/Items/DESIGN.md`. **2026-09-30:** "All you have made here is lost" was not true -- the heirlooms, the collection, the achievements and the depth go along -- so it names what is lost ("Your bag, gold, orbs, levels and this land are lost") and still says nothing of what is kept, as the 2026-09-20 ruling asks.
 
@@ -328,3 +328,51 @@ thing the board was said to be for. Finding a tile of that land is now the map's
 is for. A save's `located` key on a posting is read by nothing, and her `quarry` count in `inventory.fortunes` is
 never asked again. The same day the swatches became hexagons, a quarter of the map tile ringed in the cards' slot
 brown -- the user's pick of four mockups (`HexTileset.ENV_HEX_ROWS`), on the tile panel's rows as well.
+
+## Board tiers and the clearing choice (2026-10-03)
+
+The user found bounties unrewarding. Everything a posting paid -- gold, experience, a vendor's orb, a piece
+at the town's ceiling -- the ground paid too, and clearing a whole board earned nothing that one more
+posting did not. Two things went in together.
+
+**A town's board has a tier, I to III.** It goes up by one for every board that town clears, and stops at
+III (the user: "cap the tiers at 3"). It is a **per-town record** (`CLEARS` in the drawer), so a town the
+player keeps coming back to becomes worth more than one they pass through, and a new town starts at I. A
+higher tier asks for more bodies (the user's answer to whether "tougher assignments" should mean more
+work) and pays better on every line: more gold, experience and orbs, the rarity drawn more times, a
+unique likelier, and every ascension step likelier. The user turned down tiers that switch things on
+(a fourth "Wanted" card, a vendor a rarity better, and so on): "just improve the rarity in general".
+
+**Clearing a board offers three rewards, and the player takes one** -- Hearthstone's way, the user's
+reference. All three are good, and they are three *different* kinds drawn at random from five: an
+ascended epic, an epic above the town's ceiling in the best material that level has, a unique, an
+ascended unique, and a handful of one of the three dearest orbs (Divinity, Chaos, Exaltation). The tier
+makes each one better: more ascensions, more levels, more orbs. The bundle **keeps the walls' unlock**
+(the user's ruling of the same day: every way an orb is had draws only from what the walls have
+unlocked), so before the first wall falls there is no bundle, and the three come from the other four.
+
+The options are **rolled whole when the board is cleared and written down** in the town's drawer, the
+way a shelf is. They are real pieces that the player can open and compare against their own, which a
+promise could not offer. And nothing that happens before one is taken -- a closed game, the X, a full
+bag -- rerolls them or loses them: the board's **Reward** puts them back up.
+
+**The first clear has the smith say so** (`first_board_cleared`), over the choice he is handing over:
+the player is a proper adventurer, here is some of his best work, and he will tell the board they can
+take the nastier jobs, which pay better. That is the tier explained in his voice instead of in a
+sentence on the page. He says it in a village too, where he has no counter.
+
+Every number is a dial for the user, unplayed: `TIER_*`, `CHOICE_PLUS`, `CHOICE_LEVELS`, `CHOICE_ORBS`.
+
+**The same day the user reshaped the reward (2026-10-03), and widened it to eight kinds.** The first
+cut grew every option fast with the tier (+1/+2/+3 ascensions, 3/6/10 levels over the ceiling). Now:
+the epic at the ceiling is a plain +1 at I, a **lucky** +1 at II and a lucky +2 at III; the high epic stands only
+1, 2 or 3 levels over, its material drawn lucky, twice lucky and three times lucky (the best of two,
+three and four draws); the ascended unique is +1, +1, +2. Three kinds went in beside them: a plain rare
+rolled lucky, a pile of gold and a pile of experience. **Lucky is rolled twice and the better kept**,
+the ARPG word: on a piece every modifier (tier and number) is rolled again and the higher number stays
+-- the modifier count is the rarity's ordinary draw. **The piles are filler** (the user's word): there so
+that not every clear hands over something epic, and so small -- one common posting's gold or
+experience at that tier (`PILE_GOLD`, `PILE_XP`, in bodies at the town's level). A first cut at a whole
+board's worth was too much. The postings changed with it: a
+unique is 2/3/5% of a common posting's piece and 10/15/25% of an elite's, and at least +1 is 25/33/50%,
+every later step moving by the same factor.

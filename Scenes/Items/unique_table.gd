@@ -560,6 +560,6 @@ static func roll(enemy_name: String, unlocked: Array, rng: RandomNumberGenerator
 	var pool := pool_for(unlocked)
 	if pool.is_empty():
 		return null
-	var ceiling := maxi(1, tile_level + int(LootTable.TIER_LEVEL[EnemyRoster.tier_of(enemy_name)]))
-	return Item.rolled_unique(pool[rng.randi_range(0, pool.size() - 1)], rng,
-			ItemRarity.roll_level(ItemRarity.Rarity.UNIQUE, ceiling, rng))
+	var id: String = pool[rng.randi_range(0, pool.size() - 1)]
+	return Item.rolled_unique(id, rng, LootTable.drop_level(EnemyRoster.tier_of(enemy_name), tile_level,
+			ItemRarity.Rarity.UNIQUE, rng))

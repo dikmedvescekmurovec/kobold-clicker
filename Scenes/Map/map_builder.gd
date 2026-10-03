@@ -315,6 +315,16 @@ func walls_fallen() -> int:
 	return maxi(0, (land_radius - START_LAND_RADIUS) / wall_step)
 
 
+## The level of the deepest land charted in this world: what the heirlooms climb back to by themselves
+## (`Inventory.raise_heirlooms`). A scan, asked once a tile charted.
+func charted_level() -> int:
+	var deepest := 0
+	for cell: Vector2i in _states:
+		if _states[cell] == State.CHARTED:
+			deepest = maxi(deepest, HexGrid.distance(CENTER, cell))
+	return _level_at(deepest)
+
+
 ## Whether `cell` lies past the wall, in the frozen wasteland: seen as snow, never walked on.
 func is_wasteland(cell: Vector2i) -> bool:
 	return HexGrid.distance(CENTER, cell) > land_radius + 1

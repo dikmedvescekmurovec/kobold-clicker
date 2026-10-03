@@ -26,6 +26,7 @@ func _run() -> void:
 	_check(_test_stock_rolls() == true, "stock roll tests ran to the end")
 	_check(_test_smith() == true, "blacksmith tests ran to the end")
 	_check(_test_bounties() == true, "bounty board tests ran to the end")
+	_check(_test_board_tiers() == true, "board tier tests ran to the end")
 	_check(_test_bounty_kills() == true, "bounty kill tests ran to the end")
 	_check(_test_fortune() == true, "fortuneteller tests ran to the end")
 	await _test_selling()
@@ -428,28 +429,34 @@ func _test_smith() -> bool:
 	_check(absf(TownPrices.sell_price(whole) * 2.0 - was_worth) <= 1.0,
 			"a broken piece fetches half (%d of %d)" % [TownPrices.sell_price(whole), was_worth])
 
-	# An heirloom out of a world that has ended is walked back up to the level it had for nothing but
-	# gold: the doomed stream, which breaks anything else on its first blow, never touches it.
+	# An heirloom out of a world that has ended climbs back to the level it had by itself, with the land
+	# charted, and the smith will not take it there sooner.
 	var heirloom := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 6)
 	var peaks := heirloom.mods.map(heirloom.tier_of)
 	heirloom.transcend()
 	_check(heirloom.level == 1 and heirloom.safe_level == 6, "an heirloom comes back at level 1, remembering 6")
 	_check(heirloom.mods.all(func(mod: Dictionary) -> bool: return heirloom.tier_of(mod) == 1),
 			"its lines at level 1's one tier")
-	_check(Blacksmith.break_chance(heirloom) == 0.0, "and under that the hammer cannot break it")
+	_check(not Blacksmith.can_upgrade(heirloom, 99)
+			and Blacksmith.why_not_upgrade(heirloom, 99) == "It climbs to level 6 on its own",
+			"and under that the smith will not touch it")
+	var heir := Inventory.new()
+	heir.stash().items.append(heirloom)
+	_check(not heir.raise_heirlooms(1) and heirloom.level == 1, "land of level 1 leaves it where it is")
 	for level in range(2, 7):
-		doomed.seed = doomed.seed
-		_check(Blacksmith.upgrade(heirloom, 99, doomed) and heirloom.level == level,
-				"level %d lands whatever the draw" % level)
+		_check(heir.raise_heirlooms(level) and heirloom.level == level, "land of level %d takes it there" % level)
 		_check(heirloom.mods.map(heirloom.tier_of) == peaks.map(func(peak: int) -> int: return mini(peak, level)),
 				"each line a tier nearer the one it had, as far as level %d allows" % level)
+	_check(not heir.raise_heirlooms(99) and heirloom.level == 6, "and no further than it had been")
 	_check(not heirloom.broken and heirloom.stats == Item.scaled_stats("Wooden Sword", 6),
 			"whole, and worth what a fresh level 6 is")
 	_check(Item.from_dict(heirloom.to_dict()).mods == heirloom.mods, "and the save remembers the tiers")
-	_check(Blacksmith.break_chance(heirloom) == Blacksmith.BREAK_CHANCE, "past it the hammer is the hammer")
+	_check(Blacksmith.can_upgrade(heirloom, 99), "past it the smith takes it on")
 	doomed = _stream_that(true)
 	_check(not Blacksmith.upgrade(heirloom, 99, doomed) and heirloom.broken and heirloom.level == 6,
 			"and the blow past it can break it")
+	heirloom.transcend()
+	_check(not heir.raise_heirlooms(6) and heirloom.level == 1, "and a broken one climbs no more")
 	return true
 
 
@@ -482,8 +489,8 @@ func _test_bounties() -> bool:
 			lives = lives or env in envs
 		_check(lives, "%s lives on the land around the town" % enemy)
 		var need := int(bounty[BountyBoard.NEED])
-		_check(need == (BountyBoard.NEED_ELITE if tier == EnemyRoster.Tier.ELITE
-				else BountyBoard.NEED_COMMON), "%s asks for its tier's count (%d)" % [enemy, need])
+		_check(need == int(BountyBoard.TIER_NEED_ELITE[0] if tier == EnemyRoster.Tier.ELITE
+				else BountyBoard.TIER_NEED_COMMON[0]), "%s asks for its tier's count (%d)" % [enemy, need])
 		_check(int(bounty[BountyBoard.HAVE]) == 0, "%s starts at nothing" % enemy)
 		_check(not bool(bounty[BountyBoard.DONE]), "and is not handed in")
 		_check(float(bounty[BountyBoard.GOLD]) == maxf(1.0, roundf(Encounter.gold_of(enemy, TOWN_CELL)
@@ -677,6 +684,125 @@ func _test_bounties() -> bool:
 	_check(int(saved_active.get(BountyBoard.HAVE, -1)) == carried,
 			"and the accepted one's progress (%d)" % int(saved_active.get(BountyBoard.HAVE, -1)))
 	return true
+
+
+## A board's tier, kept by its town, and what clearing a board offers: three options of different kinds,
+## each the kind it says it is, only orbs the world has unlocked, and one taken while the rest go.
+func _test_board_tiers() -> bool:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var envs := PackedStringArray(["grass"])
+	var drawer := {}
+	_check(BountyBoard.board_tier(drawer) == 1, "a town's board starts at tier I")
+	_check(not BountyBoard.clear(drawer, TOWN_CELL, rng), "a board with nothing on it is not cleared for a reward")
+	_check(not drawer.has(BountyBoard.CHOICE) and BountyBoard.board_tier(drawer) == 1, "and pays nothing")
+	BountyBoard.restock(drawer, envs, TOWN_CELL, rng)
+	_check(not BountyBoard.clear(drawer, TOWN_CELL, rng), "nor is one with work still on it")
+	_check(BountyBoard.choice(drawer).is_empty() and BountyBoard.board_tier(drawer) == 1, "which pays nothing either")
+	for tier: int in [2, 3, 3]:
+		for bounty: Dictionary in BountyBoard.bounties(drawer):
+			bounty[BountyBoard.DONE] = true
+		_check(BountyBoard.clear(drawer, TOWN_CELL, rng), "a board handed in whole is cleared")
+		_check(BountyBoard.board_tier(drawer) == tier, "and the town's board is tier %d (%d)"
+				% [tier, BountyBoard.board_tier(drawer)])
+		_check(BountyBoard.choice(drawer).size() == BountyBoard.CHOICES, "and three are offered for it")
+		BountyBoard.restock(drawer, envs, TOWN_CELL, rng)
+	# The next board is posted at the new tier, asking more.
+	for bounty: Dictionary in BountyBoard.bounties(drawer):
+		var elite := EnemyRoster.tier_of(str(bounty[BountyBoard.ENEMY])) == EnemyRoster.Tier.ELITE
+		_check(int(bounty[BountyBoard.NEED]) == int(BountyBoard.TIER_NEED_ELITE[2] if elite
+				else BountyBoard.TIER_NEED_COMMON[2]), "a tier III posting asks tier III's count")
+	# And pays more, for the same monster on the same land.
+	for enemy: String in ["Imp", BountyBoard.bounties(drawer)[2][BountyBoard.ENEMY]]:
+		var tier := EnemyRoster.tier_of(enemy)
+		var low := BountyBoard._posting(enemy, tier, TOWN_CELL, rng, OrbTable.EVERY_WALL, 1)
+		var high := BountyBoard._posting(enemy, tier, TOWN_CELL, rng, OrbTable.EVERY_WALL, 3)
+		_check(float(high[BountyBoard.GOLD]) > float(low[BountyBoard.GOLD])
+				and int(high[BountyBoard.XP]) > int(low[BountyBoard.XP])
+				and BountyBoard.orbs_of(high).size() > BountyBoard.orbs_of(low).size(),
+				"a tier III %s pays more gold, experience and orbs than a tier I one" % enemy)
+
+	# What is offered, over many clears: each option the kind it is, no two of a kind, and orbs only as
+	# far as the walls have unlocked them.
+	var ceiling := maxi(1, MapBuilder.level_of(TOWN_CELL) + int(LootTable.TIER_LEVEL[EnemyRoster.Tier.BOSS]))
+	var seen := {}
+	for walls: int in [0, 1, 2]:
+		for tier: int in [1, 2, 3]:
+			for i in 30:
+				var stored := BountyBoard.roll_choice(tier, TOWN_CELL, rng, Achievements.STARTERS, walls)
+				var kinds := {}
+				for option: Dictionary in BountyBoard.choice({BountyBoard.CHOICE: stored}):
+					var kind := _choice_kind(option, tier, ceiling, walls)
+					kinds[kind] = true
+					seen[kind] = true
+				_check(stored.size() == BountyBoard.CHOICES and kinds.size() == BountyBoard.CHOICES
+						and not kinds.has(""), "three options of three good kinds (%s)" % [kinds.keys()])
+	_check(seen.size() == BountyBoard.CHOICE_KINDS.size(), "and every kind turns up (%s)" % [seen.keys()])
+	# Lucky is the best of its draws: a material drawn sixty-four times over is the best the level has
+	# but once in a million, and one draw is an even draw.
+	var lucky := {}
+	var plain := {}
+	for i in 20:
+		lucky[LootTable._tier_at("sword", 9, rng, 64)] = true
+		plain[LootTable._tier_at("sword", 9, rng)] = true
+	_check(lucky.keys() == ["Masterwork Sword"] and plain.size() > 1,
+			"a lucky draw keeps the best material (%s), a plain one any (%s)" % [lucky.keys(), plain.keys()])
+
+	# The offer goes in the save with its town, and one taken lets the rest go.
+	var inventory := Inventory.new()
+	var spot := Vector2i(130, 128)
+	inventory.towns.visit(spot).merge(drawer.duplicate(true))
+	_check(inventory.save(TEST_PATH), "saved with the offer in it")
+	var back := Inventory.load_from(TEST_PATH).towns.visit(spot)
+	var before := BountyBoard.choice(drawer)
+	var after := BountyBoard.choice(back)
+	_check(after.size() == before.size() and BountyBoard.board_tier(back) == 3, "the offer and the tier come back")
+	for i in after.size():
+		var piece: Item = after[i].get(BountyBoard.CHOICE_ITEM)
+		_check((piece.display_name() if piece else str(after[i])) == (before[i][BountyBoard.CHOICE_ITEM].display_name()
+				if before[i].has(BountyBoard.CHOICE_ITEM) else str(before[i])), "option %d as it was" % i)
+	_check(BountyBoard.take_choice(back, BountyBoard.CHOICES).is_empty() and BountyBoard.choice(back).size() == after.size(),
+			"an option that is not there is not taken, and nothing goes")
+	var taken := BountyBoard.take_choice(back, 1)
+	_check(not taken.is_empty() and BountyBoard.choice(back).is_empty(), "one taken, and the others are gone")
+	_check(BountyBoard.take_choice(back, 0).is_empty(), "so nothing more can be taken")
+	_check(BountyBoard.choice({BountyBoard.CHOICE: [{BountyBoard.CHOICE_ORB: "Orb of Nothing", BountyBoard.CHOICE_COUNT: 3},
+			{BountyBoard.CHOICE_ITEM: "not a piece"}, "nor this"]}).is_empty(), "an offer this build cannot read is none")
+	return true
+
+
+## Which kind of a cleared board's reward `option` is, read off the thing itself, or "" when it is none
+## of them as the rules make them: at `tier`, over a board at `ceiling`, in a world with `walls` down.
+func _choice_kind(option: Dictionary, tier: int, ceiling: int, walls: int) -> String:
+	var at := tier - 1
+	if option.has(BountyBoard.CHOICE_ORB):
+		var orb := str(option[BountyBoard.CHOICE_ORB])
+		var ok := BountyBoard.CHOICE_ORBS.has(orb) and orb in OrbTable.unlocked(walls) \
+				and int(option[BountyBoard.CHOICE_COUNT]) == int(BountyBoard.CHOICE_ORBS[orb][at])
+		return BountyBoard.ORB_BUNDLE if ok else ""
+	if option.has(BountyBoard.CHOICE_GOLD):
+		return BountyBoard.GOLD_PILE if float(option[BountyBoard.CHOICE_GOLD]) == BountyBoard.pile_gold(tier, TOWN_CELL) else ""
+	if option.has(BountyBoard.CHOICE_XP):
+		return BountyBoard.XP_PILE if int(option[BountyBoard.CHOICE_XP]) == BountyBoard.pile_xp(tier, TOWN_CELL) else ""
+	var piece: Item = option[BountyBoard.CHOICE_ITEM]
+	if piece.rarity == ItemRarity.Rarity.UNIQUE:
+		if not (str(piece.unique) in Achievements.STARTERS) or piece.level != ceiling:
+			return ""
+		return BountyBoard.UNIQUE if piece.plus == 0 \
+				else (BountyBoard.ASCENDED_UNIQUE if piece.plus == int(BountyBoard.UNIQUE_PLUS[at]) else "")
+	if piece.rarity == ItemRarity.Rarity.RARE:
+		return BountyBoard.RARE if piece.plus == 0 and piece.level == ceiling else ""
+	if piece.rarity != ItemRarity.Rarity.ELITE:
+		return ""
+	if piece.plus == int(BountyBoard.EPIC_PLUS[at]) and piece.level == ceiling:
+		return BountyBoard.ASCENDED
+	# The high piece's material is a lucky draw, so any the level has unlocked will do.
+	var level := ceiling + int(BountyBoard.CHOICE_LEVELS[at])
+	var item_row: Dictionary = LootTable.ITEMS[piece.type]
+	var tier_levels: Array = LootTable.KINDS[item_row["kind"]].get("tier_levels", LootTable.TIER_MIN_LEVEL)
+	if piece.plus == 0 and piece.level == level and level >= int(tier_levels[int(item_row["tier"])]):
+		return BountyBoard.HIGH
+	return ""
 
 
 ## The ledger on the boards: every fight counts a body as it falls; a tile fight writes it down at once
@@ -1114,12 +1240,11 @@ func _test_smithing() -> void:
 			"with nothing open in the bag there is nothing to press")
 
 	# A piece held up to him: both prices on their buttons, and a purse that cannot cover either.
-	var piece := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 3)
+	var piece := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 1)
 	inventory.add(piece)
 	page.bag_changed(piece)
-	_check(page._upgrade_cap() == MapBuilder.circle_level(TOWN_CELL)
-			+ int(LootTable.TIER_LEVEL[EnemyRoster.Tier.BOSS]),
-			"the cap is what a boss on this circle's deepest land could drop (%d)" % page._upgrade_cap())
+	_check(page._upgrade_cap() == MapBuilder.circle_level(TOWN_CELL),
+			"the cap is this circle's deepest land (%d)" % page._upgrade_cap())
 	# Every tile in a circle shares it: the first circle's deepest land is its outer ring.
 	_check(MapBuilder.circle_level(Vector2i(1, 0)) == MapBuilder.level_of(
 			Vector2i(MapBuilder.START_LAND_RADIUS, 0)), "the first circle is gated by its outer ring")
@@ -1134,7 +1259,7 @@ func _test_smithing() -> void:
 			"an empty purse kills both")
 	page._on_upgrade_pressed()
 	page._on_lock_pressed()
-	_check(piece.level == 3 and piece.locked_mod().is_empty() and inventory.gold == 0,
+	_check(piece.level == 1 and piece.locked_mod().is_empty() and inventory.gold == 0,
 			"and nothing was done on the way past the button")
 	_check(page._swing_clock < 0.0, "and the smith did not strike for it")
 
@@ -1145,10 +1270,10 @@ func _test_smithing() -> void:
 	upgrade = _button(page._rows, "Upgrade")
 	_check(upgrade != null and not upgrade.disabled, "with the gold the hammer is live")
 	page._on_upgrade_pressed()
-	_check(piece.level == 4, "the piece came back a level higher (%d)" % piece.level)
+	_check(piece.level == 2, "the piece came back a level higher (%d)" % piece.level)
 	_check(page._swing_clock == 0.0 and page._swings_owed == 0, "and the smith strikes")
 	_check(inventory.gold == price * 2, "the purse paid (%d, want %d)" % [inventory.gold, price * 2])
-	_check(Inventory.load_from(TEST_PATH).items[0].level == 4, "and the upgrade was saved")
+	_check(Inventory.load_from(TEST_PATH).items[0].level == 2, "and the upgrade was saved")
 
 	# A break spends the gold all the same, says so on the page, and greys everything after it. The
 	# purse is filled again first: a level up is a dearer hammer, which is the point of the curve.
@@ -1158,7 +1283,7 @@ func _test_smithing() -> void:
 	var before_break := inventory.gold
 	page._smith_rng = _stream_that(true)
 	page._on_upgrade_pressed()
-	_check(piece.broken and piece.level == 4, "the hammer broke it and left the level alone")
+	_check(piece.broken and piece.level == 2, "the hammer broke it and left the level alone")
 	# Pressed mid-strike: owed, and begun SWING_OVERLAP frames before the first would have ended.
 	_check(page._swings_owed == 1, "a press mid-strike waits its turn")
 	page._process((page._swing_frames() - TownPage.SWING_OVERLAP) * DialogueBox.FRAME_TIME + 0.001)
@@ -1173,7 +1298,7 @@ func _test_smithing() -> void:
 
 	# Carried or worn is all one to him: a piece is locked without being stripped off first -- one
 	# modifier pinned, and a second lock refused.
-	var worn := Item.rolled("Leather Helmet", ItemRarity.Rarity.RARE, rng, 3)
+	var worn := Item.rolled("Leather Helmet", ItemRarity.Rarity.RARE, rng, 2)
 	inventory.add(worn)
 	inventory.equip(worn, Equipment.Socket.HELMET)
 	inventory.gold = TownPrices.lock_price(worn) * 2
@@ -1196,7 +1321,7 @@ func _test_smithing() -> void:
 	page._smith_rng = _stream_that(false)
 	page._fill()
 	page._on_upgrade_pressed()
-	_check(worn.level == 4, "a worn piece came back a level higher (%d)" % worn.level)
+	_check(worn.level == 3, "a worn piece came back a level higher (%d)" % worn.level)
 	page.queue_free()
 	await process_frame
 
@@ -1230,6 +1355,17 @@ func _test_board() -> void:
 	_check(BountyBoard.active(inventory.towns) == bounty, "walking in did not wipe the work taken on")
 	_check(_deep_button(page._rows, "Claim") == null, "nothing on it can be handed in yet")
 	_check(_deep_button(page._rows, "Show") == null, "and the board carries no Show")
+	# The heading's row: a round pip a posting but the last, and the gift, dark until a reward waits.
+	var row := _deep_pips(page._rows)
+	_check(row != null and row._pips.size() == 3 and row._pips[-1].texture == KillPips.GIFT[1]
+			and row._pips[0].texture == KillPips.texture(EnemyRoster.Tier.COMMON, true),
+			"the heading ends in a dark gift after two dark pips")
+	drawer[BountyBoard.CHOICE] = [{BountyBoard.CHOICE_GOLD: 10.0}]
+	page.redraw()
+	row = _deep_pips(page._rows)
+	_check(row != null and row._pips[-1].texture == KillPips.GIFT[0], "and the gift lights while a reward waits")
+	drawer.erase(BountyBoard.CHOICE)
+	page.redraw()
 
 	# Worked off, and handed in: the purse, the orb, the piece and the save all move once.
 	var reward := int(bounty[BountyBoard.GOLD])
@@ -1764,9 +1900,8 @@ func _test_fortune_page() -> void:
 	_check(FileAccess.file_exists(TEST_MAP_PATH) and main.inventory.gold > 0.0,
 			"the first press only asks")
 	var asked: Node = main.town_page._told
-	_check(asked != null and "lost" in _said(asked) and not "heirloom" in _said(asked)
-			and BigNumber.format(TownPrices.fortune_price(FortuneTeller.TRANSCEND, town)) in _said(asked),
-			"in a popup that warns of what is lost and what it costs, not of what is won")
+	_check(asked != null and "lost" in _said(asked) and not "heirloom" in _said(asked),
+			"in a popup that warns of what is lost, not of what is won")
 	_check(UITheme.price_of(_deep_button(asked, "Transcend")).is_empty(), "its Transcend a coin and no figure")
 	main.town_page._close_told()
 	var full_purse: float = main.inventory.gold
@@ -1924,6 +2059,17 @@ func _deep_button(parent: Node, text: String) -> Button:
 		if child is Button and (child as Button).text.begins_with(text):
 			return child
 		var found := _deep_button(child, text)
+		if found != null:
+			return found
+	return null
+
+
+## The first pip row anywhere under `parent`, or null.
+func _deep_pips(parent: Node) -> KillPips:
+	for child: Node in parent.get_children():
+		if child is KillPips:
+			return child
+		var found := _deep_pips(child)
 		if found != null:
 			return found
 	return null

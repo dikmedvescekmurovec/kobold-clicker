@@ -763,6 +763,8 @@ func _test_blends_stay(map: HexMap, view: MapBuilder) -> bool:
 
 	view.reveal_all()
 	_check(map.fog.cells().all(view.is_wall), "revealing the map takes the fog off every tile but the wall's")
+	_check(view.charted_level() == MapBuilder.level_of(MapBuilder.CENTER + Vector2i(view.land_radius, 0)),
+			"the deepest land charted is the level of the land's last ring (%d)" % view.charted_level())
 	var town := view.start_town - view.origin
 	_check(view.charted(town) and not view.can_farm(town) and view.can_farm(MapBuilder.CENTER),
 			"a charted town cannot be farmed, the land beside it can")

@@ -884,8 +884,10 @@ func _test_the_nameplate_wears_the_tier() -> void:
 
 	# The pips beside it are drawn in that same tier, which is the whole reason the lookup was shared
 	# rather than written out twice. The elite is the last of the ten, so it is the last pip.
-	_check(combat._pips._pips[elite].texture == KillPips.BODY[EnemyRoster.Tier.ELITE],
-			"the pip standing for the elite is green, like the frame over its head")
+	_check(combat._pips._pips[elite].texture == KillPips.texture(EnemyRoster.Tier.ELITE),
+			"the pip standing for the elite is the elite's skull")
+	_check(combat._pips._pips[0].texture == KillPips.texture(EnemyRoster.Tier.COMMON, true),
+			"and those already down are spent")
 
 	# Nothing standing means no nameplate at all, rather than an empty frame.
 	fight.index = fight.lineup.size()
@@ -901,12 +903,29 @@ func _test_the_nameplate_wears_the_tier() -> void:
 	var siege := Encounter.for_tile(cell, "grass", "village")
 	town.begin(siege, cell, 2.0, "village")
 	await process_frame
-	_check(town._pips._pips.size() == siege.enemies,
-			"a village's bar stands %d pips, not %d" % [siege.enemies, town._pips._pips.size()])
-	_check(town._pips._pips[siege.enemies - 1].texture == KillPips.BODY[EnemyRoster.Tier.BOSS],
-			"and the pip at its far end is the boss's gold")
-	_check(town._pips._tail.texture == KillPips.TAIL[EnemyRoster.Tier.BOSS],
-			"which the bar closes in, the way it closes in whatever is at its end")
+	# Fifteen do not all show: nine from the one being fought and a caret for the rest, moving on a pip
+	# a kill until the last ten are in view.
+	_check(siege.enemies > KillPips.SHOWN and town._pips._pips.size() == KillPips.SHOWN,
+			"a village's bar shows %d of its %d pips, not %d" % [KillPips.SHOWN, siege.enemies, town._pips._pips.size()])
+	var pips: Array[TextureRect] = town._pips._pips
+	_check(pips[-1].texture == KillPips.MORE, "the last place is the caret while more are to come")
+	_check(pips[0].texture == KillPips.texture(Encounter.tier_in(siege, 0)), "and the first is the one being fought")
+	siege.index = 1
+	town._refresh()
+	_check(pips[0].texture == KillPips.texture(Encounter.tier_in(siege, 1)) and pips[-1].texture == KillPips.MORE,
+			"a kill drops it off the left and the rest move up a place")
+	var last_ten := siege.enemies - KillPips.SHOWN
+	siege.index = last_ten
+	town._refresh()
+	_check(pips[-1].texture == KillPips.texture(EnemyRoster.Tier.BOSS),
+			"with the last ten in view the caret goes and the boss's crowned skull ends the bar")
+	siege.index = last_ten + 2
+	town._refresh()
+	_check(pips[1].texture == KillPips.texture(Encounter.tier_in(siege, last_ten + 1), true)
+			and pips[2].texture == KillPips.texture(Encounter.tier_in(siege, last_ten + 2)),
+			"and from there the bar stays put and drains where it stands")
+	siege.index = 0
+	town._refresh()
 	_check(town._clock_fill.get_parent().size.x
 			== KillPips.width_for(siege.enemies) - 2 * CombatScene.BAR_BORDER,
 			"the clock is cut to the pip bar it stands under")
@@ -959,6 +978,7 @@ func _test_thrown_finds() -> void:
 			var got: Color = back.material.get_shader_parameter("colour")
 			_check(got.is_equal_approx(want), "in the rarity's own colour")
 			_check(back.z_index < 0 and front.z_index >= 0, "one behind the piece and one in front of it")
+			_check(combat._hud.z_index > lit.z_index + front.z_index, "and the HUD drawn over the lot")
 			_check(back.material.get_shader_parameter("cover").x >= 16.0,
 					"wide enough at the foot to cover the piece")
 			heights.append(back.material.get_shader_parameter("height"))
