@@ -324,10 +324,11 @@ static func flat(fill: Color, pad: int) -> StyleBoxFlat:
 
 ## How far along a posting is, as a bar: an ink trough filling with leaf, snapped to whole panel pixels,
 ## with the count hanging off its bottom-right corner the way an orb's does. The row under it is kept
-## clear of the numeral by the control's own height.
-static func progress_bar(have: int, need: int, width: float) -> Control:
+## clear of the numeral by the control's own height. Not `counted`, the bar alone, for a caller that
+## writes the count itself (the character page, in the body font under it).
+static func progress_bar(have: int, need: int, width: float, counted := true) -> Control:
 	var holder := Control.new()
-	holder.custom_minimum_size = Vector2(width, BAR_HEIGHT + COUNT_OVERHANG)
+	holder.custom_minimum_size = Vector2(width, BAR_HEIGHT + (COUNT_OVERHANG if counted else 0))
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var trough := ColorRect.new()
 	trough.color = Palette.INK
@@ -342,6 +343,8 @@ static func progress_bar(have: int, need: int, width: float) -> Control:
 			BAR_HEIGHT - BAR_BORDER * 2)
 	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	holder.add_child(fill)
+	if not counted:
+		return holder
 	var tally := UITheme.label("%d/%d" % [have, need], Palette.BONE)
 	tally.add_theme_color_override("font_outline_color", Palette.INK)
 	tally.add_theme_constant_override("outline_size", 4)

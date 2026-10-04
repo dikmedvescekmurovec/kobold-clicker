@@ -53,6 +53,11 @@ func toggle() -> void:
 	_show(not body.visible)
 
 
+## Has the section `id` start folded the next time it is built, as a press on its heading would leave it.
+static func fold(id: String) -> void:
+	_shut[id] = true
+
+
 func _show(open: bool) -> void:
 	body.visible = open
 	if _caret_open == null:

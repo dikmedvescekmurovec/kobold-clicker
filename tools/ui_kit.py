@@ -1118,11 +1118,76 @@ CHAR_FRAME = (2, 34, 84, 30)
 CHAR_BARS = {"xp": (29, 18, 38)}
 CHAR_BAND_ROWS = range(11, 16)
 CHAR_BAND_LEFT = 29
+# The level's badge under the portrait (2026-10-03, mockup qa/char_plate_m2.png): the ring's outline,
+# its rim and the band's dark, its corners cut, at the frame's own pixel -- the game widens it by its
+# middle column to the number, as it does the frame. o outline, r rim, f the band's dark.
+CHAR_BADGE = """
+    .ooooooooo.
+    orrrrrrrrro
+    orfffffffro
+    orfffffffro
+    orfffffffro
+    orfffffffro
+    orrrrrrrrro
+    .ooooooooo.
+"""
+CHAR_BADGE_KEY = {"o": "#391f21", "r": "#bf6f4a", "f": "#5d2c28"}
+# The two marks of the band's damage line, where the name stood (the user's picks, 2026-10-04, off
+# qa/char_hand_m3.png and qa/char_sword_m4.png): a hand for a click, and for a second of the weapon on
+# its own a sword with a clock in its corner. In the corner marks' manner and creamed like them
+# (`_edged`), at the interface's pixel, not the frame's, since they stand beside the small font's
+# figures. X is lit by its edges, H is the grip (the ramp's dark), k a gap in the outline's dark.
+# The hand is the cursor pack's own pointing hand (tile 137) without its two-pixel outline: a
+# straight two-pixel finger and the thumb a pixel apart, which is what made it crisp where a hand
+# drawn freely was not.
+CHAR_HAND = [
+    "...XX.......",
+    "...XX.......",
+    "...XX.......",
+    "...XX.XX....",
+    "...XXXXXXXX.",
+    "XX.XXXXXXXXX",
+    "XXXXXXXXXXXX",
+    ".XXXXXXXXXXX",
+    "..XXXXXXXXXX",
+    "...XXXXXXXX.",
+    "...XXXXXXXX.",
+    "....XXXXXX..",
+]
+# The bag's sword pose, its guard shorter, drawn on the same rule as the hand.
+CHAR_SWORD = [
+    "..........XX",
+    ".........XXX",
+    "........XXX.",
+    ".......XXX..",
+    "......XXX...",
+    ".X...XXX....",
+    ".XX.XXX.....",
+    "..XXXX......",
+    "...XX.......",
+    "..H.XX......",
+    ".H...XX.....",
+    "X...........",
+]
+# Its clock, in the sword's bottom-right corner: the hands at twelve and three.
+CHAR_CLOCK = [
+    ".XXXX.",
+    "XXkXXX",
+    "XXkXXX",
+    "XXkkXX",
+    "XXXXXX",
+    ".XXXX.",
+]
+# The swing mark's square: the sword in its top left, the clock in its bottom right.
+CHAR_SWING_SIDE = (16, 15)
 CHAR_RIM = 3
 CHAR_BAR_HEIGHT = 2
 CHAR_FILLED_DX = 96
 # A point inside the portrait circle; the circle is whatever transparent run is joined to it.
 CHAR_CIRCLE_SEED = (14, 14)
+# The ring's middle column, which the badge is centred on: its foot is the four pixels 13 to 16.
+# CharacterPanel.CIRCLE_MIDDLE.
+CHAR_CIRCLE_MIDDLE = 14.5
 # The player's portrait: the kobold's first idle frame, framed so the eye and the tip of the snout sit
 # in the circle -- the head is twice the circle's width, and the snout is what says kobold -- on the
 # pack's own lilac disc, which the blue hide stands off where the pack's paler blue would not.
@@ -2004,15 +2069,72 @@ def parts():
     return out
 
 
-def _drawn(rows):
-    """One ICONS_DRAWN mark as an image in Icons.png's colours."""
+def _drawn(rows, key=ICON_KEY):
+    """One ICONS_DRAWN mark as an image in Icons.png's colours, or in `key`'s."""
     lines = [line.strip() for line in rows.strip().splitlines()]
     art = Image.new("RGBA", (max(len(line) for line in lines), len(lines)), (0, 0, 0, 0))
     for y, line in enumerate(lines):
         for x, char in enumerate(line):
             if char != ".":
-                art.putpixel((x, y), _rgb(ICON_KEY[char]))
+                art.putpixel((x, y), _rgb(key[char]))
     return art
+
+
+def _edged(shape):
+    """A silhouette shaded the corner marks' way, as ICON_KEY rows: lit (4) on its left edges and the tops
+    nothing covers, darker (2) on its right and bottom edges, the ramp's middle (3) inside, H the grip
+    (1), k a gap in the outline's dark -- and a one-pixel outline round the lot."""
+    def solid(x, y):
+        return 0 <= y < len(shape) and 0 <= x < len(shape[0]) and shape[y][x] in "XH"
+
+    grid = [["."] * (len(shape[0]) + 2) for _ in range(len(shape) + 2)]
+    for y, line in enumerate(shape):
+        for x, part in enumerate(line):
+            if part == "H":
+                grid[y + 1][x + 1] = "1"
+            elif part == "k":
+                grid[y + 1][x + 1] = "o"
+            elif part == "X":
+                grid[y + 1][x + 1] = ("4" if not solid(x - 1, y)
+                                      else "2" if not solid(x + 1, y) or not solid(x, y + 1)
+                                      else "4" if not solid(x, y - 1) else "3")
+    h, w = len(grid), len(grid[0])
+    for y in range(h):
+        for x in range(w):
+            if grid[y][x] == "." and any(0 <= y + dy < h and 0 <= x + dx < w and grid[y + dy][x + dx] not in ".o"
+                                         for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                grid[y][x] = "o"
+    return ["".join(row) for row in grid]
+
+
+def char_marks():
+    """The damage line's hand and its sword-and-clock, creamed by BONE_RAMP like the corner marks. The
+    clock stands in the sword's corner with a ring of the outline's dark round it, so the two stay apart
+    where it covers the guard."""
+    sword, clock = _edged(CHAR_SWORD), _edged(CHAR_CLOCK)
+    w, h = CHAR_SWING_SIDE
+    grid = [["."] * w for _ in range(h)]
+    for y, row in enumerate(sword):
+        for x, letter in enumerate(row):
+            grid[y][x] = letter
+    ox, oy = w - len(clock[0]), h - len(clock)
+    for y, row in enumerate(clock):
+        for x, letter in enumerate(row):
+            if letter != ".":
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        if 0 <= oy + y + dy < h and 0 <= ox + x + dx < w:
+                            grid[oy + y + dy][ox + x + dx] = "o"
+    for y, row in enumerate(clock):
+        for x, letter in enumerate(row):
+            if letter != ".":
+                grid[oy + y][ox + x] = letter
+    cream = {_rgb(dark): _rgb(light) for dark, light in BONE_RAMP.items()}
+    out = {}
+    for name, rows in (("ui_char_click", _edged(CHAR_HAND)), ("ui_char_swing", ["".join(r) for r in grid])):
+        art = _map_colors(_drawn("\n".join(rows)), cream)
+        out[name] = art.crop(art.getbbox())
+    return out
 
 
 def icons():
@@ -2208,16 +2330,22 @@ def character():
         portrait.putpixel((x - left, y - top), pixel.getpixel((0, 0)))
     out["ui_char_portrait"] = portrait
     out["xp_gem"] = _cut(XP_GEM, trim=False)
+    out["ui_char_badge"] = _drawn(CHAR_BADGE, CHAR_BADGE_KEY)
+    out.update(char_marks())
     return out, (left, top)
 
 
 def character_preview(cut, portrait_at):
-    """The assembled panel at full, half and nearly empty XP, and the gem at 1x and 4x."""
+    """The assembled panel at full, half and nearly empty XP with the level's badge under the circle,
+    and the gem and the damage line's two marks at 1x and 4x."""
     frame = cut["ui_char_frame"]
+    badge = cut["ui_char_badge"]
     shares = [1.0, 0.5, 0.05]
     pad = 6
-    out = Image.new("RGBA", (frame.width + 2 * pad, len(shares) * (frame.height + pad) + pad + 30),
-                    (0x3C, 0x5A, 0x3C, 0xFF))
+    loose = ["xp_gem", "ui_char_click", "ui_char_swing"]
+    marks_wide = sum(cut[name].width * 5 + 6 for name in loose)
+    out = Image.new("RGBA", (max(frame.width, marks_wide) + 2 * pad,
+                             len(shares) * (frame.height + pad) + pad + 50), (0x3C, 0x5A, 0x3C, 0xFF))
     for i, share in enumerate(shares):
         y0 = pad + i * (frame.height + pad)
         panel = frame.copy()
@@ -2226,11 +2354,14 @@ def character_preview(cut, portrait_at):
             bar = cut["ui_char_bar_" + name]
             shown = w if name != "xp" else max(1, round(w * share))
             panel.alpha_composite(bar.crop((0, 0, shown, CHAR_BAR_HEIGHT)), (x, y))
+        panel.alpha_composite(badge, (round(CHAR_CIRCLE_MIDDLE - badge.width / 2), frame.height - badge.height))
         out.alpha_composite(panel, (pad, y0))
-    gem = cut["xp_gem"]
-    gy = pad + len(shares) * (frame.height + pad)
-    out.alpha_composite(gem, (pad, gy))
-    out.alpha_composite(gem.resize((gem.width * 4, gem.height * 4), Image.NEAREST), (pad + 12, gy))
+    x, gy = pad, pad + len(shares) * (frame.height + pad)
+    for name in loose:
+        mark = cut[name]
+        out.alpha_composite(mark, (x, gy))
+        out.alpha_composite(mark.resize((mark.width * 4, mark.height * 4), Image.NEAREST), (x + mark.width + 2, gy))
+        x += mark.width * 5 + 6
     return out.resize((out.width * 4, out.height * 4), Image.NEAREST)
 
 

@@ -904,7 +904,7 @@ func _accent_roll(cell: Vector2i) -> float:
 
 ## Charts a tile the player can see next to them: its grey veil comes off, the land within `sight` steps of
 ## it comes out of the fog as uncharted, and the player sets off for it, arriving a couple of seconds later.
-## `sight` is the two rings behind the tile for a player carrying nothing (`main_scene.BASE_SIGHT`) and further with a torch in hand;
+## `sight` is the two rings behind the tile for a player carrying nothing (`Inventory.BASE_SIGHT`) and further with a torch in hand;
 ## at none or less -- the Thick Fog's, with no torch held -- only the tile taken comes out of the fog.
 ## Returns how many tiles newly showed, or -1 if it can't be charted.
 ##

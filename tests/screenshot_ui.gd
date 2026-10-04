@@ -929,6 +929,34 @@ func _shoot_town() -> void:
 	root.get_texture().get_image().save_png("user://ui_character.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_character.png"))
 
+	# The same page late in a run, which is how it is mostly read: a hero of its own (the world's is
+	# left as it is for the shots after this), its page standing where the world's does. Then the
+	# weapon swapped for a better one since the last look, so the changes are written beside the numbers.
+	var late := _late_hero()
+	var sheet := CharacterPage.new(late, main.ui_scale)
+	main.character_page.get_parent().add_child(sheet)
+	sheet.area = main.character_page.area
+	main.character_page.hide()
+	sheet.layout()
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_character_late.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_character_late.png"))
+	sheet.hide()
+	sheet.show()
+	var weapon: Item = late.equipment.worn[Equipment.Socket.WEAPON]
+	weapon.stats["damage"] = float(weapon.stats.get("damage", 0.0)) * 1.3
+	weapon.stats["attack_speed"] = float(weapon.stats.get("attack_speed", 0.0)) + 0.4
+	sheet.open()
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_character_change.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_character_change.png"))
+	sheet.queue_free()
+	main.character_page.show()
+
 	# The same page in a world under curses, which it lists at its foot; and the tile panel of land
 	# that carries modifiers. That land lies past the second wall, which this world has not reached, so
 	# Wild Tiles and a wall counted as fallen stand in: the rings generated past the first wall then
@@ -1046,6 +1074,33 @@ func _shoot_board() -> void:
 ## state's stylebox and font colour as its normal ones. A Panel with a centred Label stood in once, and
 ## drew the label where no button puts it -- hover and pressed read as lifting the word, which the
 ## game never did (pressed sinks it a pixel, `UITheme.build`).
+## A hero some way into a run, for the character page: level 53, a set of rolled pieces at level 50,
+## two uniques worn, a capstone learned, a share of the collection found and a depth of the Descent won.
+func _late_hero() -> Inventory:
+	var hero := Inventory.new()
+	hero.level = 53
+	hero.xp = 342
+	hero.kills = 6216
+	hero.dungeon_depth = 4
+	hero.uniques_found.assign(UniqueTable.ids().slice(0, 22))
+	hero.skills.ranks["assassin"] = 1
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	for id: String in ["worry_stone", "couriers_boots"]:
+		var unique := Item.rolled_unique(id, rng, 50)
+		hero.equipment.equip(hero.equipment.sockets_for(unique)[0], unique)
+	var enemy: String = EnemyRoster.ENEMIES.keys()[0]
+	var tries := 0
+	while hero.equipment.worn.size() < Equipment.NAMES.size() and tries < 200:
+		tries += 1
+		var piece := LootTable.roll(enemy, rng, true, 50, 0.0, 0.0, ItemRarity.Rarity.ELITE)
+		for socket: Equipment.Socket in hero.equipment.sockets_for(piece):
+			if not hero.equipment.worn.has(socket) and hero.equipment.displaced_by(socket, piece).is_empty():
+				hero.equipment.equip(socket, piece)
+				break
+	return hero
+
+
 func _sample(variation: String, state: String, size: Vector2) -> Control:
 	var button := Button.new()
 	button.theme_type_variation = variation

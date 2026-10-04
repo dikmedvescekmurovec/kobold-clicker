@@ -93,6 +93,9 @@ const NOVICE_UNTIL := 20
 const ATTRIBUTE_PERCENT := 0.2
 const ATTRIBUTE_GIVES := {"strength": "damage", "dexterity": "attack_speed", "intelligence": "xp_more"}
 
+## Rings a charted tile shows round it with no torch held; the Thick Fog takes all of it (`sight`).
+const BASE_SIGHT := 2
+
 ## How close the Crown of Accord asks the three to be: the lowest against the highest. Every other
 ## number a unique reads here is its rank's (`_dial`, `UniqueTable`), so the card and the rule agree.
 const ACCORD_WITHIN := 0.9
@@ -650,6 +653,13 @@ func attribute_gift(attribute: String, points: float) -> Array:
 	if "zealot" in worn and _peak("zealots_brand"):
 		gift[1] = float(gift[1]) * ZEALOT_GIFT
 	return gift
+
+
+## How far the player sees from a tile they have just taken: `BASE_SIGHT` rings, none under the Thick
+## Fog, and whatever a torch adds. The map asks it as a won tile is charted, the character page to
+## show it, so the two cannot disagree.
+func sight() -> int:
+	return (0 if Curses.THICK_FOG in curses else BASE_SIGHT) + int(stats().get("sight", 0))
 
 
 ## The three attributes as the gear itself adds them up over both dolls, before any unique counts them

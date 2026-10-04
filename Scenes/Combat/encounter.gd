@@ -505,7 +505,7 @@ var walk_in := WALK_IN
 ## The gear's share of the walk-in taken off, 0-100.
 var spawn_speed := 0.0
 ## What the tile and the world add to every body's health, to every blow and to how often one comes,
-## as shares: **one sum each**, the way `_unique_more` is, so a Thick-skinned tile under Iron Foes is
+## as shares: **one sum each**, the way `unique_more` is, so a Thick-skinned tile under Iron Foes is
 ## +110% and not +140%.
 var _hp_more := 0.0
 var _hit_more := 0.0
@@ -1175,8 +1175,8 @@ func _strike(automatic: bool, riposte := false) -> bool:
 	var dealt := maxf(1.0, roundf(damage * (1.0 + crit_more / 100.0))) if crit else damage
 	if "giant_slayer" in effects and big:
 		dealt *= 2
-	# Everything the uniques add to a blow, summed and applied once -- see `_unique_more`.
-	dealt = maxf(1.0, roundf(dealt * (1.0 + _unique_more(automatic))))
+	# Everything the uniques add to a blow, summed and applied once -- see `unique_more`.
+	dealt = maxf(1.0, roundf(dealt * (1.0 + unique_more(automatic))))
 	if riposte:
 		dealt = maxf(1.0, roundf(dealt * _dial("bulwark", "share") / 100.0))
 	# Two blows' worth, now and then: every tenth click that lands under the Berserker's Band at IV, and
@@ -1233,11 +1233,38 @@ func _strike(automatic: bool, riposte := false) -> bool:
 	return true
 
 
+## What one blow does on average as `_strike` deals it, against a common body as the fight starts: its
+## crits, everything the uniques and curses add (`unique_more`), the Berserker's Band's tenth click and
+## the Overflowing Chalice's doubled crit at IV, and the Gambler's Die's mean -- but no streak built, no
+## kill made, no clock run low, and nothing of Giant Slayer, which is for elites. `automatic` is the
+## weapon's swing; a click is the hand's, and does nothing where the hand does nothing (`hit`). Next to
+## `_strike` so the two move together: the character page's damage per click and per second.
+func average_blow(automatic: bool) -> float:
+	if not automatic and ("metronome" in effects or _cursed_with(Curses.PACIFIST_HANDS)):
+		return 0.0
+	var crits := crit_chance / 100.0 * crit_damage / 100.0
+	if "overcrit" in effects and _peak("overflowing_chalice"):
+		crits += crit_chance / 100.0 * CHALICE_TWICE * (1.0 + crit_damage / 100.0)
+	var blow := damage * (1.0 + crits) * (1.0 + unique_more(automatic))
+	if not automatic and "berserk" in effects and _peak("berserkers_band"):
+		blow *= 1.0 + 1.0 / BERSERK_EVERY
+	if "gamble" in effects:
+		blow *= (GAMBLE_LEAST + _dial("gamblers_die", "top")) / 2.0
+	return blow
+
+
+## A second of the weapon on its own, hands off: its average swing as often as it swings, and the
+## bleed that leaves. Nothing where it does not swing at all. The character page's headline and the
+## character panel's line, beside `average_blow(false)`, a click.
+func per_second() -> float:
+	return average_blow(true) * (attack_speed + bleed / 100.0) if swings() else 0.0
+
+
 ## What the worn uniques add to a blow, as a share: 2.0 is three times the damage. **One sum**, the
 ## way `Equipment.totals` adds its global percents, and for the same reason: twenty-odd uniques that
 ## each multiplied would let a stack of them outrun the map, and every one would beat any crafted
 ## piece in its socket. Added, a full stack is worth a stretch of frontier and no more.
-func _unique_more(automatic: bool) -> float:
+func unique_more(automatic: bool) -> float:
 	var more := 0.0
 	if automatic:
 		more += (_dial("metronome", "times") - 1.0) * effects.count("metronome")

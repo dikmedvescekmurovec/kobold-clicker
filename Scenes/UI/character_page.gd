@@ -1,43 +1,94 @@
 class_name CharacterPage
 extends Control
-## What the player adds up to, as a page against the left edge: the portrait beside level, experience
-## and kills, the three attributes as numbers on coloured discs, and under them every other stat that
-## is not nothing as a table, names on the left and numbers on the right -- `Inventory.stats()`, which
-## is exactly what a fight is armed with.
+## What the player adds up to, as a page against the left edge headed "Character": a card of who they
+## are (the portrait beside the name with its pencil, the level and its experience, and the three
+## attributes as chips under them), the damage they do a second and a click, this world's curses, what
+## changes how a fight plays (the uniques worn and the capstones learned), and every other stat that is
+## something, in tables -- the kills and the depth won last, under Misc.
+##
+## **The numbers are the fight's** (`_numbers`): a fight armed off `Inventory.stats()` the way the main
+## scene arms one, so the bare hand, the caps and the base clock and sight are in them -- the page says
+## what a blow does, not what the gear adds up to. Where a number comes from is its row's tooltip, and
+## a number that has moved since the page was last put away carries the difference beside it.
 ##
 ## Built like the other left-hand pages (`CollectionPage`): `open()` redraws it, `layout()` fits it to
 ## the window, `closed` is its X. It changes nothing and so saves nothing: the pencil beside the name
-## on its bar only asks the main scene to rename the character (`rename_pressed`).
+## only asks the main scene to rename the character (`rename_pressed`).
 
 ## The page's X was pressed.
 signal closed
 ## The pencil beside the name was pressed: the main scene asks the system for a new one.
 signal rename_pressed
 
-## The pencil's mark, in the pack's brown: dark on the green bar, as the name beside it is.
-const PENCIL_ICON := "res://Assets/UI/ui_icon_pencil_brown.png"
+## What the page's bar says; the character's own name heads its card.
+const TITLE := "Character"
+## The pencil's mark, in the pack's brown.
+const PENCIL_ICON := preload("res://Assets/UI/ui_icon_pencil_brown.png")
+## The air between the name and its pencil.
+const NAME_GAP := 4
 
-## The three attributes, in the order they stand, and the colour of each one's disc.
+## The three attributes, in the order they stand, and the colour of each one's chip.
 const ATTRIBUTES := {
 	"strength": Palette.BRICK,
 	"intelligence": Palette.ICE_DK,
 	"dexterity": Palette.LEAF,
 }
-const DISC_SIDE := 32
-const DISC_BORDER := 2
-const DISC_GAP := 16
+## The tables, each under its heading, in the order they stand: every stat `LootTable.STAT_LABELS`
+## names but the attributes (`test_inventory` holds that, so a new stat is never left off), the
+## experience the fight adds (`xp_more`), which is the player's and no piece's, and under Misc the
+## counts of how far they have come.
+const GROUPS := {
+	"Offence": ["damage", "crit_chance", "crit_damage", "attack_speed", "bleed"],
+	"Defence": ["armor", "dodge", "block", "time_on_hit", "fight_clock"],
+	"Rewards": ["drop_rate", "item_rarity", "gold_find", "orb_find", "xp_more"],
+	"Utility": ["spawn_speed", "move_speed", "sight"],
+	"Misc": ["kills", "depth"],
+}
+## What a row is called where `LootTable.STAT_LABELS` does not say.
+const LABELS := {"xp_more": "Experience", "kills": "Kills", "depth": "Depth won"}
+## The rows written even at nothing, because every hero has some: a blow, a clock, a sight, a count of
+## kills. So a fresh hero's page is never an empty frame.
+const ALWAYS := ["damage", "fight_clock", "sight", "kills"]
+## What is a bonus on what the hero already has, written with its sign: what a crit adds, a finder's
+## lift, a faster walk. A chance or a share of something is written bare.
+const SIGNED := ["crit_damage", "move_speed", "drop_rate", "item_rarity", "gold_find", "orb_find", "xp_more"]
+## The two headline numbers' keys in `_now`, and the names of their values' Labels.
+const PER_SECOND := "per_second"
+const PER_CLICK := "per_click"
+const HEADLINES := {PER_SECOND: "Damage per second (avg)", PER_CLICK: "Damage per click (avg)"}
+## The Label a change since the last look is written in, set into its row between the name and the number.
+const CHANGE_NAME := "Change"
+## A heading's id for `Accordion`, which keeps what is folded by it.
+const SECTION_ID := "character:%s"
+const CURSES := "Curses"
+const EFFECTS := "Effects"
+## A chip: the air round its number, the least it is across (so a 0 is not a sliver), its corners.
+const CHIP_PAD := Vector2i(4, 1)
+const CHIP_LEAST := 12
+const CHIP_CORNER := 4
+const CHIP_GAP := 8
 const PORTRAIT_SCALE := 2
 ## The header card's padding and the air between its portrait and its lines.
 const CARD_PAD := 4
 const CARD_GAP := 8
 
+## Whether the curses have been shown open this session: from the first time the page is put away
+## over them they start folded, so the stats, which change, have the page's top and the curses, which
+## do not, are a press away (the user's sheet review, 2026-10-03). Opened again, they stay open.
+static var _curses_shown := false
+
 var inventory: Inventory
 var _ui_scale: float
 var _panel: VBoxContainer
-## The name on the bar, which `open()` writes: kept, since beside a pencil it is not where
-## `UITheme.title_of` looks.
+## The character's name at the head of the card, which every `open()` writes.
 var _title: Label
 var _rows: VBoxContainer
+## Every number the page writes now, by stat (`_numbers`), and what they were when the page was last
+## put away -- or built: the difference between the two is written beside a number that moved.
+var _now := {}
+var _seen := {}
+## Whether the page has been up since it was built, which is what makes putting it away a look.
+var _looked := false
 
 
 func _init(player_inventory: Inventory, ui_scale: float) -> void:
@@ -48,119 +99,99 @@ func _init(player_inventory: Inventory, ui_scale: float) -> void:
 
 
 func _ready() -> void:
-	_panel = UITheme.titled_panel(inventory.hero(), "Close", closed.emit)
+	_panel = UITheme.titled_panel(TITLE, "Close", closed.emit)
 	_panel.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_panel)
-	_title = UITheme.title_of(_panel)
-	# The system's own text box is the whole of renaming (`DisplayServer.dialog_input_text`), so a
-	# platform with none has no pencil.
-	# ponytail: no text box of the game's own; add one if a platform without a native one ships.
-	if DisplayServer.has_feature(DisplayServer.FEATURE_NATIVE_DIALOG_INPUT):
-		_add_pencil()
 	# Scrolled, like the log: a late set carries more stats than a 648 px window holds.
 	var scroll := UITheme.scroll()
 	UITheme.body_of(_panel).add_child(scroll)
 	_rows = UITheme.vbox(BountyList.ROW_GAP, BagPage.WIDTH)
 	scroll.add_child(_rows)
 	open()
+	_seen = _now.duplicate()
+	visibility_changed.connect(_on_visibility_changed)
 
 
-## The pencil straight after the name, the two centred on the bar as one, where the name alone was.
-func _add_pencil() -> void:
-	var bar := _title.get_parent()
-	var pair := HBoxContainer.new()
-	pair.alignment = BoxContainer.ALIGNMENT_CENTER
-	pair.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	pair.add_theme_constant_override("separation", 4)
-	bar.add_child(pair)
-	bar.move_child(pair, _title.get_index())
-	_title.reparent(pair)
-	_title.size_flags_horizontal = Control.SIZE_FILL
-	var pencil := UITheme.button("", UITheme.BARE_BUTTON, "Rename")
-	pencil.icon = load(PENCIL_ICON)
-	pencil.focus_mode = Control.FOCUS_NONE
-	pencil.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	pencil.pressed.connect(rename_pressed.emit)
-	pair.add_child(pencil)
-
-
-## Redraws the page: who, then the attributes, then the rest as a table, under the character's name.
+## Redraws the page: who, the headline, the curses, the effects, then the tables.
 func open() -> void:
-	_title.text = inventory.hero()
 	UITheme.clear(_rows)
 	var totals := inventory.stats()
-	_rows.add_child(_who())
-	# What this world is under, if anything, straight under the card: at the foot it would be under the
-	# fold. Each its name with what it costs and pays written under it, as the tile panel writes a
-	# modifier; the numbers a curse pays are in the table below (`Inventory.stats`).
+	var fight := armed(inventory, totals)
+	_now = _numbers(totals, fight)
+	_rows.add_child(_who(totals))
+	_rows.add_child(_headline())
 	if not inventory.curses.is_empty():
-		var cursed := _section("Curses")
-		for id: String in inventory.curses:
-			var curse: Dictionary = Curses.CURSES[id]
-			# A block of its own at the tile panel's gap: the page's row gap would pull the lines apart.
-			var block := UITheme.vbox(2)
-			block.add_child(UITheme.label(str(curse["name"]), Palette.RUST))
-			block.add_child(ItemDetails.line(str(curse["text"]), Palette.TEXT, BagPage.WIDTH, true))
-			block.add_child(ItemDetails.line(str(curse["reward"]), Palette.LEAF, BagPage.WIDTH, true))
-			# The one curse whose terms were dealt and not written: which two lands are home.
-			if id == Curses.HOMELAND and not inventory.homeland.is_empty():
-				block.add_child(ItemDetails.line("Your lands: %s." % " and ".join(inventory.homeland.map(
-						func(env: String) -> String: return env.capitalize())), Palette.TEXT_SOFT, BagPage.WIDTH, true))
-			cursed.add_child(block)
-	var discs := HBoxContainer.new()
-	discs.alignment = BoxContainer.ALIGNMENT_CENTER
-	discs.add_theme_constant_override("separation", DISC_GAP)
-	for stat: String in ATTRIBUTES:
-		discs.add_child(_disc(stat, float(totals.get(stat, 0.0))))
-	_section("Attributes").add_child(discs)
+		_curses()
+	_effects()
+	for heading: String in GROUPS:
+		_table(heading, totals, fight)
 
-	# A framed block of its own: the page's row gap is for cards, and would pull a table apart.
-	var table := PanelContainer.new()
-	table.add_theme_stylebox_override("panel", BountyList.flat(Color.TRANSPARENT, 1))
-	var body := UITheme.vbox(0)
-	table.add_child(body)
-	_section("Stats").add_child(table)
-	for stat: String in LootTable.STAT_LABELS:
-		var value := float(totals.get(stat, 0.0))
-		if ATTRIBUTES.has(stat) or value <= 0.0:
-			continue
-		body.add_child(UITheme.table_row(LootTable.STAT_LABELS[stat], LootTable.stat_value(stat, value),
-				body.get_child_count() % 2 == 1, 0.0, Palette.SLOT_TAN_DK, Palette.TEXT))
-	# Already inside the damage figure above, and nothing else on the page says where it came from.
-	if inventory.collection_bonus() > 0:
-		body.add_child(UITheme.table_row("Collection", "+%d%% Damage" % inventory.collection_bonus(),
-				body.get_child_count() % 2 == 1, 0.0, Palette.SLOT_TAN_DK, Palette.TEXT_SOFT))
-	# How far down the dungeon the player has been, which the cave's own tile says too: the depths are
-	# what the curses' skulls are paid in, so they are part of what the player adds up to.
-	if inventory.dungeon_depth > 0:
-		body.add_child(UITheme.table_row("The Descent", "Depth %d won" % inventory.dungeon_depth,
-				body.get_child_count() % 2 == 1, 0.0, Palette.SLOT_TAN_DK, Palette.TEXT_SOFT))
-	# The attributes' shares the same way: inside the figures above, said here where they come from.
-	for stat: String in ATTRIBUTES:
-		var gift := inventory.attribute_gift(stat, float(totals.get(stat, 0.0)))
-		var share: float = gift[1]
-		if share > 0.0:
-			var gives: String = gift[0]
-			body.add_child(UITheme.table_row(LootTable.STAT_LABELS[stat], "+%.1f%% %s" % [share,
-					"Experience" if gives == "xp_more" else LootTable.STAT_LABELS[gives]],
-					body.get_child_count() % 2 == 1, 0.0, Palette.SLOT_TAN_DK, Palette.TEXT_SOFT))
+
+## Put away: what the page read becomes what the next look is measured from, and the curses, once seen
+## open this session, start folded.
+func _on_visibility_changed() -> void:
+	if visible:
+		_looked = true
+		return
+	_seen = _now.duplicate()
+	if _looked and not inventory.curses.is_empty() and not _curses_shown:
+		_curses_shown = true
+		Accordion.fold(SECTION_ID % CURSES)
+
+
+## A fight armed the way the main scene arms one, with no lineup: what a blow, a crit, a swing and the
+## clock come to once the bare hand, the caps and the uniques that move a number are counted. The
+## character panel's numbers off a fight, too (`main_scene._show_damage`).
+static func armed(owner: Inventory, totals: Dictionary) -> Encounter:
+	var fight := Encounter.new()
+	# Not `wear`, which takes the Dreadmask and the curses on over a lineup this fight has not got.
+	fight.effects = owner.effects()
+	fight.ranks = Achievements.ranks(owner)
+	fight.arm(totals)
+	return fight
+
+
+## Every number the page writes, by stat: the fight's where the fight reads one, so the page says what
+## the hero has rather than what the gear adds up to. Block, time on hit and the clock are in tenths, as
+## the gear keeps them (`LootTable.SECONDS_STATS`).
+func _numbers(totals: Dictionary, fight: Encounter) -> Dictionary:
+	var out := {}
+	for heading: String in GROUPS:
+		for stat: String in GROUPS[heading]:
+			out[stat] = float(totals.get(stat, 0.0))
+	out["damage"] = fight.damage
+	out["crit_chance"] = fight.crit_chance
+	out["crit_damage"] = fight.crit_damage
+	out["attack_speed"] = fight.attack_speed
+	out["spawn_speed"] = fight.spawn_speed
+	out["xp_more"] = fight.xp_more
+	out["fight_clock"] = fight.seconds * 10.0
+	out["sight"] = float(inventory.sight())
+	out["kills"] = float(inventory.kills)
+	out["depth"] = float(inventory.dungeon_depth)
+	out[PER_SECOND] = fight.per_second()
+	out[PER_CLICK] = fight.average_blow(false)
+	return out
 
 
 ## A heading that folds what is under it, added to the page; returns what to fill.
 func _section(title: String) -> VBoxContainer:
-	var section := Accordion.new(title, "character:" + title, BountyList.ROW_GAP)
+	var section := Accordion.new(title, SECTION_ID % title, BountyList.ROW_GAP)
 	_rows.add_child(section)
 	return section.body
 
 
-## The card at the head of the page: the portrait on a socket, and beside it the level, the
-## experience towards the next as the bounty's own bar, and the kills.
-func _who() -> PanelContainer:
+## The card at the head of the page: the portrait on a socket, and beside it the character's name with
+## its pencil, the level and the experience towards the next as a bar with its count under it; under
+## them the three attributes as chips.
+func _who(totals: Dictionary) -> PanelContainer:
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", BountyList.flat(Color.TRANSPARENT, CARD_PAD))
+	var column := UITheme.vbox(CARD_PAD)
+	card.add_child(column)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", CARD_GAP)
-	card.add_child(row)
+	column.add_child(row)
 	var socket := PanelContainer.new()
 	socket.add_theme_stylebox_override("panel", BountyList.flat(Palette.SLOT_TAN, CARD_PAD))
 	socket.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -175,57 +206,286 @@ func _who() -> PanelContainer:
 	row.add_child(socket)
 	var lines := UITheme.vbox(2)
 	lines.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var heading := HBoxContainer.new()
-	var level := UITheme.label("Level %d" % inventory.level)
-	level.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	heading.add_child(level)
-	var kills := UITheme.label("%d kills" % inventory.kills, Palette.TEXT_SOFT, true)
-	kills.size_flags_vertical = Control.SIZE_SHRINK_END
-	heading.add_child(kills)
-	lines.add_child(heading)
+	lines.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	# What the card has left once the socket, the gap and both paddings are paid for.
-	var bar_width: float = BagPage.WIDTH - portrait.custom_minimum_size.x - CARD_GAP - CARD_PAD * 4 - 2
-	lines.add_child(BountyList.progress_bar(inventory.xp, PlayerLevel.xp_to_next(inventory.level), bar_width))
-	lines.add_child(UITheme.label("Experience", Palette.TEXT_SOFT, true))
+	var room: float = BagPage.WIDTH - portrait.custom_minimum_size.x - CARD_GAP - CARD_PAD * 4 - 2
+	lines.add_child(_name_row(room))
+	lines.add_child(UITheme.label("Level %d" % inventory.level, Palette.TEXT, true))
+	var need := PlayerLevel.xp_to_next(inventory.level)
+	lines.add_child(BountyList.progress_bar(inventory.xp, need, room, false))
+	lines.add_child(UITheme.label("%s / %s XP" % [BigNumber.format(float(inventory.xp)),
+			BigNumber.format(float(need))], Palette.TEXT_SOFT, true))
 	row.add_child(lines)
+	column.add_child(UITheme.rule())
+	var chips := HBoxContainer.new()
+	chips.alignment = BoxContainer.ALIGNMENT_CENTER
+	chips.add_theme_constant_override("separation", CHIP_GAP)
+	for stat: String in ATTRIBUTES:
+		chips.add_child(_chip(stat, float(totals.get(stat, 0.0))))
+	column.add_child(chips)
 	return card
 
 
-## One attribute: its total on a disc of its colour, its name under it.
-func _disc(stat: String, value: float) -> VBoxContainer:
-	var column := UITheme.vbox(2)
-	var disc := PanelContainer.new()
+## The character's name, the one heading in the card, with the pencil straight after it -- built only
+## where `DisplayServer` has a native text box to rename with (`FEATURE_NATIVE_DIALOG_INPUT`). A name
+## past the `room` the pencil leaves is cut with an ellipsis, as the corner panel cuts it.
+func _name_row(room: float) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", NAME_GAP)
+	_title = UITheme.label(inventory.hero())
+	_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	row.add_child(_title)
+	# ponytail: no text box of the game's own; add one if a platform without a native one ships.
+	if DisplayServer.has_feature(DisplayServer.FEATURE_NATIVE_DIALOG_INPUT):
+		var pencil := UITheme.button("", UITheme.BARE_BUTTON, "Rename")
+		pencil.icon = PENCIL_ICON
+		pencil.focus_mode = Control.FOCUS_NONE
+		pencil.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		pencil.pressed.connect(rename_pressed.emit)
+		row.add_child(pencil)
+		var face := UITheme.theme().get_stylebox("normal", UITheme.BARE_BUTTON)
+		room -= NAME_GAP + PENCIL_ICON.get_width() + face.get_margin(SIDE_LEFT) + face.get_margin(SIDE_RIGHT)
+	# Measured off the theme: the label is not in the tree yet, and a trimmed label asks for no width.
+	var font := UITheme.theme().get_font("font", "PanelLabel")
+	var width := ceilf(font.get_string_size(_title.text, HORIZONTAL_ALIGNMENT_LEFT, -1, UITheme.FONT_SIZE).x)
+	_title.custom_minimum_size.x = minf(width, room)
+	return row
+
+
+## One attribute: its total on a chip of its colour, its name under it. Small, because a point is worth
+## little (`Inventory.ATTRIBUTE_PERCENT`) and what the number is mostly for is the equip requirement.
+func _chip(stat: String, value: float) -> VBoxContainer:
+	var column := UITheme.vbox(1)
+	var chip := PanelContainer.new()
 	var box := StyleBoxFlat.new()
 	box.bg_color = ATTRIBUTES[stat]
 	box.border_color = (ATTRIBUTES[stat] as Color).darkened(0.4)
-	box.set_border_width_all(DISC_BORDER)
-	box.set_corner_radius_all(DISC_SIDE / 2)
-	# Hard edges: a smoothed disc beside pixel art reads as a different game.
+	box.set_border_width_all(1)
+	box.set_corner_radius_all(CHIP_CORNER)
+	# Hard edges: a smoothed chip beside pixel art reads as a different game.
 	box.anti_aliasing = false
-	disc.add_theme_stylebox_override("panel", box)
-	disc.custom_minimum_size = Vector2(DISC_SIDE, DISC_SIDE)
-	disc.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	box.content_margin_left = CHIP_PAD.x
+	box.content_margin_right = CHIP_PAD.x
+	box.content_margin_top = CHIP_PAD.y
+	box.content_margin_bottom = CHIP_PAD.y
+	chip.add_theme_stylebox_override("panel", box)
+	chip.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	# Through to the column, whose tooltip says what the attribute does (`TipCard.text_of`).
-	disc.mouse_filter = Control.MOUSE_FILTER_PASS
-	# Bone with an ink outline, as the numbers over the map are: it has to read on all three colours.
-	var number := UITheme.label(BigNumber.format(roundf(value)), Palette.BONE)
+	chip.mouse_filter = Control.MOUSE_FILTER_PASS
+	# Bone in the body font: all three colours are dark enough to carry it without an outline.
+	var number := UITheme.label(BigNumber.format(roundf(value)), Palette.BONE, true)
 	number.name = stat
-	number.add_theme_color_override("font_outline_color", Palette.INK)
-	number.add_theme_constant_override("outline_size", 4)
 	number.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	number.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	disc.add_child(number)
-	column.add_child(disc)
+	number.custom_minimum_size.x = CHIP_LEAST
+	chip.add_child(number)
+	column.add_child(chip)
 	var label := UITheme.label(LootTable.STAT_LABELS[stat], Palette.TEXT_SOFT, true)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(label)
 	# What a point is worth, off the same `attribute_gift` the fight's numbers are, so the Scholar's
 	# Circlet turning intelligence to damage says so here too.
 	var gift := inventory.attribute_gift(stat, value)
-	var gives := "Experience" if gift[0] == "xp_more" else str(LootTable.STAT_LABELS[gift[0]])
-	column.tooltip_text = "Each point of %s adds %.1f%% more %s.\nYours add +%.1f%%" % [
+	var gives := str(LABELS["xp_more"]) if gift[0] == "xp_more" else str(LootTable.STAT_LABELS[gift[0]])
+	column.tooltip_text = "Each point of %s adds %.1f%% more %s\nYours add +%.1f%%" % [
 			LootTable.STAT_LABELS[stat], inventory.attribute_gift(stat, 1.0)[1], gives, gift[1]]
 	return column
+
+
+## The two numbers the rest add up to, on their own under the card, each an average off every stat the
+## fight reads (`Encounter.average_blow`) and saying so: what a second of the weapon swinging does,
+## hands off, and what a click does.
+func _headline() -> PanelContainer:
+	var box := PanelContainer.new()
+	box.add_theme_stylebox_override("panel", BountyList.flat(UITheme.TABLE_STRIPE, CARD_PAD))
+	var rows := UITheme.vbox(2)
+	box.add_child(rows)
+	rows.add_child(_headline_row(PER_SECOND))
+	rows.add_child(_headline_row(PER_CLICK))
+	return box
+
+
+## One headline: its name small, the change since the last look, and the number in Pixellari. The name
+## wraps where a long figure and its change leave it no room, as a table row's does.
+func _headline_row(key: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", UITheme.TABLE_GAP)
+	var name_cell := UITheme.label(HEADLINES[key], Palette.TEXT_SOFT, true)
+	name_cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_cell.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	name_cell.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	row.add_child(name_cell)
+	var change := _change(key)
+	if change != null:
+		change.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(change)
+	var value := UITheme.label(_text(key, _now[key]))
+	value.name = key
+	row.add_child(value)
+	return row
+
+
+## What this world is under, straight under the headline: at the foot it would be under the fold. Each
+## its name with what it costs and pays written under it, as the tile panel writes a modifier; the
+## numbers a curse pays are in the tables (`Inventory.stats`).
+func _curses() -> void:
+	var cursed := _section(CURSES)
+	for id: String in inventory.curses:
+		var curse: Dictionary = Curses.CURSES[id]
+		# A block of its own at the tile panel's gap: the page's row gap would pull the lines apart.
+		var block := UITheme.vbox(2)
+		block.add_child(UITheme.label(str(curse["name"]), Palette.RUST))
+		block.add_child(ItemDetails.line(str(curse["text"]), Palette.TEXT, BagPage.WIDTH, true))
+		block.add_child(ItemDetails.line(str(curse["reward"]), Palette.LEAF, BagPage.WIDTH, true))
+		# The one curse whose terms were dealt and not written: which two lands are home.
+		if id == Curses.HOMELAND and not inventory.homeland.is_empty():
+			block.add_child(ItemDetails.line("Your lands: %s." % " and ".join(inventory.homeland.map(
+					func(env: String) -> String: return env.capitalize())), Palette.TEXT_SOFT, BagPage.WIDTH, true))
+		cursed.add_child(block)
+
+
+## What changes how a fight plays rather than a number: every unique worn on either doll as its square
+## (its card under the cursor, held against nothing -- an heirloom's doll is not the one Alt compares
+## with), then every capstone learned as its badge, named with what it does in its tooltip. Left out
+## while there is none.
+func _effects() -> void:
+	var pieces := (inventory.equipment.items() + inventory.stash().equipment.items()).filter(
+			func(piece: Item) -> bool: return not piece.unique.is_empty())
+	var capstones := []
+	for tree: String in SkillTree.trees():
+		var nodes: Dictionary = SkillTree.nodes_of(tree)
+		for id: String in nodes:
+			if nodes[id].has("effect") and inventory.skills.total_of(id) > 0:
+				capstones.append(id)
+	if pieces.is_empty() and capstones.is_empty():
+		return
+	var flow := HFlowContainer.new()
+	flow.add_theme_constant_override("h_separation", BagPage.SLOT_GAP)
+	flow.add_theme_constant_override("v_separation", BagPage.SLOT_GAP)
+	_section(EFFECTS).add_child(flow)
+	for piece: Item in pieces:
+		var slot := ItemSlot.make(piece)
+		slot.set_meta(ItemCard.NO_COMPARE, true)
+		flow.add_child(slot)
+	for id: String in capstones:
+		flow.add_child(_capstone(id))
+
+
+## A capstone's badge, at the skills page's size in an item square's room so it lines up with the
+## uniques beside it; no socket, the pack's icons carrying their own frame (`SkillSlot`).
+static func _capstone(id: String) -> CenterContainer:
+	var node := SkillTree.node(id)
+	var holder := CenterContainer.new()
+	holder.custom_minimum_size = Vector2.ONE * ItemSlot.SIDE
+	holder.tooltip_text = "%s\n%s" % [node["name"], node["effect_text"]]
+	var icon := TextureRect.new()
+	# Mode before texture and size, for `OrbSlot`'s reason.
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_SCALE
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.texture = SkillTree.icon(id)
+	icon.custom_minimum_size = Vector2.ONE * SkillSlot.SIDE
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(icon)
+	return holder
+
+
+## One heading's stats as a table, each that is something -- or that every hero has (`ALWAYS`) -- a row
+## named for its stat: the name, the change since the last look, the number, and where it comes from as
+## its tooltip. A heading with none of its stats is left out.
+func _table(heading: String, totals: Dictionary, fight: Encounter) -> void:
+	var shown: Array = GROUPS[heading].filter(func(stat: String) -> bool:
+			return stat in ALWAYS or float(_now[stat]) > 0.0)
+	if shown.is_empty():
+		return
+	# A framed block of its own: the page's row gap is for cards, and would pull a table apart.
+	var table := PanelContainer.new()
+	table.add_theme_stylebox_override("panel", BountyList.flat(Color.TRANSPARENT, 1))
+	var body := UITheme.vbox(0)
+	table.add_child(body)
+	_section(heading).add_child(table)
+	for stat: String in shown:
+		var row := UITheme.table_row(str(LABELS.get(stat, LootTable.STAT_LABELS.get(stat, stat))),
+				_text(stat, _now[stat]), body.get_child_count() % 2 == 1, 0.0, Palette.SLOT_TAN_DK, Palette.TEXT)
+		row.name = stat
+		row.tooltip_text = _sources(stat, totals, fight)
+		var change := _change(stat)
+		if change != null:
+			var cells := row.get_child(0)
+			cells.add_child(change)
+			cells.move_child(change, 1)
+		body.add_child(row)
+
+
+## `value` of `stat` as the page writes it: the stat's own way (`LootTable.stat_value`; a count as a plain
+## number), with its sign where it is a bonus (`SIGNED`).
+static func _text(stat: String, value: float) -> String:
+	if stat in HEADLINES:
+		return BigNumber.format(value)
+	var text := BigNumber.format(value) + "%" if stat == "xp_more" else LootTable.stat_value(stat, value)
+	return "+" + text if stat in SIGNED and value > 0.0 else text
+
+
+## The difference from what `stat` read the last time the page was put away, in leaf for more and brick
+## for less -- every stat here is better higher -- or null where nothing that shows has moved. Nor for a
+## stat that was nothing then: its whole number is the change, and "+10% 10%" says it twice.
+func _change(stat: String) -> Label:
+	if float(_seen.get(stat, 0.0)) == 0.0 or _text(stat, _now[stat]) == _text(stat, _seen[stat]):
+		return null
+	var moved: float = _now[stat] - _seen[stat]
+	if not LootTable.delta_shows(stat, moved):
+		return null
+	var text := BigNumber.format(moved, true)
+	if stat in LootTable.RATE_STATS:
+		text = "%+.1f/s" % moved
+	elif stat in LootTable.SECONDS_STATS:
+		text = LootTable.seconds_text(moved, true)
+	elif stat == "xp_more" or stat in LootTable.PERCENT_STATS:
+		text += "%"
+	var label := UITheme.label(text, Palette.LEAF if moved > 0.0 else Palette.BRICK, true)
+	label.name = CHANGE_NAME
+	return label
+
+
+## Where a row's number comes from, for its tooltip: what a rating buys, what sits on top of the gear
+## and the skills -- the bare hand, the collection, an attribute's share, the base clock and sight -- and
+## the cap a number stopped at. Empty where it is the gear and the skills alone.
+func _sources(stat: String, totals: Dictionary, fight: Encounter) -> String:
+	var lines: Array[String] = []
+	var raw := float(totals.get(stat, 0.0))
+	match stat:
+		"damage":
+			lines.append("Bare hands +%d" % Encounter.BARE_DAMAGE)
+			if inventory.collection_bonus() > 0:
+				lines.append("Collection +%d%%" % inventory.collection_bonus())
+		"crit_chance":
+			if "beginners_luck" not in fight.effects and raw > Encounter.CRIT_CAP:
+				lines.append("At most %s%%" % BigNumber.format(Encounter.CRIT_CAP))
+		"attack_speed":
+			if fight.attack_speed >= Encounter.SWING_CAP:
+				lines.append("At most %.1f/s" % Encounter.SWING_CAP)
+		"spawn_speed":
+			if raw > 100.0:
+				lines.append("At most 100%")
+		"armor":
+			lines.append("%d%% off every blow" % roundi((1.0 - fight.taken(1.0, 0.0)) * 100.0))
+		"dodge":
+			lines.append("%d%% of blows dodged" % roundi(fight.dodge_chance() * 100.0))
+		"fight_clock":
+			lines.append("Base %s" % LootTable.seconds_text(Encounter.SECONDS * 10.0))
+			if fight.seconds > Encounter.SECONDS:
+				lines.append("Gear %s" % LootTable.seconds_text((fight.seconds - Encounter.SECONDS) * 10.0, true))
+			if LootTable.seconds_of(stat, raw) > Encounter.CLOCK_MOST:
+				lines.append("Gear at most %s" % LootTable.seconds_text(Encounter.CLOCK_MOST * 10.0, true))
+		"sight":
+			lines.append("Base %d" % (0 if Curses.THICK_FOG in inventory.curses else Inventory.BASE_SIGHT))
+			if raw > 0.0:
+				lines.append("Gear +%d" % roundi(raw))
+	# The attributes' shares, off the same `attribute_gift` the totals are.
+	for attribute: String in ATTRIBUTES:
+		var gift := inventory.attribute_gift(attribute, float(totals.get(attribute, 0.0)))
+		if gift[0] == stat and float(gift[1]) > 0.0:
+			lines.append("%s +%.1f%%" % [LootTable.STAT_LABELS[attribute], gift[1]])
+	return "\n".join(lines)
 
 
 ## Where the main scene stands the page, in window pixels: empty for the whole window.

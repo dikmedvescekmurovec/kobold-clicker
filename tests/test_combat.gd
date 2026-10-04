@@ -2315,9 +2315,9 @@ func _test_more_unique_effects() -> bool:
 	# Snowball: 2% a kill, and no further than double.
 	var snow := _standing(["momentum"], {"damage": 9.0})
 	snow.index = 10
-	var ten := snow._unique_more(false)
+	var ten := snow.unique_more(false)
 	snow.index = 500
-	var many := snow._unique_more(false)
+	var many := snow.unique_more(false)
 	_check(is_equal_approx(ten, 0.2) and is_equal_approx(many, 1.0), "momentum builds and stops at double (%s, %s)"
 			% [ten, many])
 
@@ -2640,7 +2640,7 @@ func _test_rank_four() -> bool:
 				/ UniqueTable.dial("knucklebone_ring", "step", rank)))
 		for i in clicks:
 			ring.hit()
-		var swung := ring._unique_more(true)
+		var swung := ring.unique_more(true)
 		_check(is_equal_approx(swung, UniqueTable.dial("knucklebone_ring", "most", rank) / 100.0 if rank == iv else 0.0),
 				"a full Knucklebone reaches the swings only at IV (rank %d: %s)" % [rank, swung])
 
@@ -2753,7 +2753,7 @@ func _test_rank_four() -> bool:
 	# Brawler's Wraps: strength and dexterity both, on clicks and on swings.
 	var brawl := _told(["brawler"], {"brawlers_wraps": iv}, {"damage": 9.0, "strength": 50.0, "dexterity": 100.0})
 	var each := UniqueTable.dial("brawlers_wraps", "more", iv) / 100.0 * 150.0
-	_check(is_equal_approx(brawl._unique_more(false), each) and is_equal_approx(brawl._unique_more(true), each),
+	_check(is_equal_approx(brawl.unique_more(false), each) and is_equal_approx(brawl.unique_more(true), each),
 			"the Wraps at IV count both on both")
 
 	# Last Gasp: in its last seconds the enemies hold their blows.
@@ -2842,7 +2842,7 @@ func _test_rank_four() -> bool:
 	for rank in [3, iv]:
 		var run := Encounter.farm(Vector2i(12, 0), "grass")
 		run.wear(["glass_edge"], {"glass_edge": rank})
-		_check(is_equal_approx(run._unique_more(false),
+		_check(is_equal_approx(run.unique_more(false),
 				UniqueTable.dial("glass_edge", "times", rank) - 1.0 if rank == iv else 0.0),
 				"the Edge in a run at rank %d" % rank)
 
@@ -3575,12 +3575,23 @@ func _test_more_curses() -> bool:
 	var full := berserk.hp
 	berserk.advance(0.9)
 	_check(berserk.hp == full, "a second of standing there costs the enemy nothing")
-	_check(is_equal_approx(berserk._unique_more(false), Encounter.BERSERK_WORLD_MORE)
-			and is_equal_approx(berserk._unique_more(true), 0.0), "its clicks are worth double, its swings no more")
+	_check(is_equal_approx(berserk.unique_more(false), Encounter.BERSERK_WORLD_MORE)
+			and is_equal_approx(berserk.unique_more(true), 0.0), "its clicks are worth double, its swings no more")
 	var banded: Encounter = one.call([Curses.effect(Curses.BERSERKERS_WORLD), "berserk"], {"damage": 3.0})
-	_check(is_equal_approx(banded._unique_more(false),
+	_check(is_equal_approx(banded.unique_more(false),
 			Encounter.BERSERK_WORLD_MORE + UniqueTable.dial("berserkers_band", "times") - 1.0),
 			"and a Berserker's Band adds its share to the same sum")
+	# The average blow the character page heads itself with: 3 and the bare hand's 1, crits half the
+	# time adding as much again -- and a click in the Berserker's World worth double that.
+	var even: Encounter = one.call([], {"damage": 3.0, "crit_chance": 50.0, "crit_damage": 100.0})
+	_check(is_equal_approx(even.average_blow(true), 6.0) and is_equal_approx(even.average_blow(false), 6.0),
+			"a blow is its damage with its crits averaged in (%s)" % even.average_blow(true))
+	var doubled: Encounter = one.call([Curses.effect(Curses.BERSERKERS_WORLD)],
+			{"damage": 3.0, "crit_chance": 50.0, "crit_damage": 100.0})
+	_check(is_equal_approx(doubled.average_blow(false), 12.0) and is_equal_approx(doubled.average_blow(true), 6.0),
+			"and what the curses and uniques add to a click or a swing goes in on top")
+	var still: Encounter = one.call(["metronome"], {"damage": 3.0})
+	_check(still.average_blow(false) == 0.0, "a hand that does nothing averages nothing")
 
 	# Glass World: the clock a third faster and +100%, and with the Glass Edge both twice over.
 	for case: Array in [[[Curses.effect(Curses.GLASS_WORLD)], 1], [[Curses.effect(Curses.GLASS_WORLD), "glass_edge"], 2]]:
@@ -3589,10 +3600,10 @@ func _test_more_curses() -> bool:
 		glass.advance(0.3)
 		_check(is_equal_approx(left - glass.time_left, 0.3 * pow(Encounter.GLASS_CLOCK, case[1])),
 				"the glass spends the clock %d time(s) over" % case[1])
-		_check(is_equal_approx(glass._unique_more(false), Encounter.GLASS_MORE * case[1]), "and pays for each")
+		_check(is_equal_approx(glass.unique_more(false), Encounter.GLASS_MORE * case[1]), "and pays for each")
 	var run := Encounter.farm(here, "grass", "plain")
 	run.wear([Curses.effect(Curses.GLASS_WORLD)])
-	_check(is_equal_approx(run._unique_more(false), 0.0), "a run has no clock to spend, and is paid nothing")
+	_check(is_equal_approx(run.unique_more(false), 0.0), "a run has no clock to spend, and is paid nothing")
 
 	# Raw Finds: gear falls common and bare, a unique as it always did, and orbs three times as often.
 	var raw := Encounter.farm(here, "grass", "plain")

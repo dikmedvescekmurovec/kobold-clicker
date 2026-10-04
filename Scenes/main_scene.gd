@@ -16,8 +16,6 @@ const ZOOM_MIN := 1.0
 const ZOOM_MOST := 3.0
 ## How far two fingers have to spread (or close, by its inverse) to step the zoom once.
 const PINCH_STEP := 1.3
-## Rings a charted tile shows round it with no torch held; the Thick Fog takes all of it.
-const BASE_SIGHT := 2
 ## The same for the UI panel. Pixellari only renders cleanly at its native 16 px, so the way to make
 ## the interface smaller is to draw its pixels smaller, not to shrink the font. 0 is picked from the
 ## window as the game starts (`UITheme.pick_scale`): 2 on the default window.
@@ -772,7 +770,6 @@ func _build_character() -> void:
 	_character = CharacterPanel.new()
 	_character.scale = Vector2(ui_scale, ui_scale)
 	_character.position = Vector2(8, 8)
-	_character.set_player_name(inventory.hero())
 	layer.add_child(_character)
 	_sync_character()
 
@@ -780,6 +777,16 @@ func _build_character() -> void:
 ## Puts the panel back in step with the inventory: gems still in the air when a fight closed never arrive.
 func _sync_character() -> void:
 	_character.set_state(inventory.level, inventory.xp)
+	_show_damage()
+
+
+## The panel's damage line: a click and a second, as the character page heads itself. Over a fight
+## they are that fight's, so a tile's modifiers and the curses are in them; anywhere else, a fight armed
+## the way one would be.
+func _show_damage() -> void:
+	var fight: Encounter = _combat.fight if _combat != null and _combat.fight != null \
+			else CharacterPage.armed(inventory, inventory.stats())
+	_character.set_damage(fight.average_blow(false), fight.per_second())
 
 
 ## Whether `cell` is this world's cave, as far as the player can tell: seen, and not under the ice.
@@ -822,6 +829,10 @@ func _build_pages(layer: CanvasLayer) -> void:
 		_character_button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 	_character_button.tooltip_text = "Character"
 	_character_button.pressed.connect(_on_character_pressed)
+	# The frame is this button's face, a bare one, so it lights under the mouse as a bare mark does
+	# (`_show_corner` puts it out when the button stops taking the mouse).
+	_character_button.mouse_entered.connect(func() -> void: _character.modulate = UITheme.BARE_HOVER)
+	_character_button.mouse_exited.connect(func() -> void: _character.modulate = Color.WHITE)
 	layer.add_child(_character_button)
 	# Passes its press up, so the bar opens the character page as the rest of the panel does -- and in a
 	# fight, where the button takes no mouse, on to the swing (`_show_corner`).
@@ -839,6 +850,8 @@ func _build_pages(layer: CanvasLayer) -> void:
 	inventory.save_written.connect(_check_achievements, CONNECT_DEFERRED)
 	# And so is where a piece put on, taken off or crafted in the bag mid-fight reaches the fight.
 	inventory.save_written.connect(_rearm, CONNECT_DEFERRED)
+	# And the character panel's damage line, after the fight it may read is armed again.
+	inventory.save_written.connect(_show_damage, CONNECT_DEFERRED)
 	skills_page = SkillsPage.new(inventory, inventory_path, ui_scale)
 	skills_page.changed.connect(func() -> void: _pulse(_skills_button, "skill_point", _skill_point_free()))
 	bag_page = BagPage.new(inventory, inventory_path, ui_scale)
@@ -1790,6 +1803,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	_close_left_pages()
 	_show_corner(false)
 	_character.show()
+	_show_damage()
 	# The tips about the fight itself come as it opens rather than after it, when they are needed.
 	_check_tips()
 
@@ -1848,6 +1862,7 @@ func _on_dungeon_pressed() -> void:
 	_close_left_pages()
 	_show_corner(false)
 	_character.show()
+	_show_damage()
 
 
 ## Back from the dungeon. The depths it won are the whole of what it earned.
@@ -1855,6 +1870,7 @@ func _on_dungeon_finished(_won: bool) -> void:
 	_bank_depths()
 	_combat.queue_free()
 	_combat = null
+	_show_damage()
 	_play_music(IDLE_MUSIC)
 	map.process_mode = Node.PROCESS_MODE_INHERIT
 	map.show()
@@ -1974,13 +1990,11 @@ func _credit_walls() -> void:
 		_save_map()
 
 
-## How far the player sees from a tile they have just taken: their own `BASE_SIGHT` rings behind it, plus whatever a
-## torch adds. It is read here and nowhere else -- at the moment the tile is charted -- so a torch put
-## on afterwards uncovers nothing and one taken off hides nothing. What a tile showed is what it showed.
+## How far the player sees from a tile they have just taken (`Inventory.sight`). It is read here and
+## nowhere else -- at the moment the tile is charted -- so a torch put on afterwards uncovers nothing
+## and one taken off hides nothing. What a tile showed is what it showed.
 func _sight() -> int:
-	# Under the Thick Fog the player's own sight is gone, and a torch is what buys it back. None at all
-	# is a chart that uncovers the tile taken and nothing round it (`MapBuilder.chart`).
-	return (0 if Curses.THICK_FOG in inventory.curses else BASE_SIGHT) + int(inventory.stats().get("sight", 0))
+	return inventory.sight()
 
 
 ## The Homeland's two lands, chosen once, the first time the cursed world's map exists: the kind the
@@ -2305,6 +2319,8 @@ func _show_corner(shown: bool) -> void:
 	# through): the button itself takes no mouse there, no key and no hand.
 	_character_button.disabled = not shown
 	_character_button.mouse_filter = Control.MOUSE_FILTER_STOP if shown else Control.MOUSE_FILTER_IGNORE
+	if not shown:
+		_character.modulate = Color.WHITE
 	Cursors.wear(_character.xp_hover, Cursors.HAND if shown else Cursors.ARROW)
 	# The log is a thing to be found, like what it lists: it is not there until the first unique is.
 	_collection_button.visible = shown and (Settings.show_all_uniques()
@@ -2665,7 +2681,6 @@ func _on_name_entered(text: String) -> void:
 	if _save_blocked or _resetting or _transcend_page != null or not inventory.rename(text):
 		return
 	inventory.save(inventory_path)
-	_character.set_player_name(inventory.hero())
 	if character_page.visible:
 		character_page.open()
 

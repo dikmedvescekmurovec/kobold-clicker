@@ -568,9 +568,10 @@ func _labels_in(slot: OrbSlot) -> int:
 	return found
 
 
-## The character panel: the bar and the portrait lie inside the frame, the XP bar empties by whole
-## sprite pixels, never to nothing while there is anything to show, and the frame widens to a long
-## name but not past a cut-short one.
+## The character panel: the bar, the portrait and the badge lie inside the frame, the XP bar empties by
+## whole sprite pixels, never to nothing while there is anything to show, the frame widens to a long
+## damage line and the badge -- never the frame -- to a long level, and at its widest the panel stays
+## clear of a fight's centred column.
 func _test_character_panel() -> bool:
 	var frame := CharacterPanel.FRAME.get_size()
 	var portrait := CharacterPanel.PORTRAIT.get_size()
@@ -579,6 +580,9 @@ func _test_character_panel() -> bool:
 	_check(end.x <= frame.x and end.y <= frame.y, "the bar lies inside the frame")
 	_check(CharacterPanel.STRETCH_AT > CharacterPanel.XP_AT.x and CharacterPanel.STRETCH_AT < end.x,
 			"the bar widens at the frame's column")
+	var badge := CharacterPanel.BADGE.get_size()
+	_check(badge.y <= frame.y and CharacterPanel.CIRCLE_MIDDLE + badge.x / 2.0 < CharacterPanel.XP_AT.x,
+			"the badge stands under the circle, short of the band's bar")
 	var gem: Texture2D = load("res://Assets/UI/xp_gem.png")
 	_check(gem != null and gem.get_size() == Vector2(6, 6), "the gem is the 6 px cut")
 
@@ -586,7 +590,7 @@ func _test_character_panel() -> bool:
 	root.add_child(panel)
 	var plain := panel.size
 	_check(plain == frame * CharacterPanel.PIXEL,
-			"the name sits in the frame at its own width, nothing over it: %s" % plain)
+			"a fresh hero's damage line sits in the frame at its own width: %s" % plain)
 	# The bar widens by as many columns as the frame.
 	var full := CharacterPanel.XP_BAR.get_width() + int(plain.x / CharacterPanel.PIXEL - frame.x)
 	_check(panel.shown_pixels() == 0, "no experience shows no bar")
@@ -603,25 +607,36 @@ func _test_character_panel() -> bool:
 	var gains := panel.get_children().filter(func(child: Node) -> bool:
 			return child is Label and child.text == "+%d" % PlayerLevel.xp_to_next(1))
 	_check(gains.size() == 1, "absorbing floats the amount off the bar")
+	# The level is the badge's: a long one widens the badge, still centred on the circle, and never the frame.
+	var badges := panel.get_children().filter(func(child: Node) -> bool:
+			return child is NinePatchRect and (child as NinePatchRect).texture == CharacterPanel.BADGE)
+	_check(badges.size() == 1, "the level stands on one badge")
+	var shield: NinePatchRect = badges[0]
+	var narrow := shield.size.x
 	panel.set_state(10 ** 6, 0)
-	_check(panel.size.x > plain.x, "a long level widens the frame")
+	_check(shield.size.x > narrow and panel.size == plain, "a long level widens the badge, not the frame")
+	var middle := (shield.position.x / CharacterPanel.PIXEL) + shield.size.x / 2.0
+	_check(absf(middle - CharacterPanel.CIRCLE_MIDDLE) <= 0.5, "and it stays under the circle: %s" % middle)
 	panel.set_state(1, PlayerLevel.xp_to_next(1) / 2)
-	_check(panel.size == plain, "and a short one narrows it back")
-	panel.set_player_name("Sir Adventurer")
+	_check(shield.size.x == narrow, "and a short one narrows it back")
+	panel.set_damage(88888.0, 88888.0)
 	var long := panel.size.x
-	_check(long > plain.x, "a long name widens the frame")
+	_check(long > plain.x, "a long damage line widens the frame")
 	_check(absi(panel.shown_pixels() - int(long / CharacterPanel.PIXEL - frame.x
 			+ CharacterPanel.XP_BAR.get_width()) / 2) <= 1, "and the bar under it, still half full")
-	panel.set_player_name("Adventurer".repeat(5))
-	var cut := panel.size.x
-	panel.set_player_name("Adventurer".repeat(50))
-	_check(cut > long and panel.size.x == cut, "a name past the room is cut short: %d, %d" % [cut, panel.size.x])
-	# At its widest, it stays clear of a settlement fight's centred column on the narrowest window not
-	# held upright, where it stands 8 px in at ui_scale 1.
+	panel.set_damage(6.0, 0.0)
+	_check(panel.size == plain, "and a short one narrows it back")
+	# At its widest -- the widest figures `BigNumber` writes, plain, named or past the names -- it stays
+	# clear of a settlement fight's centred column on the narrowest window not held upright, where it
+	# stands 8 px in at ui_scale 1.
 	panel.set_state(9999, 0)
+	var widest := 0.0
+	for figure: float in [88888.0, 888e33, 8.88e88]:
+		panel.set_damage(figure, figure)
+		widest = maxf(widest, panel.size.x)
 	var column := (UITheme.MIN_LONG - KillPips.width_for(Encounter.SETTLEMENT["enemies"])) / 2.0
-	_check(8 + panel.size.x + 4 <= column, "the widest panel ends at %d, the fight's column starts at %d"
-			% [8 + panel.size.x, column])
+	_check(widest > plain.x and 8 + widest + 4 <= column,
+			"the widest panel ends at %d, the fight's column starts at %d" % [8 + widest, column])
 	_check(panel.mouse_filter == Control.MOUSE_FILTER_IGNORE, "the panel never takes the mouse")
 	panel.queue_free()
 	return true
@@ -680,14 +695,16 @@ func _test_tip_card() -> bool:
 			"Godot's own tooltip is out of reach, so nothing is said twice")
 	row.queue_free()
 
-	# The character page's attribute discs say what a point does, under the cursor on the disc itself.
+	# The character page's attribute chips say what a point does, under the cursor on the chip itself.
 	var worn := Inventory.new()
 	var page := CharacterPage.new(worn, 1.0)
 	root.add_child(page)
 	for stat: String in CharacterPage.ATTRIBUTES:
 		var disc := page.find_child(stat, true, false).get_parent() as Control
 		var said := TipCard.text_of(disc, disc.get_global_rect().get_center())
-		_check(LootTable.STAT_LABELS[stat] in said and "Yours add" in said, "the %s disc says what it does: %s" % [stat, said])
+		_check(LootTable.STAT_LABELS[stat] in said and "Yours add" in said
+				and not Array(said.split("\n")).any(func(line: String) -> bool: return line.ends_with(".")),
+				"the %s chip says what it does, with no full stop: %s" % [stat, said])
 	page.queue_free()
 	return true
 

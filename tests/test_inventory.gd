@@ -73,6 +73,7 @@ func _run() -> void:
 	_check(await _test_collection() == true, "collection log tests ran to the end")
 	_check(await _test_achievements() == true, "achievement tests ran to the end")
 	_check(await _test_character_page() == true, "character page tests ran to the end")
+	_check(await _test_character_sheet() == true, "character sheet tests ran to the end")
 	_check(await _test_item_generator() == true, "item generator tests ran to the end")
 	_check(await _test_heirlooms() == true, "heirloom tests ran to the end")
 	_check(_test_super_orbs() == true, "super orb tests ran to the end")
@@ -4822,6 +4823,129 @@ func _test_item_generator() -> bool:
 	return true
 
 
+## The sheet writes what the fight is armed with -- never an empty frame, a cap where a number stopped,
+## where a number comes from -- what changed since the last look, and what changes a fight.
+func _test_character_sheet() -> bool:
+	# Every stat a piece can carry stands in one of the page's tables, so a new one is never left off.
+	var tabled := []
+	for heading: String in CharacterPage.GROUPS:
+		tabled.append_array(CharacterPage.GROUPS[heading])
+	for stat: String in LootTable.STAT_LABELS:
+		_check(stat in tabled or CharacterPage.ATTRIBUTES.has(stat), "%s has a table on the character page" % stat)
+
+	# A fresh hero: a blow, a clock and a sight, and what a click does at the head.
+	var page := CharacterPage.new(Inventory.new(), 1.0)
+	root.add_child(page)
+	_check(_sheet_value(page, "damage") == "1", "a bare hand does 1 (%s)" % _sheet_value(page, "damage"))
+	_check(_sheet_value(page, "fight_clock") == "30.0s", "the clock is the fight's (%s)" % _sheet_value(page, "fight_clock"))
+	_check(_sheet_value(page, "sight") == str(Inventory.BASE_SIGHT), "and the sight the base")
+	_check(page.find_child("armor", true, false) == null, "armour at nothing is no row")
+	var click: Label = page.find_child(CharacterPage.PER_CLICK, true, false)
+	var idle: Label = page.find_child(CharacterPage.PER_SECOND, true, false)
+	_check(click != null and click.text == "1" and idle != null and idle.text == "0",
+			"with no swing a second does nothing and a click does its 1")
+	_check(UITheme.title_of(page._panel).text == CharacterPage.TITLE and page._title.text == "Adventurer",
+			"the bar says what the page is, and the card whose it is")
+	_check(_sheet_value(page, "kills") == "0" and page.find_child("depth", true, false) == null,
+			"the kills are counted under Misc from the first, the depth once one is won")
+	page.queue_free()
+
+	# Geared past the crit cap: the fight's numbers, capped, signed and sourced.
+	var hero := Inventory.new()
+	var blade := Item.new()
+	blade.type = "Wooden Sword"
+	blade.stats = {"damage": 9.0, "crit_chance": 150.0, "crit_damage": 50.0, "attack_speed": 2.0}
+	hero.equipment.equip(Equipment.Socket.WEAPON, blade)
+	page = CharacterPage.new(hero, 1.0)
+	root.add_child(page)
+	_check(_sheet_value(page, "damage") == "10", "the bare hand is on top of the gear (%s)" % _sheet_value(page, "damage"))
+	_check("Bare hands +1" in (page.find_child("damage", true, false) as Control).tooltip_text, "and says so")
+	_check(_sheet_value(page, "crit_chance") == "100%", "crit chance stops where the fight stops it")
+	_check("At most 100%" in (page.find_child("crit_chance", true, false) as Control).tooltip_text,
+			"and its tooltip says where")
+	_check(_sheet_value(page, "crit_damage") == "+50%", "what a crit adds carries its sign")
+	# 10 a blow, every blow a crit adding half: 15, twice a second.
+	var second: Label = page.find_child(CharacterPage.PER_SECOND, true, false)
+	_check(second != null and second.text == "30", "a swinging weapon heads the page with a second of it (%s)"
+			% (second.text if second != null else "none"))
+	var each: Label = page.find_child(CharacterPage.PER_CLICK, true, false)
+	_check(each != null and each.text == "15", "and a click is the same average blow (%s)"
+			% (each.text if each != null else "none"))
+	_check(each != null and (each.get_parent() as Control).tooltip_text.is_empty()
+			and (each.get_parent().get_child(0) as Label).text.ends_with("(avg)"),
+			"each says it is an average in its name, with no tooltip")
+	hero.dungeon_depth = 3
+	hero.kills = 1234
+	page.open()
+	_check(_sheet_value(page, "depth") == "3" and _sheet_value(page, "kills") == "1,234",
+			"a depth won and the kills are rows under Misc")
+
+	# A change since the last look is written beside the number; put away, the next look starts again.
+	blade.stats["damage"] = 19.0
+	page.open()
+	var change: Label = page.find_child("damage", true, false).find_child(CharacterPage.CHANGE_NAME, true, false)
+	_check(change != null and change.text == "+10", "a number that moved says by how much (%s)"
+			% (change.text if change != null else "none"))
+	_check(change != null and change.get_theme_color("font_color") == Palette.LEAF, "in leaf, for more")
+	page.hide()
+	page.show()
+	page.open()
+	_check(page.find_child("damage", true, false).find_child(CharacterPage.CHANGE_NAME, true, false) == null,
+			"and once the page has been put away it is the new mark")
+	blade.stats["bleed"] = 20.0
+	page.open()
+	var bleed := page.find_child("bleed", true, false)
+	_check(bleed != null and bleed.find_child(CharacterPage.CHANGE_NAME, true, false) == null,
+			"a stat that was nothing is a new row, not a change")
+
+	# The uniques worn and the capstones learned, which change a fight rather than a number.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var luck := Item.rolled_unique("beginners_luck", rng, 1)
+	hero.equipment.equip(hero.equipment.sockets_for(luck)[0], luck)
+	hero.skills.ranks["assassin"] = 1
+	page.open()
+	var squares := page.find_children("*", "Panel", true, false).filter(func(n: Node) -> bool: return n is ItemSlot)
+	_check(squares.size() == 1 and (squares[0] as ItemSlot).item == luck
+			and squares[0].has_meta(ItemCard.NO_COMPARE), "a worn unique is a square held against nothing")
+	var badges := page.find_children("*", "CenterContainer", true, false).filter(
+			func(badge: Control) -> bool: return "Execute" in badge.tooltip_text)
+	_check(badges.size() == 1, "and a learned capstone a badge saying what it does")
+	_check(_sheet_value(page, "crit_chance") == "25%", "Beginner's Luck's crit chance is the one the fight uses")
+	page.queue_free()
+
+	# The curses: open until the page has been looked at and put away once this session, then folded.
+	CharacterPage._curses_shown = false
+	var cursed := Inventory.new()
+	cursed.curses.assign([Curses.WILD_TILES])
+	page = CharacterPage.new(cursed, 1.0)
+	root.add_child(page)
+	var folds := func() -> Array:
+		return page.find_children("*", "VBoxContainer", true, false).filter(func(n: Node) -> bool: return n is Accordion)
+	_check((folds.call()[0] as Accordion).is_open(), "the curses stand open the first time")
+	# Built standing up, as no page in the game is: shown is what makes putting it away a look.
+	page.hide()
+	page.show()
+	page.hide()
+	page.show()
+	page.open()
+	_check(not (folds.call()[0] as Accordion).is_open(), "and folded once they have been seen")
+	(folds.call()[0] as Accordion).toggle()
+	page.hide()
+	page.show()
+	page.open()
+	_check((folds.call()[0] as Accordion).is_open(), "opened again, they stay open")
+	page.queue_free()
+	await process_frame
+	return true
+
+
+## The number on the character page's row for `stat`, or "" where there is no such row.
+func _sheet_value(page: CharacterPage, stat: String) -> String:
+	var row := page.find_child(stat, true, false)
+	return "" if row == null else (row.find_child(UITheme.TABLE_VALUE, true, false) as Label).text
+
+
 func _test_character_page() -> bool:
 	_clear_save()
 	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
@@ -4845,7 +4969,11 @@ func _test_character_page() -> bool:
 	var said := ""
 	for label: Node in main.character_page.find_children("*", "Label", true, false):
 		said += (label as Label).text + "|"
-	_check(said.contains("Damage|5|"), "a stat that is something is a row, name then number (%s)" % said)
+	# 5 and 2.4% for the strength is 5.12, which the fight rounds before the bare hand's 1 goes on top.
+	var damage: Node = main.character_page.find_child("damage", true, false)
+	_check(said.contains("Damage|") and damage != null
+			and (damage.find_child(UITheme.TABLE_VALUE, true, false) as Label).text == "6",
+			"a stat that is something is a row, and its number is what a blow does (%s)" % said)
 	_check(not said.contains("Armour"), "and one that is nothing is not")
 	# Renaming is the system's own text box, which a headless run has not got: its answer is what is
 	# handed in here. The page wears the name on its bar, as the corner and the hero's tips do.
@@ -4853,7 +4981,11 @@ func _test_character_page() -> bool:
 	_check(main.inventory.hero() == "Cobalt" and Inventory.load_from(TEST_PATH).hero() == "Cobalt",
 			"a name handed back is the character's, and saved")
 	_check(main.character_page._title.text == "Cobalt", "the page's bar says it")
-	_check(main._character._name_label.text == "Cobalt", "and so does the corner")
+	# The corner wears no name (2026-10-03): where it stood is what a click does, as the page heads
+	# itself, read again off the save the name was written in.
+	await process_frame
+	_check(main._character._click_label.text == BigNumber.format(main.character_page._now[CharacterPage.PER_CLICK]),
+			"the corner says what a click does, as the page does (%s)" % main._character._click_label.text)
 	main._on_name_entered("")
 	_check(main.inventory.hero() == "Cobalt", "an empty answer leaves the name as it was")
 	var pencils: Array = main.character_page.find_children("", "Button", true, false).filter(

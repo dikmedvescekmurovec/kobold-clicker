@@ -1,6 +1,6 @@
 # New uniques for `Scenes/Items/unique_table.gd`
 
-> **Status: built** (8c1cad2, 2026-09-18). Kept as the record of the brief. Where it and the code disagree, the code and `Scenes/Items/CLAUDE.md` / `DESIGN.md` are current -- for one, the damage uniques add into one sum (`Encounter._unique_more`) rather than multiplying.
+> **Status: built** (8c1cad2, 2026-09-18). Kept as the record of the brief. Where it and the code disagree, the code and `Scenes/Items/CLAUDE.md` / `DESIGN.md` are current -- for one, the damage uniques add into one sum (`Encounter.unique_more`) rather than multiplying.
 
 Read `Scenes/Items/CLAUDE.md`, `Scenes/Items/DESIGN.md`, `unique_table.gd` and `Scenes/Combat/encounter.gd` first.
 Follow the rules the table already states:

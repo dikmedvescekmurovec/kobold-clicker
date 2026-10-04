@@ -100,16 +100,16 @@ const LEAST_ROWS := 2
 ## Each socket's centre in the doll sprite's own pixels, before DOLL_SCALE. The places the pack's figure had
 ## at 3x, kept when the pixellab doll replaced it (2026-09-23), which was generated and fitted to sit under them:
 ## head, chest and feet down the middle, the shield at the left edge and the sword hand at the right. The
-## jewellery sits in a row below the figure.
+## jewellery sits in a row below the figure. Rows and columns are one 51 px grid.
 const DOLL_SOCKETS := {
 	Equipment.Socket.HELMET: Vector2(63, 24),
-	Equipment.Socket.OFFHAND: Vector2(12, 78),
+	Equipment.Socket.OFFHAND: Vector2(12, 75),
 	Equipment.Socket.BODY: Vector2(63, 75),
 	Equipment.Socket.WEAPON: Vector2(114, 75),
-	Equipment.Socket.BOOTS: Vector2(63, 123),
-	Equipment.Socket.RING_LEFT: Vector2(12, 174),
-	Equipment.Socket.AMULET: Vector2(63, 174),
-	Equipment.Socket.RING_RIGHT: Vector2(114, 174),
+	Equipment.Socket.BOOTS: Vector2(63, 126),
+	Equipment.Socket.RING_LEFT: Vector2(12, 177),
+	Equipment.Socket.AMULET: Vector2(63, 177),
+	Equipment.Socket.RING_RIGHT: Vector2(114, 177),
 }
 
 ## Whose grid and whose doll this page is: the player's inventory, or -- on the heirlooms' page --

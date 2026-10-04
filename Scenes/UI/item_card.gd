@@ -31,6 +31,10 @@ const KEYS := "keys"
 ## `hint`: an achievement's square writes the unique it unlocks there, and a unique's square in the log
 ## its achievement (the user's, 2026-10-02). The word Alt is offered under goes in its `KEYS`.
 const ALT_CARD := "alt_card"
+## The meta a square may carry that holds its piece up against nothing: a piece shown as worn on a page
+## that is not its doll's (the character page's uniques), which the card would otherwise hold against
+## the ordinary doll -- the wrong one for an heirloom.
+const NO_COMPARE := "no_compare"
 const ORB_SHINE := preload("res://Scenes/UI/orb_shine.gdshader")
 ## How long the light behind the card takes to swell in, and to die after the least orb and after the
 ## best, in seconds (`shine`); and the most it reaches past the card's edges, in the card's pixels.
@@ -287,7 +291,7 @@ func write_second(slot: ItemSlot) -> bool:
 	if slot.has_meta(ALT_CARD):
 		(slot.get_meta(ALT_CARD) as Callable).call(_worn_rows, WIDTH)
 		return true
-	if slot.hint.is_valid():
+	if slot.hint.is_valid() or slot.has_meta(NO_COMPARE):
 		return false
 	var worn := worn_for(slot.item)
 	if worn != null:
@@ -309,7 +313,7 @@ func write_second(slot: ItemSlot) -> bool:
 func hints_for(slot: ItemSlot, alt: bool) -> Dictionary:
 	var hints := {}
 	# A square with a `hint` is not the player's piece, so it is held against nothing worn.
-	if not alt and not slot.hint.is_valid() and (worn_for(slot.item) != null or bare_for(slot.item)):
+	if not alt and not slot.hint.is_valid() and not slot.has_meta(NO_COMPARE) 			and (worn_for(slot.item) != null or bare_for(slot.item)):
 		hints["alt"] = "compare"
 	hints.merge(slot.get_meta(KEYS, {}))
 	if alt:
