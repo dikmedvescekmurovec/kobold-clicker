@@ -42,13 +42,13 @@ const GROUPS := {
 	"Defence": ["armor", "dodge", "block", "time_on_hit", "fight_clock"],
 	"Rewards": ["drop_rate", "item_rarity", "gold_find", "orb_find", "xp_more"],
 	"Utility": ["spawn_speed", "move_speed", "sight"],
-	"Misc": ["kills", "depth"],
+	"Misc": ["kills", "depth", "time"],
 }
 ## What a row is called where `LootTable.STAT_LABELS` does not say.
-const LABELS := {"xp_more": "Experience", "kills": "Kills", "depth": "Depth won"}
+const LABELS := {"xp_more": "Experience", "kills": "Kills", "depth": "Depth won", "time": "Time played"}
 ## The rows written even at nothing, because every hero has some: a blow, a clock, a sight, a count of
-## kills. So a fresh hero's page is never an empty frame.
-const ALWAYS := ["damage", "fight_clock", "sight", "kills"]
+## kills, the time played. So a fresh hero's page is never an empty frame.
+const ALWAYS := ["damage", "fight_clock", "sight", "kills", "time"]
 ## What is a bonus on what the hero already has, written with its sign: what a crit adds, a finder's
 ## lift, a faster walk. A chance or a share of something is written bare.
 const SIGNED := ["crit_damage", "move_speed", "drop_rate", "item_rarity", "gold_find", "orb_find", "xp_more"]
@@ -89,6 +89,8 @@ var _now := {}
 var _seen := {}
 ## Whether the page has been up since it was built, which is what makes putting it away a look.
 var _looked := false
+## The time played's number, kept moving while the page is up so it does not sit still as it is read.
+var _played: Label
 
 
 func _init(player_inventory: Inventory, ui_scale: float) -> void:
@@ -125,6 +127,11 @@ func open() -> void:
 	_effects()
 	for heading: String in GROUPS:
 		_table(heading, totals, fight)
+
+
+func _process(_delta: float) -> void:
+	if visible and is_instance_valid(_played):
+		_played.text = _text("time", inventory.play_seconds)
 
 
 ## Put away: what the page read becomes what the next look is measured from, and the curses, once seen
@@ -169,6 +176,7 @@ func _numbers(totals: Dictionary, fight: Encounter) -> Dictionary:
 	out["sight"] = float(inventory.sight())
 	out["kills"] = float(inventory.kills)
 	out["depth"] = float(inventory.dungeon_depth)
+	out["time"] = inventory.play_seconds
 	out[PER_SECOND] = fight.per_second()
 	out[PER_CLICK] = fight.average_blow(false)
 	return out
@@ -408,6 +416,8 @@ func _table(heading: String, totals: Dictionary, fight: Encounter) -> void:
 				_text(stat, _now[stat]), body.get_child_count() % 2 == 1, 0.0, Palette.SLOT_TAN_DK, Palette.TEXT)
 		row.name = stat
 		row.tooltip_text = _sources(stat, totals, fight)
+		if stat == "time":
+			_played = row.find_child(UITheme.TABLE_VALUE, true, false)
 		var change := _change(stat)
 		if change != null:
 			var cells := row.get_child(0)
@@ -421,6 +431,8 @@ func _table(heading: String, totals: Dictionary, fight: Encounter) -> void:
 static func _text(stat: String, value: float) -> String:
 	if stat in HEADLINES:
 		return BigNumber.format(value)
+	if stat == "time":
+		return _spent(value)
 	var text := BigNumber.format(value) + "%" if stat == "xp_more" else LootTable.stat_value(stat, value)
 	return "+" + text if stat in SIGNED and value > 0.0 else text
 
@@ -429,7 +441,8 @@ static func _text(stat: String, value: float) -> String:
 ## for less -- every stat here is better higher -- or null where nothing that shows has moved. Nor for a
 ## stat that was nothing then: its whole number is the change, and "+10% 10%" says it twice.
 func _change(stat: String) -> Label:
-	if float(_seen.get(stat, 0.0)) == 0.0 or _text(stat, _now[stat]) == _text(stat, _seen[stat]):
+	# The time played moves every second, and would always say so.
+	if stat == "time" or float(_seen.get(stat, 0.0)) == 0.0 or _text(stat, _now[stat]) == _text(stat, _seen[stat]):
 		return null
 	var moved: float = _now[stat] - _seen[stat]
 	if not LootTable.delta_shows(stat, moved):
@@ -444,6 +457,15 @@ func _change(stat: String) -> Label:
 	var label := UITheme.label(text, Palette.LEAF if moved > 0.0 else Palette.BRICK, true)
 	label.name = CHANGE_NAME
 	return label
+
+
+## `seconds` played as words: hours once there are any, and seconds until then, so a fresh game's line
+## moves while it is watched.
+static func _spent(seconds: float) -> String:
+	var whole := int(seconds)
+	if whole >= 3600:
+		return "%dh %dm" % [whole / 3600, whole % 3600 / 60]
+	return "%dm %ds" % [whole / 60, whole % 60]
 
 
 ## Where a row's number comes from, for its tooltip: what a rating buys, what sits on top of the gear

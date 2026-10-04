@@ -257,7 +257,13 @@ func _ready() -> void:
 	_scroll_lines = UITheme.vbox(0, BODY_WIDTH)
 	# At least as tall as the scroll, so a row that asks to expand (an accepted bounty's card) can.
 	_scroll_lines.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_scroll.add_child(_scroll_lines)
+	# Room over the first row inside the scroll, which clips: a shelf's squares wear frames that stand
+	# `FRAME_HEAD` above them.
+	var headroom := MarginContainer.new()
+	headroom.add_theme_constant_override("margin_top", ItemRarity.FRAME_HEAD)
+	headroom.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	headroom.add_child(_scroll_lines)
+	_scroll.add_child(headroom)
 	# After the panel, so it is drawn over it.
 	_orb_card = OrbCard.new()
 	_orb_card.scale = Vector2(_ui_scale, _ui_scale)

@@ -1,7 +1,7 @@
 class_name Settings
 extends RefCounted
-## What the player has chosen about the game rather than done in it: sound, how much a fight throws
-## about, and how much an item says. Static, because everything that reads it (`Juice`, `CombatScene`,
+## What the player has chosen about the game rather than done in it: how loud, whether full screen,
+## how much a fight throws about and shakes, and how much an item says. Static, because everything that reads it (`Juice`, `CombatScene`,
 ## `ItemDetails`) is asked from somewhere different and none of them owns it.
 ##
 ## Its own file rather than a corner of the inventory's, so Reset -- which deletes the saves -- leaves
@@ -19,9 +19,17 @@ const SFX_DB := -6.0
 ## shake or freeze; NONE throws and writes nothing at all, and what was earned still reaches its counter.
 enum Anim { NONE, LOW, DEFAULT }
 
-static var music := true
-static var sfx := true
+## How loud the music and the sound effects are, 0 to 1 in `VOLUME_STEP`s; 0 is silent. A file from
+## before there were volumes held only whether each was on, which reads as all or nothing.
+static var music_volume := 1.0
+static var sfx_volume := 1.0
+const VOLUME_STEP := 0.1
 static var animations := Anim.DEFAULT
+## Whether the screen shakes on a heavy blow, apart from the animations: shaking is what some players
+## cannot watch while they still want the coins and the numbers. Shaking needs Default as well.
+static var shake := true
+## Whether a desktop window fills the screen (`apply_window`). Nothing on a phone or the web asks it.
+static var fullscreen := false
 ## Whether a modifier's line carries the band it rolled in: "+14(8-20)% increased Damage".
 static var item_details := false
 ## What Sell all and the bin do with a unique among the handful: ask (the second question, whose tick
@@ -57,8 +65,10 @@ static func load_settings() -> void:
 	var file := ConfigFile.new()
 	if path.is_empty() or file.load(path) != OK:
 		return
-	music = bool(file.get_value(SECTION, "music", music))
-	sfx = bool(file.get_value(SECTION, "sfx", sfx))
+	music_volume = _volume(file, "music_volume", "music", music_volume)
+	sfx_volume = _volume(file, "sfx_volume", "sfx", sfx_volume)
+	shake = bool(file.get_value(SECTION, "shake", shake))
+	fullscreen = bool(file.get_value(SECTION, "fullscreen", fullscreen))
 	animations = clampi(int(file.get_value(SECTION, "animations", animations)), Anim.NONE, Anim.DEFAULT) as Anim
 	item_details = bool(file.get_value(SECTION, "item_details", item_details))
 	uniques = clampi(int(file.get_value(SECTION, "uniques", uniques)), Uniques.ASK, Uniques.KEEP) as Uniques
@@ -76,8 +86,10 @@ static func save() -> void:
 	if path.is_empty():
 		return
 	var file := ConfigFile.new()
-	file.set_value(SECTION, "music", music)
-	file.set_value(SECTION, "sfx", sfx)
+	file.set_value(SECTION, "music_volume", music_volume)
+	file.set_value(SECTION, "sfx_volume", sfx_volume)
+	file.set_value(SECTION, "shake", shake)
+	file.set_value(SECTION, "fullscreen", fullscreen)
 	file.set_value(SECTION, "animations", int(animations))
 	file.set_value(SECTION, "item_details", item_details)
 	file.set_value(SECTION, "uniques", int(uniques))
@@ -89,6 +101,15 @@ static func save() -> void:
 	file.set_value(SECTION, "wall_hp_base", wall_hp)
 	if file.save(path) != OK:
 		push_warning("Settings: cannot write %s" % path)
+
+
+## A volume off the file, or off the on/off it held before there were volumes: on is all, off nothing.
+static func _volume(file: ConfigFile, key: String, old_key: String, fallback: float) -> float:
+	if file.has_section_key(SECTION, key):
+		return clampf(float(file.get_value(SECTION, key)), 0.0, 1.0)
+	if file.has_section_key(SECTION, old_key):
+		return 1.0 if bool(file.get_value(SECTION, old_key)) else 0.0
+	return fallback
 
 
 static func show_all_uniques() -> bool:
@@ -119,15 +140,31 @@ static func show_all_services() -> bool:
 	return all_services and OS.is_debug_build() and not path.is_empty()
 
 
-## Mutes or opens the two buses, making them first if this run has not yet. Made here rather than in
-## a `default_bus_layout.tres`, which the open editor would have to be told about.
+## Sets the two buses to their volumes -- the effects `SFX_DB` under the files' own levels -- muting one
+## at nothing, and makes them first if this run has not yet. Made here rather than in a
+## `default_bus_layout.tres`, which the open editor would have to be told about.
 static func apply_audio() -> void:
-	for bus: Array in [[MUSIC_BUS, music], [SFX_BUS, sfx]]:
+	for bus: Array in [[MUSIC_BUS, music_volume, 0.0], [SFX_BUS, sfx_volume, SFX_DB]]:
 		var index := AudioServer.get_bus_index(bus[0])
 		if index == -1:
 			index = AudioServer.bus_count
 			AudioServer.add_bus()
 			AudioServer.set_bus_name(index, bus[0])
-			if bus[0] == SFX_BUS:
-				AudioServer.set_bus_volume_db(index, SFX_DB)
-		AudioServer.set_bus_mute(index, not bus[1])
+		var volume: float = bus[1]
+		AudioServer.set_bus_mute(index, volume <= 0.0)
+		if volume > 0.0:
+			AudioServer.set_bus_volume_db(index, linear_to_db(volume) + float(bus[2]))
+
+
+## Whether a window can be made to fill the screen here: a desktop with a real window.
+static func has_window() -> bool:
+	return OS.has_feature("pc") and DisplayServer.get_name() != "headless"
+
+
+## Fills the screen or gives the window back, as `fullscreen` says, where there is a window to fill.
+static func apply_window() -> void:
+	if not has_window():
+		return
+	var mode := DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
+	if DisplayServer.window_get_mode() != mode:
+		DisplayServer.window_set_mode(mode)

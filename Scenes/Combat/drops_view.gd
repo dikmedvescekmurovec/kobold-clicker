@@ -76,9 +76,14 @@ func _init() -> void:
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	found.add_child(_scroll)
-	_scroll.add_child(_grid)
+	# Room over the first row inside the scroll, which clips: a find's frame stands `FRAME_HEAD` above it.
+	var headroom := MarginContainer.new()
+	headroom.add_theme_constant_override("margin_top", ItemRarity.FRAME_HEAD)
+	_scroll.add_child(headroom)
+	headroom.add_child(_grid)
 	# As wide as the box, so a row of one stands in the middle of it rather than against its left edge:
 	# a scroll child that does not ask to expand is only as wide as it has to be.
+	headroom.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# The orbs the fight turned up, under the squares as the tray is under the bag. A record only:
 	# they take no mouse, because there is nothing here an orb can be pressed to do.
@@ -155,7 +160,8 @@ func _fit_scroll() -> void:
 	var long := ceili(_items.size() / float(PER_ROW)) > most_rows
 	_scroll.vertical_scroll_mode = (ScrollContainer.SCROLL_MODE_SHOW_NEVER if long
 			else ScrollContainer.SCROLL_MODE_DISABLED)
-	_scroll.custom_minimum_size.y = most_rows * ItemSlot.SIDE + floorf(most_rows) * GAP if long else 0.0
+	_scroll.custom_minimum_size.y = (ItemRarity.FRAME_HEAD + most_rows * ItemSlot.SIDE + floorf(most_rows) * GAP
+			if long else 0.0)
 
 
 ## The box `over` panel pixels too tall for the window its owner stands in: rows are given up until it

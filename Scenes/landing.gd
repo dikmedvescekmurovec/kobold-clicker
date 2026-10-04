@@ -13,6 +13,11 @@ const TALL := [preload("res://Assets/Landing/cover_tall.ogv"), Vector2(180, 390)
 
 
 func _ready() -> void:
+	# Full screen from the first frame, where the player chose it: the cover plays in what the game will.
+	if Settings.has_window():
+		Settings.path = Settings.SAVE_PATH
+		Settings.load_settings()
+		Settings.apply_window()
 	# The game's files load behind the video, so the click only has to start it.
 	ResourceLoader.load_threaded_request(GAME)
 	resized.connect(_fit)

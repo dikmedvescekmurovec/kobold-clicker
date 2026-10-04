@@ -72,7 +72,7 @@ static var _until := 0
 ## Rattles `node` about where it stands, dying away over `time`. Offsets are whole pixels so the art
 ## stays on the grid; a shake landing on a shake replaces it rather than drifting the node's home.
 static func shake(node: Node2D, strength: float, time := 0.2) -> void:
-	if Settings.animations != Settings.Anim.DEFAULT:
+	if Settings.animations != Settings.Anim.DEFAULT or not Settings.shake:
 		return
 	var home: Vector2 = node.get_meta("shake_home", node.position)
 	node.set_meta("shake_home", home)

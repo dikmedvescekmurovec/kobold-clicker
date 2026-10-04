@@ -104,9 +104,18 @@ const TEXT_COLORS := {
 ## up: the panel behind it is cream, so anything lighter than the socket would disappear into it.
 const SOCKET := Palette.SLOT_TAN
 const SELECTED_SOCKET := Palette.SLOT_TAN_DK
-## The frame round a square, one a step above common, drawn by `tools/item_frames.py` at the square's
-## own 40 px with a clear middle: a bevel, then studs, then filigree, then a unique's gems and crest.
+## The frame round a square, one a step above common, drawn by `tools/item_frames.py` (the user's design,
+## 2026-10-04): a thin ring in the rarity's colour with a cap on each top corner, longer a step up, and on
+## a unique the elite's cap in gold and a crest on the top edge that grows with its rank (`UNIQUE_FRAMES`,
+## 0 a starter's). The square's width and `FRAME_HEAD` taller: the caps and the crest stand up into the
+## gutter over the square, never past its sides, where a scroll as wide as the grid would clip them.
 const FRAMES := "res://Assets/UI/item_frame_%s.png"
+const UNIQUE_FRAMES := "res://Assets/UI/item_frame_unique_%d.png"
+const FRAME_HEAD := 4
+## How far a framed socket's corners are cut back, as a straight chamfer (`corner_detail` 1), so the tan
+## never shows outside the ring where it rounds the corner: the ring leaves three pixels a corner clear,
+## and a chamfer of 3 clears exactly those and nothing the ring does not cover.
+const FRAME_CORNER := 3
 ## How solid a socket on the equipment doll is. Enough to read as a square to drop something into,
 ## little enough that the figure underneath still reads as a figure.
 const SOCKET_ALPHA := 0.55
@@ -198,13 +207,19 @@ static func from_name(text: String) -> int:
 
 
 ## The frame an item square wears, or null for a common one -- which is what makes a frame mean
-## something.
-static func frame(rarity: Rarity) -> Texture2D:
-	return null if rarity == Rarity.COMMON else load(FRAMES % NAMES[rarity])
+## something. `rank` is a unique's (0 for a starter, which has none, up to `UniqueTable.PEAK`); a square
+## with no piece behind it (a bounty's promise) wears rank I's.
+static func frame(rarity: Rarity, rank := 1) -> Texture2D:
+	if rarity == Rarity.COMMON:
+		return null
+	if rarity == Rarity.UNIQUE:
+		return load(UNIQUE_FRAMES % clampi(rank, 0, 4))
+	return load(FRAMES % NAMES[rarity])
 
 
 ## The face of an item square: the socket alone. What rings an uncommon or better piece is drawn art
-## laid over it (`frame`), so the box is the same for every rarity and `rarity` only keys the cache.
+## laid over it (`frame`), so the box is the same for every rarity but its corners: a framed one's are
+## cut back to the ring's (`FRAME_CORNER`).
 static func slot_style(rarity: Rarity, selected := false, translucent := false) -> StyleBoxFlat:
 	var key := [rarity, selected, translucent]
 	if _styles.has(key):
@@ -216,7 +231,9 @@ static func slot_style(rarity: Rarity, selected := false, translucent := false) 
 		# the body it names. The pack's own equipment screen does the same: its sockets are washes
 		# over the figure, not holes cut out of it.
 		box.bg_color.a = SOCKET_ALPHA
-	box.set_corner_radius_all(0)
+	# A framed socket is cut back where its ring rounds the corner; a common's stays square.
+	box.set_corner_radius_all(0 if rarity == Rarity.COMMON else FRAME_CORNER)
+	box.corner_detail = 1
 	# The default soft edge fringes into a smear once the panel is scaled up.
 	box.anti_aliasing = false
 	_styles[key] = box

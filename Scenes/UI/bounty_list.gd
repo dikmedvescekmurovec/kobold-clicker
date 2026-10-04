@@ -266,8 +266,15 @@ static func portrait_box(enemy: String, side: int, frame: Texture2D = null) -> P
 	# A Panel and anchors rather than a PanelContainer: a container lays every child inside its pad,
 	# and the frame has to reach the socket's edge as it does on an `ItemSlot`.
 	var box := Panel.new()
-	box.add_theme_stylebox_override("panel", flat(Palette.SLOT_TAN, PORTRAIT_PAD))
-	box.custom_minimum_size = Vector2.ONE * (side + PORTRAIT_PAD * 2)
+	var socket := flat(Palette.SLOT_TAN, PORTRAIT_PAD)
+	var outer := side + PORTRAIT_PAD * 2
+	if frame != null:
+		# Cut back where the frame's ring rounds the corner, as a framed `ItemSlot`'s socket is.
+		socket.set_corner_radius_all(roundi(ItemRarity.FRAME_CORNER * float(outer) / ItemSlot.SIDE))
+		socket.corner_detail = 1
+		socket.anti_aliasing = false
+	box.add_theme_stylebox_override("panel", socket)
+	box.custom_minimum_size = Vector2.ONE * outer
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var face := TextureRect.new()
 	# Set before the texture and the size: a TextureRect's minimum is its own texture until
@@ -287,6 +294,8 @@ static func portrait_box(enemy: String, side: int, frame: Texture2D = null) -> P
 		ring.texture = frame
 		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		ring.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		# Its caps and crest stand up over the socket, at the frame's scale to the box.
+		ring.offset_top = -ItemRarity.FRAME_HEAD * float(outer) / ItemSlot.SIDE
 		box.add_child(ring)
 	return box
 

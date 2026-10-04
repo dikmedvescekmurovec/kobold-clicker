@@ -614,7 +614,9 @@ LETTERS = {
 ICON_KEY = {"o": "#3e1f1d", "1": "#603928", "2": "#70492a", "3": "#825c2f", "4": "#88682d",
             # The close button's own colours, which BONE_RAMP leaves alone: its teal frame, its cream
             # face, the light along that face's top left, and the black of its X. For ui_icon_info.
-            "t": "#38605b", "c": "#e5d6a1", "l": "#fbf5bd", "k": "#151419"}
+            "t": "#38605b", "c": "#e5d6a1", "l": "#fbf5bd", "k": "#151419",
+            # LinkedIn's blue in ENDESGA 64, its edge a step darker, and the white of its "in". For ui_icon_linkedin.
+            "D": "#00396d", "B": "#0069aa", "W": "#ffffff"}
 ICONS_DRAWN = {
     # Auto (a level's autodiscard): the count's chest struck through -- what drops at this level is not
     # kept. The user's pick of seven candidates (2026-09-25), redrawn 2026-09-30 as a square chest
@@ -812,6 +814,22 @@ ICONS_DRAWN = {
         .tcckkkkcct.
         ..ttcccctt..
         ....tttt....
+    """,
+    # LinkedIn, beside the developer's name in the credits: "in" on a blue square (12x12), worn by a bare
+    # button that opens the profile.
+    "ui_icon_linkedin": """
+        .DDDDDDDDDD.
+        DBBBBBBBBBBD
+        DBWWBBBBBBBD
+        DBWWBBBBBBBD
+        DBBBBBBBBBBD
+        DBWWBWWWWBBD
+        DBWWBWWBWWBD
+        DBWWBWWBWWBD
+        DBWWBWWBWWBD
+        DBWWBWWBWWBD
+        DBBBBBBBBBBD
+        .DDDDDDDDDD.
     """,
     # Swap, on the bag's comparison: two arrows chasing each other round -- the other ring finger.
     "ui_icon_swap": """

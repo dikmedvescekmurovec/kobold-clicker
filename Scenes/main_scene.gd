@@ -404,6 +404,13 @@ func _ready() -> void:
 	# headless run keeps the stretch, whose window every test lays out against.
 	if DisplayServer.get_name() != "headless":
 		get_tree().root.content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
+	# The player's own settings only beside the player's own save: a test or a screenshot sees the
+	# defaults and writes nothing. Before the scale is picked, so a window put full screen is measured
+	# full (the landing page has done it already on a real start; this is for a run straight in).
+	Settings.path = Settings.SAVE_PATH if inventory_path == Inventory.SAVE_PATH else ""
+	Settings.load_settings()
+	Settings.apply_window()
+	Settings.apply_audio()
 	if ui_scale <= 0.0:
 		ui_scale = UITheme.pick_scale(get_viewport().get_visible_rect().size)
 	if zoom <= 0.0:
@@ -420,11 +427,6 @@ func _ready() -> void:
 	# to a bad read is worse than an error message.
 	# The inventory first, and by the same rule: it is what the player owns, and an empty bag saved over
 	# a file that could not be read is that file gone on the first kill.
-	# The player's own settings only beside the player's own save, for the same reason: a test or a
-	# screenshot sees the defaults and writes nothing.
-	Settings.path = Settings.SAVE_PATH if inventory_path == Inventory.SAVE_PATH else ""
-	Settings.load_settings()
-	Settings.apply_audio()
 	_music = AudioStreamPlayer.new()
 	_music.bus = Settings.MUSIC_BUS
 	add_child(_music)
@@ -861,6 +863,9 @@ func _build_pages(layer: CanvasLayer) -> void:
 	settings_page.cloud = cloud
 	settings_page.inventory = inventory
 	settings_page.inventory_path = inventory_path
+	# The controls screen's list: each corner button's key beside its page's name, which is its tooltip.
+	for key: int in HOTKEYS:
+		settings_page.hotkeys.append([OS.get_keycode_string(key).to_lower(), (get(HOTKEYS[key]) as Button).tooltip_text])
 	settings_page.reset_pressed.connect(_on_reset_pressed)
 	settings_page.uniques_toggled.connect(_show_corner.bind(true))
 	settings_page.chests_toggled.connect(view.redraw_chests)
@@ -1091,7 +1096,8 @@ func _place_toast() -> void:
 func _bounty_face(enemy: String, tier: EnemyRoster.Tier, big: bool) -> Control:
 	var frame: Texture2D = null
 	if BOUNTY_TIER.has(tier):
-		frame = ItemRarity.frame(BOUNTY_TIER[tier]["frame"])
+		# A boss wears the unique's frame at its fullest crest.
+		frame = ItemRarity.frame(BOUNTY_TIER[tier]["frame"], UniqueTable.PEAK)
 	return BountyList.portrait_box(enemy, TOAST_BIG_PORTRAIT if big else TOAST_PORTRAIT, frame)
 
 

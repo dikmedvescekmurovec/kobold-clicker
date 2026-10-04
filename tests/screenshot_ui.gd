@@ -1012,7 +1012,16 @@ func _shoot_town() -> void:
 		root.get_texture().get_image().save_png("user://%s.png" % shot)
 		print("Saved ", ProjectSettings.globalize_path("user://%s.png" % shot))
 		main.settings_page._ask(true)
-	# The dev generator in the settings' place, a golden helm some orbs in.
+	# The settings' three screens, each in the settings' place.
+	for screen: Array in [["ui_settings_controls", "_open_controls"], ["ui_settings_credits", "_open_credits"],
+			["ui_settings_dev", "_open_dev"]]:
+		main.settings_page.call(screen[1])
+		for i in 2:
+			await process_frame
+		await RenderingServer.frame_post_draw
+		root.get_texture().get_image().save_png("user://%s.png" % screen[0])
+		print("Saved ", ProjectSettings.globalize_path("user://%s.png" % screen[0]))
+	# The dev generator in the developer screen's place, a golden helm some orbs in.
 	main.settings_page._open_generator()
 	var forge: ItemGenerator = main.settings_page._rows.get_child(-1)
 	forge.pick("helm", 3, 12)

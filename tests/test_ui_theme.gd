@@ -21,6 +21,7 @@ func _run() -> void:
 	_check(_test_dialogue_box() == true, "dialogue box tests ran to the end")
 	_check(_test_accordion() == true, "accordion tests ran to the end")
 	_check(await _test_settings_scroll() == true, "settings scroll tests ran to the end")
+	_check(await _test_settings_page() == true, "settings page tests ran to the end")
 	_check(_test_table_rows() == true, "table row tests ran to the end")
 	_check(_test_palette() == true, "palette tests ran to the end")
 	_check(await _test_responsive() == true, "responsive layout tests ran to the end")
@@ -742,8 +743,8 @@ func _test_accordion() -> bool:
 	return true
 
 
-## A page with more rows than the window holds stays inside it and scrolls: the settings, whose dev
-## rows run past a 648 px window's foot in a debug build.
+## A page with more rows than the window holds stays inside it and scrolls: the settings' credits, which
+## run past a 648 px window's foot.
 func _test_settings_scroll() -> bool:
 	var was := root.size
 	root.size = Vector2i(1152, 648)
@@ -756,11 +757,73 @@ func _test_settings_scroll() -> bool:
 	_check(page._panel.position.y + page._panel.size.y * 2.0 <= 648.0,
 			"the settings stay inside the window (%s)" % page._panel.size)
 	_check(scroll.is_ancestor_of(page._rows), "and their rows are in a scroll")
-	if OS.is_debug_build():
-		_check(page._rows.size.y > scroll.size.y, "which has more to show than room (%s > %s)"
-				% [page._rows.size.y, scroll.size.y])
+	page._open_credits()
+	await process_frame
+	page.layout()
+	await process_frame
+	_check(page._panel.position.y + page._panel.size.y * 2.0 <= 648.0 and page._rows.size.y > scroll.size.y,
+			"the credits have more to show than room, and still stay inside (%s > %s)"
+			% [page._rows.size.y, scroll.size.y])
 	page.free()
 	root.size = was
+	return true
+
+
+## The settings: the player's sections and nothing of a developer's, the dev tools behind one button on
+## a screen of their own (and the balancing page and the generator coming back to it), the corner
+## buttons' keys on the controls screen, and every name `credits.md` thanks on the credits screen.
+func _test_settings_page() -> bool:
+	var page := SettingsPage.new(2.0)
+	page.hotkeys = [["i", "Items"], ["o", "Settings"]]
+	root.add_child(page)
+	await process_frame
+	var said := func() -> String:
+		var words := ""
+		for node: Node in page._rows.find_children("*", "", true, false):
+			if node is Label or node is Button:
+				words += node.text + "|"
+		return words
+	var top: String = said.call()
+	for heading: String in ["Sound", "Display", "Items", "Screen shake", "Full", "Credits", "Reset save"]:
+		_check(top.contains(heading + "|"), "the settings carry %s (%s)" % [heading, top])
+	_check(page._rows.find_child("music_volume", true, false) is HSlider
+			and page._rows.find_child("sfx_volume", true, false) is HSlider, "the music and the effects are volumes")
+	for dev: String in ["Show all uniques", "Even loot", "Gold x10", "Balancing", "Item generator"]:
+		_check(not top.contains(dev), "and nothing of a developer's: %s" % dev)
+	_check(top.contains(SettingsPage.DEV_TITLE + "|") == OS.is_debug_build(), "whose screen is a button in a debug build only")
+
+	page._open_dev()
+	var dev: String = said.call()
+	_check(UITheme.title_of(page._panel).text == SettingsPage.DEV_TITLE, "the developer screen says what it is")
+	for tool: String in ["Show all uniques", "Show all chests", "Show old icons", "Show all services", "Even loot",
+			"Gold x10", "Skill points +10", "Balancing"]:
+		_check(dev.contains(tool + "|"), "and holds %s" % tool)
+	page._open_balance()
+	var back: Array = page._rows.find_children("*", "Button", true, false).filter(
+			func(b: Button) -> bool: return b.tooltip_text == "Back to the developer tools")
+	_check(back.size() == 1, "the balancing page goes back to it")
+	back[0].pressed.emit()
+	_check(UITheme.title_of(page._panel).text == SettingsPage.DEV_TITLE, "and is back on it")
+	page.open()
+	_check(UITheme.title_of(page._panel).text == SettingsPage.TITLE, "open() is the settings again")
+
+	page._open_controls()
+	var keys: String = said.call()
+	_check(keys.contains("Items|") and keys.contains("Settings|") and keys.contains("Hold to compare|"),
+			"the controls list the corner buttons' pages and the item keys (%s)" % keys)
+
+	# Every name thanked in credits.md, in bold, is on the credits screen, and the developer's link with it.
+	page._open_credits()
+	var thanked: String = said.call()
+	var file := FileAccess.get_file_as_string("res://credits.md")
+	var bold := RegEx.create_from_string("\\*\\*([^*]+)\\*\\*")
+	var names: Array = bold.search_all(file).map(func(found: RegExMatch) -> String: return found.get_string(1))
+	_check(names.size() > 10, "credits.md names its makers (%d)" % names.size())
+	for name: String in names:
+		_check(thanked.contains(name + "|"), "the credits screen thanks %s" % name)
+	_check(page._rows.find_children("*", "Button", true, false).any(
+			func(b: Button) -> bool: return b.tooltip_text == "LinkedIn"), "and links the developer's LinkedIn")
+	page.free()
 	return true
 
 

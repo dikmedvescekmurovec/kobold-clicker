@@ -1060,24 +1060,43 @@ func _test_the_longest_stop_wins() -> void:
 ## since the suites after this one in the file read them.
 func _test_settings() -> void:
 	Settings.path = "user://test_settings.cfg"
-	Settings.sfx = false
+	Settings.sfx_volume = 0.0
+	Settings.music_volume = 0.5
+	Settings.shake = false
+	Settings.fullscreen = true
 	Settings.animations = Settings.Anim.LOW
 	Settings.item_details = true
 	Settings.uniques = Settings.Uniques.KEEP
 	Settings.save()
-	Settings.sfx = true
+	Settings.sfx_volume = 1.0
+	Settings.music_volume = 1.0
+	Settings.shake = true
+	Settings.fullscreen = false
 	Settings.animations = Settings.Anim.DEFAULT
 	Settings.item_details = false
 	Settings.uniques = Settings.Uniques.ASK
 	Settings.load_settings()
-	_check(not Settings.sfx and Settings.animations == Settings.Anim.LOW and Settings.item_details
+	_check(Settings.sfx_volume == 0.0 and is_equal_approx(Settings.music_volume, 0.5) and not Settings.shake
+			and Settings.fullscreen and Settings.animations == Settings.Anim.LOW and Settings.item_details
 			and Settings.uniques == Settings.Uniques.KEEP, "settings come back off their file")
 	Settings.uniques = Settings.Uniques.ASK
+	Settings.shake = true
+	Settings.fullscreen = false
 	Settings.apply_audio()
-	_check(AudioServer.is_bus_mute(AudioServer.get_bus_index(Settings.SFX_BUS)), "a muted SFX bus is muted")
-	_check(not AudioServer.is_bus_mute(AudioServer.get_bus_index(Settings.MUSIC_BUS)), "and music is not")
+	var music := AudioServer.get_bus_index(Settings.MUSIC_BUS)
+	_check(AudioServer.is_bus_mute(AudioServer.get_bus_index(Settings.SFX_BUS)), "effects at nothing are muted")
+	_check(not AudioServer.is_bus_mute(music) and is_equal_approx(AudioServer.get_bus_volume_db(music),
+			linear_to_db(0.5)), "and music at half is heard at half (%s dB)" % AudioServer.get_bus_volume_db(music))
+	# A file from before there were volumes held whether each was on: on is all, off is nothing.
+	var old := ConfigFile.new()
+	old.set_value(Settings.SECTION, "music", false)
+	old.set_value(Settings.SECTION, "sfx", true)
+	old.save(Settings.path)
+	Settings.load_settings()
+	_check(Settings.music_volume == 0.0 and Settings.sfx_volume == 1.0, "an old file's on and off become full and silent")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(Settings.path))
 	Settings.path = ""
+	Settings.music_volume = 1.0
 
 	var piece := _thrown_piece(ItemRarity.Rarity.COMMON)
 	piece.mods = [{"id": "increased_damage", "value": 14}]
@@ -1106,7 +1125,7 @@ func _test_settings() -> void:
 	_check(combat._ground_drops.get_child_count() == 1, "on low a purse is one coin")
 	combat.queue_free()
 	await process_frame
-	Settings.sfx = true
+	Settings.sfx_volume = 1.0
 	Settings.animations = Settings.Anim.DEFAULT
 	Settings.item_details = false
 	Settings.apply_audio()

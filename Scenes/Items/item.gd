@@ -308,9 +308,16 @@ func border_color() -> Color:
 	return ItemRarity.BORDER_COLORS[rarity]
 
 
-## The frame its square wears: its rarity's. Null for a common piece.
+## The frame its square wears: its rarity's, and a unique's crest at the player's rank of it (a starter's
+## has none). Null for a common piece.
 func frame() -> Texture2D:
-	return ItemRarity.frame(rarity)
+	return ItemRarity.frame(rarity, frame_rank())
+
+
+## The rank a unique's frame shows: the player's (`UniqueTable.shown_rank`), 0 for a starter. Read as the
+## square is drawn, so every copy held grows with the achievement.
+func frame_rank() -> int:
+	return UniqueTable.shown_rank(unique) if UniqueTable.is_ranked(unique) else 0
 
 
 func icon() -> Texture2D:

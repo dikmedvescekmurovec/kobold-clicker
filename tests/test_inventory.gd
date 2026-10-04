@@ -66,6 +66,7 @@ func _run() -> void:
 	_check(_test_fight_ledger() == true, "fight ledger tests ran to the end")
 	_check(_test_unique_table() == true, "unique table tests ran to the end")
 	_check(_test_unique_items() == true, "unique item tests ran to the end")
+	_check(_test_rarity_frames() == true, "rarity frame tests ran to the end")
 	_check(await _test_unique_stats() == true, "unique stat tests ran to the end")
 	_check(_test_attribute_uniques() == true, "attribute unique tests ran to the end")
 	_check(_test_rank_four_uniques() == true, "rank IV unique tests ran to the end")
@@ -3853,6 +3854,45 @@ func _test_unique_table() -> bool:
 
 
 ## One unique: rolled, worn, saved, crafted and thrown away like the piece it is -- and unlike one.
+## The frame a square wears: none for a common, its rarity's otherwise, and a unique's crest at the
+## player's rank of it (a starter's has none), standing up over the square and never past its sides,
+## on a socket cut back where the ring rounds the corner.
+func _test_rarity_frames() -> bool:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	_check(_piece(ItemRarity.Rarity.COMMON, 3).frame() == null, "a common wears no frame")
+	for rarity: ItemRarity.Rarity in [ItemRarity.Rarity.UNCOMMON, ItemRarity.Rarity.RARE, ItemRarity.Rarity.ELITE]:
+		var frame := _piece(rarity, 3).frame()
+		_check(frame != null and frame.get_width() == ItemSlot.SIDE
+				and frame.get_height() == ItemSlot.SIDE + ItemRarity.FRAME_HEAD,
+				"%s: its frame is the square's width and stands up over it" % ItemRarity.NAMES[rarity])
+	var ranked := Item.rolled_unique("metronome", rng, 1)
+	var paths := []
+	for rank in range(1, UniqueTable.PEAK + 1):
+		UniqueTable.ranks = {"metronome": rank}
+		paths.append(ranked.frame().resource_path)
+		_check(ranked.frame() == ItemRarity.frame(ItemRarity.Rarity.UNIQUE, rank),
+				"a unique at rank %d wears that rank's crest" % rank)
+	UniqueTable.ranks = {}
+	_check(paths.size() == UniqueTable.PEAK and paths.all(func(path: String) -> bool: return paths.count(path) == 1),
+			"every rank its own (%s)" % [paths])
+	_check(ranked.frame() == ItemRarity.frame(ItemRarity.Rarity.UNIQUE, 1), "and with no rank earned, rank I's")
+	var starter := Item.rolled_unique(Achievements.STARTERS[0], rng, 1)
+	_check(starter.frame() == ItemRarity.frame(ItemRarity.Rarity.UNIQUE, 0) and not starter.frame() in
+			range(1, UniqueTable.PEAK + 1).map(func(rank: int) -> Texture2D: return ItemRarity.frame(ItemRarity.Rarity.UNIQUE, rank)),
+			"a starter, which has no rank, wears none of theirs")
+	var square := ItemSlot.make(ranked)
+	var ring := square.get_node(ItemSlot.FRAME_NAME) as TextureRect
+	_check(ring.position == Vector2(0, -ItemRarity.FRAME_HEAD), "the square's frame stands up over it, flush with its sides")
+	_check((square.get_theme_stylebox("panel") as StyleBoxFlat).corner_radius_top_left == ItemRarity.FRAME_CORNER,
+			"on a socket cut back at the corners")
+	var plain := ItemSlot.make(_piece(ItemRarity.Rarity.COMMON, 3))
+	_check((plain.get_theme_stylebox("panel") as StyleBoxFlat).corner_radius_top_left == 0, "and a common's square")
+	square.free()
+	plain.free()
+	return true
+
+
 func _test_unique_items() -> bool:
 	_clear_save()
 	var rng := RandomNumberGenerator.new()
@@ -4848,6 +4888,10 @@ func _test_character_sheet() -> bool:
 			"the bar says what the page is, and the card whose it is")
 	_check(_sheet_value(page, "kills") == "0" and page.find_child("depth", true, false) == null,
 			"the kills are counted under Misc from the first, the depth once one is won")
+	page.inventory.play_seconds = 3725.0
+	await process_frame
+	_check(_sheet_value(page, "time") == "1h 2m", "and the time played, kept moving while the page is up (%s)"
+			% _sheet_value(page, "time"))
 	page.queue_free()
 
 	# Geared past the crit cap: the fight's numbers, capped, signed and sourced.

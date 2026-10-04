@@ -1,5 +1,8 @@
 # Credits
 
+## Development
+- **Dik Medvešček Murovec** [![LinkedIn](Assets/UI/ui_icon_linkedin.png)](https://www.linkedin.com/in/dik-medvescek-murovec): lead everything.
+
 ## Art
 
 ### Characters and enemies
@@ -12,7 +15,6 @@
 ### Interface
 - **CraftPix.net** ([Free Basic Pixel Art UI for RPG](https://craftpix.net/freebies/free-basic-pixel-art-ui-for-rpg/)): panels, buttons, the character panel. Licence: [CraftPix file licence](https://craftpix.net/file-licenses/).
 - **Cainos** ([Pixel Art Icon Pack - RPG](https://cainos.itch.io/pixel-art-icon-pack-rpg)): gear icons, socket marks and button marks. Licence: free and commercial projects, may be modified.
-- **jfranci_px** (Ability Icons): skill icons and the fortuneteller's fallback icons. Licence: free and commercial projects, may be modified; not to be redistributed or resold as standalone files or asset packs; credit appreciated, not required.
 - **Kelano Studio** ([Ore & Gem — 50 Minerals | 32x32](https://kelano-studio.itch.io/ore-gem-50-minerals-32x32)): the orbs.
 - **Dream Mix** ([Pixel Keyboard Keys - for UI](https://dreammixgames.itch.io/keyboard-keys-for-ui)): the Shift, Ctrl and Alt keys on the item card.
 - **TotusLotus** ([Animated pixel coins](https://totuslotus.itch.io/pixel-coins)): the coin.
@@ -30,4 +32,4 @@
 - **Kenney** ([kenney.nl](https://www.kenney.nl)): Impact Sounds, Interface Sounds, UI Audio, RPG Audio and Music Jingles. Licence: CC0 1.0.
 
 ## Music
-Music by <a href="https://pixabay.com/users/cyberwave-orchestra-23801316/?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=415933">Cyberwave-Orchestra</a> from <a href="https://pixabay.com//?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=415933">Pixabay</a>
+- **alkakrab** ([alkakrab.itch.io](https://alkakrab.itch.io/)): the ambient and action music. Used under licence.

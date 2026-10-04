@@ -90,13 +90,15 @@ func setup(held: Item, open := false, translucent := false) -> void:
 	if item.rarity >= ItemRarity.Rarity.RARE:
 		_shine(icon, ICON, 3.0)
 	add_child(icon)
-	# The frame goes over the icon, not under it: its corners reach in past the icon's margin.
+	# The frame goes over the icon, not under it: its caps reach in past the icon's margin.
 	var ring := item.frame()
 	if ring != null:
 		var frame := TextureRect.new()
 		frame.name = FRAME_NAME
 		frame.texture = ring
 		frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# Its caps and a unique's crest stand up into the gutter over the square.
+		frame.position.y = -ItemRarity.FRAME_HEAD
 		# A unique's frame glints as well as its icon, and faster.
 		if item.rarity == ItemRarity.Rarity.UNIQUE and Settings.animations != Settings.Anim.NONE:
 			_shine(frame, SIDE, 2.0)
@@ -231,7 +233,12 @@ static func teaser(mark: Texture2D, rarity: ItemRarity.Rarity, plus: int, label:
 	var slot := ItemSlot.new()
 	slot.custom_minimum_size = Vector2(side, side)
 	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	slot.add_theme_stylebox_override("panel", ItemRarity.slot_style(rarity))
+	var socket := ItemRarity.slot_style(rarity)
+	if side != SIDE and rarity != ItemRarity.Rarity.COMMON:
+		# The corners are cut back as the frame is drawn, at its scale.
+		socket = socket.duplicate()
+		socket.set_corner_radius_all(maxi(1, roundi(ItemRarity.FRAME_CORNER * float(side) / SIDE)))
+	slot.add_theme_stylebox_override("panel", socket)
 	slot.tooltip_text = label
 	var icon := TextureRect.new()
 	# Set before the texture and the size: a 16 px mark is asked to stand at the icon's 32.
@@ -252,7 +259,10 @@ static func teaser(mark: Texture2D, rarity: ItemRarity.Rarity, plus: int, label:
 		frame.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		frame.texture = ring
 		frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		frame.size = Vector2(side, side)
+		# The art's own proportions, standing up over the square as an `ItemSlot`'s does.
+		var head := ItemRarity.FRAME_HEAD * float(side) / SIDE
+		frame.position.y = -head
+		frame.size = Vector2(side, side + head)
 		slot.add_child(frame)
 	if plus > 0:
 		slot.add_child(OrbSlot.count_label("+%d" % plus))
