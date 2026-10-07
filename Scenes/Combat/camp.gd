@@ -71,7 +71,8 @@ static func rates(fight: Encounter) -> Dictionary:
 static func make(cell: Vector2i, place: String, fight: Encounter, at: float) -> Dictionary:
 	var earns := rates(fight)
 	var restless := Curses.effect(Curses.RESTLESS) in fight.effects
-	var pay := RESTLESS_PAY if restless else 1.0
+	# The body armour's Camp Earnings on top of the sample, which played the run and not the camp.
+	var pay := (RESTLESS_PAY if restless else 1.0) * (1.0 + fight.camp_more / 100.0)
 	return {
 		SINCE: int(at),
 		CELL: [cell.x, cell.y],

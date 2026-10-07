@@ -48,7 +48,8 @@ const MOST_MODS := 3
 ## [I, II, III, IV], and `effect_text` writes them through `{dial}` -- or is four sentences, one a
 ## rank, where rank I reads differently ("a second" against "2 seconds"). `dial` is how the fight and
 ## the inventory read a number, so a card and the rule it describes are one figure. The starters have
-## no ranks: their rules are fixed.
+## no ranks: their rules are fixed. It also has a `hint`: what its card says while it is locked, in
+## place of everything else -- what it does in words, never a number (the user's, 2026-10-07).
 const UNIQUES := {
 	# --- The starters (`Achievements.STARTERS`): in the pool from the first unique on, one a socket with
 	# Snowball and the Magpie's Band. Each is plainly good early and runs out -- a flat number, a floor, a
@@ -92,6 +93,7 @@ const UNIQUES := {
 	},
 	"metronome": {
 		"name": "Metronome", "base": "Wooden Sword",
+		"hint": "Your weapon's swings hit much harder, but your clicks deal nothing.",
 		"mods": ["increased_attack_speed", "increased_damage", "added_damage"],
 		"effect": "metronome",
 		"effect_text": "Your weapon's own swings deal {times} times damage. Your clicks deal none.",
@@ -100,6 +102,7 @@ const UNIQUES := {
 	},
 	"headsman": {
 		"name": "Headsman", "base": "Wooden Sword",
+		"hint": "Kills an enemy outright once its health is low.",
 		"mods": ["increased_damage", "increased_crit_damage", "added_crit_damage"],
 		"effect": "headsman",
 		"effect_text": "A blow that leaves an enemy under {share}% health kills it. Adds to Execute.",
@@ -108,6 +111,7 @@ const UNIQUES := {
 	},
 	"knucklebone_ring": {
 		"name": "Knucklebone Ring", "base": "Jade Ring",
+		"hint": "Clicking quickly in a row builds up extra click damage.",
 		"mods": ["added_damage", "added_crit"],
 		"effect": "knucklebone",
 		"effect_text": "Each click within a second of the last adds {step}% to your clicks, up to {most}%.",
@@ -116,14 +120,16 @@ const UNIQUES := {
 	},
 	"the_tithe": {
 		"name": "The Tithe", "base": "Gold Ring",
+		"hint": "Enemies drop no ordinary gear, but far more gold.",
 		"mods": ["added_gold_find", "global_increased_damage"],
 		"effect": "tithe",
-		"effect_text": "Enemies drop no ordinary gear. Their purses are {times} times as full.",
+		"effect_text": "Enemies drop no ordinary gear. They drop {times}x more gold.",
 		"ranks": {"times": [3, 5, 8, 15]},
 		"peak": "Elites and bosses still drop ordinary gear.",
 	},
 	"hourglass_amulet": {
 		"name": "Hourglass Amulet", "base": "Ruby Amulet",
+		"hint": "Kills put time back on the clock.",
 		"mods": ["global_increased_attack_speed", "added_crit"],
 		"effect": "hourglass",
 		"effect_text": ["Each kill but a boss puts a second back on the clock, never past its start.",
@@ -136,6 +142,7 @@ const UNIQUES := {
 	# The home pieces: each is found anywhere, and its damage counts on its own ground alone.
 	"meadowstriders": {
 		"name": "Meadowstriders", "base": "Leather Boots",
+		"hint": "Deals more damage in grassland.",
 		"mods": ["increased_move_speed", "added_drop_rate"],
 		"effect": "home", "home": "grass",
 		"effect_text": "Deals {times} times the damage in grassland.",
@@ -144,6 +151,7 @@ const UNIQUES := {
 	},
 	"hunters_lantern": {
 		"name": "Hunter's Lantern", "base": "Wooden Torch",
+		"hint": "Deals more damage in forest.",
 		"mods": ["added_crit_damage", "added_crit"],
 		"effect": "home", "home": "forest",
 		"effect_text": "Deals {times} times the damage in forest.",
@@ -152,14 +160,16 @@ const UNIQUES := {
 	},
 	"sunscorched_cowl": {
 		"name": "Sunscorched Cowl", "base": "Leather Helmet",
+		"hint": "Deals more damage in desert.",
 		"mods": ["added_crit", "increased_armor"],
 		"effect": "home", "home": "desert",
 		"effect_text": "Deals {times} times the damage in desert.",
 		"ranks": {"times": [2, 2.5, 3, 4]},
-		"peak": "Purses in desert are twice as full.",
+		"peak": "Enemies in desert drop twice as much gold.",
 	},
 	"rimeplate": {
 		"name": "Rimeplate", "base": "Wooden Armour",
+		"hint": "Deals more damage on ice.",
 		"mods": ["added_damage", "increased_armor"],
 		"effect": "home", "home": "ice",
 		"effect_text": "Deals {times} times the damage on ice.",
@@ -168,6 +178,7 @@ const UNIQUES := {
 	},
 	"stonebreaker": {
 		"name": "Stonebreaker", "base": "Wooden Sword",
+		"hint": "Deals more damage in mountains.",
 		"mods": ["added_damage", "increased_crit_damage"],
 		"effect": "home", "home": "mountains",
 		"effect_text": "Deals {times} times the damage in mountains.",
@@ -176,6 +187,7 @@ const UNIQUES := {
 	},
 	"gravediggers_charm": {
 		"name": "Gravedigger's Charm", "base": "Ruby Amulet",
+		"hint": "Deals more damage in the barrens.",
 		"mods": ["global_increased_damage", "added_crit_damage"],
 		"effect": "home", "home": "dirt",
 		"effect_text": "Deals {times} times the damage in the barrens.",
@@ -185,6 +197,7 @@ const UNIQUES := {
 	# --- Trade-offs ---
 	"berserkers_band": {
 		"name": "Berserker's Band", "base": "Iron Band",
+		"hint": "Your clicks hit much harder, but your weapon never swings on its own.",
 		"mods": ["added_damage", "added_crit_damage"],
 		"effect": "berserk",
 		"effect_text": "Your clicks deal {times} times damage. Your weapon never swings on its own.",
@@ -193,6 +206,7 @@ const UNIQUES := {
 	},
 	"glass_edge": {
 		"name": "Glass Edge", "base": "Wooden Sword",
+		"hint": "Deals more damage, but the clock runs faster.",
 		"mods": ["increased_damage", "increased_crit"],
 		"effect": "glass_edge",
 		"effect_text": "Deals {times} times the damage against the clock, which runs a third faster.",
@@ -201,6 +215,7 @@ const UNIQUES := {
 	},
 	"gamblers_die": {
 		"name": "Gambler's Die", "base": "Emerald Amulet",
+		"hint": "Every blow deals a random amount, from almost nothing to far more.",
 		"mods": ["added_crit", "added_drop_rate"],
 		"effect": "gamble",
 		"effect_text": "Every blow deals anywhere from almost nothing to {top} times its worth.",
@@ -209,6 +224,7 @@ const UNIQUES := {
 	},
 	"ascetics_cord": {
 		"name": "Ascetic's Cord", "base": "Ruby Amulet",
+		"hint": "More damage for every empty gear slot.",
 		"mods": ["global_increased_damage"],
 		"effect": "ascetic",
 		"effect_text": "{more}% more damage for every empty slot.",
@@ -218,6 +234,7 @@ const UNIQUES := {
 	# --- The clock ---
 	"last_gasp": {
 		"name": "Last Gasp", "base": "Leather Helmet",
+		"hint": "Deals much more damage when the clock is nearly out.",
 		"mods": ["added_crit", "increased_armor"],
 		"effect": "last_gasp",
 		"effect_text": "Triple damage while {seconds} seconds or fewer remain.",
@@ -227,6 +244,7 @@ const UNIQUES := {
 	# --- Crits and the lineup ---
 	"duelists_buckler": {
 		"name": "Duelist's Buckler", "base": "Wooden Shield",
+		"hint": "Your first blow against each enemy is a crit.",
 		"mods": ["added_crit_damage", "increased_block"],
 		"effect": "opening_strike",
 		"effect_text": ["Your first blow against every enemy is a crit.",
@@ -238,6 +256,7 @@ const UNIQUES := {
 	},
 	"overflowing_chalice": {
 		"name": "Overflowing Chalice", "base": "Wooden Torch",
+		"hint": "Crit chance past the cap becomes crit damage.",
 		"mods": ["added_crit", "added_crit_damage"],
 		"effect": "overcrit",
 		"effect_text": "Each point of critical chance past the most you can have becomes {times} points of critical damage.",
@@ -248,6 +267,7 @@ const UNIQUES := {
 	# builds twice as fast (the user's ruling, 2026-09-24).
 	"serpents_eye": {
 		"name": "Serpent's Eye", "base": "Emerald Amulet",
+		"hint": "Each blow that does not crit raises your crit chance until one does.",
 		"mods": ["added_crit_damage", "global_increased_attack_speed"],
 		"effect": "serpent",
 		"effect_text": "Every blow that does not crit adds {step}% to your crit chance until one does.",
@@ -258,6 +278,7 @@ const UNIQUES := {
 	# leftover on in turn (the user's, 2026-09-29) -- never into an elite or a boss.
 	"dominoes": {
 		"name": "Dominoes", "base": "Leather Boots",
+		"hint": "Damage left over from a one-blow kill carries into the next enemy.",
 		"mods": ["added_damage", "increased_move_speed"],
 		"effect": "domino",
 		"effect_text": "An enemy felled in one blow carries {share}% of the damage left over into the next, and on through any it fells. Never into an elite or a boss.",
@@ -272,6 +293,7 @@ const UNIQUES := {
 	},
 	"packmule": {
 		"name": "Packmule's Harness", "base": "Wooden Armour",
+		"hint": "More damage for every item in your bag.",
 		"mods": ["increased_armor", "added_drop_rate"],
 		"effect": "packmule",
 		"effect_text": "{more}% more damage for every item in your bag.",
@@ -281,6 +303,7 @@ const UNIQUES := {
 	# --- Defence given a second job, on top of keeping blows off the clock ---
 	"bulwark": {
 		"name": "Bulwark", "base": "Wooden Shield",
+		"hint": "A blow you block entirely is answered with a swing of your own.",
 		"mods": ["increased_block", "added_block"],
 		"effect": "riposte",
 		"effect_text": "A blow your block stops entirely is answered at once with a swing of your own, at {share}% damage.",
@@ -289,6 +312,7 @@ const UNIQUES := {
 	},
 	"heartwood_plate": {
 		"name": "Heartwood Plate", "base": "Wooden Armour",
+		"hint": "Your armour adds time to the clock.",
 		"mods": ["increased_armor", "added_armor"],
 		"effect": "heartwood",
 		"effect_text": "Every fifty armour you have is a second more on the clock, up to {most}.",
@@ -297,6 +321,7 @@ const UNIQUES := {
 	},
 	"spiked_helm": {
 		"name": "Spiked Helm", "base": "Leather Helmet",
+		"hint": "Part of your armour is added to your damage.",
 		"mods": ["increased_armor", "added_armor"],
 		"effect": "spikes",
 		"effect_text": "{share}% of your armour is added to your damage.",
@@ -308,10 +333,11 @@ const UNIQUES := {
 		"name": "Magpie's Band", "base": "Opal Ring",
 		"mods": ["added_drop_rate", "added_gold_find"],
 		"effect": "magpie",
-		"effect_text": "One purse in twenty is an item instead.",
+		"effect_text": "One gold drop in twenty is an item instead.",
 	},
 	"lucky_wound": {
 		"name": "Lucky Wound", "base": "Wooden Torch",
+		"hint": "An enemy killed by a crit rolls its drop more than once.",
 		"mods": ["added_crit", "added_drop_rate"],
 		"effect": "lucky_wound",
 		"effect_text": "An enemy killed by a crit rolls its drop {rolls} times and keeps the best.",
@@ -320,6 +346,7 @@ const UNIQUES := {
 	},
 	"rag_and_bone_sack": {
 		"name": "Rag and Bone Sack", "base": "Wooden Armour",
+		"hint": "Gear you discard pays some gold.",
 		"mods": ["added_gold_find", "increased_armor"],
 		"effect": "salvage",
 		"effect_text": "Gear you discard pays {share}% of what a trader would give.",
@@ -330,6 +357,7 @@ const UNIQUES := {
 	# (`Inventory.attributes`), and the Crown, the Brand and the Echo change what every other one reads.
 	"ogres_knuckle": {
 		"name": "Ogre's Knuckle", "base": "Iron Band",
+		"hint": "Part of your strength is added to your damage.",
 		"mods": ["added_strength", "added_damage"],
 		"effect": "ogre",
 		"effect_text": "{share}% of your strength is added to your damage.",
@@ -338,6 +366,7 @@ const UNIQUES := {
 	},
 	"fencers_signet": {
 		"name": "Fencer's Signet", "base": "Jade Ring",
+		"hint": "Dexterity gives Time on Hit.",
 		"mods": ["added_dexterity", "added_time_on_hit"],
 		"effect": "fencer",
 		"effect_text": "Every {dexterity} dexterity is a tenth of a second of Time on Hit.",
@@ -346,6 +375,7 @@ const UNIQUES := {
 	},
 	"scholars_circlet": {
 		"name": "Scholar's Circlet", "base": "Leather Helmet",
+		"hint": "Intelligence gives damage instead of experience.",
 		"mods": ["added_intelligence", "increased_armor"],
 		"effect": "scholar",
 		"effect_text": "Your intelligence gives damage instead of experience, at {times} times the rate.",
@@ -354,6 +384,7 @@ const UNIQUES := {
 	},
 	"sages_abacus": {
 		"name": "Sage's Abacus", "base": "Gold Amulet",
+		"hint": "Intelligence makes your skills stronger.",
 		"mods": ["added_intelligence", "added_crit"],
 		"effect": "abacus",
 		"effect_text": "Your skills are 1% stronger for every {intelligence} intelligence.",
@@ -362,6 +393,7 @@ const UNIQUES := {
 	},
 	"crown_of_accord": {
 		"name": "Crown of Accord", "base": "Hide Hood",
+		"hint": "While your three attributes are nearly even, each counts many times over.",
 		"mods": ["added_strength", "added_dexterity", "added_intelligence"],
 		"effect": "accord",
 		"effect_text": "While your three attributes are within a tenth of each other, each counts {times} times over.",
@@ -372,6 +404,7 @@ const UNIQUES := {
 	# highest four times over and the other two nothing.
 	"zealots_brand": {
 		"name": "Zealot's Brand", "base": "Ruby Amulet",
+		"hint": "Your two lower attributes count as much as your highest.",
 		"mods": ["global_increased_damage", "added_crit_damage"],
 		"effect": "zealot",
 		"effect_text": ["Your two lower attributes count as much as your highest.",
@@ -383,6 +416,7 @@ const UNIQUES := {
 	},
 	"patchwork_coat": {
 		"name": "Patchwork Coat", "base": "Hide Jerkin",
+		"hint": "More damage for every attribute modifier you wear.",
 		"mods": ["added_strength", "added_dexterity", "added_intelligence"],
 		"effect": "patchwork",
 		"effect_text": "{more}% more damage for every attribute modifier you wear.",
@@ -391,6 +425,7 @@ const UNIQUES := {
 	},
 	"purists_seal": {
 		"name": "Purist's Seal", "base": "Pearl Ring",
+		"hint": "More damage for every item you wear without an attribute modifier.",
 		"mods": ["added_damage", "global_increased_damage"],
 		"effect": "purist",
 		"effect_text": "{more}% more damage for every item you wear without an attribute modifier.",
@@ -399,6 +434,7 @@ const UNIQUES := {
 	},
 	"brawlers_wraps": {
 		"name": "Brawler's Wraps", "base": "Opal Ring",
+		"hint": "Strength adds to your clicks, and dexterity to your weapon's swings.",
 		"mods": ["added_strength", "added_dexterity"],
 		"effect": "brawler",
 		"effect_text": "{more}% more damage for every point of strength on your clicks, and of dexterity on your weapon's swings.",
@@ -407,6 +443,7 @@ const UNIQUES := {
 	},
 	"butchers_cleaver": {
 		"name": "Butcher's Cleaver", "base": "Wooden Sword",
+		"hint": "Strength gives Bleed.",
 		"mods": ["added_strength", "increased_damage"],
 		"effect": "butcher",
 		"effect_text": "Every {strength} strength is 1% Bleed.",
@@ -415,6 +452,7 @@ const UNIQUES := {
 	},
 	"quickdraw_boots": {
 		"name": "Quickdraw Boots", "base": "Leather Boots",
+		"hint": "Dexterity gives Spawn Speed.",
 		"mods": ["added_dexterity", "increased_move_speed"],
 		"effect": "quickdraw",
 		"effect_text": "Every point of dexterity is {times} Spawn Speed.",
@@ -423,6 +461,7 @@ const UNIQUES := {
 	},
 	"heirlooms_echo": {
 		"name": "Heirloom's Echo", "base": "Emerald Amulet",
+		"hint": "The attributes on your heirlooms count for more.",
 		"mods": ["added_intelligence", "added_crit"],
 		"effect": "echo",
 		"effect_text": "The attributes on your heirlooms' doll count {times} times.",
@@ -433,6 +472,7 @@ const UNIQUES := {
 	# line yet: the user named the four numbers and nothing past them.
 	"nightwalkers": {
 		"name": "Nightwalkers", "base": "Leather Boots",
+		"hint": "Chart tiles deep into the dark, fighting for each one on the way.",
 		"mods": ["increased_move_speed", "added_dodge"],
 		"effect": "nightwalker",
 		"effect_text": "You can chart a tile up to {tiles} steps into the dark, fighting for every tile on the way, one after another.",
@@ -440,6 +480,7 @@ const UNIQUES := {
 	},
 	"dreadmask": {
 		"name": "Dreadmask", "base": "Leather Helmet",
+		"hint": "Fights have fewer common enemies, and fewer still past each ice wall.",
 		"mods": ["increased_armor", "added_strength"],
 		"effect": "dread",
 		"effect_text": "Fights on the land have {fewer} fewer common enemies, one fewer for every ice wall inside the tile.",
@@ -494,6 +535,11 @@ static func dial(id: String, key: String, rank := 1) -> float:
 ## The rank a card writes `id` at: the player's (`ranks`), else I.
 static func shown_rank(id: String) -> int:
 	return int(ranks.get(id, 1))
+
+
+## What a locked unique's card says of it (`CollectionPage.write_hint`); "" for a starter.
+static func hint(id: String) -> String:
+	return str(UNIQUES[id].get("hint", ""))
 
 
 ## The line a unique gains at rank IV (`PEAK`), whatever rank it is asked at: a card writes it only

@@ -99,6 +99,10 @@ PALETTE = [
 ]
 assert len(PALETTE) <= 256
 C = {name: i for i, (name, _) in enumerate(PALETTE)}
+# Not a colour: a shadow cast onto whatever ground an overlay is laid over, written as translucent ink. Only
+# the ice's own sheets use it (the wall's rubble), which skip the atlas and its indexed palette.
+SHADE = -1
+SHADE_RGBA = (20, 16, 30, 70)
 
 # ENDESGA 64 (Endesga; lospec.com/palette-list/endesga-64): the palette every fighter pack is drawn in, and
 # since 2026-09-30 the whole interface (the user's call): `to_e64` puts an image into it.

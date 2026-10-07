@@ -707,6 +707,90 @@ def caves(tag):
     print(f"  wrote qa/caves_{tag}.png (a ground a row: bare, lit, lit under the fog, and its village)")
 
 
+def fallen(tag):
+    """Where a wall stood, once it has fallen: a patch of land with the old ring running through all six
+    grounds, a road across it (drawn over the rubble) and a village on it (which has none), beside the
+    same patch with the wall still standing."""
+    from PIL import Image
+    import towns as T
+    from blends import RANK, blend_tile
+    from ice_wall import VARIANTS as IV, WASTE_COLS, WASTE_ROWS, rubble, snow_spill, wall_band, waste
+    from preview import tile_image
+    from roads import ENV_MATERIAL, all_roads
+    from terrain import ACCENTS, ENV_CHAIN, ENVS, VARIANTS
+    rows, cols, centre, R = 8, 12, (11, 6), 8
+    road_col, town_at = 4, (3, 7)
+
+    def ring(r, c):
+        q = lambda r, c: (c - (r - (r & 1)) // 2, r)
+        (q1, r1), (q0, r0) = q(r, c), q(*centre)
+        dq, dr = q1 - q0, r1 - r0
+        return (abs(dq) + abs(dr) + abs(dq + dr)) // 2
+
+    def env_at(r, c):
+        return ENV_CHAIN[min(max(c, 0), cols - 1) // 2]
+    print("illegal borders:", illegal_borders(env_at, rows, cols))
+    envs = {e: {v: ENVS[e](v) for v in VARIANTS} for e in ENV_CHAIN}
+    roads = {(t.name.split("_")[1], frozenset(EDGE_NAMES.index(n) for n in t.edges)): t for t in all_roads()}
+    road = {}
+    for r in range(rows):
+        es = (5, 1) if r % 2 == 0 else (4, 2)          # down column road_col, a bend a row
+        road[(r, road_col)] = roads[(ENV_MATERIAL[env_at(r, road_col)], frozenset(es))]
+    town_tile, town_cv = T.build(env_at(*town_at), "small")
+    town_sprite = Image.new("RGBA", (T.SPRITE_W, T.SPRITE_H))
+    town_sprite.putdata([RGBA_OF(c) for row in town_cv.px for c in row])
+    blends = {}
+
+    def scene(fell):
+        rng = random.Random(4)
+        img = Image.new("RGBA", (cols * 56 + 28, rows * 48 + 16), (20, 20, 24, 255))
+        for r in range(rows):
+            for c in range(cols):
+                d, own = ring(r, c), env_at(r, c)
+                variant = rng.choice(ACCENTS) if rng.random() < 0.1 else rng.choice(VARIANTS[:3])
+                ice = not fell and d >= R
+                layers = []
+                if ice:
+                    layers.append(waste(c % WASTE_COLS, r % WASTE_ROWS))
+                else:
+                    layers.append(town_tile if (r, c) == town_at else envs[own]["v1" if (r, c) in road else variant])
+                    near = {}
+                    for e in range(6):
+                        nr, nc = neighbor(r, c, e)
+                        if 0 <= nr < rows and 0 <= nc < cols and RANK[env_at(nr, nc)] > RANK[own]:
+                            near.setdefault(env_at(nr, nc), []).append(e)
+                    for n, es in sorted(near.items(), key=lambda kv: RANK[kv[0]]):
+                        if (n, tuple(es)) not in blends:
+                            blends[(n, tuple(es))] = blend_tile(n, tuple(es))
+                        layers.append(blends[(n, tuple(es))])
+                ring_edges = tuple(e for e in range(6) if ring(*neighbor(r, c, e)) == R)
+                version = IV[hash((r, c)) % len(IV)]
+                if not fell:
+                    if d == R:
+                        layers.append(wall_band(ring_edges, version))
+                    elif d < R:
+                        touching = tuple(e for e in range(6) if ring(*neighbor(r, c, e)) >= R)
+                        if touching:
+                            layers.append(snow_spill(touching))
+                elif d == R and (r, c) != town_at:
+                    layers.append(rubble(ring_edges, version))
+                if (r, c) in road and not ice:
+                    layers.append(road[(r, c)])
+                ox, oy = c * 56 + (28 if r % 2 else 0), r * 48
+                for t in layers:
+                    img.alpha_composite(tile_image(t), (ox, oy))
+        ox, oy = town_at[1] * 56 + (28 if town_at[0] % 2 else 0), town_at[0] * 48
+        img.alpha_composite(town_sprite, (ox - T.SHIFT[0], oy - T.SHIFT[1]))
+        return img.crop((14, 8, img.width - 14, img.height - 8))
+
+    standing, fell = scene(False), scene(True)
+    sheet = Image.new("RGBA", (standing.width * 2 + 8, standing.height), (40, 40, 48, 255))
+    sheet.paste(standing, (0, 0))
+    sheet.paste(fell, (standing.width + 8, 0))
+    sheet.resize((sheet.width * 2, sheet.height * 2), Image.NEAREST).save(f"qa/fallen_{tag}.png")
+    print(f"  wrote qa/fallen_{tag}.png (the wall standing, then fallen)")
+
+
 def RGBA_OF(c):
     from preview import RGBA
     return RGBA[c] if c else (0, 0, 0, 0)
@@ -714,4 +798,4 @@ def RGBA_OF(c):
 if __name__ == "__main__":
     {"phase1": phase1, "phase2": phase2, "phase3": phase3, "showcase": showcase,
      "blends": blends, "ui": ui, "slimes": slimes, "hpbar": hpbar, "gear": gear,
-     "icewall": icewall, "towns": towns, "caves": caves}[sys.argv[1]](*sys.argv[2:])
+     "icewall": icewall, "towns": towns, "caves": caves, "fallen": fallen}[sys.argv[1]](*sys.argv[2:])

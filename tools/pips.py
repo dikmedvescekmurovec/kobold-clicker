@@ -159,6 +159,8 @@ def sprites():
     out["ui_pip_more"] = draw(MORE, "common")
     out["ui_pip_reward"] = gift(True)
     out["ui_pip_reward_spent"] = gift(False)
+    # The round pip in red: on a corner button whose page has something new (the main scene's `_mark_new`).
+    out["ui_pip_new"] = draw(SHAPES["common"], "red")
     return out
 
 

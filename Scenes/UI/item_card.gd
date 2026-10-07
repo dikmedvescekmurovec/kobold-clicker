@@ -68,6 +68,9 @@ var _alt := false
 ## new `Item`s too (`VendorStock.items`), so nothing pressed is still there to be compared with.
 var _muted := Rect2()
 var _pressed_at := Vector2.INF
+## Whether an orb was in the hand as the press under way began. The press that spends the last orb
+## puts it down before the button is let go of, and its card is still where the result is read.
+var _orb_press := false
 ## The orb in a bag page's hand, or "" (`BagPage.held_changed`, wired in the main scene).
 var held := ""
 ## The light `lights` stands behind the card, a `Node2D` for `shine`'s reasons, and drawn under it.
@@ -166,14 +169,16 @@ func _process(_delta: float) -> void:
 ## nothing more until the cursor has been somewhere else, whether the press opened it, shut it or
 ## did nothing at all, and neither does whatever a sale slid under a cursor that has not moved. But
 ## not with an orb in the hand: that press crafts the piece where it lies, and the new lines are the
-## whole point of it.
+## whole point of it -- even when it spent the last orb, and the hand is empty before the release.
 func hovered(at: Vector2, pressed: bool) -> ItemSlot:
 	var slot := slot_at(at)
 	# A finger has no hover: its tap is how a piece is asked about, so the card comes up as it lifts
 	# and stays until the next tap lands somewhere else.
 	if pressed and Cursors.touched:
 		return null
-	if Cursors.holding():
+	if not pressed:
+		_orb_press = Cursors.holding()
+	if _orb_press or Cursors.holding():
 		return slot
 	if pressed:
 		_muted = slot.get_global_rect() if slot != null else Rect2()

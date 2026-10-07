@@ -16,6 +16,10 @@ const GOLD := Color("ffc825")
 ## Gold as a word on the cream: a unique's name, a banner's title, a camp's place. Nothing in ENDESGA
 ## 64 that still reads as gold is dark enough, so it is the vermilion next to it, for 16 px names alone.
 const GOLD_TEXT := Color("c64524")
+## A unique's ring (`tools/item_frames.py`): its lit row and the row under it. The card draws the ring's
+## top edge in them round a unique's rule (`ItemDetails`).
+const FRAME_GOLD := Color("ffa214")
+const FRAME_GOLD_DK := Color("ed7614")
 const EARTH_DK := Color("391f21")
 ## A common piece's name: the one grey on the cream (a 16 px name, held to 3:1).
 const SLATE := Color("5d5d5d")
@@ -31,7 +35,7 @@ const PANEL_CREAM := Color("f6ca9f")
 const TEXT := Color("391f21")
 const TEXT_SOFT := Color("5d2c28")
 const SLOT_TAN := Color("e69c69")
-## The same slot pressed in: the wood's brown, which is also what a unique's rule is written in.
+## The same slot pressed in: the wood's brown.
 const SLOT_TAN_DK := Color("8a4836")
 ## The brown button's face (`ui_btn_brown_normal`), for a mark drawn in code that has to read as one.
 const BUTTON_BROWN := Color("8a4836")
@@ -48,6 +52,8 @@ const LILAC := Color("93388f")
 const RUST := Color("8a4836")
 ## The epic step, border and name alike, strength's ring on the character page, and a refusal.
 const BRICK := Color("891e2b")
+## LEAF_LT's twin for a loss: a red for words outlined on the backdrop or the band, never on the cream.
+const BRICK_LT := Color("f5555d")
 
 ## ENDESGA 64 itself, for `test_ui_theme` to hold the constants above to.
 const E64 := ["ff0040", "131313", "1b1b1b", "272727", "3d3d3d", "5d5d5d", "858585", "b4b4b4", "ffffff",

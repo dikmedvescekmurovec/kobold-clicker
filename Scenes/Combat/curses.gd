@@ -62,7 +62,7 @@ const CURSES := {
 	LEAN_PICKINGS: {"name": "Lean Pickings", "skulls": 2,
 		"text": "Gear drops half as often.", "reward": "One item in ten drops +1, and one in a hundred +2."},
 	PAUPER: {"name": "Pauper", "skulls": 2,
-		"text": "Every purse is halved.", "reward": "+40% experience",
+		"text": "Enemies drop half as much gold.", "reward": "+40% experience",
 		"stats": {"xp_more": 40.0}},
 	WILD_TILES: {"name": "Wild Tiles", "skulls": 2,
 		"text": "Tile modifiers start past the first wall, not the second, and every tile has one more.",

@@ -11,6 +11,9 @@ extends RefCounted
 ## A body the accepted bounty took, and what that bounty stands at with it: `have >= need` is filled.
 ## The one thing the screen hears of a bounty mid-fight.
 signal bounty_counted(enemy: String, have: int, need: int)
+## A body the accepted bounty wants, short of filling it, that fell on land shallower than `level`, the
+## posting's: it did not count, and the screen says why.
+signal bounty_too_low(enemy: String, level: int)
 
 ## What the fight has turned up. Kept after it ends, for the report.
 var drops: Array[Item] = []
@@ -62,6 +65,10 @@ func add_xp(amount: int) -> void:
 ## the inventory, which is what this already holds -- nothing here knows there is a page showing them.
 func add_kill(enemy: String) -> void:
 	if not BountyBoard.count_kill(_inventory.towns, enemy, 1, tile_level):
+		# Its monster, and not filled: only the tile's level can have refused it.
+		var wanted := BountyBoard.active(_inventory.towns)
+		if BountyBoard.takes(wanted, enemy) and not BountyBoard.ready(wanted):
+			bounty_too_low.emit(enemy, int(wanted.get(BountyBoard.LEVEL, 0)))
 		return
 	_write()
 	var bounty := BountyBoard.active(_inventory.towns)

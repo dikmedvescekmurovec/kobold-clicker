@@ -377,15 +377,18 @@ func perfect_lines(detailed := false) -> PackedStringArray:
 func _mod_line(mod: Dictionary, detailed: bool) -> String:
 	var line := ModifierTable.line(mod)
 	if detailed and not line.is_empty():
-		# Every modifier's line opens with its number, so the band goes hard against it and ahead
-		# of its unit: "+4(1-4)s", "+0.3(0.1-0.3)s". The number may be `BigNumber`'s "1.23M" or "1.23e36". The
-		# band is written the way the number is (`ModifierTable.amount`), less the unit that follows.
-		var number := RegEx.create_from_string("^\\+[0-9.]+(e[0-9]+|[A-Z][a-z]?)?").search(line)
-		if number != null:
-			var id := str(mod["id"])
-			var band := ModifierTable.band_for(id, tier_of(mod))
-			line = "%s(%s-%s)%s" % [number.get_string(), ModifierTable.amount(id, int(band[0])).trim_suffix("s"),
-					ModifierTable.amount(id, int(band[1])).trim_suffix("s"), line.substr(number.get_end())]
+		# The band goes hard against the line's number and ahead of its unit: "+4(1-4)s",
+		# "+0.3(0.1-0.3)s", "come 30(20-40)% later" -- the first number, wherever the sentence puts it. The
+		# number may be `BigNumber`'s "1.23M" or "1.23e36". The band is written the way the number is
+		# (`ModifierTable.amount`), less the unit that follows; a signed one as its reach ("±2"), and a
+		# band of one number not at all.
+		var number := RegEx.create_from_string("[+-]?[0-9][0-9.]*(e[0-9]+|[A-Z][a-z]?)?").search(line)
+		var id := str(mod["id"])
+		var band := ModifierTable.band_for(id, tier_of(mod))
+		if number != null and band[0] != band[1]:
+			var written := "±%d" % int(band[1]) if ModifierTable.MODS[id].get("signed", false) else "%s-%s" % [
+					ModifierTable.amount(id, int(band[0])).trim_suffix("s"), ModifierTable.amount(id, int(band[1])).trim_suffix("s")]
+			line = "%s(%s)%s" % [line.substr(0, number.get_end()), written, line.substr(number.get_end())]
 			# The tier last, where the row's name ends; a modifier with one band at every tier has none.
 			if ModifierTable.tiered(id):
 				line += " T%d" % tier_of(mod)

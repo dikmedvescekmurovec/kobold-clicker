@@ -17,7 +17,7 @@ extends Control
 
 ## The page's X was pressed.
 signal closed
-## The pencil beside the name was pressed: the main scene asks the system for a new one.
+## The pencil beside the name was pressed: the main scene asks for a new one (`TextPrompt`).
 signal rename_pressed
 
 ## What the page's bar says; the character's own name heads its card.
@@ -34,24 +34,32 @@ const ATTRIBUTES := {
 	"dexterity": Palette.LEAF,
 }
 ## The tables, each under its heading, in the order they stand: every stat `LootTable.STAT_LABELS`
-## names but the attributes (`test_inventory` holds that, so a new stat is never left off), the
-## experience the fight adds (`xp_more`), which is the player's and no piece's, and under Misc the
-## counts of how far they have come.
+## names but the attributes, which are the chips, and their line of all three, which is in them
+## (`test_inventory` holds that, so a new stat is never left off), and under Misc the counts of how far
+## they have come.
 const GROUPS := {
-	"Offence": ["damage", "crit_chance", "crit_damage", "attack_speed", "bleed"],
-	"Defence": ["armor", "dodge", "block", "time_on_hit", "fight_clock"],
-	"Rewards": ["drop_rate", "item_rarity", "gold_find", "orb_find", "xp_more"],
-	"Utility": ["spawn_speed", "move_speed", "sight"],
+	"Offence": ["damage", "crit_chance", "crit_damage", "attack_speed", "bleed", "burn", "click_damage",
+		"swing_damage", "elite_damage", "first_blow", "double_strike", "parry", "thorns", "less_health"],
+	"Defence": ["armor", "dodge", "block", "time_on_hit", "time_on_block", "recoup", "blow_delay",
+		"elite_ward", "tile_ward", "fight_clock"],
+	"Rewards": ["drop_rate", "item_rarity", "gold_find", "orb_find", "xp_more", "elite_chance", "camp_earnings"],
+	"Utility": ["spawn_speed", "move_speed", "sight", "extra_enemies", "power_skills", "fortune_skills",
+		"guard_skills"],
 	"Misc": ["kills", "depth", "time"],
 }
 ## What a row is called where `LootTable.STAT_LABELS` does not say.
-const LABELS := {"xp_more": "Experience", "kills": "Kills", "depth": "Depth won", "time": "Time played"}
+const LABELS := {"kills": "Kills", "depth": "Depth won", "time": "Time played"}
 ## The rows written even at nothing, because every hero has some: a blow, a clock, a sight, a count of
 ## kills, the time played. So a fresh hero's page is never an empty frame.
 const ALWAYS := ["damage", "fight_clock", "sight", "kills", "time"]
 ## What is a bonus on what the hero already has, written with its sign: what a crit adds, a finder's
 ## lift, a faster walk. A chance or a share of something is written bare.
-const SIGNED := ["crit_damage", "move_speed", "drop_rate", "item_rarity", "gold_find", "orb_find", "xp_more"]
+const SIGNED := ["crit_damage", "move_speed", "drop_rate", "item_rarity", "gold_find", "orb_find", "xp_more",
+	"click_damage", "swing_damage", "elite_damage", "first_blow", "camp_earnings", "extra_enemies",
+	"power_skills", "fortune_skills", "guard_skills", "parry"]
+## The rows the fight holds to a most (`Encounter.WARD_MOST`, certainty for the recoup), read off the
+## fight (its fields of the same names) rather than the gear, so the page says what the hero has.
+const HELD := ["elite_ward", "tile_ward", "less_health", "recoup"]
 ## The two headline numbers' keys in `_now`, and the names of their values' Labels.
 const PER_SECOND := "per_second"
 const PER_CLICK := "per_click"
@@ -171,7 +179,11 @@ func _numbers(totals: Dictionary, fight: Encounter) -> Dictionary:
 	out["crit_damage"] = fight.crit_damage
 	out["attack_speed"] = fight.attack_speed
 	out["spawn_speed"] = fight.spawn_speed
+	out["double_strike"] = fight.double_strike
+	out["elite_chance"] = fight.elite_chance
 	out["xp_more"] = fight.xp_more
+	for stat: String in HELD:
+		out[stat] = float(fight.get(stat))
 	out["fight_clock"] = fight.seconds * 10.0
 	out["sight"] = float(inventory.sight())
 	out["kills"] = float(inventory.kills)
@@ -234,25 +246,22 @@ func _who(totals: Dictionary) -> PanelContainer:
 	return card
 
 
-## The character's name, the one heading in the card, with the pencil straight after it -- built only
-## where `DisplayServer` has a native text box to rename with (`FEATURE_NATIVE_DIALOG_INPUT`). A name
-## past the `room` the pencil leaves is cut with an ellipsis, as the corner panel cuts it.
+## The character's name, the one heading in the card, with the pencil straight after it. A name past
+## the `room` the pencil leaves is cut with an ellipsis, as the corner panel cuts it.
 func _name_row(room: float) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", NAME_GAP)
 	_title = UITheme.label(inventory.hero())
 	_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	row.add_child(_title)
-	# ponytail: no text box of the game's own; add one if a platform without a native one ships.
-	if DisplayServer.has_feature(DisplayServer.FEATURE_NATIVE_DIALOG_INPUT):
-		var pencil := UITheme.button("", UITheme.BARE_BUTTON, "Rename")
-		pencil.icon = PENCIL_ICON
-		pencil.focus_mode = Control.FOCUS_NONE
-		pencil.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		pencil.pressed.connect(rename_pressed.emit)
-		row.add_child(pencil)
-		var face := UITheme.theme().get_stylebox("normal", UITheme.BARE_BUTTON)
-		room -= NAME_GAP + PENCIL_ICON.get_width() + face.get_margin(SIDE_LEFT) + face.get_margin(SIDE_RIGHT)
+	var pencil := UITheme.button("", UITheme.BARE_BUTTON, "Rename")
+	pencil.icon = PENCIL_ICON
+	pencil.focus_mode = Control.FOCUS_NONE
+	pencil.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	pencil.pressed.connect(rename_pressed.emit)
+	row.add_child(pencil)
+	var face := UITheme.theme().get_stylebox("normal", UITheme.BARE_BUTTON)
+	room -= NAME_GAP + PENCIL_ICON.get_width() + face.get_margin(SIDE_LEFT) + face.get_margin(SIDE_RIGHT)
 	# Measured off the theme: the label is not in the tree yet, and a trimmed label asks for no width.
 	var font := UITheme.theme().get_font("font", "PanelLabel")
 	var width := ceilf(font.get_string_size(_title.text, HORIZONTAL_ALIGNMENT_LEFT, -1, UITheme.FONT_SIZE).x)
@@ -293,9 +302,8 @@ func _chip(stat: String, value: float) -> VBoxContainer:
 	# What a point is worth, off the same `attribute_gift` the fight's numbers are, so the Scholar's
 	# Circlet turning intelligence to damage says so here too.
 	var gift := inventory.attribute_gift(stat, value)
-	var gives := str(LABELS["xp_more"]) if gift[0] == "xp_more" else str(LootTable.STAT_LABELS[gift[0]])
-	column.tooltip_text = "Each point of %s adds %.1f%% more %s\nYours add +%.1f%%" % [
-			LootTable.STAT_LABELS[stat], inventory.attribute_gift(stat, 1.0)[1], gives, gift[1]]
+	column.tooltip_text = "Each point of %s adds %.1f%% more %s\nYours add +%.1f%%" % [LootTable.STAT_LABELS[stat],
+			inventory.attribute_gift(stat, 1.0)[1], LootTable.STAT_LABELS[gift[0]], gift[1]]
 	return column
 
 
@@ -399,10 +407,11 @@ static func _capstone(id: String) -> CenterContainer:
 
 ## One heading's stats as a table, each that is something -- or that every hero has (`ALWAYS`) -- a row
 ## named for its stat: the name, the change since the last look, the number, and where it comes from as
-## its tooltip. A heading with none of its stats is left out.
+## its tooltip. A heading with none of its stats is left out. Something is anything but nothing: the
+## body armour's count of enemies can be fewer.
 func _table(heading: String, totals: Dictionary, fight: Encounter) -> void:
 	var shown: Array = GROUPS[heading].filter(func(stat: String) -> bool:
-			return stat in ALWAYS or float(_now[stat]) > 0.0)
+			return stat in ALWAYS or float(_now[stat]) != 0.0)
 	if shown.is_empty():
 		return
 	# A framed block of its own: the page's row gap is for cards, and would pull a table apart.
@@ -433,7 +442,7 @@ static func _text(stat: String, value: float) -> String:
 		return BigNumber.format(value)
 	if stat == "time":
 		return _spent(value)
-	var text := BigNumber.format(value) + "%" if stat == "xp_more" else LootTable.stat_value(stat, value)
+	var text := LootTable.stat_value(stat, value)
 	return "+" + text if stat in SIGNED and value > 0.0 else text
 
 
@@ -452,7 +461,7 @@ func _change(stat: String) -> Label:
 		text = "%+.1f/s" % moved
 	elif stat in LootTable.SECONDS_STATS:
 		text = LootTable.seconds_text(moved, true)
-	elif stat == "xp_more" or stat in LootTable.PERCENT_STATS:
+	elif stat in LootTable.PERCENT_STATS:
 		text += "%"
 	var label := UITheme.label(text, Palette.LEAF if moved > 0.0 else Palette.BRICK, true)
 	label.name = CHANGE_NAME
@@ -485,9 +494,12 @@ func _sources(stat: String, totals: Dictionary, fight: Encounter) -> String:
 		"attack_speed":
 			if fight.attack_speed >= Encounter.SWING_CAP:
 				lines.append("At most %.1f/s" % Encounter.SWING_CAP)
-		"spawn_speed":
+		"spawn_speed", "double_strike", "elite_chance", "recoup":
 			if raw > 100.0:
 				lines.append("At most 100%")
+		"elite_ward", "tile_ward", "less_health":
+			if raw > Encounter.WARD_MOST:
+				lines.append("At most %s%%" % BigNumber.format(Encounter.WARD_MOST))
 		"armor":
 			lines.append("%d%% off every blow" % roundi((1.0 - fight.taken(1.0, 0.0)) * 100.0))
 		"dodge":

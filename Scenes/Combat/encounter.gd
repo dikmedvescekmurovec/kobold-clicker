@@ -232,6 +232,14 @@ const HIT_WALL_GROWTH := 1.5
 ## point of each is worth.
 const ARMOUR_K := 50.0
 const DODGE_K := 50.0
+## The most the helmet's three "less" lines come to -- less off an elite's blow, less of a tile
+## modifier, less health -- because a "less" that reached the whole would be no blow, no modifier and no
+## body. Three quarters is four times the damage, or a quarter of the blow.
+const WARD_MOST := 75.0
+## How long a blow's recoup takes to come back, and a burn to burn out. Both are in their lines' text
+## (`ModifierTable.MODS`), so a change here is a change there.
+const RECOUP_SECONDS := 4.0
+const BURN_SECONDS := 3.0
 ## Seconds its death plays out, before the next one comes on.
 const DEATH := 0.5
 
@@ -348,6 +356,47 @@ var drop_rate := 0.0
 var item_rarity := 0.0
 var gold_find := 0.0
 var orb_find := 0.0
+## The weapon's own lines, in percent: more of a click, of a swing, of a blow at an elite or a boss and
+## of the first blow a body takes -- one sum, `gear_more` -- and the chance a blow lands twice.
+var click_damage := 0.0
+var swing_damage := 0.0
+var elite_damage := 0.0
+var first_blow := 0.0
+var double_strike := 0.0
+## The rings' Elite Chance, in percent: how often a common comes on as an elite of its ground instead
+## (`_promote`). Drawn on a generator of its own, and only while there is any, so nobody else's stream
+## moves; unseeded, because which bodies come on promoted belongs to the attempt, as the loot does.
+var elite_chance := 0.0
+var elite_rng := RandomNumberGenerator.new()
+## The helmet's, the body's and the offhand's lines (`arm`), all percents but the count and the seconds:
+## how much later an enemy's first blow comes, how much less an elite's or a boss's takes, how much of
+## a tile modifier's bite is gone, how much less health every body has (the three "less" ones held to
+## `WARD_MOST`), what a camp pays more, bodies more or fewer in a tile fight, a share of `damage`
+## struck back at a blow that lands, a share of what a blow took coming back over `RECOUP_SECONDS`
+## (held to certainty), crit chance a dodge hands the next blow, a share of a blow burning on over
+## `BURN_SECONDS`, and seconds a blow the block stops whole wins back.
+var blow_delay := 0.0
+var elite_ward := 0.0
+var tile_ward := 0.0
+var less_health := 0.0
+var camp_more := 0.0
+var extra_enemies := 0
+var thorns := 0.0
+var recoup := 0.0
+var parry := 0.0
+var burn := 0.0
+var time_on_block := 0.0
+## Whether `arm` has shaped the lineup already rolled -- its count, its health, its elite chance
+## (`_shape`) -- which it does once however often it runs.
+var _promoted := false
+## What a dodge handed the next blow in crit chance (`parry`), spent by whichever blow comes next.
+var _parry := 0.0
+## The burn on the body in front of the player: damage a second, and the seconds it has left. The
+## deepest one, refreshed by every blow, cleared with the body like `_bleed`.
+var _burn := 0.0
+var _burn_left := 0.0
+## What the blows are still owed back (`recoup`): one [seconds left, a second] a blow.
+var _recouping: Array = []
 
 ## How much of the next automatic swing has been earned. Only runs while an enemy is standing there
 ## to be hit, so a slow weapon loses nothing to a walk-in and cannot bank swings through a death.
@@ -685,10 +734,17 @@ func _take_mods(carried: Array) -> void:
 	phase_left = walk_in
 
 
-## The health `enemy` starts this fight with: what the tile makes it worth (`hp_of`), more for whatever
-## the tile and the world add. The ice wall answers to `WALL_HP` and the Long Winter and to nothing
-## else -- it is the check on the player, and a tile's modifier is not what it checks.
+## The health `enemy` starts this fight with: `_raw_health_of`, less the helmet's Enemy Health Reduction --
+## on every body there is, the wall's and the dungeon's too, since everything worn reaches them.
 func _health_of(enemy: String, position := -1) -> float:
+	return maxf(1.0, roundf(_raw_health_of(enemy, position) * (1.0 - less_health / 100.0)))
+
+
+## The health `enemy` starts this fight with before the gear has a say: what the tile makes it worth
+## (`hp_of`), more for whatever the tile and the world add. The ice wall answers to `WALL_HP` and the
+## Long Winter and to nothing else -- it is the check on the player, and a tile's modifier is not what
+## it checks.
+func _raw_health_of(enemy: String, position := -1) -> float:
 	if dungeon:
 		# The floor and the tier and nothing else: no tile's modifier and no world's curse reaches down
 		# here. Asked as a body joins, the floor is how many are already built; `_take_curses`, sizing
@@ -825,6 +881,21 @@ func _append_enemy(rng: RandomNumberGenerator) -> void:
 		picked = EnemyRoster.names()[0]
 	lineup.append(picked)
 	health.append(_health_of(picked))
+	_promote(lineup.size() - 1)
+
+
+## Elite Chance: the common at `at` comes on as an elite of its ground instead, sized as one. Never in the
+## dungeon, whose floors are counted, and with no chance nothing is drawn. Whether it was.
+func _promote(at: int) -> bool:
+	if dungeon or elite_chance <= 0.0 or EnemyRoster.tier_of(lineup[at]) != EnemyRoster.Tier.COMMON \
+			or elite_rng.randf() * 100.0 >= elite_chance:
+		return false
+	var picked := EnemyRoster.pick(env, EnemyRoster.Tier.ELITE, elite_rng)
+	if picked.is_empty():
+		return false
+	lineup[at] = picked
+	health[at] = _health_of(picked, at)
+	return true
 
 
 ## Announces the first enemy, so whoever is drawing the fight can put it on the field. Safe to call
@@ -1026,6 +1097,17 @@ func arm(stats: Dictionary) -> void:
 	_dexterity = maxf(0.0, float(stats.get("dexterity", 0.0)))
 	_attribute_lines = maxi(0, int(stats.get("attribute_lines", 0)))
 	_pure_pieces = maxi(0, int(stats.get("pure_pieces", 0)))
+	blow_delay = maxf(0.0, float(stats.get("blow_delay", 0.0)))
+	elite_ward = clampf(float(stats.get("elite_ward", 0.0)), 0.0, WARD_MOST)
+	tile_ward = clampf(float(stats.get("tile_ward", 0.0)), 0.0, WARD_MOST)
+	less_health = clampf(float(stats.get("less_health", 0.0)), 0.0, WARD_MOST)
+	camp_more = maxf(0.0, float(stats.get("camp_earnings", 0.0)))
+	extra_enemies = roundi(float(stats.get("extra_enemies", 0.0)))
+	thorns = maxf(0.0, float(stats.get("thorns", 0.0)))
+	recoup = clampf(float(stats.get("recoup", 0.0)), 0.0, 100.0)
+	parry = maxf(0.0, float(stats.get("parry", 0.0)))
+	burn = maxf(0.0, float(stats.get("burn", 0.0)))
+	time_on_block = maxf(0.0, LootTable.seconds_of("time_on_block", float(stats.get("time_on_block", 0.0))))
 	# Heartwood Plate: armour buys clock, and stops buying it at its rank's most -- armour grows with
 	# every level, and a clock that grew with it would be no clock. A run has none to add to.
 	var more := 0.0
@@ -1035,6 +1117,9 @@ func arm(stats: Dictionary) -> void:
 	var clock := LootTable.seconds_of("fight_clock", float(stats.get("fight_clock", 0.0)))
 	if clock > 0.0 and not endless:
 		more += minf(clock, CLOCK_MOST)
+	# Weaker tile modifiers give back their share of what a Dusk took off the clock.
+	if not endless:
+		more -= TileMods.total(mods, "seconds") * tile_ward / 100.0
 	# By the difference, so arming again mid-fight -- a piece put on in the bag -- gives or takes what
 	# changed and never fills the clock again.
 	seconds += more - _clock_more
@@ -1046,20 +1131,31 @@ func arm(stats: Dictionary) -> void:
 	item_rarity = maxf(0.0, float(stats.get("item_rarity", 0.0)))
 	gold_find = maxf(0.0, float(stats.get("gold_find", 0.0)))
 	orb_find = maxf(0.0, float(stats.get("orb_find", 0.0)))
+	click_damage = maxf(0.0, float(stats.get("click_damage", 0.0)))
+	swing_damage = maxf(0.0, float(stats.get("swing_damage", 0.0)))
+	elite_damage = maxf(0.0, float(stats.get("elite_damage", 0.0)))
+	first_blow = maxf(0.0, float(stats.get("first_blow", 0.0)))
+	double_strike = clampf(float(stats.get("double_strike", 0.0)), 0.0, 100.0)
+	elite_chance = clampf(float(stats.get("elite_chance", 0.0)), 0.0, 100.0)
+	# What is already rolled is shaped once, as the fight is first armed; a run's later bodies are asked
+	# as they join (`_append_enemy`).
+	if not _promoted:
+		_promoted = true
+		_shape()
 	xp_more = maxf(0.0, float(stats.get("xp_more", 0.0)))
 	# Meadowstriders at IV: double experience on grass, added like any other "more".
 	if env == "grass" and _home_peak():
 		xp_more += HOME_XP
 	# The tile's own say, last: what it takes off the player's numbers, and what it pays for the fight
 	# it made -- added to the finders like any other percent, so `_kill` has no second path.
-	armor *= TileMods.factor(mods, "armor")
-	dodge *= TileMods.factor(mods, "dodge")
-	block *= TileMods.factor(mods, "block")
-	time_on_hit *= TileMods.factor(mods, "time_on_hit")
-	attack_speed = minf(attack_speed * TileMods.factor(mods, "swing"), SWING_CAP)
+	armor *= _tile_factor("armor")
+	dodge *= _tile_factor("dodge")
+	block *= _tile_factor("block")
+	time_on_hit *= _tile_factor("time_on_hit")
+	attack_speed = minf(attack_speed * _tile_factor("swing"), SWING_CAP)
 	# From the const rather than from `walk_in`, so arming twice does not take the share off twice.
 	spawn_speed = clampf(float(stats.get("spawn_speed", 0.0)), 0.0, 100.0)
-	walk_in = WALK_IN * TileMods.factor(mods, "walk_in") * (1.0 - spawn_speed / 100.0)
+	walk_in = WALK_IN * _tile_factor("walk_in") * (1.0 - spawn_speed / 100.0)
 	if phase == Phase.WALKING_IN:
 		phase_left = minf(phase_left, walk_in)
 	if _cursed_with(Curses.HOMELAND) and _at_home():
@@ -1069,6 +1165,62 @@ func arm(stats: Dictionary) -> void:
 	item_rarity += TileMods.total(mods, "item_rarity") * pays
 	gold_find += TileMods.total(mods, "gold_find") * pays
 	xp_more += TileMods.total(mods, "xp") * pays
+
+
+## What the gear does to the lineup already rolled, once, as the fight is first armed: bodies more or
+## fewer (`_take_extra`), a tile's Thick-skinned weakened and every body's health less, then the elite
+## chance. Health is sized again only where the gear moved it, so a fight built by hand keeps its own.
+func _shape() -> void:
+	_take_extra()
+	var thinner := tile_ward > 0.0 and TileMods.total(mods, "hp") > 0.0
+	if thinner:
+		_hp_more -= TileMods.total(mods, "hp") * tile_ward / 100.0
+	if thinner or less_health > 0.0:
+		for at in range(index, lineup.size()):
+			health[at] = _health_of(lineup[at], at)
+		if index < lineup.size():
+			hp = health[index]
+	for at in range(index, lineup.size()):
+		if _promote(at) and at == index:
+			hp = health[at]
+
+
+## The body armour's count: commons put on the front of what is left, from the cell's own draw so a
+## tile fields the same ones each time, or taken off the front, never the last body standing. A tile's
+## fight only -- a run has no count, the dungeon's floors are counted, and a wall or a chest is one body.
+func _take_extra() -> void:
+	if extra_enemies == 0 or endless or dungeon or index >= lineup.size() or lineup[index] in [WALL_NAME, MIMIC]:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(["extra", cell])
+	for i in extra_enemies:
+		var picked := EnemyRoster.pick(env, EnemyRoster.Tier.COMMON, rng)
+		if picked.is_empty():
+			break
+		lineup.insert(index, picked)
+		health.insert(index, _health_of(picked, index))
+	var fewer := -extra_enemies
+	var at := index
+	while fewer > 0 and at < lineup.size() and lineup.size() - index > 1:
+		if EnemyRoster.tier_of(lineup[at]) == EnemyRoster.Tier.COMMON:
+			lineup.remove_at(at)
+			health.remove_at(at)
+			fewer -= 1
+		else:
+			at += 1
+	enemies = lineup.size()
+	hp = health[index]
+
+
+## A tile modifier's factor on one of the player's numbers, less the share of its bite the helmet's
+## Tile Modifier Reduction takes back: half the armour under a Piercing tile at 50% is three quarters.
+func _tile_factor(key: String) -> float:
+	return 1.0 + (TileMods.factor(mods, key) - 1.0) * (1.0 - tile_ward / 100.0)
+
+
+## What the helmet's Tile Modifier Reduction takes back of an added lift the tile put on (`hit`, `attack`).
+func _softened(key: String) -> float:
+	return TileMods.total(mods, key) * tile_ward / 100.0
 
 
 func _cursed_with(curse: String) -> bool:
@@ -1142,8 +1294,10 @@ func _lean(item: Item) -> Item:
 func _strike(automatic: bool, riposte := false) -> bool:
 	if finished or phase != Phase.WAITING:
 		return false
-	# Beginner's Luck sets the chance outright, so the Serpent's Eye has nothing to build on.
-	var chance := crit_chance if "beginners_luck" in effects else minf(crit_chance + _serpent, CRIT_CAP)
+	# Beginner's Luck sets the chance outright, so the Serpent's Eye and a dodge have nothing to build on.
+	var chance := crit_chance if "beginners_luck" in effects \
+			else minf(crit_chance + _serpent + _parry, CRIT_CAP)
+	_parry = 0.0
 	var crit := chance > 0.0 and crit_rng.randf() * 100.0 < chance
 	var first := _blows == 0
 	_blows += 1
@@ -1175,7 +1329,9 @@ func _strike(automatic: bool, riposte := false) -> bool:
 	var dealt := maxf(1.0, roundf(damage * (1.0 + crit_more / 100.0))) if crit else damage
 	if "giant_slayer" in effects and big:
 		dealt *= 2
-	# Everything the uniques add to a blow, summed and applied once -- see `unique_more`.
+	# What the weapon's lines add to this kind of blow, and then everything the uniques add -- each
+	# summed and applied once, `gear_more` and `unique_more`.
+	dealt *= 1.0 + gear_more(automatic, big, first)
 	dealt = maxf(1.0, roundf(dealt * (1.0 + unique_more(automatic))))
 	if riposte:
 		dealt = maxf(1.0, roundf(dealt * _dial("bulwark", "share") / 100.0))
@@ -1186,6 +1342,9 @@ func _strike(automatic: bool, riposte := false) -> bool:
 		if _hand_blows % BERSERK_EVERY == 0:
 			dealt *= 2.0
 	if crit and "overcrit" in effects and _peak("overflowing_chalice") and crit_rng.randf() < CHALICE_TWICE:
+		dealt *= 2.0
+	# Double Strike: the blow lands twice, drawn only where there is a chance, like the Chalice's.
+	if double_strike > 0.0 and crit_rng.randf() * 100.0 < double_strike:
 		dealt *= 2.0
 	# The Gambler's Die is not more damage but a different blow every time, so it stands outside that.
 	# At IV the first blow on each enemy is drawn twice and the better kept.
@@ -1224,6 +1383,11 @@ func _strike(automatic: bool, riposte := false) -> bool:
 		# not how many of them land -- a weapon that swung twice as fast would otherwise bleed twice
 		# as hard for free.
 		_bleed = maxf(_bleed, dealt * bleed / 100.0)
+		# The torch's Burn: its share of the blow over `BURN_SECONDS`, the deepest one, lit again by
+		# every blow.
+		if burn > 0.0:
+			_burn = maxf(_burn, dealt * burn / 100.0 / BURN_SECONDS)
+			_burn_left = BURN_SECONDS
 	# Time on hit: a landed blow wins back what the enemies' blows took, and never more. A run has no
 	# clock to win back.
 	if not endless and wounds > 0.0 and time_on_hit > 0.0:
@@ -1235,17 +1399,19 @@ func _strike(automatic: bool, riposte := false) -> bool:
 
 ## What one blow does on average as `_strike` deals it, against a common body as the fight starts: its
 ## crits, everything the uniques and curses add (`unique_more`), the Berserker's Band's tenth click and
-## the Overflowing Chalice's doubled crit at IV, and the Gambler's Die's mean -- but no streak built, no
-## kill made, no clock run low, and nothing of Giant Slayer, which is for elites. `automatic` is the
-## weapon's swing; a click is the hand's, and does nothing where the hand does nothing (`hit`). Next to
-## `_strike` so the two move together: the character page's damage per click and per second.
+## the Overflowing Chalice's doubled crit at IV, the weapon's click or swing damage and its double
+## strike, and the Gambler's Die's mean -- but no streak built, no kill made, no clock run low, and
+## nothing of Giant Slayer or Elite Damage, which are for elites, or of First Blow Damage. `automatic`
+## is the weapon's swing; a click is the hand's, and does nothing where the hand does nothing (`hit`).
+## Next to `_strike` so the two move together: the character page's damage per click and per second.
 func average_blow(automatic: bool) -> float:
 	if not automatic and ("metronome" in effects or _cursed_with(Curses.PACIFIST_HANDS)):
 		return 0.0
 	var crits := crit_chance / 100.0 * crit_damage / 100.0
 	if "overcrit" in effects and _peak("overflowing_chalice"):
 		crits += crit_chance / 100.0 * CHALICE_TWICE * (1.0 + crit_damage / 100.0)
-	var blow := damage * (1.0 + crits) * (1.0 + unique_more(automatic))
+	var blow := damage * (1.0 + crits) * (1.0 + gear_more(automatic, false, false)) \
+			* (1.0 + unique_more(automatic)) * (1.0 + double_strike / 100.0)
 	if not automatic and "berserk" in effects and _peak("berserkers_band"):
 		blow *= 1.0 + 1.0 / BERSERK_EVERY
 	if "gamble" in effects:
@@ -1254,10 +1420,23 @@ func average_blow(automatic: bool) -> float:
 
 
 ## A second of the weapon on its own, hands off: its average swing as often as it swings, and the
-## bleed that leaves. Nothing where it does not swing at all. The character page's headline and the
-## character panel's line, beside `average_blow(false)`, a click.
+## bleed and the burn that leaves. Nothing where it does not swing at all. The character page's headline
+## and the character panel's line, beside `average_blow(false)`, a click.
 func per_second() -> float:
-	return average_blow(true) * (attack_speed + bleed / 100.0) if swings() else 0.0
+	return average_blow(true) * (attack_speed + bleed / 100.0 + burn / 100.0 / BURN_SECONDS) \
+			if swings() else 0.0
+
+
+## What the weapon's lines add to a blow, as a share: the hand's Click Damage or the weapon's own Swing
+## Damage, Elite Damage on an elite or a boss (`big`), and First Blow Damage on the first blow a body
+## takes (`first`). **One sum**, as `unique_more` is and beside it: a gear line is not a unique's.
+func gear_more(automatic: bool, big: bool, first: bool) -> float:
+	var more := swing_damage if automatic else click_damage
+	if big:
+		more += elite_damage
+	if first:
+		more += first_blow
+	return more / 100.0
 
 
 ## What the worn uniques add to a blow, as a share: 2.0 is three times the damage. **One sum**, the
@@ -1508,8 +1687,15 @@ func advance(delta: float) -> void:
 	_swing_weapon(delta)
 	_be_struck(delta)
 	# The weapon has swung; now what is already in the body: a mace's wound takes its share of the
-	# blow that opened it.
+	# blow that opened it, and a torch's burn its share until it burns out.
 	_wear_down(_bleed, delta, true)
+	if _burn_left > 0.0:
+		var burning := minf(delta, _burn_left)
+		_burn_left -= burning
+		_wear_down(_burn, burning)
+	# And what the blows took coming back, before the clock is asked whether it ran out.
+	if not endless and not _recouping.is_empty():
+		_recoup(delta)
 	if not endless and time_left <= 0.0 and not finished:
 		# Second Wind and the Worry Stone: once a fight each, the clock gets back SECOND_WIND_SECONDS
 		# rather than running out, and the two add up.
@@ -1547,12 +1733,18 @@ func _be_struck(delta: float) -> void:
 	# Last Gasp at IV: in its last seconds the enemies hold their blows.
 	if "last_gasp" in effects and _peak("last_gasp") and time_left <= _dial("last_gasp", "seconds"):
 		return
-	# A Frenzied tile brings the blows round sooner; a Savage one and the Bloodthirst make each bigger.
-	var every: float = ATTACK_EVERY[EnemyRoster.tier_of(lineup[index])] / (1.0 + _attack_more)
+	# A Savage tile and the Bloodthirst make each blow bigger, less what weaker tile modifiers take back.
+	var every := _attack_every()
 	_attack += delta
 	while _attack >= every and phase == Phase.WAITING and not finished:
 		_attack -= every
-		_struck_by(hit_of(lineup[index], cell) * (1.0 + _hit_more))
+		_struck_by(hit_of(lineup[index], cell) * (1.0 + _hit_more - _softened("hit")))
+
+
+## How often the enemy out now strikes: its tier's `ATTACK_EVERY`, sooner on a Frenzied tile, less what
+## weaker tile modifiers take back.
+func _attack_every() -> float:
+	return ATTACK_EVERY[EnemyRoster.tier_of(lineup[index])] / (1.0 + _attack_more - _softened("attack"))
 
 
 ## One blow at the clock: dodged whole, or cut by armour and then block and taken off `time_left`.
@@ -1566,17 +1758,24 @@ func _struck_by(hit: float) -> void:
 	elif crit_rng.randf() < dodge_chance():
 		# Afterimage: a dodge wins back some of what the blows took, never more, so it banks nothing.
 		if "afterimage" in effects:
-			var back := minf(AFTERIMAGE_SECONDS, wounds)
-			wounds -= back
-			time_left += back
+			_win_back(AFTERIMAGE_SECONDS)
+		# The buckler's line: the next blow carries the crit chance, the best of what dodges handed it.
+		_parry = maxf(_parry, parry)
 		player_hit.emit(0.0, true, false)
 		_spikes_back()
 		return
 	# Shield Wall: block counts double against an elite's or a boss's blow.
 	var big := index < lineup.size() and EnemyRoster.tier_of(lineup[index]) != EnemyRoster.Tier.COMMON
 	var lost := 0.0 if walled else taken(hit, block * (2.0 if big and "shieldwall" in effects else 1.0))
+	# The helmet's Elite Blow Reduction: a share less of whatever got through from an elite or a boss.
+	if big:
+		lost *= 1.0 - elite_ward / 100.0
 	time_left = maxf(time_left - lost, 0.0)
 	wounds += lost
+	# The body's Recoup: a share of it coming back evenly over the next few seconds (`_recoup`).
+	if lost > 0.0 and recoup > 0.0:
+		var owed := lost * recoup / 100.0
+		_recouping.append([owed, owed / RECOUP_SECONDS])
 	_count("blows_taken")
 	if lost <= 0.0:
 		_count("blocked")
@@ -1585,7 +1784,31 @@ func _struck_by(hit: float) -> void:
 	if lost <= 0.0 and "riposte" in effects:
 		_strike(true, true)
 	if lost <= 0.0:
+		# The shield's Time on Block: such a blow wins back what earlier ones took.
+		_win_back(time_on_block)
 		_spikes_back()
+	# The body's Thorns: a blow that landed, blocked or not, hits back a share of the damage -- nobody's
+	# blow (`_wear_down`), so no crit, no unique's more and no Dominoes come of it.
+	if thorns > 0.0:
+		_wear_down(damage * thorns / 100.0, 1.0)
+
+
+## Seconds back on the clock out of what the blows took (`wounds`), never more, so nothing is banked.
+func _win_back(seconds: float) -> void:
+	var back := minf(seconds, wounds)
+	if back <= 0.0:
+		return
+	wounds -= back
+	time_left += back
+
+
+## What the blows are owed back by `recoup`, a second's share of each at a time, out of the wounds.
+func _recoup(delta: float) -> void:
+	for owed: Array in _recouping:
+		var give := minf(float(owed[0]), float(owed[1]) * delta)
+		owed[0] = float(owed[0]) - give
+		_win_back(give)
+	_recouping = _recouping.filter(func(owed: Array) -> bool: return float(owed[0]) > 0.0)
 
 
 ## The Spiked Helm at IV: a blow dodged or blocked whole sends a share of the armour back into the body
@@ -1658,6 +1881,8 @@ func stop() -> void:
 func _advance_phase() -> void:
 	if phase == Phase.WALKING_IN:
 		phase = Phase.WAITING
+		# The helmet's Enemy First Blow Delay: the first blow waits its share of an interval longer.
+		_attack = -_attack_every() * blow_delay / 100.0
 		enemy_spawned.emit(index, lineup[index], hp)
 		_take_carried()
 		return
@@ -1668,6 +1893,8 @@ func _advance_phase() -> void:
 	if not (_bled_out and "butcher" in effects and _peak("butchers_cleaver")):
 		_bleed = 0.0
 	_bled_out = false
+	_burn = 0.0
+	_burn_left = 0.0
 	_attack = 0.0
 	index += 1
 	if index >= lineup.size():

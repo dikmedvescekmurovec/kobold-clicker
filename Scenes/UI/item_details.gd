@@ -17,6 +17,12 @@ const PEAK_ICON := "res://Assets/UI/ui_icon_trophy.png"
 ## height in panel pixels, the 1 px rim of the trough included.
 const ASCENSION_BAR := "AscensionBar"
 const ASCENSION_HEIGHT := 4
+## What the row for a modifier the piece has room for and has not rolled says.
+const OPEN_ROW := "—"
+## The crest cut off a unique's frame (`Item.frame`): its spikes and wings, the ring's top edge under
+## them from `CREST_EDGE` down, and the point under that.
+const CREST_REGION := Rect2(9, 0, 22, 8)
+const CREST_EDGE := 4
 
 
 ## How far `item` is to its next plus, as the bar over its name: a socket's tan, filling with its brown.
@@ -35,6 +41,36 @@ static func _ascension_bar(item: Item, width: float) -> ColorRect:
 	return trough
 
 
+## The unique frame's top edge laid across the card, two rows of `Palette.FRAME_GOLD`: over a unique's
+## rule with the crest standing on it at the player's rank of the piece, under the rule bare.
+static func _gold_rule(item: Item, crest: bool) -> Control:
+	var rule := Control.new()
+	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var top := CREST_EDGE if crest else 0
+	rule.custom_minimum_size.y = CREST_REGION.size.y if crest else 2
+	for row in 2:
+		var edge := ColorRect.new()
+		edge.color = Palette.FRAME_GOLD if row == 0 else Palette.FRAME_GOLD_DK
+		edge.anchor_right = 1.0
+		edge.offset_top = top + row
+		edge.offset_bottom = top + row + 1
+		edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rule.add_child(edge)
+	if crest:
+		var cut := AtlasTexture.new()
+		cut.atlas = item.frame()
+		cut.region = CREST_REGION
+		var mark := TextureRect.new()
+		mark.texture = cut
+		mark.anchor_left = 0.5
+		mark.anchor_right = 0.5
+		mark.offset_left = -CREST_REGION.size.x / 2.0
+		mark.offset_right = CREST_REGION.size.x / 2.0
+		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rule.add_child(mark)
+	return rule
+
+
 ## Empties `rows` and writes `item` into it. `width` is what a line may use before it wraps.
 ##
 ## What a smith has left on a piece reads here and so reads everywhere a piece is shown: "Broken"
@@ -46,11 +82,8 @@ static func _ascension_bar(item: Item, width: float) -> ColorRect:
 ##
 ## `every_rank` (the collection log under detailed descriptions) writes a ranked unique's rule with
 ## every rank's numbers, "5/4/3/2", and its rank IV line greyed behind a trophy until it is reached.
-##
-## `base` false leaves out what the piece itself is worth, the base-stat table: the smith's counter,
-## whose portrait takes the height it would need, and whose piece is also on the card beside the bag.
 static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[Item] = [],
-		every_rank := false, base := true) -> void:
+		every_rank := false) -> void:
 	for child: Node in rows.get_children():
 		child.queue_free()
 	# On its way to the next plus, over the name the plus is written after: the Orbs of Ascension fed
@@ -83,18 +116,20 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 	elif item.safe_level > item.level:
 		rows.add_child(line("Climbs to level %d" % item.safe_level, Palette.TEXT_SOFT, width, true))
 	# What a unique is worn for, straight under what it is: the one line on the block that is a rule
-	# rather than a number. In the pack's wood brown and not the unique's own gold, which carries a
-	# name at 16 px and is too pale on cream for a sentence at 10.
+	# rather than a number. Set between two gold lines, the top edge of its square's frame with the
+	# crest on the first (the user's, 2026-10-07: written as the modifiers were, it read as one of
+	# them), in ink, since the gold carries a name at 16 px and is too pale on cream for one at 10.
 	every_rank = every_rank and ranked
 	var rule := UniqueTable.effect_text(item.unique, 0) if every_rank else item.effect_text()
 	if not rule.is_empty():
-		rows.add_child(line(rule, Palette.SLOT_TAN_DK, width, true))
-	# And what it gained at rank IV, in the same brown: it is as much the piece's rule as the first.
+		rows.add_child(_gold_rule(item, true))
+		rows.add_child(line(rule, Palette.TEXT, width, true))
+	# And what it gained at rank IV, in the same ink: it is as much the piece's rule as the first.
 	if not item.peak_text().is_empty():
-		rows.add_child(line(item.peak_text(), Palette.SLOT_TAN_DK, width, true))
+		rows.add_child(line(item.peak_text(), Palette.TEXT, width, true))
 	# Not reached yet: "<trophy> IV: the line", greyed the way a dead button is -- the mark faded as a
 	# bare one's, the words in a disabled face's colour.
-	elif every_rank:
+	elif every_rank and not UniqueTable.peak_text(item.unique).is_empty():
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 2)
 		var trophy := TextureRect.new()
@@ -107,6 +142,10 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 		row.add_child(line("%s: %s" % [Achievements.RANK_NAMES[UniqueTable.PEAK], UniqueTable.peak_text(item.unique)],
 				UITheme.DISABLED_FONT_COLOR, width - trophy.texture.get_width() - 2, true))
 		rows.add_child(row)
+	# The gold line under the rule stands in for the first table's rule.
+	var ruled := not rule.is_empty()
+	if ruled:
+		rows.add_child(_gold_rule(item, false))
 	# Three blocks of [text, colour], each under a rule of its own and
 	# drawn as a table (name left, number right): what the swap is worth, what the
 	# piece is, what it rolled. The swap goes first, straight under the name: it is the answer the
@@ -121,9 +160,8 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 			# up; one that ever inverted would need one here, and there is none.
 			blocks[0].append([LootTable.stat_delta(stat, change[stat]),
 					Palette.LEAF if change[stat] > 0.0 else Palette.RUST])
-	if base:
-		for text in item.stat_lines():
-			blocks[1].append([text, Palette.TEXT])
+	for text in item.stat_lines():
+		blocks[1].append([text, Palette.TEXT])
 	# The locked one in a base stat's ink: it is as fixed as they are, and under the rule that parts
 	# the two it cannot be taken for one of them.
 	# A perfected one in leaf, apart from the rust the rest are written in: as good as it can be.
@@ -132,13 +170,21 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 	for text in item.mod_lines(Settings.item_details):
 		blocks[2].append([text, Palette.TEXT if text in pinned
 				else Palette.LEAF if text in perfect else Palette.RUST])
+	# A modifier the rarity still has room for, as a row with nothing on it but a dash greyed as a dead
+	# button's face: a piece one short reads apart from a full one without a word. Not on a broken
+	# piece, which no orb can fill.
+	if not item.broken:
+		for _open in OrbTable.room(item) - item.mods.size():
+			blocks[2].append([OPEN_ROW, UITheme.DISABLED_FONT_COLOR])
 	# A detailed modifier line ends on its tier ("T95"), which stands apart at the row's right end.
 	var tier := RegEx.create_from_string(" (T[0-9]+)$")
 	for index in blocks.size():
 		var block: Array = blocks[index]
 		if block.is_empty():
 			continue
-		rows.add_child(UITheme.rule())
+		if not ruled:
+			rows.add_child(UITheme.rule())
+		ruled = false
 		# A box of its own with no gap, so the stripes of `UITheme.table_row` lie against each other.
 		var table := UITheme.vbox(0)
 		rows.add_child(table)

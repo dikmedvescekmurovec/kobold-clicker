@@ -36,6 +36,21 @@ const SELL_ICON := "res://Assets/UI/ui_icon_coins_brown.png"
 const COUNT_ICON := "res://Assets/UI/ui_icon_chest_brown.png"
 const SWAP_ICON :="res://Assets/UI/ui_icon_swap.png"
 ## Hide points back at the bag the doll folds into, Show out to where it opens.
+## The filter's folder tabs over the grid (the user's pick of tools/qa/bag_filter_m1_b.png, 2026-10-07):
+## "" for everything, then each `LootTable.slot_of`, with its mark and its name. The town page's tabs,
+## `FILTER_TAB` wide so eight stand in `WIDTH`.
+const FILTERS := {
+	"": ["slot_all", "All items"],
+	"weapon": ["sword", "Weapons"],
+	"offhand": ["slot_offhand", "Offhands"],
+	"helmet": ["slot_helmet", "Helmets"],
+	"body": ["slot_body", "Body armour"],
+	"boots": ["slot_boots", "Boots"],
+	"ring": ["slot_ring", "Rings"],
+	"amulet": ["slot_amulet", "Amulets"],
+}
+const FILTER_MARK := "res://Assets/UI/ui_icon_%s_%s.png"
+const FILTER_TAB := 20
 const HIDE_ICON := "res://Assets/UI/ui_icon_caret_left.png"
 const SHOW_ICON := "res://Assets/UI/ui_icon_caret_right.png"
 ## An orb taking to a piece, a super orb's included -- its knock and its swell together, the user's
@@ -137,6 +152,9 @@ var _ui_scale: float
 var _services: PackedStringArray = []
 
 var _panel: VBoxContainer
+var _filter_tabs: HBoxContainer
+## Which of `FILTERS` the grid shows. Kept while the game runs, never saved.
+var _filter := ""
 var _count: Label
 var _gold: Label
 var _scroll: ScrollContainer
@@ -239,6 +257,9 @@ func _ready() -> void:
 	# Slate rather than GOLD: amber on cream is too weak a pairing.
 	_gold = UITheme.label("", Palette.TEXT_SOFT)
 	top.add_child(_gold)
+	_filter_tabs = HBoxContainer.new()
+	_filter_tabs.add_theme_constant_override("separation", 0)
+	rows.add_child(_filter_tabs)
 
 	# Wheel scrolling is the container's, dragging is `_on_grid_input`'s; no bar is drawn.
 	_scroll = UITheme.scroll()
@@ -423,8 +444,13 @@ func refresh() -> void:
 		if not _sorted_as.has(item):
 			_sorted_as[item] = item.rarity
 	for i in inventory.order(_sorted_as):
-		by_level.get_or_add(inventory.items[i].level, []).append(i)
+		if _shows(inventory.items[i]):
+			by_level.get_or_add(inventory.items[i].level, []).append(i)
+	_fill_tabs()
 	for level: int in inventory.levels():
+		# Under a filter a level holding nothing of its slot is left out -- but never one holding nothing at all.
+		if not by_level.has(level) and inventory.count_at(level) > 0:
+			continue
 		_sections.add_child(_section_heading(level))
 		# A level with a rule and no items keeps its heading, the only place the rule can be undone.
 		if not by_level.has(level):
@@ -466,6 +492,30 @@ func refresh() -> void:
 	_place_actions.call_deferred()
 
 
+## Whether the filter lets this piece into the grid.
+func _shows(item: Item) -> bool:
+	return _filter.is_empty() or LootTable.slot_of(item.type) == _filter
+
+
+## The filter's folder tabs, built again with the grid: the open one's face and mark change with it.
+## A selected piece the filter hides stays selected (its buttons put away with no square to stand by).
+func _fill_tabs() -> void:
+	UITheme.clear(_filter_tabs)
+	for slot: String in FILTERS:
+		if _filter_tabs.get_child_count() > 0:
+			_filter_tabs.add_child(TownPage.tab_line(TownPage.TAB_GAP))
+		var tab := UITheme.button("", UITheme.BARE_BUTTON, FILTERS[slot][1])
+		tab.icon = load(FILTER_MARK % [FILTERS[slot][0], "green" if slot == _filter else "brown"])
+		TownPage.tab_faces(tab, slot == _filter, FILTER_TAB)
+		tab.pressed.connect(func() -> void:
+			_filter = slot
+			refresh())
+		_filter_tabs.add_child(tab)
+	var rest := TownPage.tab_line(0)
+	rest.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_filter_tabs.add_child(rest)
+
+
 ## A level's heading, one line: its name in the body font, the rule running on from it, Auto (a chest struck through,
 ## which stays down while the level is being thrown away as it drops) and Clear (a bin: drop what is
 ## held). The name used to be Pixellari over a rule of its own, which cost three levels most of a row.
@@ -498,9 +548,9 @@ func _section_heading(level: int) -> HBoxContainer:
 
 	# In a town that buys gear the same button sells the handful instead of destroying it: it is the
 	# same act -- being done with a level -- and the merchant is simply a better way to do it.
-	# What the press would take: a locked piece stays.
+	# What the press would take: a locked piece stays, and so does whatever the filter hides.
 	var loose := inventory.items.filter(
-			func(item: Item) -> bool: return item.level == level and not item.locked)
+			func(item: Item) -> bool: return item.level == level and not item.locked and _shows(item))
 	var held := loose.size()
 	var selling := _buys(TownServices.GEAR)
 	var worth := TownPrices.sell_total(loose) if selling else 0.0
@@ -706,7 +756,7 @@ func _drop_level(level: int, selling: bool) -> void:
 	var deed := _sell_level if selling else _clear_level
 	deed.call(level, Settings.uniques == Settings.Uniques.SELL)
 	var uniques := inventory.items.filter(func(item: Item) -> bool:
-		return item.level == level and not item.unique.is_empty() and not item.locked)
+		return item.level == level and not item.unique.is_empty() and not item.locked and _shows(item))
 	if Settings.uniques != Settings.Uniques.ASK or uniques.is_empty():
 		return
 	var names := ", ".join(uniques.map(func(item: Item) -> String: return item.display_name()))
@@ -718,7 +768,7 @@ func _drop_level(level: int, selling: bool) -> void:
 
 
 func _clear_level(level: int, uniques: bool) -> void:
-	var gone := inventory.discard_level(level, uniques)
+	var gone := inventory.discard_level(level, uniques, _filter)
 	print("Discarded %d item(s) at level %d" % [gone.size(), level])
 	# The Rag and Bone Sack pays for what is thrown away, which is nothing unless it is worn.
 	for item: Item in gone:
@@ -732,7 +782,7 @@ func _clear_level(level: int, uniques: bool) -> void:
 ## A whole level over the counter. The price is summed off what `discard_level` hands back, so the
 ## purse is paid for exactly what left the bag rather than for what was in it a moment ago.
 func _sell_level(level: int, uniques: bool) -> void:
-	var gone := inventory.discard_level(level, uniques)
+	var gone := inventory.discard_level(level, uniques, _filter)
 	var paid := TownPrices.sell_total(gone)
 	_purse.sell_for(paid)
 	print("Sold %d item(s) at level %d for %s gold"
@@ -858,7 +908,9 @@ func _show_item(index: int) -> void:
 	if _buys(TownServices.GEAR):
 		var price := TownPrices.sell_price(item)
 		var sell := UITheme.priced_button("Sell", price, "LightButton",
-				"Sell this to the merchant for %s gold" % BigNumber.format(price))
+				"Never sell is on" if item.locked
+				else "Sell this to the merchant for %s gold" % BigNumber.format(price))
+		sell.disabled = item.locked
 		sell.pressed.connect(_on_sell_pressed.bind(item))
 		sell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_action_box.add_child(sell)
@@ -1024,16 +1076,12 @@ func _on_sell_pressed(item: Item) -> void:
 func _refresh_worn() -> void:
 	_doll = null
 	UITheme.clear(_worn_body)
-	# In a town the page on the far edge needs the room, and the doll is the one thing on this side
-	# that can go without taking a decision with it: nothing is worn while the bag is being emptied
-	# over a counter. **The smith is the exception:** he works on a worn piece as readily as a carried
-	# one, so there the doll is the decision, and it is how the player hands him what they are wearing.
-	_worn_panel.visible = _services.is_empty() or TownServices.SMITH in _services
-	# Hidden, the whole sheet goes and only the way back to it stays.
-	_show_button.visible = _doll_hidden and _worn_panel.visible
-	if _show_button.visible:
-		_worn_panel.hide()
-	elif _worn_panel.visible:
+	# The doll stands at every counter (the user's, 2026-10-07): what is worn is what a shelf piece or a
+	# sale is weighed against, and the smith takes a worn piece off it. Hidden, the whole sheet goes and
+	# only the way back to it stays.
+	_worn_panel.visible = not _doll_hidden
+	_show_button.visible = _doll_hidden
+	if _worn_panel.visible:
 		_show_doll()
 	# Measured again deferred: a container's minimum is only right once it has laid out its new children.
 	layout()

@@ -16,6 +16,7 @@ const ENV := "grass"
 func _run() -> void:
 	_check(_test_a_camp_is_the_farm_run_nobody_clicks() == true, "camp rate tests ran to the end")
 	_check(_test_what_a_camp_pays() == true, "camp earning tests ran to the end")
+	_check(_test_camp_earnings() == true, "camp earnings line tests ran to the end")
 	_check(_test_a_camp_survives_the_save() == true, "camp save tests ran to the end")
 	await _test_the_map_camps_and_strikes_camp()
 	_report("camp")
@@ -68,6 +69,26 @@ func _test_what_a_camp_pays() -> bool:
 	var near := Camp.make(Vector2i(1, 0), "Near", _armed_on(Vector2i(1, 0), 4.0, 40.0), 0.0)
 	var far := Camp.make(Vector2i(6, 0), "Far", _armed_on(Vector2i(6, 0), 4.0, 40.0), 0.0)
 	_check(float(far[Camp.GOLD]) > float(near[Camp.GOLD]), "a camp deeper out pays more an hour")
+	return true
+
+
+## The body armour's Camp Earnings: the same run sampled, and half as much again of its gold and its
+## experience, and not one body more.
+func _test_camp_earnings() -> bool:
+	var plain := _armed(4.0, 40.0)
+	var paid := Encounter.farm(TILE, ENV)
+	paid.lineup = plain.lineup.duplicate()
+	paid.health = plain.health.duplicate()
+	paid.hp = plain.hp
+	paid.arm({"damage": 40.0, "attack_speed": 4.0, "camp_earnings": 50.0})
+	for fight: Encounter in [plain, paid]:
+		fight.roster_rng.seed = WORLD_SEED
+	var bare := Camp.make(TILE, "Here", plain, 0.0)
+	var more := Camp.make(TILE, "Here", paid, 0.0)
+	_check(float(bare[Camp.GOLD]) > 0.0 and is_equal_approx(float(more[Camp.GOLD]), float(bare[Camp.GOLD]) * 1.5),
+			"half as much gold again (%s, %s)" % [bare[Camp.GOLD], more[Camp.GOLD]])
+	_check(is_equal_approx(float(more[Camp.XP]), float(bare[Camp.XP]) * 1.5), "and experience")
+	_check(is_equal_approx(float(more[Camp.KILLS]), float(bare[Camp.KILLS])), "for the same bodies")
 	return true
 
 

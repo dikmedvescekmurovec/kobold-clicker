@@ -51,10 +51,16 @@ func _test_ice_sheets(tileset: HexTileset) -> bool:
 		var at_edge := Vector2(cell + middle) + (EDGE_OFFSETS[edge] as Vector2) * 0.45
 		_check(spill.get_pixelv(Vector2i(at_edge)).a > 0, "the spill for mask %d covers its seam" % mask)
 	var band := IceOverlay.BAND.get_image()
+	var rubble := HexTileset.RUBBLE.get_image()
+	_check(rubble.get_size() == size * Vector2i(8 * HexTileset.RUBBLE_VERSIONS, 8),
+			"the rubble sheet is 8 masks x 8, RUBBLE_VERSIONS times over")
 	for version in IceOverlay.BAND_VERSIONS:
 		for mask in [9, 18, 36, 5, 10, 20, 40, 17, 34]:  # opposite edges, and two apart: a ring's turns
 			var cell := Vector2i(mask % 8 + 8 * version, mask / 8) * size
 			_check(band.get_pixelv(cell + middle).a > 0, "band %d version %d is drawn" % [mask, version])
+			# Rubble lies in broken lines, so its middle may be bare.
+			_check(rubble.get_region(Rect2i(cell, size)).get_used_rect().has_area(),
+					"rubble %d version %d is drawn" % [mask, version])
 	return true
 
 

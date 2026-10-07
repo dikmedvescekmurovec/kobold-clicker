@@ -5,6 +5,12 @@ extends RefCounted
 
 const SHEET_JSON := SheetMeta.SHEET_JSON
 const SOURCE_ID := 0
+## The rubble a fallen wall leaves along its ring: its own source, off the ice sheets
+## (`AI-sprites-generator/build_ice.py`) rather than the hex atlas, laid out like `IceOverlay.BAND` --
+## the ring edge mask `m` of version `v` at column `m % 8 + 8 v`, row `m / 8`.
+const RUBBLE_ID := 1
+const RUBBLE := preload("res://Assets/Ice/ice_rubble.png")
+const RUBBLE_VERSIONS := 3
 const CUSTOM_DATA := ["name", "group", "env", "kind"]
 ## The terrain swatch the interface shows for an environment: a pointy-top hexagon a quarter of the
 ## map tile's 56x64, each row's width from the point down -- the slants step two pixels a row, as the
@@ -171,6 +177,13 @@ func _build_tile_set(texture: Texture2D, tiles: Array) -> void:
 	source.texture = texture
 	source.texture_region_size = tile_size
 	tile_set.add_source(source, SOURCE_ID)
+	var rubble := TileSetAtlasSource.new()
+	rubble.texture = RUBBLE
+	rubble.texture_region_size = tile_size
+	tile_set.add_source(rubble, RUBBLE_ID)
+	for row in 8:
+		for col in 8 * RUBBLE_VERSIONS:
+			rubble.create_tile(Vector2i(col, row))
 
 	for entry: Dictionary in tiles:
 		var tile_name: String = entry["name"]

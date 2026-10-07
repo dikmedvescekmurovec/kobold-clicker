@@ -37,6 +37,8 @@ func _run() -> void:
 	_check(_test_rarity_rolls() == true, "rarity roll tests ran to the end")
 	_check(_test_modifier_tables() == true, "modifier table tests ran to the end")
 	_check(_test_modifier_rolls() == true, "modifier roll tests ran to the end")
+	_check(_test_deeper_pools() == true, "deeper pool tests ran to the end")
+	_check(_test_defence_pools() == true, "helmet, body and offhand pool tests ran to the end")
 	_check(_test_rolls() == true, "drop tests ran to the end")
 	_check(_test_a_fight_drops() == true, "fight drop tests ran to the end")
 	_check(_test_drops_cascade() == true, "cascading drop tests ran to the end")
@@ -53,6 +55,7 @@ func _run() -> void:
 	_check(_test_bag_order() == true, "bag order tests ran to the end")
 	_check(_test_capacity() == true, "capacity tests ran to the end")
 	_check(_test_autodiscard() == true, "autodiscard tests ran to the end")
+	_check(await _test_bag_filter() == true, "bag filter tests ran to the end")
 	_check(_test_deltas() == true, "delta tests ran to the end")
 	_check(_test_upgrade_mark() == true, "upgrade mark tests ran to the end")
 	_check(await _test_comparing() == true, "comparison tests ran to the end")
@@ -132,12 +135,15 @@ func _test_items() -> bool:
 						and mod["stat"] == stat)
 			_check(reachable, "%s can carry %s, but nothing flat rolls it" % [item, stat])
 		# And the same three questions of the globals: a stat with no label reaches the block as a
-		# bare key, a global on a base stat would say the same thing a PERCENT already says, and one
-		# no GLOBAL modifier names is a permission nothing can use.
+		# bare key, a global on a base stat takes its PERCENT's place rather than saying the same thing
+		# beside it, and one no GLOBAL modifier names is a permission nothing can use.
+		var pool := ModifierTable.pool_for(item)
 		for stat: String in LootTable.globals_of(item):
 			_check(LootTable.STAT_LABELS.has(stat), "%s has no label for global %s" % [item, stat])
-			_check(not stats.has(stat),
-					"%s scales %s globally and has it as a base stat" % [item, stat])
+			for id: String in pool:
+				var rolled: Dictionary = ModifierTable.MODS[id]
+				_check(not (rolled["kind"] == ModifierTable.Kind.PERCENT and rolled["stat"] == stat),
+						"%s scales %s globally and rolls %s beside it" % [item, stat, id])
 			var has_global := false
 			for id: String in ModifierTable.MODS:
 				var mod: Dictionary = ModifierTable.MODS[id]
@@ -473,7 +479,8 @@ func _test_slot_locks() -> bool:
 		"damage": ["sword", "dagger", "mace", "greatsword", "broken_sword", "gold_ring", "iron_band", "jade_ring",
 			"opal_ring", "pearl_ring",
 			"ruby_amulet", "gold_amulet", "emerald_amulet"],
-		"move_speed": ["boot", "greaves"],
+		# A torch may roll it too, the map's piece; only a boot shows it.
+		"move_speed": ["boot", "greaves", "torch", "broken_torch"],
 		"block": ["shield", "buckler", "torch", "broken_torch"],
 		"bleed": ["mace"],
 		"sight": ["torch", "broken_torch"],
@@ -657,7 +664,8 @@ func _test_modifier_tables() -> bool:
 		_check(int(mod["weight"]) > 0, id + " can be drawn at all")
 		var band: Array = mod["range"]
 		_check(int(band[0]) <= int(band[1]), id + " rolls in a real range")
-		_check(int(band[0]) > 0, id + " is worth something")
+		# A signed one is worth something either side of nothing (`_test_defence_pools`).
+		_check(int(band[0]) > 0 or mod.get("signed", false), id + " is worth something")
 		var stat: String = mod["stat"]
 		_check(LootTable.STAT_LABELS.has(stat), "%s names %s, which has no label" % [id, stat])
 		# A modifier for a stat nothing carries could never be rolled: dead weight in the table. A
@@ -685,6 +693,150 @@ func _test_modifier_tables() -> bool:
 		var pool := ModifierTable.pool_for(item)
 		_check(pool.size() >= most,
 				"%s can only carry %d modifiers, short of %d" % [item, pool.size(), most])
+	return true
+
+
+## The lines the weapons, the rings and the amulets gained (2026-10-07): who may roll each, the global
+## that takes a ring's own percent's place, and the amulet's line of all three attributes.
+func _test_deeper_pools() -> bool:
+	var weapon_lines := ["added_click_damage", "added_swing_damage", "added_elite_damage", "added_first_blow",
+		"added_double_strike"]
+	var ring_lines := ["added_gold_find", "added_elite_chance", "global_increased_crit",
+		"global_increased_crit_damage"]
+	var amulet_lines := ["added_all_attributes", "global_increased_bleed", "global_increased_time_on_hit"]
+	for item in LootTable.items():
+		var pool := ModifierTable.pool_for(item)
+		var slot := LootTable.slot_of(item)
+		for lines: Array in [[weapon_lines, "weapon"], [ring_lines, "ring"], [amulet_lines, "amulet"]]:
+			for id: String in lines[0]:
+				_check((id in pool) == (slot == lines[1]), "%s %s %s" % [item, "rolls" if slot == lines[1] else "never rolls", id])
+		# Lines they share with other pieces: every ring rolls time on hit, orbs and experience (a helmet
+		# and a torch do too, `_test_defence_pools`), every amulet the set's defence.
+		var shared := {"ring": ["added_time_on_hit", "added_orb_find", "added_experience"],
+			"amulet": ["global_increased_armor", "global_increased_dodge"]}
+		for id: String in shared.get(slot, []):
+			_check(id in pool, "%s rolls %s" % [item, id])
+		# Bleed is the mace's alone, both shapes of it.
+		var mace := LootTable.kind_of(item) == "mace"
+		for id: String in ["increased_bleed", "added_bleed"]:
+			_check((id in pool) == mace, "%s %s %s" % [item, "rolls" if mace else "never rolls", id])
+	# The Iron Band and the Jade Ring scale their own stat for the whole set, and so not for themselves.
+	for pair: Array in [["Iron Band", "armor"], ["Jade Ring", "dodge"]]:
+		var pool := ModifierTable.pool_for(pair[0])
+		_check(("global_increased_" + pair[1]) in pool and not ("increased_" + pair[1]) in pool,
+				"the %s's %s is the set's" % pair)
+	_check("increased_armor" in ModifierTable.pool_for("Wooden Shield"), "and a shield still scales its own")
+
+	# All Attributes: a point of each, a line of the Patchwork Coat's count, and no stat of its own.
+	var amulet := Item.new()
+	amulet.type = "Ruby Amulet"
+	amulet.stats = Item.scaled_stats(amulet.type, 1)
+	amulet.mods = [{"id": "added_all_attributes", "value": 3}, {"id": "added_strength", "value": 2}]
+	var player := Inventory.new()
+	player.equipment.equip(Equipment.Socket.AMULET, amulet)
+	var points := player.attributes()
+	_check(points["strength"] == 5.0 and points["dexterity"] == 3.0 and points["intelligence"] == 3.0,
+			"all three take the line (%s)" % points)
+	_check(player.gear_attributes() == points, "and the achievements read it the same")
+	var stats := player.stats()
+	_check(stats["strength"] == 5.0 and not stats.has(Inventory.ALL_ATTRIBUTES),
+			"the fight sees each attribute and never the line itself (%s)" % [stats.keys()])
+	_check(stats["attribute_lines"] == 2 and stats["pure_pieces"] == 0, "it counts as an attribute line")
+	return true
+
+
+## The lines the helmets, the body armour and the offhands gained (2026-10-07): who may roll each, each
+## written as what it does and never as a name, the count of enemies either side of nothing, and a tree's
+## ranks reaching the skills.
+func _test_defence_pools() -> bool:
+	var own := {
+		"helmet": ["added_blow_delay", "added_elite_ward", "added_tile_ward", "added_less_health",
+			"added_power_skills", "added_fortune_skills", "added_guard_skills"],
+		"body": ["added_camp_earnings", "added_enemies", "added_thorns", "added_recoup"],
+	}
+	var held := {"buckler": ["added_parry"], "shield": ["added_time_on_block"],
+		"torch": ["added_burn"], "broken_torch": ["added_burn"]}
+	for item in LootTable.items():
+		var pool := ModifierTable.pool_for(item)
+		var slot := LootTable.slot_of(item)
+		var kind := LootTable.kind_of(item)
+		for lines_slot: String in own:
+			for id: String in own[lines_slot]:
+				_check((id in pool) == (slot == lines_slot), "%s %s %s" % [item, "rolls" if slot == lines_slot else "never rolls", id])
+		for id: String in ["added_parry", "added_time_on_block", "added_burn"]:
+			var mine: bool = id in held.get(kind, [])
+			_check((id in pool) == mine, "%s %s %s" % [item, "rolls" if mine else "never rolls", id])
+		# Experience on a helmet and a torch beside the rings; a torch's move speed and orbs.
+		if slot == "helmet" or kind in ["torch", "broken_torch"]:
+			_check("added_experience" in pool, "%s rolls experience" % item)
+		if kind in ["torch", "broken_torch"]:
+			_check("added_move_speed" in pool and "added_orb_find" in pool, "%s rolls move speed and orbs" % item)
+
+	# Each says what it does, its number in its place, and none opens on a name and a colon.
+	var lines := {
+		"added_blow_delay": [20, "Enemies' first blows come 20% later"],
+		"added_elite_ward": [15, "15% less time lost to elites' and bosses' blows"],
+		"added_tile_ward": [25, "Tile modifiers are 25% weaker"],
+		"added_less_health": [8, "Enemies have 8% less health"],
+		"added_power_skills": [1, "+1 rank to every learned Power skill"],
+		"added_camp_earnings": [20, "Camps earn 20% more"],
+		"added_enemies": [1, "+1 enemy in each fight"],
+		"added_thorns": [30, "Blows that land on you strike back for 30% of your damage"],
+		"added_recoup": [20, "20% of the time a blow takes comes back over 4 seconds"],
+		"added_parry": [40, "A dodged blow adds 40% crit chance to your next blow"],
+		"added_burn": [20, "Blows burn for 20% of their damage over 3 seconds"],
+		"added_time_on_block": [3, "A blow your block stops entirely wins back 0.3s"],
+	}
+	for id: String in lines:
+		var written := ModifierTable.line({"id": id, "value": lines[id][0]})
+		_check(written == lines[id][1], "%s reads \"%s\"" % [id, written])
+		_check(not RegEx.create_from_string("^[A-Z][A-Za-z' ]*:").search(written), "%s opens on no name" % id)
+	_check(ModifierTable.line({"id": "added_enemies", "value": -2}) == "-2 enemies in each fight", "fewer reads as fewer")
+	_check(ModifierTable.band_line("added_enemies", 1) == "±1 enemy in each fight"
+			and ModifierTable.band_line("added_enemies", 20) == "±2 enemies in each fight",
+			"the fortuneteller reads a count as its reach (%s)" % ModifierTable.band_line("added_enemies", 20))
+	_check(ModifierTable.band_line("added_blow_delay", 1) == "Enemies' first blows come 10-25% later",
+			"and a sentence with its band in the number's place")
+
+	# The count: one either way, two either way from its wide tier, never none, held to a band as a world ends.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var wide := int(ModifierTable.MODS["added_enemies"]["wide_from"])
+	for tier: int in [1, wide - 1, wide, 30]:
+		var reach := 2 if tier >= wide else 1
+		var seen := {}
+		for i in 400:
+			var value := ModifierTable.reroll_value("added_enemies", rng, tier)
+			seen[value] = true
+		var want := [-reach, reach] if reach == 1 else [-2, -1, 1, 2]
+		var got := seen.keys()
+		got.sort()
+		_check(got == want, "tier %d rolls %s (%s)" % [tier, want, got])
+	_check(ModifierTable.rescaled("added_enemies", 2, 20, 1) == 1 and ModifierTable.rescaled("added_enemies", -2, 20, 1) == -1,
+			"two either way is one either way back at the first level")
+	var body := Item.new()
+	body.type = "Steel Plate"
+	body.level = 20
+	body.stats = Item.scaled_stats(body.type, 20)
+	body.mods = [{"id": "added_enemies", "value": -2}, {"id": "added_blow_delay", "value": 30}]
+	var detailed := body.mod_lines(true)
+	_check(detailed[0].begins_with("-2(±2) enemies in each fight T"), "a detailed count shows its reach (%s)" % detailed[0])
+
+	# A tree's ranks: on every learned skill of that tree, none of another's, both dolls.
+	var player := Inventory.new()
+	player.skills.ranks["sharpened_edge"] = 1
+	var before := float(player.stats().get("damage", 0.0))
+	var helm := Item.new()
+	helm.type = "Leather Helmet"
+	helm.stats = Item.scaled_stats(helm.type, 1)
+	helm.mods = [{"id": "added_fortune_skills", "value": 1}]
+	player.equipment.equip(Equipment.Socket.HELMET, helm)
+	_check(float(player.stats().get("damage", 0.0)) == before, "another tree's rank adds nothing to Power")
+	helm.mods = [{"id": "added_power_skills", "value": 1}]
+	_check(float(player.stats().get("damage", 0.0)) == before * 2.0,
+			"a Power rank doubles one rank of Sharpened Edge (%s, %s)" % [before, player.stats().get("damage")])
+	player.stash().equipment.equip(Equipment.Socket.HELMET, Item.from_dict(helm.to_dict()))
+	_check(float(player.stats().get("damage", 0.0)) == before * 3.0, "and the heirlooms' helmet's rank as well")
 	return true
 
 
@@ -1210,13 +1362,26 @@ func _test_the_map_keeps_what_dropped() -> bool:
 			and main._bag_button.position.y > caret.position.y,
 			"with the sheet folded away, the column stands under its caret")
 	main.bag_page._on_fold_pressed()
-	_check(not main._character_button.visible, "while the page covers the character panel's corner")
+	# The bag takes the character panel's corner, so the panel goes to the other one, mirrored -- its
+	# position is then its right edge -- with the button over it, clear of the column.
+	await process_frame
+	_check(main._character_slid_right and main._character.has_meta("moving"), "sliding in from that side")
+	var drawn: Rect2 = main._character.get_transform() * Rect2(Vector2.ZERO, main._character.size)
+	var safe := UITheme.safe_rect(main.get_viewport())
+	_check(main._character.visible and main._character.mirrored
+			and is_equal_approx(drawn.end.x, safe.end.x - main.CHARACTER_EDGE.x),
+			"while the bag is up the character panel stands mirrored in the top-right corner (%s)" % drawn)
+	_check(main._character_button.visible and main._character_button.get_rect() == drawn,
+			"and can still be pressed")
+	_check(main._bag_button.get_global_rect().end.x < drawn.position.x, "clear of the corner column")
 	main.inventory.tips.append("level_up")
 	main._show_corner(true)
 	_check(is_equal_approx(main._skills_button.position.x, main._bag_button.position.x)
 			and main._skills_button.position.y > main._bag_button.position.y, "the buttons are a column")
 	main._on_skills_pressed()
 	_check(main.skills_page.visible and not main.bag_page.visible, "and one press goes from page to page")
+	_check(not main._character.visible and not main._character_button.visible,
+			"any other page covers the character panel's corner")
 	_check(main._bag_button.position.x >= main.skills_page.get_child(0).size.x * main.ui_scale,
 			"the column standing beside that one now")
 	main._on_skills_pressed()
@@ -1229,6 +1394,9 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	_check(not main.bag_page._actions.visible, "with no buttons until a square is clicked")
 	main._on_left_page_closed()
 	_check(not main.bag_page.visible and main._bag_button.visible, "closing it gives the button back")
+	_check(main._character.visible and not main._character.mirrored
+			and main._character.position == safe.position + main.CHARACTER_EDGE,
+			"and the character panel its own corner")
 
 	# The equipment page: its own panel beside the item panel, eight sockets, all empty.
 	main._on_bag_pressed()
@@ -1300,11 +1468,12 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	main.map.select_cell(target)
 	_check(not main._left_page_up() and main._panel.visible,
 			"choosing a tile closes the page and brings the tile's panel up")
+	main.inventory.tips.append("level_up")
 	main._on_chart_pressed()
 	main.map.player.finish_walk()
-	_check(main._bag_button.visible and main._settings_button.visible and not main._skills_button.visible
+	_check(main._bag_button.visible and main._settings_button.visible and main._skills_button.visible
 			and main._character_button.mouse_filter == Control.MOUSE_FILTER_IGNORE
-			and main._character_button.disabled, "the bag's and the settings' are the corner buttons a fight leaves")
+			and main._character_button.disabled, "a fight leaves the corner buttons, but not the character's")
 	_check(main._character.xp_hover.is_visible_in_tree()
 			and main._character.xp_hover.mouse_filter == Control.MOUSE_FILTER_PASS,
 			"the experience bar's tooltip stays over a fight, letting every press through to the swing")
@@ -1618,7 +1787,7 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 	_check(fight.endless, "and it is endless")
 	_check(combat._terminate != null, "with a way out of it on the screen")
 	_check(main._bag_button.visible and main._settings_button.visible and not main._skills_button.visible,
-			"and the bag and the settings the corner buttons left standing")
+			"and the corner buttons it has earned left standing")
 	fight.loot_rng.seed = WORLD_SEED
 	# Every body carries something, so three finds is three kills. What is under test is where a
 	# run's finds go, not how often one falls -- at the real 3% this would be a hundred-odd kills.
@@ -1656,7 +1825,7 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 	_check(main.bag_page.visible and main._combat == combat, "the bag opens over the run")
 	_check(main._ui_layer.layer > combat.layer, "drawn over the fight")
 	_check(not main._skills_button.visible and main._settings_button.visible,
-			"with the settings the one other page to be had")
+			"with the other pages earned so far beside it")
 	# A piece put on mid-fight counts from the next blow.
 	var bare: float = fight.damage
 	var sword := _piece(ItemRarity.Rarity.RARE, 1)
@@ -2351,6 +2520,20 @@ func _test_super_orbs() -> bool:
 	ItemDetails.fill(bare_card, _piece(ItemRarity.Rarity.RARE, 1), 200.0)
 	_check(bare_card.get_node_or_null(ItemDetails.ASCENSION_BAR) == null, "a piece with no plus has no bar")
 	bare_card.free()
+	# A modifier the rarity has room for is an empty row on the card; a full piece and a broken one have none.
+	var short := Item.rolled("Leather Boots", ItemRarity.Rarity.RARE, rng, 4)
+	short.mods.resize(3)
+	var open_rows := func(item: Item) -> int:
+		var rows := VBoxContainer.new()
+		ItemDetails.fill(rows, item, 200.0)
+		var count := _said_by(rows).split(" ").count(ItemDetails.OPEN_ROW)
+		rows.free()
+		return count
+	_check(open_rows.call(short) == 1, "a rare with three modifiers shows one open row")
+	short.broken = true
+	_check(open_rows.call(short) == 0, "a broken one shows none")
+	short.broken = false
+	_check(OrbTable.apply("Orb of Augmentation", short, rng) and open_rows.call(short) == 0, "nor does a full one")
 
 	# Perfection: the top of the band, through a Divine, the smith and the end of a world.
 	_check(not SuperOrbTable.apply(SuperOrbTable.PERFECTION, sword, rng), "an aimed orb needs a line to aim at")
@@ -2649,6 +2832,54 @@ func _test_autodiscard() -> bool:
 	return true
 
 
+## The bag's filter tabs: a slot's tab shows only that slot's pieces and the levels holding one, and a
+## level's bin under it takes only what it stands over.
+func _test_bag_filter() -> bool:
+	_clear_save()
+	var piece := func(type: String, level: int) -> Item:
+		var item := _piece(ItemRarity.Rarity.COMMON, level)
+		item.type = type
+		return item
+	var bag := Inventory.new()
+	for row: Array in [["Iron Sword", 3], ["Gold Ring", 3], ["Gold Ring", 7], ["Iron Helmet", 5]]:
+		bag.add(piece.call(row[0], row[1]))
+	var gone := bag.discard_level(3, true, "ring")
+	_check(gone.size() == 1 and gone[0].type == "Gold Ring" and bag.count_at(3) == 1,
+			"a level's discard given a slot takes only that slot's pieces")
+	bag.add(piece.call("Gold Ring", 3))
+	bag.set_autodiscard(9, true)
+
+	var page := BagPage.new(bag, TEST_PATH, 2.0)
+	root.add_child(page)
+	await process_frame
+	var tabs: Array = page._filter_tabs.get_children().filter(func(n: Node) -> bool: return n is Button)
+	_check(tabs.size() == BagPage.FILTERS.size(), "a tab a filter")
+	_check(page._filter_tabs.get_combined_minimum_size().x <= BagPage.WIDTH, "and they fit the bag's width")
+	var shown := func() -> Array:
+		return page._sections.find_children("*", "", true, false).filter(func(n: Node) -> bool: return n is ItemSlot) \
+				.map(func(slot: ItemSlot) -> String: return slot.item.type)
+	var headings := func() -> int:
+		return page._sections.get_children().filter(func(n: Node) -> bool: return n is HBoxContainer).size()
+	_check(shown.call().size() == 4 and headings.call() == 4, "every piece and level with nothing picked")
+
+	tabs.filter(func(b: Button) -> bool: return b.tooltip_text == "Rings")[0].pressed.emit()
+	await process_frame
+	_check(shown.call() == ["Gold Ring", "Gold Ring"], "Rings shows the rings alone (%s)" % [shown.call()])
+	# Levels 7 and 3 hold one; 5 holds only a helmet and goes; 9 holds nothing but a rule and stays.
+	_check(headings.call() == 3, "and the levels holding one, and a rule's empty level")
+	page._on_clear_level_pressed(3)
+	_check(bag.count_at(3) == 1 and bag.items.any(func(i: Item) -> bool: return i.type == "Iron Sword"),
+			"a level's bin under the filter leaves what it hides")
+
+	tabs = page._filter_tabs.get_children().filter(func(n: Node) -> bool: return n is Button)
+	tabs.filter(func(b: Button) -> bool: return b.tooltip_text == "All items")[0].pressed.emit()
+	await process_frame
+	_check(shown.call().size() == 3, "All items brings every piece back")
+	page.queue_free()
+	_clear_save()
+	return true
+
+
 ## Every Label anywhere under `node`, so a test can read what a panel actually says without knowing
 ## how it is stacked.
 func _labels_under(node: Node) -> Array[Node]:
@@ -2762,9 +2993,10 @@ func _test_item_levels() -> bool:
 	# A probability may not be multiplied by a level. Every chance stat grows by its flat step alone,
 	# so a deep set of gear cannot add up past certainty and make every hit a crit.
 	for stat: String in LootTable.CHANCE_STATS:
-		# Sight and the fight clock are the two in the list that are not probabilities: a number of
-		# tiles and a number of seconds, there so that a level cannot multiply either.
-		_check(stat in LootTable.PERCENT_STATS or stat in ["sight", "fight_clock"],
+		# Sight, the fight clock, the count of enemies and a tree's ranks are the ones in the list that
+		# are not probabilities: tiles, seconds, bodies and ranks, there so that a level cannot multiply them.
+		_check(stat in LootTable.PERCENT_STATS or stat in ["sight", "fight_clock", "extra_enemies",
+				"power_skills", "fortune_skills", "guard_skills"],
 				"%s is written as a percentage" % stat)
 		for level in [1, 10, 40]:
 			var want := 5.0 + float(LootTable.LEVEL_FLAT[stat]) * float(level - 1)
@@ -4568,9 +4800,22 @@ func _test_achievements() -> bool:
 	var buckler: ItemSlot = tiles.filter(func(s: ItemSlot) -> bool: return s.item.unique == "duelists_buckler")[0]
 	var unique_card := VBoxContainer.new()
 	(buckler.get_meta(ItemCard.ALT_CARD) as Callable).call(unique_card, 150.0)
-	_check(_said_by(unique_card).contains("Duelist's Buckler") and buckler.get_meta(ItemCard.KEYS) == {"alt": "unique"},
-			"under Alt a square shows the unique it unlocks (%s)" % _said_by(unique_card))
+	_check(_said_by(unique_card).contains("Duelist's Buckler") and buckler.get_meta(ItemCard.KEYS) == {"alt": "Duelist's Buckler"},
+			"under Alt a square shows the unique it unlocks, and its key names it (%s)" % _said_by(unique_card))
 	unique_card.free()
+	# A locked one's says what it is about and nothing it does: its name, its hint, "Locked".
+	var drumroll: ItemSlot = tiles.filter(func(s: ItemSlot) -> bool: return s.item.unique == "knucklebone_ring")[0]
+	var locked_card := VBoxContainer.new()
+	(drumroll.get_meta(ItemCard.ALT_CARD) as Callable).call(locked_card, 150.0)
+	var locked_said := _said_by(locked_card)
+	_check(locked_said.contains("Knucklebone Ring") and locked_said.contains(UniqueTable.hint("knucklebone_ring"))
+			and locked_said.contains("Locked") and not locked_said.contains(UniqueTable.effect_text("knucklebone_ring"))
+			and not locked_said.contains("Level"), "a locked unique's card hides what it does (%s)" % locked_said)
+	locked_card.free()
+	var numeral := RegEx.create_from_string("[0-9]")
+	_check(Achievements.ACHIEVEMENTS.keys().all(func(id: String) -> bool:
+			return not UniqueTable.hint(id).is_empty() and numeral.search(UniqueTable.hint(id)) == null),
+			"every unique an achievement unlocks has a hint, and no number in it")
 	var lit := tiles.filter(func(slot: ItemSlot) -> bool: return slot.modulate == Color.WHITE)
 	_check(lit.size() == 1 and lit[0].item.unique == "duelists_buckler", "the earned one lit, the rest dimmed")
 	_check(_said_by(lit[0]).contains("II"), "with its rank on its corner (%s)" % _said_by(lit[0]))
@@ -4591,12 +4836,12 @@ func _test_achievements() -> bool:
 	AchievementsPage.write_card(rows, 150.0, main.inventory, "knucklebone_ring", Achievements.state(main.inventory))
 	var said := _said_by(rows)
 	_check(said.contains("Drumroll") and said.contains(Achievements.text("knucklebone_ring", 1))
-			and said.contains("Progress: 0 / %s (0%%)" % BigNumber.format(Achievements.need_at("knucklebone_ring", 1)))
-			and said.contains("Unlocks Knucklebone Ring"), "a square's card says what, how far and what for (%s)" % said)
+			and said.contains("0 / %s" % BigNumber.format(Achievements.need_at("knucklebone_ring", 1)))
+			and not said.contains("/ IV"), "a square's card says what and how far (%s)" % said)
 	AchievementsPage.write_card(rows, 150.0, main.inventory, "duelists_buckler", Achievements.state(main.inventory))
 	said = _said_by(rows)
-	_check(said.contains("Rank II of IV") and said.contains(Achievements.text("duelists_buckler", 3))
-			and said.contains("Strengthens Duelist's Buckler"), "an earned one's says its rank and asks the next (%s)" % said)
+	_check(said.contains("II / IV") and said.contains(Achievements.text("duelists_buckler", 3)),
+			"an earned one's says its rank and asks the next (%s)" % said)
 	rows.free()
 	_check(glinting[0].has_node(ItemSlot.GLINT_NAME), "and it glints on until hovered")
 	# Closed without a hover: the page closing is seeing it.
@@ -4871,7 +5116,8 @@ func _test_character_sheet() -> bool:
 	for heading: String in CharacterPage.GROUPS:
 		tabled.append_array(CharacterPage.GROUPS[heading])
 	for stat: String in LootTable.STAT_LABELS:
-		_check(stat in tabled or CharacterPage.ATTRIBUTES.has(stat), "%s has a table on the character page" % stat)
+		_check(stat in tabled or CharacterPage.ATTRIBUTES.has(stat) or stat == Inventory.ALL_ATTRIBUTES,
+				"%s has a table on the character page" % stat)
 
 	# A fresh hero: a blow, a clock and a sight, and what a click does at the head.
 	var page := CharacterPage.new(Inventory.new(), 1.0)
@@ -5019,11 +5265,20 @@ func _test_character_page() -> bool:
 			and (damage.find_child(UITheme.TABLE_VALUE, true, false) as Label).text == "6",
 			"a stat that is something is a row, and its number is what a blow does (%s)" % said)
 	_check(not said.contains("Armour"), "and one that is nothing is not")
-	# Renaming is the system's own text box, which a headless run has not got: its answer is what is
-	# handed in here. The page wears the name on its bar, as the corner and the hero's tips do.
-	main._on_name_entered("  Cobalt  ")
+	# The pencil puts the game's own text box up, holding the name as it is; what is typed and submitted
+	# is the character's. The page wears the name on its bar, as the corner and the hero's tips do.
+	var pencils: Array = main.character_page.find_children("", "Button", true, false).filter(
+			func(b: Button) -> bool: return b.tooltip_text == "Rename")
+	_check(pencils.size() == 1, "the pencil stands beside the name")
+	pencils[0].pressed.emit()
+	await process_frame
+	var prompts: Array = main._ui_layer.get_children().filter(func(n: Node) -> bool: return n is TextPrompt)
+	_check(prompts.size() == 1 and prompts[0]._field.text == main.inventory.hero(),
+			"the pencil puts up a text box holding the name")
+	prompts[0]._field.text = "  Cobalt  "
+	prompts[0]._field.text_submitted.emit(prompts[0]._field.text)
 	_check(main.inventory.hero() == "Cobalt" and Inventory.load_from(TEST_PATH).hero() == "Cobalt",
-			"a name handed back is the character's, and saved")
+			"a name typed in is the character's, and saved")
 	_check(main.character_page._title.text == "Cobalt", "the page's bar says it")
 	# The corner wears no name (2026-10-03): where it stood is what a click does, as the page heads
 	# itself, read again off the save the name was written in.
@@ -5032,10 +5287,6 @@ func _test_character_page() -> bool:
 			"the corner says what a click does, as the page does (%s)" % main._character._click_label.text)
 	main._on_name_entered("")
 	_check(main.inventory.hero() == "Cobalt", "an empty answer leaves the name as it was")
-	var pencils: Array = main.character_page.find_children("", "Button", true, false).filter(
-			func(b: Button) -> bool: return b.tooltip_text == "Rename")
-	_check(pencils.size() == (1 if DisplayServer.has_feature(DisplayServer.FEATURE_NATIVE_DIALOG_INPUT) else 0),
-			"the pencil is there exactly where the system has a text box to open")
 	main._on_left_page_closed()
 	_check(not main.character_page.visible and main._character_button.visible, "the X puts it away")
 	main.queue_free()
@@ -5172,6 +5423,11 @@ func _test_drops_scroll() -> bool:
 	_check(view._scroll.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED
 			and view._scroll.custom_minimum_size.y < 8 * ItemSlot.SIDE,
 			"thirty drops are cut to a scrolling window: %s" % view._scroll.custom_minimum_size.y)
+	# An orb under the cursor puts the bag's own orb card up, saying what it does.
+	view.fill(few, {"Orb of Transmutation": 2})
+	(view._orbs.get_child(0) as OrbSlot).hovered.emit("Orb of Transmutation")
+	_check(view._orb_card.visible and _labels_under(view._orb_card).any(func(line: Label) -> bool:
+			return line.text == OrbTable.describe("Orb of Transmutation")), "a found orb's card says what it does")
 	view.free()
 	return true
 

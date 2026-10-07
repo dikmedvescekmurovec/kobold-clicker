@@ -47,8 +47,18 @@ const ROUTES = {
   "GET /privacy": privacy,
 };
 
+// The web build is served from another origin (../web). Sessions are bearer tokens, never cookies,
+// so any page may call: a stolen token is no more use from one origin than another.
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+  "Access-Control-Max-Age": "86400",
+};
+
 export default {
   async fetch(request, env) {
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     const ip = request.headers.get("CF-Connecting-IP") ?? "local";
     if (!(await env.REQUEST_LIMIT.limit({ key: ip })).success) {
       return json({ error: "Too many requests, try again in a minute" }, 429);
@@ -454,5 +464,5 @@ function hex(bytes) {
 }
 
 function json(data, status = 200) {
-  return Response.json(data, { status });
+  return Response.json(data, { status, headers: { "Access-Control-Allow-Origin": "*" } });
 }

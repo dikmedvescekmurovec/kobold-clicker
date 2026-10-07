@@ -42,7 +42,8 @@ signal xp_claimed(amount: int)
 signal bounty_paid(enemy: String, gold: float, xp: int, orbs: Dictionary, piece: Item)
 ## The board's Reward was pressed: the main scene puts the three options of a cleared board back up.
 signal choice_asked
-## The roads lifted settlements out of the dark: the map has changed and wants saving.
+## A posting was taken on and saved: the main scene checks the tips, the smith's first word on it.
+signal bounty_accepted## The roads lifted settlements out of the dark: the map has changed and wants saving.
 signal towns_revealed
 ## A spell that is aimed at the map was asked for, at `price`, in the town on `spot`. Nothing has been
 ## charged and nothing is written down: choosing the land happens on the map, which is the main
@@ -83,7 +84,6 @@ const PRICE_COIN := 8
 ## so the column's height is no longer what sets this: 8 is air, where the 4 it was made the counter
 ## read as one block.
 const ROW_GAP := 8
-
 ## What each counter wears on its tab. A mark rather than a word, so a fortress's five stand in one
 ## row: in words they took two, and the second row was what pushed the gear tab past the window's
 ## foot. The full name is the heading under them and the tab's tooltip. The marks stand bare on the
@@ -370,16 +370,16 @@ func _fill() -> void:
 	var group := ButtonGroup.new()
 	for service: String in _tabs:
 		if tabs.get_child_count() > 0:
-			tabs.add_child(_tab_line(TAB_GAP))
+			tabs.add_child(tab_line(TAB_GAP))
 		var tab := UITheme.button("", UITheme.BARE_BUTTON, TownServices.label(service))
 		tab.icon = tab_mark(service, service == _open_tab)
-		_tab_faces(tab, service == _open_tab)
+		tab_faces(tab, service == _open_tab)
 		tab.toggle_mode = true
 		tab.button_group = group
 		tab.button_pressed = service == _open_tab
 		tab.pressed.connect(_on_tab_pressed.bind(service))
 		tabs.add_child(tab)
-	var rest := _tab_line(0)
+	var rest := tab_line(0)
 	rest.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tabs.add_child(rest)
 	if _open_tab.is_empty():
@@ -387,8 +387,9 @@ func _fill() -> void:
 		return
 	# The open counter is named in words as well as by the tab that is down: the pack presses a button
 	# by drawing it a pixel lower, which is right for a press you are watching and far too quiet for a
-	# state you are reading off a row of them.
-	_rows.add_child(UITheme.label(TownServices.label(_open_tab)))
+	# state you are reading off a row of them. Not over a piece held up to the smith: its name heads him.
+	if not (_open_tab == TownServices.SMITH and _bag_piece != null):
+		_rows.add_child(UITheme.label(TownServices.label(_open_tab)))
 	if _open_tab == TownServices.BOUNTIES:
 		_fill_board()
 		return
@@ -550,9 +551,10 @@ func _cost_cell(square: Control, figure: String, mark: Texture2D, ok: bool,
 ## corners rounded. A shut one stands lower, washed in tan, with the line it stands on for a bottom
 ## edge; the open one stands full height in the page's own cream with no bottom edge, so it runs on
 ## into the counter under it -- a state read off the row at a glance, where the green mark alone was
-## a colour change on twelve pixels.
-static func _tab_faces(tab: Button, lit: bool) -> void:
-	tab.custom_minimum_size = Vector2(TAB_SIDE, TAB_SIDE if lit else TAB_SIDE - TAB_RISE)
+## a colour change on twelve pixels. `side` is its width: the bag's filter tabs are narrower
+## (`BagPage.FILTER_TAB`), eight of them sharing its width.
+static func tab_faces(tab: Button, lit: bool, side := TAB_SIDE) -> void:
+	tab.custom_minimum_size = Vector2(side, TAB_SIDE if lit else TAB_SIDE - TAB_RISE)
 	tab.size_flags_vertical = Control.SIZE_SHRINK_END
 	tab.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	if lit:
@@ -586,7 +588,7 @@ static func _tab_face(fill: Color, floor_line: bool) -> StyleBoxFlat:
 
 
 ## A stretch of the line the tabs stand on: between two tabs (`width`) or out to the page's edge.
-static func _tab_line(width: float) -> Panel:
+static func tab_line(width: float) -> Panel:
 	var line := Panel.new()
 	var edge := StyleBoxFlat.new()
 	edge.bg_color = Color.TRANSPARENT
@@ -674,7 +676,7 @@ func _fill_board() -> void:
 	# Work taken on at another board heads this one: which bounty is out, and where it is handed in --
 	# a board that only said "no" left the player to go and find out both.
 	if busy and active_at != TownState.key(_spot):
-		var away := BountyList.row(BountyBoard.active(inventory.towns), view, BODY_WIDTH, false,
+		var away := BountyList.row(BountyBoard.active(inventory.towns), view, BODY_WIDTH,
 				"Taken at %s. Claim it there." % _town_at(active_at))
 		body.add_child(away)
 	# The one taken on here first, then the rest -- still shown while work is out, dimmed and with Accept
@@ -686,7 +688,7 @@ func _fill_board() -> void:
 	for bounty: Dictionary in postings:
 		posted += 1
 		var taken := BountyBoard.is_active(bounty)
-		var row := BountyList.row(bounty, view, BODY_WIDTH, false,
+		var row := BountyList.row(bounty, view, BODY_WIDTH,
 				"Accepted." if taken and not BountyBoard.ready(bounty) else "")
 		var action: Button
 		if not taken:
@@ -698,7 +700,7 @@ func _fill_board() -> void:
 			action.pressed.connect(_on_accept_pressed.bind(bounty))
 		# The one thing this board can do that the journal cannot: pay. A bounty is handed in where it
 		# was taken on, so the button is here and nowhere else. The figure is on the card above it and
-		# in the tooltip: beside Info there is no room for a reward that grows with the walk.
+		# in the tooltip: a small button has no room for a reward that grows with the walk.
 		elif BountyBoard.ready(bounty):
 			var gold := float(bounty.get(BountyBoard.GOLD, 0))
 			var prize := BountyBoard.reward_text(bounty)
@@ -741,6 +743,7 @@ func _on_accept_pressed(bounty: Dictionary) -> void:
 	inventory.save(_save_path)
 	_fill()
 	layout()
+	bounty_accepted.emit()
 
 
 ## One bounty handed in. It pays exactly once -- `claim` is what refuses the second press -- and the
@@ -858,14 +861,13 @@ func _fill_smith() -> void:
 	if _bag_piece == null:
 		_fill_idle_smith()
 		return
-	# The piece on the anvil, written out as an offer is: what an upgrade rolls again is its modifiers,
-	# so they are what is worth reading while the hammer is up -- and watching them change after a blow
-	# is the whole of what the blow bought. It scrolls; the buttons stay pinned at the foot.
+	# The piece on the anvil, written out whole as an offer is, with no square and no smith over it (the
+	# user's, 2026-10-07): watching its numbers change after a blow is the whole of what the blow bought.
+	# It scrolls; the buttons stay pinned at the foot.
 	var body := _scrolled(ROW_GAP)
-	_smith_bench(body, ItemSlot.make(_bag_piece))
 	var details := UITheme.vbox(2, BODY_WIDTH)
 	body.add_child(details)
-	ItemDetails.fill(details, _bag_piece, BODY_WIDTH, [], false, false)
+	ItemDetails.fill(details, _bag_piece, BODY_WIDTH)
 	var cap := _upgrade_cap()
 	var up_price := TownPrices.upgrade_price(_bag_piece)
 	var up_why := _smith_why_not(Blacksmith.why_not_upgrade(_bag_piece, cap), up_price)
@@ -881,7 +883,7 @@ func _fill_smith() -> void:
 		_rows.add_child(odds)
 	_rows.add_child(_smith_button("Upgrade", up_price, up_why,
 			"Take this to level %d for %s gold. Its modifiers stay as they are"
-			% [_bag_piece.level + 1, BigNumber.format(up_price)], _on_upgrade_pressed, UITheme.GO_BUTTON))
+			% [_bag_piece.level + 1, BigNumber.format(up_price)], _on_upgrade_pressed, "SmallGoButton"))
 	var lock_price := TownPrices.lock_price(_bag_piece)
 	var lock_why := _smith_why_not(Blacksmith.why_not_lock(_bag_piece), lock_price)
 	_rows.add_child(_smith_button("Lock", lock_price, lock_why,
@@ -908,9 +910,10 @@ func _fill_idle_smith() -> void:
 				.map(func(p: Item) -> float: return TownPrices.lock_price(p)))
 
 
-## The top of the smith's counter, whether a piece is open or not: `square` -- the empty anvil square,
-## or the open piece -- on the left, by the anvil he is drawn with, and the smith on the right. The
-## portrait rests on its first frame; an Upgrade or a Lock plays his strike once (`_strike`).
+## The top of the smith's counter while no piece is open: `square` -- the empty anvil square -- on the
+## left, by the anvil he is drawn with, and the smith on the right. The portrait rests on its first
+## frame. An Upgrade or a Lock still runs his strike (`_strike`), but only with a piece open, so it is
+## never on screen now -- only its sound is.
 func _smith_bench(body: VBoxContainer, square: Control) -> void:
 	var bench := HBoxContainer.new()
 	bench.add_theme_constant_override("separation", ROW_GAP)
@@ -996,7 +999,7 @@ func _smith_service(body: VBoxContainer, title: String, prices: Array) -> void:
 ## One of the smith's two, with the coin and the price on it the way a Buy carries them, and the
 ## reason in its tooltip when it is dead.
 func _smith_button(text: String, price: float, refused: String, tooltip: String,
-		action: Callable, variation := "LightButton") -> Button:
+		action: Callable, variation := "SmallButton") -> Button:
 	var button := UITheme.priced_button(text, price, variation,
 			refused if not refused.is_empty() else tooltip)
 	button.disabled = not refused.is_empty()
@@ -1421,7 +1424,7 @@ func _place_orb_card(square: OrbSlot) -> void:
 ## something away. An orb passes `needs_room` false -- orbs are counts, outside the cap entirely.
 func _why_not(price: float, needs_room: bool) -> String:
 	if inventory.gold < price:
-		return "Your purse is short"
+		return "Not enough gold"
 	if needs_room and inventory.is_full():
 		return "The bag is full"
 	return ""

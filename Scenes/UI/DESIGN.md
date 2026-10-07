@@ -30,7 +30,7 @@ Pixellari renders at 16 px and nowhere else, and at `ui_scale` 2 that is a 32 px
 The user asked for a review of every screen and every string and picked what to fix. Some of the reasoning:
 - **A pressed button's word never rose.** The kit's screenshot drew hover and pressed as a `Panel` with a centred `Label` -- a stand-in no button is -- so the word sat higher there than on the real face, which sinks it a pixel on press (`UITheme.build`). The game needed nothing; the kit now draws real buttons wearing each state's box.
 - **An arrow means Equip will take it.** `BagPage.is_upgrade` asked only the stats, so a level 12 sword wore the arrow over a greyed Equip. It asks `Inventory.can_equip` too.
-- **A modifier is a sentence, on one row.** Name over value doubled a card's height for rust lines that read naturally as "+8% increased Damage"; the value under the name was there only for the detailed band, which a one-row sentence wraps just as well. It is what gave the smith's counter room for the piece, with his base-stat table left to the hover card.
+- **A modifier is a sentence, on one row.** Name over value doubled a card's height for rust lines that read naturally as "+8% increased Damage"; the value under the name was there only for the detailed band, which a one-row sentence wraps just as well. It is what gave the smith's counter room for the piece. *(Since 2026-10-07 the smith's counter drops the square and his portrait while a piece is open and writes the piece whole, base stats too, over Upgrade and Lock on the small faces, one over the other -- the user's ask; side by side, the two priced buttons outgrew `BODY_WIDTH` and stretched the page.)*
 - **The collection's unlocked-but-unfound square is grey, not darker.** The user had lifted `SHADOW` from 0.35 to 0.65 because the unfound were "way too dark" to make out; at 0.65 they read as found. Colour, not light, is what now says "not held", and the card says "Not found yet".
 - **Achievements got a bar a square** so the page no longer reads as a second collection log: a square there is a thing being worked at.
 - **A banner waits behind a question.** Raised over a pop-up it lay across the pop-up's title; it now goes up once the window is clear.
@@ -45,7 +45,7 @@ The user asked for the game to be playable on a phone, a tablet and in a browser
 
 **Why there are only two layouts.** With the scale picked that way, any window on its side is at least 576 wide and 324 tall, which is the window the game was already budgeted for, so it lays out exactly as it did. Only a window held upright is left narrower (324 to about 430 across on phones), and that is the one other layout (`UITheme.narrow`): what stood side by side stands one over another. The pages dock into a room the main scene hands them (`area`), so the one place that already knew which pages there are is the one that decides what shares the screen.
 
-**What goes where, held upright.** Every page, and the tile panel, is a sheet along the foot over the corner row: centred at its own width, as tall as what it holds and never more than half the window, scrolling past that (the user's call, 2026-10-01, after a review of every screen at 360 x 780: "panels don't need to be full height, just render what you can"). They first stood full height, which left a column of empty cream under a short page. **Full width was tried and turned down the same day** (the user: "this looks much worse"): the sheets ran the window's width, the scrolls stretched what they held and the grids of squares became flows filling it, eight across in the log -- and the tile panel had run the window's width the round before, at the user's own first ask. Each is its own width again. A flow (the skill trees) knows how tall it is only once it has laid out, a frame after it was resized, so a sheet is stood again the next frame (`UITheme._settle`). Across a monitor nothing of this applies, and the tile panel stands full height there, the user's 2026-09-25 ruling. A tile chosen under the sheet is lifted into the middle of the map above it, so the sheet never hides what it describes. A banner off a fight stands under the character panel, which at that width it otherwise covered. The corner buttons, a column because beside a full-height page there was height to spare and no width, are a row for the opposite reason, and a thumb reaches the foot. A town is its counter over the bag, the counter giving up whatever the bag needs (`BagPage.least_height`: two rows of the grid, and the doll at the smith), each a sheet at the foot of its share, so a short counter stands right over the bag. The doll's sheet stands centred straight over the bag's -- on a transcension's screen too. The skill trees stand one at a time between a previous and a next arrow, centred, with nothing to scroll -- they wrapped two over one at first, and the user found scrolling a tree off. The two choice cards and the cloud's two saves stack, the curses' two sentences narrow and wrap, the dialogue's words narrow, and a card with no room either side of its square goes under it.
+**What goes where, held upright.** Every page, and the tile panel, is a sheet along the foot over the corner row: centred at its own width, as tall as what it holds and never more than half the window, scrolling past that (the user's call, 2026-10-01, after a review of every screen at 360 x 780: "panels don't need to be full height, just render what you can"). They first stood full height, which left a column of empty cream under a short page. **Full width was tried and turned down the same day** (the user: "this looks much worse"): the sheets ran the window's width, the scrolls stretched what they held and the grids of squares became flows filling it, eight across in the log -- and the tile panel had run the window's width the round before, at the user's own first ask. Each is its own width again. A flow (the skill trees) knows how tall it is only once it has laid out, a frame after it was resized, so a sheet is stood again the next frame (`UITheme._settle`). Across a monitor nothing of this applies, and the tile panel stands full height there, the user's 2026-09-25 ruling. A tile chosen under the sheet is lifted into the middle of the map above it, so the sheet never hides what it describes. A banner off a fight stands under the character panel, which at that width it otherwise covered. The corner buttons, a column because beside a full-height page there was height to spare and no width, are a row for the opposite reason, and a thumb reaches the foot. A town is its counter over the bag, the counter giving up whatever the bag needs (`BagPage.least_height`: two rows of the grid, and the doll), each a sheet at the foot of its share, so a short counter stands right over the bag. The doll's sheet stands centred straight over the bag's -- on a transcension's screen too. The skill trees stand one at a time between a previous and a next arrow, centred, with nothing to scroll -- they wrapped two over one at first, and the user found scrolling a tree off. The two choice cards and the cloud's two saves stack, the curses' two sentences narrow and wrap, the dialogue's words narrow, and a card with no room either side of its square goes under it.
 
 **The fight.** Fighters were sized by height alone, which held upright made them as tall as the window is wide; they now take the lesser of the height share and `ACTOR_WIDE` of the width. They also never went finer than one backdrop pixel, and a backdrop covering a tall window has a big one, so held upright they snap to half of it -- still one grid. Held upright the top-centre column stands under the character panel (`hud_top`, the main scene's), and the fight itself stands in the middle of the window (the user's call, 2026-10-01: at the foot it was too low): the backdrop, covering the window's height, put its ground line 86% of the way down, so the scene is lifted until the feet stand at 60%, the ground's own bottom rows repeating under it to the window's foot and the nameplate under the fighters rather than at the foot. The cave's bottom rows hold a ledge, so down there the fill is striped. The fight's corners and the character panel keep to a phone's safe area.
 
@@ -53,7 +53,7 @@ The user asked for the game to be playable on a phone, a tablet and in a browser
 
 **Found on the way:** a run's loot popup with the full-bag warning ran its title off the top of the default window. A popup taller than the window now gives up rows of its finds, which scroll (`DropsView.fit_rows`), and a popup shrinks back to its contents when a find opened in it is shorter than the grid was. The review at 360 x 780 also found the bag's questions standing under the town page held upright -- a page now comes to the front with its question -- and a tooltip left behind where its control had been when a popup settled after it came up; a tooltip now follows its control.
 
-**Left for later:** the dials `TOWN_SPLIT`, `ACTOR_WIDE` and `LEAST_ROWS` are unplayed. Held upright at the smallest budget, the smith's counter keeps its tabs and its two buttons but has no room left for the piece's lines; a taller phone, or the doll folded away, gives it back. Exporting is its own step: the web needs the Compatibility renderer (the project is Forward+ on D3D12, and the four shaders have to be checked under it), there are no export presets yet, and in a browser the leaderboard Worker has to answer with CORS.
+**Left for later:** the dials `TOWN_SPLIT`, `ACTOR_WIDE` and `LEAST_ROWS` are unplayed. Held upright at the smallest budget, a counter keeps its tabs and its buttons but has little room left for its lines (the smith's piece, a shelf piece); a taller phone, or the doll folded away, gives it back. Exporting is its own step: the web needs the Compatibility renderer (the project is Forward+ on D3D12, and the four shaders have to be checked under it), there are no export presets yet, and in a browser the leaderboard Worker has to answer with CORS.
 
 ## The character panel's band (2026-10-01)
 The pack's frame has three troughs, health, mana and experience, and the player has only experience; the other two stood full through every fight, a red bar that ignored every blow that landed. The pack draws no one-trough frame, so `tools/ui_kit.py` paints those two into one dark band, and the name and level that stood over the frame stand in it. **Tried first:** one line of Pixellari (mockup `tools/qa/char_panel_m1.png` A), which needed about 156 px where the band held 90, so the frame was widened by a third and ran under the fight's top-centre column on the default window; the column slid right to clear it. The user found the panel too long and wanted the column always centred, so the line is the small font, one line still, and "Lvl" for "Level": "Adventurer Lvl 230" is exactly the band's 90 px, and the frame is its own width again. It still widens to a longer line by repeating one column, the bar under it with it, and cuts a name past `NAME_ROOM` short -- the user's ask -- and that room is set so the widest panel stays clear of a centred fight column on the narrowest window not held upright. No outline: the band is dark, and the outline was for terrain. *(Since 2026-10-03 the band holds the damage line, not the name: below.)*
@@ -67,6 +67,8 @@ What answers it (mockup `tools/qa/char_plate_m2.png`, approved): **the level on 
 
 **Turned down on the way, in order:** a strip of coin, pointer and sword with figures hung under the frame (A on a dark plate in the frame's colours, B bare and outlined) -- "looks bad"; the cover's tavern sign hanging on two ropes from the band, three planks with a figure each, the logo's banded lettering and stylized marks -- liked, then too big, then at half the size undone in favour of **the damage in the panel itself and no gold** (the gold stays in the bag); a third compartment let down under the experience trough to the foot of the circle -- it fit early figures but widened the frame by 36 panel pixels at late ones, into the fight's heading, which is what made the name the thing to give up.
 
+**Beside the bag (2026-10-07).** A page used to cover the panel, and the bag is where a piece changes the two numbers on it, so the user asked for it to move to the other side while the bag is open, mirrored, sliding in from that side. It is one panel turned round by a negative `scale.x` (its words turned back), not a second one kept in step, so the gems and the level flash find it wherever it is. Only a bag page sends it: any other page still covers it. Not in a town (the counter has the right edge), nor held upright (the sheets stand along the foot and the doll reaches the top), and over a fight it stands under the Terminate flag, which has that corner.
+
 ## Rules and gotchas
 - **A floating panel cannot be a Godot tooltip, and that is why `OrbCard` is not one.** A tooltip is its own popup window, so it cannot inherit the bag panel's `ui_scale` transform; the only way to make it match the panel beside it would be to ask for type at `FONT_SIZE * ui_scale`, and by the rule above that comes back interpolated next to art that is not. So a card like this is an ordinary Control on the scene's own `CanvasLayer`, scaled by `ui_scale` and placed by hand -- which is what `CombatScene`'s full-bag warning already is, for the same reason.
 
@@ -74,9 +76,9 @@ What answers it (mockup `tools/qa/char_plate_m2.png`, approved): **the level on 
 The user asked for a pencil that renames the character through the platform's own text input. It went to the character page's
 bar, beside the name, rather than the corner panel: the user had just had the panel shortened, and a pencil in its band
 made it some twenty panel pixels longer on the map (a badge on the portrait was the other option shown; the user chose the page).
-The text box is `DisplayServer.dialog_input_text`, the system's own, so there is no text field of the game's to build or
-to dress; where a platform has none (`FEATURE_NATIVE_DIALOG_INPUT`: Linux, the web) the pencil is not built, and a text
-field of the game's own is the thing to add if one of those ships. The pencil is drawn in `tools/ui_kit.py` like the
+The text box was at first `DisplayServer.dialog_input_text`, the system's own, with no pencil where a platform had none
+(`FEATURE_NATIVE_DIALOG_INPUT`: Linux, the web). On 2026-10-07 the user asked for a popup of the game's own in its place:
+`TextPrompt`, dressed and brought up as every other popup is, so the pencil is now on every platform. The pencil is drawn in `tools/ui_kit.py` like the
 flag and the sack, in the brown cut so it reads dark on the green bar as the name does.
 
 ## The character sheet (2026-10-03)
@@ -129,3 +131,57 @@ own and every player point to be fixed. What the player side found, and what ans
 The developer side's findings (balancing overrides that never ship, cheats reaching the real save and the board, dev switches
 that stay on unseen) were not asked to be fixed; only the move was. The Developer button is the one dev thing on the settings,
 and a release build draws none of it.
+
+## The open modifier row (2026-10-07)
+
+The user found it was not obvious whether a piece carried all the modifiers its rarity allows or only some. Every rarity rolls
+one of two counts (1-2, 3-4, 5-6, one more after an Expansion), so a piece is either full or exactly one short, and until
+then only an Orb of Augmentation in the hand said which. The card now gives the missing one a row of its own with nothing in
+it but a greyed dash: a gap is read without a word (the no-explanatory-text rule), and a full piece's table simply ends.
+Turned down: "3/4" on the rarity line, which already wraps at 10 px with Two-handed and Rank on it, and a mark on the bag's
+square, whose two corners already hold the `+n` and the padlock; the orb's light over the bag answers which pieces have room.
+
+## A unique's rule between gold lines (2026-10-07)
+
+The user found a unique's rule was not obvious enough on its card. It was written in `SLOT_TAN_DK`, which is the same
+`8a4836` as the rust every rolled modifier is in, at the same 10 px, with no rule round it, so it read as one more line of
+the header or one more modifier. Seven mockups were tried (`tools/qa/unique_rule_m1.png`): a gold band behind it, the crest
+in front of each line, the crest standing on a gold rule over it, band and crest together (loud and muted), and the rule
+ringed as its square is. The user took the crest rule and asked for the line under the rule to be gold as well. So the rule
+now stands between two copies of its square's frame top edge, the first carrying the crest at the player's rank, and the
+sentence is in ink: it is the darkest word on the card and the gold says whose it is without a word. Turned down: the band
+(a highlighter, louder than anything else on the cream), the crest beside each line (too small at 22 x 8, and it took width
+the sentence then wrapped into), and the frame round the rule. The "Unique found" banner writes the rule on its own and was
+left as it was.
+
+## The achievement card, and a locked unique's (2026-10-07)
+
+The user found the achievement card cluttered: six lines of one size for four facts. "Rank I of IV" repeated the numeral
+on the square, "Progress: 1,711 / 10,000 (17%)" carried a label word, said the goal a second time and the fraction twice,
+and wrapped, and "Strengthens Knucklebone Ring" sat a line above "[ALT] unique", both naming the same piece. Mocked in
+`tools/qa/achievement_card_m1.png` and `_m2.png`: the progress as the page's own bar at the card's width, the rank as gold
+pips or as "I / IV" after the name, and the reward folded into the Alt row. The user took "I / IV" and the Alt row without
+the verb, so the card is four lines: name and rank, the goal, the bar (gold and "Achieved" at IV), "[ALT] <unique>". The
+pips were turned down for the numeral; the bounty board's own pips were tried first and read backwards on cream (the spent
+grey looked fuller than the lit bronze). With the verb kept, a long unique's name wrapped the Alt row onto two lines.
+At the same time a locked unique's card (an achievement's square under Alt, an old save's find in the log) stopped showing
+the piece: it is the name, a line saying what it does (`UniqueTable` `hint`) and "Locked". The first hints were
+riddles ("At home in the mountains."); the user asked for more: the player should know what the piece does, never its
+numbers. So a hint is its rule in words with every figure taken out ("Deals more damage in mountains."), and a test holds
+it to having no digit. Written by Claude, the user's to rewrite.
+
+## The bag's filter tabs (2026-10-07)
+
+The user asked for ways to filter the bag by item type. Five were mocked (`tools/qa/bag_filter_m1_*.png`): a row of bare
+marks under the count, the town page's folder tabs, the doll as the filter (a pressed socket dimming what cannot go in it,
+the way a held orb dims), grouping by type instead of by level, and the funnel mark opening a small card of the marks. The
+user took the tabs: the same tabs as a town's counters, so the bag and the counter beside it speak one language. Eight
+(All and the seven slots) stand in the bag's width at 20 px, two narrower than a counter's. A filter hides rather than
+dims, so a full bag's rings come up on one screen. Grouping by type was turned down with it, since a level's Auto and bin
+have no home there. The marks are silhouettes shaded the way the character panel's are (`ui_kit._edged`).
+
+**A bin takes only what it stands over.** With the Rings tab open, a level's heading shows one ring; a bin that threw
+away the level's other four pieces too would be a press that destroys what the player cannot see, and the question it
+asks can be ticked away. So Sell all and the bin take the filter's slot, and the count in their tooltips is what is
+shown. Auto stays a rule about the whole level: it decides what is picked up at all, not what is looked at. The filter
+is kept while the game runs and never saved, the way a folded section is.

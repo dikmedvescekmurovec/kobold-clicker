@@ -59,7 +59,7 @@ const HP_NUDGES := [["/10", "Divide by 10"], ["-1", "Take 1 away"], ["+1", "Add 
 const HP_BASE_TIP := "The health of an ordinary body on this circle's first ring. Every body in the circle scales with it"
 ## The credits' link mark, a bare button after a name that has a link.
 const LINK_ICON := preload("res://Assets/UI/ui_icon_linkedin.png")
-## The credits whose work was made by AI, each followed by a small "AI" chip (`_ai_badge`).
+## The credits whose work was made by AI, each followed by a small "AI" chip (`UITheme.chip`).
 const AI_MADE := ["PixelLab"]
 ## The controls screen's mouse keys, after the corner buttons' letters (`hotkeys`): the item card's own
 ## key pictures (`ItemCard.KEY_ICONS`) and what each does on a square.
@@ -436,27 +436,10 @@ func _open_credits() -> void:
 				link.pressed.connect(OS.shell_open.bind(entry[2]))
 				name_row.add_child(link)
 			if entry[0] in AI_MADE:
-				name_row.add_child(_ai_badge())
+				name_row.add_child(UITheme.chip("AI"))
 			block.add_child(name_row)
 			block.add_child(BountyList.wrapped(entry[1], WIDTH, Palette.TEXT_SOFT))
 			body.add_child(block)
-
-
-## "AI" in bone on a chip in the rule's brown, cut as the character page's attribute chips are.
-static func _ai_badge() -> PanelContainer:
-	var chip := PanelContainer.new()
-	var box := StyleBoxFlat.new()
-	box.bg_color = Palette.SLOT_TAN_DK
-	box.set_corner_radius_all(CharacterPage.CHIP_CORNER)
-	box.anti_aliasing = false
-	box.content_margin_left = CharacterPage.CHIP_PAD.x
-	box.content_margin_right = CharacterPage.CHIP_PAD.x
-	box.content_margin_top = CharacterPage.CHIP_PAD.y
-	box.content_margin_bottom = CharacterPage.CHIP_PAD.y
-	chip.add_theme_stylebox_override("panel", box)
-	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	chip.add_child(UITheme.label("AI", Palette.BONE, true))
-	return chip
 
 
 ## Every dev tool, which a release build has none of: the five switches, the two cheats, the balancing
@@ -481,7 +464,7 @@ func _open_dev() -> void:
 	body.add_child(_dev_tick("Even loot", Settings.even_loot,
 			"A body drops loot one time in three, every rarity from common to unique as likely, from the next fight",
 			func(on: bool) -> void: Settings.even_loot = on))
-	body.add_child(_button("Gold x10", "LightButton", "Multiply the purse by ten", cash_pressed.emit))
+	body.add_child(_button("Gold x10", "LightButton", "Multiply your gold by ten", cash_pressed.emit))
 	body.add_child(_button("Skill points +10", "LightButton", "Ten levels, and the ten skill points they earn",
 			points_pressed.emit))
 	body.add_child(_button("Balancing", "LightButton", "Scale enemy health wall by wall", _open_balance))

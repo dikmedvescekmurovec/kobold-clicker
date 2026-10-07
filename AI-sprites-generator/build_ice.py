@@ -1,15 +1,17 @@
 """Writes the ice wall and the frozen wasteland into Assets/Ice/, then reads every file back and checks it.
 
 Like build_hpbar.py this skips Aseprite and the hex atlas: `IceOverlay` draws these itself over the
-map, one hex a cell, so they ship as four plain RGBA sheets of 56x64 cells:
+map, one hex a cell, so they ship as plain RGBA sheets of 56x64 cells (the rubble on the map's own
+layer, `HexTileset.RUBBLE_ID`):
 
   ice_waste.png    WASTE_COLS x WASTE_ROWS: the snow, cell (col, row) at column col % WASTE_COLS, row row % WASTE_ROWS
   ice_band.png     24 x 8: the wall's band between its two ring neighbours, edge mask m (HexGrid.edge_mask)
                    of version v at column m % 8 + 8 v, row m / 8
   ice_spill.png    8 x 8, indexed by edge mask: the snow drifting onto a land tile from the edges that touch ice
   ice_accents.png  ACCENT_KINDS across, 3 versions down: the things lying on the snow
+  ice_rubble.png   24 x 8 like ice_band: what is left of a wall once it falls, along its ring, on land
 
-Run `python qa.py icewall <tag>` first and look at the images; this overwrites the files.
+Run `python qa.py icewall <tag>` (and `fallen <tag>` for the rubble) first and look at the images; this overwrites the files.
 """
 import os
 from collections import Counter
@@ -51,6 +53,8 @@ def sheets():
         "ice_spill": _by_mask({mask(m): iw.snow_spill(m) for k in range(1, 7) for m in combinations(range(6), k)}),
         "ice_accents": _sheet(len(iw.ACCENT_KINDS), 3, {(i // 3, i % 3): iw.accent(name)
                                                          for i, name in enumerate(iw.ACCENTS)}),
+        "ice_rubble": _sheet(8 * len(iw.VARIANTS), 8, {(mask(m) % 8 + 8 * v, mask(m) // 8): iw.rubble(m, name)
+                                                        for m in ring_masks() for v, name in enumerate(iw.VARIANTS)}),
     }
 
 

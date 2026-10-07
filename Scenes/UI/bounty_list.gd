@@ -17,6 +17,8 @@ extends Control
 signal closed
 ## Cancel gave the work up (and saved): a board open on the other edge has to be drawn again.
 signal abandoned
+## A finished bounty's "Claim at" was pressed: the main scene shows the town on `spot` on the map.
+signal town_shown(spot: Vector2i)
 
 ## How wide the page's rows run, in panel pixels. Wider than the town page's 140, because nothing here
 ## is standing beside a bag: a tile's name and the line it sits on are what set it.
@@ -47,8 +49,9 @@ const PORTRAIT_PAD := 2
 const CARD_PORTRAIT := ItemSlot.SIDE - PORTRAIT_PAD * 2
 ## The promised piece on a card, at half an item square: the orbs' size, drawn at its own pixels.
 const REWARD_SQUARE := ItemSlot.SIDE / 2
-## The row of lands a monster lives on, named so the tests can find it.
+## The row of lands a monster lives on and the level chip by its name, named so the tests can find them.
 const LANDS_NAME := "Lands"
+const LEVEL_NAME := "Level"
 
 var inventory: Inventory
 var view: MapBuilder
@@ -102,11 +105,16 @@ func open() -> void:
 				_rows.add_child(UITheme.rule(WIDTH))
 			posted += 1
 			listed += 1
+			var card := BountyList.row(bounty, view, WIDTH)
+			var actions := BountyList.actions_of(card)
 			# A finished bounty is paid for where it was taken on, which is the one thing this page
-			# cannot do and so the one thing it has to say.
-			var card := BountyList.row(bounty, view, WIDTH, true,
-					"Finished. Claim it at %s." % town if BountyBoard.ready(bounty) else "")
-			BountyList.actions_of(card).add_child(_cancel_button(bounty))
+			# cannot do: its button names that town and shows it on the map.
+			if BountyBoard.ready(bounty):
+				var claim := UITheme.button("Claim at %s" % town, "SmallGoButton", "Show %s on the map" % town)
+				claim.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				claim.pressed.connect(town_shown.emit.bind(TownState.spot(at)))
+				actions.add_child(claim)
+			actions.add_child(_cancel_button(bounty))
 			_rows.add_child(card)
 	if listed == 0:
 		_rows.add_child(wrapped("No work is out. Accept a bounty at a board.", WIDTH, Palette.TEXT_SOFT))
@@ -122,17 +130,15 @@ func layout() -> void:
 
 
 ## One posting as a card, for this page and for the board that posted it: the monster's picture in a
-## frame, its name and how many, what it pays, and a row of buttons along the foot -- **Info** and
+## frame, its name and how many, what it pays, where it lives, and a row of buttons along the foot --
 ## whatever the caller adds through `actions_of` (the board's Accept or Claim, the journal's Give up).
 ## An accepted posting carries its progress bar; `note` is one leaf-green line over the buttons.
 ##
-## Info folds out the part a wanted poster has no room for: the level of land a kill has to fall on,
-## and the lands that monster lives on as the tile panel's own swatches -- which lands, never which
-## tile: finding one is the map's business (the user's, 2026-10-01). It starts `unfolded` on the
-## journal, which is read for exactly that, and shut on the board, where three postings have to share
-## a 284 px column.
-static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
-		unfolded: bool, note := "") -> PanelContainer:
+## Where it lives is always shown, on the board and the journal alike (the user's, 2026-10-07): the
+## level of land a kill has to fall on as a chip beside the name, and the lands that monster lives on as
+## the tile panel's own swatches -- which lands, never which tile: finding one is the map's business
+## (the user's, 2026-10-01).
+static func row(bounty: Dictionary, map_view: MapBuilder, width: float, note := "") -> PanelContainer:
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", flat(Color.TRANSPARENT, CARD_PAD))
 	var inner := width - CARD_PAD * 2
@@ -152,12 +158,19 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 	# The one bounty that is out takes the whole column it is given, on the board and the journal alike.
 	if taken:
 		card.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var heading := HBoxContainer.new()
-	heading.add_theme_constant_override("separation", 3)
+	# A flow, so the level's badge goes under a long name ("Skeleton Warrior x12") rather than widening
+	# the card past the board's column.
+	var heading := HFlowContainer.new()
+	heading.add_theme_constant_override("h_separation", 3)
+	heading.add_theme_constant_override("v_separation", 2)
 	if elite:
 		var skull: Texture2D = CombatScene.TIER_MARK[EnemyRoster.Tier.ELITE]
 		heading.add_child(icon(skull, skull.get_width()))
 	heading.add_child(UITheme.label(enemy if taken or need <= 1 else "%s x%d" % [enemy, need]))
+	# The level of land a kill has to fall on, or deeper.
+	var level := UITheme.chip("Lv %d" % int(bounty.get(BountyBoard.LEVEL, 0)))
+	level.name = LEVEL_NAME
+	heading.add_child(level)
 	lines.add_child(heading)
 	# The picture beside what it pays rather than over it: three postings share one column, and a
 	# poster stacked picture, name, gold, goods was two of them to a window.
@@ -174,12 +187,6 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 	if taken:
 		lines.add_child(progress_bar(int(bounty.get(BountyBoard.HAVE, 0)), need, inner))
 
-	var details := UITheme.vbox(LINE_GAP, inner)
-	details.visible = unfolded
-	lines.add_child(details)
-	var depth := int(bounty.get(BountyBoard.LEVEL, 0))
-	if depth > 1:
-		details.add_child(wrapped("On level %d land or deeper." % depth, inner, Palette.TEXT_SOFT))
 	if map_view != null and known:
 		var swatches := HBoxContainer.new()
 		swatches.name = LANDS_NAME
@@ -188,7 +195,7 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 			var swatch := map_view.map.tileset.env_icon(env)
 			swatch.tooltip_text = HexTileset.env_name(env)
 			swatches.add_child(swatch)
-		details.add_child(swatches)
+		lines.add_child(swatches)
 	if not note.is_empty():
 		lines.add_child(wrapped(note, inner, Palette.LEAF))
 
@@ -197,10 +204,6 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float,
 	# At the card's foot however tall the card has been stretched.
 	actions.size_flags_vertical = Control.SIZE_EXPAND | Control.SIZE_SHRINK_END
 	lines.add_child(actions)
-	var info := UITheme.button("Info", "SmallButton", "Where it lives")
-	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.pressed.connect(func() -> void: details.visible = not details.visible)
-	actions.add_child(info)
 	return card
 
 
@@ -300,7 +303,7 @@ static func portrait_box(enemy: String, side: int, frame: Texture2D = null) -> P
 	return box
 
 
-## The button row along a card's foot, where the board puts its Accept or its Claim beside Info.
+## The button row along a card's foot, where the board puts its Accept or its Claim.
 static func actions_of(card: PanelContainer) -> HBoxContainer:
 	return card.get_child(0).get_child(-1)
 

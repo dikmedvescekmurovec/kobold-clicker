@@ -7,8 +7,8 @@ extends Control
 ## black -- either with no socket or ring, the sprite alone -- and its card says only "Locked".
 ##
 ## **A found square carries its card as well as an unlocked one** (`write_hint`): a found piece that is
-## locked says so, since an old save's finds must be earned again to drop (the user's ruling), and the
-## achievements page says how. The cost is that `ItemCard` skips its Alt comparison on any square that
+## locked says so, with its name and a vague line in place of what it does, since an old save's finds
+## must be earned again to drop (the user's ruling), and the achievements page says how. The cost is that `ItemCard` skips its Alt comparison on any square that
 ## carries a `hint` -- which is right, because the square is a `specimen`, never the piece in the bag.
 ## Every unique is carried on every ground, so the card names none (the user's, 2026-09-29).
 ##
@@ -156,8 +156,10 @@ static func specimen(id: String) -> Item:
 
 
 ## What the card says beside a unique in the log. With no `specimen` -- one still locked -- only the
-## word "Locked". With one: the piece itself (the log's own), and then "Locked" if it is, or "Not found
-## yet" if it is not `found`: a grey square beside a full card was read as a piece in hand.
+## word "Locked". With a locked one (a find the player must earn again, or an achievement's square under
+## Alt): its name and its `UniqueTable.hint`, never what it would do. With an unlocked one: the piece
+## itself (the log's own), and "Not found yet" if it is not `found`: a grey square beside a full card
+## was read as a piece in hand.
 static func write_hint(rows: VBoxContainer, width: float, specimen: Item = null, unlocked := true,
 		found := true) -> void:
 	# A locked one says so and nothing else: what unlocks it is the achievements page's to say (the
@@ -165,13 +167,20 @@ static func write_hint(rows: VBoxContainer, width: float, specimen: Item = null,
 	if specimen == null:
 		rows.add_child(ItemDetails.line("Locked", Palette.TEXT_SOFT, width))
 		return
-	# `fill` empties the rows it is given, so the piece goes in first. The square itself says whether
-	# it is found, so the card does not: under the piece is only "Locked".
-	ItemDetails.fill(rows, specimen, width, [], Settings.item_details)
-	if not unlocked or not found:
+	# Locked with the piece in hand: what it is about and not what it does -- no stats, no modifiers, no
+	# rule (the user's, 2026-10-07).
+	if not unlocked:
+		rows.add_child(ItemDetails.line(specimen.display_name(), specimen.text_color(), width))
+		rows.add_child(ItemDetails.line(UniqueTable.hint(specimen.unique), Palette.TEXT, width, true))
 		rows.add_child(UITheme.rule())
-		rows.add_child(ItemDetails.line("Locked" if not unlocked else "Not found yet", Palette.TEXT_SOFT,
-				width, true))
+		rows.add_child(ItemDetails.line("Locked", Palette.TEXT_SOFT, width, true))
+		return
+	# `fill` empties the rows it is given, so the piece goes in first. The square itself says whether
+	# it is found, so the card does not.
+	ItemDetails.fill(rows, specimen, width, [], Settings.item_details)
+	if not found:
+		rows.add_child(UITheme.rule())
+		rows.add_child(ItemDetails.line("Not found yet", Palette.TEXT_SOFT, width, true))
 
 
 ## Where the main scene stands the page, in window pixels: empty for the whole window.

@@ -9,7 +9,7 @@ environment so the wall stays the edge, and a few rare accents (tracks, a rock, 
 import math
 import random
 
-from hexlib import BORDER, C, ROW_OFFSET, STEP_X, STEP_Y, CENTER, EDGE_MID, EDGE_NAMES, HEX_PIXELS, in_hex, LATTICE_SHIFTS, Tile, bayer, fbm, light, periodic_noise, ramp_pick, wrap
+from hexlib import BORDER, C, ROW_OFFSET, STEP_X, STEP_Y, CENTER, EDGE_MID, EDGE_NAMES, HEX_PIXELS, in_hex, LATTICE_SHIFTS, SHADE, Tile, bayer, fbm, light, periodic_noise, ramp_pick, wrap
 from stamps import dome, edge_ring, line_pixels, scatter, shadow_set, tuft
 from terrain import hashf
 
@@ -253,22 +253,28 @@ def _seam_seed(edge, inside):
     return WALL_SEED * 100 + edge * 2 + inside
 
 
-def _peaks(edges, variant):
+def _spots(edges, variant):
+    """Where the peaks stand along the band, as (x, y, seed), the neighbours' first ones past each
+    seam included. A spot either side of a seam is seeded by the seam, so both tiles draw it alike."""
     line = _centreline(edges)
     length = sum(math.hypot(q[0] - p[0], q[1] - p[1]) for p, q in zip(line, line[1:]))
     half = PEAK_STEP / 2
     n = max(1, round((length - PEAK_STEP) / PEAK_STEP))
-    spots = [(_along(line, half + i * (length - PEAK_STEP) / n), None) for i in range(n + 1)]
-    spots[0] = (spots[0][0], _seam_seed(edges[0], True))
-    spots[-1] = (spots[-1][0], _seam_seed(edges[1], True))
+    spots = [(*_along(line, half + i * (length - PEAK_STEP) / n), _vseed(WALL_SEED, variant) * 70 + i)
+             for i in range(n + 1)]
+    spots[0] = (*spots[0][:2], _seam_seed(edges[0], True))
+    spots[-1] = (*spots[-1][:2], _seam_seed(edges[1], True))
     for e in edges:                                   # the neighbours' first peaks, past each seam
         m = EDGE_MID[EDGE_NAMES[e]]
         ux, uy = m[0] - CENTER[0], m[1] - CENTER[1]
         k = half / math.hypot(ux, uy)
-        spots.append(((m[0] + ux * k, m[1] + uy * k), _seam_seed(e, False)))
+        spots.append((m[0] + ux * k, m[1] + uy * k, _seam_seed(e, False)))
+    return spots
+
+
+def _peaks(edges, variant):
     out = []
-    for i, ((px, py), seed) in enumerate(spots):
-        seed = seed if seed is not None else _vseed(WALL_SEED, variant) * 70 + i
+    for px, py, seed in _spots(edges, variant):
         rng = random.Random(seed)
         out.append(_shard(px, py, BAND_HALF + rng.uniform(0.0, 3.0), 1.0 + 0.5 * rng.random(), seed, False))
     return out
@@ -306,4 +312,54 @@ def wall_band(edges, variant):
             t.px[y][x] = ramp_pick(0.58 + 1.6 * light(dx, dy), ramp, x, y, band=0.0)
         elif any(at(x - k, y - k) > 0.06 * k + 0.1 for k in range(1, 5)):
             t.px[y][x] = C["ice_lt"]                      # the range's shadow on the snow
+    return t
+
+
+# --------------------------------------------------------------------------- where the wall stood
+# Once a wall falls its ring is land again, and the wall's rubble lies along it: an overlay a ring edge
+# mask and version over the land's own tile, under the roads (the user's pick of six, 2026-10-07).
+ICE_RAMP = [C["abyss"], C["ice_dk"], C["ice"], C["ice"], C["ice_lt"], C["snow"]]
+
+
+def _solid(t, shards):
+    """Ice lying on the land: lit from the top-left like the band, a dark rim on its shaded side and a
+    shadow cast onto the ground."""
+    near = {(x, y) for s in shards for x, y in HEX_PIXELS
+            if abs(x + 0.5 - s[0]) <= s[2] + 2 and abs(y + 0.5 - s[1]) <= s[2] + 2}
+    h = {(x, y): max(_shard_height(s, x, y) for s in shards)
+         for x, y in near | {(x + dx, y + dy) for x, y in near for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))}}
+    shape = {p for p in near if h[p] > 0.04}
+    for x, y in shadow_set(shape, 2, 1):
+        if in_hex(x, y) and not t.px[y][x]:
+            t.px[y][x] = SHADE
+    for x, y in shape:
+        dx, dy = h[(x + 1, y)] - h[(x - 1, y)], h[(x, y + 1)] - h[(x, y - 1)]
+        c = ramp_pick(0.58 + 1.6 * light(dx, dy), ICE_RAMP, x, y, band=0.0)
+        if ((x + 1, y) not in shape or (x, y + 1) not in shape) and ICE_RAMP.index(c) > 1:
+            c = C["ice_dk"]                               # the rim on the shaded side
+        t.px[y][x] = c
+
+
+def _crumb(t, x, y):
+    """A chip of ice lying on the ground."""
+    for (dx, dy), c in (((1, 1), SHADE), ((0, 1), SHADE), ((0, 0), C["ice_lt"]), ((1, 0), C["ice_dk"])):
+        if in_hex(x + dx, y + dy) and (c != SHADE or not t.px[y + dy][x + dx]):
+            t.px[y + dy][x + dx] = c
+
+
+def rubble(edges, variant):
+    """The peaks toppled: a broken line of ice chunks and chips where the ridge stood, with gaps. The
+    chunks lie round the peaks' own spots, so they match across a seam the way the peaks did."""
+    t = Tile(f"ice_rubble_{'_'.join(map(str, edges))}_{variant}", "ice")
+    shards = []
+    for px, py, seed in _spots(edges, variant):
+        rng = random.Random(seed)
+        for _ in range(rng.randint(1, 3)):
+            _crumb(t, round(px + rng.uniform(-8, 8)), round(py + rng.uniform(-6, 6)))
+        if rng.random() < 0.2:
+            continue
+        for i in range(rng.randint(1, 3)):
+            x, y, r = px + rng.uniform(-3, 3), py + rng.uniform(-2.5, 2.5), rng.uniform(3.0, 5.5)
+            shards.append(_shard(x, y, r, r * rng.uniform(0.1, 0.16), seed * 7 + i, False))
+    _solid(t, shards)
     return t

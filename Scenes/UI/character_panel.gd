@@ -53,15 +53,27 @@ const FLASH_TIME := 0.25
 ## The "+n" that rises off the bar's filled end as gems land in it: how far, in panel pixels, and how long.
 const GAIN_RISE := 8.0
 const GAIN_TIME := 0.9
+## The meta a damage figure keeps its colour's flash under, so the next change can cut it short.
+const FLASH_NAME := "flash"
 
 var level := 1
 var xp := 0
+## Drawn the other way round -- the circle on the right, the band and the bar running left from it --
+## for the window's top-right corner (`main_scene._place_character`). The panel's own `scale.x` turns
+## negative, so `position` is then its right edge; the words are turned back to read (`_reads`).
+var mirrored := false:
+	set(on):
+		mirrored = on
+		scale.x = -absf(scale.x) if on else absf(scale.x)
+		if is_inside_tree():
+			_lay_out()
 ## Over the experience bar, carrying its "held / needed" tooltip. The panel takes no mouse, so the
 ## owner parents this under whatever does (the main scene's `_character_button`, which is out of a
 ## fight's way); `_lay_out` keeps its rect, in the owner's pixels, and its text.
 var xp_hover := Control.new()
 
 var _plate: NinePatchRect
+var _portrait: TextureRect
 var _line: HBoxContainer
 var _click_label: Label
 var _second_label: Label
@@ -71,6 +83,9 @@ var _bar: NinePatchRect
 var _fill: Control
 var _flash: Tween
 var _badge_flash: Tween
+## The two figures as last shown, which a change is measured from.
+var _per_click := 0.0
+var _per_second := 0.0
 
 
 func _init() -> void:
@@ -78,9 +93,9 @@ func _init() -> void:
 	theme = UITheme.theme()
 	_plate = _patch(FRAME, STRETCH_AT)
 	add_child(_plate)
-	var portrait := _texture(PORTRAIT)
-	portrait.position = Vector2(PORTRAIT_AT * PIXEL)
-	add_child(portrait)
+	_portrait = _texture(PORTRAIT)
+	_portrait.position = Vector2(PORTRAIT_AT * PIXEL)
+	add_child(_portrait)
 
 	_fill = Control.new()
 	_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -129,12 +144,61 @@ func set_state(new_level: int, new_xp: int) -> void:
 
 
 ## Shows what a click does and what a second of the weapon swinging does, on average -- the character
-## page's two headline numbers (`Encounter.average_blow`, `Encounter.per_second`).
-func set_damage(per_click: float, per_second: float) -> void:
+## page's two headline numbers (`Encounter.average_blow`, `Encounter.per_second`). With `announce`, a
+## number that moved says so (`_announce`): the owner asks for it where gear or skills changed it, not
+## where a fight opening or closing did.
+func set_damage(per_click: float, per_second: float, announce := false) -> void:
+	if announce:
+		_announce(_click_label, _per_click, per_click)
+		_announce(_second_label, _per_second, per_second)
+	_per_click = per_click
+	_per_second = per_second
 	_click_label.text = BigNumber.format(per_click)
 	_second_label.text = BigNumber.format(per_second) + "/s"
 	if is_inside_tree():
 		_lay_out()
+
+
+## A number that moved from `was` to `now`: it flashes green for more or red for less and fades back
+## to bone, and "+n" floats up off it in green or "-n" down off it in red, as experience floats off the
+## bar -- the float not at `Anim.NONE`. Only where the figure written moved: "1.23M" to "1.23M" says nothing.
+func _announce(number: Label, was: float, now: float) -> void:
+	if BigNumber.format(was) == BigNumber.format(now) or not is_inside_tree():
+		return
+	var by := roundf(now) - roundf(was)
+	var colour := Palette.LEAF_LT if by > 0.0 else Palette.BRICK_LT
+	# A second change cuts the first one's flash short, or the two would fight over the colour.
+	if number.has_meta(FLASH_NAME):
+		(number.get_meta(FLASH_NAME) as Tween).kill()
+	number.add_theme_color_override("font_color", colour)
+	var fade := number.create_tween()
+	fade.tween_method(func(at: Color) -> void: number.add_theme_color_override("font_color", at),
+			colour, Palette.BONE, GAIN_TIME).set_ease(Tween.EASE_IN)
+	number.set_meta(FLASH_NAME, fade)
+	if Settings.animations != Settings.Anim.NONE:
+		# Once the line has laid the new figure out, so the float stands over where it is now.
+		_float_change.call_deferred(number, BigNumber.format(by, true), colour, by > 0.0)
+
+
+## "+n" over a number rising, or "-n" under it sinking, fading as it goes.
+func _float_change(number: Label, text: String, colour: Color, up: bool) -> void:
+	if not is_instance_valid(number):
+		return
+	var label := UITheme.label(text, colour, true)
+	label.add_theme_color_override("font_outline_color", Palette.INK)
+	label.add_theme_constant_override("outline_size", 4)
+	add_child(label)
+	var shown := label.get_minimum_size()
+	# Where the number stands in the panel's own pixels, through the line's turn when mirrored.
+	var at := get_global_transform().affine_inverse() * number.get_global_transform() \
+			* Rect2(Vector2.ZERO, number.size)
+	_reads(label, Vector2(at.get_center().x - shown.x / 2.0, at.position.y - shown.y if up else at.end.y).round(),
+			shown.x)
+	var tween := label.create_tween().set_parallel(true)
+	tween.tween_property(label, "position:y", label.position.y + (-GAIN_RISE if up else GAIN_RISE), GAIN_TIME) \
+			.set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "modulate:a", 0.0, GAIN_TIME).set_ease(Tween.EASE_IN)
+	tween.chain().tween_callback(label.queue_free)
 
 
 ## Adds `amount` to what is shown, levelling up as it pays for, and flashes the bar -- and the badge,
@@ -175,7 +239,7 @@ func _float_gain(amount: int) -> void:
 	label.add_theme_constant_override("outline_size", 4)
 	add_child(label)
 	var shown := label.get_minimum_size()
-	label.position = (_fill.position + Vector2(_fill.size.x - shown.x / 2.0, -shown.y)).round()
+	_reads(label, (_fill.position + Vector2(_fill.size.x - shown.x / 2.0, -shown.y)).round(), shown.x)
 	var tween := label.create_tween().set_parallel(true)
 	tween.tween_property(label, "position:y", label.position.y - GAIN_RISE, GAIN_TIME).set_ease(Tween.EASE_OUT)
 	tween.tween_property(label, "modulate:a", 0.0, GAIN_TIME).set_ease(Tween.EASE_IN)
@@ -196,9 +260,12 @@ func shown_pixels() -> int:
 ## Widens the frame and the bar to the damage line and the badge to the level, then fills the bar to
 ## the experience held.
 func _lay_out() -> void:
+	# The kobold faces the same way in either corner, as the words read.
+	_reads(_portrait, Vector2(PORTRAIT_AT * PIXEL), _portrait.size.x)
 	var line := _line.get_combined_minimum_size()
 	# Centred where the name's capitals were, whichever of a mark and a figure is the taller.
-	_line.position.y = roundf(TEXT_AT.y + (_click_label.get_combined_minimum_size().y - line.y) / 2.0)
+	_reads(_line, Vector2(TEXT_AT.x, roundf(TEXT_AT.y + (_click_label.get_combined_minimum_size().y - line.y) / 2.0)),
+			line.x)
 	var stretch := maxi(0, ceili((line.x - TEXT_ROOM) / PIXEL))
 	_plate.size = Vector2(FRAME.get_width() + stretch, FRAME.get_height())
 	_bar.size = Vector2(XP_BAR.get_width() + stretch, XP_BAR.get_height())
@@ -209,15 +276,27 @@ func _lay_out() -> void:
 	var number := _level_label.get_combined_minimum_size()
 	_badge.size = Vector2(maxi(BADGE.get_width(), ceili(number.x / PIXEL) + 2 * BADGE_EDGE + 2), BADGE.get_height())
 	_badge.position = Vector2(roundi(CIRCLE_MIDDLE - _badge.size.x / 2.0), FRAME.get_height() - BADGE.get_height()) * PIXEL
-	_level_label.position = (_badge.position + (_badge.size * PIXEL - number) / 2.0).round()
+	_reads(_level_label, (_badge.position + (_badge.size * PIXEL - number) / 2.0).round(), number.x)
 	var pixels := roundi(clampf(float(xp) / PlayerLevel.xp_to_next(level), 0.0, 1.0) * _bar.size.x)
 	if xp > 0:
 		pixels = maxi(pixels, 1)
 	_fill.size = Vector2(pixels, _bar.size.y) * PIXEL
-	xp_hover.position = Vector2(XP_AT * PIXEL) * scale
-	xp_hover.size = _bar.size * PIXEL * scale
+	# In the owner's pixels, which are never turned round: mirrored, the bar is measured from the right.
+	var bar := Rect2(Vector2(XP_AT * PIXEL), _bar.size * PIXEL)
+	if mirrored:
+		bar.position.x = size.x - bar.end.x
+	xp_hover.position = bar.position * scale.abs()
+	xp_hover.size = bar.size * scale.abs()
 	xp_hover.tooltip_text = "%s / %s XP" % [BigNumber.format(float(xp)),
 			BigNumber.format(float(PlayerLevel.xp_to_next(level)))]
+
+
+## Puts words `at` (where their left edge stands unmirrored), `width` wide. Mirrored, they are turned
+## back about themselves and moved over by their width, so they read the right way round in the place
+## the mirror puts them.
+func _reads(words: Control, at: Vector2, width: float) -> void:
+	words.scale.x = -1.0 if mirrored else 1.0
+	words.position = at + Vector2(width if mirrored else 0.0, 0.0)
 
 
 ## A mark and its figure, added to the line; returns the figure's Label.

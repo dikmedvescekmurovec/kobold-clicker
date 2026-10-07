@@ -14,7 +14,7 @@ func _run() -> void:
 	_check(_test_controls(theme) == true, "live control tests ran to the end")
 	_check(_test_orb_tray() == true, "orb tray tests ran to the end")
 	_check(_test_health_bar() == true, "health bar tests ran to the end")
-	_check(_test_character_panel() == true, "character panel tests ran to the end")
+	_check(await _test_character_panel() == true, "character panel tests ran to the end")
 	_check(await _test_item_card() == true, "item card tests ran to the end")
 	_check(_test_cursors() == true, "cursor tests ran to the end")
 	_check(_test_tip_card() == true, "tip card tests ran to the end")
@@ -394,7 +394,10 @@ func _test_item_card() -> bool:
 	Cursors.hold(OrbTable.icon("Orb of Chaos"))
 	_check(card.hovered(Vector2(110, 110), true) == seen and card.hovered(Vector2(110, 110), false) == seen,
 			"but a press with an orb in the hand keeps it")
+	# Spending the last orb puts it down mid-press.
 	Cursors.hold(null)
+	_check(card.hovered(Vector2(110, 110), true) == seen and card.hovered(Vector2(110, 110), false) == seen,
+			"and so does the press that spent the last one")
 	_check(card.theme_type_variation == "TextPanel" and card.mouse_filter == Control.MOUSE_FILTER_IGNORE,
 			"it is a cream panel that never takes a press")
 	# The second card, under Alt: what is worn where the hovered piece would go.
@@ -639,8 +642,41 @@ func _test_character_panel() -> bool:
 	_check(widest > plain.x and 8 + widest + 4 <= column,
 			"the widest panel ends at %d, the fight's column starts at %d" % [8 + widest, column])
 	_check(panel.mouse_filter == Control.MOUSE_FILTER_IGNORE, "the panel never takes the mouse")
+	# A figure that moved, announced: "+n" in green over it, "-n" in red under it, and the figure lit in
+	# that colour. Set without announcing, or to what it already writes, it says nothing.
+	var floats := func() -> Array: return panel.get_children().filter(_is_damage_float)
+	panel.set_damage(10.0, 20.0)
+	panel.set_damage(12.0, 20.4, true)
+	_check(panel._click_label.get_theme_color("font_color") == Palette.LEAF_LT
+			and panel._second_label.get_theme_color("font_color") == Palette.BONE,
+			"the grown figure is lit green")
+	await process_frame
+	var said: Array = floats.call()
+	_check(said.size() == 1 and said[0].text == "+2"
+			and said[0].get_theme_color("font_color") == Palette.LEAF_LT,
+			"floating +2 in green, and the second that did not visibly move says nothing (%s)"
+			% str(said.map(func(l: Label) -> String: return l.text)))
+	var number: Rect2 = panel.get_global_transform().affine_inverse() * panel._click_label.get_global_transform() \
+			* Rect2(Vector2.ZERO, panel._click_label.size)
+	_check(said[0].position.y + said[0].size.y <= number.position.y + 1.0, "a gain rises from over the figure")
+	panel.set_damage(9.0, 20.0, true)
+	_check(panel._click_label.get_theme_color("font_color") == Palette.BRICK_LT, "a shrunk one red")
+	await process_frame
+	var fell: Array = floats.call().filter(func(l: Label) -> bool: return l.text == "-3")
+	_check(fell.size() == 1 and fell[0].get_theme_color("font_color") == Palette.BRICK_LT
+			and fell[0].position.y >= number.end.y - 1.0, "a loss floats -3 in red from under it")
+	var before: int = floats.call().size()
+	panel.set_damage(50.0, 50.0)
+	await process_frame
+	_check(floats.call().size() == before, "a figure set without announcing floats nothing")
 	panel.queue_free()
 	return true
+
+
+## A "+n" or "-n" floated off a damage figure, not the one experience floated off the bar.
+func _is_damage_float(child: Node) -> bool:
+	return child is Label and (child.text.begins_with("+") or child.text.begins_with("-")) \
+			and child.text != "+%d" % PlayerLevel.xp_to_next(1)
 
 
 ## Every live button that joins the tree points; one that chose a cursor keeps it, a dead one keeps

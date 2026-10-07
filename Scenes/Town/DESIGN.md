@@ -191,10 +191,10 @@ lines under it, and Info beside Accept along the foot. The first cut wrote every
 reward, level, swatches, nearest -- and three of those was a column of text nobody's eye landed on.
 The picture is `EnemyRoster.portrait`, the first idle frame cut to its own pixels rather than to
 `bounds`, which is the union of every animation and leaves a creature with a long swing small in its
-own frame. Where the monster lives is still the point of a board, so it is one press away behind
-**Info** rather than gone, and the journal -- which is opened for exactly that -- starts with it open.
-Claim lost its figure because it now shares a row with Info and a reward grows without limit; the
-figure is on the card above it.
+own frame. Where the monster lives is still the point of a board: it once sat one press away behind an
+**Info** button (open from the start on the journal), and since 2026-10-07 it is always shown on both
+and Info is gone (the user's call). Claim has no figure because a reward grows without limit and a
+small button has no room for it; the figure is on the card above it.
 
 **A dead button says why in its tooltip and nowhere else.** Buy, Restock, Upgrade and Lock each used
 to put their refusal under themselves in rust ("Your purse is short."). The user took the lines out:
@@ -220,7 +220,7 @@ The town page takes the **right edge, in the tile panel's place**: the player is
 
 That gives three panels in a 1152 px window at `ui_scale` 2, which is 576 panel pixels, and they do not all fit at their natural widths. In order of what gives way:
 
-1. **The doll goes first -- except at the smith.** With no piece open the character sheet is the pack's silhouette and its eight sockets, which answers "what am I wearing" -- a question nobody is asking while emptying a bag over a counter, so shop mode hides it. At the smith it is asked, because he works on a worn piece and the doll is the only way to hand him one: there the figure stays, and it fits, his page being no wider than a vendor's.
+1. **The doll stays -- at every counter since 2026-10-07.** It went first at first: "what am I wearing" seemed a question nobody asked while emptying a bag over a counter, so shop mode hid it everywhere but at the smith, who works on a worn piece and takes it off the doll. The user asked for it at every vendor: what is worn is what a shelf piece and a sale are weighed against. It fits beside every counter, each page being the smith's width (the fortuneteller's answers stand over the middle, as they did over his doll); held upright the counter gives it its height, as it did at the smith, and the caret folds it away where that leaves too little.
 2. **The comparison narrowed, and never went -- until 2026-09-22, when it went altogether.** It was the one thing on that side of the screen that answered the shop's own question -- is this worth more than what I have on? -- at `SHOP_WORN_WIDTH` (146), what was left after the bag, `WORN_GAP` and the town page's 160, with a long modifier wrapping to three lines on one side and one on the other. The user then asked for the worn piece only under Alt: the hover card's second card says it for a shelf piece as for any square, at the card's own width, and nothing on the bag's side is narrowed for it any more.
 3. **The bag's grid never moves.** Four squares across (`BagPage.GRID_COLS`) is what the bag is.
 
@@ -300,7 +300,7 @@ The user said they did not like how the town page looked and, shown a list of wh
 - **Orbs on the shelf are item-sized** (`OrbSlot` `side`), the icon at its own 32. The tray keeps 24: that width is the bag's arithmetic, and it has none of the shelf's room.
 - **"Buy" is gone; sub-headings are small.** A vendor's tab only ever sells, and the counter's name is already the heading, so Trade up and her two halves are a small word on a rule (`_section`, since 2026-09-25 `UITheme.section`).
 - **Tabs are folder tabs.** A green mark alone was a colour change on twelve pixels. The first pass put the open one on a tan square, and the user asked for them to "look like tabs": shut ones stand lower and washed in tan on a line, and the open one stands taller in the page's own cream with the line broken under it, so the counter reads as its page.
-- **The smith shows the piece.** His page was a name and two buttons over a blank column; the square and its `ItemDetails` block fill it, and what a blow changes is watched where it changes. The level line reads "Level 3 → 4 of 5 / Break 5%": the old "Level 6 of 6" read as though the piece were already at its cap.
+- **The smith shows the piece.** His page was a name and two buttons over a blank column; the square and its `ItemDetails` block fill it, and what a blow changes is watched where it changes. *(2026-10-07, the user: with a piece open the square and the smith are gone and the block is written whole, base stats too; Upgrade and Lock are the small faces, one over the other -- side by side they stretched the page past `BODY_WIDTH`.)* The level line reads "Level 3 → 4 of 5 / Break 5%": the old "Level 6 of 6" read as though the piece were already at its cap.
 - **Green is the one press a counter is for** (Buy, Accept, Claim, Upgrade), the pack's own green lettered in ink. This was item 1 of the 2026-09-22 look-and-feel list and is still limited to the town: the bag's Equip and the fight verdict's Collect are the obvious next candidates, and that is for the user to decide.
 - **A bounty card puts the picture beside what it pays.** Stacked (picture, name, gold, goods, buttons), the board fitted one and a half postings to a window. Its buttons are the small faces (`UITheme.SMALL_BUTTONS`, the user's ask): at Pixellari 16, Info and Accept outweighed the posting they act on.
 - **More air** (the user: "give the panels a bit more room to breathe"): `ROW_GAP` and `STOCK_GAP` 4 to 8, a card's pad 4 to 6 and its lines 2 to 4. The width this costs (`BODY_WIDTH` 140 to 148) comes out of the gap between the smith's doll and the page, which was about 45 panel pixels.

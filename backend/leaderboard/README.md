@@ -578,13 +578,16 @@ Cheating is §4.
 
 ## 16. Customising it
 
+The web build is served from another origin (`../web`, by `tools/web.py`), so every JSON reply carries
+`Access-Control-Allow-Origin: *` and an `OPTIONS` preflight is answered before the rate limiter. Any
+origin is safe: sessions are bearer tokens, never cookies.
+
 | You want | Change |
 |---|---|
 | Apple sign-in (for iOS) | Needs the Apple Developer Program ($99/yr). Add an `apple` entry to `PROVIDERS` in `src/index.js`. Apple's client secret is a signed JWT (ES256, made from its key) rather than a string, and it answers with `id_token` instead of a user endpoint. Add the route to the regex, a button appears |
 | Link Google and Discord into one account | A signed-in `POST /logins` that attaches the new identity to the caller's player instead of finding or making one |
 | Rename from the game | `PUT /me/name` already renames. The leaderboard page only asks while there is no name |
 | Replay descents on a server | Headless Godot in a container (level 3). Out of reach of Workers |
-| A web build | Add CORS headers (`Access-Control-Allow-Origin`, and an `OPTIONS` answer for `Authorization`) to `json()`. Sign-in already works in a browser tab |
 | Keep more revisions | `KEEP_REVISIONS` |
 | Seasons | A `season` on `saves` or a `scores` table, and `?season=` on `/leaderboard` |
 

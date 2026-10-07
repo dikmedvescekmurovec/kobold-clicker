@@ -50,6 +50,9 @@ var blend_layers: Dictionary[String, TileMapLayer] = {}
 @onready var ground_layer: TileMapLayer = $GroundLayer
 @onready var road_layer: TileMapLayer = $RoadLayer
 @onready var highlight: HexHighlight = $Highlight
+## The rubble of the walls that have fallen, over the blends and under the roads and the fog: it is the
+## land's, and a road runs through it.
+var rubble_layer: TileMapLayer
 
 ## Marker for the player's tile, and the grey veil over tiles that aren't charted yet. Both are created
 ## here, so the scene file stays untouched while the editor has it open.
@@ -91,6 +94,11 @@ func _ready() -> void:
 		add_child(layer)
 		move_child(layer, road_layer.get_index())
 		blend_layers[env] = layer
+	rubble_layer = TileMapLayer.new()
+	rubble_layer.name = "Rubble"
+	rubble_layer.tile_set = tileset.tile_set
+	add_child(rubble_layer)
+	move_child(rubble_layer, road_layer.get_index())
 	highlight.setup(self)
 	# The dark under everything, where nothing is drawn yet: drifting cloud, far wider than any map.
 	var backdrop := Polygon2D.new()
@@ -186,6 +194,14 @@ func set_road(cell: Vector2i, tile_name: String) -> void:
 		road_layer.set_cell(cell, HexTileset.SOURCE_ID, tileset.atlas_coords(tile_name))
 
 
+## Lays a fallen wall's rubble on `cell`, along its ring: `mask` is its two neighbours on the ring
+## (`HexGrid.edge_mask`). Which version is fixed by the cell, so the same rubble lies there every load.
+@warning_ignore("integer_division")
+func set_rubble(cell: Vector2i, mask: int) -> void:
+	var version := posmod((cell.x * 73856093) ^ (cell.y * 19349663), HexTileset.RUBBLE_VERSIONS)
+	rubble_layer.set_cell(cell, HexTileset.RUBBLE_ID, Vector2i(mask % 8 + 8 * version, mask / 8))
+
+
 ## Draws a settlement's buildings on `cell` (its tile name, e.g. "town_grass_small"), full colour once
 ## charted and dimmed before. Called again for the same cell, it only changes that.
 func set_town(cell: Vector2i, tile_name: String, charted: bool) -> void:
@@ -256,6 +272,7 @@ func set_player_cell(cell: Vector2i) -> void:
 func clear_map() -> void:
 	ground_layer.clear()
 	road_layer.clear()
+	rubble_layer.clear()
 	for layer: TileMapLayer in blend_layers.values():
 		layer.clear()
 	hovered_cell = NO_CELL

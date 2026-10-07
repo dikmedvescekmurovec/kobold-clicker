@@ -106,8 +106,10 @@ static func sound(stream: AudioStream, pitch := 1.0) -> void:
 
 ## Several takes of one sound as one stream, a different take each play -- `AudioStreamRandomizer`
 ## never plays the same one twice running -- so a sound heard every kill does not wear a groove.
-static func takes(streams: Array) -> AudioStreamRandomizer:
+## `pitch` is the most a play is pitched up or down by (1.0: never).
+static func takes(streams: Array, pitch := 1.0) -> AudioStreamRandomizer:
 	var pool := AudioStreamRandomizer.new()
+	pool.random_pitch = pitch
 	for stream: AudioStream in streams:
 		pool.add_stream(-1, stream)
 	return pool

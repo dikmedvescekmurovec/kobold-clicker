@@ -53,6 +53,8 @@ const BOOK_ICON := "res://Assets/UI/ui_icon_book.png"
 const PODIUM_ICON := "res://Assets/UI/ui_icon_podium.png"
 ## The heirlooms'. A stand-in from the pack until they have a mark of their own.
 const CROWN_ICON := "res://Assets/UI/ui_icon_crown.png"
+## The red pip over a corner button's top-right corner while its page has something new (`_mark_new`).
+const NEW_PIP := "res://Assets/UI/ui_pip_new.png"
 ## The corner's keys -> the button each presses (`_unhandled_input`), whose tip card shows the key's
 ## picture (`TipCard.KEY`). Letters only, and none the item card answers to (Shift, Ctrl, Alt).
 const HOTKEYS := {
@@ -62,6 +64,8 @@ const HOTKEYS := {
 }
 ## The air between one and the next, in panel pixels.
 const CORNER_GAP := 4.0
+## How far the character panel stands in from the window's corner, in window pixels.
+const CHARACTER_EDGE := Vector2(8, 8)
 ## The panel that stands in for the map when its save cannot be read: how wide it is allowed to be
 ## in panel pixels, and the air it keeps either side of it on a window too narrow for that.
 const REFUSAL_WIDTH := 300.0
@@ -211,8 +215,11 @@ var _heirloom_button: Button
 ## The card beside the square under the cursor. Kept so its Alt comparison can follow the doll of
 ## whichever bag page is up.
 var _item_card: ItemCard
-## The player in the top-left corner, over the map and over a fight alike.
+## The player in the top-left corner, over the map and over a fight alike -- or mirrored in the
+## top-right while a bag page is up (`_place_character`).
 var _character: CharacterPanel
+## The side the panel last slid in on, so it slides only when it changes (`_slide_character`).
+var _character_slid_right := false
 ## The banner under the fight's column, while one is up; null otherwise: a unique the log has never
 ## held, or a bounty filled. `_banner_head` is the row its heading sits in, the X at its end.
 var _banner: Control
@@ -287,9 +294,10 @@ const TIPS := [
 	["first_sense", HERO, [
 		"Ugh. Something evil woke up out there. I can feel it pulling at my scales.",
 	], "player"],
-	["first_bounty", HERO, [
-		"Someone wants a thing dead, and they're paying. My favourite kind of notice.",
-	], "player"],
+	["first_accept", "Blacksmith", [
+		"Took one on, did you. Good.",
+		"Clear the whole board and there's something extra in it for you. My own work.",
+	], "blacksmith"],
 	["first_fortune", "Fortuneteller", [
 		"You'll want the chest. They always want the chest.",
 		"Then you'll want it again and again and again. And it'll cost you twice as much every time, and you'll look at me like I did something.",
@@ -330,6 +338,8 @@ var _ambient: Ambient
 var _chest_pointer: MapPointer
 ## The badge pointing at the hero once they are off screen; a press brings the camera back (`_find_hero`).
 var _hero_pointer: MapPointer
+## The camera's glide under way (`_glide_camera`), if any.
+var _camera_glide: Tween
 ## The red light at the map's edge the way this world's Gollux cave lies, until it is seen.
 var _cave_sense: CaveSense
 ## The fortuneteller's aimed spell while its land is being chosen: which one it is ("" when nobody is
@@ -462,14 +472,15 @@ func _ready() -> void:
 		save = null
 	var used_world_seed := world_seed if world_seed != 0 else (save.world_seed if save else randi())
 	var used_map_seed := map_seed if map_seed != 0 else (save.map_seed if save else randi())
+	# What the Ring of Walls asks of the map, said before anything is drawn, charted or paid: a saved map
+	# draws the rubble of the walls that fell, which stood every `step` rings.
+	var step := MapBuilder.RING_OF_WALLS_STEP if Curses.RING_OF_WALLS in inventory.curses else MapBuilder.WALL_STEP
 	if save != null:
-		view = MapBuilder.restore(map, TownWorld.from_dict(save.towns), save)
+		view = MapBuilder.restore(map, TownWorld.from_dict(save.towns), save, step)
 	else:
 		view = MapBuilder.create(map, TownWorld.generate(used_world_seed, map_origin), map_origin, used_map_seed)
+	view.wall_step = step
 	towns = view.towns
-	# What two of the world's curses ask of the map, said before anything is charted or paid.
-	if Curses.RING_OF_WALLS in inventory.curses:
-		view.wall_step = MapBuilder.RING_OF_WALLS_STEP
 	_settle_homeland()
 	print("%s world seed %d (%d towns), map seed %d, first town at cell %s" % [
 			"Loaded" if save else "New", used_world_seed, towns.towns().size(), used_map_seed,
@@ -771,9 +782,51 @@ func _build_character() -> void:
 	add_child(layer)
 	_character = CharacterPanel.new()
 	_character.scale = Vector2(ui_scale, ui_scale)
-	_character.position = Vector2(8, 8)
+	_character.position = CHARACTER_EDGE
 	layer.add_child(_character)
 	_sync_character()
+
+
+## Whether the character panel has the top-right corner: a bag page is up across a wide window, out of
+## a town, and the panel stands mirrored on the other side of it, so it stays in view.
+func _character_right() -> bool:
+	return _left_page() is BagPage and not town_page.visible and not _narrow()
+
+
+## The character panel in its corner -- the top-left, or mirrored in the top-right (`_character_right`),
+## there under a fight's Terminate flag -- shown unless a page covers it or the black screen is up, with
+## the see-through button over it and a fight's gems flying to it. Run by `_layout_ui` and `_show_corner`.
+func _place_character() -> void:
+	var right := _character_right()
+	var safe := UITheme.safe_rect(get_viewport())
+	_character.mirrored = right
+	_character.position = safe.position + CHARACTER_EDGE
+	if right:
+		# Mirrored, the panel's position is its right edge.
+		_character.position.x = safe.end.x - CHARACTER_EDGE.x
+		if _combat != null:
+			_character.position.y = _combat.corner_bottom() + CombatScene.HUD_MARGIN
+	_character.visible = _transcend_page == null and (right or _left_page() == null)
+	var drawn := _character.get_transform() * Rect2(Vector2.ZERO, _character.size)
+	_character_button.position = drawn.position
+	_character_button.size = drawn.size
+	if _combat != null:
+		_combat.xp_target = _character.xp_point()
+	_slide_character.call_deferred()
+
+
+## Once a frame, after every placing in it: a panel that came out on the other side slides in from that
+## side's edge. Settled at the frame's end, so a page closed on the way to another bag page -- which puts
+## the panel back on the left for a moment -- does not slide it in twice.
+func _slide_character() -> void:
+	if _character.mirrored == _character_slid_right:
+		return
+	_character_slid_right = _character.mirrored
+	if not _character.visible:
+		return
+	var drawn := _character.get_transform() * Rect2(Vector2.ZERO, _character.size)
+	var away := get_viewport_rect().size.x - drawn.position.x if _character.mirrored else -drawn.end.x
+	Juice.glide(_character, _character.position + Vector2(away, 0.0))
 
 
 ## Puts the panel back in step with the inventory: gems still in the air when a fight closed never arrive.
@@ -784,11 +837,13 @@ func _sync_character() -> void:
 
 ## The panel's damage line: a click and a second, as the character page heads itself. Over a fight
 ## they are that fight's, so a tile's modifiers and the curses are in them; anywhere else, a fight armed
-## the way one would be.
-func _show_damage() -> void:
+## the way one would be. `announce` has a figure that moved say so (`CharacterPanel.set_damage`): after
+## a save, which is where gear, skills and crafting land -- never as a fight opens or closes, whose
+## tile is what moved them.
+func _show_damage(announce := false) -> void:
 	var fight: Encounter = _combat.fight if _combat != null and _combat.fight != null \
 			else CharacterPage.armed(inventory, inventory.stats())
-	_character.set_damage(fight.average_blow(false), fight.per_second())
+	_character.set_damage(fight.average_blow(false), fight.per_second(), announce)
 
 
 ## Whether `cell` is this world's cave, as far as the player can tell: seen, and not under the ice.
@@ -825,6 +880,17 @@ func _build_pages(layer: CanvasLayer) -> void:
 	_heirloom_button = UITheme.icon_button(load(CROWN_ICON), "Heirlooms", ui_scale)
 	_heirloom_button.pressed.connect(_on_heirlooms_pressed)
 	layer.add_child(_heirloom_button)
+	# Every corner button gets one, hidden: `_mark_new` says which pages have something new.
+	for button in _corner_buttons():
+		var pip := TextureRect.new()
+		pip.name = "New"
+		pip.texture = load(NEW_PIP)
+		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pip.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		pip.offset_left = -6.0
+		pip.offset_top = -2.0
+		pip.hide()
+		button.add_child(pip)
 	_character_button = Button.new()
 	_character_button.focus_mode = Control.FOCUS_NONE
 	for state: String in ["normal", "hover", "pressed", "disabled"]:
@@ -853,7 +919,9 @@ func _build_pages(layer: CanvasLayer) -> void:
 	# And so is where a piece put on, taken off or crafted in the bag mid-fight reaches the fight.
 	inventory.save_written.connect(_rearm, CONNECT_DEFERRED)
 	# And the character panel's damage line, after the fight it may read is armed again.
-	inventory.save_written.connect(_show_damage, CONNECT_DEFERRED)
+	inventory.save_written.connect(_show_damage.bind(true), CONNECT_DEFERRED)
+	# And the corner buttons' red pips: a find looked at, a rank bought, a bounty claimed all save.
+	inventory.save_written.connect(_mark_new, CONNECT_DEFERRED)
 	skills_page = SkillsPage.new(inventory, inventory_path, ui_scale)
 	skills_page.changed.connect(func() -> void: _pulse(_skills_button, "skill_point", _skill_point_free()))
 	bag_page = BagPage.new(inventory, inventory_path, ui_scale)
@@ -892,12 +960,14 @@ func _build_pages(layer: CanvasLayer) -> void:
 	town_page.xp_claimed.connect(_on_xp_absorbed)
 	town_page.bounty_paid.connect(_show_bounty_paid)
 	town_page.choice_asked.connect(_show_board_choice)
+	town_page.bounty_accepted.connect(_check_tips)
 	# A bounty's piece is announced as a body's would be: only a unique the log has never held.
 	town_page.item_claimed.connect(func(item: Item) -> void:
 		if _is_new_unique(item):
 			_announce_unique(item))
 	# A bounty given up on the journal frees the board standing open on the other edge.
 	bounty_page.abandoned.connect(town_page.redraw)
+	bounty_page.town_shown.connect(_show_town)
 	# What the counter does goes straight to the bag: a purchase reaches the purse and the grid by the
 	# same redraw (`offer`; the bag draws nothing of the shelf piece itself). Back the other
 	# way, the counter redraws around whatever the bag has open, so a piece sold to make room unlocks
@@ -1038,7 +1108,9 @@ func _announce_bounty(enemy: String, tier: EnemyRoster.Tier, have: int, need: in
 ## column, up for a moment and gone. An elite's or a boss's stands taller, framed, its count large.
 ## The latest wins -- a run's bodies can fall faster than the toast fades -- and a level of NONE shows
 ## none, as the level-up's words are: the journal carries the count.
-func _toast_bounty(enemy: String, tier: EnemyRoster.Tier) -> void:
+## `too_low` is the level a posting wants when this body fell on shallower land and did not count: the
+## toast says so in brick in place of the "+1".
+func _toast_bounty(enemy: String, tier: EnemyRoster.Tier, too_low := 0) -> void:
 	if Settings.animations == Settings.Anim.NONE:
 		return
 	if _toast != null:
@@ -1054,13 +1126,21 @@ func _toast_bounty(enemy: String, tier: EnemyRoster.Tier) -> void:
 	panel.add_child(row)
 	var big := tier != EnemyRoster.Tier.COMMON
 	row.add_child(_bounty_face(enemy, tier, big))
-	if big:
-		row.add_child(_tier_mark(tier))
-	var count := UITheme.label("+1", _bounty_colour(tier))
-	if big:
-		count.add_theme_font_size_override("font_size", CombatScene.BOSS_FONT)
-	count.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(count)
+	if too_low > 0:
+		var words := UITheme.vbox(0)
+		words.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		words.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		words.add_child(UITheme.label("Level too low", Palette.BRICK))
+		words.add_child(UITheme.label("Needs level %d or higher" % too_low, Palette.TEXT_SOFT, true))
+		row.add_child(words)
+	else:
+		if big:
+			row.add_child(_tier_mark(tier))
+		var count := UITheme.label("+1", _bounty_colour(tier))
+		if big:
+			count.add_theme_font_size_override("font_size", CombatScene.BOSS_FONT)
+		count.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(count)
 	_character.get_parent().add_child(panel)
 	_toast = panel
 	_place_toast()
@@ -1506,12 +1586,12 @@ func _show_mods(cell: Vector2i) -> void:
 ## left-hand pages lay themselves out against the other edge. Held upright, every page stands over the
 ## corner row, one at a time -- but a town, whose page stands over the bag.
 func _layout_ui() -> void:
-	_character.position = UITheme.safe_rect(get_viewport()).position + Vector2(8, 8)
+	_place_character()
 	var room := _pages_room()
 	var left := room
 	town_page.area = room
 	if _narrow() and _town_cell != HexMap.NO_CELL:
-		# The counter gives up what the bag under it needs -- the doll too, at the smith -- but keeps what
+		# The counter gives up what the bag under it needs -- the doll too -- but keeps what
 		# its own tabs and buttons need.
 		var top := floorf(minf(room.size.y * TOWN_SPLIT, room.size.y - _counter_page().least_height()))
 		top = maxf(top, (town_page.get_child(0) as Control).get_combined_minimum_size().y * ui_scale
@@ -1531,11 +1611,8 @@ func _layout_ui() -> void:
 	character_page.layout()
 	leaderboard_page.layout()
 	town_page.layout()
-	_character_button.position = _character.position
-	_character_button.size = _character.size * ui_scale
 	_place_corner()
 	if _combat != null:
-		_combat.xp_target = _character.xp_point()
 		_combat.hud_top = _fight_top()
 
 
@@ -1584,8 +1661,11 @@ func _on_map_dragged(relative: Vector2) -> void:
 
 
 ## The wheel: one whole step of zoom, about the point under the cursor so it stays put on screen.
+## Never in a town: the map behind its pages stays as it was.
 func _zoom_at(screen_point: Vector2, step: float) -> void:
-	var to := clampf(camera.zoom.x + step, ZOOM_MIN, ZOOM_MOST * ui_scale)
+	if town_page.visible:
+		return
+	var to :=clampf(camera.zoom.x + step, ZOOM_MIN, ZOOM_MOST * ui_scale)
 	if to == camera.zoom.x:
 		return
 	var from_middle := screen_point - get_viewport().get_visible_rect().size / 2.0
@@ -1769,6 +1849,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# and the boards want the monster's name, not a drop.
 	fight.enemy_died.connect(_on_enemy_died)
 	ledger.bounty_counted.connect(_on_bounty_counted)
+	ledger.bounty_too_low.connect(_on_bounty_too_low)
 	_combat = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 	_combat.finished.connect(_on_combat_finished.bind(cell))
 	_combat.retry.connect(_on_combat_retry.bind(cell))
@@ -1804,8 +1885,8 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# Before the panel is hidden: leaving a town brings the tile panel back, which a fight then takes away.
 	_close_town()
 	_panel.hide()
-	# Every button but the bag's and the settings' goes, not just covered: a Control takes the mouse
-	# before the fight sees it, so one left in that corner would quietly eat the player's swings.
+	# The pages go and the corner buttons stay (`_show_corner`); the tile panel and the character
+	# button do not, since a Control takes the mouse before the fight sees it.
 	_close_left_pages()
 	_show_corner(false)
 	_character.show()
@@ -2124,17 +2205,33 @@ func _map_room() -> Rect2:
 
 ## The hero's badge pressed: the camera back over them, in the middle of the map the panels leave.
 func _find_hero() -> void:
+	_centre_on(view.player_cell)
+
+
+## The journal's "Claim at": the town that posted a finished bounty chosen, which puts the page away
+## and its tile panel up (`_on_tile_clicked`), and brought into the middle of the map that leaves.
+func _show_town(spot: Vector2i) -> void:
+	var cell := spot - view.origin
+	map.select_cell(cell)
+	_centre_on(cell)
+
+
+## The camera glided over `cell`, in the middle of the map the panels leave.
+func _centre_on(cell: Vector2i) -> void:
 	var off_middle := _map_room().get_center() - get_viewport().get_visible_rect().size / 2.0
-	_glide_camera(_clamp_to_map(map.ground_layer.map_to_local(view.player_cell) - off_middle / camera.zoom.x))
+	_glide_camera(_clamp_to_map(map.ground_layer.map_to_local(cell) - off_middle / camera.zoom.x))
 
 
-## The camera moved `to` over `CAMERA_LIFT`, or at once with animations off.
+## The camera moved `to` over `CAMERA_LIFT`, or at once with animations off. A new glide takes over
+## from one still under way, so two never pull the camera at once.
 func _glide_camera(to: Vector2) -> void:
+	if _camera_glide != null:
+		_camera_glide.kill()
 	if Settings.animations == Settings.Anim.NONE:
 		camera.position = to
 	else:
-		var tween := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-		tween.tween_property(camera, "position", to, CAMERA_LIFT)
+		_camera_glide = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		_camera_glide.tween_property(camera, "position", to, CAMERA_LIFT)
 
 
 ## Where a fight's top-centre column stands, in window pixels: at the top of the safe part of the
@@ -2241,6 +2338,11 @@ func _on_bounty_counted(enemy: String, have: int, need: int) -> void:
 		_toast_bounty(enemy, tier)
 
 
+## The bounty's monster killed on land too shallow for its posting: the toast says so, in brick.
+func _on_bounty_too_low(enemy: String, level: int) -> void:
+	_toast_bounty(enemy, EnemyRoster.tier_of(enemy), level)
+
+
 ## The square buttons in a column, the ones there are closed up: what you carry (the bag, then the
 ## heirlooms), what you are, what you have promised to do, then the settings and the log. Under the character panel on the map; beside whichever page is
 ## up -- which has that panel's corner -- so one press goes from page to page without an X between.
@@ -2257,11 +2359,12 @@ func _place_corner() -> void:
 		# Every page's own panel is its first child, against the left edge; the bag runs on past its.
 		# The bag's sheet is centred down the window, and a column at the window's top beside it
 		# belonged to nothing: it starts where the sheet does, or under the caret that brings it back.
+		# From the top-left corner, wherever the character panel has gone (`_place_character`).
+		var top := UITheme.safe_rect(get_viewport()).position.y + CHARACTER_EDGE.y
 		var panel: Control = page.get_child(0)
 		var bag := page as BagPage
-		at = (bag.column_origin(CORNER_GAP, _character.position.y) if bag != null
-				else Vector2(panel.position.x + (panel.size.x + CORNER_GAP) * ui_scale,
-						_character.position.y))
+		at = (bag.column_origin(CORNER_GAP, top) if bag != null
+				else Vector2(panel.position.x + (panel.size.x + CORNER_GAP) * ui_scale, top))
 	var step := (_bag_button.get_combined_minimum_size().y + CORNER_GAP) * ui_scale
 	for button in _corner_buttons():
 		if button.visible:
@@ -2302,25 +2405,31 @@ func _move_corner(button: Button, at: Vector2) -> void:
 ## Every corner button at once. They come and go together because what takes them away is never
 ## about one of them: a fight that must see every click, or a town, whose three panels leave the
 ## window no room. A page does not -- they stand beside it (`_place_corner`) -- but it does cover the
-## character panel, and the see-through button over that goes with it. **A fight leaves the bag's and
-## the settings'** until its verdict (`_fight_up`): both open over every fight (the user's, 2026-10-02, 2026-10-03).
+## character panel, unless it is a bag page that sends the panel to the other corner (`_place_character`,
+## run first), and the see-through button over the panel goes where it goes. **A fight leaves every one
+## of them** until its verdict (`_fight_up`): each page opens over a farm or a chart as on the map (the
+## user's, 2026-10-02, 2026-10-03, 2026-10-07).
 func _show_corner(shown: bool) -> void:
+	_place_character()
 	shown = shown and _combat == null
+	# A fight never stands in a town, so `buttons` is `shown` past the town's line as well.
+	var buttons := shown or _fight_up()
 	# The one button a town leaves standing, because it is the only way to hold an heirloom up to a
 	# smith, a fortuneteller or a held orb: there it swaps the bag and the heirlooms at the counter.
-	_heirloom_button.visible = shown and (inventory.stash().total() > 0
+	_heirloom_button.visible = buttons and (inventory.stash().total() > 0
 			or not inventory.stash().equipment.worn.is_empty())
 	if _heirloom_button.visible:
 		_flash(_heirloom_button, "opened_heirlooms")
 	shown = shown and not town_page.visible
-	_bag_button.visible = (shown or _fight_up()) and ("first_item" in inventory.tips or "first_orb" in inventory.tips)
-	_skills_button.visible = shown and "level_up" in inventory.tips
+	buttons = shown or _fight_up()
+	_bag_button.visible = buttons and ("first_item" in inventory.tips or "first_orb" in inventory.tips)
+	_skills_button.visible = buttons and "level_up" in inventory.tips
 	# The journal has nothing in it until the player has stood at a board, which is also when their
 	# kills start counting towards one.
-	_bounty_button.visible = shown and BountyBoard.any_seen(inventory.towns)
-	# Nothing earns the settings: they are there from the first step, and over a fight as the bag is.
-	_settings_button.visible = shown or _fight_up()
-	_character_button.visible = (shown or _combat != null) and _left_page() == null
+	_bounty_button.visible = buttons and BountyBoard.any_seen(inventory.towns)
+	# Nothing earns the settings: they are there from the first step.
+	_settings_button.visible = buttons
+	_character_button.visible = (shown or _combat != null) and _character.visible
 	# Over a fight it stays only for the experience bar's tooltip (`xp_hover`, which lets every press
 	# through): the button itself takes no mouse there, no key and no hand.
 	_character_button.disabled = not shown
@@ -2329,17 +2438,18 @@ func _show_corner(shown: bool) -> void:
 		_character.modulate = Color.WHITE
 	Cursors.wear(_character.xp_hover, Cursors.HAND if shown else Cursors.ARROW)
 	# The log is a thing to be found, like what it lists: it is not there until the first unique is.
-	_collection_button.visible = shown and (Settings.show_all_uniques()
+	_collection_button.visible = buttons and (Settings.show_all_uniques()
 			or not inventory.uniques_found.is_empty())
 	_flash(_collection_button, "opened_collection")
 	# The goals are not shown until the first is reached: the page appears with the unique it unlocked.
-	_achievements_button.visible = shown and not inventory.achievements.is_empty()
+	_achievements_button.visible = buttons and not inventory.achievements.is_empty()
 	_flash(_achievements_button, "opened_achievements")
 	# The board is there once the player has a score for it: a floor of the Descent beaten.
-	_leaderboard_button.visible = shown and cloud.enabled() and inventory.dungeon_floors > 0
+	_leaderboard_button.visible = buttons and cloud.enabled() and inventory.dungeon_floors > 0
 	if _bag_button.visible:
 		_flash(_bag_button, "opened_bag")
 	_pulse(_skills_button, "skill_point", _skill_point_free())
+	_mark_new()
 	# Held upright the row takes its height from the pages' room, so they are laid out again with it.
 	if _narrow():
 		_layout_ui()
@@ -2367,8 +2477,8 @@ func _tip_due(id: String) -> bool:
 			return not ledger.farming and _combat != null
 		"first_town":
 			return view != null and view.can_visit(view.player_cell)
-		"first_bounty":
-			return BountyBoard.any_seen(inventory.towns)
+		"first_accept":
+			return not BountyBoard.active(inventory.towns).is_empty()
 		"first_unique":
 			return not inventory.uniques_found.is_empty()
 		"first_heirloom":
@@ -2487,6 +2597,19 @@ func _pulse(button: Button, id: String, on: bool) -> void:
 	_flashes.erase(id)
 
 
+## The red pip on each corner button whose page has something new: a rank to buy, a bounty to claim,
+## a find or an achievement not looked at yet. Never the bag's (the user's, 2026-10-07).
+func _mark_new() -> void:
+	var has_new := {
+		_skills_button: _skill_point_free(),
+		_bounty_button: BountyBoard.ready(BountyBoard.active(inventory.towns)),
+		_collection_button: not inventory.uniques_new.is_empty(),
+		_achievements_button: not inventory.achievements_new.is_empty(),
+	}
+	for button: Button in has_new:
+		(button.get_node(^"New") as CanvasItem).visible = has_new[button]
+
+
 ## Whether a rank can be bought anywhere: past a skill's most one point is not always enough.
 func _skill_point_free() -> bool:
 	for tree: String in SkillTree.trees():
@@ -2539,18 +2662,18 @@ func _open_left_page(page: Control) -> void:
 	# Alt on a square compares against the doll of the page it is on.
 	_item_card.equipment = (inventory.stash().equipment if page == heirloom_page
 			else inventory.equipment)
+	# The page covers the left edge and the character panel goes, or for a bag page moves to the other
+	# corner (`_place_character`, which this runs).
 	_show_corner(true)
-	# The page covers the left edge, and it stands on a layer above the character panel.
-	_character.hide()
 
 
 ## The X on any page: the same things follow from closing any of them. A town page and the bag in
-## shop mode are one thing on screen, so either X puts both away.
+## shop mode are one thing on screen, so either X puts both away. The character panel comes back to
+## its corner with the rest (`_show_corner`).
 func _on_left_page_closed() -> void:
 	_close_left_pages()
 	_close_town()
 	_show_corner(true)
-	_character.show()
 
 
 ## A corner button or the character panel pressed: its page, redrawn because what it shows moves
@@ -2676,13 +2799,15 @@ func _on_character_pressed() -> void:
 	_toggle_left_page(character_page)
 
 
-## The character page's pencil: the system's own text box, holding the name as it is.
+## The character page's pencil: the game's own text box over the window, holding the name as it is.
 func _on_rename_pressed() -> void:
-	DisplayServer.dialog_input_text("Rename", "Your character's name", inventory.hero(), _on_name_entered)
+	var prompt := TextPrompt.new("Rename", inventory.hero(), "Rename", Inventory.NAME_MOST, ui_scale)
+	prompt.entered.connect(_on_name_entered)
+	_ui_layer.add_child(prompt)
 
 
-## What the text box handed back: the character's name from now on, unless it leaves nothing. It can
-## come back late, so it asks what every save asks: never over a refused save, a reset or the black screen.
+## What the text box handed back: the character's name from now on, unless it leaves nothing. It asks
+## what every save asks: never over a refused save, a reset or the black screen.
 func _on_name_entered(text: String) -> void:
 	if _save_blocked or _resetting or _transcend_page != null or not inventory.rename(text):
 		return
@@ -2717,7 +2842,7 @@ func _on_town_pressed() -> void:
 	_stand_at_counter()
 	_layout_ui()
 	# Drawing the board is reading it, and a town always opens on its board (`TownServices.ORDER`), so
-	# this is where the tip about the bounties comes due.
+	# this is where the journal comes into the corner.
 	_check_tips()
 
 
@@ -2777,7 +2902,7 @@ func _on_town_tab_changed(_service: String) -> void:
 		_open_left_page(bag_page)
 		_layout_ui()
 	_stand_at_counter()
-	# Held upright, the doll the smith brings with him takes its height from the counter over the bag.
+	# Held upright, the counter over the bag is stood again at the height its new tab needs.
 	if _narrow():
 		_layout_ui()
 	# Her tab or his opened for the first time is where the fortuneteller or the smith speaks.

@@ -37,7 +37,8 @@ enum Kind {
 
 ## id -> what it does, what it touches, the range it rolls in, and how often it is drawn against the
 ## others in the same pool. Every line is built from the stat's label, so a stat renamed is renamed
-## everywhere. Percent ranges are wider where the stat is itself a percentage -- a fifth of a 5% crit
+## everywhere -- but a line with a `text` of its own, which says what it does in a sentence of its own
+## (`_written`). Percent ranges are wider where the stat is itself a percentage -- a fifth of a 5% crit
 ## chance is a rounding error -- and a flat roll is worth roughly two percent rolls on the same stat.
 const MODS := {
 	"increased_damage": {"kind": Kind.PERCENT, "stat": "damage", "range": [8, 20], "weight": 10},
@@ -59,6 +60,19 @@ const MODS := {
 	"added_dodge": {"kind": Kind.FLAT, "stat": "dodge", "range": [2, 6], "weight": 10},
 	"increased_crit_damage": {"kind": Kind.PERCENT, "stat": "crit_damage", "range": [8, 20], "weight": 10},
 	"added_crit_damage": {"kind": Kind.FLAT, "stat": "crit_damage", "range": [5, 15], "weight": 10},
+	# The mace's Bleed, which nothing rolled before: both shapes, as crit has, and only the mace can
+	# take either -- bleed is its kind's alone.
+	"increased_bleed": {"kind": Kind.PERCENT, "stat": "bleed", "range": [10, 25], "weight": 10},
+	"added_bleed": {"kind": Kind.FLAT, "stat": "bleed", "range": [3, 8], "weight": 10},
+	# The weapons' own lines: more of one kind of blow, summed in `Encounter.gear_more` and applied once.
+	# A click or a swing is half of what a weapon does, so those two roll a little over increased
+	# damage's band; an elite or a boss is one body in ten and a first blow one in many, so theirs are wider.
+	"added_click_damage": {"kind": Kind.FLAT, "stat": "click_damage", "range": [10, 25], "weight": 8},
+	"added_swing_damage": {"kind": Kind.FLAT, "stat": "swing_damage", "range": [10, 25], "weight": 8},
+	"added_elite_damage": {"kind": Kind.FLAT, "stat": "elite_damage", "range": [15, 35], "weight": 6},
+	"added_first_blow": {"kind": Kind.FLAT, "stat": "first_blow", "range": [20, 50], "weight": 6},
+	# A chance a blow lands twice: crit chance's shape, a point a level.
+	"added_double_strike": {"kind": Kind.FLAT, "stat": "double_strike", "range": [2, 5], "weight": 6},
 	# The attributes and what a hit wins back are flat-only: each is a quantity you add up across the
 	# set rather than a thing an item has more or less of. That they have no PERCENT form is also what
 	# lets them sit in `affixes` on pieces that show none of them.
@@ -66,6 +80,9 @@ const MODS := {
 	"added_strength": {"kind": Kind.FLAT, "stat": "strength", "range": [2, 8], "weight": 8},
 	"added_dexterity": {"kind": Kind.FLAT, "stat": "dexterity", "range": [2, 8], "weight": 8},
 	"added_intelligence": {"kind": Kind.FLAT, "stat": "intelligence", "range": [2, 8], "weight": 8},
+	# All three at once, the amulets' alone: half a line of each, drawn half as often -- the line for a
+	# Crown of Accord, or for meeting every requirement at once.
+	"added_all_attributes": {"kind": Kind.FLAT, "stat": "all_attributes", "range": [1, 4], "weight": 4},
 	# What a body leaves, which is a stat now rather than a player-wide sentence: the Gold Amulet shows
 	# it and anything allowed to carry it rolls this.
 	"added_drop_rate": {"kind": Kind.FLAT, "stat": "drop_rate", "range": [3, 10], "weight": 4},
@@ -79,6 +96,51 @@ const MODS := {
 	# which is a unique and a percentage of a purse that is already exponential in the walk.
 	"added_gold_find": {"kind": Kind.FLAT, "stat": "gold_find", "range": [20, 40], "weight": 1,
 		"level_flat": 0.0},
+	# The Pearl Ring's own stat, which every other ring rolls: the middle of its band is the Pearl's 15,
+	# and it is drawn as often as item rarity, the other narrow finder.
+	"added_orb_find": {"kind": Kind.FLAT, "stat": "orb_find", "range": [10, 20], "weight": 4},
+	# The rings' two lines no other piece carries: more experience off every body, and commons that come
+	# on as elites -- harder fights that leave more (`Encounter.arm`). Elite chance is the same band at
+	# every level, spawn speed's way: what reaches the most is wearing it, not levelling it.
+	"added_experience": {"kind": Kind.FLAT, "stat": "xp_more", "range": [5, 15], "weight": 4},
+	"added_elite_chance": {"kind": Kind.FLAT, "stat": "elite_chance", "range": [3, 8], "weight": 4},
+	# The helmet's, the body's and the offhand's own lines (2026-10-07), each written as what it does
+	# (`text`, the number in `{n}`'s place) rather than as a stat's name. Shares take a point a level.
+	# The helmet: a later first blow, less off an elite's or a boss's, weaker tile modifiers, thinner
+	# bodies -- a "less" of damage taken or health, so a narrower band -- and a tree's skills a rank up.
+	"added_blow_delay": {"kind": Kind.FLAT, "stat": "blow_delay", "range": [10, 25], "weight": 6,
+		"text": "Enemies' first blows come {n}% later"},
+	"added_elite_ward": {"kind": Kind.FLAT, "stat": "elite_ward", "range": [10, 25], "weight": 6,
+		"text": "{n}% less time lost to elites' and bosses' blows"},
+	"added_tile_ward": {"kind": Kind.FLAT, "stat": "tile_ward", "range": [10, 25], "weight": 4,
+		"text": "Tile modifiers are {n}% weaker"},
+	"added_less_health": {"kind": Kind.FLAT, "stat": "less_health", "range": [5, 12], "weight": 6,
+		"text": "Enemies have {n}% less health"},
+	# One rank, at every level: three lines, so one tree is drawn a third as often as any other line.
+	"added_power_skills": {"kind": Kind.FLAT, "stat": "power_skills", "range": [1, 1], "weight": 2,
+		"text": "+{n} rank to every learned Power skill"},
+	"added_fortune_skills": {"kind": Kind.FLAT, "stat": "fortune_skills", "range": [1, 1], "weight": 2,
+		"text": "+{n} rank to every learned Fortune skill"},
+	"added_guard_skills": {"kind": Kind.FLAT, "stat": "guard_skills", "range": [1, 1], "weight": 2,
+		"text": "+{n} rank to every learned Guard skill"},
+	# The body: a camp's pay, a count of bodies either side of nothing (`signed`: one more or fewer, and
+	# up to two from tier `wide_from`, never none), blows struck back and time recouped.
+	"added_camp_earnings": {"kind": Kind.FLAT, "stat": "camp_earnings", "range": [10, 25], "weight": 4,
+		"text": "Camps earn {n}% more"},
+	"added_enemies": {"kind": Kind.FLAT, "stat": "extra_enemies", "range": [-1, 1], "weight": 4,
+		"signed": true, "wide": [-2, 2], "wide_from": 9,
+		"text": "{n} enemies in each fight", "text_one": "{n} enemy in each fight"},
+	"added_thorns": {"kind": Kind.FLAT, "stat": "thorns", "range": [15, 35], "weight": 6,
+		"text": "Blows that land on you strike back for {n}% of your damage"},
+	"added_recoup": {"kind": Kind.FLAT, "stat": "recoup", "range": [10, 25], "weight": 6,
+		"text": "{n}% of the time a blow takes comes back over 4 seconds"},
+	# The offhand: the buckler's crit after a dodge, the torch's burn, the shield's time on a block.
+	"added_parry": {"kind": Kind.FLAT, "stat": "parry", "range": [20, 50], "weight": 6,
+		"text": "A dodged blow adds {n}% crit chance to your next blow"},
+	"added_burn": {"kind": Kind.FLAT, "stat": "burn", "range": [10, 30], "weight": 6,
+		"text": "Blows burn for {n}% of their damage over 3 seconds"},
+	"added_time_on_block": {"kind": Kind.FLAT, "stat": "time_on_block", "range": [2, 5], "weight": 6,
+		"text": "A blow your block stops entirely wins back {n}"},
 	# On anything (`LootTable.ANY_AFFIXES`), and flat at every level: eight sockets of top rolls is the
 	# cap, where the next enemy is there the moment the last one is dead.
 	"added_spawn_speed": {"kind": Kind.FLAT, "stat": "spawn_speed", "range": [5, 15], "weight": 4,
@@ -90,6 +152,15 @@ const MODS := {
 	# this is the whole of what a ring can do to it.
 	"global_increased_damage": {"kind": Kind.GLOBAL, "stat": "damage", "range": [5, 12], "weight": 8},
 	"global_increased_attack_speed": {"kind": Kind.GLOBAL, "stat": "attack_speed", "range": [5, 12], "weight": 8},
+	# The rest of the set's offence for the rings, and its bleed and defence for the amulets -- the Iron
+	# Band's armour and the Jade Ring's dodge in place of their own percent (`pool_for`). Each a little
+	# under its PERCENT band, for increased damage's reason.
+	"global_increased_crit": {"kind": Kind.GLOBAL, "stat": "crit_chance", "range": [6, 15], "weight": 6},
+	"global_increased_crit_damage": {"kind": Kind.GLOBAL, "stat": "crit_damage", "range": [5, 12], "weight": 6},
+	"global_increased_bleed": {"kind": Kind.GLOBAL, "stat": "bleed", "range": [5, 12], "weight": 6},
+	"global_increased_armor": {"kind": Kind.GLOBAL, "stat": "armor", "range": [5, 12], "weight": 6},
+	"global_increased_dodge": {"kind": Kind.GLOBAL, "stat": "dodge", "range": [5, 12], "weight": 6},
+	"global_increased_time_on_hit": {"kind": Kind.GLOBAL, "stat": "time_on_hit", "range": [5, 12], "weight": 6},
 	# Seconds on the fight clock, in tenths (`LootTable.SECONDS_STATS`): 1.0-4.0s, on anything, and the
 	# same at every level -- a clock that grew with the level would delete the only way to lose.
 	# `Encounter.CLOCK_MOST` caps what a whole set adds.
@@ -137,7 +208,10 @@ static func pool_for(item_type: String) -> PackedStringArray:
 		var fits := false
 		match mod["kind"]:
 			Kind.PERCENT:
-				fits = LootTable.has_stat(item_type, mod["stat"])
+				# A piece that may scale a stat for the whole set does not scale its own as well: the
+				# two write the same sentence, and the set's is the one worth having.
+				fits = LootTable.has_stat(item_type, mod["stat"]) \
+						and not LootTable.can_globalize(item_type, mod["stat"])
 			Kind.GLOBAL:
 				fits = LootTable.can_globalize(item_type, mod["stat"])
 			_:
@@ -224,6 +298,10 @@ static func fit_under(id: String, value: int, level: int) -> int:
 ## every tier above is the old band at its level plus a share of how fast that band was growing.
 static func band_for(id: String, tier: int) -> Array:
 	tier = maxi(tier, 1)
+	# A signed band is its two numbers as written, either side of nothing: no carry, no floor at 1.
+	if MODS[id].get("signed", false):
+		var ends := _level_band(id, tier)
+		return [int(ends[0]), int(ends[1])]
 	var here := _level_band(id, tier)
 	var before := _level_band(id, tier - 1)
 	var carry := TIER_FALLOFF * (1.0 - pow(TIER_FALLOFF, tier - 1)) / (1.0 - TIER_FALLOFF)
@@ -236,8 +314,13 @@ static func band_for(id: String, tier: int) -> Array:
 static func _level_band(id: String, level: int) -> Array[float]:
 	var entry: Dictionary = MODS[id]
 	var band: Array = entry["range"]
+	# A signed one widens once, at its tier, and grows no other way.
+	if entry.get("signed", false) and level >= int(entry.get("wide_from", level + 1)):
+		band = entry["wide"]
 	var low := float(band[0])
 	var high := float(band[1])
+	if entry.get("signed", false):
+		return [low, high]
 	match entry["kind"]:
 		Kind.FLAT:
 			# An amount of a stat, so it grows the way that stat's own numbers do -- unless the entry
@@ -266,6 +349,10 @@ static func _level_band(id: String, level: int) -> Array[float]:
 ## rolling the modifier again from scratch.
 static func reroll_value(id: String, rng: RandomNumberGenerator, tier := 1) -> int:
 	var band := band_for(id, tier)
+	# A signed band is drawn one short and stepped over nothing, which no line may be.
+	if MODS[id].get("signed", false):
+		var drawn := rng.randi_range(int(band[0]), int(band[1]) - 1)
+		return drawn + 1 if drawn >= 0 else drawn
 	return rng.randi_range(int(band[0]), int(band[1]))
 
 
@@ -276,6 +363,10 @@ static func reroll_value(id: String, rng: RandomNumberGenerator, tier := 1) -> i
 static func rescaled(id: String, value: int, from_level: int, to_level: int) -> int:
 	var from := band_for(id, from_level)
 	var to := band_for(id, to_level)
+	# A signed value keeps its side and is held to the new band's ends: a share of its band would land on
+	# nothing.
+	if MODS[id].get("signed", false):
+		return clampi(value, int(to[0]), int(to[1]))
 	var span := float(int(from[1]) - int(from[0]))
 	var place := 1.0 if span <= 0.0 else clampf((value - int(from[0])) / span, 0.0, 1.0)
 	return roundi(lerpf(float(to[0]), float(to[1]), place))
@@ -319,7 +410,8 @@ static func line(mod: Dictionary) -> String:
 	var id: String = mod.get("id", "")
 	if not MODS.has(id):
 		return ""
-	return _written(id, amount(id, int(mod.get("value", 0))))
+	var value := int(mod.get("value", 0))
+	return _written(id, amount(id, value), absi(value) == 1)
 
 
 ## A modifier written with the band it rolls in at `level` in the number's place: "+8-20% increased
@@ -328,6 +420,10 @@ static func line(mod: Dictionary) -> String:
 static func band_line(id: String, level: int) -> String:
 	if not MODS.has(id):
 		return ""
+	# A signed band is as far as it reaches either way: "±2 enemies in each fight".
+	if MODS[id].get("signed", false):
+		var reach := int(band_for(id, level)[1])
+		return _written(id, "±%d" % reach, reach == 1)
 	# Everything the piece could roll: the bottom of tier 1 to the top of the tier its level allows.
 	var low := amount(id, int(band_for(id, 1)[0]))
 	var high := amount(id, int(band_for(id, level)[1]))
@@ -341,11 +437,19 @@ static func amount(id: String, value: int) -> String:
 	# Tenths of a second, written as seconds with the unit on: the "s" is the number's, not the line's.
 	if entry["kind"] == Kind.FLAT and entry["stat"] in LootTable.SECONDS_STATS:
 		return LootTable.seconds_text(value)
+	# Either side of nothing, so the side is the number's own.
+	if entry.get("signed", false):
+		return BigNumber.format(value, true)
 	return BigNumber.format(value)
 
 
-static func _written(id: String, amount: String) -> String:
+## The sentence a modifier says, with `amount` in its number's place. `one` is a number of one, which a
+## line that counts something writes in the singular (`text_one`).
+static func _written(id: String, amount: String, one := false) -> String:
 	var entry: Dictionary = MODS[id]
+	# A line that says what it does rather than naming a stat.
+	if entry.has("text"):
+		return str(entry["text_one"] if one and entry.has("text_one") else entry["text"]).replace("{n}", amount)
 	match entry["kind"]:
 		Kind.PERCENT, Kind.GLOBAL:
 			# The same sentence for both, and honestly so: with one weapon between them, a sword's

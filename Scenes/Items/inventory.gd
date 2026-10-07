@@ -92,6 +92,12 @@ const NOVICE_UNTIL := 20
 ## better piece. Intelligence adds to `xp_more`, a percentage already; the other two multiply.
 const ATTRIBUTE_PERCENT := 0.2
 const ATTRIBUTE_GIVES := {"strength": "damage", "dexterity": "attack_speed", "intelligence": "xp_more"}
+## An amulet's line of all three (`ModifierTable`'s `added_all_attributes`): added to each where the
+## attributes are summed (`_attribute_sums`), counted as an attribute line, and read nowhere else.
+const ALL_ATTRIBUTES := "all_attributes"
+## What a tree's id is followed by in the stat a helmet's line rolls for it: `power_skills`, ranks more on
+## every learned Power skill (`stats`).
+const SKILL_RANKS := "_skills"
 
 ## Rings a charted tile shows round it with no torch held; the Thick Fog takes all of it (`sight`).
 const BASE_SIGHT := 2
@@ -370,11 +376,14 @@ func set_autodiscard(level: int, on: bool) -> void:
 
 
 ## Throws away everything held at one level but what the player has locked, and hands back what went,
-## oldest first. With `uniques` false a unique stays: the bag page asks about those on their own.
-func discard_level(level: int, uniques := true) -> Array[Item]:
+## oldest first. With `uniques` false a unique stays: the bag page asks about those on their own. Given
+## a `slot` (`LootTable.slot_of`) only that slot's pieces go: the bag's filter is on, and a bin takes
+## only what it stands over.
+func discard_level(level: int, uniques := true, slot := "") -> Array[Item]:
 	var gone: Array[Item] = []
 	for i in range(items.size() - 1, -1, -1):
-		if items[i].level == level and not items[i].locked and (uniques or items[i].unique.is_empty()):
+		if items[i].level == level and not items[i].locked and (uniques or items[i].unique.is_empty()) \
+				and (slot.is_empty() or LootTable.slot_of(items[i].type) == slot):
 			gone.append(items[i])
 			items.remove_at(i)
 	gone.reverse()
@@ -566,9 +575,14 @@ func stats() -> Dictionary:
 	var points := attributes()
 	# The Sage's Abacus at IV: every skill learned counts one rank higher.
 	var extra := 1 if "abacus" in worn and _peak("sages_abacus") else 0
-	var flat := _skills_worth(skills.flat(extra))
-	var percent := _skills_worth(skills.percent(extra))
 	var dolls := _counted_dolls()
+	# And a helmet's line, every skill learned of one tree (`<tree>_skills`, both dolls).
+	var gear := dolls[0].totals({}, {}, dolls[1])
+	var trees := {}
+	for tree: String in SkillTree.trees():
+		trees[tree] = roundi(float(gear.get(tree + SKILL_RANKS, 0.0)))
+	var flat := _skills_worth(skills.flat(extra, trees))
+	var percent := _skills_worth(skills.percent(extra, trees))
 	if "spikes" in worn:
 		var armour := float(dolls[0].totals(flat, percent, dolls[1]).get("armor", 0.0))
 		flat["damage"] = float(flat.get("damage", 0.0)) + armour * _dial("spiked_helm", "share") / 100.0
@@ -592,6 +606,8 @@ func stats() -> Dictionary:
 		if turned[stat] > 0.0:
 			flat[stat] = float(flat.get(stat, 0.0)) + turned[stat]
 	var out := dolls[0].totals(flat, percent, dolls[1])
+	# Already in each of the three (`points`), which are written in below.
+	out.erase(ALL_ATTRIBUTES)
 	out["bare_sockets"] = _side_count("ascetic",
 			func(side: Inventory) -> int: return Equipment.NAMES.size() - side.equipment.worn.size())
 	out["bag_pieces"] = _side_count("packmule", func(side: Inventory) -> int: return side.items.size())
@@ -673,8 +689,13 @@ static func _attribute_sums(doll: Equipment, other: Equipment) -> Dictionary:
 	var sums := doll.totals({}, {}, other)
 	var out := {}
 	for attribute: String in ATTRIBUTE_GIVES:
-		out[attribute] = maxf(0.0, float(sums.get(attribute, 0.0)))
+		out[attribute] = maxf(0.0, _points(sums, attribute))
 	return out
+
+
+## One attribute out of a doll's totals: its own lines and the lines of all three.
+static func _points(totals: Dictionary, attribute: String) -> float:
+	return float(totals.get(attribute, 0.0)) + float(totals.get(ALL_ATTRIBUTES, 0.0))
 
 
 ## The three attributes as everything that reads one counts them. **Added up over both dolls**, like
@@ -691,7 +712,7 @@ func attributes() -> Dictionary:
 		var echo := dolls[1].totals()
 		var again := (_dial("heirlooms_echo", "times") - 1.0) * worn.count("echo")
 		for attribute: String in out:
-			out[attribute] = maxf(0.0, out[attribute] + float(echo.get(attribute, 0.0)) * again)
+			out[attribute] = maxf(0.0, out[attribute] + _points(echo, attribute) * again)
 	var high: float = out.values().max()
 	# The Crown of Accord at IV lets them stand further apart.
 	var within := ACCORD_WITHIN_PEAK if _peak("crown_of_accord") else ACCORD_WITHIN
@@ -790,7 +811,8 @@ func _peak(id: String) -> bool:
 ## the Purist's Seal's pure piece.
 static func _attribute_lines(piece: Item) -> int:
 	return piece.mods.filter(func(mod: Dictionary) -> bool:
-			return ATTRIBUTE_GIVES.has(ModifierTable.MODS.get(mod["id"], {}).get("stat", ""))).size()
+			var stat: String = ModifierTable.MODS.get(mod["id"], {}).get("stat", "")
+			return ATTRIBUTE_GIVES.has(stat) or stat == ALL_ATTRIBUTES).size()
 
 
 ## The two dolls as their totals are read: themselves -- or, while a rank IV Heirloom's Echo or

@@ -68,7 +68,8 @@ var rect := Rect2i()
 ## How far the land reaches from cell (0, 0); ring `land_radius + 1` is the ice wall.
 var land_radius := START_LAND_RADIUS
 ## How many rings a fallen wall opens: `WALL_STEP`, or fewer under the Ring of Walls, which the main
-## scene says as the world is built. Never saved: it is the curse's, and the curse is the inventory's.
+## scene says as the world is built -- to `restore` itself, which draws the rubble of the walls that
+## fell. Never saved: it is the curse's, and the curse is the inventory's.
 ## **Only where the next wall stands moves with it** -- `Encounter.walls_inside`, which sizes every
 ## body, goes on counting in `WALL_STEP`s, so the land is as hard as it ever was and the extra walls
 ## are extra gates at the health their own ring gives them.
@@ -194,9 +195,10 @@ func to_save() -> MapSave:
 ## start town's road is already among the saved roads. Nothing is generated and no town is touched.
 ##
 ## `towns` is the world out of the same save, through TownWorld.from_dict.
-static func restore(map: HexMap, towns: TownWorld, save: MapSave) -> MapBuilder:
+static func restore(map: HexMap, towns: TownWorld, save: MapSave, step := WALL_STEP) -> MapBuilder:
 	assert(save.origin.y % 2 == 0, "MapBuilder origin row must be even")
 	var builder := MapBuilder.new()
+	builder.wall_step = step  # before anything is drawn: the rubble lies where the walls fell
 	builder.map = map
 	builder.towns = towns
 	builder.origin = save.origin
@@ -253,6 +255,7 @@ func _draw_saved() -> void:
 			continue
 		map.place_ground(cell, _tiles[cell])
 		_draw_road(cell)
+		_draw_rubble(cell)
 		if is_wall(cell):
 			_ice.set_cell(cell, IceOverlay.Kind.WALL, _ring_edges(cell))
 		if _states[cell] == State.UNCHARTED:
@@ -300,13 +303,22 @@ func is_wall(cell: Vector2i) -> bool:
 	return HexGrid.distance(CENTER, cell) == land_radius + 1
 
 
-## A wall cell's two neighbours on its own ring, as `HexGrid.edge_mask`: where the wall's band runs.
+## A cell's two neighbours on its own ring round the centre, as `HexGrid.edge_mask`: where a wall's
+## band runs, or its rubble once it has fallen.
 func _ring_edges(cell: Vector2i) -> int:
 	var mask := 0
+	var ring := HexGrid.distance(CENTER, cell)
 	for edge in HexGrid.EDGES:
-		if is_wall(HexGrid.neighbor(cell, edge)):
+		if HexGrid.distance(CENTER, HexGrid.neighbor(cell, edge)) == ring:
 			mask |= 1 << edge
 	return mask
+
+
+## A fallen wall's rubble, on every tile of its ring but a settlement's (the village stands in the
+## breach). The cave is never on a wall's ring.
+func _draw_rubble(cell: Vector2i) -> void:
+	if is_land(cell) and on_wall_ring(cell) and town_tier(cell) == -1:
+		map.set_rubble(cell, _ring_edges(cell))
 
 
 ## How many walls have come down in this world. What heirloom picks are paid against
@@ -831,6 +843,7 @@ func _break_wall() -> void:
 	for cell in _states:
 		if HexGrid.distance(CENTER, cell) == old_wall:
 			_ice.remove_cell(cell)
+			_draw_rubble(cell)
 			_draw_town(cell)
 			_draw_cave(cell)
 		elif _ice.kind_at(cell) == IceOverlay.Kind.WASTE and not is_wasteland(cell):
@@ -1011,6 +1024,7 @@ func _show(cell: Vector2i, to: State, lift := false) -> void:
 	if not seen(cell):
 		map.set_ground(cell, _tiles[cell])
 		_draw_road(cell)
+		_draw_rubble(cell)
 		if is_wall(cell):
 			_ice.set_cell(cell, IceOverlay.Kind.WALL, _ring_edges(cell))
 		else:

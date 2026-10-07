@@ -5,7 +5,7 @@ extends Control
 ## squares by the achievement's name (the user's, 2026-10-02). A square is the unique it unlocks:
 ## lit once earned, with the rank reached on its corner, the same square dimmed until then. Its card,
 ## the item card's own (`ItemSlot.hint`), says the achievement's name and rank, what the next rank
-## asks, how far the player is, and which unique it unlocks or strengthens.
+## asks and how far the player is; its Alt key names the unique.
 ##
 ## Built like the collection log beside it: `open()` redraws it, `layout()` fits it to the window,
 ## `closed` is its X, and it carries `UITheme.theme()` because it hangs off a `CanvasLayer`. It saves
@@ -20,8 +20,9 @@ signal seen
 
 ## The bar's label, for the tests.
 const SHARE_NAME := "Share"
-## The bar across the top.
+## The bar across the top, and a card's.
 const BAR_HEIGHT := 16
+const CARD_BAR_HEIGHT := 12
 ## Each square's own bar (`progress_bar`): its node name for the tests, its height and how far in
 ## from the square's edges it lies.
 const PROGRESS_NAME := "Progress"
@@ -94,20 +95,26 @@ func _on_visibility_changed() -> void:
 		seen.emit()
 
 
-## The bar across the top: an ink trough filling with leaf, the share earned written over its middle.
+## The bar across the top: the share earned, rank by rank.
 static func share_bar(have: int, need: int) -> Control:
 	var share := clampf(float(have) / maxi(need, 1), 0.0, 1.0)
+	return bar(share, "%d%%" % roundi(share * 100.0), BagPage.WIDTH, BAR_HEIGHT)
+
+
+## An ink trough filling with leaf -- gold once `done` -- with `text` written over its middle: the bar
+## across the page's top, and a card's toward its next rank.
+static func bar(share: float, text: String, width: float, height: int, done := false) -> Control:
 	var trough := ColorRect.new()
 	trough.color = Palette.INK
-	trough.custom_minimum_size = Vector2(BagPage.WIDTH, BAR_HEIGHT)
+	trough.custom_minimum_size = Vector2(width, height)
 	trough.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var fill := ColorRect.new()
-	fill.color = Palette.LEAF_LT
+	fill.color = Palette.GOLD if done else Palette.LEAF_LT
 	fill.position = Vector2.ONE
-	fill.size = Vector2(floorf((BagPage.WIDTH - 2) * share), BAR_HEIGHT - 2)
+	fill.size = Vector2(floorf((width - 2) * clampf(share, 0.0, 1.0)), height - 2)
 	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	trough.add_child(fill)
-	var said := UITheme.label("%d%%" % roundi(share * 100.0), Palette.BONE, true)
+	var said := UITheme.label(text, Palette.BONE, true)
 	said.name = SHARE_NAME
 	said.add_theme_color_override("font_outline_color", Palette.INK)
 	said.add_theme_constant_override("outline_size", 4)
@@ -130,7 +137,8 @@ static func tile(player: Inventory, id: String, known: Dictionary) -> ItemSlot:
 	slot.hint = AchievementsPage.write_card.bind(player, id, known)
 	slot.set_meta(ItemCard.ALT_CARD, CollectionPage.write_hint.bind(slot.item, Achievements.is_unlocked(player, id),
 			Settings.show_all_uniques() or player.uniques_found.has(id)))
-	slot.set_meta(ItemCard.KEYS, {"alt": "unique"})
+	# The unique it unlocks, named where Alt is said to show it.
+	slot.set_meta(ItemCard.KEYS, {"alt": UniqueTable.UNIQUES[id]["name"]})
 	# No rarity frame: a square here is an achievement, not a piece (the user's call, 2026-09-28).
 	var frame := slot.get_node_or_null(ItemSlot.FRAME_NAME)
 	if frame != null:
@@ -170,33 +178,36 @@ static func progress_bar(player: Inventory, id: String, rank: int, known: Dictio
 	return trough
 
 
-## What the card beside a square says: the achievement's name and the rank reached, what the next rank
-## asks and how far along the player is (or that every rank is earned), and the name of the unique it
-## unlocks -- or strengthens, once it has.
+## What the card beside a square says, after the user's pick (2026-10-07, `tools/qa/achievement_card_m2.png`):
+## the achievement's name with the rank reached at its right end ("I / IV"), what the next rank asks,
+## and how far along the player is as the page's own bar -- full and gold, "Achieved", at IV. The unique
+## it unlocks is the square's Alt key's word (`tile`), never a line here.
 static func write_card(rows: VBoxContainer, width: float, player: Inventory, id: String,
 		known: Dictionary) -> void:
 	UITheme.clear(rows)
 	var row: Dictionary = Achievements.ACHIEVEMENTS[id]
 	var rank := Achievements.rank(player, id)
-	rows.add_child(ItemDetails.line(str(row["name"]), Palette.TEXT, width))
+	var head := HBoxContainer.new()
+	var title := ItemDetails.line(str(row["name"]), Palette.TEXT, 0.0)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
 	if rank > 0:
-		rows.add_child(ItemDetails.line("Rank %s of %s" % [Achievements.RANK_NAMES[rank],
-				Achievements.RANK_NAMES[UniqueTable.PEAK]], Palette.TEXT_SOFT, width, true))
+		var reached := UITheme.label("%s / %s" % [Achievements.RANK_NAMES[rank],
+				Achievements.RANK_NAMES[UniqueTable.PEAK]], Palette.TEXT_SOFT, true)
+		reached.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		head.add_child(reached)
+	rows.add_child(head)
 	if rank >= UniqueTable.PEAK:
 		rows.add_child(ItemDetails.line(Achievements.text(id, rank), Palette.TEXT, width, true))
-		rows.add_child(ItemDetails.line("Achieved", Palette.LEAF, width, true))
-	else:
-		rows.add_child(ItemDetails.line(Achievements.text(id, rank + 1), Palette.TEXT, width, true))
-		var need := Achievements.need_at(id, rank + 1)
-		var have := minf(Achievements.progress(player, id, known), need)
-		# A feat done at a wall is a number of walls out, not a count to watch climb.
-		if need > 1.0 and not str(row["key"]).begins_with("wall_") and row["key"] != "domino_wall":
-			rows.add_child(ItemDetails.line("Progress: %s / %s (%d%%)" % [BigNumber.format(have),
-					BigNumber.format(need), floori(have / need * 100.0)], Palette.LEAF, width, true))
-	# Small and in ink rather than the unique's gold, which cannot be read at 10 px on cream; no rule over
-	# it and nothing of what the piece does -- the log says that (the user's call, 2026-09-28).
-	rows.add_child(ItemDetails.line("%s %s" % ["Strengthens" if rank > 0 else "Unlocks",
-			UniqueTable.UNIQUES[id]["name"]], Palette.TEXT, width, true))
+		rows.add_child(bar(1.0, "Achieved", width, CARD_BAR_HEIGHT, true))
+		return
+	rows.add_child(ItemDetails.line(Achievements.text(id, rank + 1), Palette.TEXT, width, true))
+	var need := Achievements.need_at(id, rank + 1)
+	var have := minf(Achievements.progress(player, id, known), need)
+	# A feat done at a wall is a number of walls out, not a count to watch climb.
+	if need > 1.0 and not str(row["key"]).begins_with("wall_") and row["key"] != "domino_wall":
+		rows.add_child(bar(have / need, "%s / %s" % [BigNumber.format(have), BigNumber.format(need)],
+				width, CARD_BAR_HEIGHT))
 
 
 ## Where the main scene stands the page, in window pixels: empty for the whole window.

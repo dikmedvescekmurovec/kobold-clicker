@@ -966,6 +966,96 @@ ICONS_DRAWN = {
         ooooooooooooo
     """,
 }
+# The bag's filter tabs (BagPage.FILTERS), one an equipment slot -- the weapon's is the sword above --
+# and "all", a two-by-two grid. Silhouettes shaded by `_edged`, as the character panel's marks are; H
+# is the ramp's dark, k a gap in the outline's dark (the user's pick, qa/bag_filter_m1_b.png, 2026-10-07).
+SLOT_MARKS = {
+    "ui_icon_slot_all": [
+        "XXXX.XXXX",
+        "XXXX.XXXX",
+        "XXXX.XXXX",
+        "XXXX.XXXX",
+        ".........",
+        "XXXX.XXXX",
+        "XXXX.XXXX",
+        "XXXX.XXXX",
+        "XXXX.XXXX",
+    ],
+    "ui_icon_slot_offhand": [
+        "XXXXXXXXXXX",
+        "XXXXXHXXXXX",
+        "XXXXXHXXXXX",
+        "XXHHHHHHHXX",
+        "XXXXXHXXXXX",
+        "XXXXXHXXXXX",
+        ".XXXXHXXXX.",
+        "..XXXHXXX..",
+        "...XXHXX...",
+        "....XXX....",
+        ".....X.....",
+    ],
+    "ui_icon_slot_helmet": [
+        "....XXXX....",
+        "..XXXXXXXX..",
+        ".XXXXXXXXXX.",
+        ".XXXXXXXXXX.",
+        "XXXXXXXXXXXX",
+        "XXkkkkkkkkXX",
+        "XXXXXkkXXXXX",
+        "XXXXXkkXXXXX",
+        "XXXXXkkXXXXX",
+        ".XXXX..XXXX.",
+    ],
+    "ui_icon_slot_body": [
+        ".XXX....XXX.",
+        "XXXXX..XXXXX",
+        "XXXXXXXXXXXX",
+        "XXXXXXXXXXXX",
+        "XXXXXXXXXXXX",
+        "..XXXXXXXX..",
+        "..XXXXXXXX..",
+        "..HHHHHHHH..",
+        "..XXXXXXXX..",
+        "..XXXXXXXX..",
+    ],
+    "ui_icon_slot_boots": [
+        "..XXXXX....",
+        "..XXXXX....",
+        "..XXXXX....",
+        "..XXXXX....",
+        "..XXXXX....",
+        "..XXXXXX...",
+        "..XXXXXXXX.",
+        ".XXXXXXXXXX",
+        ".XXXXXXXXXX",
+        ".HHHHHHHHHH",
+    ],
+    "ui_icon_slot_ring": [
+        "....XXX....",
+        "...XXHXX...",
+        "....XXX....",
+        "..XXXXXXX..",
+        ".XX.....XX.",
+        "XX.......XX",
+        "XX.......XX",
+        "XX.......XX",
+        ".XX.....XX.",
+        "..XXXXXXX..",
+    ],
+    "ui_icon_slot_amulet": [
+        "X.........X",
+        "X.........X",
+        ".X.......X.",
+        "..X.....X..",
+        "...X...X...",
+        "....XXX....",
+        "...XXXXX...",
+        "..XXXHXXX..",
+        "..XXHHHXX..",
+        "...XXHXX...",
+        "....XXX....",
+    ],
+}
 
 # The skill trees' icons, off "Ability Icons" -- loose 16 px files that carry their own framed square,
 # so an entry is a whole file and nothing is trimmed. One colourway a tree, so a tree reads as one
@@ -1109,9 +1199,9 @@ BONE_RAMP = {
 # scissors in both colourways: 603928 -> 2c4645, 70492a -> 3f7168, 88682d -> 50a978, a07f2d ->
 # 57c767 -- the outline to the close button's teal family and the ramp to the bar's green.
 BARE = ["ui_icon_auto", "ui_icon_filter", "ui_icon_trash", "ui_icon_coins", "ui_icon_scroll", "ui_icon_sword", "ui_icon_chest",
-        "ui_icon_gem", "ui_icon_anvil", "ui_icon_crystal", "ui_icon_kills", "ui_icon_pencil"]
+        "ui_icon_gem", "ui_icon_anvil", "ui_icon_crystal", "ui_icon_kills", "ui_icon_pencil", *SLOT_MARKS]
 GREEN_TABS = ["ui_icon_auto", "ui_icon_filter", "ui_icon_scroll", "ui_icon_sword", "ui_icon_gem", "ui_icon_anvil",
-              "ui_icon_crystal"]
+              "ui_icon_crystal", *SLOT_MARKS]
 GREEN_KEY = {"#3e1f1d": "#2c4645", "#603928": "#3f7168", "#70492a": "#478773", "#825c2f": "#50a978",
              "#88682d": "#57c767"}
 
@@ -2165,7 +2255,8 @@ def icons():
     table = {_rgb(dark): _rgb(light) for dark, light in BONE_RAMP.items()}
     marks = {name: _cut(entry) for name, entry in ICONS.items()}
     marks.update({name: _drawn(rows) for name, rows in ICONS_DRAWN.items()})
-    green = {_rgb(dark): _rgb(lit) for dark, lit in GREEN_KEY.items()}
+    marks.update({name: _drawn("\n".join(_edged(shape))) for name, shape in SLOT_MARKS.items()})
+    green ={_rgb(dark): _rgb(lit) for dark, lit in GREEN_KEY.items()}
     out = {}
     for name, art in marks.items():
         if art.width > ICON_SIDE or art.height > ICON_SIDE:

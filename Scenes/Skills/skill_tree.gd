@@ -88,7 +88,7 @@ const TREES := {
 				"effect": "trophy", "effect_text": "Trophy: every elite and boss drops an item"},
 			"midas": {"name": "Midas", "parents": ["greed"], "max_rank": 1, "row": 4, "col": 1,
 				"flat": {"gold_find": 30, "drop_rate": 5}, "percent": {},
-				"effect": "jackpot", "effect_text": "Jackpot: one purse in ten is five times fuller"},
+				"effect": "jackpot", "effect_text": "Jackpot: one gold drop in ten is five times bigger"},
 			"alchemist": {"name": "Alchemist", "parents": ["orb_seeker"], "max_rank": 1, "row": 4, "col": 2,
 				"flat": {"orb_find": 25, "item_rarity": 10}, "percent": {},
 				"effect": "transmute", "effect_text": "Transmute: an orb that falls has a one in four chance to fall twice"},

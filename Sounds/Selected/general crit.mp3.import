@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://c5bgclymptvvp"
+path="res://.godot/imported/general crit.mp3-f9f08fbead20327c2f9cc8ee6ea6c072.mp3str"
+
+[deps]
+
+source_file="res://Sounds/Selected/general crit.mp3"
+dest_files=["res://.godot/imported/general crit.mp3-f9f08fbead20327c2f9cc8ee6ea6c072.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

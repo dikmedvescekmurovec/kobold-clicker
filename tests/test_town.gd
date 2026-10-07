@@ -327,7 +327,9 @@ func _test_smith() -> bool:
 	# An upgrade is the base stats of a fresh roll at the new level, and the modifiers left as they were.
 	var piece := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 3)
 	var mods_before := piece.mods.duplicate(true)
-	var tiers_before := piece.mods.map(piece.tier_of)
+	# A line no level moves (spawn speed, the clock) has no tiers, and its "tier" is only the level.
+	var tiered := piece.mods.filter(func(mod: Dictionary) -> bool: return ModifierTable.tiered(str(mod["id"])))
+	var tiers_before := tiered.map(piece.tier_of)
 	_check(Blacksmith.can_upgrade(piece, cap), "a piece under the cap can be upgraded")
 	_check(Blacksmith.why_not_upgrade(piece, cap).is_empty(), "and nothing is said against it")
 	_check(Blacksmith.upgrade(piece, cap, safe), "the hammer lands")
@@ -338,7 +340,7 @@ func _test_smith() -> bool:
 	_check(pick.call(piece.mods, "id") == pick.call(mods_before, "id")
 			and pick.call(piece.mods, "value") == pick.call(mods_before, "value"),
 			"carrying the modifiers it already had, at the numbers they had")
-	_check(piece.mods.map(piece.tier_of) == tiers_before, "and at the tiers they had")
+	_check(not tiered.is_empty() and tiered.map(piece.tier_of) == tiers_before, "and at the tiers they had")
 	_check(not piece.broken, "nothing broke")
 
 	# A locked line is what the lock is bought for: the hammer leaves its number where it was.
@@ -819,9 +821,12 @@ func _test_bounty_kills() -> bool:
 
 	# What each ledger says of its bodies, gathered in an Array: a lambda captures by value.
 	var said := []
+	var too_low := []
 	var hear := func(ledger: FightLedger) -> void:
 		ledger.bounty_counted.connect(func(enemy: String, have: int, need: int) -> void:
 			said.append([enemy, have, need]))
+		ledger.bounty_too_low.connect(func(enemy: String, level: int) -> void:
+			too_low.append([enemy, level]))
 	var charting := FightLedger.new(inventory, TEST_PATH)
 	hear.call(charting)
 	charting.add_kill("nobody")
@@ -843,7 +848,10 @@ func _test_bounty_kills() -> bool:
 	shallow_run.tile_level = 4
 	shallow_run.add_kill(target)
 	_check(_have(drawer, 0) == 1, "and neither does a run's")
-	_check(said.size() == 1, "and neither is said (%s)" % [said])
+	_check(said.size() == 1, "and neither is said to count (%s)" % [said])
+	_check(too_low == [[target, 5], [target, 5]], "but each is said to be too low, with the level wanted (%s)" % [too_low])
+	shallow.add_kill("nobody")
+	_check(too_low.size() == 2, "and a body the bounty does not want is not")
 
 	var run := FightLedger.new(inventory, TEST_PATH, true)
 	hear.call(run)
@@ -865,6 +873,8 @@ func _test_bounty_kills() -> bool:
 	last.add_kill(target)
 	_check(said.slice(4) == [[target, 5, 5]], "the filling body is said and the one past it is not (%s)" % [said])
 	_check(_have(drawer, 0) == 5, "and the board stops at the job (%d)" % _have(drawer, 0))
+	shallow.add_kill(target)
+	_check(too_low.size() == 2, "and once it is filled, a shallow body is nothing to say either")
 	return true
 
 
@@ -938,6 +948,15 @@ func _test_selling() -> void:
 	# Put back for the checks below, which count the purse and the bag as they were.
 	inventory.add(boot)
 	inventory.gold = price
+	# Never sell greys the piece's own Sell, and a Ctrl-click passes it by.
+	boot.locked = true
+	page._select_item(inventory.items.find(boot))
+	var locked_sell := _deep_button(page._actions, "Sell")
+	_check(locked_sell != null and locked_sell.disabled, "a piece under Never sell cannot be sold")
+	page._press_action(false)
+	_check(inventory.items.has(boot) and inventory.gold == price, "and a Ctrl-click leaves it")
+	boot.locked = false
+	page._select_item(-1)
 	page.refresh()
 
 	# Sell all takes the ordinary pieces over the counter and asks about a unique among them on its
@@ -1175,7 +1194,7 @@ func _test_buying() -> void:
 	var card_text := " ".join(page._orb_card.find_children("*", "Label", true, false).map(
 			func(label: Label) -> String: return label.text))
 	_check(page._orb_card.visible and OrbTable.describe(orb) in card_text
-			and BigNumber.format(orb_price) in card_text and "purse is short" in card_text,
+			and BigNumber.format(orb_price) in card_text and "Not enough gold" in card_text,
 			"a shelf orb's card says what it does, its price and why not: %s" % card_text)
 	(shelf_orbs[0] as OrbSlot).unhovered.emit()
 	_check(not page._orb_card.visible, "and goes when the cursor does")
@@ -1238,11 +1257,17 @@ func _test_smithing() -> void:
 	_check(page.open_tab() == TownServices.SMITH, "the smith's tab is open")
 	_check(_button(page._rows, "Upgrade") == null and _button(page._rows, "Lock") == null,
 			"with nothing open in the bag there is nothing to press")
+	var named := func() -> bool:
+		return page._rows.get_children().any(func(c: Node) -> bool:
+			return c is Label and (c as Label).text == TownServices.label(TownServices.SMITH))
+	_check(named.call(), "and the counter is named")
 
 	# A piece held up to him: both prices on their buttons, and a purse that cannot cover either.
 	var piece := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 1)
 	inventory.add(piece)
 	page.bag_changed(piece)
+	# Its name heads the counter.
+	_check(not named.call(), "over a piece the counter is not named")
 	_check(page._upgrade_cap() == MapBuilder.circle_level(TOWN_CELL),
 			"the cap is this circle's deepest land (%d)" % page._upgrade_cap())
 	# Every tile in a circle shares it: the first circle's deepest land is its outer ring.
@@ -1312,7 +1337,7 @@ func _test_smithing() -> void:
 	_check(not worn.locked_mod().is_empty(), "a modifier is pinned")
 	_check(inventory.gold == purse - lock_price, "the purse paid the lock (%d, want %d)"
 			% [inventory.gold, purse - lock_price])
-	_check(_button(page._rows, "Lock").disabled, "and the button is dead for a second one")
+	_check(_deep_button(page._rows, "Lock").disabled, "and the button is dead for a second one")
 	var saved: Item = Inventory.load_from(TEST_PATH).equipment.item_at(Equipment.Socket.HELMET)
 	_check(saved != null and not saved.locked_mod().is_empty(),
 			"the lock was saved with the worn piece")
@@ -1491,14 +1516,13 @@ func _test_entering() -> void:
 	# Standing on a charted settlement is what the first tip about towns waits for, and reading its
 	# board is what the second one waits for.
 	_check(main._tip_due("first_town"), "standing on a charted town, the tip about towns is due")
-	_check(not main._tip_due("first_bounty"), "and the one about the board is not, unread")
+	_check(not main._tip_due("first_accept"), "and the smith's about taking work on is not")
 
 	main._on_town_pressed()
 	await process_frame
-	_check(main._tip_due("first_bounty"), "drawing the board is reading it, so that tip comes due")
-	_check("first_town" in main.inventory.tips and "first_bounty" in main.inventory.tips,
-			"both are marked seen once they are shown")
-	_check(Inventory.load_from(TEST_PATH).tips.has("first_bounty"), "and written down")
+	_check(not main._tip_due("first_accept"), "nor once the board is read, with nothing taken on")
+	_check("first_town" in main.inventory.tips, "the one about towns is marked seen once shown")
+	_check(Inventory.load_from(TEST_PATH).tips.has("first_town"), "and written down")
 	while main._tip_panel != null:
 		main._on_tip_closed()
 	await process_frame
@@ -1519,7 +1543,7 @@ func _test_entering() -> void:
 			== BountyBoard.COMMONS + BountyBoard.ELITES, "and the board has its three postings")
 	main.town_page._on_tab_pressed(vendor)
 	_check(main.bag_page._buys(vendor), "at the village's one vendor the bag is standing at the counter")
-	_check(not main.bag_page._worn_panel.visible, "the doll gives its room to the page")
+	_check(main.bag_page._worn_panel.visible, "and the doll stands beside it")
 	# The map is still clickable behind the page, and the tile panel shares that edge with it.
 	main.map.select_cell(MapBuilder.CENTER)
 	_check(not main._panel.visible, "clicking the map does not put the tile panel over the town")
@@ -1554,6 +1578,21 @@ func _test_entering() -> void:
 	main._on_town_pressed()
 	main.town_page._on_tab_pressed(TownServices.BOUNTIES)
 	await process_frame
+	var board_lands: Node = main.town_page._rows.find_child(BountyList.LANDS_NAME, true, false)
+	_check(board_lands != null and board_lands.is_visible_in_tree() and board_lands.get_child_count() > 0,
+			"the board's cards show where the monster lives, with no button to press first")
+	_check(_deep_button(main.town_page._rows, "Info") == null, "and have no Info")
+	# The longest common name at a tier III board's count, with a two-figure level badge beside it.
+	var widest := BountyList.row({BountyBoard.ENEMY: "Skeleton Warrior", BountyBoard.NEED: 12,
+			BountyBoard.LEVEL: 99}, main.view, TownPage.BODY_WIDTH)
+	main.town_page._rows.add_child(widest)
+	await process_frame
+	var name_width: float = widest.find_child(BountyList.LEVEL_NAME, true, false).get_parent() \
+			.get_child(0).get_combined_minimum_size().x + BountyList.CARD_PAD * 2
+	_check(widest.get_combined_minimum_size().x <= maxf(TownPage.BODY_WIDTH, name_width),
+			"a level badge goes under a long name rather than widening the card (%.0f)"
+			% widest.get_combined_minimum_size().x)
+	widest.queue_free()
 	var accept :=_deep_button(main.town_page._rows, "Accept")
 	_check(accept != null and not accept.disabled, "a posting on the board can be accepted")
 	if accept != null:
@@ -1561,6 +1600,11 @@ func _test_entering() -> void:
 	await process_frame
 	_check(not BountyBoard.active(main.inventory.towns).is_empty(), "which takes it on")
 	_check(not BountyBoard.active(Inventory.load_from(TEST_PATH).towns).is_empty(), "and is saved")
+	_check(main._tip_panel is DialogueBox and "first_accept" in main.inventory.tips
+			and Inventory.load_from(TEST_PATH).tips.has("first_accept"),
+			"and the first one taken on has the smith speak of the board's reward, once and saved")
+	while main._tip_panel != null:
+		main._on_tip_closed()
 	var others: Array = main.town_page._rows.find_children("", "Button", true, false).filter(
 			func(b: Button) -> bool: return b.text == "Accept")
 	_check(not others.is_empty() and others.all(func(b: Button) -> bool: return b.disabled),
@@ -1582,6 +1626,25 @@ func _test_entering() -> void:
 				"and each swatch names its land on hover")
 	_check(not _said(main.bounty_page).contains("Nearest"), "and names no tile")
 	_check(_deep_button(main.bounty_page, "Show") == null, "nor has a Show to take the map to one")
+	var out: Dictionary = BountyBoard.active(main.inventory.towns)
+	var chip: Node = main.bounty_page.find_child(BountyList.LEVEL_NAME, true, false)
+	_check(chip != null and _said(chip).strip_edges() == "Lv %d" % int(out[BountyBoard.LEVEL])
+			and not _said(main.bounty_page).contains("On level"),
+			"the level a kill must fall on is a badge by the name, not a sentence")
+	_check(_deep_button(main.bounty_page, "Claim at") == null, "an unfinished bounty has nothing to claim")
+	# Finished: the journal's button names the town and shows it on the map, and no sentence says so.
+	out[BountyBoard.HAVE] = out[BountyBoard.NEED]
+	main.bounty_page.open()
+	var claim_at := _deep_button(main.bounty_page, "Claim at")
+	_check(claim_at != null and claim_at.text == "Claim at " + main.view.name_of(town)
+			and not _said(main.bounty_page).contains("Finished"),
+			"a finished one has a Claim at its town, and says no more (%s)" % _said(main.bounty_page))
+	if claim_at != null:
+		claim_at.pressed.emit()
+	await process_frame
+	_check(main.map.selected_cell == town and main._panel.visible and not main.bounty_page.visible,
+			"which puts the page away and the town's tile panel up")
+	out[BountyBoard.HAVE] = 0
 	main._on_left_page_closed()
 	main.inventory.gold = 1.0e9
 	main.map.select_cell(town)

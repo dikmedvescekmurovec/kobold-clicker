@@ -61,8 +61,8 @@ const BUTTONS := {
 ## The green face is lettered in ink, as the pack letters its green bar: cream on that green is too pale.
 const GO_BUTTON := "LightGoButton"
 const GO_FONT_COLOR := Palette.INK
-## The same faces lettered in the body font, for a row of buttons inside a card (a bounty's Info and
-## Accept) where Pixellari's 16 px made the buttons outweigh what they act on. Each is the face it
+## The same faces lettered in the body font, for a row of buttons inside a card (a bounty's Accept
+## and Claim) where Pixellari's 16 px made the buttons outweigh what they act on. Each is the face it
 ## names, its padding cut to `SMALL_BUTTON_MARGIN`; a priced one carries a half-size coin.
 const SMALL_BUTTONS := {
 	"SmallButton": "LightButton",
@@ -507,6 +507,39 @@ static func label(text := "", color: Variant = null, small := false) -> Label:
 	if color != null:
 		made.add_theme_color_override("font_color", color)
 	return made
+
+
+## A few words in bone on a chip in the rule's brown, cut as the character page's attribute chips are:
+## the credits' "AI", a bounty's level.
+static func chip(text: String) -> PanelContainer:
+	var chip := PanelContainer.new()
+	var box := StyleBoxFlat.new()
+	box.bg_color = Palette.SLOT_TAN_DK
+	box.set_corner_radius_all(CharacterPage.CHIP_CORNER)
+	box.anti_aliasing = false
+	box.content_margin_left = CharacterPage.CHIP_PAD.x
+	box.content_margin_right = CharacterPage.CHIP_PAD.x
+	box.content_margin_top = CharacterPage.CHIP_PAD.y
+	box.content_margin_bottom = CharacterPage.CHIP_PAD.y
+	chip.add_theme_stylebox_override("panel", box)
+	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	chip.add_child(label(text, Palette.BONE, true))
+	return chip
+
+
+## The game's text field: a `LineEdit` in the cream panel's own white box, so it reads as something to
+## write in, `width` wide and taking at most `most` characters.
+static func text_field(placeholder: String, most: int, width: float) -> LineEdit:
+	var field := LineEdit.new()
+	field.max_length = most
+	field.placeholder_text = placeholder
+	field.custom_minimum_size.x = width
+	for state: String in ["normal", "focus", "read_only"]:
+		field.add_theme_stylebox_override(state, theme().get_stylebox("panel", "TextPanel"))
+	field.add_theme_color_override("font_color", Palette.TEXT)
+	field.add_theme_color_override("font_placeholder_color", Palette.TEXT_SOFT)
+	field.add_theme_color_override("caret_color", Palette.TEXT)
+	return field
 
 
 ## A box for whatever may run past the window's foot: it takes the column's slack and scrolls by the

@@ -986,6 +986,31 @@ func _test_wall(map: HexMap, view: MapBuilder) -> bool:
 	_check(illegal_border == 0, "the new land borders the old legally (%d bad borders)" % illegal_border)
 	view.reveal_all()
 	print("The wall fell in %d ms; the map is now %s" % [fall_ms, view.rect])
+
+	# The fallen wall's rubble lies along its ring, all of it but under a settlement, and nowhere else.
+	var old_ring := MapBuilder.START_LAND_RADIUS + 1
+	var rubble := map.rubble_layer.get_used_cells()
+	var expected := 0
+	for cell: Vector2i in view.to_save().states:
+		expected += int(HexGrid.distance(MapBuilder.CENTER, cell) == old_ring and view.town_tier(cell) == -1)
+	_check(rubble.size() == expected and rubble.has(wall) and rubble.all(func(cell: Vector2i) -> bool:
+			return HexGrid.distance(MapBuilder.CENTER, cell) == old_ring),
+			"the fallen wall's ring carries its rubble, but under a settlement (%d of %d)" % [rubble.size(), expected])
+	# A saved map lays it again where it lay, and on every ring a wall stood on: under the Ring of Walls the
+	# restore is told the step before it draws.
+	_check(view.to_save().save(TEST_MAP_PATH), "the fallen map writes itself to disk")
+	var save := MapSave.load_from(TEST_MAP_PATH, [], MapSave.fingerprint(map.tileset))
+	var other: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
+	root.add_child(other)
+	MapBuilder.restore(other, TownWorld.from_dict(save.towns), save)
+	_check(rubble.all(func(cell: Vector2i) -> bool:
+			return other.rubble_layer.get_cell_atlas_coords(cell) == map.rubble_layer.get_cell_atlas_coords(cell))
+			and other.rubble_layer.get_used_cells().size() == rubble.size(), "a saved map lays the same rubble")
+	MapBuilder.restore(other, TownWorld.from_dict(save.towns), save, MapBuilder.RING_OF_WALLS_STEP)
+	_check(other.rubble_layer.get_used_cells().any(func(cell: Vector2i) -> bool:
+			return HexGrid.distance(MapBuilder.CENTER, cell) == old_ring + MapBuilder.RING_OF_WALLS_STEP),
+			"and under the Ring of Walls, on the rings its walls stood on")
+	other.queue_free()
 	return true
 
 

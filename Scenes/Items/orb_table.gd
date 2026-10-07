@@ -189,7 +189,7 @@ static func can_apply(orb: String, item: Item) -> bool:
 			# 2026-10-02): an epic transmuted is an uncommon with an uncommon's modifiers.
 			return true
 		"Orb of Augmentation":
-			return item.mods.size() < _room(item)
+			return item.mods.size() < room(item)
 		"Orb of Divinity", "Orb of Chaos":
 			return not item.mods.is_empty()
 	return false
@@ -210,7 +210,7 @@ static func why_not(orb: String, item: Item) -> String:
 		return "Only an Orb of Divinity or Chaos can change a unique"
 	match orb:
 		"Orb of Augmentation":
-			if _room(item) == 0:
+			if room(item) == 0:
 				return "A common item cannot carry a modifier"
 			return "This %s already carries all it can" % piece
 		"Orb of Divinity", "Orb of Chaos":
@@ -296,8 +296,9 @@ static func _reroll_at(item: Item, rarity: ItemRarity.Rarity, rng: RandomNumberG
 
 
 ## The most modifiers this piece's rarity allows. A common's is zero, which is what makes a common
-## with a modifier a contradiction rather than a rare event.
-static func _room(item: Item) -> int:
+## with a modifier a contradiction rather than a rare event. The card writes what is left of it as an
+## empty row (`ItemDetails.fill`).
+static func room(item: Item) -> int:
 	return int(ItemRarity.MOD_COUNT[item.rarity][1]) + int(item.extra_slot)
 
 

@@ -229,6 +229,15 @@ func _shoot_inventory() -> void:
 	crop.save_png("user://ui_inventory_crop.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_inventory_crop.png"))
 
+	# The filter's Rings tab open: the rings alone, under the levels that hold one.
+	main.bag_page._filter = "ring"
+	main.bag_page.refresh()
+	for i in 2:
+		await process_frame
+	await _save_window("ui_bag_filter.png")
+	main.bag_page._filter = ""
+	main.bag_page.refresh()
+
 	# The elite sword selected -- the newest item -- with its buttons beside its square, and the doll
 	# still standing beside the bag: what the piece would replace is the hover card's to say under Alt.
 	main.bag_page._select_item(main.inventory.total() - 1)
@@ -288,6 +297,19 @@ func _shoot_inventory() -> void:
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_two_handed.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_two_handed.png"))
+	# The panel's figures announcing a change, a click up and a second down, caught mid-float: the one
+	# shot here taken with animations on.
+	var animations := Settings.animations
+	Settings.animations = Settings.Anim.DEFAULT
+	var per_click: float = main._character._per_click
+	var per_second: float = main._character._per_second
+	main._character.set_damage(per_click + 5.0, maxf(per_second - 2.0, 0.0), true)
+	for i in 4:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_damage_change.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_damage_change.png"))
+	Settings.animations = animations
 	main.queue_free()
 	await process_frame
 	for scratch in [SCRATCH_SAVE, SCRATCH_MAP]:
@@ -368,7 +390,7 @@ func _shoot_skills() -> void:
 
 ## A settlement: what the tile panel says about one from outside, then the inside of it -- each
 ## counter's shelf with the bag standing beside it, and one piece off the shelf open with its price.
-## The whole point of these is the width and the height: the town page, the bag and the doll at the smith
+## The whole point of these is the width and the height: the town page, the bag and the doll
 ## have to share a 1152x648 window and the shelf has to fit down the page, so they are full-window
 ## shots.
 func _shoot_town() -> void:
@@ -432,7 +454,7 @@ func _shoot_town() -> void:
 	for i in 2:
 		await process_frame
 
-	# The board as a town opens on it: three cards, each a picture, a name, a reward, Info and Accept.
+	# The board as a town opens on it: three cards, each a picture, a name, a reward, its lands and Accept.
 	# Two of the postings are made to promise a piece -- an elite sword +1 and a unique -- so the shot
 	# has both reward squares on it whatever the seed rolled.
 	var board := BountyBoard.bounties(main.inventory.towns.visit(main.view.origin + town))
@@ -831,8 +853,8 @@ func _shoot_town() -> void:
 	Settings.animations = animations
 
 	# And out of the town again, where the same postings are read off the journal in the corner: the
-	# town that posted them over the top, the swatches and the nearest tile under each, and the line
-	# that says a finished one is paid for back where it was taken on.
+	# town that posted them over the top, the level badge and the swatches on each, and a finished one's
+	# Claim at the town it is paid for in.
 	main._on_left_page_closed()
 	main._on_bounty_pressed()
 	for i in 2:
@@ -978,6 +1000,15 @@ func _shoot_town() -> void:
 	root.get_texture().get_image().save_png("user://ui_character_folded.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_character_folded.png"))
 	main.character_page.find_children("*", "VBoxContainer", true, false).filter(func(n: Node) -> bool: return n is Accordion)[0].toggle()
+	# The pencil's text box over the page.
+	main._on_rename_pressed()
+	for i in 2:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_rename.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_rename.png"))
+	for prompt: Node in main._ui_layer.get_children().filter(func(n: Node) -> bool: return n is TextPrompt):
+		prompt.free()
 	main._on_left_page_closed()
 	var radius: int = main.view.land_radius
 	var generated := MapBuilder.START_LAND_RADIUS + MapBuilder.WASTE_DEPTH + 1

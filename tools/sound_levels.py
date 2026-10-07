@@ -47,9 +47,14 @@ CUTS = {
     f"{SFX}/blunt_hit.ogg": ("blunt hit.mp3", 0.07, 1.15),
     f"{SFX}/blunt_crit.ogg": ("blunt critical.mp3", 0.30, 1.10),
     f"{SFX}/slash_crit.ogg": ("slash critical.mp3", 0.05, 2.19),
+    # Played over `slash_crit` (the user's pairing), so it starts on its hit, not on the swell before.
+    f"{SFX}/general_crit.ogg": ("general crit.mp3", 0.07, 0.80),
     f"{SFX}/defeat.ogg": ("defeat.mp3", 0.06, 2.55),
     f"{SFX}/unique_drop.ogg": ("unique drop.mp3", 0.30, 4.10),
     f"{SFX}/cloth_drop.ogg": ("clothes drop.mp3", 0.13, 1.10),
+    f"{SFX}/item_drop.ogg": ("Drop Large Item.wav", 0.16, 1.00),
+    # Its ring and the little bounce after it, at 0.8 s.
+    f"{SFX}/orb_drop.ogg": ("Drop, Complex Crystaline Item.wav", 0.27, 1.00),
     # Gated: the pick is a quiet clink over a steady hiss, which its level raised to 11 dB under it.
     f"{SFX}/jewel_drop.ogg": ("jewelry drop 2.mp3", 0.44, 1.94,
                               "agate=threshold=0.015:ratio=20:attack=0.5:release=80:range=0.001"),
@@ -99,11 +104,15 @@ LEVELS = {
     f"{SFX}/blunt_hit.ogg": -16.0,
     f"{SFX}/blunt_crit.ogg": -14.0,
     f"{SFX}/slash_crit.ogg": -14.0,
+    f"{SFX}/general_crit.ogg": -16.0,
     f"{SFX}/defeat.ogg": -17.0,
     f"{SFX}/unique_drop.ogg": -10.0,
     f"{SFX}/cloth_drop.ogg": DROP,
+    # Under the other drops: heard every few kills (the user's, 2026-10-06).
+    f"{SFX}/item_drop.ogg": -18.0,
+    f"{SFX}/orb_drop.ogg": -18.0,
     f"{SFX}/jewel_drop.ogg": DROP,
-    **{name: DROP for name in CUTS if "weapon_drop" in name or "base_drop" in name or "orb_drop" in name},
+    **{name: DROP for name in CUTS if "weapon_drop" in name or "base_drop" in name or "orb_drop_" in name},
     f"{SFX}/coin_drop.ogg": -25.0,
     **{name: -27.0 for name in CUTS if "/xp_" in name},
     f"{SFX}/level_up.ogg": -15.0,

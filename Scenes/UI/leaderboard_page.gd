@@ -98,17 +98,8 @@ func _draw() -> void:
 
 ## A name and Choose. The server says whether it will have it; the field only stops what it never would.
 func _draw_join() -> void:
-	var field := LineEdit.new()
-	field.max_length = 16
-	field.placeholder_text = "Your name"
+	var field := UITheme.text_field("Your name", 16, WIDTH)
 	field.text = _typed
-	field.custom_minimum_size.x = WIDTH
-	# The cream panel's own white box, so the field reads as something to write in.
-	for state: String in ["normal", "focus", "read_only"]:
-		field.add_theme_stylebox_override(state, UITheme.theme().get_stylebox("panel", "TextPanel"))
-	field.add_theme_color_override("font_color", Palette.TEXT)
-	field.add_theme_color_override("font_placeholder_color", Palette.TEXT_SOFT)
-	field.add_theme_color_override("caret_color", Palette.TEXT)
 	_rows.add_child(field)
 	var join := UITheme.button("Choose name", UITheme.GO_BUTTON, "Put this name on the board")
 	var ready_to_join := func() -> void:

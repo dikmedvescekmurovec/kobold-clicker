@@ -29,6 +29,9 @@ func _run() -> void:
 	_check(_test_the_hand_is_capped() == true, "click cap tests ran to the end")
 	_check(_test_spawn_speed() == true, "spawn speed tests ran to the end")
 	_check(_test_bleed() == true, "bleed tests ran to the end")
+	_check(_test_weapon_lines() == true, "weapon line tests ran to the end")
+	_check(_test_elite_chance() == true, "elite chance tests ran to the end")
+	_check(_test_defence_lines() == true, "helmet, body and offhand line tests ran to the end")
 	_check(_test_capstone_effects() == true, "capstone effect tests ran to the end")
 	_check(_test_unique_drops() == true, "unique drop tests ran to the end")
 	_check(_test_unique_effects() == true, "unique effect tests ran to the end")
@@ -249,6 +252,253 @@ func _test_the_hand_is_capped() -> bool:
 
 ## The mace's Bleed: a share of the blow that goes on coming off while the body stands there, the
 ## deepest wound and never a pile of them, and a death it can bring about on its own.
+## The weapon's lines: each on the blow it names and no other, one sum, and what a blow is worth on
+## average says so.
+func _test_weapon_lines() -> bool:
+	var top := 1.0e9
+	# Click Damage on the hand's blow, Swing Damage on the weapon's own.
+	var both := _standing([], {"damage": 9.0, "click_damage": 50.0, "swing_damage": 100.0, "attack_speed": 1.0})
+	both.hit()
+	_check(both.hp == top - 15.0, "a click of 10 at +50%% is 15 (%s)" % (top - both.hp))
+	both.advance(1.0)
+	_check(both.hp == top - 35.0, "and a swing of 10 at +100%% is 20 (%s)" % (top - both.hp - 15.0))
+	# Elite Damage on an elite and not on a common; First Blow Damage on a body's first blow alone.
+	var big := _standing([], {"damage": 9.0, "elite_damage": 100.0})
+	big.hit()
+	_check(big.hp == top - 10.0, "a common takes the plain blow")
+	big.index = big.enemies - 1
+	big.hp = big.health[big.index]
+	var before := big.hp
+	big.hit()
+	_check(big.on_elite() and big.hp == before - 20.0, "the elite takes twice it")
+	var opener := _standing([], {"damage": 9.0, "first_blow": 100.0, "click_damage": 50.0})
+	opener.hit()
+	_check(opener.hp == top - 25.0, "the first blow adds its share to the click's, one sum (%s)" % (top - opener.hp))
+	opener.hit()
+	_check(opener.hp == top - 40.0, "and the second has only the click's")
+	# Double Strike: capped at certainty, where every blow lands twice; with none, nothing is drawn.
+	var twice := _standing([], {"damage": 9.0, "double_strike": 150.0})
+	_check(twice.double_strike == 100.0, "a chance is at most certain")
+	twice.hit()
+	_check(twice.hp == top - 20.0, "a blow of 10 lands as 20 (%s)" % (top - twice.hp))
+	var plain := _standing([], {"damage": 9.0})
+	var drawn := plain.crit_rng.state
+	plain.hit()
+	_check(plain.crit_rng.state == drawn, "with no chance at all the generator is left alone")
+	# The average blow counts the hand's or the weapon's line and the double strike, and nothing of the
+	# elite's or the first blow's.
+	var average := _standing([], {"damage": 9.0, "click_damage": 50.0, "swing_damage": 100.0,
+		"double_strike": 50.0, "elite_damage": 300.0, "first_blow": 300.0})
+	_check(is_equal_approx(average.average_blow(false), 22.5) and is_equal_approx(average.average_blow(true), 30.0),
+			"a click averages 22.5 and a swing 30 (%s, %s)" % [average.average_blow(false), average.average_blow(true)])
+	return true
+
+
+## Elite Chance: commons come on as elites of their ground, sized as elites, once a fight -- and a run's
+## later bodies as they join. Never in the dungeon, and with none nothing is drawn.
+func _test_elite_chance() -> bool:
+	var cell := Vector2i(12, 0)
+	var plain := Encounter.for_tile(cell, "grass")
+	var none := Encounter.for_tile(cell, "grass")
+	var untouched := none.elite_rng.state
+	none.arm({})
+	_check(none.lineup == plain.lineup and none.elite_rng.state == untouched,
+			"with no chance the lineup is the cell's and nothing is drawn")
+	var promoted := Encounter.for_tile(cell, "grass")
+	promoted.elite_rng.seed = WORLD_SEED
+	promoted.arm({"elite_chance": 250.0})
+	_check(promoted.elite_chance == 100.0, "a chance is at most certain")
+	for at in promoted.lineup.size():
+		var enemy := promoted.lineup[at]
+		_check(Encounter.tier_in(promoted, at) == EnemyRoster.Tier.ELITE
+				and "grass" in EnemyRoster.environments_of(enemy),
+				"%s at %d comes on as an elite of the grass" % [enemy, at])
+		_check(promoted.health[at] == Encounter.hp_of(enemy, cell), "%s is sized as the elite it is" % enemy)
+	_check(promoted.hp == promoted.health[0], "the first body out is the promoted one")
+	var kept := promoted.lineup.duplicate()
+	promoted.arm({"elite_chance": 100.0})
+	_check(promoted.lineup == kept and promoted.enemies == plain.enemies, "armed again it promotes nothing more")
+	# A run asks each body as it joins.
+	var run := Encounter.farm(cell, "grass")
+	run.arm({"elite_chance": 100.0, "damage": 1.0e9})
+	run.start()
+	for i in 4:
+		run.advance(Encounter.WALK_IN)
+		run.hit()
+		run.advance(Encounter.DEATH)
+	_check(run.lineup.size() > 4, "the run went on (%d)" % run.lineup.size())
+	for enemy in run.lineup:
+		_check(EnemyRoster.tier_of(enemy) == EnemyRoster.Tier.ELITE, "%s joined the run as an elite" % enemy)
+	# The dungeon's floors are counted, and the wall is a wall.
+	var deep := Encounter.for_dungeon()
+	deep.arm({"elite_chance": 100.0})
+	_check(EnemyRoster.tier_of(deep.lineup[0]) == EnemyRoster.Tier.COMMON, "the dungeon's first floor stays rabble")
+	var wall := Encounter.for_wall(cell)
+	wall.arm({"elite_chance": 100.0})
+	_check(wall.lineup[0] == Encounter.WALL_NAME, "and the wall stays the wall")
+	return true
+
+
+## The helmet's, the body's and the offhand's lines (2026-10-07): each does what its sentence says, on
+## the fights it says, and the "less" ones stop at `WARD_MOST`.
+func _test_defence_lines() -> bool:
+	var top := 1.0e9
+	# A later first blow: half an interval late, and the blows after it on their own rhythm.
+	var late := _struck_standing(EnemyRoster.Tier.COMMON, {"blow_delay": 50.0})
+	var blows: Array = []
+	late.player_hit.connect(func(t: float, _d: bool, _b: bool) -> void: blows.append(t))
+	late.advance(1.499)
+	_check(blows.is_empty(), "the first blow waits half an interval more (%d)" % blows.size())
+	late.advance(0.002)
+	_check(blows.size() == 1, "and then lands")
+	late.advance(1.0)
+	_check(blows.size() == 2, "and the next a whole interval after it")
+
+	# Less off an elite's or a boss's blow, nothing off a common's, and never past the most.
+	for tier: EnemyRoster.Tier in [EnemyRoster.Tier.COMMON, EnemyRoster.Tier.ELITE]:
+		var warded := _struck_standing(tier, {"elite_ward": 50.0})
+		var taken: Array = []
+		warded.player_hit.connect(func(t: float, _d: bool, _b: bool) -> void: taken.append(t))
+		warded.advance(float(Encounter.ATTACK_EVERY[tier]) + 0.001)
+		var whole := Encounter.hit_of(warded.enemy_name(), warded.cell)
+		var want := whole * (0.5 if tier == EnemyRoster.Tier.ELITE else 1.0)
+		_check(taken.size() == 1 and is_equal_approx(float(taken[0]), want),
+				"tier %d's blow takes %.3f (%s)" % [tier, want, taken])
+	var most := Encounter.new()
+	most.arm({"elite_ward": 500.0, "tile_ward": 500.0, "less_health": 500.0, "recoup": 500.0})
+	_check(most.elite_ward == Encounter.WARD_MOST and most.tile_ward == Encounter.WARD_MOST
+			and most.less_health == Encounter.WARD_MOST and most.recoup == 100.0, "each stops at its most")
+
+	# Weaker tile modifiers: half of a Piercing tile's armour back, half a Dusk's seconds, half a
+	# Thick-skinned tile's health and half a Brutal tile's blow; what the tile pays is untouched.
+	var here := Vector2i(4, 6)
+	var mods := ["piercing", "short_day", "thick_skinned", "savage"]
+	var bitten := Encounter.for_tile(here, "grass", "plain", false, mods)
+	bitten.arm({"armor": 100.0})
+	var softer := Encounter.for_tile(here, "grass", "plain", false, mods)
+	softer.arm({"armor": 100.0, "tile_ward": 50.0})
+	_check(is_equal_approx(bitten.armor, 50.0) and is_equal_approx(softer.armor, 75.0),
+			"a Piercing tile leaves 50 armour, three quarters with half its bite gone (%s)" % softer.armor)
+	_check(is_equal_approx(softer.seconds, bitten.seconds + 4.0) and is_equal_approx(softer.time_left, softer.seconds),
+			"a Dusk takes four seconds rather than eight (%s, %s)" % [bitten.seconds, softer.seconds])
+	for at in bitten.lineup.size():
+		var plain := Encounter.hp_of(bitten.lineup[at], here)
+		_check(softer.health[at] == maxf(1.0, roundf(plain * 1.25)) and bitten.health[at] == maxf(1.0, roundf(plain * 1.5)),
+				"%s has a quarter more health rather than a half" % bitten.lineup[at])
+	_check(softer.gold_find == bitten.gold_find and softer.drop_rate == bitten.drop_rate, "and the tile pays as much")
+	# Armed again with no armour, so the blows are the tile's alone.
+	bitten.arm({})
+	softer.arm({"tile_ward": 50.0})
+	for fight: Encounter in [bitten, softer]:
+		fight.strikes = true
+		fight.lineup[0] = _enemy_of(EnemyRoster.Tier.COMMON)
+		fight.hp = top
+		fight.start()
+		fight.advance(fight.walk_in)
+	var sizes: Array = []
+	for fight: Encounter in [bitten, softer]:
+		fight.player_hit.connect(func(t: float, _d: bool, _b: bool) -> void: sizes.append(t))
+		fight.advance(1.001)
+	var bare_hit := Encounter.hit_of(bitten.lineup[0], here)
+	_check(sizes.size() == 2 and is_equal_approx(float(sizes[0]) / float(sizes[1]), 1.5 / 1.25),
+			"a Brutal tile's blow is a quarter more rather than a half (%s against %s)" % [sizes, bare_hit])
+
+	# Less health: on every body of a tile, on the wall, and on the dungeon's floors as they come.
+	var cell := Vector2i(12, 0)
+	var full := Encounter.for_tile(cell, "grass")
+	var thin := Encounter.for_tile(cell, "grass")
+	thin.arm({"less_health": 20.0})
+	for at in full.lineup.size():
+		_check(thin.health[at] == maxf(1.0, roundf(full.health[at] * 0.8)), "%s has a fifth less health" % full.lineup[at])
+	_check(thin.hp == thin.health[0], "the first body out is the thinner one")
+	var wall := Encounter.for_wall(cell)
+	var thin_wall := Encounter.for_wall(cell)
+	thin_wall.arm({"less_health": 20.0})
+	_check(thin_wall.hp == roundf(wall.hp * 0.8), "the wall too (%s of %s)" % [thin_wall.hp, wall.hp])
+	var deep := Encounter.for_dungeon()
+	var thin_deep := Encounter.for_dungeon()
+	thin_deep.arm({"less_health": 20.0, "damage": 1.0e12})
+	thin_deep.start()
+	thin_deep.advance(Encounter.WALK_IN)
+	thin_deep.hit()
+	thin_deep.advance(Encounter.DEATH + Encounter.WALK_IN)
+	deep._append_enemy(deep.roster_rng)
+	_check(thin_deep.health[1] == maxf(1.0, roundf(deep.health[1] * 0.8)), "and a floor joined later (%s)" % thin_deep.health[1])
+
+	# More or fewer bodies on a tile: commons at the front, the elite still last, the same each time;
+	# never the last body, and never a run's, a wall's or the dungeon's count.
+	for extra: int in [2, -2]:
+		var shaped := Encounter.for_tile(cell, "grass")
+		shaped.arm({"extra_enemies": float(extra)})
+		var again := Encounter.for_tile(cell, "grass")
+		again.arm({"extra_enemies": float(extra)})
+		_check(shaped.lineup.size() == full.lineup.size() + extra and shaped.enemies == shaped.lineup.size(),
+				"%+d is %d bodies (%d)" % [extra, full.lineup.size() + extra, shaped.lineup.size()])
+		_check(EnemyRoster.tier_of(shaped.lineup[-1]) == EnemyRoster.Tier.ELITE, "and the fight still ends on its elite")
+		_check(shaped.lineup == again.lineup, "the same bodies every time")
+		_check(shaped.hp == shaped.health[0], "the first out is the first in line")
+	var lone := Encounter.for_tile(cell, "grass")
+	lone.arm({"extra_enemies": -50.0})
+	_check(lone.lineup.size() == 1 and EnemyRoster.tier_of(lone.lineup[0]) == EnemyRoster.Tier.ELITE,
+			"the commons can all go, never the elite (%s)" % [lone.lineup])
+	var run := Encounter.farm(cell, "grass")
+	run.arm({"extra_enemies": 2.0})
+	_check(run.lineup.size() == 1, "a run has no count to change")
+	var still := Encounter.for_wall(cell)
+	still.arm({"extra_enemies": 2.0})
+	_check(still.lineup == PackedStringArray([Encounter.WALL_NAME]), "a wall is one body")
+
+	# Thorns: a blow that lands strikes back a share of the damage, and a dodged one nothing.
+	var spiky := _struck_standing(EnemyRoster.Tier.COMMON, {"damage": 9.0, "thorns": 50.0})
+	spiky.advance(1.001)
+	_check(spiky.hp == 1.0e9 - 5.0, "half of 10 struck back (%s)" % (1.0e9 - spiky.hp))
+	var slippery := _standing([], {"damage": 9.0, "thorns": 50.0, "dodge": 1.0e15})
+	slippery._struck_by(1.0)
+	_check(slippery.hp == top, "a dodged blow strikes nothing back")
+
+	# Recoup: half of a 4 s blow back over four seconds, a second's share at a time.
+	var mended := _standing([], {"recoup": 50.0})
+	var start := mended.time_left
+	mended._struck_by(4.0)
+	mended.advance(2.0)
+	_check(is_equal_approx(mended.time_left, start - 4.0 - 2.0 + 1.0), "half of it is back after two seconds (%.3f)"
+			% (mended.time_left - start))
+	mended.advance(10.0)
+	_check(is_equal_approx(mended.time_left, start - 4.0 - 12.0 + 2.0) and is_equal_approx(mended.wounds, 2.0),
+			"and all of the half after four, and no more (%.3f)" % (mended.time_left - start))
+
+	# A dodge hands the next blow its crit chance, and the blow after it has none.
+	var parried := _standing([], {"damage": 9.0, "crit_damage": 100.0, "parry": 100.0, "dodge": 1.0e15})
+	parried._struck_by(1.0)
+	parried.hit()
+	_check(parried.hp == top - 20.0, "the blow after a dodge crits (%s)" % (top - parried.hp))
+	parried.hit()
+	_check(parried.hp == top - 30.0, "and the next does not")
+
+	# Burn: 30% of a blow of 10 over three seconds is a point a second, the deepest burn, for three seconds.
+	var burnt := _standing([], {"damage": 9.0, "burn": 30.0})
+	burnt.hit()
+	burnt.advance(1.0)
+	_check(is_equal_approx(burnt.hp, top - 11.0), "a point burns in the first second (%s)" % (top - burnt.hp))
+	burnt.advance(5.0)
+	_check(is_equal_approx(burnt.hp, top - 13.0), "and three in all (%s)" % (top - burnt.hp))
+
+	# Time on block: a blow the block stops whole wins back its seconds out of the wounds, one that gets
+	# through wins nothing.
+	var blocker := _standing([], {"block": 100.0, "time_on_block": 10.0})
+	blocker.wounds = 5.0
+	blocker.time_left = 20.0
+	blocker._struck_by(1.0)
+	_check(is_equal_approx(blocker.time_left, 21.0) and is_equal_approx(blocker.wounds, 4.0),
+			"a second back for a blow stopped whole (%.2f)" % blocker.time_left)
+	var through := _standing([], {"time_on_block": 10.0})
+	through.wounds = 5.0
+	through.time_left = 20.0
+	through._struck_by(1.0)
+	_check(is_equal_approx(through.time_left, 19.0), "and nothing for one that got through (%.2f)" % through.time_left)
+	return true
+
+
 func _test_bleed() -> bool:
 	# Twenty points at a quarter is five a second, and the bar moves with it.
 	var mace := _standing([], {"damage": 19.0, "bleed": 25.0}, 1000.0)
@@ -1138,26 +1388,24 @@ func _test_sounds() -> bool:
 	for type: String in LootTable.items():
 		if not first.has(LootTable.kind_of(type)):
 			first[LootTable.kind_of(type)] = type
-	var lands := {"sword": "weapon", "mace": "weapon", "gold_ring": "jewel", "ruby_amulet": "jewel",
-			"hood": "cloth", "boot": "cloth", "jerkin": "cloth",
-			"helm": "base", "greaves": "base", "plate": "base", "shield": "base", "torch": "base"}
-	for kind: String in lands:
+	for kind: String in ["sword", "gold_ring", "boot", "plate", "torch"]:
 		var piece := _thrown_piece(ItemRarity.Rarity.RARE)
 		piece.type = first[kind]
-		_check(CombatScene.drop_sound_of(piece) == lands[kind], "a %s lands as %s" % [kind, lands[kind]])
+		_check(CombatScene.drop_sound_of(piece) == "gear", "a %s lands as gear" % kind)
 	_check(CombatScene.drop_sound_of(_thrown_piece(ItemRarity.Rarity.UNIQUE)) == "unique",
 			"and a unique with its own, whatever it is")
 
-	var blows := [["", CombatScene.HIT_SOUND, CombatScene.BLUNT_CRIT],
-			["mace", CombatScene.BLUNT_HIT, CombatScene.BLUNT_CRIT],
-			["sword", CombatScene.HIT_SOUND, CombatScene.SLASH_CRIT],
-			["dagger", CombatScene.HIT_SOUND, CombatScene.SLASH_CRIT]]
+	var blows := [["", CombatScene.HIT_SOUND, CombatScene.BLUNT_CRIT, null],
+			["mace", CombatScene.BLUNT_HIT, CombatScene.BLUNT_CRIT, null],
+			["sword", CombatScene.HIT_SOUND, CombatScene.SLASH_CRIT, CombatScene.GENERAL_CRIT],
+			["dagger", CombatScene.HIT_SOUND, CombatScene.SLASH_CRIT, CombatScene.GENERAL_CRIT]]
 	for blow: Array in blows:
 		var combat: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 		combat.weapon_kind = blow[0]
 		root.add_child(combat)
 		combat.begin(Encounter.for_tile(Vector2i(4, 0), "grass"), Vector2i(4, 0), 2.0)
-		_check(combat._hit_sound.stream == blow[1] and combat._crit_sound.stream == blow[2],
+		var layer: AudioStream = null if combat._crit_layer == null else combat._crit_layer.stream
+		_check(combat._hit_sound.stream == blow[1] and combat._crit_sound.stream == blow[2] and layer == blow[3],
 				"a hit with %s lands and crits as it should" % ("bare hands" if blow[0] == "" else "a " + blow[0]))
 		combat.free()
 	return true

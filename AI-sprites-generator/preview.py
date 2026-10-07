@@ -4,7 +4,7 @@ import random
 from PIL import Image
 
 from buildlib import ceil_div
-from hexlib import H, PALETTE, ROW_OFFSET, STEP_X, STEP_Y, W
+from hexlib import H, PALETTE, ROW_OFFSET, SHADE, SHADE_RGBA, STEP_X, STEP_Y, W
 
 
 def _rgba(hexstr):
@@ -19,7 +19,7 @@ RGBA = [_rgba(h) for _, h in PALETTE]
 
 def tile_image(tile):
     img = Image.new("RGBA", (getattr(tile, "w", W), getattr(tile, "h", H)))
-    img.putdata([RGBA[c] if c else (0, 0, 0, 0) for c in tile.flat()])
+    img.putdata([SHADE_RGBA if c == SHADE else RGBA[c] if c else (0, 0, 0, 0) for c in tile.flat()])
     return img
 
 

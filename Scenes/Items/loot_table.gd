@@ -67,17 +67,21 @@ const OLD_ROOT := ROOT + "Old/"
 ## top.
 const KINDS := {
 	# --- Helmet: a half each, and the two ways a head keeps a blow off the clock -- armour, which
-	# takes a share of every hit, and dodge, which now and then takes all of one.
+	# takes a share of every hit, and dodge, which now and then takes all of one. The head's own lines
+	# are the mind's: a later first blow, less from the big ones, weaker land, thinner bodies, a tree's
+	# skills a rank higher, and experience.
 	"helm": {
 		"slot": "helmet", "weight": 18, "needs": "strength",
 		"stats": {"armor": 3},
-		"affixes": ["time_on_hit", "strength", "intelligence"],
+		"affixes": ["time_on_hit", "strength", "intelligence", "xp_more", "blow_delay", "elite_ward",
+			"tile_ward", "less_health", "power_skills", "fortune_skills", "guard_skills"],
 		"tiers": ["Leather Helmet", "Iron Helmet", "Steel Helm", "Golden Helm", "Masterwork Helm"],
 	},
 	"hood": {
 		"slot": "helmet", "weight": 18, "needs": "dexterity",
 		"stats": {"dodge": 3},
-		"affixes": ["armor", "dexterity", "intelligence"],
+		"affixes": ["armor", "dexterity", "intelligence", "xp_more", "blow_delay", "elite_ward",
+			"tile_ward", "less_health", "power_skills", "fortune_skills", "guard_skills"],
 		"tiers": ["Hide Hood", "Leather Hood", "Studded Hood", "Shadow Hood", "Masterwork Hood"],
 	},
 	# --- Boots: every one of them keeps Move Speed, because that is what a boot is for.
@@ -104,27 +108,31 @@ const KINDS := {
 	"sword": {
 		"slot": "weapon", "weight": 12, "needs": "strength",
 		"stats": {"damage": 1, "crit_chance": 5, "crit_damage": 50, "attack_speed": 1.0},
-		"affixes": ["time_on_hit", "strength"],
+		"affixes": ["time_on_hit", "strength",
+			"click_damage", "swing_damage", "elite_damage", "first_blow", "double_strike"],
 		"tiers": ["Wooden Sword", "Iron Sword", "Steel Sword", "Golden Sword", "Masterwork Sword"],
 	},
 	"dagger": {
 		"slot": "weapon", "weight": 9, "needs": "dexterity",
 		"stats": {"damage": 1, "crit_chance": 8, "crit_damage": 50, "attack_speed": 1.8},
-		"affixes": ["time_on_hit", "dexterity"],
+		"affixes": ["time_on_hit", "dexterity",
+			"click_damage", "swing_damage", "elite_damage", "first_blow", "double_strike"],
 		"power": {"damage": 0.6},
 		"tiers": ["Bone Knife", "Iron Dagger", "Steel Stiletto", "Golden Kris", "Masterwork Dagger"],
 	},
 	"mace": {
 		"slot": "weapon", "weight": 9, "needs": "strength",
 		"stats": {"damage": 1, "crit_chance": 5, "crit_damage": 60, "attack_speed": 0.75, "bleed": 20},
-		"affixes": ["time_on_hit", "strength"],
+		"affixes": ["time_on_hit", "strength",
+			"click_damage", "swing_damage", "elite_damage", "first_blow", "double_strike"],
 		"power": {"damage": 1.3},
 		"tiers": ["Wooden Club", "Iron Mace", "Steel Morningstar", "Golden Sceptre", "Masterwork Mace"],
 	},
 	"greatsword": {
 		"slot": "weapon", "weight": 6, "needs": "strength", "two_handed": true,
 		"stats": {"damage": 1, "crit_chance": 5, "crit_damage": 75, "attack_speed": 0.5},
-		"affixes": ["time_on_hit", "strength"],
+		"affixes": ["time_on_hit", "strength",
+			"click_damage", "swing_damage", "elite_damage", "first_blow", "double_strike"],
 		"power": {"damage": 2.2},
 		"tiers": ["Wooden Greatsword", "Iron Claymore", "Steel Zweihander", "Golden Greatsword", "Masterwork Greatsword"],
 	},
@@ -132,34 +140,39 @@ const KINDS := {
 	"broken_sword": {
 		"slot": "weapon", "weight": 0, "needs": "strength",
 		"stats": {"damage": 1},
-		"affixes": ["time_on_hit", "strength"],
+		"affixes": ["time_on_hit", "strength",
+			"click_damage", "swing_damage", "elite_damage", "first_blow", "double_strike"],
 		"tiers": ["Broken Sword"],
 	},
 	# --- Offhand: the shield is the commonest thing to find in the hand, and the torch the rarest,
 	# because Sight is worth more than any number on it. Block lives here and nowhere else: a
 	# greatsword gives it up with the hand it closes.
+	# The shield's own line is what a blow its block stops whole wins back; the buckler's, the crit a
+	# dodge hands the next blow.
 	"shield": {
 		"slot": "offhand", "weight": 30, "needs": "strength",
 		"stats": {"armor": 3, "block": 2},
-		"affixes": ["strength"],
+		"affixes": ["strength", "time_on_block"],
 		"tiers": ["Wooden Shield", "Iron Shield", "Steel Kite Shield", "Golden Aegis", "Masterwork Shield"],
 	},
 	"buckler": {
 		"slot": "offhand", "weight": 24, "needs": "dexterity",
 		"stats": {"dodge": 3, "block": 2},
-		"affixes": ["armor", "dexterity"],
+		"affixes": ["armor", "dexterity", "parry"],
 		"tiers": ["Hide Buckler", "Iron Buckler", "Steel Targe", "Golden Buckler", "Masterwork Buckler"],
 	},
 	# Sight is the whole piece and it has only three values, so the torch has three materials rather
 	# than five and names its own unlock levels: the masterwork's is the others', and its third tile is
 	# the whole of what it is. Its affixes are all flat: with no base number but Sight,
 	# there is nothing on it for a percent modifier to scale. Crit chance sits beside the crit damage
-	# it already rolled, and is what makes its pool deep enough for an elite piece.
+	# it already rolled, and is what makes its pool deep enough for an elite piece. A torch burns what
+	# it strikes, and is the map's piece and the intelligence's: move speed, experience and orbs.
 	"torch": {
 		"slot": "offhand", "weight": 18, "needs": "intelligence",
 		"tier_levels": [1, 5, 9],
 		"tier_stats": [{"sight": 1}, {"sight": 2}, {"sight": 3}],
-		"affixes": ["block", "crit_chance", "crit_damage", "intelligence"],
+		"affixes": ["block", "crit_chance", "crit_damage", "intelligence", "burn", "move_speed",
+			"xp_more", "orb_find"],
 		"tiers": ["Wooden Torch", "Blazing Torch", "Masterwork Torch"],
 	},
 	# What a world under the Thick Fog begins with and nothing else hands out (BROKEN_TORCH): weight
@@ -168,53 +181,58 @@ const KINDS := {
 	"broken_torch": {
 		"slot": "offhand", "weight": 0, "needs": "intelligence",
 		"stats": {"sight": 1},
-		"affixes": ["block", "crit_chance", "crit_damage", "intelligence"],
+		"affixes": ["block", "crit_chance", "crit_damage", "intelligence", "burn", "move_speed",
+			"xp_more", "orb_find"],
 		"tiers": ["Broken Torch"],
 	},
-	# --- Body: the biggest numbers in the table, and the same two-way split as the head.
+	# --- Body: the biggest numbers in the table, and the same two-way split as the head. The body's own
+	# lines are the long haul's: a camp's pay, more or fewer bodies a fight, blows struck back, and time
+	# a blow took coming back.
 	"plate": {
 		"slot": "body", "weight": 12, "needs": "strength",
 		"stats": {"armor": 5},
-		"affixes": ["time_on_hit", "dodge", "strength"],
+		"affixes": ["time_on_hit", "dodge", "strength", "camp_earnings", "extra_enemies", "thorns", "recoup"],
 		"tiers": ["Wooden Armour", "Iron Armour", "Steel Plate", "Golden Plate", "Masterwork Plate"],
 	},
 	"jerkin": {
 		"slot": "body", "weight": 12, "needs": "dexterity",
 		"stats": {"dodge": 5},
-		"affixes": ["armor", "time_on_hit", "dexterity"],
+		"affixes": ["armor", "time_on_hit", "dexterity", "camp_earnings", "extra_enemies", "thorns", "recoup"],
 		"tiers": ["Hide Jerkin", "Leather Jerkin", "Studded Jerkin", "Shadow Leathers", "Masterwork Jerkin"],
 	},
 	# --- Jewellery: one material apiece, the way Path of Exile's is. The kinds are gem and metal
 	# pieces rather than a ladder, and all eight carry the global offence.
 	#
 	# The rings are where a stat of the player's own is a base stat: a ring is worn for what it
-	# finds -- gold on the Gold Ring, rarity on the Opal, orbs on the Pearl -- or for a little defence.
-	# What offence it carries is all modifiers -- flat damage and crit among the affixes, the two
-	# increases in `globals` -- so a ring is worth something to a fight without ever being the thing
-	# that swings. Five rings share the three rings' old weight of 24, so the slot drops as often as it
-	# always did.
+	# finds -- gold on the Gold Ring, rarity on the Opal, orbs on the Pearl -- or for a little defence,
+	# which the Iron Band and the Jade Ring scale for the whole set (a global on a stat the piece shows
+	# takes the place of its own percent: `ModifierTable.pool_for`). What offence a ring carries is all
+	# modifiers -- flat damage and crit among the affixes, the increases in `globals` -- so a ring is worth
+	# something to a fight without ever being the thing that swings. Every ring may roll every finder but
+	# drop rate, which is the amulets', and the elite chance that only a ring carries.
+	# Five rings share the three rings' old weight of 24, so the slot drops as often as it always did.
 	"gold_ring": {
 		"slot": "ring", "weight": 5,
 		"stats": {"gold_find": 20},
 		"affixes": ["damage", "crit_chance", "crit_damage", "strength", "dexterity", "intelligence",
-			"item_rarity"],
-		"globals": ["damage", "attack_speed"],
+			"item_rarity", "orb_find", "time_on_hit", "xp_more", "elite_chance"],
+		"globals": ["damage", "attack_speed", "crit_chance", "crit_damage"],
 		"tiers": ["Gold Ring"],
 	},
 	"iron_band": {
 		"slot": "ring", "weight": 5,
 		"stats": {"armor": 2},
 		"affixes": ["damage", "crit_chance", "crit_damage", "strength", "dexterity", "intelligence",
-			"item_rarity"],
-		"globals": ["damage", "attack_speed"],
+			"item_rarity", "gold_find", "orb_find", "time_on_hit", "xp_more", "elite_chance"],
+		"globals": ["damage", "attack_speed", "crit_chance", "crit_damage", "armor"],
 		"tiers": ["Iron Band"],
 	},
 	"jade_ring": {
 		"slot": "ring", "weight": 5,
 		"stats": {"dodge": 2},
 		"affixes": ["damage", "crit_chance", "crit_damage", "strength", "dexterity", "intelligence",
-			"item_rarity"],
-		"globals": ["damage", "attack_speed"],
+			"item_rarity", "gold_find", "orb_find", "time_on_hit", "xp_more", "elite_chance"],
+		"globals": ["damage", "attack_speed", "crit_chance", "crit_damage", "dodge"],
 		"tiers": ["Jade Ring"],
 	},
 	# Item rarity as a base stat, where every other jewel only rolls it: the middle of
@@ -222,46 +240,48 @@ const KINDS := {
 	"opal_ring": {
 		"slot": "ring", "weight": 5,
 		"stats": {"item_rarity": 15},
-		"affixes": ["damage", "crit_chance", "crit_damage", "strength", "dexterity", "intelligence"],
-		"globals": ["damage", "attack_speed"],
+		"affixes": ["damage", "crit_chance", "crit_damage", "strength", "dexterity", "intelligence",
+			"gold_find", "orb_find", "time_on_hit", "xp_more", "elite_chance"],
+		"globals": ["damage", "attack_speed", "crit_chance", "crit_damage"],
 		"tiers": ["Opal Ring"],
 	},
 	# The one piece that shows orb find, which only the Fortune tree gave before; a skill's rank is 10.
-	# No modifier rolls it, so this number is all of it.
+	# The middle of `added_orb_find`'s band, which the other rings roll.
 	"pearl_ring": {
 		"slot": "ring", "weight": 4,
 		"stats": {"orb_find": 15},
 		"affixes": ["damage", "crit_chance", "crit_damage", "strength", "dexterity", "intelligence",
-			"item_rarity"],
-		"globals": ["damage", "attack_speed"],
+			"item_rarity", "gold_find", "time_on_hit", "xp_more", "elite_chance"],
+		"globals": ["damage", "attack_speed", "crit_chance", "crit_damage"],
 		"tiers": ["Pearl Ring"],
 	},
 	# The catch-all socket, and the rarest: the widest affix pools in the table, so an amulet is the
-	# one piece that can turn up carrying almost anything. The Gold Amulet shows drop rate, the broad
+	# one piece that can turn up carrying almost anything -- all three attributes in one line among them,
+	# and the set's bleed and defence among its globals. The Gold Amulet shows drop rate, the broad
 	# finder -- it lifts gear, uniques, orbs and gold alike -- and the Emerald crit chance, the middle
 	# of `added_crit`'s band.
 	"ruby_amulet": {
 		"slot": "amulet", "weight": 4,
 		"stats": {"crit_damage": 10},
 		"affixes": ["crit_chance", "damage", "drop_rate", "time_on_hit", "strength", "dexterity",
-			"intelligence", "item_rarity"],
-		"globals": ["damage", "attack_speed"],
+			"intelligence", "item_rarity", "all_attributes"],
+		"globals": ["damage", "attack_speed", "bleed", "armor", "dodge", "time_on_hit"],
 		"tiers": ["Ruby Amulet"],
 	},
 	"gold_amulet": {
 		"slot": "amulet", "weight": 4,
 		"stats": {"drop_rate": 5},
 		"affixes": ["crit_chance", "crit_damage", "damage", "time_on_hit", "strength",
-			"dexterity", "intelligence", "item_rarity"],
-		"globals": ["damage", "attack_speed"],
+			"dexterity", "intelligence", "item_rarity", "all_attributes"],
+		"globals": ["damage", "attack_speed", "bleed", "armor", "dodge", "time_on_hit"],
 		"tiers": ["Gold Amulet"],
 	},
 	"emerald_amulet": {
 		"slot": "amulet", "weight": 4,
 		"stats": {"crit_chance": 3},
 		"affixes": ["crit_damage", "damage", "drop_rate", "time_on_hit", "strength",
-			"dexterity", "intelligence", "item_rarity"],
-		"globals": ["damage", "attack_speed"],
+			"dexterity", "intelligence", "item_rarity", "all_attributes"],
+		"globals": ["damage", "attack_speed", "bleed", "armor", "dodge", "time_on_hit"],
 		"tiers": ["Emerald Amulet"],
 	},
 }
@@ -346,6 +366,14 @@ const STAT_LABELS := {
 	"attack_speed": "Attack Speed",
 	# What a blow leaves behind: a share of it that goes on hurting. The mace's, and nothing else's.
 	"bleed": "Bleed",
+	# The weapon's own lines: more of one kind of blow -- the hand's, the weapon's own swing, one at an
+	# elite or a boss, the first an enemy takes -- and a chance a blow lands twice. Each a percentage
+	# the fight reads (`Encounter.gear_more`), carried and never shown by a piece.
+	"click_damage": "Click Damage",
+	"swing_damage": "Swing Damage",
+	"elite_damage": "Elite Damage",
+	"first_blow": "First Blow Damage",
+	"double_strike": "Double Strike",
 	# Defence, which rolls nearly everywhere: what keeps an enemy's blow off the fight clock.
 	"armor": "Armour",
 	"dodge": "Dodge",
@@ -365,6 +393,8 @@ const STAT_LABELS := {
 	"strength": "Strength",
 	"dexterity": "Dexterity",
 	"intelligence": "Intelligence",
+	# One line of all three, which `Inventory.attributes` adds to each and nothing else reads.
+	"all_attributes": "All Attributes",
 	# The other two finders. The Fortune tree carries all three; the jewellery rolls item rarity, the
 	# Gold Ring shows gold find, the Opal Ring item rarity and the Pearl Ring orb find.
 	"item_rarity": "Item Rarity",
@@ -373,9 +403,38 @@ const STAT_LABELS := {
 	# How much shorter the next enemy's walk-in is. A percentage of the walk, capped at 100 by
 	# `Encounter.arm`: at the cap the next body is simply there.
 	"spawn_speed": "Spawn Speed",
+	# More experience off every body: the intelligence's, the curses', and a ring's, a helmet's and a
+	# torch's line.
+	"xp_more": "Experience",
+	# How often a common comes on as an elite instead (`Encounter.arm`): more to fight, more to find.
+	"elite_chance": "Elite Chance",
+	# The helmet's lines (`Encounter.arm`): how much later an enemy's first blow comes, how much less an
+	# elite's or a boss's blow takes, how much of a tile modifier's bite is gone, how much less health
+	# every body has -- and a rank more on every learned skill of one tree (`Skills.flat`).
+	"blow_delay": "Enemy First Blow Delay",
+	"elite_ward": "Elite Blow Reduction",
+	"tile_ward": "Tile Modifier Reduction",
+	"less_health": "Enemy Health Reduction",
+	"power_skills": "Power Skill Ranks",
+	"fortune_skills": "Fortune Skill Ranks",
+	"guard_skills": "Guard Skill Ranks",
+	# The body armour's: more gold and experience off a camp (`Camp.make`), bodies more or fewer in a
+	# fight, a share of the damage struck back at whatever lands a blow, and a share of what a blow took
+	# coming back over a few seconds.
+	"camp_earnings": "Camp Earnings",
+	"extra_enemies": "Enemies per Fight",
+	"thorns": "Thorns",
+	"recoup": "Recoup",
+	# The offhand's: the crit a dodge hands the next blow (the buckler's), a share of a blow burning on
+	# (the torch's), and what a blow the block stops whole wins back (the shield's, in tenths).
+	"parry": "Crit after a Dodge",
+	"burn": "Burn",
+	"time_on_block": "Time on Block",
 }
 const PERCENT_STATS := ["crit_chance", "crit_damage", "move_speed", "drop_rate", "bleed",
-	"item_rarity", "gold_find", "orb_find", "spawn_speed"]
+	"item_rarity", "gold_find", "orb_find", "spawn_speed", "click_damage", "swing_damage",
+	"elite_damage", "first_blow", "double_strike", "xp_more", "elite_chance", "blow_delay",
+	"elite_ward", "tile_ward", "less_health", "camp_earnings", "thorns", "recoup", "parry", "burn"]
 ## The percentages that are a *probability*: how often something happens, rather than how much of it
 ## there is. They are the ones a level may not multiply -- see `scale`. Crit damage is not one of
 ## them (500% crit damage is a fine number).
@@ -400,8 +459,18 @@ const PERCENT_STATS := ["crit_chance", "crit_damage", "move_speed", "drop_rate",
 ##
 ## The fight clock is here for Sight's reason: seconds on a thirty-second clock that a level multiplied
 ## would delete the only way to lose, so no level moves it at all.
+##
+## Double strike and elite chance are chances, capped at certainty by `Encounter.arm`. Experience is a
+## finder's kind of number: a level's multiplier would make a level-30 line thirty times a level-1 one.
+##
+## The helmet's, the body's and the offhand's shares are here for bleed's reason -- a share that
+## compounded would be past everything -- and the three "less" ones (`Encounter.WARD_MOST`) and the
+## recoup are capped besides. Camp earnings is a finder's number on a camp. The count of enemies and a
+## tree's ranks are whole steps no level moves.
 const CHANCE_STATS := ["crit_chance", "drop_rate", "gold_find", "item_rarity", "orb_find", "bleed",
-	"sight", "spawn_speed", "fight_clock"]
+	"sight", "spawn_speed", "fight_clock", "double_strike", "xp_more", "elite_chance", "blow_delay",
+	"elite_ward", "tile_ward", "less_health", "power_skills", "fortune_skills", "guard_skills",
+	"camp_earnings", "extra_enemies", "thorns", "recoup", "parry", "burn"]
 ## The stats any piece at all may roll a FLAT modifier for, without being told so kind by kind.
 const ANY_AFFIXES := ["spawn_speed", "fight_clock"]
 ## Per second: attacks. The one stat that is neither a plain number nor a percentage.
@@ -413,7 +482,7 @@ const RATE_STATS := ["attack_speed"]
 ## "+1 Block" a wall against every blow in the first band. `seconds_of` is the conversion, and every
 ## place that writes or reads one goes through it: `stat_value`, `stat_delta`, `ModifierTable.amount`
 ## and `Encounter.arm`.
-const SECONDS_STATS := ["block", "time_on_hit", "fight_clock"]
+const SECONDS_STATS := ["block", "time_on_hit", "fight_clock", "time_on_block"]
 
 ## How much one level multiplies every scaled number by. The dial for how fast gear answers the
 ## frontier; Encounter.HP_GROWTH is the dial for how fast the frontier pulls away.
@@ -443,7 +512,20 @@ const LEVEL_FLAT := {
 	# they grow alike. Block and time on hit are tenths of a second (SECONDS_STATS), a tenth a level.
 	"armor": 2.0, "dodge": 2.0, "block": 1.0, "time_on_hit": 1.0,
 	"move_speed": 1.0, "drop_rate": 1.0,
-	"strength": 1.0, "dexterity": 1.0, "intelligence": 1.0,
+	"strength": 1.0, "dexterity": 1.0, "intelligence": 1.0, "all_attributes": 1.0,
+	# More of one kind of blow is an increase of damage, so it grows the way a PERCENT modifier does:
+	# the level's multiplier and no step. A chance a blow lands twice takes a point a level, as crit does.
+	"click_damage": 0.0, "swing_damage": 0.0, "elite_damage": 0.0, "first_blow": 0.0,
+	"double_strike": 1.0,
+	# Experience takes the finders' point a level; elite chance takes none, for spawn speed's reason
+	# below: it is reached by wearing it, not by levelling.
+	"xp_more": 1.0, "elite_chance": 0.0,
+	# The helmet's, the body's and the offhand's shares take a point a level, as bleed does; what a
+	# blocked blow wins back takes time on hit's tenth. A count of bodies and a tree's ranks take nothing:
+	# they are whole steps, and the count's band is its own (`ModifierTable`'s `signed`).
+	"blow_delay": 1.0, "elite_ward": 1.0, "tile_ward": 1.0, "less_health": 1.0,
+	"camp_earnings": 1.0, "thorns": 1.0, "recoup": 1.0, "parry": 1.0, "burn": 1.0, "time_on_block": 1.0,
+	"extra_enemies": 0.0, "power_skills": 0.0, "fortune_skills": 0.0, "guard_skills": 0.0,
 	# The other finders. They take the same point a level drop rate does, which is all a CHANCE_STAT
 	# ever takes.
 	"item_rarity": 1.0, "gold_find": 1.0, "orb_find": 1.0,

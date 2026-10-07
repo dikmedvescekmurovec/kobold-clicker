@@ -1,0 +1,9 @@
+# Kobold Clicker's web build, served out of R2: Godot's .wasm and the game's .pck are over the 25 MiB a
+# Worker's static assets may be. Filled and deployed by tools/web.py.
+name = "play"
+main = "index.js"
+compatibility_date = "2025-09-01"
+
+[[r2_buckets]]
+binding = "GAME"
+bucket_name = "kobold-clicker-web"

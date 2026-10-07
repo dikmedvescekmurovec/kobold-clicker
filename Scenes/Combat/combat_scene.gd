@@ -137,9 +137,11 @@ const ATTACK_SOUND := preload("res://Assets/Player/attack.mp3")
 ## weapon of a `BLUNT` kind (the user's ruling, 2026-10-02).
 const HIT_SOUND := preload("res://Sounds/universfield-punch-03-352040.mp3")
 const BLUNT_HIT := preload("res://Sounds/Sfx/blunt_hit.ogg")
-## A crit, in place of the blow: blunt for bare hands and a `BLUNT` weapon, a slash for every blade.
+## A crit, in place of the blow: blunt for bare hands and a `BLUNT` weapon, a slash for every blade --
+## with `GENERAL_CRIT` over the slash (the user's pairing, 2026-10-06).
 const BLUNT_CRIT := preload("res://Sounds/Sfx/blunt_crit.ogg")
 const SLASH_CRIT := preload("res://Sounds/Sfx/slash_crit.ogg")
+const GENERAL_CRIT := preload("res://Sounds/Sfx/general_crit.ogg")
 ## The kinds of weapon (`LootTable.KINDS`) that strike blunt.
 const BLUNT := ["mace"]
 ## A body going down.
@@ -149,24 +151,17 @@ const STRUCK_SOUND := preload("res://Sounds/Sfx/player_hit.ogg")
 ## A lost fight's verdict (`_on_finished`). A won one is silent: its fanfare was annoying (the user's
 ## ruling, 2026-10-02).
 const DEFEAT_SOUND := preload("res://Sounds/Sfx/defeat.ogg")
-## A find landing, by what it is (`drop_sound_of`), each a pool of takes. `base` is the fallback for
-## whatever the others do not name (the user's ruling): plate, helms, greaves, shields and torches.
+## A find landing (`drop_sound_of`), each a pool of takes: a unique its own, every other piece one
+## (the user's ruling, 2026-10-06).
 const DROP_SOUNDS := {
 	"unique": [preload("res://Sounds/Sfx/unique_drop.ogg")],
-	"weapon": [preload("res://Sounds/Sfx/weapon_drop_1.ogg"), preload("res://Sounds/Sfx/weapon_drop_2.ogg"),
-			preload("res://Sounds/Sfx/weapon_drop_3.ogg"), preload("res://Sounds/Sfx/weapon_drop_4.ogg"),
-			preload("res://Sounds/Sfx/weapon_drop_5.ogg")],
-	"jewel": [preload("res://Sounds/Sfx/jewel_drop.ogg")],
-	"cloth": [preload("res://Sounds/Sfx/cloth_drop.ogg")],
-	"base": [preload("res://Sounds/Sfx/base_drop_1.ogg"), preload("res://Sounds/Sfx/base_drop_2.ogg")],
+	"gear": [preload("res://Sounds/Sfx/item_drop.ogg")],
 }
-## The kinds of armour (`LootTable.KINDS`) that land as cloth: the dexterity line's.
-const CLOTH := ["hood", "boot", "jerkin"]
 ## A coin landing: every one a purse throws, each as it lands (the user's ask), quiet for it.
 const COIN_SOUND := preload("res://Sounds/Sfx/coin_drop.ogg")
-const ORB_DROP_SOUNDS := [preload("res://Sounds/Sfx/orb_drop_1.ogg"), preload("res://Sounds/Sfx/orb_drop_2.ogg"),
-		preload("res://Sounds/Sfx/orb_drop_3.ogg"), preload("res://Sounds/Sfx/orb_drop_4.ogg"),
-		preload("res://Sounds/Sfx/orb_drop_5.ogg"), preload("res://Sounds/Sfx/orb_drop_6.ogg")]
+const ORB_DROP_SOUND := preload("res://Sounds/Sfx/orb_drop.ogg")
+## How far a drop -- a find, a coin or an orb -- is pitched up or down, at random, each time it lands.
+const DROP_PITCH := 1.04
 ## A body's experience reaching the bar (`xp_absorbed`).
 const XP_SOUNDS := [preload("res://Sounds/Sfx/xp_1.ogg"), preload("res://Sounds/Sfx/xp_2.ogg"),
 		preload("res://Sounds/Sfx/xp_3.ogg"), preload("res://Sounds/Sfx/xp_4.ogg"), preload("res://Sounds/Sfx/xp_5.ogg")]
@@ -395,6 +390,8 @@ var _enemy_hit: Tween
 var _sound: AudioStreamPlayer
 var _hit_sound: AudioStreamPlayer
 var _crit_sound: AudioStreamPlayer
+## `GENERAL_CRIT` for a blade, null otherwise.
+var _crit_layer: AudioStreamPlayer
 var _death_sound: AudioStreamPlayer
 var _struck_sound: AudioStreamPlayer
 ## `DROP_SOUNDS`' keys -> each one's player.
@@ -671,13 +668,16 @@ func _build() -> void:
 	_sound.stream = ATTACK_SOUND
 	add_child(_sound)
 	_hit_sound = _sfx_player(BLUNT_HIT if weapon_kind in BLUNT else HIT_SOUND)
-	_crit_sound = _sfx_player(SLASH_CRIT if weapon_kind != "" and weapon_kind not in BLUNT else BLUNT_CRIT)
+	var blade := weapon_kind != "" and weapon_kind not in BLUNT
+	_crit_sound = _sfx_player(SLASH_CRIT if blade else BLUNT_CRIT)
+	if blade:
+		_crit_layer = _sfx_player(GENERAL_CRIT)
 	_death_sound = _sfx_player(DEATH_SOUND)
 	_struck_sound = _sfx_player(STRUCK_SOUND)
 	for key: String in DROP_SOUNDS:
-		_drop_sounds[key] = _sfx_player(Juice.takes(DROP_SOUNDS[key]))
-	_coin_sound = _sfx_player(COIN_SOUND)
-	_orb_sound = _sfx_player(Juice.takes(ORB_DROP_SOUNDS))
+		_drop_sounds[key] = _sfx_player(Juice.takes(DROP_SOUNDS[key], DROP_PITCH))
+	_coin_sound = _sfx_player(Juice.takes([COIN_SOUND], DROP_PITCH))
+	_orb_sound = _sfx_player(Juice.takes([ORB_DROP_SOUND], DROP_PITCH))
 	_xp_sound = _sfx_player(Juice.takes(XP_SOUNDS))
 	xp_absorbed.connect(_xp_sound.play.unbind(1))
 
@@ -1104,6 +1104,8 @@ func _on_hit_landed(amount: float, crit: bool, automatic: bool) -> void:
 	_show_damage(amount, crit)
 	_jolt_enemy()
 	(_crit_sound if crit else _hit_sound).play()
+	if crit and _crit_layer != null:
+		_crit_layer.play()
 	if crit:
 		Juice.shake(_arena, SHAKE_CRIT)
 
@@ -1628,17 +1630,9 @@ func _on_gold_dropped(_index: int, amount: float) -> void:
 	gold_gained.emit(amount)
 
 
-## Which of `DROP_SOUNDS` a find lands with: a unique its own boom, anything else by where it is worn
-## and armour by whether it is cloth, with `base` for whatever none of those names.
+## Which of `DROP_SOUNDS` a find lands with: a unique its own boom, anything else the one gear sound.
 static func drop_sound_of(item: Item) -> String:
-	if item.rarity == ItemRarity.Rarity.UNIQUE:
-		return "unique"
-	match LootTable.slot_of(item.type):
-		"weapon":
-			return "weapon"
-		"ring", "amulet":
-			return "jewel"
-	return "cloth" if LootTable.kind_of(item.type) in CLOTH else "base"
+	return "unique" if item.rarity == ItemRarity.Rarity.UNIQUE else "gear"
 
 
 ## A drop's sound as it lands: a throw's length on (and `after` more, for one held back in a burst), on
@@ -1698,6 +1692,12 @@ func _fill_loot() -> void:
 ## main scene stands over a fight and has to keep off the HUD, which is what `_place_corners` placed.
 func hud_bottom() -> float:
 	return _tally.position.y + _tally.get_combined_minimum_size().y * _ui_scale
+
+
+## The bottom of the top-right corner's Terminate flag, in screen pixels: the character panel stands
+## under it while the bag is up over the fight.
+func corner_bottom() -> float:
+	return _terminate.position.y + _terminate.get_combined_minimum_size().y * _ui_scale
 
 
 ## Puts the HUD's corners where they belong. Done every frame rather than anchored, because every

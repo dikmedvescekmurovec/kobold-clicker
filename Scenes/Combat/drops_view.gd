@@ -46,6 +46,7 @@ var _none: Label
 var _grid: VBoxContainer
 var _scroll: ScrollContainer
 var _orbs: HBoxContainer
+var _orb_card: OrbCard
 var _inspect: PanelContainer
 var _inspect_rows: VBoxContainer
 var _discard: Button
@@ -86,11 +87,18 @@ func _init() -> void:
 	headroom.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# The orbs the fight turned up, under the squares as the tray is under the bag. A record only:
-	# they take no mouse, because there is nothing here an orb can be pressed to do.
+	# nothing here an orb can be pressed to do, so it wears the arrow, and its hover is what it does.
 	_orbs = HBoxContainer.new()
 	_orbs.add_theme_constant_override("separation", GAP)
 	_orbs.alignment = BoxContainer.ALIGNMENT_CENTER
 	found.add_child(_orbs)
+	# The bag's orb card, for the orb under the cursor. Top level, so no container lays it out and it
+	# stands over the panel and over everything the fight throws, at the scale the view is drawn at.
+	_orb_card = OrbCard.new()
+	_orb_card.top_level = true
+	_orb_card.z_index = RenderingServer.CANVAS_ITEM_Z_MAX
+	_orb_card.hide()
+	add_child(_orb_card)
 
 	# One drop, looked at properly. On the white panel, because that is the ground the rarity
 	# colours were picked to be read against.
@@ -132,7 +140,10 @@ func fill(items: Array[Item], orbs := {}) -> void:
 	UITheme.clear(_orbs)
 	for orb: String in orbs:
 		var held := OrbSlot.make(orb, int(orbs[orb]), true)
-		held.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		Cursors.wear(held, Cursors.ARROW)
+		held.hovered.connect(_on_orb_hovered.bind(held, int(orbs[orb])))
+		held.unhovered.connect(_orb_card.hide)
+		held.tree_exiting.connect(_orb_card.hide)
 		_orbs.add_child(held)
 	_orbs.visible = not orbs.is_empty()
 	_scroll.visible = not _items.is_empty()
@@ -198,6 +209,25 @@ func _on_grid_input(event: InputEvent) -> void:
 			if slot.get_global_rect().has_point(event.global_position):
 				inspect(slot.get_meta("drop_index", -1))
 				return
+
+
+## The orb card beside `slot`. Placed now and again deferred: the first pass measures labels that
+## have not laid out yet.
+func _on_orb_hovered(orb: String, slot: OrbSlot, count: int) -> void:
+	_orb_card.fill(orb, count)
+	_orb_card.show()
+	_place_orb_card(slot)
+	_place_orb_card.call_deferred(slot)
+
+
+func _place_orb_card(slot: OrbSlot) -> void:
+	if not _orb_card.visible or not is_instance_valid(slot) or not slot.is_inside_tree():
+		return
+	var drawn := get_global_transform().get_scale()
+	_orb_card.scale = drawn
+	_orb_card.reset_size()
+	_orb_card.position = ItemCard.beside(slot.get_global_rect(), _orb_card.get_combined_minimum_size() * drawn,
+			get_viewport_rect().size, ItemCard.GAP * drawn.x)
 
 
 ## Everything on show, orbs first and the finds after them in the order they fell: what a reward

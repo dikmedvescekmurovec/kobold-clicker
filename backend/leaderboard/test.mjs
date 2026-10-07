@@ -205,6 +205,13 @@ test("signing out and deleting the account end the session", async () => {
   assert.equal((await read("/me", { token: fresh })).data.save, null, "a new account, with nothing left of the old");
 });
 
+test("the web build, served from another origin, may call", async () => {
+  const preflight = await call("/me", { method: "OPTIONS" });
+  assert.equal(preflight.status, 204);
+  assert.match(preflight.headers.get("Access-Control-Allow-Headers"), /Authorization/);
+  assert.equal((await call("/leaderboard")).headers.get("Access-Control-Allow-Origin"), "*");
+});
+
 // The limiter counts in fixed minutes, so ten calls may straddle two of them: 21 cannot.
 test("one address may start ten sign-ins a minute", async () => {
   const statuses = [];

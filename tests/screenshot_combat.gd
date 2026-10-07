@@ -189,6 +189,10 @@ func _shoot_fight() -> void:
 	main._on_bounty_counted(fight.lineup[0], 3, 5)
 	await create_timer(0.3).timeout
 	await _save(combat, "combat_bounty.png")
+	# The same monster on land too shallow for the posting: the toast in brick, saying so.
+	main._on_bounty_too_low(fight.lineup[0], 7)
+	await create_timer(0.3).timeout
+	await _save(combat, "combat_bounty_low.png")
 	main._on_bounty_counted(fight.lineup[0], 5, 5)
 	await create_timer(0.7).timeout
 	await _save(combat, "combat_bounty_filled.png")
