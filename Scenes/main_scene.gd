@@ -318,7 +318,9 @@ const TIPS := [
 ## include filter, since it is no resource.
 const CHANGELOG := "res://CHANGELOG.md"
 const CHANGELOG_TITLE := "What's new"
-## Between the version and each section; within one the rows are `BagPage.SLOT_GAP` apart.
+## Between one version and the next, and within one between its heading and each section; within a
+## section the rows are `BagPage.SLOT_GAP` apart.
+const CHANGELOG_VERSION_GAP := 16
 const CHANGELOG_SECTION_GAP := 8
 ## A change's bullet, square, and how far its words stand in from the edge.
 const CHANGELOG_BULLET := 2.0
@@ -2526,23 +2528,21 @@ func _check_tips() -> void:
 		_show_next_tip()
 
 
-## The newest version `CHANGELOG` names: `{version, date, sections}`, a section `[heading, [item, ...]]`
-## (heading "" for items before any `### `), an item a change's line or a table row's cells (an Array;
-## the first of a run is the header, the `|---|` row dropped); the version empty with no file.
-static func changelog() -> Dictionary:
-	var version := ""
-	var date := ""
-	var sections: Array = []
+## Every version `CHANGELOG` names, newest first: `{version, date, sections}`, a section
+## `[heading, [item, ...]]` (heading "" for items before any `### `), an item a change's line or a table
+## row's cells (an Array; the first of a run is the header, the `|---|` row dropped). Empty with no file.
+static func changelog() -> Array:
+	var versions: Array = []
 	for raw in FileAccess.get_file_as_string(CHANGELOG).split("\n"):
 		var line := raw.strip_edges()
 		if line.begins_with("## "):
-			if not version.is_empty():
-				break
-			version = line.get_slice(" ", 1)
-			date = line.get_slice("(", 1).get_slice(")", 0)
-		elif version.is_empty():
+			versions.append({"version": line.get_slice(" ", 1),
+					"date": line.get_slice("(", 1).get_slice(")", 0), "sections": []})
 			continue
-		elif line.begins_with("### "):
+		if versions.is_empty():
+			continue
+		var sections: Array = versions[-1]["sections"]
+		if line.begins_with("### "):
 			sections.append([line.trim_prefix("### "), []])
 		elif line.begins_with("- ") or line.begins_with("|"):
 			if sections.is_empty():
@@ -2553,32 +2553,44 @@ static func changelog() -> Dictionary:
 				var cells: Array = Array(line.trim_prefix("|").trim_suffix("|").split("|")).map(
 						func(cell: String) -> String: return cell.strip_edges())
 				sections[-1][1].append(cells)
-	return {"version": version, "date": date, "sections": sections}
+	return versions
 
 
-## What the newest version changed, as a tip, once: the web build's start-up asks, and the version is
-## written to the settings as it is queued, so it comes up again only for a newer one.
+## Every version newer than the one last shown, as one tip, once: the web build's start-up asks, and
+## the newest is written to the settings as it is queued, so nothing comes up again until a newer one.
 func _show_changelog() -> void:
-	var latest := changelog()
-	var version: String = latest["version"]
-	if version.is_empty() or version == Settings.changelog_seen:
+	var unseen: Array = []
+	for version: Dictionary in changelog():
+		if version["version"] == Settings.changelog_seen:
+			break
+		unseen.append(version)
+	if unseen.is_empty():
 		return
-	Settings.changelog_seen = version
+	Settings.changelog_seen = unseen[0]["version"]
 	Settings.save()
-	_tip_queue.append([CHANGELOG, CHANGELOG_TITLE, latest])
+	_tip_queue.append([CHANGELOG, CHANGELOG_TITLE, unseen])
 	if _tip_panel == null:
 		_show_next_tip()
 
 
-## The changelog's page, in four steps of type: the version in Pixellari with its date small beside it,
-## each section's heading as a counter's (`UITheme.section`), and its changes in the body font, each
-## behind a bullet with its wrapped lines hanging clear of it -- or its table, the game's own
-## (`UITheme.table_row`): the header soft over a rule, the rows striped, the first column wrapping.
-static func _changelog_page(latest: Dictionary, width: float) -> VBoxContainer:
+## The changelog's page, newest version first, each in four steps of type: the version in Pixellari
+## with its date small beside it, each section's heading as a counter's (`UITheme.section`), and its
+## changes in the body font, each behind a bullet with its wrapped lines hanging clear of it -- or its
+## table, the game's own (`UITheme.table_row`): the header soft over a rule, the rows striped, the
+## first column wrapping.
+static func _changelog_page(versions: Array, width: float) -> VBoxContainer:
+	var page := UITheme.vbox(CHANGELOG_VERSION_GAP, width)
+	for version: Dictionary in versions:
+		page.add_child(_changelog_version(version, width))
+	return page
+
+
+## One version of the changelog's page.
+static func _changelog_version(version: Dictionary, width: float) -> VBoxContainer:
 	var page := UITheme.vbox(CHANGELOG_SECTION_GAP, width)
 	var head := HBoxContainer.new()
-	head.add_child(UITheme.label(latest["version"]))
-	var date := UITheme.label(latest["date"], Palette.TEXT_SOFT, true)
+	head.add_child(UITheme.label(version["version"]))
+	var date := UITheme.label(version["date"], Palette.TEXT_SOFT, true)
 	date.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	date.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	date.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -2587,7 +2599,7 @@ static func _changelog_page(latest: Dictionary, width: float) -> VBoxContainer:
 	# On the first line's middle, whatever the body font's height.
 	var line_height := UITheme.theme().get_font("font", "SmallLabel").get_height(UITheme.SMALL_FONT_SIZE)
 	var bullet_top := floorf((line_height - CHANGELOG_BULLET) / 2.0)
-	for section: Array in latest["sections"]:
+	for section: Array in version["sections"]:
 		var block := UITheme.vbox(BagPage.SLOT_GAP)
 		page.add_child(block)
 		if not str(section[0]).is_empty():

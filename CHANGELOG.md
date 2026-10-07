@@ -1,7 +1,7 @@
 # Changelog
 
-The newest version is first. Its heading is the version the game is: the web build shows what is listed
-under it once, the first time a player starts this version (`main_scene.gd` `_show_changelog`). A version is
+The newest version is first, and its heading is the version the game is: the web build shows every version
+a player has not seen yet once, together, newest first (`main_scene.gd` `_show_changelog`). A version is
 `## vX.Y.Z (YYYY-MM-DD)`, its sections `### Name`, and each change one line under them starting `- `,
 written for players. A section may hold a two-column table instead (`| left | right |`, a header row, then
 `|---|---|`): the game draws its rows as its own tables, the left column wrapping and the right kept short.

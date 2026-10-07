@@ -4025,27 +4025,41 @@ func _test_tips() -> bool:
 	_check(not main._flashes.has("skill_point") and main._skills_button.modulate == Color.WHITE,
 			"until no point is left to spend")
 
-	# The web build's changelog: the newest version and its lines, packed into the export, shown once.
-	var latest: Dictionary = main.changelog()
-	var sections: Array = latest["sections"]
-	_check(str(latest["version"]).begins_with("v") and not str(latest["date"]).is_empty(),
-			"CHANGELOG.md names a version and its date (%s, %s)" % [latest["version"], latest["date"]])
-	_check(not sections.is_empty() and sections.all(func(s: Array) -> bool: return not s[1].is_empty()),
-			"and what changed")
+	# The web build's changelog: every version, newest first, packed into the export, and every one the
+	# player has not seen shown once, together.
+	var versions: Array = main.changelog()
+	_check(versions.size() >= 3, "CHANGELOG.md names its versions (%d)" % versions.size())
 	var rows: Array = []
-	for section: Array in sections:
-		rows.append_array(section[1].filter(func(item: Variant) -> bool: return item is Array))
-	_check(rows.all(func(cells: Array) -> bool:
+	for version: Dictionary in versions:
+		var sections: Array = version["sections"]
+		_check(str(version["version"]).begins_with("v") and not str(version["date"]).is_empty()
+				and not sections.is_empty() and sections.all(func(s: Array) -> bool: return not s[1].is_empty()),
+				"%s has its date and what changed" % version["version"])
+		for section: Array in sections:
+			rows.append_array(section[1].filter(func(item: Variant) -> bool: return item is Array))
+	_check(rows.size() > 2 and rows.all(func(cells: Array) -> bool:
 			return cells.size() == 2 and not str(cells[0]).is_empty() and not str(cells[0]).begins_with("-")),
 			"a table's rows are two cells each, its |---| row dropped (%d)" % rows.size())
 	_check(FileAccess.get_file_as_string("res://export_presets.cfg").contains("CHANGELOG.md"),
 			"and the web build packs it")
+	var names: Array = versions.map(func(v: Dictionary) -> String: return v["version"])
+	# The version headings the popup up holds, top to bottom.
+	var shown := func() -> Array:
+		var texts: Array = main._tip_panel.find_children("*", "Label", true, false).map(
+				func(l: Label) -> String: return l.text)
+		return texts.filter(func(text: String) -> bool: return text in names)
 	Settings.changelog_seen = ""
 	main._show_changelog()
-	_check(main._tip_panel != null and Settings.changelog_seen == latest["version"], "it comes up for a version not seen")
+	_check(main._tip_panel != null and shown.call().size() == versions.size()
+			and Settings.changelog_seen == versions[0]["version"], "a player who has seen none sees every version")
 	main._on_tip_closed()
 	main._show_changelog()
-	_check(main._tip_panel == null, "and never again for the same one")
+	_check(main._tip_panel == null, "and never again until there is a newer one")
+	Settings.changelog_seen = versions[2]["version"]
+	main._show_changelog()
+	_check(main._tip_panel != null and shown.call() == [versions[0]["version"], versions[1]["version"]],
+			"one who saw an older one sees every version since, newest first")
+	main._on_tip_closed()
 	Settings.changelog_seen = ""
 	main.queue_free()
 	_clear_save()
