@@ -314,6 +314,9 @@ const TIPS := [
 		"I'll tell them you're ready for the nasty jobs. Nasty pays better.",
 	], "blacksmith"],
 ]
+## What changed, newest version first (`changelog`); packed into the web build by `export_presets.cfg`'s
+## include filter, since it is no resource.
+const CHANGELOG := "res://CHANGELOG.md"
 const FLASH_BRIGHT := Color(1.6, 1.6, 1.6)
 const FLASH_SECONDS := 0.5
 
@@ -497,6 +500,8 @@ func _ready() -> void:
 	# Before the interface, which is what decides whether the crown stands in the corner.
 	_credit_walls()
 	_build_ui()
+	if OS.has_feature("web") and not Settings.path.is_empty():
+		_show_changelog()
 	# A save from before there were heirlooms has just been paid for its walls: say what that means.
 	if inventory.super_orbs > 0:
 		_check_tips()
@@ -2515,6 +2520,34 @@ func _check_tips() -> void:
 		_show_next_tip()
 
 
+## The newest version `CHANGELOG` names and its lines: ["v0.2.0", ["...", ...]], or ["", []] with no file.
+static func changelog() -> Array:
+	var version := ""
+	var lines: Array = []
+	for raw in FileAccess.get_file_as_string(CHANGELOG).split("\n"):
+		var line := raw.strip_edges()
+		if line.begins_with("## "):
+			if not version.is_empty():
+				break
+			version = line.trim_prefix("## ").get_slice(" ", 0)
+		elif not version.is_empty() and line.begins_with("- "):
+			lines.append(line.trim_prefix("- "))
+	return [version, lines]
+
+
+## What the newest version changed, as a tip, once: the web build's start-up asks, and the version is
+## written to the settings as it is queued, so it comes up again only for a newer one.
+func _show_changelog() -> void:
+	var latest := changelog()
+	if latest[0].is_empty() or latest[0] == Settings.changelog_seen:
+		return
+	Settings.changelog_seen = latest[0]
+	Settings.save()
+	_tip_queue.append([CHANGELOG, "What's new in %s" % latest[0], latest[1]])
+	if _tip_panel == null:
+		_show_next_tip()
+
+
 ## One tip at a time, in the middle of the window, built the way the refused-save panel is.
 func _show_next_tip() -> void:
 	if _tip_queue.is_empty():
@@ -2538,12 +2571,28 @@ func _show_next_tip() -> void:
 	_tip_panel = panel
 	# The character panel's layer, which stands over the fight's, so a tip can come up mid-run.
 	_character.get_parent().add_child(panel)
-	var label := Label.new()
-	label.theme_type_variation = "PanelLabel"
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.custom_minimum_size.x = minf(get_viewport().get_visible_rect().size.x / ui_scale - REFUSAL_MARGIN, REFUSAL_WIDTH)
-	label.text = tip[2]
-	UITheme.body_of(panel).add_child(label)
+	var width := minf(get_viewport().get_visible_rect().size.x / ui_scale - REFUSAL_MARGIN, REFUSAL_WIDTH)
+	if tip[2] is Array:
+		# The changelog: a line a change in the body font, scrolling past what the window leaves.
+		var scroll := UITheme.scroll()
+		var lines := UITheme.vbox(BagPage.SLOT_GAP, width)
+		for line: String in tip[2]:
+			lines.add_child(BountyList.wrapped(line, width))
+		scroll.add_child(lines)
+		UITheme.body_of(panel).add_child(scroll)
+		# Twice: a wrapped label only knows how tall it is once it has been laid out once.
+		var fit := func() -> void:
+			scroll.custom_minimum_size.y = minf(lines.get_combined_minimum_size().y,
+					get_viewport().get_visible_rect().size.y / ui_scale - TownPage.TOLD_CHROME)
+		fit.call()
+		fit.call_deferred()
+	else:
+		var label := Label.new()
+		label.theme_type_variation = "PanelLabel"
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.custom_minimum_size.x = width
+		label.text = tip[2]
+		UITheme.body_of(panel).add_child(label)
 	var close := UITheme.button("Got it", "LightButton", "")
 	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	close.pressed.connect(_on_tip_closed)

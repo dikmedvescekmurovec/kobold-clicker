@@ -57,6 +57,15 @@ func _shoot_main_scene() -> void:
 	crop.resize(crop.get_width() * 2, crop.get_height() * 2, Image.INTERPOLATE_NEAREST)
 	crop.save_png("user://ui_panel_crop.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_panel_crop.png"))
+
+	# What the web build says once a version: the changelog over the map.
+	Settings.changelog_seen = ""
+	main._show_changelog()
+	for i in 2:
+		await process_frame
+	await _save_window("ui_changelog.png")
+	main._on_tip_closed()
+	Settings.changelog_seen = ""
 	main.queue_free()
 	await process_frame
 

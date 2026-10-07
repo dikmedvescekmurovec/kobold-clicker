@@ -4024,6 +4024,20 @@ func _test_tips() -> bool:
 	main.skills_page.open()
 	_check(not main._flashes.has("skill_point") and main._skills_button.modulate == Color.WHITE,
 			"until no point is left to spend")
+
+	# The web build's changelog: the newest version and its lines, packed into the export, shown once.
+	var latest: Array = main.changelog()
+	_check(str(latest[0]).begins_with("v") and not latest[1].is_empty(),
+			"CHANGELOG.md names a version and what changed (%s)" % latest[0])
+	_check(FileAccess.get_file_as_string("res://export_presets.cfg").contains("CHANGELOG.md"),
+			"and the web build packs it")
+	Settings.changelog_seen = ""
+	main._show_changelog()
+	_check(main._tip_panel != null and Settings.changelog_seen == latest[0], "it comes up for a version not seen")
+	main._on_tip_closed()
+	main._show_changelog()
+	_check(main._tip_panel == null, "and never again for the same one")
+	Settings.changelog_seen = ""
 	main.queue_free()
 	_clear_save()
 	return true
