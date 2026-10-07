@@ -317,6 +317,12 @@ const TIPS := [
 ## What changed, newest version first (`changelog`); packed into the web build by `export_presets.cfg`'s
 ## include filter, since it is no resource.
 const CHANGELOG := "res://CHANGELOG.md"
+const CHANGELOG_TITLE := "What's new"
+## Between the version and each section; within one the rows are `BagPage.SLOT_GAP` apart.
+const CHANGELOG_SECTION_GAP := 8
+## A change's bullet, square, and how far its words stand in from the edge.
+const CHANGELOG_BULLET := 2.0
+const CHANGELOG_INDENT := 7.0
 const FLASH_BRIGHT := Color(1.6, 1.6, 1.6)
 const FLASH_SECONDS := 0.5
 
@@ -2520,32 +2526,101 @@ func _check_tips() -> void:
 		_show_next_tip()
 
 
-## The newest version `CHANGELOG` names and its lines: ["v0.2.0", ["...", ...]], or ["", []] with no file.
-static func changelog() -> Array:
+## The newest version `CHANGELOG` names: `{version, date, sections}`, a section `[heading, [item, ...]]`
+## (heading "" for items before any `### `), an item a change's line or a table row's cells (an Array;
+## the first of a run is the header, the `|---|` row dropped); the version empty with no file.
+static func changelog() -> Dictionary:
 	var version := ""
-	var lines: Array = []
+	var date := ""
+	var sections: Array = []
 	for raw in FileAccess.get_file_as_string(CHANGELOG).split("\n"):
 		var line := raw.strip_edges()
 		if line.begins_with("## "):
 			if not version.is_empty():
 				break
-			version = line.trim_prefix("## ").get_slice(" ", 0)
-		elif not version.is_empty() and line.begins_with("- "):
-			lines.append(line.trim_prefix("- "))
-	return [version, lines]
+			version = line.get_slice(" ", 1)
+			date = line.get_slice("(", 1).get_slice(")", 0)
+		elif version.is_empty():
+			continue
+		elif line.begins_with("### "):
+			sections.append([line.trim_prefix("### "), []])
+		elif line.begins_with("- ") or line.begins_with("|"):
+			if sections.is_empty():
+				sections.append(["", []])
+			if line.begins_with("- "):
+				sections[-1][1].append(line.trim_prefix("- "))
+			elif not line.replace("|", "").replace("-", "").replace(":", "").strip_edges().is_empty():
+				var cells: Array = Array(line.trim_prefix("|").trim_suffix("|").split("|")).map(
+						func(cell: String) -> String: return cell.strip_edges())
+				sections[-1][1].append(cells)
+	return {"version": version, "date": date, "sections": sections}
 
 
 ## What the newest version changed, as a tip, once: the web build's start-up asks, and the version is
 ## written to the settings as it is queued, so it comes up again only for a newer one.
 func _show_changelog() -> void:
 	var latest := changelog()
-	if latest[0].is_empty() or latest[0] == Settings.changelog_seen:
+	var version: String = latest["version"]
+	if version.is_empty() or version == Settings.changelog_seen:
 		return
-	Settings.changelog_seen = latest[0]
+	Settings.changelog_seen = version
 	Settings.save()
-	_tip_queue.append([CHANGELOG, "What's new in %s" % latest[0], latest[1]])
+	_tip_queue.append([CHANGELOG, CHANGELOG_TITLE, latest])
 	if _tip_panel == null:
 		_show_next_tip()
+
+
+## The changelog's page, in four steps of type: the version in Pixellari with its date small beside it,
+## each section's heading as a counter's (`UITheme.section`), and its changes in the body font, each
+## behind a bullet with its wrapped lines hanging clear of it -- or its table, the game's own
+## (`UITheme.table_row`): the header soft over a rule, the rows striped, the first column wrapping.
+static func _changelog_page(latest: Dictionary, width: float) -> VBoxContainer:
+	var page := UITheme.vbox(CHANGELOG_SECTION_GAP, width)
+	var head := HBoxContainer.new()
+	head.add_child(UITheme.label(latest["version"]))
+	var date := UITheme.label(latest["date"], Palette.TEXT_SOFT, true)
+	date.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	date.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	date.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	head.add_child(date)
+	page.add_child(head)
+	# On the first line's middle, whatever the body font's height.
+	var line_height := UITheme.theme().get_font("font", "SmallLabel").get_height(UITheme.SMALL_FONT_SIZE)
+	var bullet_top := floorf((line_height - CHANGELOG_BULLET) / 2.0)
+	for section: Array in latest["sections"]:
+		var block := UITheme.vbox(BagPage.SLOT_GAP)
+		page.add_child(block)
+		if not str(section[0]).is_empty():
+			block.add_child(UITheme.section(section[0]))
+		var table: VBoxContainer = null
+		for item: Variant in section[1]:
+			if item is Array:
+				var cells: Array = item
+				if table == null:
+					table = UITheme.vbox(0)
+					block.add_child(table)
+					table.add_child(UITheme.table_row(cells[0], cells[-1], false, width,
+							Palette.TEXT_SOFT, Palette.TEXT_SOFT, false))
+					table.add_child(UITheme.rule(width))
+				else:
+					table.add_child(UITheme.table_row(cells[0], cells[-1], table.get_child_count() % 2 == 0, width,
+							null, null, false))
+				continue
+			table = null
+			var line: String = item
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 0)
+			var hang := Control.new()
+			hang.custom_minimum_size.x = CHANGELOG_INDENT
+			var bullet := ColorRect.new()
+			bullet.color = Palette.SLOT_TAN_DK
+			bullet.position = Vector2(1, bullet_top)
+			bullet.size = Vector2(CHANGELOG_BULLET, CHANGELOG_BULLET)
+			hang.add_child(bullet)
+			row.add_child(hang)
+			row.add_child(BountyList.wrapped(line, width - CHANGELOG_INDENT))
+			block.add_child(row)
+	return page
 
 
 ## One tip at a time, in the middle of the window, built the way the refused-save panel is.
@@ -2572,12 +2647,10 @@ func _show_next_tip() -> void:
 	# The character panel's layer, which stands over the fight's, so a tip can come up mid-run.
 	_character.get_parent().add_child(panel)
 	var width := minf(get_viewport().get_visible_rect().size.x / ui_scale - REFUSAL_MARGIN, REFUSAL_WIDTH)
-	if tip[2] is Array:
-		# The changelog: a line a change in the body font, scrolling past what the window leaves.
+	if tip[0] == CHANGELOG:
+		# Scrolling past what the window leaves.
 		var scroll := UITheme.scroll()
-		var lines := UITheme.vbox(BagPage.SLOT_GAP, width)
-		for line: String in tip[2]:
-			lines.add_child(BountyList.wrapped(line, width))
+		var lines := _changelog_page(tip[2], width)
 		scroll.add_child(lines)
 		UITheme.body_of(panel).add_child(scroll)
 		# Twice: a wrapped label only knows how tall it is once it has been laid out once.

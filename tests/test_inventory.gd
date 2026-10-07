@@ -4026,14 +4026,23 @@ func _test_tips() -> bool:
 			"until no point is left to spend")
 
 	# The web build's changelog: the newest version and its lines, packed into the export, shown once.
-	var latest: Array = main.changelog()
-	_check(str(latest[0]).begins_with("v") and not latest[1].is_empty(),
-			"CHANGELOG.md names a version and what changed (%s)" % latest[0])
+	var latest: Dictionary = main.changelog()
+	var sections: Array = latest["sections"]
+	_check(str(latest["version"]).begins_with("v") and not str(latest["date"]).is_empty(),
+			"CHANGELOG.md names a version and its date (%s, %s)" % [latest["version"], latest["date"]])
+	_check(not sections.is_empty() and sections.all(func(s: Array) -> bool: return not s[1].is_empty()),
+			"and what changed")
+	var rows: Array = []
+	for section: Array in sections:
+		rows.append_array(section[1].filter(func(item: Variant) -> bool: return item is Array))
+	_check(rows.all(func(cells: Array) -> bool:
+			return cells.size() == 2 and not str(cells[0]).is_empty() and not str(cells[0]).begins_with("-")),
+			"a table's rows are two cells each, its |---| row dropped (%d)" % rows.size())
 	_check(FileAccess.get_file_as_string("res://export_presets.cfg").contains("CHANGELOG.md"),
 			"and the web build packs it")
 	Settings.changelog_seen = ""
 	main._show_changelog()
-	_check(main._tip_panel != null and Settings.changelog_seen == latest[0], "it comes up for a version not seen")
+	_check(main._tip_panel != null and Settings.changelog_seen == latest["version"], "it comes up for a version not seen")
 	main._on_tip_closed()
 	main._show_changelog()
 	_check(main._tip_panel == null, "and never again for the same one")

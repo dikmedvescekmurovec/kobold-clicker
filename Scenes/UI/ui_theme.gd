@@ -589,9 +589,11 @@ static func vbox(separation: int, width := 0.0) -> VBoxContainer:
 ## has to be told its width before it can say its height. At 0 the name takes what the parent gives.
 ## Where the name and the value will not share one line, the value drops under the name, against the
 ## right edge: a long value ("+607K(416K-997K)%") squeezed the name into a word a line, four lines tall.
-## The value's Label is named `TABLE_VALUE`, for a caller with a tooltip to hang on it.
+## The value's Label is named `TABLE_VALUE`, for a caller with a tooltip to hang on it. With `can_stack`
+## false the value always stands on the name's first line, the name wrapping in what it leaves: a short
+## value beside a long name (the changelog's table).
 static func table_row(text: String, value: String, striped: bool, width := 0.0,
-		text_color: Variant = null, value_color: Variant = null) -> PanelContainer:
+		text_color: Variant = null, value_color: Variant = null, can_stack := true) -> PanelContainer:
 	var row := _row_panel(striped)
 	var room := width - 2 * TABLE_PAD.x
 	var taken := 0.0
@@ -600,7 +602,7 @@ static func table_row(text: String, value: String, striped: bool, width := 0.0,
 	if width > 0.0 and not value.is_empty():
 		var font := theme().get_font("font", "SmallLabel")
 		taken = ceilf(font.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, SMALL_FONT_SIZE).x)
-		stacked = ceilf(font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, SMALL_FONT_SIZE).x) \
+		stacked = can_stack and ceilf(font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, SMALL_FONT_SIZE).x) \
 				+ TABLE_GAP + taken > room
 	var cells: BoxContainer = VBoxContainer.new() if stacked else HBoxContainer.new()
 	cells.add_theme_constant_override("separation", 0 if stacked else TABLE_GAP)
