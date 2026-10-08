@@ -1,5 +1,5 @@
-// Kobold Clicker's backend: signing in with Google or Discord, cloud saves, and the Gollux
-// leaderboard, scored from those saves. A save is taken at its word: the player is trusted not to
+// Kobold Clicker's backend: signing in with Google or Discord, cloud saves, and the leaderboards
+// (Gollux, walls broken, deepest tile), scored from those saves. A save is taken at its word: the player is trusted not to
 // cheat. The API, the sign-in flow and how it is deployed: ../README.md.
 
 const NAME = /^[A-Za-z0-9 _-]{3,16}$/;
@@ -9,6 +9,13 @@ const LOGIN_MS = 10 * 60 * 1000;
 const KEEP_REVISIONS = 10;
 // A save is ~140 KB of JSON; a body past this is not one.
 const MOST_BODY = 4_000_000;
+// The boards: each a column of `players` it ranks by, the column of when that last rose, and how a save
+// gives its score. Only these names reach the SQL.
+const BOARDS = {
+  gollux: { score: "floors", at: "reached_at", of: (save) => number(save, "dungeon_floors") },
+  walls: { score: "walls", at: "walls_at", of: (save) => number(Object(save.tally), "walls") },
+  deepest: { score: "deepest", at: "deepest_at", of: (save) => number(save, "deepest_level") },
+};
 // The four letters both screens show. No 0/O, 1/I/L, 2/Z, 5/S, 6/G, 8/B to mix up.
 const CHECK_LETTERS = "ACDEFHJKMNPRTUVWXY3479";
 
@@ -306,7 +313,6 @@ async function putSave(request, env, url, player) {
   if (baseRevision !== current && body.replace !== true) {
     return json({ error: "The cloud has a newer save", revision: current, summary: JSON.parse(latest.summary) }, 409);
   }
-  const floors = number(save, "dungeon_floors");
   const revision = current + 1;
   // `checked` and `vouched` are left from when uploads were checked, and no longer read.
   const writes = [
@@ -317,9 +323,11 @@ async function putSave(request, env, url, player) {
     env.DB.prepare("DELETE FROM saves WHERE player_id = ? AND revision <= ?")
       .bind(player.id, revision - KEEP_REVISIONS),
   ];
-  // The board moves only upwards, and only a rise moves `reached_at`.
-  writes.push(env.DB.prepare("UPDATE players SET floors = ?, reached_at = ? WHERE id = ? AND floors < ?")
-    .bind(floors, now, player.id, floors));
+  // A board moves only upwards, and only a rise moves its `_at`.
+  for (const { score, at, of } of Object.values(BOARDS)) {
+    writes.push(env.DB.prepare(`UPDATE players SET ${score} = ?, ${at} = ? WHERE id = ? AND ${score} < ?`)
+      .bind(of(save), now, player.id, of(save)));
+  }
   try {
     await env.DB.batch(writes);
   } catch (error) {
@@ -354,35 +362,42 @@ async function deleteSave(request, env, url, player) {
 }
 
 // ---------------------------------------------------------------------------------------------------
-// The board: signed-in players with a name, scored by the deepest of their saves.
+// The boards: signed-in players with a name, each board scored by the best of their saves (`BOARDS`).
+// `?board=` picks one, Gollux's when it is left out (what builds before the other boards ask). A row
+// keeps `floors` beside its `score`, as those builds read it.
 
 async function board(request, env, url) {
   const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit"), 10) || TOP, 1), TOP);
+  const key = url.searchParams.get("board") ?? "gollux";
+  if (!Object.hasOwn(BOARDS, key)) return json({ error: "No such board" }, 404);
+  const which = BOARDS[key];
   let me = null;
   if (request.headers.has("Authorization")) {
     const player = await authed(request, env);
     if (!player) return json({ error: "Unknown player" }, 401);
-    me = await standing(env, player.id);
+    me = await standing(env, player.id, which);
   }
+  const { score, at } = which;
   const { results } = await env.DB.prepare(
-    `SELECT name, floors, reached_at FROM players
-     WHERE hidden = 0 AND linked = 1 AND floors > 0 AND name IS NOT NULL
-     ORDER BY floors DESC, reached_at, id LIMIT ?`,
+    `SELECT name, floors, ${score} AS score, ${at} AS reached_at FROM players
+     WHERE hidden = 0 AND linked = 1 AND ${score} > 0 AND name IS NOT NULL
+     ORDER BY ${score} DESC, ${at}, id LIMIT ?`,
   ).bind(limit).all();
-  return json({ top: results.map((row, at) => ({ rank: at + 1, ...row })), me });
+  return json({ top: results.map((row, place) => ({ rank: place + 1, ...row })), me });
 }
 
-// One player's row with their rank: one more than everyone ahead of them in `board`'s order. Null rank
-// until they are on the board. A hidden player is ranked among the others and never finds out.
+// One player's row on a board with their rank: one more than everyone ahead of them in `board`'s
+// order. Null rank until they are on it. A hidden player is ranked among the others and never finds out.
 // ponytail: the count scans every row ahead of the player, so it grows with the board; past ~10k
 // players cache the board (Cache API, a minute) and store ranks instead of counting.
-async function standing(env, id) {
+async function standing(env, id, which = BOARDS.gollux) {
+  const { score, at } = which;
   return env.DB.prepare(
-    `SELECT p.name, p.floors, p.reached_at,
-       CASE WHEN p.floors = 0 OR p.name IS NULL OR p.linked = 0 THEN NULL ELSE 1 + (
+    `SELECT p.name, p.floors, p.${score} AS score, p.${at} AS reached_at,
+       CASE WHEN p.${score} = 0 OR p.name IS NULL OR p.linked = 0 THEN NULL ELSE 1 + (
          SELECT COUNT(*) FROM players q
-         WHERE q.hidden = 0 AND q.linked = 1 AND q.floors > 0 AND q.name IS NOT NULL
-           AND (q.floors > p.floors OR (q.floors = p.floors AND (q.reached_at, q.id) < (p.reached_at, p.id)))
+         WHERE q.hidden = 0 AND q.linked = 1 AND q.${score} > 0 AND q.name IS NOT NULL
+           AND (q.${score} > p.${score} OR (q.${score} = p.${score} AND (q.${at}, q.id) < (p.${at}, p.id)))
        ) END AS rank
      FROM players p WHERE p.id = ?`,
   ).bind(id).first();
@@ -413,7 +428,7 @@ function privacy() {
   return page("Privacy", `<p>Kobold Clicker keeps, for each player who signs in:</p>
     <ul><li>the id Google or Discord gives your account (not your email, name or picture),</li>
     <li>the leaderboard name you choose,</li><li>your save, and when it was uploaded.</li></ul>
-    <p>They are used for cloud saves and the Gollux leaderboard, and nothing else. Nothing is sold or
+    <p>They are used for cloud saves and the leaderboards, and nothing else. Nothing is sold or
     shared. Addresses are seen only to limit how often anyone may call, and are not kept.</p>
     <p>To delete all of it, choose <b>Delete cloud account</b> in the game's settings.</p>`);
 }

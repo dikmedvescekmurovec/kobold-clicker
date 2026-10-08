@@ -2070,19 +2070,22 @@ func _on_combat_finished(won: bool, cell: Vector2i, retrying := false) -> void:
 
 
 ## Every wall down in this world that has not yet paid its super orb pays it, and the save says
-## so; the heirlooms climb to the land charted, the land's furthest reach is written down, and the world's cave is put down if it is due. Asked wherever a wall can have fallen -- a tile charted -- and once at start-up, which is what
+## so; the heirlooms climb to the land charted, the land's furthest reach and its deepest tile are written down, and the world's cave is put down if it is due. Asked wherever a wall can have fallen -- a tile charted -- and once at start-up, which is what
 ## pays a save from before there were heirlooms for the walls it already has down.
 func _credit_walls() -> void:
 	var paid := inventory.credit_walls(view.walls_fallen())
 	if paid:
 		print("A wall is down: %d super orb(s) to spend at a transcension" % inventory.super_orbs)
 	# The heirlooms climb with the land charted; a page already up shows the new levels.
-	var climbed := inventory.raise_heirlooms(view.charted_level())
+	var charted := view.charted_level()
+	var climbed := inventory.raise_heirlooms(charted)
 	if climbed and bag_page != null:
 		bag_page.refresh()
 		heirloom_page.refresh()
+	# The deepest tile ever charted is a leaderboard's score.
+	var deeper := inventory.chart(charted)
 	# How far the land has ever reached is the cave's bound in every world after this one.
-	if inventory.reach(view.land_radius) or paid or climbed:
+	if inventory.reach(view.land_radius) or paid or climbed or deeper:
 		inventory.save(inventory_path)
 	# One cave a world, once any wall in any world has fallen: now, or the moment the first one does.
 	if view.place_cave(inventory.farthest_land):
@@ -2457,8 +2460,9 @@ func _show_corner(shown: bool) -> void:
 	# The goals are not shown until the first is reached: the page appears with the unique it unlocked.
 	_achievements_button.visible = buttons and not inventory.achievements.is_empty()
 	_flash(_achievements_button, "opened_achievements")
-	# The board is there once the player has a score for it: a floor of the Descent beaten.
-	_leaderboard_button.visible = buttons and cloud.enabled() and inventory.dungeon_floors > 0
+	# The boards are there once the player has a score worth one: a wall broken (the cave comes after one).
+	_leaderboard_button.visible = buttons and cloud.enabled() and (int(inventory.tally.get("walls", 0)) > 0
+			or inventory.dungeon_floors > 0)
 	if _bag_button.visible:
 		_flash(_bag_button, "opened_bag")
 	_pulse(_skills_button, "skill_point", _skill_point_free())

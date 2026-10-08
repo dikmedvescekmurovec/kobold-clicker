@@ -91,9 +91,7 @@ func _ready() -> void:
 	_inventory.pending_curses = []
 	_create_page = BagPage.new(_inventory, "", _ui_scale, false, true)
 	_upgrade_page = BagPage.new(_inventory, "", _ui_scale, true, true)
-	_create_page.heirloom_made.connect(func(_item: Item) -> void:
-		_made = true
-		_show_choice())
+	_create_page.heirloom_made.connect(_name_heirloom)
 	for page: BagPage in [_create_page, _upgrade_page]:
 		page.hide()
 		page.closed.connect(_show_choice)
@@ -164,6 +162,18 @@ func _show_choice() -> void:
 	_choice.add_child(on)
 	_layout()
 	_layout.call_deferred()
+
+
+## The heirloom just made, back on the choice, and asked for a name over it as a caught Pokemon is: what
+## is typed goes in its name's place from then on (`Item.nickname`); Cancel, or its own name, leaves it be.
+func _name_heirloom(item: Item) -> void:
+	_made = true
+	_show_choice()
+	var prompt := TextPrompt.new("Name your heirloom", item.base_name(), "Name", Inventory.NAME_MOST, _ui_scale)
+	prompt.entered.connect(func(text: String) -> void:
+		var called := text.strip_edges().left(Inventory.NAME_MOST)
+		item.nickname = "" if called == item.base_name() else called)
+	add_child(prompt)
 
 
 ## One card: its button, and under it where it stands (done, what is left to spend), in bone on the

@@ -1,4 +1,4 @@
-# Kobold Clicker's backend: accounts, cloud saves and the Gollux leaderboard
+# Kobold Clicker's backend: accounts, cloud saves and the leaderboards
 
 One **Cloudflare Worker** (a small JavaScript program run on Cloudflare's servers) and one
 **Cloudflare D1** database (managed SQLite) give the game three things:
@@ -6,12 +6,13 @@ One **Cloudflare Worker** (a small JavaScript program run on Cloudflare's server
 - **Signing in with Google or Discord.** It's optional; the game plays exactly the same without it.
 - **Cloud saves.** Play on one computer and carry on on another. If two devices both played offline,
   the player is asked which save to keep. A save is taken at its word: the player is trusted not to cheat.
-- **The Gollux leaderboard.** It shows each signed-in player's deepest descent as **`depth.floor`**
-  (**3.14** is depth 3, 14 of its floors beaten): the deepest any of their saves reached. Of two
-  equal scores, whoever reached it first stands higher.
+- **Three leaderboards.** Gollux: each signed-in player's deepest descent as **`depth.floor`**
+  (**3.14** is depth 3, 14 of its floors beaten). Walls: every ice wall they have broken, in every
+  world. Deepest: the level of the deepest tile they have charted, in any world. Each is the best any
+  of their saves reached; of two equal scores, whoever reached it first stands higher.
 
 At this game's scale it costs **$0 a month**, with no servers to patch. The Worker is one JavaScript
-file, the database two migrations.
+file, the database three migrations.
 
 **Live:** `https://gollux-leaderboard.kobold-clicker.workers.dev`, on the Cloudflare account
 *Dik.med.mur@gmail.com's Account*, workers.dev subdomain `kobold-clicker`. The Worker keeps the name
@@ -233,18 +234,29 @@ is. The way to deal with a cheater is by hand: **take them off the board** (§13
 
 ---
 
-## 5. The leaderboard
+## 5. The leaderboards
 
-A score is a number of dungeon floors, shown as depth and floor. 44 is 2 × 15 + 14, shown as **3.14**,
+Three boards, each a column of `players` and the column of when it last rose (`BOARDS` in
+`src/index.js`), each read off an upload by the same rules below:
+
+| Board | Score | Read from the save | When it rose |
+|---|---|---|---|
+| `gollux` | `floors` | `dungeon_floors` | `reached_at` |
+| `walls` | `walls` | `tally.walls` (ice walls broken, every world) | `walls_at` |
+| `deepest` | `deepest` | `deepest_level` (the deepest tile's land level, any world) | `deepest_at` |
+
+A walls or deepest score fills in at a player's first upload after migration `0003_boards.sql`.
+
+Gollux's score is a number of dungeon floors, shown as depth and floor. 44 is 2 × 15 + 14, shown as **3.14**,
 and killing depth 3's Gollux is 45, shown as **4.00**. `Cloud.score_text` formats it, with two digits
 after the dot (`3.05`, never `3.5`).
 
-**A player's score is the deepest any of their saves reached:** an upload's own `dungeon_floors`. It
-only ever rises, so a restored backup or a reset never takes it down.
+**A player's score is the best any of their saves reached:** an upload's own number. It only ever
+rises, so a restored backup or a reset never takes it down.
 
-**Who is on it:** signed-in players with a board name and a score above 0, not `hidden`.
+**Who is on one:** signed-in players with a board name and a score above 0, not `hidden`.
 
-**Order:** score highest first, then `reached_at` earliest first, then `id`. `reached_at` is the
+**Order:** score highest first, then `reached_at` (or the board's `_at`) earliest first, then `id`. It is the
 **server's** clock, and it moves only when the score rises, so the same score sent again changes
 nothing.
 
@@ -278,7 +290,7 @@ sentence as it is. "Bearer" means `Authorization: Bearer <session token>`.
 | `GET /save` | Bearer | – | `{revision, uploaded_at, summary, inventory, map}` (the two files as text) | 401, 404 none |
 | `PUT /save` | Bearer | `{base_revision, replace?, inventory, map}` | **200** `{revision, ...standing}` | 400 not a save, **409** `{revision, summary}` the cloud is newer, 413 |
 | `DELETE /save` | Bearer | – | `{deleted}`: the cloud's saves gone, the board untouched | 401 |
-| `GET /leaderboard?limit=50` | optional Bearer | – | `{top: [{rank, name, floors, reached_at}], me}` | 401 if a token is sent and unknown |
+| `GET /leaderboard?board=walls&limit=50` | optional Bearer | – | `{top: [{rank, name, score, floors, reached_at}], me: {name, score, rank, ...}}` for `gollux` (left out: what builds before the other boards ask), `walls` or `deepest`; `reached_at` is that board's | 401 if a token is sent and unknown, 404 no such board |
 | `GET /privacy` | – | – | the privacy page (HTML) | – |
 
 Rules:
@@ -303,6 +315,10 @@ erDiagram
         TEXT name UK "board name, NULL until chosen"
         INTEGER floors "board score, the deepest save"
         INTEGER reached_at "server ms when floors last rose"
+        INTEGER walls "walls board: ice walls broken"
+        INTEGER walls_at "server ms when walls last rose"
+        INTEGER deepest "deepest board: the deepest tile's level"
+        INTEGER deepest_at "server ms when deepest last rose"
         INTEGER created_at
         INTEGER hidden "1 is off the board, silently"
         INTEGER linked "1 once signed in"

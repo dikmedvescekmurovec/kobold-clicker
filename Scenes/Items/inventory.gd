@@ -70,7 +70,9 @@ const SAVE_PATH := "user://inventory.json"
 ## 30 adds `skill_bursts`, how often every tree has been filled and burst this world, and drops the
 ## ranks past a skill's most: a version 29 save's are cut to the most and their points are free again.
 ## 31 adds `name`, what the player calls their character; a version 30 save's is unnamed (`DEFAULT_NAME`).
-const VERSION := 31
+## 32 adds `deepest_level`, a leaderboard's score; a version 31 save has charted none deeper than its
+## own world (the main scene reads that off the map at start-up).
+const VERSION := 32
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -179,6 +181,9 @@ var dungeon_floors := 0
 ## wall ever broken opened. The Gollux cave of every world after is put down no further out than this
 ## (`MapBuilder.place_cave`). It only rises (`reach`), and every transcension carries it over.
 var farthest_land := MapBuilder.START_LAND_RADIUS
+## The level of the deepest tile ever charted, in any world: the deepest leaderboard's score. Only
+## rises (`chart`), and every transcension carries it over.
+var deepest_level := 1
 
 ## What currency the player is holding: orb name -> how many. Counts rather than objects, because an
 ## orb has nothing to tell apart -- two Orbs of Chaos are the same orb, which is exactly what gear
@@ -892,6 +897,14 @@ func reach(radius: int) -> bool:
 	return true
 
 
+## A tile of land level `level` is charted: remembered if it is the deepest in any world. Whether that was news.
+func chart(level: int) -> bool:
+	if level <= deepest_level:
+		return false
+	deepest_level = level
+	return true
+
+
 ## Every heirloom under the level of the deepest land charted climbs to it by itself, a smith's level
 ## at a time (`Item.level_up`, so its lines climb back towards their peak tiers too), and never past
 ## the level it had before its world ended (`Item.safe_level`). The smith no longer walks it there
@@ -966,6 +979,7 @@ func transcended() -> Inventory:
 	next.dungeon_depth = dungeon_depth
 	next.dungeon_floors = dungeon_floors
 	next.farthest_land = farthest_land
+	next.deepest_level = deepest_level
 	next.first_sword_taken = true
 	next.first_orb_taken = true
 	next.super_orbs = super_orbs
@@ -1058,6 +1072,7 @@ func save(path := SAVE_PATH) -> bool:
 		"dungeon_depth": dungeon_depth,
 		"dungeon_floors": dungeon_floors,
 		"farthest_land": farthest_land,
+		"deepest_level": deepest_level,
 		"level": level,
 		"xp": xp,
 		"skills": skills.to_dict(),
@@ -1165,6 +1180,9 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var farthest: Variant = data.get("farthest_land", MapBuilder.START_LAND_RADIUS)
 	if typeof(farthest) in [TYPE_INT, TYPE_FLOAT]:
 		inventory.farthest_land = maxi(MapBuilder.START_LAND_RADIUS, int(farthest))
+	var charted: Variant = data.get("deepest_level", 1)
+	if typeof(charted) in [TYPE_INT, TYPE_FLOAT]:
+		inventory.deepest_level = maxi(1, int(charted))
 	# Version 30 knew no name: an unnamed character, as a name that is not a string is.
 	var called: Variant = data.get("name", "")
 	if typeof(called) == TYPE_STRING:

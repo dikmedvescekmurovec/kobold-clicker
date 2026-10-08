@@ -1,6 +1,6 @@
 class_name Cloud
 extends Node
-## The player's account and cloud save, and the Gollux leaderboard, against the Worker in
+## The player's account and cloud save, and the leaderboards, against the Worker in
 ## `backend/leaderboard/` (its README holds the API, the sign-in flow and what the server keeps).
 ##
 ## Signing in is optional. `sign_in` opens the browser at the server's sign-in page, where the player
@@ -69,8 +69,12 @@ var signing_check := ""
 ## Two saves that both moved on, waiting for the player to keep one, `{local, cloud}` (each a
 ## `summary_of`); empty when nothing waits. `sync` holds back while it waits.
 var question := {}
-## The board as last read: `{rank, name, floors, reached_at}` a row, best first.
-var top: Array = []
+## The boards the server keeps: Gollux's floors, ice walls broken in every world (`tally.walls`) and
+## the deepest tile charted (`Inventory.deepest_level`).
+const BOARDS: Array[String] = ["gollux", "walls", "deepest"]
+## Each board as last read, by its name: `{top, me}`, `top` its rows best first (`{rank, name, score,
+## reached_at}`) and `me` the player's own `{score, rank}` on it. A board not yet read is absent.
+var boards := {}
 ## The player's own row as last read (`/me`): name, floors, rank, providers, save. Empty until read.
 var me := {}
 ## Why the last call failed, for the pages; empty when it did not.
@@ -281,15 +285,14 @@ func choose_name(wanted: String) -> void:
 	changed.emit()
 
 
-## Reads the top of the board, and the player's own place on it.
-func refresh() -> void:
+## Reads the top of `board` (one of `BOARDS`), and the player's own place on it.
+func refresh(board: String = BOARDS[0]) -> void:
 	if not enabled():
 		return
-	var reply := await _call(HTTPClient.METHOD_GET, "/leaderboard?limit=%d" % TOP)
+	var reply := await _call(HTTPClient.METHOD_GET, "/leaderboard?board=%s&limit=%d" % [board, TOP])
 	if reply.status == 200:
-		top = reply.data.get("top") if reply.data.get("top") is Array else []
-		if reply.data.get("me") is Dictionary:
-			_take_me(reply.data.get("me"))
+		boards[board] = {"top": reply.data.get("top") if reply.data.get("top") is Array else [],
+				"me": reply.data.get("me") if reply.data.get("me") is Dictionary else {}}
 	changed.emit()
 
 

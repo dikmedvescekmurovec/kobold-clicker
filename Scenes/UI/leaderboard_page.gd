@@ -1,9 +1,9 @@
 class_name LeaderboardPage
 extends Control
-## The Gollux leaderboard as a page against the left edge, opened from the corner and the cave's tile
-## panel: the player's own place -- or Sign in, or a name to choose, until they have one -- over the top
-## of the board, which anyone may read. A score is the deepest any of the player's cloud saves has
-## reached, taken at its word.
+## The leaderboards as a page against the left edge, opened from the corner and the cave's tile panel:
+## a tab a board (`BOARDS`), and under it the player's own place -- or Sign in, or a name to choose,
+## until they have one -- over the top of that board, which anyone may read. A score is the best any of
+## the player's cloud saves has reached, taken at its word.
 ##
 ## Built like the other left-hand pages (`SettingsPage`): `open()` redraws it, syncs and reads the board
 ## again, `layout()` fits it to the window, `closed` is its X. Everything it shows is the `Cloud`'s, and
@@ -20,8 +20,16 @@ const ME_COLOUR := Palette.ICE_DK
 const TROPHIES: Array[String] = ["res://Assets/UI/ui_icon_trophy_gold.png",
 		"res://Assets/UI/ui_icon_trophy_silver.png", "res://Assets/UI/ui_icon_trophy_bronze.png"]
 const PLACE_WIDTH := 14
-## The depth's column and the floor's, each wide enough for its heading.
+## A score's columns (Gollux's depth and floor), each wide enough for its heading.
 const NUMBER_WIDTH := 28
+## Each of `Cloud.BOARDS`: its tab, the tab's tooltip, and its columns' heads.
+const BOARDS := {
+	"gollux": ["Gollux", "Deepest descent", ["Depth", "Floor"]],
+	"walls": ["Walls", "Ice walls broken, in every world", ["Walls"]],
+	"deepest": ["Deepest", "Deepest tile charted, in any world", ["Level"]],
+}
+## A tab's width: three and their gaps stand in `WIDTH` with room to spare.
+const TAB_WIDTH := 50
 
 var _board: Cloud
 ## The best the save holds, in floors: shown at once, before the server has answered.
@@ -32,6 +40,8 @@ var _rows: VBoxContainer
 var _refresh: Button
 ## What was typed into the name field, kept across the redraws a call makes.
 var _typed := ""
+## The board whose tab is open.
+var _open: String = Cloud.BOARDS[0]
 
 
 func _init(board: Cloud, best: Callable, ui_scale: float) -> void:
@@ -53,7 +63,7 @@ func _ready() -> void:
 	scroll.add_child(_rows)
 	# Pinned under the scroll, so a long board never pushes it out of reach.
 	_refresh = UITheme.button("Refresh", "LightButton", "Read the board again")
-	_refresh.pressed.connect(func() -> void: _board.refresh())
+	_refresh.pressed.connect(func() -> void: _board.refresh(_open))
 	UITheme.body_of(_panel).add_child(_refresh)
 	_board.changed.connect(func() -> void:
 		if visible:
@@ -65,7 +75,7 @@ func _ready() -> void:
 func open() -> void:
 	_draw()
 	_board.sync(true)
-	_board.refresh()
+	_board.refresh(_open)
 
 
 func _draw() -> void:
@@ -75,6 +85,7 @@ func _draw() -> void:
 	if not _board.enabled():
 		_rows.add_child(BountyList.wrapped("The leaderboard is not set up in this build.", WIDTH))
 		return
+	_rows.add_child(_tabs())
 	_rows.add_child(UITheme.section("You"))
 	if not _board.signing_check.is_empty():
 		_rows.add_child(check_letters(_board.signing_check))
@@ -118,27 +129,59 @@ func _draw_join() -> void:
 	_rows.add_child(join)
 
 
-## The player's own line: what the board counts for them, which is only the floors beaten under the
-## server's checks and so can be less than the save's best.
+## The boards' folder tabs, the bag's filter tabs in words: the open one is the page, the rest stand
+## behind it. Opening one reads that board again.
+func _tabs() -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 0)
+	for key: String in Cloud.BOARDS:
+		if row.get_child_count() > 0:
+			row.add_child(TownPage.tab_line(TownPage.TAB_GAP))
+		var tab := UITheme.button(BOARDS[key][0], UITheme.BARE_BUTTON, BOARDS[key][1])
+		tab.add_theme_font_override("font", theme.get_font("font", "SmallLabel"))
+		tab.add_theme_font_size_override("font_size", UITheme.SMALL_FONT_SIZE)
+		for state: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color",
+				"font_hover_pressed_color"]:
+			tab.add_theme_color_override(state, Palette.TEXT if key == _open else Palette.TEXT_SOFT)
+		TownPage.tab_faces(tab, key == _open, TAB_WIDTH)
+		tab.pressed.connect(func() -> void:
+			_open = key
+			_draw()
+			_board.refresh(key))
+		row.add_child(tab)
+	var rest := TownPage.tab_line(0)
+	rest.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(rest)
+	return row
+
+
+## The open board as last read: `{top, me}` (`Cloud.boards`), empty until read.
+func _read() -> Dictionary:
+	return _board.boards.get(_open, {})
+
+
+## The player's own line on the open board.
 func _draw_me() -> void:
-	var rank: Variant = _board.me.get("rank")
+	var mine: Dictionary = _read().get("me", {})
+	var rank: Variant = mine.get("rank")
 	_table().add_child(_place_row(int(rank) if rank != null else 0, _board.player_name,
-			int(_board.me.get("floors", 0)), false, true))
+			int(mine.get("score", 0)), false, true))
 
 
-## The top of the board, a framed table.
+## The top of the open board, a framed table.
 func _draw_board() -> void:
-	_rows.add_child(UITheme.section("Deepest"))
-	if _board.top.is_empty():
+	_rows.add_child(UITheme.section("Top"))
+	var top: Array = _read().get("top", [])
+	if top.is_empty():
 		_rows.add_child(UITheme.label("Asking the board..." if _board.busy()
-				else "Nobody has beaten a floor yet.", Palette.TEXT_SOFT, true))
+				else "Nobody is on this board yet.", Palette.TEXT_SOFT, true))
 		return
 	var table := _table()
 	table.add_child(_heads())
-	for at in _board.top.size():
-		var row: Dictionary = _board.top[at]
+	for at in top.size():
+		var row: Dictionary = top[at]
 		var line := _place_row(int(row.get("rank", at + 1)), str(row.get("name", "")),
-				int(row.get("floors", 0)), at % 2 == 1, str(row.get("name")) == _board.player_name)
+				int(row.get("score", 0)), at % 2 == 1, str(row.get("name")) == _board.player_name)
 		line.tooltip_text = "Reached %s" % Time.get_datetime_string_from_unix_time(
 				int(row.get("reached_at", 0)) / 1000, true)
 		table.add_child(line)
@@ -155,9 +198,10 @@ func _table() -> VBoxContainer:
 
 
 ## One line of the board: the place in a column before the name -- a trophy for the top three, else the
-## number (nothing while the server has not placed the player) -- then the depth and the floor of it in
-## two columns of their own. One figure, "3.14", read as a decimal: is 3.9 more or less?
-func _place_row(place: int, player: String, floors: int, striped: bool, mine: bool) -> PanelContainer:
+## number (nothing while the server has not placed the player) -- then the score in the open board's
+## columns. Gollux's is the depth and the floor of it in two: one figure, "3.14", read as a decimal: is
+## 3.9 more or less?
+func _place_row(place: int, player: String, score: int, striped: bool, mine: bool) -> PanelContainer:
 	var colour: Variant = ME_COLOUR if mine else null
 	var cell: Control
 	if place >= 1 and place <= TROPHIES.size():
@@ -169,33 +213,38 @@ func _place_row(place: int, player: String, floors: int, striped: bool, mine: bo
 		var number := UITheme.label(str(place) if place > 0 else "", colour, true)
 		number.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		cell = number
-	var at := Cloud.depth_and_floor(floors)
-	return _columns(cell, player, str(at.x), str(at.y), striped, colour)
+	if _open != "gollux":
+		return _columns(cell, player, [str(score)], striped, colour)
+	var at := Cloud.depth_and_floor(score)
+	return _columns(cell, player, [str(at.x), str(at.y)], striped, colour)
 
 
-## The board's column heads, over its first line.
+## The open board's column heads, over its first line.
 func _heads() -> PanelContainer:
-	return _columns(Control.new(), "", "Depth", "Floor", false, Palette.TEXT_SOFT)
+	return _columns(Control.new(), "", BOARDS[_open][2], false, Palette.TEXT_SOFT)
 
 
 ## `UITheme.table_row` laid out as the board's columns: `place` first, the name taking what is left, and
-## `depth` and `level` right-aligned at `NUMBER_WIDTH` each, so they stand in columns down the board.
-func _columns(place: Control, player: String, depth: String, level: String, striped: bool,
+## each of `numbers` right-aligned at `NUMBER_WIDTH`, so they stand in columns down the board.
+func _columns(place: Control, player: String, numbers: Array, striped: bool,
 		colour: Variant) -> PanelContainer:
-	var row := UITheme.table_row(player, depth, striped, WIDTH - 2, colour, colour)
+	var row := UITheme.table_row(player, numbers[0], striped, WIDTH - 2, colour, colour)
 	var cells := row.get_child(0)
 	place.custom_minimum_size.x = PLACE_WIDTH
 	place.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	cells.add_child(place)
 	cells.move_child(place, 0)
-	var floor_cell := UITheme.label(level, colour, true)
-	floor_cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	cells.add_child(floor_cell)
-	for number: Label in [cells.get_node(UITheme.TABLE_VALUE) as Label, floor_cell]:
+	var columns: Array[Label] = [cells.get_node(UITheme.TABLE_VALUE) as Label]
+	for more: String in numbers.slice(1):
+		var extra := UITheme.label(more, colour, true)
+		extra.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		cells.add_child(extra)
+		columns.append(extra)
+	for number: Label in columns:
 		number.custom_minimum_size.x = NUMBER_WIDTH
-	# The name wraps in what the three columns leave it.
+	# The name wraps in what the columns leave it.
 	(cells.get_child(1) as Label).custom_minimum_size.x = maxf(WIDTH - 2 - 2 * UITheme.TABLE_PAD.x
-			- PLACE_WIDTH - 2 * NUMBER_WIDTH - 3 * UITheme.TABLE_GAP, 0.0)
+			- PLACE_WIDTH - numbers.size() * NUMBER_WIDTH - (numbers.size() + 1) * UITheme.TABLE_GAP, 0.0)
 	return row
 
 

@@ -97,8 +97,9 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 	# rank, which is the player's and moves every number its rule writes.
 	var ranked := not item.unique.is_empty() and UniqueTable.is_ranked(item.unique)
 	# In the soft ink for every rarity: the name over it carries the rarity's colour, which at 10 px on
-	# cream is too pale to read a line by (2026-09-30).
-	rows.add_child(line("%s · Level %d%s%s" % [item.rarity_label(), item.level,
+	# cream is too pale to read a line by (2026-09-30). A named heirloom says here what it is underneath.
+	rows.add_child(line("%s%s · Level %d%s%s" % [item.rarity_label(),
+			"" if item.nickname.is_empty() else " " + item.base_name(), item.level,
 			" · Two-handed" if LootTable.two_handed(item.type) else "",
 			" · Rank %s" % Achievements.RANK_NAMES[UniqueTable.shown_rank(item.unique)] if ranked else ""],
 			Palette.TEXT_SOFT, width, true))

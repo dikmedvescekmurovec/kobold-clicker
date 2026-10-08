@@ -98,11 +98,12 @@ async function signIn(subject, key = "google", legacy = undefined) {
 }
 
 // A save as the game writes it, with the numbers the server reads.
-function save({ kills = 10, play = 1000, floors = 0, uniques = ["headsman"], achievements = { headsman: 1 } } = {}) {
+function save({ kills = 10, play = 1000, floors = 0, walls = 0, deepest = 0, uniques = ["headsman"],
+  achievements = { headsman: 1 } } = {}) {
   return JSON.stringify({
-    version: 30, level: 20, saved_at: Date.now() / 1000, kills, play_seconds: play,
-    dungeon_depth: Math.floor(floors / 15), dungeon_floors: floors, farthest_land: 5,
-    uniques_found: uniques, achievements, tally: { clicks: 5 }, items: [],
+    version: 32, level: 20, saved_at: Date.now() / 1000, kills, play_seconds: play,
+    dungeon_depth: Math.floor(floors / 15), dungeon_floors: floors, farthest_land: 5, deepest_level: deepest,
+    uniques_found: uniques, achievements, tally: { clicks: 5, walls }, items: [],
   });
 }
 
@@ -191,6 +192,20 @@ test("the board is signed-in players with a name, by floors then by who got ther
   const scores = top.filter((row) => ["Early", "Late", "Deep"].includes(row.name)).map((row) => [row.name, row.floors]);
   assert.deepEqual(scores, [["Deep", 1001], ["Early", 1000], ["Late", 1000]]);
   assert.ok(!top.some((row) => row.name === "Oldtimer" || row.name === null), "no anonymous or nameless rows");
+});
+
+test("the walls and deepest boards rank by their own score, each only rising", async () => {
+  const token = await signIn("google-boards-climber");
+  await read("/me/name", { method: "PUT", token, body: { name: "Climber" } });
+  await upload(token, 0, save({ walls: 7, deepest: 12 }));
+  await upload(token, 1, save({ walls: 3, deepest: 30 }));
+  const walls = (await read("/leaderboard?board=walls", { token })).data;
+  const deepest = (await read("/leaderboard?board=deepest", { token })).data;
+  assert.deepEqual(walls.top.find((row) => row.name === "Climber").score, 7, "walls never go down");
+  assert.deepEqual([deepest.top[0].name, deepest.top[0].score], ["Climber", 30]);
+  assert.deepEqual([walls.me.score, walls.me.rank, deepest.me.score, deepest.me.rank], [7, 1, 30, 1]);
+  assert.ok(!walls.top.some((row) => row.score === 0), "nobody on a board with nothing on it");
+  assert.equal((await read("/leaderboard?board=constructor")).status, 404);
 });
 
 test("signing out and deleting the account end the session", async () => {

@@ -1288,16 +1288,21 @@ func _test_saving() -> bool:
 	_check(played.farthest_land == MapBuilder.START_LAND_RADIUS and not played.reach(MapBuilder.START_LAND_RADIUS),
 			"no land further than the start's before a wall falls")
 	_check(played.reach(30) and not played.reach(20) and played.farthest_land == 30, "the furthest reach only rises")
+	# And the deepest tile charted, a leaderboard's score: the start's level 1 is no news.
+	_check(not played.chart(1) and played.chart(9) and not played.chart(5) and played.deepest_level == 9,
+			"the deepest tile charted only rises")
 	played.save(TEST_PATH)
 	var kept := Inventory.load_from(TEST_PATH)
-	_check(kept.farthest_land == 30, "it comes back off the save")
-	_check(played.transcended().farthest_land == 30, "and a transcension carries it over")
+	_check(kept.farthest_land == 30 and kept.deepest_level == 9, "they come back off the save")
+	_check(played.transcended().farthest_land == 30 and played.transcended().deepest_level == 9,
+			"and a transcension carries them over")
 	file = FileAccess.open(TEST_PATH, FileAccess.WRITE)
 	file.store_string('{"version": 24, "items": []}')
 	file.close()
 	kept = Inventory.load_from(TEST_PATH)
 	_check(kept.farthest_land == MapBuilder.START_LAND_RADIUS,
 			"a save from before it has been no further than the start's land")
+	_check(kept.deepest_level == 1, "nor charted deeper than the start's tile")
 	_check(kept.hero() == Inventory.DEFAULT_NAME, "and an unnamed character, as a save before names is")
 
 	# The character's name: trimmed, cut to its most, never nothing, kept and carried like the kills.
@@ -2351,6 +2356,20 @@ func _test_heirlooms() -> bool:
 			"and Keep does it, for no orb")
 	_check(not FileAccess.file_exists(TEST_PATH), "and writes nothing")
 	choosing.queue_free()
+	# The black screen asks for a name for it, which it goes by from then on, through the save as well.
+	var black := TranscendPage.new(owner, 2.0)
+	root.add_child(black)
+	await process_frame
+	black._name_heirloom(treasure)
+	var naming: Array = black.get_children().filter(func(child: Node) -> bool: return child is TextPrompt)
+	_check(naming.size() == 1, "making one asks for its name")
+	(naming[0] as TextPrompt).entered.emit("  Fang ")
+	var named := Item.from_dict(treasure.to_dict())
+	_check(treasure.display_name() == "Fang" and named.nickname == "Fang" and named.base_name() == "Wooden Sword",
+			"and the name it is given is its name, in the save too")
+	(naming[0] as TextPrompt).entered.emit("Wooden Sword")
+	_check(treasure.nickname.is_empty(), "its own name is no name")
+	black.queue_free()
 
 	# Over the heirlooms the tray is the super orbs, used as an ordinary orb is: picked up, then pressed
 	# on a piece. An aimed one asks which line; the rest are spent at once.

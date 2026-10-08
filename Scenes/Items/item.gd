@@ -52,6 +52,9 @@ var extra_slot := false
 ## The player's padlock: a level's Sell all and bin pass it by (`Inventory.discard_level`). Not the
 ## smith's Lock, which holds one modifier (`locked_mod`).
 var locked := false
+## What the player called it as it was made an heirloom (`TranscendPage`), written in its name's place;
+## "" for every other piece. Saved only where set.
+var nickname := ""
 
 ## What one `plus` is worth to a piece's modifiers, in item levels. A percent band grows 12% a level,
 ## so three levels is about +40% a plus. A dial, unplayed.
@@ -215,10 +218,15 @@ func tier_of(mod: Dictionary) -> int:
 
 
 ## What the panel calls it. A method rather than reading `type`, because a unique has a name of its
-## own and this is where that seam belongs.
+## own and this is where that seam belongs. An heirloom the player named goes by that name instead.
 func display_name() -> String:
-	var named := type if unique.is_empty() else str(UniqueTable.UNIQUES[unique]["name"])
+	var named := base_name() if nickname.is_empty() else nickname
 	return named if plus <= 0 else "%s +%d" % [named, plus]
+
+
+## What the piece is, whatever the player calls it: its base, or a unique's own name.
+func base_name() -> String:
+	return type if unique.is_empty() else str(UniqueTable.UNIQUES[unique]["name"])
 
 
 ## The sentence saying what a unique changes about a fight, with its numbers at the player's rank of
@@ -412,6 +420,8 @@ func to_dict() -> Dictionary:
 		out["extra_slot"] = true
 	if locked:
 		out["locked"] = true
+	if not nickname.is_empty():
+		out["nickname"] = nickname
 	return out
 
 
@@ -461,6 +471,7 @@ static func from_dict(data: Variant) -> Item:
 	item.ascension = maxi(0, int(saved.get("ascension", 0)))
 	item.extra_slot = bool(saved.get("extra_slot", false))
 	item.locked = bool(saved.get("locked", false))
+	item.nickname = str(saved.get("nickname", ""))
 	# A save written before pieces carried their own numbers has none to read, and what such a
 	# piece was worth when it was written is exactly the table unscaled -- so that is what it keeps.
 	var saved_stats: Variant = saved.get("stats", null)
