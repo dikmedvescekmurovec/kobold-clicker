@@ -79,6 +79,8 @@ const MOUSE_KEYS := [["shift", "Click to equip or unequip"], ["ctrl", "Click to 
 const CREDITS := [
 	["Development", [
 		["Dik Medvešček Murovec", "Lead everything", "https://www.linkedin.com/in/dik-medvescek-murovec"],
+		["Benjamin Medvešček Murovec", "Ideas & QA",
+				"https://www.linkedin.com/in/benjamin-medve%C5%A1%C4%8Dek-murovec-a12110207/"],
 	]],
 	["Art", [
 		["Mattz Art", "The hero, the portraits and the enemies"],
