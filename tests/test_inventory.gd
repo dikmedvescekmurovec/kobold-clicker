@@ -31,6 +31,7 @@ func _run() -> void:
 	_check(_test_totals() == true, "stat total tests ran to the end")
 	_check(_test_wearing() == true, "wearing tests ran to the end")
 	_check(await _test_key_clicks() == true, "key click tests ran to the end")
+	_check(await _test_drag_and_drop() == true, "drag and drop tests ran to the end")
 	_check(_test_two_handed() == true, "two-handed tests ran to the end")
 	_check(_test_chances() == true, "drop-chance tests ran to the end")
 	_check(_test_rarity_tables() == true, "rarity table tests ran to the end")
@@ -49,12 +50,16 @@ func _run() -> void:
 	_check(_test_saving() == true, "saving tests ran to the end")
 	_check(_test_orb_tables() == true, "orb table tests ran to the end")
 	_check(_test_orb_verbs() == true, "orb verb tests ran to the end")
+	_check(_test_wall_unlocks() == true, "wall unlock tests ran to the end")
+	_check(_test_runes() == true, "rune tests ran to the end")
 	_check(_test_locks_and_breaks() == true, "lock and break tests ran to the end")
 	_check(_test_orb_saving() == true, "orb saving tests ran to the end")
 	_check(_test_player_level() == true, "player level tests ran to the end")
 	_check(_test_bag_order() == true, "bag order tests ran to the end")
 	_check(_test_capacity() == true, "capacity tests ran to the end")
 	_check(_test_autodiscard() == true, "autodiscard tests ran to the end")
+	_check(_test_loot_filter() == true, "loot filter tests ran to the end")
+	_check(_test_stones() == true, "skill stone tests ran to the end")
 	_check(await _test_bag_filter() == true, "bag filter tests ran to the end")
 	_check(_test_deltas() == true, "delta tests ran to the end")
 	_check(_test_upgrade_mark() == true, "upgrade mark tests ran to the end")
@@ -92,6 +97,11 @@ func _clear_save() -> void:
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
+## A hero with nothing under their gear but the gear: a fresh tree holds no point, so it adds nothing.
+func _hero() -> Inventory:
+	return Inventory.new()
+
+
 ## Every item has art on disk at the size the panel draws it, a weight that can come up, and stats
 ## the panel knows how to write.
 func _test_items() -> bool:
@@ -114,8 +124,8 @@ func _test_items() -> bool:
 		_check(icon != null, item + " has an icon")
 		if icon != null:
 			_check(icon.get_size() == Vector2(32, 32), "%s is %s, not 32x32" % [item, icon.get_size()])
-		_check(int(LootTable.ITEMS[item]["weight"]) > 0 or item in [LootTable.FIRST_DROP, LootTable.BROKEN_TORCH],
-				item + " can come up at all")
+		_check(int(LootTable.ITEMS[item]["weight"]) > 0 or item in [LootTable.FIRST_DROP, LootTable.BROKEN_TORCH]
+				or LootTable.slot_of(item) == SkillTree.SLOT, item + " can come up at all")
 		var stats := LootTable.stats_of(item)
 		_check(not stats.is_empty(), item + " is worth something")
 		for stat: String in stats:
@@ -237,7 +247,7 @@ func _test_totals() -> bool:
 
 	# The attributes are a fifth of a percent a point: strength of the set's damage, dexterity of its
 	# swings, intelligence of the experience a kill pays.
-	var bag := Inventory.new()
+	var bag := _hero()
 	var own := Item.new()
 	own.type = "Wooden Sword"
 	own.stats = Item.scaled_stats("Wooden Sword", 1)
@@ -679,6 +689,8 @@ func _test_modifier_tables() -> bool:
 					carried = carried or LootTable.can_globalize(item, stat)
 				_:
 					carried = carried or LootTable.can_roll(item, stat)
+			# A skill stone's lines are listed by id (`SkillTree.LINES`), not let on by a gate.
+			carried = carried or id in SkillTree.LINES.get(item, {})
 		# Unless it is one of the ones held back on purpose, which have to be named rather than
 		# inferred: a modifier nothing can roll is dead weight, and a dormant one is a system waiting.
 		var held_back: bool = id in ModifierTable.DORMANT or id in ModifierTable.UNIQUE_ONLY
@@ -707,6 +719,9 @@ func _test_deeper_pools() -> bool:
 	for item in LootTable.items():
 		var pool := ModifierTable.pool_for(item)
 		var slot := LootTable.slot_of(item)
+		# A skill stone's pool is its base's (`_test_stones`), whichever socket's lines those are.
+		if slot == SkillTree.SLOT:
+			continue
 		for lines: Array in [[weapon_lines, "weapon"], [ring_lines, "ring"], [amulet_lines, "amulet"]]:
 			for id: String in lines[0]:
 				_check((id in pool) == (slot == lines[1]), "%s %s %s" % [item, "rolls" if slot == lines[1] else "never rolls", id])
@@ -732,7 +747,7 @@ func _test_deeper_pools() -> bool:
 	amulet.type = "Ruby Amulet"
 	amulet.stats = Item.scaled_stats(amulet.type, 1)
 	amulet.mods = [{"id": "added_all_attributes", "value": 3}, {"id": "added_strength", "value": 2}]
-	var player := Inventory.new()
+	var player := _hero()
 	player.equipment.equip(Equipment.Socket.AMULET, amulet)
 	var points := player.attributes()
 	_check(points["strength"] == 5.0 and points["dexterity"] == 3.0 and points["intelligence"] == 3.0,
@@ -751,7 +766,7 @@ func _test_deeper_pools() -> bool:
 func _test_defence_pools() -> bool:
 	var own := {
 		"helmet": ["added_blow_delay", "added_elite_ward", "added_tile_ward", "added_less_health",
-			"added_power_skills", "added_fortune_skills", "added_guard_skills"],
+			"added_strength_stones", "added_dexterity_stones", "added_intelligence_stones"],
 		"body": ["added_camp_earnings", "added_enemies", "added_thorns", "added_recoup"],
 	}
 	var held := {"buckler": ["added_parry"], "shield": ["added_time_on_block"],
@@ -760,6 +775,8 @@ func _test_defence_pools() -> bool:
 		var pool := ModifierTable.pool_for(item)
 		var slot := LootTable.slot_of(item)
 		var kind := LootTable.kind_of(item)
+		if slot == SkillTree.SLOT:
+			continue
 		for lines_slot: String in own:
 			for id: String in own[lines_slot]:
 				_check((id in pool) == (slot == lines_slot), "%s %s %s" % [item, "rolls" if slot == lines_slot else "never rolls", id])
@@ -778,7 +795,7 @@ func _test_defence_pools() -> bool:
 		"added_elite_ward": [15, "15% less time lost to elites' and bosses' blows"],
 		"added_tile_ward": [25, "Tile modifiers are 25% weaker"],
 		"added_less_health": [8, "Enemies have 8% less health"],
-		"added_power_skills": [1, "+1 rank to every learned Power skill"],
+		"added_strength_stones": [1, "+1 rank to every Strength Node holding a point"],
 		"added_camp_earnings": [20, "Camps earn 20% more"],
 		"added_enemies": [1, "+1 enemy in each fight"],
 		"added_thorns": [30, "Blows that land on you strike back for 30% of your damage"],
@@ -822,21 +839,29 @@ func _test_defence_pools() -> bool:
 	var detailed := body.mod_lines(true)
 	_check(detailed[0].begins_with("-2(±2) enemies in each fight T"), "a detailed count shows its reach (%s)" % detailed[0])
 
-	# A tree's ranks: on every learned skill of that tree, none of another's, both dolls.
+	# A base's ranks: on every stone of that base holding a point, none of another's, both dolls.
 	var player := Inventory.new()
-	player.skills.ranks["sharpened_edge"] = 1
-	var before := float(player.stats().get("damage", 0.0))
+	player.level = 2
+	player.skills.stones["0"] = SkillTree._starter_stone("Strength Node", "added_damage")
+	player.rank_up_skill("0")
+	var damage := func() -> float:
+		var tree := player._tree()
+		return float(player.skills.flat(tree[0], tree[1]).get("damage", 0.0))
+	var before: float = damage.call()
 	var helm := Item.new()
 	helm.type = "Leather Helmet"
 	helm.stats = Item.scaled_stats(helm.type, 1)
-	helm.mods = [{"id": "added_fortune_skills", "value": 1}]
+	helm.mods = [{"id": "added_intelligence_stones", "value": 1}]
 	player.equipment.equip(Equipment.Socket.HELMET, helm)
-	_check(float(player.stats().get("damage", 0.0)) == before, "another tree's rank adds nothing to Power")
-	helm.mods = [{"id": "added_power_skills", "value": 1}]
-	_check(float(player.stats().get("damage", 0.0)) == before * 2.0,
-			"a Power rank doubles one rank of Sharpened Edge (%s, %s)" % [before, player.stats().get("damage")])
+	_check(before > 0.0 and damage.call() == before, "another base's rank adds nothing to the strength stone")
+	helm.mods = [{"id": "added_strength_stones", "value": 1}]
+	_check(damage.call() == before * 2.0, "a strength rank doubles its one rank (%s, %s)" % [before, damage.call()])
 	player.stash().equipment.equip(Equipment.Socket.HELMET, Item.from_dict(helm.to_dict()))
-	_check(float(player.stats().get("damage", 0.0)) == before * 3.0, "and the heirlooms' helmet's rank as well")
+	_check(damage.call() == before * 3.0, "and the heirlooms' helmet's rank as well")
+	# A helmet saved with a rank on one of the old trees reads as the base that took the tree's place.
+	var old := helm.to_dict()
+	old["mods"] = [{"id": "added_power_skills", "value": 1}]
+	_check(Item.from_dict(old).mods[0]["id"] == "added_strength_stones", "a Power rank saved is a strength stone's")
 	return true
 
 
@@ -848,7 +873,7 @@ func _test_modifier_rolls() -> bool:
 		var stats := LootTable.stats_of(item_type)
 		for step: ItemRarity.Rarity in [ItemRarity.Rarity.COMMON, ItemRarity.Rarity.UNCOMMON,
 				ItemRarity.Rarity.RARE, ItemRarity.Rarity.ELITE]:
-			var band: Array = ItemRarity.MOD_COUNT[step]
+			var band: Array = ItemRarity.band(step, item_type)
 			for i in 200:
 				var item := Item.rolled(item_type, step, rng)
 				_check(item.mods.size() >= int(band[0]) and item.mods.size() <= int(band[1]),
@@ -860,7 +885,8 @@ func _test_modifier_rolls() -> bool:
 					_check(not seen.has(id), "%s carries %s twice" % [item_type, id])
 					seen[id] = true
 					var entry: Dictionary = ModifierTable.MODS[id]
-					var range_band: Array = entry["range"]
+					var range_band: Array = ModifierTable.band_for(id, item.tier_of(mod)) if item.is_stone() \
+							else entry["range"]
 					_check(typeof(mod["value"]) == TYPE_INT, id + " rolled a whole number")
 					_check(mod["value"] >= int(range_band[0]) and mod["value"] <= int(range_band[1]),
 							"%s rolled %d, outside %s" % [id, mod["value"], range_band])
@@ -869,6 +895,9 @@ func _test_modifier_rolls() -> bool:
 					if entry["kind"] == ModifierTable.Kind.PERCENT:
 						_check(stats.has(entry["stat"]),
 								"%s rolled %s, scaling a base stat it hasn't got" % [item_type, id])
+					elif item.is_stone():
+						_check(id in SkillTree.lines_for(item_type, item.stone_tier),
+								"a tier %d %s rolled %s, which it has not unlocked" % [item.stone_tier, item_type, id])
 					elif entry["kind"] == ModifierTable.Kind.FLAT:
 						_check(LootTable.can_roll(item_type, entry["stat"]),
 								"%s rolled %s for a stat it cannot carry" % [item_type, id])
@@ -1581,11 +1610,14 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	await process_frame
 	_check(main.bag_page._actions.visible, "a press that stays put is a click")
 	main.bag_page._select_item(-1)
+	# A finger's: a mouse's press that travels from a square lifts the piece (`_test_drag_and_drop`).
+	Cursors.touched = true
 	_press(main, on_first, true)
 	_drag(main, on_first, BagPage.DRAG_THRESHOLD * 4.0)
 	_press(main, on_first, false)
+	Cursors.touched = false
 	await process_frame
-	_check(not main.bag_page._actions.visible, "a press that travels is a drag, and opens nothing")
+	_check(not main.bag_page._actions.visible, "a finger's press that travels is a drag, and opens nothing")
 
 	# Sections. Two levels means two grids with a heading each, and a square in the second section is
 	# the case the flat-grid arithmetic this replaced would have got wrong.
@@ -2047,12 +2079,7 @@ func _test_key_clicks() -> bool:
 	var bare: Array = sockets.filter(func(s: Control) -> bool:
 			return s.get_meta("socket") == Equipment.Socket.HELMET)
 	_check(bare.size() == 1 and not bare[0].has_meta(ItemCard.KEYS), "and a bare socket to nothing")
-	var press := InputEventMouseButton.new()
-	press.button_index = MOUSE_BUTTON_LEFT
-	press.pressed = true
-	press.shift_pressed = true
-	press.position = worn[0].position + worn[0].size / 2.0
-	page._on_doll_input(press)
+	_click_doll(page, worn[0].position + worn[0].size / 2.0, true)
 	await process_frame
 	_check(inventory.equipment.item_at(Equipment.Socket.WEAPON) == null and sword in inventory.items,
 			"a Shift-click on the doll takes the piece off")
@@ -2066,8 +2093,7 @@ func _test_key_clicks() -> bool:
 	await process_frame
 	worn = _socket_squares(main).filter(func(s: Control) -> bool:
 			return s.get_meta("socket") == Equipment.Socket.WEAPON)
-	press.position = worn[0].position + worn[0].size / 2.0
-	page._on_doll_input(press)
+	_click_doll(page, worn[0].position + worn[0].size / 2.0, true)
 	await process_frame
 	_check(inventory.equipment.item_at(Equipment.Socket.WEAPON) == sword,
 			"a full bag leaves a Shift-clicked worn piece on")
@@ -2100,6 +2126,137 @@ func _test_key_clicks() -> bool:
 	choosing.queue_free()
 	await process_frame
 	return true
+
+
+## Drag and drop through the viewport, as a mouse does it: a bag piece let go over a socket it does not
+## fit stays in the bag, over one it fits is worn, and a worn piece let go over the bag is taken off; on
+## the black screen's stones page a stone let go over a slot of the tree is placed there.
+func _test_drag_and_drop() -> bool:
+	var window := root.size
+	root.size = Vector2i(1152, 648)
+	var inventory := Inventory.new()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 4)
+	inventory.add(sword)
+	var page := BagPage.new(inventory, TEST_PATH, 2.0)
+	root.add_child(page)
+	await process_frame
+	var main := {"bag_page": page}
+	var socket_spot := func(socket: Equipment.Socket) -> Vector2:
+		for slot: Control in _socket_squares(main):
+			if slot.get_meta("socket") == socket:
+				return _middle(slot)
+		return Vector2.INF
+	var marks := func(on: Node) -> Array[Node]:
+		return on.find_children(BagPage.DROP_MARK_NAME, "", true, false)
+	var dimmed := func(socket: Equipment.Socket) -> bool:
+		return _socket_squares(main).any(func(slot: Control) -> bool:
+				return slot.get_meta("socket") == socket and slot.modulate == OrbSlot.DIM)
+	await _mouse_drag(_middle(_bag_squares(main)[0]), socket_spot.call(Equipment.Socket.HELMET),
+			func() -> void:
+				_check(page._selected == -1 and not page._actions.visible,
+						"a piece being dragged is not opened, and no buttons stand beside it")
+				_check(dimmed.call(Equipment.Socket.HELMET) and not dimmed.call(Equipment.Socket.WEAPON),
+						"the sockets it cannot go in are dimmed, the one it can is not")
+				_check(marks.call(page).is_empty(), "and the helmet it is over, which will not take it, is not outlined"))
+	await process_frame
+	_check(sword in inventory.items and inventory.equipment.worn.is_empty(),
+			"a sword let go over the helmet stays in the bag")
+	_check(not root.gui_is_dragging(), "and the drag is over")
+	_check(not dimmed.call(Equipment.Socket.HELMET), "and nothing is dimmed after it")
+	await _mouse_drag(_middle(_bag_squares(main)[0]), socket_spot.call(Equipment.Socket.WEAPON),
+			func() -> void:
+				var outlined: Array = marks.call(page)
+				_check(outlined.size() == 1 and outlined[0].get_parent().get_meta("socket", -1)
+						== Equipment.Socket.WEAPON, "over the weapon hand, which will take it, that socket is outlined"))
+	await process_frame
+	_check(inventory.equipment.item_at(Equipment.Socket.WEAPON) == sword and sword not in inventory.items,
+			"let go over the weapon hand it is worn")
+	_check(marks.call(page).is_empty(), "and the outline goes with the drag")
+	await _mouse_drag(socket_spot.call(Equipment.Socket.WEAPON), _middle(page._scroll))
+	await process_frame
+	_check(sword in inventory.items and inventory.equipment.worn.is_empty(),
+			"a worn piece let go over the bag is taken off")
+	page.queue_free()
+
+	var stone := Item.new()
+	stone.type = "Strength Node"
+	stone.rarity = ItemRarity.Rarity.RARE
+	stone.stone_tier = 1
+	stone.connectors = 2
+	stone.stats = Item.scaled_stats(stone.type, 1)
+	inventory.add(stone)
+	var starter: Item = inventory.skills.stones["0"]
+	var stones := BagPage.new(inventory, "", 2.0, false, true, true)
+	root.add_child(stones)
+	await process_frame
+	main.bag_page = stones
+	var tree_view := func() -> SkillTreeView:
+		return stones.find_children("*", "SkillTreeView", true, false)[0]
+	var spot: Control = tree_view.call().squares["0"]
+	await _mouse_drag(_middle(_bag_squares(main)[0]),
+			spot.get_global_transform_with_canvas() * (spot.get_combined_minimum_size() / 2.0),
+			func() -> void:
+				var squares: Dictionary = tree_view.call().squares
+				_check(squares[""].modulate == SkillTreeView.FAINT and squares["0"].modulate == Color.WHITE
+						and tree_view.call()._rings.has("0"),
+						"over the tree the root is faint for a dragged stone, the slot it fits ringed")
+				_check(not marks.call(squares["0"]).is_empty(), "and the slot under it is outlined"))
+	await process_frame
+	_check(inventory.skills.stones["0"] == stone and starter in inventory.items and stone not in inventory.items,
+			"a stone let go over the tree's slot is placed, and the one it replaces comes back to the bag")
+	_check(tree_view.call().squares[""].modulate == Color.WHITE, "and the root is lit again after")
+	stones.queue_free()
+	var back := InputEventMouseMotion.new()
+	Input.parse_input_event(back)
+	await process_frame
+	root.size = window
+	return true
+
+
+## The middle of `control` in the window's pixels, where a pushed mouse event lands.
+func _middle(control: Control) -> Vector2:
+	return control.get_global_transform_with_canvas() * (control.size / 2.0)
+
+
+## A mouse's drag from `from` to `to` (window pixels): down, across in steps, up, a frame each. Through
+## `Input` rather than straight into the viewport, because a drop is placed where the mouse is, and
+## headless that is `Input`'s mouse; the frames let the doll the lift redraws be laid out under it.
+## `midway` is called over `to` before letting go.
+func _mouse_drag(from: Vector2, to: Vector2, midway := Callable()) -> void:
+	var at := from
+	for step in 6:
+		if step == 5 and midway.is_valid():
+			# A frame more, for the page's `_process` to have followed the mouse there.
+			await process_frame
+			midway.call()
+		var event: InputEventMouse
+		if step == 0 or step == 5:
+			event = InputEventMouseButton.new()
+			event.button_index = MOUSE_BUTTON_LEFT
+			event.pressed = step == 0
+		else:
+			var next := from.lerp(to, step / 4.0)
+			event = InputEventMouseMotion.new()
+			event.button_mask = MOUSE_BUTTON_MASK_LEFT
+			event.relative = next - at
+			at = next
+		event.position = at
+		event.global_position = at
+		Input.parse_input_event(event)
+		await process_frame
+
+
+## A click on the doll at `at` (its own pixels), straight to its handler: a socket counts as it lets go.
+func _click_doll(page: BagPage, at: Vector2, shift := false) -> void:
+	for down: bool in [true, false]:
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT
+		click.pressed = down
+		click.shift_pressed = shift
+		click.position = at
+		page._on_doll_input(click)
 
 
 ## Every socket square on the doll, or nothing at all while the doll is folded away. It is
@@ -2227,7 +2384,7 @@ func _test_heirlooms() -> bool:
 			"a version 13 save has none, and no wall paid for")
 
 	# Two dolls. Flats add; each doll's global percents are a multiplier of their own.
-	var both := Inventory.new()
+	var both := _hero()
 	wear.call(both, _piece(ItemRarity.Rarity.COMMON, 5))
 	var one_sword: float = both.stats()["damage"]
 	wear.call(both.stash(), _piece(ItemRarity.Rarity.COMMON, 5))
@@ -2236,7 +2393,7 @@ func _test_heirlooms() -> bool:
 	wear.call(both.stash(), ring_of.call(20))
 	_check(is_equal_approx(both.stats()["damage"], one_sword * 2.0 * 1.2 * 1.2),
 			"20%% on each doll is x1.44 (%s)" % both.stats()["damage"])
-	var one_doll := Inventory.new()
+	var one_doll := _hero()
 	wear.call(one_doll, _piece(ItemRarity.Rarity.COMMON, 5))
 	wear.call(one_doll, ring_of.call(20))
 	wear.call(one_doll, ring_of.call(20))
@@ -2260,7 +2417,7 @@ func _test_heirlooms() -> bool:
 	_check(counted.stats()["bag_pieces"] == 1, "the harness on the heirlooms' doll counts the stash and not the bag")
 
 	# A stat is the player's: the helm on one doll is paid for armour on the other.
-	var spiked := Inventory.new()
+	var spiked := _hero()
 	wear.call(spiked, _piece(ItemRarity.Rarity.COMMON, 5))
 	var bare_damage: float = spiked.stats()["damage"]
 	var helm := Item.rolled_unique("spiked_helm", rng, 5)
@@ -2813,6 +2970,59 @@ func _test_capacity() -> bool:
 	return true
 
 
+## The loot filter, the sixth wall's (`Inventory.leaves_behind`, `Settings.filter_*`): nothing until the
+## wall has fallen in some world, then the least rarity, material and level and ascended pieces only --
+## never a unique, a kind with one material never short of one, a skill stone by its rarity alone -- and
+## a level's own rule all along.
+func _test_loot_filter() -> bool:
+	var player := Inventory.new()
+	var plain := _piece(ItemRarity.Rarity.COMMON, 3)
+	Settings.filter_rarity = ItemRarity.Rarity.RARE
+	Settings.filter_level = 10
+	_check(not player.leaves_behind(plain), "before the sixth wall the filter is not there")
+	player.set_autodiscard(3, true)
+	_check(player.leaves_behind(plain), "but a level's own rule always is")
+	player.set_autodiscard(3, false)
+	player.farthest_land = MapBuilder.START_LAND_RADIUS + 6 * MapBuilder.WALL_STEP
+	Settings.filter_rarity = 0
+	Settings.filter_level = 1
+	_check(not player.leaves_behind(plain), "a filter keeping everything leaves nothing")
+
+	Settings.filter_rarity = ItemRarity.Rarity.RARE
+	var rare := _piece(ItemRarity.Rarity.RARE, 3)
+	_check(player.leaves_behind(plain) and not player.leaves_behind(rare), "under the least rarity it is left")
+	var unique := _piece(ItemRarity.Rarity.UNIQUE, 1)
+	_check(not player.leaves_behind(unique), "a unique never is")
+	Settings.filter_rarity = 0
+
+	Settings.filter_level = 5
+	_check(player.leaves_behind(plain) and not player.leaves_behind(_piece(ItemRarity.Rarity.COMMON, 5)),
+			"under the least level it is left")
+	Settings.filter_level = 1
+
+	Settings.filter_material = 2
+	var steel := _piece(ItemRarity.Rarity.COMMON, 6)
+	steel.type = "Steel Sword"
+	var ring := _piece(ItemRarity.Rarity.COMMON, 6)
+	ring.type = "Gold Ring"
+	_check(player.leaves_behind(plain) and not player.leaves_behind(steel),
+			"a wooden sword is short of steel, a steel one is not")
+	_check(not player.leaves_behind(ring), "jewellery has one material and is never short of one")
+	Settings.filter_material = 0
+
+	Settings.filter_ascended = true
+	var ascended := _piece(ItemRarity.Rarity.COMMON, 3)
+	ascended.plus = 1
+	_check(player.leaves_behind(plain) and not player.leaves_behind(ascended), "ascended only keeps a +1")
+	var stone := SkillTree._starter_stone("Dexterity Node", "global_increased_attack_speed")
+	_check(not player.leaves_behind(stone), "a skill stone answers to the rarity alone")
+	Settings.filter_rarity = ItemRarity.Rarity.RARE
+	_check(player.leaves_behind(stone), "and an uncommon one is under rare")
+	Settings.filter_rarity = 0
+	Settings.filter_ascended = false
+	return true
+
+
 ## A level the player is done with: cleared once, and then told not to come back.
 func _test_autodiscard() -> bool:
 	var bag := Inventory.new()
@@ -2848,6 +3058,103 @@ func _test_autodiscard() -> bool:
 	_check(gone.size() == 1 and bag.items == [kept], "Clear and Sell all leave a locked piece")
 	_check(Item.from_dict(kept.to_dict()).locked, "and the lock is saved")
 	_check(not Item.from_dict(gone[0].to_dict()).locked, "an unlocked one reads back unlocked")
+	return true
+
+
+## Skill nodes as items (the user's, 2026-10-08): carried and crafted like gear and never worn. A stone's
+## tier lifts its lines and picks its disc, its connectors are saved with it, and a capstone is a leaf
+## of unique rarity whose lines are its row's and which no orb touches.
+func _test_stones() -> bool:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	# Each base's pool is its own list (`SkillTree.LINES`), unlocked a tier at a time, never the lines
+	# any piece of gear may carry; ranks are on every base from tier I and drawn less the deeper it is.
+	for type: String in SkillTree.BASES:
+		var first := ModifierTable.pool_for(type, 1)
+		var deepest := ModifierTable.pool_for(type, SkillTree.MOST_TIER)
+		_check("added_stone_ranks" in first, "%s may roll ranks from tier I" % type)
+		_check(first.size() < deepest.size(), "%s unlocks lines as its tier deepens" % type)
+		for id in first:
+			_check(id in deepest, "%s keeps %s at a deeper tier" % [type, id])
+		for id in deepest:
+			_check(ModifierTable.MODS[id]["kind"] != ModifierTable.Kind.PERCENT,
+					"%s rolls no percent of its own (%s)" % [type, id])
+		_check(ModifierTable.pool_for(type, 0).is_empty(), "%s below tier I has nothing to roll" % type)
+	for tier in range(2, SkillTree.MOST_TIER + 1):
+		_check(ModifierTable.weight_of("added_stone_ranks", tier) < ModifierTable.weight_of("added_stone_ranks", tier - 1),
+				"ranks are drawn less at tier %d than at %d" % [tier, tier - 1])
+	_check(ModifierTable.weight_of("added_damage", 1) == ModifierTable.weight_of("added_damage", 9),
+			"and no other line's weight moves with the tier")
+	# The ranks line is tiered, its band written by the tier: 1 to 2 at T1, the top two more a tier.
+	_check(ModifierTable.tiered("added_stone_ranks"), "the ranks line has tiers")
+	for tier: int in [1, 2, 5, 26]:
+		_check(ModifierTable.band_for("added_stone_ranks", tier) == [1, 2 * tier],
+				"ranks at T%d roll %s" % [tier, ModifierTable.band_for("added_stone_ranks", tier)])
+	_check("added_spawn_speed" in ModifierTable.pool_for("Dexterity Node")
+			and not "added_spawn_speed" in ModifierTable.pool_for("Strength Node"),
+			"spawn speed is the dexterity stone's, not every stone's")
+	_check("added_fight_clock" in ModifierTable.pool_for("Dexterity Node")
+			and not "added_fight_clock" in ModifierTable.pool_for("Intelligence Node"),
+			"and so is the fight clock")
+	# An orb draws from what the stone's tier unlocks, as the drop does.
+	var shallow := Item.rolled("Strength Node", ItemRarity.Rarity.ELITE, rng, 4, 1, 0)
+	for i in 20:
+		OrbTable._reroll_at(shallow, ItemRarity.Rarity.ELITE, rng)
+		for mod in shallow.mods:
+			_check(SkillTree.LINES["Strength Node"][mod["id"]] == 1, "an orb on a tier I stone rolls %s" % mod["id"])
+
+	var stone := Item.rolled("Strength Node", ItemRarity.Rarity.RARE, rng, 4, 3, 2)
+	_check(stone.is_stone() and stone.stone_tier == 3 and stone.connectors == 2, "a stone keeps its shape")
+	_check(stone.mod_level() == stone.level, "its lines read their bands at its level, whatever its tier")
+	_check(stone.mods.size() == 2, "a rare stone carries two lines (%d)" % stone.mods.size())
+	_check(stone.icon() == LootTable.icon("Strength Node", 3)
+			and LootTable.icon_path("Strength Node", 3).ends_with("str_3.png"), "and wears its tier's disc")
+	_check(SkillTree.shape_text(stone) == "Tier 3 · 2 connectors", SkillTree.shape_text(stone))
+	var back := Item.from_dict(stone.to_dict())
+	_check(back != null and back.stone_tier == 3 and back.connectors == 2 and back.mods == stone.mods,
+			"a stone reads back the stone it was")
+	var saved_as_stone := stone.to_dict()
+	saved_as_stone["type"] = "Strength Stone"
+	_check(Item.from_dict(saved_as_stone).type == "Strength Node", "and one saved under its old name is a node now")
+	_check(not Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng).is_stone(), "a sword is no stone")
+
+	# The orbs work on a stone as on gear, to a stone's count: one line a step.
+	var crafted := Item.rolled("Dexterity Node", ItemRarity.Rarity.UNCOMMON, rng, 1)
+	_check(crafted.stone_tier == 1 and crafted.mods.size() == 1, "a stone is tier 1 at the least")
+	_check(not OrbTable.can_apply("Orb of Augmentation", crafted), "an uncommon stone's one line is all it holds")
+	_check(OrbTable.apply("Orb of Exaltation", crafted, rng) and crafted.mods.size() == 3,
+			"an Exaltation makes it epic, with three (%d)" % crafted.mods.size())
+	_check(OrbTable.apply("Orb of Divinity", crafted, rng), "and a Divine rerolls it")
+
+	# A capstone: a leaf of its base at unique rarity, its row's lines, its old badge, and no orb at all.
+	var cap := Item.rolled_capstone("titan", 2, rng, 5)
+	_check(cap.rarity == ItemRarity.Rarity.UNIQUE and cap.connectors == 0 and cap.type == "Strength Node"
+			and cap.stone_tier == 2, "a capstone is a unique-rarity leaf of its base")
+	_check(cap.mods.map(func(mod: Dictionary) -> String: return mod["id"]) == SkillTree.CAPSTONES["titan"]["mods"],
+			"carrying its row's lines")
+	_check(cap.display_name() == "Titan" and not cap.effect_text().is_empty() and cap.icon() == SkillTree.icon("titan"),
+			"under its own name, rule and badge")
+	for orb: String in OrbTable.ORBS:
+		_check(not OrbTable.can_apply(orb, cap) and not OrbTable.why_not(orb, cap).is_empty(),
+				"%s leaves a capstone alone" % orb)
+	var cap_back := Item.from_dict(cap.to_dict())
+	_check(cap_back != null and cap_back.capstone == "titan" and cap_back.stone_tier == 2
+			and cap_back.rarity == ItemRarity.Rarity.UNIQUE, "a capstone reads back whole")
+	var retired := cap.to_dict()
+	retired["capstone"] = "retired"
+	_check(Item.from_dict(retired) == null, "and one this build no longer has goes whole")
+
+	# Never an heirloom, spared by the bin with the uniques, and no socket for the card to call bare.
+	var bag := Inventory.new()
+	bag.add(stone)
+	bag.add(cap)
+	_check(not bag.can_make_heirloom(stone), "a stone is never an heirloom")
+	bag.discard_level(5, false)
+	_check(bag.items.has(cap), "the bin spares a capstone with the uniques")
+	var card := ItemCard.new(1.0)
+	card.equipment = bag.equipment
+	_check(not card.bare_for(stone), "a stone has no bare socket to compare against")
+	card.free()
 	return true
 
 
@@ -2894,6 +3201,14 @@ func _test_bag_filter() -> bool:
 	tabs.filter(func(b: Button) -> bool: return b.tooltip_text == "All items")[0].pressed.emit()
 	await process_frame
 	_check(shown.call().size() == 3, "All items brings every piece back")
+
+	# The skill stones' tab, the last: the stones alone.
+	bag.add(Item.rolled("Dexterity Node", ItemRarity.Rarity.COMMON, RandomNumberGenerator.new(), 3))
+	page.refresh()
+	tabs = page._filter_tabs.get_children().filter(func(n: Node) -> bool: return n is Button)
+	tabs.filter(func(b: Button) -> bool: return b.tooltip_text == "Skill nodes")[0].pressed.emit()
+	await process_frame
+	_check(shown.call() == ["Dexterity Node"], "Skill nodes shows the stones alone (%s)" % [shown.call()])
 	page.queue_free()
 	_clear_save()
 	return true
@@ -3015,7 +3330,7 @@ func _test_item_levels() -> bool:
 		# Sight, the fight clock, the count of enemies and a tree's ranks are the ones in the list that
 		# are not probabilities: tiles, seconds, bodies and ranks, there so that a level cannot multiply them.
 		_check(stat in LootTable.PERCENT_STATS or stat in ["sight", "fight_clock", "extra_enemies",
-				"power_skills", "fortune_skills", "guard_skills"],
+				"strength_stones", "intelligence_stones", "dexterity_stones", "stone_ranks"],
 				"%s is written as a percentage" % stat)
 		for level in [1, 10, 40]:
 			var want := 5.0 + float(LootTable.LEVEL_FLAT[stat]) * float(level - 1)
@@ -3107,6 +3422,8 @@ func _test_kinds() -> bool:
 	for kind: String in LootTable.KINDS:
 		var slot := str(LootTable.KINDS[kind]["slot"])
 		var weight := int(LootTable.KINDS[kind]["weight"])
+		if slot == SkillTree.SLOT:
+			continue
 		_check(weight > 0 or kind in ["broken_sword", "broken_torch"], "%s can come up at all" % kind)
 		weights[slot] = int(weights.get(slot, 0)) + weight
 		total += weight
@@ -3173,7 +3490,7 @@ func _test_kinds() -> bool:
 	# Item rarity is the jewellery's line and nobody else's, and gold find's band is written flat so
 	# that The Tithe reads the same at level 30 as at level 1.
 	for type in LootTable.items():
-		var jewel: bool = LootTable.slot_of(type) in ["ring", "amulet"]
+		var jewel: bool = LootTable.slot_of(type) in ["ring", "amulet"] or type == "Intelligence Node"
 		_check(("added_item_rarity" in ModifierTable.pool_for(type)) == jewel,
 				"%s %s roll item rarity" % [type, "should" if jewel else "should not"])
 	_check(ModifierTable.band_for("added_gold_find", 30) == ModifierTable.band_for("added_gold_find", 1),
@@ -3389,15 +3706,11 @@ func _test_comparing() -> bool:
 	_check(offhand != null and offhand.get_child_count() > 0,
 			"the offhand socket is drawn taken while a greatsword is worn")
 	if offhand != null:
-		var press := InputEventMouseButton.new()
-		press.button_index = MOUSE_BUTTON_LEFT
-		press.pressed = true
-		press.position = offhand.position + offhand.size / 2.0
-		main.bag_page._on_doll_input(press)
+		_click_doll(main.bag_page, offhand.position + offhand.size / 2.0)
 		_check(main.bag_page._worn_selected == Equipment.Socket.WEAPON,
-				"and a press on it opens the greatsword")
-	# A real press, through the viewport: the doll is redrawn under it, and a Control freed in its own
-	# gui_input never marks the press handled, so the map behind it took the click.
+				"and a click on it opens the greatsword")
+	# A real click, through the viewport: the doll is redrawn under it, and a Control freed in its own
+	# gui_input never marks the event handled, so the map behind it took the click.
 	for slot: Control in _socket_squares(main):
 		if slot.get_meta("socket") != Equipment.Socket.WEAPON:
 			continue
@@ -3410,8 +3723,8 @@ func _test_comparing() -> bool:
 			click.global_position = at
 			root.push_input(click, true)
 			if down:
-				_check(main.bag_page._worn_selected == -1 and not main.map._pressing,
-						"a press on the doll closes the piece and never reaches the map")
+				_check(not main.map._pressing, "a press on the doll never reaches the map")
+		_check(main.bag_page._worn_selected == -1, "and letting go closes the piece")
 	main._on_left_page_closed()
 	main.queue_free()
 	_clear_save()
@@ -3442,7 +3755,7 @@ func _test_orb_tables() -> bool:
 		_check(OrbTable.ORBS.has(orb), "a drawn orb is one of the six")
 		seen[orb] = true
 	_check(seen.size() == 6, "every orb can be drawn, saw %d" % seen.size())
-	# The walls down in this world unlock them two at a time, in the tray's order, for a body and a shelf alike.
+	# The deepest wall ever broken unlocks them two at a time, in the tray's order, for a body and a shelf alike.
 	for walls in 3:
 		var pool := OrbTable.unlocked(walls)
 		_check(pool == OrbTable.orbs().slice(0, 2 * walls + 2), "%d walls unlock %s" % [walls, pool])
@@ -3456,6 +3769,155 @@ func _test_orb_tables() -> bool:
 			and OrbTable.unlocked(1).slice(2) == ["Orb of Alchemy", "Orb of Divinity"]
 			and OrbTable.unlocked(5).slice(4) == ["Orb of Chaos", "Orb of Exaltation"],
 			"no wall, then Alchemy and Divinity, then Chaos and Exaltation")
+	return true
+
+
+## The walls' ladder (the user's, 2026-10-09), read off the deepest wall ever broken so a transcension
+## keeps it: the orbs two a wall, Gollux and the runes at the third, distant charting at the fourth, two
+## root branches at the fifth, the filter at the sixth, the abilities at the seventh, a branch a wall
+## after -- and the root's slots set as a save loads, before its tree, so a stone out on a branch the
+## walls opened comes back.
+func _test_wall_unlocks() -> bool:
+	var player := Inventory.new()
+	_check(player.walls_ever() == 0, "a fresh player has broken no wall")
+	player.farthest_land = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP - 1
+	_check(player.walls_ever() == 0, "nor has land short of a whole wall's step")
+	player.farthest_land = MapBuilder.START_LAND_RADIUS + 3 * MapBuilder.WALL_STEP
+	_check(player.walls_ever() == 3 and player.transcended().walls_ever() == 3,
+			"three walls ever, and a transcension keeps them")
+	var opens := {WallUnlocks.GOLLUX: 3, WallUnlocks.RUNES: 3, WallUnlocks.DISTANT: 4, WallUnlocks.FILTER: 6,
+			WallUnlocks.ABILITIES: 7}
+	for id: String in opens:
+		_check(not WallUnlocks.has(opens[id] - 1, id) and WallUnlocks.has(opens[id], id)
+				and WallUnlocks.has(opens[id] + 5, id), "%s opens at wall %d and stays open" % [id, opens[id]])
+	var branches := []
+	for walls in 11:
+		branches.append(WallUnlocks.root_branches(walls))
+	_check(branches == [1, 1, 1, 1, 1, 3, 3, 3, 4, 5, 6],
+			"the root's branches: one, three from the fifth wall, one more a wall from the eighth (%s)" % [branches])
+	var named := func(wall: int) -> Array:
+		return WallUnlocks.of_wall(wall).map(func(unlock: Dictionary) -> String: return unlock["name"])
+	_check(named.call(0).is_empty() and named.call(1) == ["Orb of Alchemy", "Orb of Divinity"]
+			and named.call(2) == ["Orb of Chaos", "Orb of Exaltation"] and named.call(3) == ["Gollux", "Runes"]
+			and named.call(4) == ["Distant charting"] and named.call(5) == ["+2 skill branches"]
+			and named.call(6) == ["Item filter"] and named.call(7) == ["Abilities"]
+			and named.call(9) == ["+1 skill branch"],
+			"each wall's panel names what it opens (%s, %s)" % [named.call(3), named.call(9)])
+	for wall in range(1, 10):
+		for unlock: Dictionary in WallUnlocks.of_wall(wall):
+			_check(load(unlock["icon"]) != null and not str(unlock["tip"]).is_empty(),
+					"%s has a mark and a tooltip" % unlock["name"])
+
+	# The root's slots: a stone on the third branch, out on a fifth wall, comes back off the save.
+	player.farthest_land = MapBuilder.START_LAND_RADIUS + 5 * MapBuilder.WALL_STEP
+	SkillTree.root_slots = WallUnlocks.root_branches(player.walls_ever())
+	var stone := SkillTree._starter_stone("Dexterity Node", "global_increased_attack_speed")
+	_check(player.skills.place(stone, "2").is_empty() and player.skills.stones.has("2"),
+			"three branches take a stone on the third")
+	player.save(TEST_PATH)
+	SkillTree.root_slots = SkillTree.ROOT_CONNECTORS
+	var back := Inventory.load_from(TEST_PATH)
+	_check(SkillTree.root_slots == 3 and back.skills.stones.has("2"),
+			"the save sets the root's slots before its tree, so the stone stays")
+	_check(back.reach(MapBuilder.START_LAND_RADIUS + 8 * MapBuilder.WALL_STEP) and SkillTree.root_slots == 4,
+			"an eighth wall's land grows the root again")
+	Inventory.load_from("user://no_such_save.json")
+	_check(SkillTree.root_slots == SkillTree.ROOT_CONNECTORS, "and a fresh start is the root's one")
+	SkillTree.root_slots = SkillTree.ROOT_CONNECTORS
+	return true
+
+
+## The runes (`RuneTable`, the user's 2026-10-09): what a cave body carries, and what each does to a
+## tile's rune work -- never to its own modifiers -- with every modifier, every Depth and the Ascent on
+## a count of its own that runs out, and the inventory holding the runes and the work through a save.
+func _test_runes() -> bool:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7070
+	for rune: String in RuneTable.names():
+		var picture := RuneTable.icon(rune)
+		_check(picture != null and picture.get_size() == Vector2(RuneTable.ICON_SIDE, RuneTable.ICON_SIDE),
+				"%s has a %d px picture" % [rune, RuneTable.ICON_SIDE])
+	_check(RuneTable.roll("Gollux", rng) != "", "Gollux always carries a rune")
+	var drawn := {}
+	var none := 0
+	for i in 3000:
+		var rune := RuneTable.roll("Rat", rng)
+		if rune.is_empty():
+			none += 1
+		else:
+			drawn[rune] = true
+	_check(none > 2000 and drawn.size() == RuneTable.RUNES.size(), "a common body seldom does, and any rune can fall")
+
+	# What Unrest may give: only what a farm run feels, none the tile has, none a modifier on it refuses.
+	var farmed := TileMods.MODS.keys().filter(func(id: String) -> bool: return TileMods.MODS[id].get("farm", false))
+	_check(RuneTable.pool([], RuneTable.fresh()) == Array(farmed), "a bare tile may take any modifier a farm run feels")
+	_check(not "thick_skinned" in RuneTable.pool(["thick_skinned"], RuneTable.fresh()), "but none it has of its own")
+	var barren := RuneTable.fresh()
+	barren["mods"].append({"id": "barren", "tier": 1, "left": RuneTable.KILLS})
+	_check(not "gilded" in RuneTable.pool([], barren) and not "barren" in RuneTable.pool([], barren),
+			"nor one a rune already gave it, nor one that will not stand beside it")
+
+	var work := RuneTable.fresh()
+	var own := ["thick_skinned"]
+	for rune: String in [RuneTable.SHIFTING, RuneTable.UPHEAVAL, RuneTable.STILLNESS]:
+		_check(not RuneTable.can_apply(rune, own, work), "%s does nothing to a tile no rune has touched" % rune)
+	_check(RuneTable.apply(RuneTable.UNREST, own, work, rng) and RuneTable.apply(RuneTable.UNREST, own, work, rng),
+			"Unrest gives a modifier, twice")
+	var ids: Array = work["mods"].map(func(mod: Dictionary) -> String: return mod["id"])
+	_check(ids.size() == 2 and ids[0] != ids[1] and not "thick_skinned" in ids
+			and work["mods"].all(func(mod: Dictionary) -> bool: return mod["tier"] == 1 and mod["left"] == RuneTable.KILLS),
+			"two new ones, at tier I, on full counts, none the tile's own (%s)" % [ids])
+	for i in 20:
+		RuneTable.apply(RuneTable.SHIFTING, own, work, rng)
+		for mod: Dictionary in work["mods"]:
+			var once: bool = TileMods.MODS[mod["id"]].get("once", false)
+			_check(mod["tier"] >= 1 and mod["tier"] <= (1 if once else RuneTable.MOST_TIER),
+					"Shifting deals %s a tier it may have (%d)" % [mod["id"], mod["tier"]])
+	work["mods"][0]["left"] = 40
+	RuneTable.apply(RuneTable.UPHEAVAL, own, work, rng)
+	_check(work["mods"].size() == 2 and work["mods"][0]["left"] == 40 and not "thick_skinned" in RuneTable.mods_of(work),
+			"Upheaval keeps how many and how long, never the tile's own")
+	RuneTable.apply(RuneTable.STILLNESS, own, work, rng)
+	_check(work["mods"].size() == 1, "Stillness takes one away whole")
+	RuneTable.apply(RuneTable.DEPTH, own, work, rng)
+	RuneTable.apply(RuneTable.DEPTH, own, work, rng)
+	_check(RuneTable.deeper(work) == 2, "Depth stacks")
+	_check(RuneTable.apply(RuneTable.ASCENT, own, work, rng) and not RuneTable.can_apply(RuneTable.ASCENT, own, work),
+			"Ascent works once")
+
+	# Every count on its own: the modifier at 1 goes at the next kill, the rest go on.
+	work["mods"][0]["left"] = 1
+	work["depth"][0] = 1
+	var gone := RuneTable.count_kill(work)
+	_check(gone["mods"].size() == 1 and gone["depth"] == 1 and not gone["ascent"] and RuneTable.any_gone(gone)
+			and work["mods"].is_empty() and RuneTable.deeper(work) == 1 and RuneTable.ascended(work),
+			"a kill runs out what was at its last, and only that")
+	work["ascent"] = 1
+	work["depth"][0] = 5
+	gone = RuneTable.count_kill(work)
+	_check(gone["ascent"] and not RuneTable.ascended(work) and work["depth"] == [4], "the Ascent runs out on its own count")
+
+	# The inventory: held like orbs, spent only where one does something, and both kept by the save.
+	var player := Inventory.new()
+	var spot := Vector2i(130, 131)
+	player.add_rune(RuneTable.UNREST, 2)
+	player.add_rune(RuneTable.STILLNESS)
+	player.add_rune("Rune of Nothing")
+	_check(player.rune_count(RuneTable.UNREST) == 2 and not player.runes.has("Rune of Nothing"), "runes are counted by name")
+	_check(not player.use_rune(RuneTable.STILLNESS, spot, [], rng) and player.rune_count(RuneTable.STILLNESS) == 1
+			and not player.has_runes(spot), "one that would do nothing is not spent")
+	_check(player.use_rune(RuneTable.UNREST, spot, [], rng) and player.rune_count(RuneTable.UNREST) == 1
+			and player.has_runes(spot) and player.rune_work(spot)["mods"].size() == 1, "one that does is spent on its tile")
+	_check(player.use_rune(RuneTable.STILLNESS, spot, [], rng) and not player.runes.has(RuneTable.STILLNESS),
+			"and the last of one is gone from the count")
+	player.use_rune(RuneTable.UNREST, spot, [], rng)
+	player.rune_state(Vector2i(1, 1))
+	player.save(TEST_PATH)
+	var back := Inventory.load_from(TEST_PATH)
+	_check(back.runes.is_empty() and back.rune_work(spot)["mods"] == player.rune_work(spot)["mods"]
+			and not back.has_runes(Vector2i(1, 1)), "the save keeps the work still going, and no tile with none (%s)" % [back.runed])
+	_check(player.transcended().runed.is_empty() and player.transcended().runes.is_empty(),
+			"a transcension leaves both with the world")
 	return true
 
 
@@ -4222,7 +4684,7 @@ func _test_unique_items() -> bool:
 
 	var ring := Item.rolled_unique("the_tithe", rng, 5)
 	_check(ring.effective_stats().get("gold_find", 0.0) > 0.0, "The Tithe's gold find is a stat it is worth")
-	var bag := Inventory.new()
+	var bag := _hero()
 	for id: String in ["knucklebone_ring", "knucklebone_ring", "meadowstriders"]:
 		var piece := Item.rolled_unique(id, rng, 3)
 		bag.items.append(piece)
@@ -4279,7 +4741,7 @@ func _test_attribute_uniques() -> bool:
 		piece.stats = Item.scaled_stats(piece.type, 1)
 		return lined.call(piece, lines)
 	var armed := func(rings: Array) -> Inventory:
-		var bag := Inventory.new()
+		var bag := _hero()
 		wear.call(bag, _piece(ItemRarity.Rarity.COMMON, 5))
 		for lines: Dictionary in rings:
 			wear.call(bag, ring.call(lines))
@@ -4434,7 +4896,7 @@ func _test_rank_four_uniques() -> bool:
 
 	# The Heirloom's Echo: every heirloom one plus higher, its lines with it -- the piece itself untouched.
 	var lowest := int(ModifierTable.band_for("added_strength", 1)[0])
-	var echoed := Inventory.new()
+	var echoed := _hero()
 	var heir: Item = ring.call({"added_strength": lowest})
 	wear.call(echoed.stash(), heir)
 	wear.call(echoed, lined.call(Item.rolled_unique("heirlooms_echo", rng, 1), {}))
@@ -4469,18 +4931,19 @@ func _test_rank_four_uniques() -> bool:
 			_check(orb.is_empty() or OrbTable.ORBS.has(orb), "a real orb (%s)" % orb)
 		_check((orbs == 0) == (rank != iv) and orbs < 60, "orbs from the Sack at rank %d: %d of 400" % [rank, orbs])
 
-	# The Sage's Abacus: every skill learned counts one rank higher.
+	# The Sage's Abacus: every stone holding a point counts one rank higher.
 	var sage := Inventory.new()
-	var root: String = SkillTree.nodes_of(SkillTree.trees()[0]).keys()[0]
-	sage.skills.ranks[root] = 1
-	for stat: String in sage.skills.flat():
-		_check(sage.skills.flat(1)[stat] == 2.0 * sage.skills.flat()[stat], "a rank more is the rank's again (%s)" % stat)
+	sage.skills.ranks["0"] = 1
+	_check(not sage.skills.percent().is_empty(), "the starter's stone adds a percent")
+	for stat: String in sage.skills.percent():
+		_check(sage.skills.percent(1)[stat] == 2.0 * sage.skills.percent()[stat],
+				"a rank more is the rank's again (%s)" % stat)
 	wear.call(sage, lined.call(Item.rolled_unique("sages_abacus", rng, 1), {}))
 	_check(at.call(sage, "sages_abacus", iv).stats() != at.call(sage, "sages_abacus", 3).stats(),
 			"and the Abacus at IV hands the fight that")
 
 	# The Fencer's Signet and the Scholar's Circlet: dexterity to dodge, intelligence to crit damage.
-	var fencer := Inventory.new()
+	var fencer := _hero()
 	wear.call(fencer, ring.call({"added_dexterity": 50, "added_intelligence": 50}))
 	wear.call(fencer, lined.call(Item.rolled_unique("fencers_signet", rng, 1), {}))
 	wear.call(fencer, lined.call(Item.rolled_unique("scholars_circlet", rng, 1), {}))
@@ -4494,7 +4957,7 @@ func _test_rank_four_uniques() -> bool:
 			"both at IV and neither at III (%s, %s)" % [fencer.stats().get("dodge"), fencer.stats().get("crit_damage")])
 
 	# The Quickdraw Boots: Spawn Speed past 100% is attack speed.
-	var quick := Inventory.new()
+	var quick := _hero()
 	wear.call(quick, lined.call(Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 1), {}))
 	wear.call(quick, ring.call({"added_dexterity": 150}))
 	wear.call(quick, lined.call(Item.rolled_unique("quickdraw_boots", rng, 1), {}))
@@ -4506,7 +4969,7 @@ func _test_rank_four_uniques() -> bool:
 			"the Boots at IV turn Spawn Speed past 100%% into attack speed (%s from %s)" % [fast, slow])
 
 	# The Crown of Accord: attributes a fifth apart count.
-	var crown := Inventory.new()
+	var crown := _hero()
 	wear.call(crown, ring.call({"added_strength": 100, "added_dexterity": 85, "added_intelligence": 85}))
 	wear.call(crown, lined.call(Item.rolled_unique("crown_of_accord", rng, 1), {}))
 	_check(at.call(crown, "crown_of_accord", 3).attributes()["strength"] == 100.0, "85 of 100 is too far at III")
@@ -4547,7 +5010,7 @@ func _test_unique_stats() -> bool:
 		_check(bag.equip(piece, bag.equipment.sockets_for(piece)[0]), "%s goes on" % piece.display_name())
 
 	# Spikes: a hundredth of the armour, in with the flat damage so a global percent scales it.
-	var bag := Inventory.new()
+	var bag := _hero()
 	wear.call(bag, _piece(ItemRarity.Rarity.COMMON, 5))
 	var ring := Item.new()
 	ring.type = "Gold Ring"
@@ -4776,24 +5239,25 @@ func _test_achievements() -> bool:
 	var figures := Achievements.state(zealot)
 	_check(zealot.attributes()["dexterity"] > 0.0 and figures["dexterity"] == 0.0 and figures["zealot"] == 250.0
 			and figures["accord"] == 0.0, "the Brand counts for the fight and not for an ask (%s)" % [figures])
-	# Mastery: the trees filled, and its last rank for filling them twice.
+	# Mastery: the stones standing in the skill tree.
 	var scholar := Inventory.new()
-	scholar.level = 500
-	for tree: String in SkillTree.trees():
-		for id: String in SkillTree.nodes_of(tree):
-			scholar.skills.ranks[id] = int(SkillTree.node(id)["max_rank"])
-	_check(Achievements.state(scholar)["mastery"] == float(SkillTree.trees().size()), "every tree full")
-	scholar.skills.burst()
-	_check(Achievements.state(scholar)["mastery"] == float(SkillTree.trees().size()), "a burst counts all three")
-	for tree: String in SkillTree.trees():
-		for id: String in SkillTree.nodes_of(tree):
-			scholar.skills.ranks[id] = int(SkillTree.node(id)["max_rank"])
-	_check(Achievements.state(scholar)["mastery"] >= Achievements.need_at("sages_abacus", UniqueTable.PEAK),
-			"and filling them twice is its last rank")
+	_check(Achievements.state(scholar)["mastery"] == 1.0, "the starter tree is one stone")
+	var stones := RandomNumberGenerator.new()
+	scholar.add(Item.rolled("Strength Node", ItemRarity.Rarity.COMMON, stones, 1, 1, 3))
+	scholar.place_stone(scholar.items[0], "0")
+	for i in 3:
+		scholar.add(Item.rolled("Dexterity Node", ItemRarity.Rarity.COMMON, stones, 1, 2, 2 if i == 0 else 0))
+		scholar.place_stone(scholar.items[-1], "0.%d" % i)
+	for i in 2:
+		scholar.add(Item.rolled("Intelligence Node", ItemRarity.Rarity.COMMON, stones, 1, 3))
+		scholar.place_stone(scholar.items[-1], "0.0.%d" % i)
+	_check(Achievements.state(scholar)["mastery"] == 6.0
+			and Achievements.state(scholar)["mastery"] >= Achievements.need_at("sages_abacus", 1),
+			"five more under it, three deep (%s)" % Achievements.state(scholar)["mastery"])
 	_check(Achievements.state(Inventory.new())["carried"] == 0.0, "and a bag is counted piece by piece")
 
 	# The starters' own numbers, read by `stats()`.
-	var starter := Inventory.new()
+	var starter := _hero()
 	var bare := starter.stats()
 	for id: String in ["squires_blade", "couriers_boots", "novices_cap"]:
 		var piece := Item.rolled_unique(id, rng, 1)
@@ -5172,7 +5636,7 @@ func _test_character_sheet() -> bool:
 	for heading: String in CharacterPage.GROUPS:
 		tabled.append_array(CharacterPage.GROUPS[heading])
 	for stat: String in LootTable.STAT_LABELS:
-		_check(stat in tabled or CharacterPage.ATTRIBUTES.has(stat) or stat == Inventory.ALL_ATTRIBUTES,
+		_check(stat in tabled or CharacterPage.ATTRIBUTES.has(stat) or stat in [Inventory.ALL_ATTRIBUTES, "stone_ranks"],
 				"%s has a table on the character page" % stat)
 
 	# A fresh hero: a blow, a clock and a sight, and what a click does at the head.
@@ -5249,14 +5713,15 @@ func _test_character_sheet() -> bool:
 	rng.seed = 7
 	var luck := Item.rolled_unique("beginners_luck", rng, 1)
 	hero.equipment.equip(hero.equipment.sockets_for(luck)[0], luck)
-	hero.skills.ranks["assassin"] = 1
+	var assassin := Item.rolled_capstone("assassin", 1, rng)
+	hero.skills.stones["1"] = assassin
+	hero.skills.ranks["1"] = 1
 	page.open()
 	var squares := page.find_children("*", "Panel", true, false).filter(func(n: Node) -> bool: return n is ItemSlot)
-	_check(squares.size() == 1 and (squares[0] as ItemSlot).item == luck
+	_check(squares.size() == 2 and (squares[0] as ItemSlot).item == luck
 			and squares[0].has_meta(ItemCard.NO_COMPARE), "a worn unique is a square held against nothing")
-	var badges := page.find_children("*", "CenterContainer", true, false).filter(
-			func(badge: Control) -> bool: return "Execute" in badge.tooltip_text)
-	_check(badges.size() == 1, "and a learned capstone a badge saying what it does")
+	_check((squares[1] as ItemSlot).item == assassin and squares[1].has_meta(ItemCard.NO_COMPARE),
+			"and a capstone holding a point another")
 	_check(_sheet_value(page, "crit_chance") == "25%", "Beginner's Luck's crit chance is the one the fight uses")
 	page.queue_free()
 
@@ -5311,7 +5776,7 @@ func _test_character_page() -> bool:
 	await process_frame
 	_check(main.character_page.visible and not main._character_button.visible, "the page takes the corner")
 	var strength: Label = main.character_page.find_child("strength", true, false)
-	_check(strength != null and strength.text == "12", "strength is on its disc")
+	_check(strength != null and strength.text == "12", "strength is on its disc, the blade's")
 	var said := ""
 	for label: Node in main.character_page.find_children("*", "Label", true, false):
 		said += (label as Label).text + "|"
@@ -5432,16 +5897,16 @@ func _test_curses() -> bool:
 			"a version 17 save is a world under none")
 	_clear_save()
 
-	# Hard Lessons' pay: every skill point counts double, flat and percent alike, and the card says so.
+	# Hard Lessons' pay: every skill point counts double, flat and percent alike.
 	var student := Inventory.new()
 	student.level = 10
-	_check(student.skills.rank_up("sharpened_edge", student.level), "a point goes into Sharpened Edge")
+	student.skills.stones["0"] = SkillTree._starter_stone("Strength Node", "added_damage")
+	_check(student.skills.rank_up("0", student.level), "a point goes into a strength stone")
 	var taught := float(student.stats().get("damage", 0.0))
 	student.curses = [Curses.HARD_LESSONS]
 	_check(taught > 0.0 and float(student.stats().get("damage", 0.0)) == taught * 2.0 and student.skill_worth() == 2,
 			"under Hard Lessons the point is worth double (%s against %s)" % [student.stats().get("damage", 0.0), taught])
-	_check(SkillTree.describe("sharpened_edge", student.skill_worth()) == SkillTree.describe("sharpened_edge", 2)
-			and Inventory.new().skill_worth() == 1, "and the card describes two points for one")
+	_check(Inventory.new().skill_worth() == 1, "and nothing doubles it without the curse")
 	_check(student.effects().count(Curses.effect(Curses.HARD_LESSONS)) == 1, "the fight hears of it once")
 
 	# The Long Winter's pay: a wall twice as hard is worth two.
@@ -5502,22 +5967,29 @@ func _test_more_curses() -> bool:
 	_check(is_equal_approx(float(pacifist.stats()["attack_speed"]), Inventory.PACIFIST_SWINGS * Inventory.PACIFIST_FASTER),
 			"under Pacifist Hands they swing (%s a second)" % pacifist.stats()["attack_speed"])
 
-	# The Specialist: one tree, and every point worth half again -- added to Hard Lessons', never compounded.
+	# The Specialist: one branch, and every point worth half again -- added to Hard Lessons', never compounded.
+	# The root has one slot today (`SkillTree.ROOT_CONNECTORS`), so two branches are stood in by hand: the
+	# rule is the branch's, whatever the root holds.
 	var student := Inventory.new()
 	student.level = 10
-	var trees := SkillTree.trees()
-	var first := str(SkillTree.nodes_of(trees[0]).keys()[0])
-	var second := ""
-	for id: String in SkillTree.nodes_of(trees[1]):
-		if SkillTree.node(id)["parents"].is_empty():
-			second = id
-			break
-	_check(student.rank_up_skill(first), "a point goes into the first tree")
-	_check(student.why_not_skill(second).is_empty(), "and without the curse the second tree is open")
+	var first := "1"
+	var second := "2"
+	student.skills.stones[first] = SkillTree._starter_stone("Strength Node", "added_damage")
+	student.skills.stones[second] = SkillTree._starter_stone("Intelligence Node", "added_crit")
+	_check(student.rank_up_skill(first), "a point goes into the first branch")
+	_check(student.why_not_skill(second).is_empty(), "and without the curse the second branch is open")
 	student.curses = [Curses.SPECIALIST]
 	_check("Specialist" in student.why_not_skill(second) and not student.rank_up_skill(second)
-			and student.skills.spent(trees[1]) == 0, "a Specialist is refused a second tree (%s)" % student.why_not_skill(second))
-	_check(not "Specialist" in student.why_not_skill(first), "and never the tree already begun")
+			and student.skills.rank_of(second) == 0,
+			"a Specialist is refused a second branch (%s)" % student.why_not_skill(second))
+	student.curses = []
+	student.skills.ranks.erase(first)
+	student.skills.stones["1"].mods.append({"id": "added_stone_ranks", "value": 1})
+	student.curses = [Curses.SPECIALIST]
+	_check(student.rank_up_skill(first) and not "Specialist" in student.why_not_skill(first),
+			"and never the branch already begun")
+	_check(student.rank_up_skill("") and student.why_not_skill(first).is_empty(),
+			"the root is on no branch: a Specialist puts points in it beside the one begun")
 	_check(is_equal_approx(student.skill_worth(), 1.5), "every point is worth half again")
 	student.curses = [Curses.HARD_LESSONS, Curses.SPECIALIST]
 	_check(is_equal_approx(student.skill_worth(), 2.5), "and beside Hard Lessons the two add (%s)" % student.skill_worth())

@@ -78,7 +78,8 @@ func setup(which: String, count: int, usable: bool, armed := false, side := SIDE
 	_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_icon.texture = SuperOrbTable.icon(which) if SuperOrbTable.has(which) else OrbTable.icon(which)
+	_icon.texture = SuperOrbTable.icon(which) if SuperOrbTable.has(which) \
+			else RuneTable.icon(which) if RuneTable.has(which) else OrbTable.icon(which)
 	var icon := side - (SIDE - ICON)
 	_icon.custom_minimum_size = Vector2(icon, icon)
 	_icon.size = Vector2(icon, icon)
@@ -113,7 +114,7 @@ func _gui_input(event: InputEvent) -> void:
 	if not _live:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		accept_event()  # Before the emit, which may redraw this slot out of the tree (SkillSlot's reason).
+		accept_event()  # Before the emit, which may redraw this slot out of the tree.
 		# A finger has no hover: its first tap is what puts the card up, and only the next presses.
 		if Cursors.touched and not _read:
 			_read = true

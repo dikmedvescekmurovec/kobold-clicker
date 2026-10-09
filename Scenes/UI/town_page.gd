@@ -290,8 +290,8 @@ func open(town_name: String, services: PackedStringArray, cell: Vector2i, spot: 
 	_drawer = inventory.towns.visit(spot)
 	# The shelves are filled once and the board whenever all its work has been handed in. Both are
 	# asked, so not `or`, which would skip the board whenever the shelves had news.
-	var stocked := VendorStock.restock(_drawer, tier, cell, _stock_rng, inventory.walls_credited)
-	var posted := BountyBoard.restock(_drawer, _board_land(), cell, _stock_rng, inventory.walls_credited)
+	var stocked := VendorStock.restock(_drawer, tier, cell, _stock_rng, inventory.walls_ever())
+	var posted := BountyBoard.restock(_drawer, _board_land(), cell, _stock_rng, inventory.walls_ever())
 	if stocked or posted:
 		inventory.save(_save_path)
 	_tabs = PackedStringArray()
@@ -474,7 +474,7 @@ func _upscales() -> GridContainer:
 	grid.columns = STOCK_COLS
 	grid.add_theme_constant_override("h_separation", STOCK_GAP)
 	grid.add_theme_constant_override("v_separation", STOCK_GAP)
-	for orb: String in OrbTable.unlocked(inventory.walls_credited):
+	for orb: String in OrbTable.unlocked(inventory.walls_ever()):
 		var from := OrbTable.upscale_from(orb)
 		if from.is_empty():
 			continue
@@ -770,8 +770,8 @@ func _on_claim_pressed(bounty: Dictionary) -> void:
 		inventory.add(piece)
 	# The last one handed in clears the board, which offers its reward and raises the town's tier, and
 	# brings new work there and then -- in that order, so the new work is posted at the new tier.
-	BountyBoard.clear(_drawer, _cell, _stock_rng, Achievements.unlocked(inventory), inventory.walls_credited)
-	BountyBoard.restock(_drawer, _board_land(), _cell, _stock_rng, inventory.walls_credited)
+	BountyBoard.clear(_drawer, _cell, _stock_rng, Achievements.unlocked(inventory), inventory.walls_ever())
+	BountyBoard.restock(_drawer, _board_land(), _cell, _stock_rng, inventory.walls_ever())
 	print("Claimed the bounty on %s for %s gold, %d experience and %s" % [str(bounty.get(BountyBoard.ENEMY, "")),
 			BigNumber.format(reward), xp, orbs])
 	var counted := {}
@@ -842,7 +842,7 @@ func _on_reroll_pressed() -> void:
 	if inventory.gold < price:
 		return
 	inventory.gold -= price
-	VendorStock.reroll(_drawer, _shelf_key(), _tier, _cell, _stock_rng, inventory.walls_credited)
+	VendorStock.reroll(_drawer, _shelf_key(), _tier, _cell, _stock_rng, inventory.walls_ever())
 	print("Restocked the %s shelf for %s gold" % [_shelf_key(), BigNumber.format(price)])
 	inventory.save(_save_path)
 	_fill()
@@ -1503,7 +1503,7 @@ func _on_buy_orb(orb: String, at: int) -> void:
 func _on_upscale(orb: String) -> void:
 	var from := OrbTable.upscale_from(orb)
 	if from.is_empty() or inventory.orb_count(from) < OrbTable.UPSCALE_COST \
-			or orb not in OrbTable.unlocked(inventory.walls_credited):
+			or orb not in OrbTable.unlocked(inventory.walls_ever()):
 		return
 	for i in OrbTable.UPSCALE_COST:
 		inventory.spend_orb(from)

@@ -58,6 +58,14 @@ func _shoot_main_scene() -> void:
 	crop.save_png("user://ui_panel_crop.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_panel_crop.png"))
 
+	# The first wall's panel: what it opens for good once broken (`ui_wall_unlocks.png`).
+	var wall := Vector2i(MapBuilder.START_LAND_RADIUS + 1, 0)
+	main.map.select_cell(wall)
+	main._on_tile_clicked(wall, main.map.get_tile_info(wall))
+	for i in 2:
+		await process_frame
+	await _save_window("ui_wall_unlocks.png")
+
 	# What the web build says once a version: the changelog over the map.
 	Settings.changelog_seen = ""
 	main._show_changelog()
@@ -85,6 +93,8 @@ func _shoot_cave() -> void:
 		await process_frame
 	var view: MapBuilder = main.view
 	main.inventory.farthest_land = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
+	# Behind the first wall, by hand: Gollux's own unlock is the third wall's (`WallUnlocks.GOLLUX`).
+	view.place_cave(main.inventory.farthest_land)
 	main._credit_walls()
 	var cave: Vector2i = view.cave
 	# The wall in front of it broken, which is when the hero first feels it.
@@ -326,7 +336,8 @@ func _shoot_inventory() -> void:
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch))
 
 
-## The skills page part-spent, with the card up over a skill that cannot be learned yet.
+## The skills page over a tree a few worlds grown, part-spent, with the card up over its capstone; then a
+## plain tooltip on its Reset.
 func _shoot_skills() -> void:
 	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
 	main.world_seed = WORLD_SEED
@@ -338,63 +349,51 @@ func _shoot_skills() -> void:
 		await process_frame
 	main.inventory.level = 17
 	main.inventory.gold = 900
-	main.inventory.skills = Skills.new()
-	for id in ["sharpened_edge", "sharpened_edge", "sharpened_edge", "sharpened_edge", "sharpened_edge",
-			"keen_eye", "keen_eye", "keen_eye", "battle_rhythm", "might", "might", "quick_hands", "titan",
-			"scavenger", "scavenger", "scavenger"]:
-		main.inventory.skills.rank_up(id, main.inventory.level)
+	var skills: Skills = main.inventory.skills
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	# The root's one branch: a strength stone of three connectors, a dexterity and an intelligence stone
+	# either side of the capstone under it, and one more under each of those.
+	skills.stones["0"] = Item.rolled("Strength Node", ItemRarity.Rarity.RARE, rng, 20, 1, 3)
+	for i: int in [0, 2]:
+		var base: String = "Dexterity Node" if i == 0 else "Intelligence Node"
+		skills.stones["0.%d" % i] = Item.rolled(base, ItemRarity.Rarity.RARE, rng, 20, 2, 1)
+		skills.stones["0.%d.0" % i] = Item.rolled(base, ItemRarity.Rarity.UNCOMMON, rng, 20, 3)
+	skills.stones["0.1"] = Item.rolled_capstone("titan", 2, rng, 20)
+	skills.ranks = {}
+	for path: String in ["", "", "", "0", "0.0", "0.2", "0.0.0", "0.1"]:
+		skills.rank_up(path, main.inventory.level)
 	main._on_skills_pressed()
 	for i in 2:
 		await process_frame
-	var view: SkillTreeView = main.skills_page._skill_views["power"]
-	for child: Node in view.get_children():
-		if child is SkillSlot and child.id == "whirlwind":
-			main.skills_page._on_skill_hovered(child.id, child)
-	for i in 2:
+	var capstone: Control = main.skills_page._view.squares["0.1"]
+	_hover(capstone.get_global_rect().get_center())
+	for i in 3:
 		await process_frame
 	await RenderingServer.frame_post_draw
 	var image := root.get_texture().get_image()
 	image.save_png("user://ui_skills.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_skills.png"))
 
-	# A plain tooltip on the tip card: the cursor left on a Reset for longer than `TipCard.DELAY`.
-	main.skills_page._hide_card()
-	var reset: Button = main.skills_page._respec_buttons["power"]
-	root.warp_mouse(reset.get_global_rect().get_center())
-	# The viewport only learns what is hovered from a motion event, and a warp sends none.
-	var motion := InputEventMouseMotion.new()
-	motion.position = reset.get_global_rect().get_center()
-	motion.global_position = motion.position
-	root.push_input(motion)
+	# A plain tooltip on the tip card: the cursor left on the Reset for longer than `TipCard.DELAY`.
+	_hover(main.skills_page._reset.get_global_rect().get_center())
 	await create_timer(TipCard.DELAY + 0.3).timeout
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_tooltip.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_tooltip.png"))
 	root.warp_mouse(Vector2.ZERO)
-
-	# The trees burst once, the second tree begun, with the card over Titan: its numbers, no effect.
-	main.inventory.level = 100
-	main.inventory.skills = Skills.new()
-	main.inventory.skills.bursts = 1
-	for id: String in ["sharpened_edge", "sharpened_edge", "sharpened_edge", "keen_eye", "scavenger"]:
-		main.inventory.skills.rank_up(id, main.inventory.level)
-	main.skills_page.open()
-	var away := InputEventMouseMotion.new()
-	away.position = Vector2(root.size) - Vector2.ONE
-	away.global_position = away.position
-	root.push_input(away)
-	for i in 2:
-		await process_frame
-	for slot: Node in main.skills_page._skill_views["power"].get_children():
-		if slot is SkillSlot and slot.id == "titan":
-			main.skills_page._on_skill_hovered("titan", slot)
-	for i in 2:
-		await process_frame
-	await RenderingServer.frame_post_draw
-	root.get_texture().get_image().save_png("user://ui_skills_burst.png")
-	print("Saved ", ProjectSettings.globalize_path("user://ui_skills_burst.png"))
 	main.queue_free()
 	await process_frame
+
+
+## The cursor put on `at` (window pixels). The viewport only learns what is hovered from a motion event,
+## and a warp sends none.
+func _hover(at: Vector2) -> void:
+	root.warp_mouse(at)
+	var motion := InputEventMouseMotion.new()
+	motion.position = at
+	motion.global_position = at
+	root.push_input(motion)
 
 
 ## A settlement: what the tile panel says about one from outside, then the inside of it -- each
@@ -848,6 +847,19 @@ func _shoot_town() -> void:
 			black._on_curse_toggled(true, Curses.LEAN_PICKINGS), "ui_transcend_curses"],
 		# And the foot of the same table, which is longer than the window and scrolls under its headings.
 		[func() -> void: black._curse_scroll.scroll_vertical = 100000, "ui_transcend_curses_end"],
+		# The skill tree behind the fourth card: the bag's stones beside the tree, one of them open and
+		# the slots it fits lit.
+		[func() -> void:
+			var stones := RandomNumberGenerator.new()
+			stones.seed = WORLD_SEED
+			for shape: Array in [["Strength Node", 2, 2, ItemRarity.Rarity.RARE],
+					["Dexterity Node", 1, 3, ItemRarity.Rarity.UNCOMMON],
+					["Intelligence Node", 3, 1, ItemRarity.Rarity.ELITE]]:
+				main.inventory.add(Item.rolled(shape[0], shape[3], stones, 12, shape[1], shape[2]))
+			main.inventory.add(Item.rolled_capstone("phantom", 2, stones, 12))
+			black._show_choice()
+			black._open(black._stones_page)
+			black._stones_page._select_item(main.inventory.items.size() - 4), "ui_transcend_tree"],
 	]
 	for shot in black_shots:
 		(shot[0] as Callable).call()
@@ -1132,9 +1144,10 @@ func _late_hero() -> Inventory:
 	hero.kills = 6216
 	hero.dungeon_depth = 4
 	hero.uniques_found.assign(UniqueTable.ids().slice(0, 22))
-	hero.skills.ranks["assassin"] = 1
 	var rng := RandomNumberGenerator.new()
 	rng.seed = WORLD_SEED
+	hero.skills.stones["0"] = Item.rolled_capstone("assassin", 1, rng, 50)
+	hero.skills.ranks["0"] = 1
 	for id: String in ["worry_stone", "couriers_boots"]:
 		var unique := Item.rolled_unique(id, rng, 50)
 		hero.equipment.equip(hero.equipment.sockets_for(unique)[0], unique)

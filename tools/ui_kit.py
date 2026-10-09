@@ -967,7 +967,8 @@ ICONS_DRAWN = {
     """,
 }
 # The bag's filter tabs (BagPage.FILTERS), one an equipment slot -- the weapon's is the sword above --
-# and "all", a two-by-two grid. Silhouettes shaded by `_edged`, as the character panel's marks are; H
+# "all", a two-by-two grid, and the skill stones', a disc with a carved I like the stones' own faces (the
+# user's pick, qa/bag_filter_stones.png, 2026-10-09). Silhouettes shaded by `_edged`, as the character panel's marks are; H
 # is the ramp's dark, k a gap in the outline's dark (the user's pick, qa/bag_filter_m1_b.png, 2026-10-07).
 SLOT_MARKS = {
     "ui_icon_slot_all": [
@@ -1055,73 +1056,48 @@ SLOT_MARKS = {
         "...XXHXX...",
         "....XXX....",
     ],
+    "ui_icon_slot_stone": [
+        "...XXXXX...",
+        "..XXXXXXX..",
+        ".XXXXXXXXX.",
+        "XXXXXHXXXXX",
+        "XXXXXHXXXXX",
+        "XXXXXHXXXXX",
+        "XXXXXHXXXXX",
+        "XXXXXHXXXXX",
+        ".XXXXXXXXX.",
+        "..XXXXXXX..",
+        "...XXXXX...",
+    ],
 }
 
-# The skill trees' icons, off "Ability Icons" -- loose 16 px files that carry their own framed square,
-# so an entry is a whole file and nothing is trimmed. One colourway a tree, so a tree reads as one
-# thing: red for Power, the gold-orange for Fortune, which is the colour loot already speaks in, and
-# blue for Guard. The pack's blues are water and ice, not shields: stand-ins until something is drawn.
-# The pack's Locked mark in each colourway stands in for a node that cannot be learned yet.
-#
-# node id -> (tree, file under "Ability Icons/Icons (All)")
-SKILL_ROOT = "Ability Icons/Icons (All)/"
-SKILL_LOCKED = "Ability Icons/Icons (Base & Locked)/"
+# The capstone stones' badges (`SkillTree.CAPSTONES`, Assets/Skills/<id>.png): what is left of the three skill
+# trees the player's own tree of stones replaced (2026-10-08). The user's pixellab badges (2026-09-25): one grey
+# frame (`SKILL_FRAME`, drawn once) with its corners cut, tinted by lightness in the colours of the node's base
+# (`SKILL_TINTS`), and a symbol of what it does centred on it, 32 px.
 SKILL_OUT = "Assets/Skills"
+# The pack's whole 16 px icons, which a fortuneteller's spell with no symbol of its own still wears.
+SKILL_ROOT = "Ability Icons/Icons (All)/"
 SKILL_SIDE = 16
+# capstone id -> the base of the node it is (`SkillTree.CAPSTONES`), for the tint. Until 2026-10-09 the tint was the
+# old tree's: gold for the intelligence capstones and slate for the dexterity ones, beside the blue and green discs
+# of the same bases in the tree (the user approved the change off `tools/qa/capstone_tints.png`).
 SKILLS = {
-    "sharpened_edge": ("power", "Red4"),
-    "keen_eye": ("power", "Red9"),
-    "quick_hands": ("power", "Red15"),
-    "battle_rhythm": ("power", "Red1"),
-    "deadly_strikes": ("power", "Red13"),
-    "assassin": ("power", "Red2"),
-    "flurry": ("power", "Red3"),
-    "whirlwind": ("power", "Red8"),
-    "might": ("power", "Red10"),
-    "titan": ("power", "Red5"),
-    "scavenger": ("fortune", "Yellow6"),
-    "prospector": ("fortune", "Yellow10"),
-    "appraiser": ("fortune", "Yellow7"),
-    "fortunes_favour": ("fortune", "Yellow3"),
-    "treasure_hunter": ("fortune", "Yellow15"),
-    "collector": ("fortune", "Yellow8"),
-    "greed": ("fortune", "Yellow14"),
-    "midas": ("fortune", "Yellow9"),
-    "orb_seeker": ("fortune", "Yellow11"),
-    "alchemist": ("fortune", "Yellow12"),
-    "toughness": ("guard", "Blue3"),
-    "footwork": ("guard", "Blue2"),
-    "steady_guard": ("guard", "Blue13"),
-    "resolve": ("guard", "Blue7"),
-    "evasion": ("guard", "Blue14"),
-    "phantom": ("guard", "Blue10"),
-    "shield_mastery": ("guard", "Blue8"),
-    "bastion": ("guard", "Blue1"),
-    "tenacity": ("guard", "Blue12"),
-    "undying": ("guard", "Blue5"),
+    "assassin": "strength", "whirlwind": "strength", "titan": "strength",
+    "collector": "intelligence", "midas": "intelligence", "alchemist": "intelligence",
+    "phantom": "dexterity", "bastion": "dexterity", "undying": "dexterity",
 }
-SKILL_LOCKS = {"power_locked": "RedLocked", "fortune_locked": "YellowLocked", "guard_locked": "BlueLocked"}
-# The user's pixellab skill icons (2026-09-25), replacing the pack's a tree at a time: one grey badge
-# (`SKILL_FRAME`, drawn once) with its corners cut, tinted per tree by lightness (`SKILL_TINTS`), and a bone-white
-# symbol of what the skill does centred on it. 32 px: SkillSlot draws every icon into the same 32 px square, the
-# pack's 16 px ones at 2x and these at 1x. A skill not in `SKILL_SYMBOLS` keeps its pack icon.
 SKILL_PIXELLAB = "Skills/"
 SKILL_FRAME = SKILL_PIXELLAB + "frame"
 SKILL_BADGE = 32
-SKILL_SYMBOLS = {"sharpened_edge", "keen_eye", "quick_hands", "battle_rhythm", "deadly_strikes", "flurry", "might",
-                 "assassin", "whirlwind", "titan",
-                 "scavenger", "prospector", "appraiser", "fortunes_favour", "treasure_hunter", "greed", "orb_seeker",
-                 "collector", "midas", "alchemist",
-                 "toughness", "footwork", "steady_guard", "resolve", "evasion", "shield_mastery", "tenacity", "phantom",
-                 "bastion", "undying"}
-# One padlock for every tree's locked mark: the frame's tint says which tree (`Skills/locked.png`).
-SKILL_LOCK_SYMBOL = "locked"
 # The frame's lightness, measured: its outer ring ~0.06, the field ~0.15, the border's shade ~0.45 and light ~0.73.
-# Each tree maps those onto its own chart colours, so the bevel keeps its light and shade and only the hue moves.
+# Each base maps those onto its own colours, so the bevel keeps its light and shade and only the hue moves: strength
+# the old power tree's red, intelligence and dexterity off the user's carved stones' own ramps
+# (`Assets/Skills/Stones/<attr>_5.png`), so a badge wears its disc's colour.
 SKILL_TINTS = {
-    "power": [(0.0, "#2f3236"), (0.06, "#3f0e1d"), (0.15, "#5a1122"), (0.45, "#982a1e"), (0.73, "#ba3423"), (1.0, "#e1828f")],
-    "fortune": [(0.0, "#2f3236"), (0.06, "#3a2217"), (0.15, "#4e2d1f"), (0.45, "#9b7227"), (0.73, "#c49e48"), (1.0, "#f9f4d4")],
-    "guard": [(0.0, "#2f3236"), (0.06, "#171a2a"), (0.15, "#1a2134"), (0.45, "#3f4a64"), (0.73, "#546783"), (1.0, "#999dd5")],
+    "strength": [(0.0, "#2f3236"), (0.06, "#3f0e1d"), (0.15, "#5a1122"), (0.45, "#982a1e"), (0.73, "#ba3423"), (1.0, "#e1828f")],
+    "intelligence": [(0.0, "#2f3236"), (0.06, "#181e23"), (0.15, "#1d314a"), (0.45, "#3c6982"), (0.73, "#4b9cb5"), (1.0, "#8edbd4")],
+    "dexterity": [(0.0, "#2f3236"), (0.06, "#20292c"), (0.15, "#2a3e3a"), (0.45, "#3d7154"), (0.73, "#458459"), (1.0, "#7ab574")],
     # The fortuneteller's spells: purple, hers alone (the user, 2026-09-25), as the pack's placeholders were.
     "teller": [(0.0, "#2f3236"), (0.06, "#221931"), (0.15, "#34264a"), (0.45, "#574175"), (0.73, "#7b70ad"), (1.0, "#c1b5cf")],
 }
@@ -1149,31 +1125,6 @@ FORTUNE = {
     "homecoming": "Purple11",
     # The way out: the user's own cracked orb (2026-09-25), a pixellab symbol with no pack stand-in.
     "transcend": None,
-}
-# The sketch's shape, row by row: which node stands in which of three columns, and its parents. Written
-# here only so the preview can draw a tree; SkillTree in the game is where it is actually decided.
-SKILL_LAYOUT = {
-    "power": [
-        ("sharpened_edge", 0, 1, []), ("keen_eye", 1, 0, ["sharpened_edge"]),
-        ("quick_hands", 1, 2, ["sharpened_edge"]), ("battle_rhythm", 2, 1, ["keen_eye", "quick_hands"]),
-        ("deadly_strikes", 3, 0, ["battle_rhythm"]), ("flurry", 3, 1, ["battle_rhythm"]),
-        ("might", 3, 2, ["battle_rhythm"]), ("assassin", 4, 0, ["deadly_strikes"]),
-        ("whirlwind", 4, 1, ["flurry"]), ("titan", 4, 2, ["might"]),
-    ],
-    "fortune": [
-        ("scavenger", 0, 1, []), ("prospector", 1, 0, ["scavenger"]),
-        ("appraiser", 1, 2, ["scavenger"]), ("fortunes_favour", 2, 1, ["prospector", "appraiser"]),
-        ("treasure_hunter", 3, 0, ["fortunes_favour"]), ("greed", 3, 1, ["fortunes_favour"]),
-        ("orb_seeker", 3, 2, ["fortunes_favour"]), ("collector", 4, 0, ["treasure_hunter"]),
-        ("midas", 4, 1, ["greed"]), ("alchemist", 4, 2, ["orb_seeker"]),
-    ],
-    "guard": [
-        ("toughness", 0, 1, []), ("footwork", 1, 0, ["toughness"]),
-        ("steady_guard", 1, 2, ["toughness"]), ("resolve", 2, 1, ["footwork", "steady_guard"]),
-        ("evasion", 3, 0, ["resolve"]), ("shield_mastery", 3, 1, ["resolve"]),
-        ("tenacity", 3, 2, ["resolve"]), ("phantom", 4, 0, ["evasion"]),
-        ("bastion", 4, 1, ["shield_mastery"]), ("undying", 4, 2, ["tenacity"]),
-    ],
 }
 # What the face pads its icon by. The game's own copy is UITheme.ICON_FACE_MARGIN -- padding is a
 # decision the theme makes, the way UITheme.BUTTON_MARGIN is; this one is here so the preview draws
@@ -2032,21 +1983,14 @@ def orb_preview(cut):
 
 
 def skills():
-    """Every skill icon and the locked marks: the pixellab badge where a symbol has arrived (`SKILL_SYMBOLS`),
-    otherwise the pack's whole file at its own 16 px."""
+    """The nine capstones' badges. The tree's root is the user's grey stone (`tools/skill_stones.py`)."""
     out = {}
     frame = _corners_cut(_cut((SKILL_FRAME, 0, 0, SKILL_BADGE, SKILL_BADGE, 1), trim=False))
-    for name, (tree, src) in SKILLS.items():
-        if name in SKILL_SYMBOLS:
-            out[name] = _badge(frame, tree, _cut((SKILL_PIXELLAB + name, 0, 0, SKILL_BADGE, SKILL_BADGE, 1)))
-        else:
-            out[name] = _cut((SKILL_ROOT + src, 0, 0, SKILL_SIDE, SKILL_SIDE, 1), trim=False)
-    padlock = _cut((SKILL_PIXELLAB + SKILL_LOCK_SYMBOL, 0, 0, SKILL_BADGE, SKILL_BADGE, 1))
-    for name in SKILL_LOCKS:
-        out[name] = _badge(frame, name.removesuffix("_locked"), padlock)
+    for name, tree in SKILLS.items():
+        out[name] = _badge(frame, tree, _cut((SKILL_PIXELLAB + name, 0, 0, SKILL_BADGE, SKILL_BADGE, 1)))
     for name, image in out.items():
-        if image.width != image.height or image.width not in (SKILL_SIDE, SKILL_BADGE):
-            raise SystemExit("%s is %dx%d, not %d or %d square" % (name, image.width, image.height, SKILL_SIDE, SKILL_BADGE))
+        if image.size != (SKILL_BADGE, SKILL_BADGE):
+            raise SystemExit("%s is %dx%d, not %d square" % (name, image.width, image.height, SKILL_BADGE))
     return out
 
 
@@ -2100,44 +2044,11 @@ def _badge(frame, tree, symbol):
 
 
 def skill_preview(cut):
-    """Every tree on the cream panel at the 2x they are drawn at, laid out as the sketch is.
-
-    Each tree is shown twice: the left copy fresh, where only the root is open and everything else
-    wears the locked mark, and the right copy part-spent, which is the only state worth judging whether
-    twenty icons read as twenty different skills.
-    """
-    cream, ink, lit = (0xE5, 0xD6, 0xA1, 0xFF), (0x3B, 0x2A, 0x1E, 0xFF), (0xE8, 0xB7, 0x3A, 0xFF)
-    side, gap_x, gap_y, pad = SKILL_SIDE * 2, 18, 18, 12
-    tree_w = 3 * side + 2 * gap_x
-    tree_h = 5 * side + 4 * gap_y
-    learned = {"sharpened_edge", "keen_eye", "battle_rhythm", "flurry",
-               "scavenger", "appraiser", "prospector", "fortunes_favour", "greed", "midas",
-               "toughness", "footwork", "resolve", "shield_mastery", "bastion"}
-    out = Image.new("RGBA", (pad + 2 * len(SKILL_LAYOUT) * (tree_w + pad), tree_h + 2 * pad), cream)
-    draw = ImageDraw.Draw(out)
-
-    def centre(ox, row, col):
-        return ox + col * (side + gap_x) + side // 2, pad + row * (side + gap_y) + side // 2
-
-    for copy, (tree, nodes) in [(c, t) for t in SKILL_LAYOUT.items() for c in (0, 1)]:
-        index = list(SKILL_LAYOUT).index(tree)
-        ox = pad + (index * 2 + copy) * (tree_w + pad)
-        ranked = learned if copy else set()
-        place = {n: (r, c) for n, r, c, _p in nodes}
-        for name, row, col, parents in nodes:
-            for parent in parents:
-                colour = lit if parent in ranked else ink
-                draw.line([centre(ox, *place[parent]), centre(ox, row, col)], fill=colour, width=2)
-        for name, row, col, parents in nodes:
-            open_ = not parents or any(p in ranked for p in parents)
-            icon = cut[name] if open_ else cut[tree + "_locked"]
-            if name not in ranked:
-                # Greyed like the game's SkillSlot: locked and open alike, until a point goes in.
-                shape = icon.getchannel("A")
-                icon = Image.blend(icon, Image.new("RGBA", icon.size, (0x60, 0x60, 0x60, 0xFF)), 0.45)
-                icon.putalpha(shape)
-            x, y = centre(ox, row, col)
-            out.alpha_composite(icon.resize((side, side), Image.NEAREST), (x - side // 2, y - side // 2))
+    """The nine capstones in a row on the cream panel, at 2x."""
+    cream, pad = (0xE5, 0xD6, 0xA1, 0xFF), 8
+    out = Image.new("RGBA", (pad + len(cut) * (SKILL_BADGE + pad), SKILL_BADGE + 2 * pad), cream)
+    for i, name in enumerate(SKILLS):
+        out.alpha_composite(cut[name], (pad + i * (SKILL_BADGE + pad), pad))
     return out.resize((out.width * 2, out.height * 2), Image.NEAREST)
 
 
@@ -2643,7 +2554,7 @@ def main():
     for name, image in orb.items():
         image.save(os.path.join(ORB_OUT, name + ".png"))
 
-    # Their own folder too: SkillTree loads them by path, and a skill is neither gear nor an orb.
+    # Their own folder too: SkillTree loads them by path, and a capstone's badge is neither gear nor an orb.
     os.makedirs(SKILL_OUT, exist_ok=True)
     skill = skills()
     skill_preview(skill).save(os.path.join(QA, "ui_kit_skills.png"))

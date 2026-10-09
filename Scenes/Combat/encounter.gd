@@ -61,6 +61,8 @@ signal gold_dropped(index: int, amount: float)
 ## against it, so one body can hand over both, and kept for the reason the other two are: nothing is
 ## rolled when the clock runs out, so what came off a body before it is the player's.
 signal orb_dropped(index: int, orb: String)
+## A rune off a body in Gollux's cave (`RuneTable`), once the third wall has opened them (`runes_drop`).
+signal rune_dropped(index: int, rune: String)
 ## That enemy's experience, which every one of them carries the way it carries a purse. Emitted with
 ## the death beside `gold_dropped` and kept for the same reason.
 signal xp_dropped(index: int, amount: int)
@@ -435,8 +437,8 @@ var always_orb := false
 ## this player. The main scene sets it; zero, the default, means orbs drop from the first body.
 var orbs_after := 0
 
-## Walls down in this world, which decides the orbs that can drop here (`OrbTable.unlocked`). The main
-## scene sets it; a fight nobody tells drops every orb.
+## The deepest wall ever broken (`Inventory.walls_ever`), which decides the orbs that can drop here
+## (`OrbTable.unlocked`). The main scene sets it; a fight nobody tells drops every orb.
 var walls_down := OrbTable.EVERY_WALL
 
 ## Whether the first body to fall here leaves `OrbTable.FIRST_ORB`, past `orbs_after` and the chance.
@@ -467,6 +469,12 @@ var uniques_after := NO_UNIQUES
 ## real gear and unique rolls, so every rarity's drop can be looked at without farming for it.
 const EVEN_LOOT_CHANCE := 1.0 / 3.0
 var even_loot := false
+## Whether a body can leave a skill stone (`SkillTree.roll`), drawn on a generator of its own for the
+## reason `orb_rng` is. The main scene turns it on once the first sword has dropped -- a stone before it
+## would spend that promise (`FightLedger.add_loot`) -- and a fight nobody tells drops none, so every
+## test that counts what a body leaves counts what it always did.
+var stone_drops := false
+var stone_rng := RandomNumberGenerator.new()
 ## The uniques the player has unlocked (`Achievements.unlocked`), the only ones a body can carry. The
 ## main scene sets it; a fight nobody tells has none, on the same terms as `uniques_after`.
 var unlocked: Array = []
@@ -548,6 +556,16 @@ const FOG_UNIQUES := 2.0         ## what the chance of a unique is multiplied by
 ## What the tile itself does to the fight (`TileMods`, by id): land past the second wall, told to
 ## `for_tile` and `farm` by whoever opens the fight. A fight nobody tells has none.
 var mods: Array = []
+## Runes on a farm run's tile (`RuneTable`, the user's 2026-10-09; never a camp): `deeper` levels higher
+## for every Depth still working -- each as `MapBuilder.LEVEL_TILES` rings further out for a body's health
+## and purse, and a level for its experience and for what it drops (`_level`) -- and `ascended`, what
+## drops falling ascended as Lean Pickings' do. Their modifiers ride in `mods` with the tile's own.
+var deeper := 0
+var ascended := false
+## Whether a body in the cave may carry a rune: the third wall's unlock, which the main scene says.
+var runes_drop := false
+## The elite pace before any modifier set it, which `forget_mod` goes back to.
+var _base_elite_every := 0
 ## Seconds an enemy of this fight spends running in: `WALK_IN`, or longer in a Mire, or shorter for
 ## what the gear's spawn speed takes off it -- none at all at 100%.
 var walk_in := WALK_IN
@@ -686,15 +704,17 @@ func cleared() -> int:
 
 
 ## A farm run on `cell`: the same enemies the tile's terrain fields, coming forever, with no clock
-## and no count. It ends when the player says so.
+## and no count. It ends when the player says so. `deeper` is the Depth runes on it (`RuneTable`).
 ##
 ## It keeps the tile's own elite rhythm -- a run on a town throws one up every five -- and never its
 ## boss: a boss is what a set piece ends on, and a run does not end.
-static func farm(cell: Vector2i, env: String, variant := "", mods: Array = []) -> Encounter:
+static func farm(cell: Vector2i, env: String, variant := "", mods: Array = [], deeper := 0) -> Encounter:
 	var fight := Encounter.new()
 	fight.env = env
 	fight.cell = cell
 	fight.endless = true
+	# Before the first body, whose health it lifts: the Depth runes on the tile.
+	fight.deeper = deeper
 	fight.elite_every = int(profile_for(variant)["elite_every"])
 	# Only what can bite with no clock and nothing striking it, reward and all.
 	fight._take_mods(TileMods.farmable(mods))
@@ -716,6 +736,7 @@ func _take_profile(profile: Dictionary) -> void:
 ## the numbers that shape it. What they do to the player's numbers, and what they pay, waits for `arm`.
 func _take_mods(carried: Array) -> void:
 	mods = carried
+	_base_elite_every = elite_every
 	var last := false
 	for id: String in mods:
 		var mod: Dictionary = TileMods.MODS[id]
@@ -764,7 +785,29 @@ func _raw_health_of(enemy: String, position := -1) -> float:
 	var more := 1.0 + _hp_more
 	if enemy == MIMIC and Curses.effect(Curses.HUNGRY_MIMICS) in effects:
 		more += HUNGRY_HP
-	return maxf(1.0, roundf(hp_of(enemy, cell) * more))
+	return maxf(1.0, roundf(hp_of(enemy, cell) * more * pow(HP_GROWTH, MapBuilder.LEVEL_TILES * deeper)))
+
+
+## The level of what drops here and what a body's experience is counted at: the tile's, and a level
+## more for every Depth rune working on it.
+func _level() -> int:
+	return MapBuilder.level_of(cell) + deeper
+
+
+## A rune's modifier has worn off mid-run (`RuneTable.count_kill`): one listing of `id` -- a tier -- leaves
+## the fight, and what it shaped is shaped again from the next body on. What it paid goes at the next
+## `arm`, which the main scene calls.
+func forget_mod(id: String) -> void:
+	var at := mods.find(id)
+	if at < 0:
+		return
+	mods.remove_at(at)
+	var row: Dictionary = TileMods.MODS[id]
+	_hp_more -= float(row.get("hp", 0.0))
+	_hit_more -= float(row.get("hit", 0.0))
+	_attack_more -= float(row.get("attack", 0.0))
+	if row.has("elite_every"):
+		elite_every = int(TileMods.value(id, "elite_every", mods.count(id))) if id in mods else _base_elite_every
 
 
 ## What the world's curses do to the shape of the fight, once: `wear` hands them over with the rest of
@@ -1260,7 +1303,7 @@ static func _lifted(rate: float, factor: float) -> float:
 ## The dev's even loot: one find at a rarity drawn evenly from common to unique. A ground with no
 ## unique pool gives an elite in the unique's place.
 func _even_find() -> Item:
-	var level := MapBuilder.level_of(cell)
+	var level := _level()
 	var step := loot_rng.randi_range(ItemRarity.Rarity.COMMON, ItemRarity.Rarity.UNIQUE)
 	if step == ItemRarity.Rarity.UNIQUE:
 		var found := UniqueTable.roll(lineup[index], unlocked, unique_rng, level, 0.0, true)
@@ -1275,10 +1318,10 @@ func _gear_rate() -> float:
 	return _lifted(drop_rate, LEAN_LESS) if Curses.effect(Curses.LEAN_PICKINGS) in effects else drop_rate
 
 
-## Lean Pickings' other half: a find that falls may fall already ascended. Drawn only under the
-## curse, so nobody else's loot rolls as it did not before.
+## Lean Pickings' other half, and the Ascent rune's whole: a find that falls may fall already ascended.
+## Drawn only under the curse or on an ascended tile, so nobody else's loot rolls as it did not before.
 func _lean(item: Item) -> Item:
-	if item == null or not Curses.effect(Curses.LEAN_PICKINGS) in effects:
+	if item == null or not (Curses.effect(Curses.LEAN_PICKINGS) in effects or ascended):
 		return item
 	var roll := loot_rng.randf()
 	var plus := 2 if roll < LEAN_PLUS[1] else 1 if roll < LEAN_PLUS[0] + LEAN_PLUS[1] else 0
@@ -1504,8 +1547,13 @@ func _kill(swung := false) -> void:
 	_domino = false
 	enemy_died.emit(index)
 	# The dungeon pays nothing, from anything: no gear, purse, experience, unique or orb, and no
-	# Hourglass second either, which down here would be a clock that never ran out.
+	# Hourglass second either, which down here would be a clock that never ran out -- but a rune, the
+	# one thing only it has, once the third wall has opened them.
 	if dungeon:
+		if runes_drop:
+			var rune := RuneTable.roll(lineup[index], loot_rng)
+			if not rune.is_empty():
+				rune_dropped.emit(index, rune)
 		return
 	# The only path to a death, which is why drops survive a loss for free: nothing is rolled
 	# when the clock runs out.
@@ -1516,7 +1564,7 @@ func _kill(swung := false) -> void:
 	var mimic := lineup[index] == MIMIC
 	var chest_unique: Item = null
 	if mimic and loot_rng.randf() < MIMIC_UNIQUE:
-		chest_unique = UniqueTable.roll(lineup[index], unlocked, unique_rng, MapBuilder.level_of(cell),
+		chest_unique = UniqueTable.roll(lineup[index], unlocked, unique_rng, _level(),
 				drop_rate, true)
 	var rolls := 1
 	if mimic:
@@ -1541,13 +1589,13 @@ func _kill(swung := false) -> void:
 		var certain: bool = always_drop or mimic or (roll == 0
 				and ((guarantee_elite and on_elite()) or (big and "trophy" in effects)
 				or (on_elite() and env == "forest" and _home_peak())))
-		var dropped := LootTable.roll(lineup[index], loot_rng, certain, MapBuilder.level_of(cell),
+		var dropped := LootTable.roll(lineup[index], loot_rng, certain, _level(),
 				gear_rate, item_rarity)
 		# Lucky Wound: a body felled by a crit rolls its rank's number of times and leaves the best.
 		if _crit_kill and "lucky_wound" in effects:
 			for again in int(_dial("lucky_wound", "rolls")) - 1:
 				dropped = _better(dropped, LootTable.roll(lineup[index], loot_rng, certain,
-						MapBuilder.level_of(cell), gear_rate, item_rarity))
+						_level(), gear_rate, item_rarity))
 		var found := 0
 		while dropped != null:
 			if first_sword:
@@ -1562,7 +1610,7 @@ func _kill(swung := false) -> void:
 			# `always_drop`, a mimic, the elite's promise, Trophy Hunter -- does not, because it beat
 			# nothing: the promise is one piece.
 			dropped = null if certain or found >= MOST_DROPS else LootTable.roll(lineup[index],
-					loot_rng, false, MapBuilder.level_of(cell), gear_rate, item_rarity)
+					loot_rng, false, _level(), gear_rate, item_rarity)
 	# Every body carries one, which is the whole difference between gold and gear: nine kills in
 	# ten leave nothing, and all ten leave this.
 	# Gold find lifts the purse here rather than inside `gold_of`, which is what the body is worth
@@ -1570,7 +1618,7 @@ func _kill(swung := false) -> void:
 	# Drop rate finds everything, so it is in this sum too, **added** to gold find the way two global
 	# percents add: 20 and 30 are half again as much gold, not 56% more.
 	var purse := maxf(1.0, roundf(gold_of(lineup[index], cell)
-			* (1.0 + (gold_find + drop_rate) / 100.0)))
+			* (1.0 + (gold_find + drop_rate) / 100.0) * pow(GOLD_GROWTH, MapBuilder.LEVEL_TILES * deeper)))
 	# Two Tithes add (at rank I five times, not nine), the way two global modifiers do.
 	purse *= 1.0 + (_dial("the_tithe", "times") - 1.0) * effects.count("tithe")
 	# The Sunscorched Cowl at IV: a desert purse is twice as full.
@@ -1584,7 +1632,7 @@ func _kill(swung := false) -> void:
 	if "magpie" in effects and not no_gear and loot_rng.randf() < MAGPIE_CHANCE:
 		purse = 0.0
 		loot_dropped.emit(index, _lean(_raw(LootTable.roll(lineup[index], loot_rng, true,
-				MapBuilder.level_of(cell), drop_rate, item_rarity))))
+				_level(), drop_rate, item_rarity))))
 	# The Pauper's curse, and a Barren tile, where a body carries nothing at all.
 	if purse > 0.0 and Curses.effect(Curses.PAUPER) in effects:
 		purse = maxf(1.0, roundf(purse * PAUPER_PURSE))
@@ -1595,7 +1643,9 @@ func _kill(swung := false) -> void:
 		gold_dropped.emit(index, purse)
 	# Hard Lessons is a "less": what is left of the experience once every "more" has been added.
 	var lessons := LESSONS_XP if Curses.effect(Curses.HARD_LESSONS) in effects else 1.0
-	var worth := maxi(1, roundi(xp_of(lineup[index], cell) * (1.0 + xp_more / 100.0) * lessons))
+	# A Depth rune's level counts the way the tile's own does: experience is so much a level.
+	var worth := maxi(1, roundi(xp_of(lineup[index], cell) * float(_level()) / MapBuilder.level_of(cell)
+			* (1.0 + xp_more / 100.0) * lessons))
 	xp += worth
 	xp_dropped.emit(index, worth)
 	# A unique, beside the gear and not from its table: any body can carry one, off the pool of what
@@ -1612,13 +1662,13 @@ func _kill(swung := false) -> void:
 		var lucky := (FOG_UNIQUES if _cursed_with(Curses.THICK_FOG) else 1.0) \
 				* (HOME_UNIQUES if _cursed_with(Curses.HOMELAND) and _at_home() else 1.0)
 		var unique_rate := _lifted(drop_rate, lucky)
-		var found := UniqueTable.roll(lineup[index], unlocked, unique_rng, MapBuilder.level_of(cell),
+		var found := UniqueTable.roll(lineup[index], unlocked, unique_rng, _level(),
 				unique_rate, false, item_rarity)
 		# A second chance, never a second unique: a boss in the mountains under Stonebreaker at IV, and a
 		# crit kill under the Lucky Wound at IV.
 		if found == null and ((boss and env == "mountains" and _home_peak())
 				or (_crit_kill and "lucky_wound" in effects and _peak("lucky_wound"))):
-			found = UniqueTable.roll(lineup[index], unlocked, unique_rng, MapBuilder.level_of(cell),
+			found = UniqueTable.roll(lineup[index], unlocked, unique_rng, _level(),
 					unique_rate, false, item_rarity)
 		if found != null:
 			loot_dropped.emit(index, _lean(found))
@@ -1649,6 +1699,13 @@ func _kill(swung := false) -> void:
 		for i in count:
 			orbs[orb] = int(orbs.get(orb, 0)) + 1
 			orb_dropped.emit(index, orb)
+	# A fourth: a skill stone, gear's chance in a share, on its own generator. Not gear, so neither a
+	# curse nor a unique that keeps gear from falling keeps it.
+	if stone_drops:
+		var stone := SkillTree.roll(lineup[index], stone_rng, _level(), drop_rate,
+				item_rarity)
+		if stone != null:
+			loot_dropped.emit(index, stone)
 
 
 ## The better of two finds, either of which may be nothing: the higher rarity, then the higher level.

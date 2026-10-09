@@ -1,7 +1,8 @@
 extends "res://tests/harness.gd"
-## Headless checks for the skill trees: their tables, how points are earned and spent, how skills
-## combine with gear, the paid reset, the save, and what the Fortune stats do to a drop. Run from the
-## project folder:
+## Headless checks for the skill tree: the starter tree, what a path is and where a stone may stand, how
+## points are earned and spent, what the stones add up to and how that stacks with gear, the paid reset,
+## placing stones on the black screen, the save, the capstones' effects, the page and its radial
+## drawing, what the Fortune stats do to a drop, and how stones drop. Run from the project folder:
 ##   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/test_skills.gd
 
 ## Never Inventory.SAVE_PATH: these tests write and delete, and that is the player's own save.
@@ -10,107 +11,138 @@ const SHAPE_ROLLS := 6000
 
 
 func _run() -> void:
-	_check(_test_tables() == true, "table tests ran to the end")
+	_check(_test_starter() == true, "starter tests ran to the end")
+	_check(_test_paths() == true, "path tests ran to the end")
 	_check(_test_spending() == true, "spending tests ran to the end")
 	_check(_test_stacking() == true, "stacking tests ran to the end")
 	_check(_test_respec() == true, "reset tests ran to the end")
+	_check(_test_placing() == true, "placing tests ran to the end")
 	_check(_test_save() == true, "save tests ran to the end")
-	_check(await _test_bursts() == true, "burst tests ran to the end")
-	_check(_test_hold() == true, "held press tests ran to the end")
+	_check(_test_effects() == true, "effect tests ran to the end")
+	_check(await _test_page() == true, "page tests ran to the end")
+	_check(_test_layout() == true, "layout tests ran to the end")
 	_check(_test_rarity() == true, "rarity tests ran to the end")
 	_check(_test_gold_and_orbs() == true, "gold and orb find tests ran to the end")
+	_check(_test_stone_drops() == true, "stone drop tests ran to the end")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_PATH))
 	_report("skill")
 
 
-## Every tree is the sketch: one root, parents that exist and sit higher, strength paid for in depth.
-func _test_tables() -> bool:
-	_check(SkillTree.trees() == ["power", "fortune", "guard"], "three trees, power first")
-	var seen := {}
-	for tree: String in SkillTree.trees():
-		var nodes := SkillTree.nodes_of(tree)
-		_check(nodes.size() == 10, "%s has the sketch's ten skills" % tree)
-		_check(SkillTree.capacity(tree) == 23, "%s holds 23 points" % tree)
-		_check(ResourceLoader.exists(SkillTree.ICON_ROOT + str(SkillTree.TREES[tree]["locked"]) + ".png"),
-				"%s has its locked mark" % tree)
-		var roots := 0
-		var cells := {}
-		for id: String in nodes:
-			_check(not seen.has(id), "%s is named once across every tree" % id)
-			seen[id] = true
-			var entry: Dictionary = nodes[id]
-			var parents: Array = entry["parents"]
-			if parents.is_empty():
-				roots += 1
-			var cell := Vector2i(int(entry["col"]), int(entry["row"]))
-			_check(not cells.has(cell), "%s has its own place in the grid" % id)
-			cells[cell] = true
-			_check(cell.x >= 0 and cell.x < SkillTree.COLS and cell.y >= 0 and cell.y < SkillTree.ROWS,
-					"%s is inside the grid" % id)
-			for parent: String in parents:
-				_check(nodes.has(parent), "%s leads from %s, in its own tree" % [id, parent])
-				if nodes.has(parent):
-					# Parents above is what rules out a cycle: every edge points down.
-					_check(int(nodes[parent]["row"]) < int(entry["row"]), "%s sits under %s" % [id, parent])
-					_check(int(nodes[parent]["max_rank"]) >= int(entry["max_rank"]),
-							"%s holds no more than %s" % [id, parent])
-			_check(ResourceLoader.exists(SkillTree.ICON_ROOT + id + ".png"), "%s has an icon" % id)
-			_check(not SkillTree.describe(id).is_empty(), "%s says what it does" % id)
-			for kind: String in ["flat", "percent"]:
-				for stat: String in entry[kind]:
-					_check(LootTable.STAT_LABELS.has(stat), "%s names %s, which has a label" % [id, stat])
-		_check(roots == 1, "%s has one root" % tree)
+## A stone of `type` made by hand: `tier`, `connectors`, and `lines` as [id, value] pairs.
+func _stone(type: String, tier: int, connectors := 0, lines := []) -> Item:
+	var stone := Item.new()
+	stone.type = type
+	stone.rarity = ItemRarity.Rarity.RARE
+	stone.stone_tier = tier
+	stone.connectors = connectors
+	stone.stats = Item.scaled_stats(type, 1)
+	for line: Array in lines:
+		stone.mods.append({"id": line[0], "value": line[1]})
+	return stone
+
+
+## Every hero starts with the root and, in its one slot, a dexterity stone: an uncommon leaf of tier 1.
+func _test_starter() -> bool:
+	var skills := Skills.new()
+	_check(SkillTree.ROOT_CONNECTORS == 1 and skills.stones.keys() == ["0"],
+			"one stone in the root's one slot (%s)" % [skills.stones.keys()])
+	var want := {"0": ["Dexterity Node", "global_increased_attack_speed"]}
+	for path: String in want:
+		var stone: Item = skills.stones[path]
+		_check(stone.type == want[path][0] and stone.stone_tier == 1 and stone.connectors == 0
+				and stone.rarity == ItemRarity.Rarity.UNCOMMON, "%s is a tier-1 uncommon leaf" % stone.type)
+		_check(stone.mods.size() == 1 and stone.mods[0]["id"] == want[path][1] and stone.mods[0]["value"] == 1,
+				"%s carries its one line (%s)" % [stone.type, stone.mod_lines()])
+		_check(float(stone.base_stats()[SkillTree.base_of(stone)]) == 5.0, "and 5 of its attribute")
+	_check(skills.attributes() == {"strength": 0.0, "dexterity": 0.0, "intelligence": 0.0},
+			"with no point spent the tree adds no attribute")
+	_check(skills.flat().is_empty() and skills.percent().is_empty(), "and adds nothing else")
+	_check(Skills.new().stones["0"] != skills.stones["0"], "every tree's stones are its own")
 	return true
 
 
+## A slot is a path, and a stone stands only where a slot is, no deeper than its tier.
+func _test_paths() -> bool:
+	_check(SkillTree.depth_of("") == 0 and SkillTree.depth_of("2") == 1 and SkillTree.depth_of("2.1.0") == 3,
+			"depth is the number of steps")
+	_check(SkillTree.parent_of("2.1.0") == "2.1" and SkillTree.parent_of("2") == "", "the parent is a step up")
+	_check(SkillTree.index_of("2.1") == 1 and SkillTree.child_of("2", 1) == "2.1" and SkillTree.child_of("", 0) == "0",
+			"and a child a connector down")
+	_check(SkillTree.branch_of("2.1.0") == "2" and SkillTree.branch_of("1") == "1", "the branch is the first step")
+
+	var stones := {"0": _stone("Strength Node", 1, 2)}
+	_check(SkillTree.exists("0", stones) and SkillTree.exists("0.1", stones), "the root's and a stone's slots exist")
+	_check(not SkillTree.exists("1", stones), "but the root has one")
+	_check(not SkillTree.exists("0.2", stones), "and none past a stone's connectors")
+	_check(not SkillTree.exists("0.0.0", stones), "nor under an empty slot")
+	for bad: String in ["", "3", "1.", "a", "1..0", "-1"]:
+		_check(not SkillTree.exists(bad, stones), "%s is no slot" % bad)
+	var deep := _stone("Dexterity Node", 2)
+	_check(SkillTree.can_place(deep, "0", stones) and SkillTree.can_place(deep, "0.0", stones),
+			"a tier-2 stone stands at depth 1 or 2")
+	stones["0.0"] = _stone("Strength Node", 2, 1)
+	_check(not SkillTree.can_place(deep, "0.0.0", stones), "and never at 3")
+	_check(SkillTree.can_place(_stone("Dexterity Node", 3), "0.0.0", stones), "where a tier-3 one may")
+	_check(not SkillTree.can_place(Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, RandomNumberGenerator.new()),
+			"0", stones), "a sword is no stone")
+	return true
+
+
+## A level is a point, a point is a rank, a stone opens once the stone above it holds one, and a stone
+## holds one rank and its "+N ranks" more. Its lines count once a rank.
 func _test_spending() -> bool:
 	var skills := Skills.new()
-	_check(skills.points(1) == 0, "level 1 has no points")
-	_check(skills.points(5) == 4, "a point a level past the first")
-	_check(not skills.rank_up("sharpened_edge", 1), "nothing to spend at level 1")
-	_check(skills.why_not("sharpened_edge", 1) == "No skill points left", "and it says so")
+	skills.stones["0"] = _stone("Strength Node", 1, 1, [["added_damage", 2], ["added_stone_ranks", 1]])
+	skills.stones["0.0"] = _stone("Strength Node", 2, 0, [["global_increased_damage", 10]])
+	_check(Skills.earned(1) == 0 and Skills.earned(5) == 4, "a point a level past the first")
+	_check(SkillTree.most_ranks(skills.stones["0"]) == 2 and SkillTree.most_ranks(skills.stones["0.0"]) == 1,
+			"a stone takes one rank and its ranks line more")
+	_check(not skills.rank_up("0.0", 5) and skills.why_not("0.0", 5) == "Needs a point in the node before it",
+			"a stone opens once the one above it holds a point")
+	_check(skills.rank_up("0", 5) and skills.rank_up("0", 5), "two into a stone of two ranks")
+	_check(skills.why_not("0", 5) == SkillTree.FULL and not skills.rank_up("0", 5), "and no third")
+	_check(skills.rank_up("0.0", 5), "and now the one under it opens")
+	_check(skills.points(5) == 1 and skills.spent() == 3, "three of four spent")
+	_check(skills.why_not("", 2) == "No skill points left", "a level with nothing left refuses")
+	_check(skills.why_not("0.0.0", 5) == "No node here", "where no stone stands takes nothing")
 
-	_check(not skills.rank_up("keen_eye", 20), "a side skill is shut before its root")
-	_check(skills.why_not("keen_eye", 20).begins_with("Needs a point in"), "and it says what it needs")
-	_check(skills.rank_up("sharpened_edge", 20), "the root takes a point")
-	_check(skills.why_not("keen_eye", 20) == "Needs 3 points in Power",
-			"a row down wants three points in the tree (%s)" % skills.why_not("keen_eye", 20))
-	skills.rank_up("sharpened_edge", 20)
-	_check(not skills.rank_up("keen_eye", 20), "two is not enough")
-	skills.rank_up("sharpened_edge", 20)
-	_check(skills.rank_up("keen_eye", 20), "three opens the side skill")
-	# Either parent is enough for the skill in the middle.
-	_check(not SkillTree.is_open("quick_hands", {}), "the other side stays shut until its root is in")
-	_check(not skills.rank_up("battle_rhythm", 20), "the middle wants six")
-	skills.rank_up("sharpened_edge", 20)
-	skills.rank_up("sharpened_edge", 20)
-	_check(skills.rank_up("battle_rhythm", 20), "the middle opens off one side alone")
-	_check(skills.points(20) == 12, "seven spent of nineteen")
-	_check(skills.rank_of("sharpened_edge") == 5, "the root fills to five")
-	_check(not skills.rank_up("sharpened_edge", 20), "and no further")
-	_check(skills.why_not("sharpened_edge", 20) == SkillTree.FULL, "which it says")
-	_check(skills.spent("power") == 7 and skills.spent("fortune") == 0, "spent is counted per tree")
+	# Read off the stones' own lines, never restated, so a retune moves both sides together.
+	var flat: Dictionary = skills.flat()
+	_check(is_equal_approx(flat["damage"], 2.0 * 2), "a flat line counts once a rank (%s)" % flat)
+	_check(not flat.has(SkillTree.RANKS_STAT) and not flat.has("strength"),
+			"never the stone's ranks, and the attributes are counted apart")
+	_check(is_equal_approx(skills.percent()["damage"], 10.0), "a global line goes to the percents")
+	_check(is_equal_approx(skills.attributes()["strength"], 5.0 * 3),
+			"strength is every rank's of the stones' (%s)" % skills.attributes())
+	# The Abacus at IV and a helmet's line: ranks more, on every stone holding a point and on one base's.
+	_check(is_equal_approx(skills.flat(1)["damage"], 2.0 * 3), "a rank more on every stone holding one")
+	_check(is_equal_approx(skills.flat(0, {"strength": 2})["damage"], 2.0 * 4), "two more on the strength stones")
+	_check(skills.flat(0, {"dexterity": 2})["damage"] == flat["damage"], "and none from another base's")
+	skills.ranks.erase("0.0")
+	_check(not skills.percent().has("damage"), "a stone with no point adds nothing, however many it is lent")
 
-	# The capstone row wants twelve points in its tree before it.
-	for id in ["keen_eye", "keen_eye", "battle_rhythm", "might"]:
-		skills.rank_up(id, 20)
-	_check(skills.spent("power") == 11 and skills.rank_up("might", 20), "eleven, then a twelfth")
-	skills.ranks.erase("might")
-	skills.ranks["deadly_strikes"] = 1
-	_check(not skills.rank_up("assassin", 20), "a capstone is shut at eleven")
-	skills.rank_up("deadly_strikes", 20)
-	_check(skills.rank_up("assassin", 20), "and open at twelve")
-	_check(skills.effects() == ["execute"], "a learned capstone is an effect (%s)" % [skills.effects()])
-
-	# A level-3 player has two points: the third is refused wherever it is aimed.
-	var poor := Skills.new()
-	_check(poor.rank_up("scavenger", 3) and poor.rank_up("scavenger", 3), "two points at level 3")
-	_check(not poor.rank_up("scavenger", 3), "and not a third")
-	_check(poor.points(3) == 0, "none left")
+	# The root (the user's, 2026-10-09): no most, so every point the level has earned, each a point of
+	# damage and a percent more of it, and no attribute; the stones under it open without it.
+	var rooted := Skills.new()
+	_check(rooted.flat().is_empty() and rooted.percent().is_empty(), "a root with no point adds nothing")
+	for i in Skills.earned(6):
+		rooted.rank_up("", 6)
+	_check(rooted.rank_of("") == Skills.earned(6) and rooted.why_not("", 6) == "No skill points left",
+			"the root takes every point there is, and is never full (%d)" % rooted.rank_of(""))
+	_check(rooted.why_not("", 7).is_empty() and rooted.rank_up("", 7), "a level more is a point more in it")
+	_check(is_equal_approx(rooted.flat()["damage"], SkillTree.ROOT_DAMAGE * 6)
+			and is_equal_approx(rooted.percent()["damage"], SkillTree.ROOT_PERCENT * 6),
+			"each point a point of damage and a percent more (%s, %s)" % [rooted.flat(), rooted.percent()])
+	_check(rooted.attributes().values().max() == 0.0 and rooted.effects().is_empty(), "and nothing else")
+	_check(rooted.why_not("0", 8).is_empty(), "the stone under it opens without a point in it")
+	var saved := Skills.from_dict(rooted.tree_dict(), rooted.ranks, 7)
+	_check(saved.rank_of("") == 6, "its points are saved (%d)" % saved.rank_of(""))
+	_check(Skills.from_dict(rooted.tree_dict(), rooted.ranks, 5).ranks.is_empty(),
+			"and handed back with the rest when the level cannot pay for them")
 	return true
 
 
-## Flat first, then the gear's globals, then the skills' percents, as a separate multiplier.
+## Flat first, then the gear's globals, then the tree's percents, as a separate multiplier.
 func _test_stacking() -> bool:
 	var worn := Equipment.new()
 	var blade := Item.new()
@@ -132,203 +164,254 @@ func _test_stacking() -> bool:
 			"and the skill's percent multiplies on top rather than adding to the ring's")
 	_check(not is_equal_approx(both["damage"], (sword + 3.0) * 1.3), "it does not add to the ring's")
 
-	# The tree's own sums.
-	var skills := Skills.new()
-	skills.ranks = {"sharpened_edge": 3, "keen_eye": 1, "battle_rhythm": 2, "titan": 1, "might": 1}
-	# Read off the table rather than restated, so a retune moves both sides together.
-	var per := func(id: String, kind: String) -> float:
-		return float(SkillTree.node(id)[kind].get("damage", 0.0))
-	var want_flat: float = per.call("sharpened_edge", "flat") * 3 + per.call("titan", "flat") \
-			+ per.call("might", "flat")
-	var want_percent: float = per.call("battle_rhythm", "percent") * 2 + per.call("titan", "percent")
-	_check(want_flat > 0.0 and want_percent > 0.0, "the picked skills carry flat and percent damage")
-	_check(is_equal_approx(skills.flat()["damage"], want_flat), "flat damage is ranks times per point")
-	_check(is_equal_approx(skills.percent()["damage"], want_percent), "percents add inside the tree")
-
-	# Through the inventory and into a fight.
+	# A stone of two ranks through the inventory and into a fight, its strength with it.
 	var inventory := Inventory.new()
 	inventory.level = 10
 	inventory.equipment = worn
-	inventory.skills = skills
+	inventory.skills.stones["0"] = _stone("Strength Node", 1, 0,
+			[["added_damage", 3], ["global_increased_damage", 10], ["added_stone_ranks", 1]])
+	inventory.skills.ranks = {"0": 2}
+	var strength := float(inventory.attributes()["strength"])
+	_check(is_equal_approx(strength, 5.0 * 2), "the tree's strength reaches the hero (%s)" % strength)
 	var fight := Encounter.for_tile(Vector2i(1, 0), "grass")
 	fight.arm(inventory.stats())
-	var want := roundi((sword + want_flat) * 1.2 * (1.0 + want_percent / 100.0)) + Encounter.BARE_DAMAGE
-	_check(fight.damage == want, "a fight hits for gear and skills together (%d, want %d)" % [fight.damage, want])
+	var want := roundi((sword + 6.0) * 1.2 * 1.2 * (1.0 + Inventory.attribute_bonus(strength) / 100.0)) \
+			+ Encounter.BARE_DAMAGE
+	_check(fight.damage == want, "a fight hits for gear and stones together (%d, want %d)" % [fight.damage, want])
 	return true
 
 
+## A reset takes every point back, for gold the level grows; refused when the purse is short.
 func _test_respec() -> bool:
 	var inventory := Inventory.new()
-	inventory.level = 10
-	_check(not inventory.respec("power"), "nothing spent is nothing to reset")
-	for i in 3:
-		inventory.skills.rank_up("sharpened_edge", inventory.level)
-	inventory.skills.rank_up("scavenger", inventory.level)
-	var cost := inventory.respec_cost("power")
-	_check(cost == SkillTree.respec_cost(10, 3) and cost > 0, "a reset costs gold (%d)" % cost)
-	_check(SkillTree.respec_cost(20, 3) > cost, "and more as the player levels")
-	inventory.gold = cost - 1
-	_check(not inventory.respec("power"), "refused one gold short")
-	_check(inventory.skills.spent("power") == 3 and inventory.gold == cost - 1, "and nothing moved")
-	inventory.gold = cost + 7
-	_check(inventory.respec("power"), "paid for")
-	_check(inventory.gold == 7, "the price came out of the purse")
-	_check(inventory.skills.spent("power") == 0, "every Power point is back")
-	_check(inventory.skills.rank_of("scavenger") == 1, "and Fortune was not touched")
-	_check(inventory.skills.points(10) == 8, "the refund is exact")
+	inventory.level = 6
+	_check(inventory.respec_cost() == 0.0 and not inventory.respec(), "nothing spent is nothing to reset")
+	for path: String in ["0", "", ""]:
+		inventory.rank_up_skill(path)
+	var cost := inventory.respec_cost()
+	_check(cost == SkillTree.respec_cost(6, 3) and cost > 0.0, "three points cost what the table says")
+	inventory.gold = cost - 1.0
+	_check(not inventory.respec() and inventory.skills.spent() == 3, "a short purse resets nothing")
+	inventory.gold = cost
+	_check(inventory.respec() and inventory.skills.spent() == 0 and inventory.gold == 0.0, "a full one takes it all back")
+	_check(SkillTree.respec_cost(20, 3) > SkillTree.respec_cost(6, 3), "and costs more the higher the level")
 	return true
 
 
-func _test_save() -> bool:
-	var inventory := Inventory.new()
-	inventory.level = 12
-	inventory.skills.rank_up("scavenger", 12)
-	inventory.skills.rank_up("scavenger", 12)
-	inventory.skills.rank_up("scavenger", 12)
-	inventory.skills.rank_up("appraiser", 12)
-	inventory.skills.rank_up("appraiser", 12)
-	_check(inventory.save(TEST_PATH), "saved")
-	var back := Inventory.load_from(TEST_PATH)
-	_check(back.skills.ranks == inventory.skills.ranks, "the skills come back as they were")
-	_check(back.skills.points(back.level) == 6, "with the same points free")
-
-	# A version 8 save has no skills, and every level's point comes back to spend.
-	var file := FileAccess.open(TEST_PATH, FileAccess.WRITE)
-	file.store_string('{"version": 8, "level": 6, "xp": 0, "items": []}')
-	file.close()
-	var old := Inventory.load_from(TEST_PATH)
-	_check(old.skills.ranks.is_empty() and old.skills.points(old.level) == 5, "a version 8 save learns nothing")
-
-	# Unknown names go, ranks over the most are cut down.
-	var tidy := Skills.from_dict({"scavenger": 9, "retired_skill": 2, "appraiser": "lots"}, 30)
-	_check(tidy.ranks == {"scavenger": 5}, "a drifted save is pruned (%s)" % [tidy.ranks])
-	# More spent than the level earned, or a point nothing leads to: all of it comes back.
-	_check(Skills.from_dict({"scavenger": 5}, 3).ranks.is_empty(), "overspending refunds everything")
-	_check(Skills.from_dict({"collector": 1}, 30).ranks.is_empty(), "an orphaned point refunds everything")
-	_check(Skills.from_dict({"sharpened_edge": 5, "keen_eye": 1, "battle_rhythm": 1, "might": 1,
-			"titan": 1}, 30).ranks.is_empty(), "a capstone held on too few points refunds everything")
-	_check(Skills.from_dict("nonsense", 30).ranks.is_empty(), "the wrong shape is nothing learned")
-	return true
-
-
-## Every tree full: the trees burst, keep what they gave, start again a point dearer a rank, and a
-## capstone's effect is not given twice.
-func _test_bursts() -> bool:
-	var full := SkillTree.total_capacity()
-	_check(full == 69, "the trees hold 69 ranks (%d)" % full)
-	var level := full + 1
+## On the black screen: a stone out of the bag into a slot it fits, what stood there and every stone under
+## a connector the new one lacks back into the bag, whole; and the new world keeps the tree and none of
+## the bag's stones or the points.
+func _test_placing() -> bool:
 	var skills := Skills.new()
-	for tree: String in ["power", "fortune"]:
-		_fill(skills, tree, level)
-	_check(not skills.can_burst() and not skills.burst(), "no burst while a tree has room")
-	_check(skills.why_not("titan", level) == SkillTree.FULL, "and no rank past the most")
-	_fill(skills, "guard", level)
-	_check(skills.points(level) == 0 and skills.can_burst(), "every tree full takes every point at level %d" % level)
-	var damage := float(skills.flat()["damage"])
-	var boost := float(skills.percent()["damage"])
-	var effects := skills.effects()
+	skills.stones["0"] = _stone("Strength Node", 1, 3)
+	skills.stones["0.0"] = _stone("Strength Node", 2, 1)
+	skills.stones["0.0.0"] = _stone("Intelligence Node", 3)
+	skills.stones["0.2"] = _stone("Dexterity Node", 2)
+	skills.ranks = {"0": 1, "0.0": 1, "0.2": 1}
+	var leaf := _stone("Dexterity Node", 1)
+	var refused := skills.place(leaf, "0.0")
+	_check(refused == [leaf] and skills.stones["0.0"] != leaf, "a tier-1 stone is handed back from depth 2")
+	var narrow := _stone("Intelligence Node", 1, 1)
+	var old_one: Item = skills.stones["0"]
+	var past: Item = skills.stones["0.2"]
+	var out := skills.place(narrow, "0")
+	_check(skills.stones["0"] == narrow and not skills.ranks.has("0"), "the new stone stands there, no point in it")
+	_check(out == [old_one, past], "out comes the old one and the stone past the one connector (%d)" % out.size())
+	_check(skills.stones.has("0.0") and skills.stones.has("0.0.0"), "what hangs off the kept connector stays, whole")
+	_check(not skills.stones.has("0.2") and not skills.ranks.has("0.2"), "and the rest goes, its point with it")
+	var bare := skills.place(_stone("Dexterity Node", 1), "0")
+	_check(bare.size() == 3 and not skills.stones.has("0.0.0"), "a leaf takes a whole subtree out under it")
 
-	_check(skills.burst() and skills.bursts == 1 and skills.ranks.is_empty(), "the trees burst and start again")
-	_check(float(skills.flat()["damage"]) == damage and float(skills.percent()["damage"]) == boost
-			and skills.effects() == effects, "keeping everything the burnt trees gave")
-	_check(skills.rank_cost() == 2 and skills.sunk() == full, "a rank now costs 2, and the burnt 69 stay spent")
-	_check(skills.points(level) == 0 and skills.why_not("sharpened_edge", level) == "No skill points left",
-			"nothing is handed back")
-	_check(skills.why_not("sharpened_edge", level + 1) == "Needs 2 skill points", "one point is not a rank")
-	_check(skills.rank_up("sharpened_edge", level + 2) and skills.points(level + 2) == 0, "two are")
-	_check(skills.spent("power") == 2 and skills.total_of("sharpened_edge") == 6, "spent in points, ranks stacked")
-	var edge := float(SkillTree.node("sharpened_edge")["flat"]["damage"])
-	_check(float(skills.flat()["damage"]) == damage + edge, "the new rank adds to the old tree's")
-
-	# The second tree's capstones: their numbers again, their effect not twice.
-	var second := level + 2 * full
-	for tree: String in SkillTree.trees():
-		_fill(skills, tree, second)
-	_check(skills.can_burst() and skills.points(second) == 0, "the second tree costs twice as much (%d)"
-			% skills.points(second))
-	_check(float(skills.percent()["damage"]) == 2 * boost, "and gives the first one's numbers again")
-	_check(skills.effects().count("giant_slayer") == 1, "but Giant Slayer once")
-	skills.burst()
-	_check(skills.rank_cost() == 3 and skills.sunk() == full * 3, "a third tree costs 3 a rank")
-
-	# A Reset gives back only this tree's points, at what they cost.
-	var inventory := Inventory.new()
-	inventory.level = second + 10
-	inventory.skills = skills
-	inventory.gold = 1e30
-	skills.rank_up("scavenger", inventory.level)
-	_check(skills.spent("fortune") == 3 and inventory.respec("fortune") and skills.points(inventory.level) == 10,
-			"a reset hands back this tree's points and never a burnt one's")
-
-	# The save keeps the bursts; a world's transcension starts them over.
-	skills.rank_up("scavenger", inventory.level)
-	_check(inventory.save(TEST_PATH), "saved")
-	var back := Inventory.load_from(TEST_PATH)
-	_check(back.skills.bursts == 2 and back.skills.ranks == skills.ranks
-			and back.skills.points(back.level) == skills.points(inventory.level), "the bursts survive the save")
-	_check(inventory.transcended().skills.bursts == 0, "and end with the world")
-	_check(Skills.from_dict({}, 10, 1).bursts == 0, "bursts a level cannot have paid for are forgotten")
-	# A version 29 save's ranks past the most are cut down, their points free again.
-	var file := FileAccess.open(TEST_PATH, FileAccess.WRITE)
-	file.store_string(JSON.stringify({"version": 29, "level": 100, "xp": 0, "items": [],
-		"skills": {"sharpened_edge": 9}}))
-	file.close()
-	var legacy := Inventory.load_from(TEST_PATH)
-	_check(legacy.skills.ranks == {"sharpened_edge": 5} and legacy.skills.points(100) == 94,
-			"a version 29 save's overranks are free again")
-
-	# The page plays it: opened over full trees, it bursts them and saves.
-	var was := Settings.animations
-	Settings.animations = Settings.Anim.NONE
-	var player := Inventory.new()
-	player.level = level
-	for tree: String in SkillTree.trees():
-		_fill(player.skills, tree, level)
-	var page := SkillsPage.new(player, TEST_PATH, 1.0)
-	root.add_child(page)
-	await process_frame
-	_check(player.skills.bursts == 1 and Inventory.load_from(TEST_PATH).skills.bursts == 1,
-			"the page bursts full trees and saves it")
-	page.free()
-	Settings.animations = was
-	return true
-
-
-## A press held on a skill keeps learning it until the skill is full or the press is let go, and the
-## points are saved when it ends.
-func _test_hold() -> bool:
 	var inventory := Inventory.new()
 	inventory.level = 4
-	var page := SkillsPage.new(inventory, TEST_PATH, 1.0)
-	root.add_child(page)
-	page._on_skill_pressed("sharpened_edge")
-	_check(inventory.skills.rank_of("sharpened_edge") == 1 and page._held == "sharpened_edge",
-			"a press learns a point and holds")
-	page._on_hold_tick()
-	_check(inventory.skills.rank_of("sharpened_edge") == 2, "a tick learns another")
-	_check(is_equal_approx(page._hold_timer.wait_time, SkillsPage.HOLD_FIRST)
-			and page._hold_gap < SkillsPage.HOLD_FIRST, "slowly at first, and quicker each point")
-	var release := InputEventMouseButton.new()
-	release.button_index = MOUSE_BUTTON_LEFT
-	page._input(release)
-	_check(page._held.is_empty() and page._hold_timer.is_stopped(), "a release lets go")
-	_check(Inventory.load_from(TEST_PATH).skills.rank_of("sharpened_edge") == 2, "and saves the points")
-	page._on_skill_pressed("sharpened_edge")
-	page._on_hold_tick()
-	_check(inventory.skills.rank_of("sharpened_edge") == 3 and page._held.is_empty(),
-			"a refused point ends the hold on its own")
-	page.free()
+	var found := _stone("Strength Node", 1, 2)
+	var spare := _stone("Intelligence Node", 1)
+	inventory.add(found)
+	inventory.add(spare)
+	inventory.rank_up_skill("0")
+	var was: Item = inventory.skills.stones["0"]
+	_check(not inventory.place_stone(_stone("Dexterity Node", 1), "0"), "only a stone from the bag")
+	_check(inventory.place_stone(found, "0") and inventory.items.has(was) and not inventory.items.has(found),
+			"the bag's stone goes in and the old one comes out to the bag")
+	var next := inventory.transcended()
+	_check(next.skills.stones["0"].type == "Strength Node" and next.skills.stones["0"].connectors == 2,
+			"the new world keeps the tree")
+	_check(next.skills.stones["0"] != found, "as a copy")
+	_check(next.skills.ranks.is_empty() and not next.items.has(spare) and next.items.is_empty(),
+			"but not its points, nor a stone left in the bag")
 	return true
 
 
-## Every skill of `tree` learned, row by row, which is an order the rules always allow.
-func _fill(skills: Skills, tree: String, level: int) -> void:
-	var nodes := SkillTree.nodes_of(tree)
-	for row in SkillTree.ROWS:
-		for id: String in nodes:
-			if int(nodes[id]["row"]) == row:
-				while skills.rank_up(id, level):
-					pass
+## The tree and its points go into the save and come back; a save from before the tree starts from the
+## starter with every point free, and points that overspend or that nothing leads to are handed back.
+func _test_save() -> bool:
+	var inventory := Inventory.new()
+	inventory.level = 5
+	inventory.skills.stones["0"] = _stone("Strength Node", 2, 1, [["added_stone_ranks", 2]])
+	inventory.skills.stones["0.0"] = _stone("Intelligence Node", 2)
+	inventory.skills.ranks = {"0": 3, "0.0": 1}
+	_check(inventory.save(TEST_PATH), "saved")
+	var back := Inventory.load_from(TEST_PATH)
+	_check(back.skills.tree_dict() == inventory.skills.tree_dict(), "the tree comes back stone for stone")
+	_check(back.skills.ranks == {"0": 3, "0.0": 1}, "and its points (%s)" % back.skills.ranks)
+
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(TEST_PATH))
+	data.erase("skill_tree")
+	data.erase("skill_ranks")
+	data["skills"] = {"sharpened_edge": 3}
+	data["skill_bursts"] = 1
+	var file := FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	file.store_string(JSON.stringify(data))
+	file.close()
+	var old := Inventory.load_from(TEST_PATH)
+	_check(old.skills.tree_dict() == Skills.new().tree_dict() and old.skills.points(5) == 4,
+			"a save from before the tree is the starter, every point free")
+
+	var loose := Skills.from_dict(inventory.skills.tree_dict(), {"0.0": 1}, 5)
+	_check(loose.ranks.is_empty(), "a point nothing leads to hands every point back")
+	var greedy := Skills.from_dict(inventory.skills.tree_dict(), {"0": 3, "0.0": 1}, 3)
+	_check(greedy.ranks.is_empty(), "and so does more than the level earned")
+	var capped := Skills.from_dict(inventory.skills.tree_dict(), {"0": 9}, 20)
+	_check(capped.ranks == {"0": 3}, "a rank past a stone's most is cut to it")
+	var tree := inventory.skills.tree_dict()
+	tree.erase("0")
+	_check(not Skills.from_dict(tree, {}, 5).stones.has("0.0"), "a stone whose parent is gone goes with it")
+	return true
+
+
+## A capstone holding a point is its effect, once however many are placed; one with none is nothing.
+func _test_effects() -> bool:
+	var rng := RandomNumberGenerator.new()
+	var inventory := Inventory.new()
+	inventory.level = 10
+	inventory.skills.stones["0"] = _stone("Strength Node", 1, 2)
+	inventory.skills.stones["0.0"] = Item.rolled_capstone("titan", 2, rng)
+	inventory.skills.stones["0.1"] = Item.rolled_capstone("titan", 2, rng)
+	inventory.rank_up_skill("0")
+	_check(not "giant_slayer" in inventory.effects(), "a capstone with no point does nothing")
+	inventory.rank_up_skill("0.0")
+	inventory.rank_up_skill("0.1")
+	_check(inventory.effects().count("giant_slayer") == 1, "two give their effect once (%s)" % [inventory.effects()])
+	return true
+
+
+## The page draws the tree, a press on a stone puts a point in it, and the Reset takes them back.
+func _test_page() -> bool:
+	var inventory := Inventory.new()
+	inventory.level = 3
+	var page := SkillsPage.new(inventory, TEST_PATH, 1.0)
+	root.add_child(page)
+	await process_frame
+	var view: SkillTreeView = page._view
+	_check(view.squares.keys().size() == 2 and view.squares.has(""), "the root and its one stone")
+	_check(view._rings.has("") and view._rings.has("0") and view.squares["0"].modulate == SkillTreeView.UNLEARNED,
+			"with points to spend the root and the stone are ringed, the stone faint while it holds none")
+	_check(view._marks.get_child_count() == 0, "a stone of one rank and a root holding nothing carry no number")
+	view.slot_pressed.emit("0")
+	_check(inventory.skills.rank_of("0") == 1, "a press is a point")
+	_check(page._points.text == "1 skill point", page._points.text)
+	inventory.gold = 1.0e9
+	page.open()
+	page._reset.pressed.emit()
+	_check(inventory.skills.spent() == 0, "and the Reset takes it back")
+	_check(page._scroll.custom_minimum_size.x >= BagPage.WIDTH, "a small tree's page is the bag's width at the least")
+
+	# Zoom: whole window pixels a tree pixel, from one to `ZOOM_MOST` times the scale, by the buttons and
+	# the wheel, and kept when the page draws the tree again.
+	var pixels := func() -> int: return roundi(view._canvas.scale.x * 1.0)
+	_check(pixels.call() == 1, "the starter fits at the page's own size")
+	var buttons := page._panel.find_children("*", "Button", true, false)
+	var across := page._scroll.custom_minimum_size.x
+	(buttons.filter(func(b: Button) -> bool: return b.tooltip_text == "Zoom in")[0] as Button).pressed.emit()
+	_check(pixels.call() == 2 and view.zoom == 2, "+ zooms in a whole step")
+	_check(page._scroll.custom_minimum_size.x == across, "and the page keeps its width, the tree scrolling in it")
+	view.zoom_by(1)
+	_check(pixels.call() == SkillTreeView.ZOOM_MOST, "and no closer than the most")
+	page.open()
+	_check(pixels.call() == 2, "a redraw keeps it")
+	var wheel := InputEventMouseButton.new()
+	wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	wheel.pressed = true
+	view._gui_input(wheel)
+	view._gui_input(wheel)
+	_check(pixels.call() == 1, "the wheel zooms out, and no further than one")
+
+	# A press counts as it lets go, and a drag presses nothing.
+	var stone: Control = view.squares["0"]
+	var on := view._canvas.position + (stone.position + stone.get_combined_minimum_size() / 2.0) * view._canvas.scale
+	var pressed: Array = []
+	view.slot_pressed.connect(func(path: String) -> void: pressed.append(path))
+	var left := func(down: bool) -> InputEventMouseButton:
+		var event := InputEventMouseButton.new()
+		event.button_index = MOUSE_BUTTON_LEFT
+		event.pressed = down
+		event.position = on
+		return event
+	view._gui_input(left.call(true))
+	_check(pressed.is_empty(), "nothing as a press goes down")
+	view._gui_input(left.call(false))
+	_check(pressed == ["0"], "and the stone as it lets go (%s)" % [pressed])
+	var drag := InputEventMouseMotion.new()
+	drag.button_mask = MOUSE_BUTTON_MASK_LEFT
+	drag.relative = Vector2(BagPage.DRAG_THRESHOLD * 3.0, 0.0)
+	view._gui_input(left.call(true))
+	view._gui_input(drag)
+	view._gui_input(left.call(false))
+	_check(pressed == ["0"], "a drag presses nothing (%s)" % [pressed])
+	# The root takes a press on this page, and says what its points add up to under the cursor.
+	var middle: Control = view.squares[""]
+	var centre := view._canvas.position + (middle.position + middle.get_combined_minimum_size() / 2.0) * view._canvas.scale
+	for down: bool in [true, false]:
+		var event: InputEventMouseButton = left.call(down)
+		event.position = centre
+		view._gui_input(event)
+	_check(pressed == ["0", ""], "a press on the root is the root's (%s)" % [pressed])
+	_check("+%d Damage" % inventory.skills.rank_of("") in view._get_tooltip(centre),
+			view._get_tooltip(centre))
+	page.queue_free()
+	await process_frame
+	return true
+
+
+## Round the root: its first branch straight down, the other two up either side; no two squares touching
+## however the tree grows; and a tree too big for its room drawn a whole window pixel a pixel smaller.
+func _test_layout() -> bool:
+	var skills := Skills.new()
+	var view := SkillTreeView.new()
+	view.fill(skills)
+	var at := func(path: String) -> Vector2:
+		var square: Control = view.squares[path]
+		return square.position + square.get_combined_minimum_size() / 2.0
+	_check(at.call("0").y > at.call("").y and is_equal_approx(at.call("0").x, at.call("").x),
+			"the root's one branch goes straight down")
+	# Every slot under full stones of three connectors, three deep under the one branch.
+	for path: String in ["0", "0.0", "0.1", "0.2", "0.0.0", "0.0.1", "0.0.2", "0.1.0", "0.1.1", "0.1.2",
+			"0.2.0", "0.2.1", "0.2.2"]:
+		skills.stones[path] = _stone("Strength Node", 3, 3)
+	view.fill(skills)
+	var below := view.squares.keys().all(func(path: String) -> bool:
+		return path.is_empty() or at.call(path).y > at.call("").y)
+	_check(below, "a lone branch keeps its third of the circle and hangs below the root, crossing nothing")
+	# Each slot at its own size: the root's grey stone whole, the stones and the empty slots small.
+	var boxes: Array = view.squares.values().map(func(square: Control) -> Rect2:
+		return Rect2(square.position, square.get_combined_minimum_size()))
+	var crowded := 0
+	for i in boxes.size():
+		for j in range(i + 1, boxes.size()):
+			if (boxes[i] as Rect2).intersects(boxes[j]):
+				crowded += 1
+	_check(boxes.size() == 1 + 1 + 3 + 9 + 27 and crowded == 0,
+			"%d slots and none on another (%d)" % [boxes.size(), crowded])
+	_check((view.squares[""] as Control).get_combined_minimum_size().x
+			> (view.squares["0"] as Control).get_combined_minimum_size().x, "the root stands bigger than a stone")
+	_check(view.squares["0"] is ItemSlot and (view.squares["0"] as ItemSlot).item == skills.stones["0"],
+			"and a stone is still a square the card can write")
+	var whole := view.custom_minimum_size
+	var fitted := view.fit(whole / 2.0, 4.0)
+	_check(fitted.x <= whole.x / 2.0 + 1.0 and is_equal_approx(view._canvas.scale.x * 4.0, roundf(view._canvas.scale.x * 4.0)),
+			"too big, it shrinks a whole window pixel at a time (%s)" % view._canvas.scale)
+	view.free()
+	return true
 
 
 func _test_rarity() -> bool:
@@ -386,6 +469,61 @@ func _test_gold_and_orbs() -> bool:
 	_play_out(rich)
 	_check(plain.gold > 0 and rich.gold >= plain.gold * 2 - plain.enemies,
 			"doubled gold find doubles the purse (%d vs %d)" % [rich.gold, plain.gold])
+	return true
+
+
+## Skill nodes fall on a roll of their own (`SkillTree.roll`): a tier no deeper than the ground allows,
+## lines lifted by it, now and then a capstone -- a unique-rarity leaf carrying its row's lines -- and
+## none at all from a fight nobody told to drop them.
+func _test_stone_drops() -> bool:
+	# Each tier lasts a level longer than the one before: 1, 2-3, 4-6, 7-10, 11-15...
+	var reach := []
+	for level in range(1, 12):
+		reach.append(SkillTree.deepest(level))
+	_check(reach == [1, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5] and SkillTree.deepest(100000) == SkillTree.MOST_TIER,
+			"the ground sets the deepest tier (%s)" % [reach])
+	var enemy: String = Encounter.for_tile(Vector2i(4, 2), "grass").lineup[0]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var level := 10
+	var tiers := {}
+	var capstones := 0
+	var stones := 0
+	for i in SHAPE_ROLLS:
+		var stone := SkillTree.roll(enemy, rng, level, 1.0e6)
+		if stone == null:
+			continue
+		stones += 1
+		tiers[stone.stone_tier] = true
+		_check(stone.is_stone() and stone.stone_tier >= 1 and stone.stone_tier <= SkillTree.deepest(level),
+				"a stone's tier is one the ground allows (%d)" % stone.stone_tier)
+		_check(stone.connectors >= 0 and stone.connectors <= SkillTree.MOST_CONNECTORS, "and its connectors 0 to 3")
+		_check(stone.mod_level() == stone.level and stone.mods.all(func(mod: Dictionary) -> bool:
+				return stone.tier_of(mod) <= stone.level), "its lines' tiers are its level's, never more")
+		if stone.capstone.is_empty():
+			_check(stone.type in SkillTree.BASES and stone.rarity != ItemRarity.Rarity.UNIQUE,
+					"an ordinary stone is one of the three bases")
+			continue
+		capstones += 1
+		_check(stone.rarity == ItemRarity.Rarity.UNIQUE and stone.connectors == 0
+				and stone.mods.size() == (SkillTree.CAPSTONES[stone.capstone]["mods"] as Array).size(),
+				"a capstone is a unique-rarity leaf with its row's lines")
+	_check(tiers.size() == SkillTree.deepest(level), "every tier the ground allows turns up (%s)" % [tiers.keys()])
+	_check(stones > 0 and stones < SHAPE_ROLLS, "a stone is a chance, not a certainty (%d)" % stones)
+	_check(capstones > 0 and capstones * 4 < stones, "and a capstone a rare one (%d of %d)" % [capstones, stones])
+
+	# A fight drops stones only once told to.
+	for told: bool in [false, true]:
+		var fight := Encounter.for_tile(Vector2i(4, 2), "grass")
+		fight.arm({"damage": 1.0e9, "drop_rate": 1.0e6})
+		fight.stone_drops = told
+		fight.stone_rng.seed = WORLD_SEED
+		var found := [0]
+		fight.loot_dropped.connect(func(_index: int, item: Item) -> void:
+			if item.is_stone():
+				found[0] += 1)
+		_play_out(fight)
+		_check((found[0] > 0) == told, "a fight %s stones (%d)" % ["drops" if told else "never drops", found[0]])
 	return true
 
 

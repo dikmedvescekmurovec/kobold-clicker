@@ -55,6 +55,16 @@ var locked := false
 ## What the player called it as it was made an heirloom (`TranscendPage`), written in its name's place;
 ## "" for every other piece. Saved only where set.
 var nickname := ""
+## A skill stone's tier: the deepest it may sit in the skill tree (`SkillTree.can_place`) and which of
+## its base's lines it may roll (`SkillTree.lines_for`); its lines' bands are its level's, as gear's are
+## (the user's, 2026-10-09). At least 1 on every stone and 0 on everything else, so it is also the one
+## answer to "is this a stone" (`is_stone`).
+var stone_tier := 0
+## A skill stone's child slots, 0 to 3: a stone with none is a leaf.
+var connectors := 0
+## Which of `SkillTree.CAPSTONES` this stone is, or "" for every other piece. A capstone's lines are
+## its row's, and no orb touches it.
+var capstone := ""
 
 ## What one `plus` is worth to a piece's modifiers, in item levels. A percent band grows 12% a level,
 ## so three levels is about +40% a plus. A dial, unplayed.
@@ -62,15 +72,20 @@ const PLUS_LEVELS := 3
 
 
 ## A fresh drop: the piece, its rarity, its level, and however many modifiers that rarity carries.
-## Everything it is worth is settled here and never again.
+## Everything it is worth is settled here and never again. A skill stone takes its `tier` (1 at the
+## least) and its `connectors` first, since the tier says which lines it may roll.
 static func rolled(item_type: String, item_rarity: ItemRarity.Rarity, rng: RandomNumberGenerator,
-		item_level := 1) -> Item:
+		item_level := 1, tier := 1, child_slots := 0) -> Item:
 	var item := Item.new()
 	item.type = item_type
 	item.rarity = item_rarity
 	item.level = maxi(1, item_level)
+	if LootTable.slot_of(item_type) == SkillTree.SLOT:
+		item.stone_tier = maxi(1, tier)
+		item.connectors = clampi(child_slots, 0, SkillTree.MOST_CONNECTORS)
 	item.stats = scaled_stats(item_type, item.level)
-	item.mods = ModifierTable.roll(item_type, ItemRarity.mod_count(item_rarity, rng), rng, item.level)
+	item.mods = ModifierTable.roll(item_type, ItemRarity.mod_count(item_rarity, rng, item_type), rng,
+			item.mod_level(), item.stone_tier)
 	return item
 
 
@@ -86,6 +101,22 @@ static func rolled_unique(id: String, rng: RandomNumberGenerator, item_level := 
 	item.stats = scaled_stats(item.type, item.level)
 	for mod_id: String in row["mods"]:
 		item.mods.append(ModifierTable.rolled_mod(mod_id, rng, item.level))
+	return item
+
+
+## A capstone, fresh off a body: a leaf of its base at `tier`, and the lines its row names -- always
+## those, a unique's way -- each rolled in its level's band, as any line is.
+static func rolled_capstone(id: String, tier: int, rng: RandomNumberGenerator, item_level := 1) -> Item:
+	var row: Dictionary = SkillTree.CAPSTONES[id]
+	var item := Item.new()
+	item.capstone = id
+	item.type = row["base"]
+	item.rarity = ItemRarity.Rarity.UNIQUE
+	item.level = maxi(1, item_level)
+	item.stone_tier = maxi(1, tier)
+	item.stats = scaled_stats(item.type, item.level)
+	for mod_id: String in row["mods"]:
+		item.mods.append(ModifierTable.rolled_mod(mod_id, rng, item.mod_level()))
 	return item
 
 
@@ -157,10 +188,16 @@ func _set_tier(mod: Dictionary, from: int, tier: int) -> void:
 	mod["value"] = ModifierTable.rescaled(str(mod["id"]), int(mod["value"]), from, tier)
 
 
-## The level its modifiers' bands are read at: its own, and `PLUS_LEVELS` more for every plus.
-## Everything that rolls, rerolls or writes a band for a piece already made asks this, never `level`.
+## The level its modifiers' bands are read at: its own, and `PLUS_LEVELS` more for every plus. A skill
+## stone's tier lifts nothing (the user's, 2026-10-09: its lines follow its level exactly). Everything that
+## rolls, rerolls or writes a band for a piece already made asks this, never `level`.
 func mod_level() -> int:
 	return level + plus * PLUS_LEVELS
+
+
+## Whether this is a skill stone: carried and crafted like gear, never worn, placed in the skill tree.
+func is_stone() -> bool:
+	return stone_tier > 0
 
 
 ## How many Orbs of Ascension the next plus takes: one more for every plus already on the piece.
@@ -226,12 +263,16 @@ func display_name() -> String:
 
 ## What the piece is, whatever the player calls it: its base, or a unique's own name.
 func base_name() -> String:
+	if not capstone.is_empty():
+		return str(SkillTree.CAPSTONES[capstone]["name"])
 	return type if unique.is_empty() else str(UniqueTable.UNIQUES[unique]["name"])
 
 
 ## The sentence saying what a unique changes about a fight, with its numbers at the player's rank of
 ## it (`UniqueTable.shown_rank`), or "" for a piece that changes nothing.
 func effect_text() -> String:
+	if not capstone.is_empty():
+		return str(SkillTree.CAPSTONES[capstone]["effect_text"])
 	return "" if unique.is_empty() else UniqueTable.effect_text(unique, UniqueTable.shown_rank(unique))
 
 
@@ -329,7 +370,9 @@ func frame_rank() -> int:
 
 
 func icon() -> Texture2D:
-	return LootTable.icon(type) if unique.is_empty() else UniqueTable.icon(unique)
+	if not capstone.is_empty():
+		return SkillTree.icon(capstone)
+	return LootTable.icon(type, stone_tier) if unique.is_empty() else UniqueTable.icon(unique)
 
 
 ## "5 Damage", "5% Crit Chance" -- what the item is worth before anything on top.
@@ -422,6 +465,12 @@ func to_dict() -> Dictionary:
 		out["locked"] = true
 	if not nickname.is_empty():
 		out["nickname"] = nickname
+	if is_stone():
+		out["stone_tier"] = stone_tier
+	if connectors > 0:
+		out["connectors"] = connectors
+	if not capstone.is_empty():
+		out["capstone"] = capstone
 	return out
 
 
@@ -459,8 +508,20 @@ static func from_dict(data: Variant) -> Item:
 			return null
 		item_type = UniqueTable.UNIQUES[unique_id]["base"]
 		step = ItemRarity.Rarity.UNIQUE
+	# A capstone likewise, by its row.
+	var capstone_id := str(saved.get("capstone", ""))
+	if not capstone_id.is_empty():
+		if not SkillTree.CAPSTONES.has(capstone_id):
+			return null
+		item_type = SkillTree.CAPSTONES[capstone_id]["base"]
+		step = ItemRarity.Rarity.UNIQUE
 	var item := Item.new()
 	item.unique = unique_id
+	item.capstone = capstone_id
+	# Before the modifiers, which read their bands at `mod_level` and so at the tier.
+	if LootTable.slot_of(item_type) == SkillTree.SLOT:
+		item.stone_tier = maxi(1, int(saved.get("stone_tier", 1)))
+		item.connectors = clampi(int(saved.get("connectors", 0)), 0, SkillTree.MOST_CONNECTORS)
 	item.type = item_type
 	item.rarity = step
 	item.level = maxi(1, int(saved.get("level", 1)))

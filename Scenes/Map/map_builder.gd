@@ -97,6 +97,15 @@ var dark_reach := Callable()
 ## reach it was worked out at: the hover asks on every move of the mouse.
 var _chartable: Dictionary[Vector2i, bool] = {}
 var _chartable_reach := 0
+## Distant charting, the fourth wall's unlock (`WallUnlocks.DISTANT`, the user's 2026-10-09): any tile
+## the player has seen can be charted, however far, so long as seen land leads to it from the charted --
+## every tile of the way fought for in turn, as the Nightwalkers' are. Never into the unseen: that is
+## still theirs alone. The main scene says so as the world is built and as a wall falls.
+var distant := false:
+	set(value):
+		if value != distant:
+			distant = value
+			_chartable.clear()
 
 var _envs: Dictionary[Vector2i, String] = {}
 ## The land past the wall being fought for, generated on another thread (`_generate_ahead`): the
@@ -577,17 +586,47 @@ func _find_chartable(steps: int) -> void:
 				if is_land(next):
 					next_ring.append(next)
 		ring = next_ring
+	if not distant:
+		return
+	# Distant charting: every seen tile the charted land reaches across seen land, however far. One flood
+	# out from all of it at once, as above, with no count of steps.
+	var queue: Array[Vector2i] = []
+	for cell: Vector2i in _states:
+		if charted(cell):
+			queue.append(cell)
+	var flooded: Dictionary[Vector2i, bool] = {}
+	var i := 0
+	while i < queue.size():
+		var at := queue[i]
+		i += 1
+		for next in HexGrid.neighbors(at):
+			if flooded.has(next) or charted(next) or not seen(next) or not _tiles.has(next) or is_wasteland(next):
+				continue
+			flooded[next] = true
+			_chartable[next] = true
+			if is_land(next):
+				queue.append(next)
 
 
 ## The way to `cell` from the charted land: the charted tile it starts on, the uncharted tiles between,
 ## each beside the last, and `cell` last -- every one of them fought for in turn (the main scene's
 ## `_dark_way`). The fewest tiles, and of those the start the player is fewest steps from. Empty when
-## no charted tile is within `reach()`.
+## no charted tile is within `reach()` -- and, under distant charting, when no seen land leads to a seen
+## `cell` either (`distant`).
 func dark_path(cell: Vector2i) -> Array[Vector2i]:
+	var path := _way_in(cell, reach(), false)
+	if path.is_empty() and distant and seen(cell):
+		path = _way_in(cell, -1, true)
+	return path
+
+
+## `dark_path`'s search: out from `cell` a ring at a time to the charted land, across `steps` - 1 tiles
+## of any land, or with `seen_only` across seen land however many (`steps` -1).
+func _way_in(cell: Vector2i, steps: int, seen_only: bool) -> Array[Vector2i]:
 	var came_from: Dictionary[Vector2i, Vector2i] = {cell: cell}
 	var ring: Array[Vector2i] = [cell]
-	var steps := reach()
-	for step in steps:
+	var step := 0
+	while not ring.is_empty() and (steps < 0 or step < steps):
 		var starts: Array[Vector2i] = []
 		var next_ring: Array[Vector2i] = []
 		for at in ring:
@@ -597,7 +636,7 @@ func dark_path(cell: Vector2i) -> Array[Vector2i]:
 				if charted(next):
 					came_from[next] = at
 					starts.append(next)
-				elif step + 1 < steps and _tiles.has(next) and is_land(next):
+				elif _tiles.has(next) and is_land(next) and (seen(next) if seen_only else step + 1 < steps):
 					came_from[next] = at
 					next_ring.append(next)
 		if not starts.is_empty():
@@ -613,6 +652,7 @@ func dark_path(cell: Vector2i) -> Array[Vector2i]:
 				path.append(came_from[path[-1]])
 			return path
 		ring = next_ring
+		step += 1
 	return []
 
 
@@ -663,7 +703,8 @@ func can_enter_cave(cell: Vector2i) -> bool:
 ## Puts this world's cave down, once: on a cell from `CAVE_FIRST_RING` out to `reach` -- how far the
 ## land has ever reached, in any world (`Inventory.farthest_land`) -- never on a ring a wall stands or
 ## stood on, and never on a settlement. Nothing while `reach` is short of the first ring it may stand
-## on, which is every world before the first wall ever falls. Chosen off the map seed, so a world
+## on; the main scene asks only once Gollux is unlocked (`WallUnlocks.GOLLUX`, the third wall ever
+## broken, the user's 2026-10-09), so no world has one before that. Chosen off the map seed, so a world
 ## reloaded before its first save chooses the same. Returns whether it was put down now.
 ##
 ## The land out there need not be generated yet: the cell is chosen by where it lies and nothing else,

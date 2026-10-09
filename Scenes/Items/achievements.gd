@@ -99,9 +99,8 @@ const ACHIEVEMENTS := {
 			"tier": 3, "key": "domino_wall", "need": [1, 2, 3, 4]},
 	"scholars_circlet": {"name": "Bookworm", "text": "Reach {need} intelligence.",
 			"tier": 3, "key": "intelligence", "need": [100, 175, 300, 500]},
-	"sages_abacus": {"name": "Mastery", "text": ["Fill one skill tree.", "Fill two skill trees.",
-			"Fill all three skill trees.", "Fill all three skill trees twice."],
-			"tier": 3, "key": "mastery", "need": [1, 2, 3, 6]},
+	"sages_abacus": {"name": "Mastery", "text": "Grow your skill tree to {need} nodes.",
+			"tier": 3, "key": "mastery", "need": [6, 10, 15, 21]},
 	"gamblers_die": {"name": "Gambler", "text": "Use {need} Orbs of Chaos.",
 			"tier": 3, "key": "chaos", "need": [10, 100, 200, 500]},
 	"the_tithe": {"name": "Hoarder", "text": "Hold {need} gold at once.",
@@ -184,9 +183,6 @@ static func state(inventory: Inventory) -> Dictionary:
 	var values := [float(points["strength"]), float(points["dexterity"]), float(points["intelligence"])]
 	var most: float = values.max()
 	var least: float = values.min()
-	var full := 0
-	for tree: String in SkillTree.trees():
-		full += int(SkillTree.is_full(tree, inventory.skills.ranks))
 	# Dreaded: every kill on every ground, which is only ever counted where `record` counts.
 	var kills := 0
 	for key: String in inventory.tally:
@@ -207,12 +203,12 @@ static func state(inventory: Inventory) -> Dictionary:
 		"crit_chance": float(stats.get("crit_chance", 0.0)),
 		"armor": float(stats.get("armor", 0.0)),
 		"gold": inventory.gold,
-		# Mastery: the trees filled, a burst counting all three.
-		"mastery": float(full + SkillTree.trees().size() * inventory.skills.bursts),
+		# Mastery: the stones standing in the skill tree.
+		"mastery": float(inventory.skills.stones.size()),
 		"depth": float(inventory.dungeon_depth),
 		"kills": float(kills),
 		# Into the Dark: the furthest wall ever broken, in any world, off how far the land has reached.
-		"furthest_wall": floorf(float(inventory.farthest_land - MapBuilder.START_LAND_RADIUS) / MapBuilder.WALL_STEP),
+		"furthest_wall": float(inventory.walls_ever()),
 	}
 
 

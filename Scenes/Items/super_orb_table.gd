@@ -151,7 +151,7 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator, index := 
 		REPLACEMENT:
 			# Drawn from what the piece does not carry, the one being replaced included, so it is
 			# never itself again. A fresh dictionary: what was perfect about the old line goes with it.
-			var fresh := ModifierTable.add_one(item.type, item.mods, rng, item.mod_level())
+			var fresh := ModifierTable.add_one(item.type, item.mods, rng, item.mod_level(), item.stone_tier)
 			if fresh.is_empty():
 				return false
 			item.mods[index] = fresh
@@ -165,7 +165,7 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator, index := 
 			item.mods[index]["perfect"] = true
 			item.refresh_perfect()
 		EXPANSION:
-			var extra := ModifierTable.add_one(item.type, item.mods, rng, item.mod_level())
+			var extra := ModifierTable.add_one(item.type, item.mods, rng, item.mod_level(), item.stone_tier)
 			if extra.is_empty():
 				return false
 			item.extra_slot = true

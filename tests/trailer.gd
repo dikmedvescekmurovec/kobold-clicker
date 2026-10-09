@@ -290,56 +290,58 @@ func _sweep(reveal: Reveal, rate: float) -> void:
 	reveal.queue_free()
 
 
-## Beats 46-56: the skills page sliding in over the map, the trees filled point by point with the
-## pointer, the last point into a capstone with its card up, and the burst popping on the hit at 54.
+## Beats 46-56: the skills page sliding in over the map with a tree a few worlds grown, its stones lit
+## point by point with the pointer, and the last point into the capstone, its card up, on the hit at 54.
 func _grow() -> void:
-	var level := SkillTree.total_capacity() + 1
-	_main.inventory.level = level
-	var order: Array[String] = []
-	var full := Skills.new()
-	var learned := true
-	while learned:
-		learned = false
-		for tree: String in SkillTree.trees():
-			for id: String in SkillTree.nodes_of(tree):
-				if full.rank_up(id, level):
-					order.append(id)
-					learned = true
-	order.erase(CAPSTONE)
-	var presses: Array[String] = order.slice(order.size() - 5)
-	presses.append(CAPSTONE)
-	var skills := Skills.new()
-	_learn(skills, order.slice(0, order.size() - 5), level)
-	_main.inventory.skills = skills
-	# Filling the trees earns achievements, and their banner would stand over the burst.
+	var presses := _grown_tree()
+	var skills: Skills = _main.inventory.skills
+	# Growing the tree earns an achievement, and its banner would stand over the page.
 	_main._resetting = true
 	_main._on_skills_pressed()
 	_caption("GROW", 46.0, 48.0)
-	# The burst takes BURST_GLINT + BURST_SHAKE after the last press to pop: 4.8 beats.
-	var pop_at := 54.0 - _beats(SkillsPage.BURST_GLINT + SkillsPage.BURST_SHAKE)
+	var last := 54.0
 	var page: SkillsPage = _main.skills_page
 	_cursor.position = Vector2(root.get_visible_rect().size) * Vector2(0.55, 0.9)
 	_cursor.show()
 	for i in presses.size():
 		# The capstone is pointed at a beat and a half early and held under the pointer, so its card
-		# is up for a beat before the point goes in; the rest go in a point every 0.4 beat.
-		var at := pop_at if i == presses.size() - 1 else pop_at - 3.0 + i * 0.4
+		# is up for a beat before the point goes in; the rest go in a point every 0.6 beat.
+		var at := last if i == presses.size() - 1 else last - 5.5 + i * 0.6
 		var lead := 1.5 if i == presses.size() - 1 else 0.3
 		await _until(at - lead)
-		await _point_at(_slot(page, presses[i]), lead if i == presses.size() - 1 else 0.3)
+		await _point_at(_slot(page, presses[i]), lead)
 		await _until(at)
 		var had := skills.rank_of(presses[i])
 		await _click()
-		# A pushed click can land in a hold still being let go; the point goes in regardless.
+		# A pushed click can miss on a slow frame; the point goes in regardless.
 		if skills.rank_of(presses[i]) == had:
-			page._on_skill_pressed(presses[i])
-			page._stop_holding()
-	await _until(pop_at + 1.0)
+			page._on_stone_pressed(presses[i])
+	await _until(last + 1.0)
 	_cursor.hide()
 	await _until(56.0)
 	# Earned here, quietly, so the next check has nothing left to announce.
 	Achievements.earn(_main.inventory)
 	_main._resetting = false
+
+
+## The hero's tree a few worlds in, for the skills page to be filmed over: in the root's one slot a rare
+## strength stone of three connectors, under it a dexterity and an intelligence stone either side of
+## `CAPSTONE`, and an uncommon one under each of those. The hero is given a point for every press. Returns
+## the slots in the order they are to be pressed, the root among them and the capstone last.
+func _grown_tree() -> Array[String]:
+	var skills: Skills = _main.inventory.skills
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 46
+	skills.stones["0"] = Item.rolled("Strength Node", ItemRarity.Rarity.RARE, rng, 20, 1, 3)
+	for i: int in [0, 2]:
+		var base: String = "Dexterity Node" if i == 0 else "Intelligence Node"
+		skills.stones["0.%d" % i] = Item.rolled(base, ItemRarity.Rarity.RARE, rng, 20, 2, 1)
+		skills.stones["0.%d.0" % i] = Item.rolled(base, ItemRarity.Rarity.UNCOMMON, rng, 20, 3)
+	skills.stones["0.1"] = Item.rolled_capstone(CAPSTONE, 2, rng, 20)
+	skills.ranks = {}
+	var presses: Array[String] = ["", "0", "0.0", "0.2", "0.0.0", "0.2.0", "0.1"]
+	_main.inventory.level = maxi(_main.inventory.level, presses.size() + 1)
+	return presses
 
 
 ## Beats 56-70: the skills page giving way to the town's, the pointer to the fortuneteller, her way
@@ -729,11 +731,8 @@ func _send_motion() -> void:
 	root.push_input(event)
 
 
-func _slot(page: SkillsPage, id: String) -> Control:
-	for slot: Node in page._skill_views[SkillTree.tree_of(id)].get_children():
-		if slot is SkillSlot and slot.id == id:
-			return slot
-	return null
+func _slot(page: SkillsPage, path: String) -> Control:
+	return page._view.squares.get(path)
 
 
 # ---- helpers
@@ -777,19 +776,6 @@ func _open(fight: Encounter, cell: Vector2i, variant: String, layout: int, env :
 func _close_fight() -> void:
 	_combat.queue_free()
 	_combat = null
-
-
-## Ranks `ids` in turn, going round again until none will take a point: a list cut short can leave a
-## skill ahead of the points its row asks for.
-func _learn(skills: Skills, ids: Array, level: int) -> void:
-	var left := ids.duplicate()
-	var learned := true
-	while learned:
-		learned = false
-		for id: String in left.duplicate():
-			if skills.rank_up(id, level):
-				left.erase(id)
-				learned = true
 
 
 ## Clicks the fight every `every` frames until `beat`, the way a player's press does

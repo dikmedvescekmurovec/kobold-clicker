@@ -83,10 +83,12 @@ const ICON_FACES := {"BrownIconButton": "ui_btn_brown"}
 const ICON_FACE_MARGIN := 4
 
 ## Buttons that are a drawn icon rather than a stretched face -> the sprite name they are built from.
-## The pack draws its close button once, at one size, for every panel it has, so this one is placed
-## at its own size and never scaled or tiled -- which is also why it carries no content margin and
-## no pressed sink: the sprite already holds the pixel the face drops by.
+## The pack draws its close button once, at one size, for every panel it has, so this one is drawn
+## whole at `ICON_BUTTON_SCALE` times that size (the user's, 2026-10-09: the pack's 9 px X was too
+## small to hit) and never tiled -- which is also why it carries no content margin and no pressed
+## sink: the sprite already holds the pixel the face drops by.
 const ICON_BUTTONS := {"CloseButton": "ui_close"}
+const ICON_BUTTON_SCALE := 2
 
 ## A mark with no face at all, the way the pack lays its marks on the cream body: the button is
 ## empty styleboxes round the icon, hover lifts the mark by the step the pack lifts its arrows,
@@ -97,6 +99,8 @@ const BARE_BUTTON := "BareIconButton"
 const BARE_MARGIN := 2
 const BARE_HOVER := Color(1.25, 1.25, 1.25)
 const BARE_DISABLED := Color(1, 1, 1, 0.4)
+## How thick a scroll's bar is, in panel pixels, where one is shown at all.
+const SCROLL_BAR := 2.0
 
 ## One label colour for every button: the faces are the pack's green replayed in the icon buttons'
 ## brown (or red for danger), and the words are the same cream as the icon buttons' marks.
@@ -207,9 +211,9 @@ static func natural_height(panel: Control) -> float:
 	return tall
 
 
-## A finger is broader than the pack's 9 px X: on a touchscreen the X is pressed anywhere in
-## `TOUCH_TARGET` round it, and still drawn at its own size in the middle of that.
-const TOUCH_TARGET := Vector2(24, 16)
+## A finger is broader than the X: on a touchscreen the X is pressed anywhere in `TOUCH_TARGET`
+## round it, and still drawn at its own size in the middle of that.
+const TOUCH_TARGET := Vector2(28, 20)
 static func _widen_for_fingers(close: Button) -> void:
 	var pad := (TOUCH_TARGET - Vector2(icon_size("CloseButton"))) / 2.0
 	for state: String in STATES:
@@ -331,8 +335,12 @@ static func build() -> Theme:
 		built.set_type_variation(variation, "Button")
 		for state: String in STATES:
 			var sprite_name: String = "%s_%s" % [ICON_BUTTONS[variation], state]
-			built.set_stylebox(state, variation, _style(sheet, regions[sprite_name], margins[sprite_name]))
-		_icon_sizes[variation] = Vector2i(regions[ICON_BUTTONS[variation] + "_normal"].size)
+			var box := _style(sheet, regions[sprite_name], margins[sprite_name])
+			# Stretched, never tiled: one X blown up by a whole number, not `ICON_BUTTON_SCALE` squared of them.
+			box.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
+			box.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
+			built.set_stylebox(state, variation, box)
+		_icon_sizes[variation] = Vector2i(regions[ICON_BUTTONS[variation] + "_normal"].size) * ICON_BUTTON_SCALE
 
 	built.set_type_variation(BARE_BUTTON, "Button")
 	for state: String in STATES + ["focus"]:
@@ -345,6 +353,18 @@ static func build() -> Theme:
 		built.set_stylebox(state, BARE_BUTTON, box)
 	built.set_color("icon_hover_color", BARE_BUTTON, BARE_HOVER)
 	built.set_color("icon_disabled_color", BARE_BUTTON, BARE_DISABLED)
+
+	# The bar a scroll wears where it shows one at all (the skill tree, zoomed past its box): a thin ink
+	# grabber half seen, on no track, so it reads on the cream and says only that there is more.
+	for bar: String in ["HScrollBar", "VScrollBar"]:
+		var track := StyleBoxEmpty.new()
+		track.set_content_margin_all(SCROLL_BAR / 2.0)
+		built.set_stylebox("scroll", bar, track)
+		var grabber := StyleBoxFlat.new()
+		grabber.bg_color = Color(Palette.INK, 0.5)
+		grabber.set_content_margin_all(SCROLL_BAR / 2.0)
+		for state: String in ["grabber", "grabber_highlight", "grabber_pressed"]:
+			built.set_stylebox(state, bar, grabber)
 	return built
 
 

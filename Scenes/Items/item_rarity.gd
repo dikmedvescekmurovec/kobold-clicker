@@ -77,6 +77,14 @@ const MOD_COUNT := {
 	Rarity.ELITE: [5, 6],
 	Rarity.UNIQUE: [0, 0],
 }
+## A skill stone's: one line a step (the user's, 2026-10-08). `band` picks between the two.
+const STONE_MOD_COUNT := {
+	Rarity.COMMON: [0, 0],
+	Rarity.UNCOMMON: [1, 1],
+	Rarity.RARE: [2, 2],
+	Rarity.ELITE: [3, 3],
+	Rarity.UNIQUE: [0, 0],
+}
 
 ## The border around an item's square, which sits on a dark socket. Cold to hot -- grey, blue, lilac,
 ## brick, gold -- so every step is a hue of its own and the order needs no convention to be read.
@@ -182,9 +190,16 @@ static func roll_level(rarity: Rarity, ceiling: int, rng: RandomNumberGenerator)
 
 ## How many modifiers this step carries this time. The draw happens even where the band is a single
 ## number, so how much of the stream a drop eats does not depend on which rarity it rolled.
-static func mod_count(rarity: Rarity, rng: RandomNumberGenerator) -> int:
-	var band: Array = MOD_COUNT[rarity]
-	return rng.randi_range(int(band[0]), int(band[1]))
+static func mod_count(rarity: Rarity, rng: RandomNumberGenerator, item_type := "") -> int:
+	var count := band(rarity, item_type)
+	return rng.randi_range(int(count[0]), int(count[1]))
+
+
+## The fewest and most modifiers a piece of `item_type` carries at this step: a skill stone's table, or
+## everything else's.
+static func band(rarity: Rarity, item_type := "") -> Array:
+	var stone := LootTable.ITEMS.has(item_type) and LootTable.slot_of(item_type) == SkillTree.SLOT
+	return (STONE_MOD_COUNT if stone else MOD_COUNT)[rarity]
 
 
 ## "rare", for the save file. What the player reads is `label_of`.

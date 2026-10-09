@@ -107,7 +107,7 @@ const MODS := {
 	# The helmet's, the body's and the offhand's own lines (2026-10-07), each written as what it does
 	# (`text`, the number in `{n}`'s place) rather than as a stat's name. Shares take a point a level.
 	# The helmet: a later first blow, less off an elite's or a boss's, weaker tile modifiers, thinner
-	# bodies -- a "less" of damage taken or health, so a narrower band -- and a tree's skills a rank up.
+	# bodies -- a "less" of damage taken or health, so a narrower band -- and one base's stones a rank up.
 	"added_blow_delay": {"kind": Kind.FLAT, "stat": "blow_delay", "range": [10, 25], "weight": 6,
 		"text": "Enemies' first blows come {n}% later"},
 	"added_elite_ward": {"kind": Kind.FLAT, "stat": "elite_ward", "range": [10, 25], "weight": 6,
@@ -116,13 +116,21 @@ const MODS := {
 		"text": "Tile modifiers are {n}% weaker"},
 	"added_less_health": {"kind": Kind.FLAT, "stat": "less_health", "range": [5, 12], "weight": 6,
 		"text": "Enemies have {n}% less health"},
-	# One rank, at every level: three lines, so one tree is drawn a third as often as any other line.
-	"added_power_skills": {"kind": Kind.FLAT, "stat": "power_skills", "range": [1, 1], "weight": 2,
-		"text": "+{n} rank to every learned Power skill"},
-	"added_fortune_skills": {"kind": Kind.FLAT, "stat": "fortune_skills", "range": [1, 1], "weight": 2,
-		"text": "+{n} rank to every learned Fortune skill"},
-	"added_guard_skills": {"kind": Kind.FLAT, "stat": "guard_skills", "range": [1, 1], "weight": 2,
-		"text": "+{n} rank to every learned Guard skill"},
+	# One rank, at every level: three lines, so one base is drawn a third as often as any other line.
+	"added_strength_stones": {"kind": Kind.FLAT, "stat": "strength_stones", "range": [1, 1], "weight": 2,
+		"text": "+{n} rank to every Strength Node holding a point"},
+	"added_intelligence_stones": {"kind": Kind.FLAT, "stat": "intelligence_stones", "range": [1, 1],
+		"weight": 2, "text": "+{n} rank to every Intelligence Node holding a point"},
+	"added_dexterity_stones": {"kind": Kind.FLAT, "stat": "dexterity_stones", "range": [1, 1], "weight": 2,
+		"text": "+{n} rank to every Dexterity Node holding a point"},
+	# A skill stone's (the user's, 2026-10-08): the points it takes past the one every stone takes, each
+	# one more of everything the stone carries (`Skills`). One of the stone's handful of lines, so a rank
+	# is bought with a line it could have rolled instead. Tiered like any line, but a tier's band is
+	# written outright (`per_tier`, the user's, 2026-10-09): tier 1 is 1-2 and each tier lifts the top by
+	# two, the bottom staying at 1. Drawn at the stone's tier's weight (`SkillTree.RANKS_WEIGHTS`), never
+	# at this one.
+	"added_stone_ranks": {"kind": Kind.FLAT, "stat": "stone_ranks", "range": [1, 2], "weight": 4,
+		"per_tier": [0, 2], "text": "+{n} ranks", "text_one": "+{n} rank"},
 	# The body: a camp's pay, a count of bodies either side of nothing (`signed`: one more or fewer, and
 	# up to two from tier `wide_from`, never none), blows struck back and time recouped.
 	"added_camp_earnings": {"kind": Kind.FLAT, "stat": "camp_earnings", "range": [10, 25], "weight": 4,
@@ -175,6 +183,10 @@ const RENAMED := {
 	"walk_speed": ["added_move_speed", 1],
 	"item_rarity": ["added_item_rarity", 1],
 	"fight_clock": ["added_fight_clock", 10],
+	# A helmet's rank on one of the three skill trees, which became the three bases of stone (2026-10-08).
+	"added_power_skills": ["added_strength_stones", 1],
+	"added_fortune_skills": ["added_intelligence_stones", 1],
+	"added_guard_skills": ["added_dexterity_stones", 1],
 }
 
 ## No modifier can be drawn without a stat to hang on, so attack speed has no flat form: "+0.2
@@ -200,8 +212,12 @@ const UNIQUE_ONLY: Array[String] = []
 
 
 ## Every modifier this piece could carry: the ones that name a stat it has or may carry. This list is the whole rule -- an impossible modifier is never
-## in it, so nothing downstream has to know it was impossible.
-static func pool_for(item_type: String) -> PackedStringArray:
+## in it, so nothing downstream has to know it was impossible. A skill stone's is its base's own list,
+## as far as its `tier` unlocks (`SkillTree.lines_for`); every other piece passes no tier, or its
+## `stone_tier` of 0, and the tier is nothing to it.
+static func pool_for(item_type: String, tier := SkillTree.MOST_TIER) -> PackedStringArray:
+	if SkillTree.LINES.has(item_type):
+		return SkillTree.lines_for(item_type, tier)
 	var pool := PackedStringArray()
 	for id: String in MODS:
 		var mod: Dictionary = MODS[id]
@@ -227,13 +243,13 @@ static func pool_for(item_type: String) -> PackedStringArray:
 ## having both shapes. A pool too thin to fill the count gives everything it has, which cannot happen
 ## with today's tables and is held to that by a test.
 static func roll(item_type: String, count: int, rng: RandomNumberGenerator,
-		level := 1) -> Array[Dictionary]:
-	var pool := pool_for(item_type)
+		level := 1, tier := SkillTree.MOST_TIER) -> Array[Dictionary]:
+	var pool := pool_for(item_type, tier)
 	var rolled: Array[Dictionary] = []
 	for i in count:
 		if pool.is_empty():
 			break
-		var id := _weighted(pool, rng)
+		var id := _weighted(pool, rng, tier)
 		pool.remove_at(pool.find(id))
 		rolled.append(rolled_mod(id, rng, level))
 	return rolled
@@ -298,8 +314,9 @@ static func fit_under(id: String, value: int, level: int) -> int:
 ## every tier above is the old band at its level plus a share of how fast that band was growing.
 static func band_for(id: String, tier: int) -> Array:
 	tier = maxi(tier, 1)
-	# A signed band is its two numbers as written, either side of nothing: no carry, no floor at 1.
-	if MODS[id].get("signed", false):
+	# A signed band is its two numbers as written, either side of nothing: no carry, no floor at 1. A
+	# band written by the tier (`per_tier`) is that tier's as written too.
+	if MODS[id].get("signed", false) or MODS[id].has("per_tier"):
 		var ends := _level_band(id, tier)
 		return [int(ends[0]), int(ends[1])]
 	var here := _level_band(id, tier)
@@ -321,6 +338,10 @@ static func _level_band(id: String, level: int) -> Array[float]:
 	var high := float(band[1])
 	if entry.get("signed", false):
 		return [low, high]
+	# Stepped by the tier rather than grown by the level: `per_tier` more on each end a tier past the first.
+	if entry.has("per_tier"):
+		var step: Array = entry["per_tier"]
+		return [low + float(step[0]) * maxi(level - 1, 0), high + float(step[1]) * maxi(level - 1, 0)]
 	match entry["kind"]:
 		Kind.FLAT:
 			# An amount of a stat, so it grows the way that stat's own numbers do -- unless the entry
@@ -379,27 +400,36 @@ static func rescaled(id: String, value: int, from_level: int, to_level: int) -> 
 ## Augmentation is this -- which pieces it is offered on is `OrbTable.can_apply`'s business and not this
 ## function's.
 static func add_one(item_type: String, existing: Array[Dictionary], rng: RandomNumberGenerator,
-		level := 1) -> Dictionary:
+		level := 1, tier := SkillTree.MOST_TIER) -> Dictionary:
 	var held := {}
 	for mod in existing:
 		held[str(mod.get("id", ""))] = true
 	var pool := PackedStringArray()
-	for id in pool_for(item_type):
+	for id in pool_for(item_type, tier):
 		if not held.has(id):
 			pool.append(id)
 	if pool.is_empty():
 		return {}
-	return rolled_mod(_weighted(pool, rng), rng, level)
+	return rolled_mod(_weighted(pool, rng, tier), rng, level)
+
+
+## How often `id` is drawn against the rest of its pool: its `weight`, but for a skill stone's ranks
+## line, which its tier sets (`SkillTree.ranks_weight`).
+static func weight_of(id: String, tier := SkillTree.MOST_TIER) -> int:
+	if MODS[id]["stat"] == SkillTree.RANKS_STAT:
+		return SkillTree.ranks_weight(tier)
+	return int(MODS[id]["weight"])
 
 
 ## One draw from what is left, by weight -- the same walk LootTable and EnemyRoster use.
-static func _weighted(pool: PackedStringArray, rng: RandomNumberGenerator) -> String:
+static func _weighted(pool: PackedStringArray, rng: RandomNumberGenerator,
+		tier := SkillTree.MOST_TIER) -> String:
 	var total := 0
 	for id in pool:
-		total += int(MODS[id]["weight"])
+		total += weight_of(id, tier)
 	var pick := rng.randi_range(0, total - 1)
 	for id in pool:
-		pick -= int(MODS[id]["weight"])
+		pick -= weight_of(id, tier)
 		if pick < 0:
 			return id
 	return pool[0]

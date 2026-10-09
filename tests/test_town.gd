@@ -37,6 +37,7 @@ func _run() -> void:
 	await _test_entering()
 	await _test_fortune_page()
 	await _test_curses_the_world_feels()
+	await _test_tree_builder()
 	for scratch in [TEST_PATH, TEST_MAP_PATH]:
 		if FileAccess.file_exists(scratch):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch))
@@ -1866,8 +1867,11 @@ func _test_fortune_page() -> void:
 	main.town_page.bag_changed(null)
 	await process_frame
 
-	# A world with a cave in it, as the rest of her spells are asked in.
+	# A world with a cave in it, as the rest of her spells are asked in: put down behind the first wall by
+	# hand, Gollux's own unlock being the third wall's (`WallUnlocks.GOLLUX`).
 	main.inventory.farthest_land = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
+	main.view.place_cave(main.inventory.farthest_land)
+	main._save_map()
 	main._credit_walls()
 	main.town_page.redraw()
 	await process_frame
@@ -2193,6 +2197,58 @@ func _test_curses_the_world_feels() -> void:
 	main.queue_free()
 	await process_frame
 	_clear_scratch()
+
+
+## The black screen's skill tree (the user's, 2026-10-08): its card counts the bag's stones, the page shows
+## them alone, a stone opened lights the slots it fits, a press on one places it -- the stone it pushes
+## out back in the bag -- and an orb in the hand goes into a placed stone.
+func _test_tree_builder() -> void:
+	var inventory := Inventory.new()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	var found := Item.rolled("Strength Node", ItemRarity.Rarity.UNCOMMON, rng, 3, 2, 2)
+	inventory.add(found)
+	inventory.add(Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng))
+	inventory.add_orb("Orb of Exaltation")
+	var black := TranscendPage.new(inventory, 1.0)
+	root.add_child(black)
+	await process_frame
+	black._show_choice()
+	_check("1 to place" in _said(black), "the card counts the bag's one stone")
+	_deep_button(black, "Skill tree").pressed.emit()
+	await process_frame
+	var page: BagPage = black._stones_page
+	var squares := func() -> Array:
+		return page._sections.find_children("*", "", true, false).filter(
+				func(node: Node) -> bool: return node is ItemSlot and (node as ItemSlot).item != null)
+	_check(page.visible and squares.call().size() == 1 and squares.call()[0].item == found,
+			"the page shows the stone and not the sword")
+	var view := func() -> SkillTreeView:
+		return page._worn_body.find_children("*", "", true, false).filter(
+				func(node: Node) -> bool: return node is SkillTreeView)[0]
+	page._select_item(inventory.items.find(found))
+	var lit: Array = view.call().squares.keys().filter(func(path: String) -> bool:
+		return not path.is_empty() and view.call().squares[path].modulate == Color.WHITE)
+	lit.sort()
+	_check(lit == ["0"], "a tier-2 stone lights the root's one slot (%s)" % [lit])
+	_check(view.call()._rings == ["0"], "and rings it")
+	var old: Item = inventory.skills.stones["0"]
+	view.call().slot_pressed.emit("0")
+	_check(inventory.skills.stones["0"] == found and inventory.items.has(old) and not inventory.items.has(found),
+			"pressed, it stands there and the stone it took the place of is back in the bag")
+	_check(view.call().squares.has("0.0") and view.call().squares.has("0.1"), "with its two slots under it")
+	_check(view.call()._marks.get_child_count() == 0, "with nothing in the hand no slot says its tier")
+	page._select_item(inventory.items.find(old))
+	var numerals: Array = view.call()._marks.get_children().map(func(holder: Control) -> String:
+		return (holder.get_child(0) as Label).text)
+	_check(numerals == ["II", "II"] and view.call()._rings == ["0"],
+			"a tier-1 stone in the hand rings the one slot it fits, the two too deep for it saying II (%s)" % [numerals])
+	page._on_orb_pressed("Orb of Exaltation")
+	view.call().slot_pressed.emit("0")
+	_check(found.rarity == ItemRarity.Rarity.ELITE and inventory.orb_count("Orb of Exaltation") == 0,
+			"an orb in the hand goes into the stone placed there")
+	black.queue_free()
+	await process_frame
 
 
 func _clear_scratch() -> void:

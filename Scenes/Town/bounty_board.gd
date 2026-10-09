@@ -122,7 +122,7 @@ const CHOICE_XP := "xp"
 ## many times each modifier is rolled, the best kept -- a plain +1 at I, a lucky +1 at II, a lucky +2 at III. The
 ## high epic: the levels it stands above the ceiling and how many draws its material is the best of
 ## (lucky, twice lucky, three times lucky). The ascended unique's ascensions. The rare is lucky at every
-## tier. How many of each orb the bundle holds: only an orb this world has unlocked
+## tier. How many of each orb the bundle holds: only an orb the player has unlocked
 ## (`OrbTable.unlocked`) is ever offered, and with none of the three unlocked there is no bundle. And
 ## the piles, in bodies at the town's level: filler, so that not every clear is an epic reward -- one
 ## common posting's gold or experience at that tier (`REWARD_COMMON` / `XP_COMMON` times `TIER_PAY`).

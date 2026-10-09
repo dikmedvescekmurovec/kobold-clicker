@@ -54,8 +54,8 @@ static func current(orb: String) -> String:
 ## The weights are relative and flat -- no depth gating. Fighting deeper buys better *modifiers*,
 ## which is what a tile's level ceiling already decides; an orb rate that climbed with it would make
 ## the frontier the only place worth farming, and the frontier is the part the player cannot reach.
-## What does move is which orbs exist at all: the walls down in this world unlock them two at a time
-## (`unlocked`), anywhere on the land once they are.
+## What does move is which orbs exist at all: the deepest wall ever broken unlocks them two at a time
+## (`unlocked`, `WallUnlocks`), anywhere on the land and in every world after.
 const ORBS := {
 	"Orb of Transmutation": {
 		"icon": "Orb of Transmutation.png", "glow": Color("0069aa"), "weight": 24,
@@ -122,9 +122,9 @@ const RARITY_OF := {
 	"Orb of Exaltation": ItemRarity.Rarity.ELITE,
 }
 
-## How many orbs each wall down in this world unlocks, in tray order: Transmutation and Augmentation
-## from the start, Alchemy and Divinity behind the first wall, Chaos and Exaltation behind the second
-## (the user's ruling, 2026-10-03). Every way an orb is had -- a body, a shelf, a bounty, the Sack, a
+## How many orbs each wall unlocks, in tray order: Transmutation and Augmentation from the start,
+## Alchemy and Divinity behind the first wall, Chaos and Exaltation behind the second (the user's
+## ruling, 2026-10-03), for good once broken in any world (`Inventory.walls_ever`, the user's, 2026-10-09). Every way an orb is had -- a body, a shelf, a bounty, the Sack, a
 ## trade up -- draws only from `unlocked`.
 const ORBS_A_WALL := 2
 
@@ -142,7 +142,7 @@ static func orbs() -> Array:
 	return ORBS.keys()
 
 
-## The orbs that can be had with `walls` walls down in this world, in the tray's order.
+## The orbs that can be had with the `walls`th wall the deepest ever broken, in the tray's order.
 static func unlocked(walls: int) -> Array:
 	return orbs().slice(0, ORBS_A_WALL * (maxi(walls, 0) + 1))
 
@@ -180,6 +180,9 @@ static func can_apply(orb: String, item: Item) -> bool:
 	# One answer for all six: a piece the hammer ruined is out of the game as far as crafting goes.
 	if item.broken:
 		return false
+	# A skill stone's capstone is what it dropped as, and stays it (the user's, 2026-10-08).
+	if not item.capstone.is_empty():
+		return false
 	# A unique's modifiers are its row's and stay: only their numbers may move, which is Divine and Chaos.
 	if item.rarity == ItemRarity.Rarity.UNIQUE and orb not in ["Orb of Divinity", "Orb of Chaos"]:
 		return false
@@ -206,6 +209,8 @@ static func why_not(orb: String, item: Item) -> String:
 	var piece := "%s %s" % [item.rarity_label().to_lower(), item.display_name()]
 	if item.broken:
 		return "A broken item cannot be changed"
+	if not item.capstone.is_empty():
+		return "A capstone cannot be changed"
 	if item.rarity == ItemRarity.Rarity.UNIQUE:
 		return "Only an Orb of Divinity or Chaos can change a unique"
 	match orb:
@@ -230,7 +235,7 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator) -> bool:
 		"Orb of Transmutation", "Orb of Alchemy", "Orb of Exaltation":
 			_reroll_at(item, RARITY_OF[orb], rng)
 		"Orb of Augmentation":
-			var extra := ModifierTable.add_one(item.type, item.mods, rng, item.mod_level())
+			var extra := ModifierTable.add_one(item.type, item.mods, rng, item.mod_level(), item.stone_tier)
 			if extra.is_empty():
 				return false
 			item.mods.append(extra)
@@ -272,7 +277,7 @@ static func reroll_tiers(item: Item, rng: RandomNumberGenerator) -> void:
 
 ## Sets the piece to a rarity and gives it that rarity's own fresh handful of modifiers. Three of the
 ## six end here, because "what rarity is it now" and "how many modifiers does it carry" are one
-## question in this game -- ItemRarity.MOD_COUNT is the join, and nothing else may answer it.
+## question in this game -- `ItemRarity.band` is the join, and nothing else may answer it.
 ##
 ## A locked modifier is one of that handful rather than an extra on top: it is put back first and the
 ## draw fills what is left around it, so the rarity's ceiling holds exactly as it does on a piece
@@ -280,15 +285,15 @@ static func reroll_tiers(item: Item, rng: RandomNumberGenerator) -> void:
 ## what keeps the lock from being rolled a second time.
 static func _reroll_at(item: Item, rarity: ItemRarity.Rarity, rng: RandomNumberGenerator) -> void:
 	item.rarity = rarity
-	var count := ItemRarity.mod_count(rarity, rng) + int(item.extra_slot)
+	var count := ItemRarity.mod_count(rarity, rng, item.type) + int(item.extra_slot)
 	# The smith's lock and an Orb of Binding's: two at most, and both are of the handful.
 	var mods: Array[Dictionary] = []
 	mods.assign(item.mods.filter(Item.held_fast))
 	if mods.is_empty():
-		item.mods = ModifierTable.roll(item.type, count, rng, item.mod_level())
+		item.mods = ModifierTable.roll(item.type, count, rng, item.mod_level(), item.stone_tier)
 		return
 	for i in count - mods.size():
-		var extra := ModifierTable.add_one(item.type, mods, rng, item.mod_level())
+		var extra := ModifierTable.add_one(item.type, mods, rng, item.mod_level(), item.stone_tier)
 		if extra.is_empty():
 			break
 		mods.append(extra)
@@ -299,7 +304,7 @@ static func _reroll_at(item: Item, rarity: ItemRarity.Rarity, rng: RandomNumberG
 ## with a modifier a contradiction rather than a rare event. The card writes what is left of it as an
 ## empty row (`ItemDetails.fill`).
 static func room(item: Item) -> int:
-	return int(ItemRarity.MOD_COUNT[item.rarity][1]) + int(item.extra_slot)
+	return int(ItemRarity.band(item.rarity, item.type)[1]) + int(item.extra_slot)
 
 
 ## How often this enemy leaves an orb: its tier times its body, and never more than certain. Rolled

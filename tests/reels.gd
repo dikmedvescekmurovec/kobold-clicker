@@ -223,7 +223,8 @@ func _reel_explore() -> void:
 ## Craft: a plain sword in the bag taken up a rarity at a time with orbs, the card beside it after each.
 func _reel_craft() -> void:
 	var inventory: Inventory = _main.inventory
-	inventory.walls_credited = OrbTable.EVERY_WALL
+	# Every orb unlocked: the walls they come with broken in some world (`OrbTable.unlocked`).
+	inventory.farthest_land = MapBuilder.START_LAND_RADIUS + OrbTable.EVERY_WALL * MapBuilder.WALL_STEP
 	for pair: Array in [["Orb of Transmutation", 6], ["Orb of Augmentation", 4], ["Orb of Alchemy", 3],
 			["Orb of Chaos", 9], ["Orb of Exaltation", 1]]:
 		inventory.add_orb(pair[0], pair[1])
@@ -263,26 +264,10 @@ func _reel_craft() -> void:
 	await _until(_hit_at + 2.4)
 
 
-## Grow: the skill trees filled to the last point, the capstone under the pointer, and the burst.
+## Grow: the skill tree lit stone by stone, and the last point into the capstone under the pointer.
 func _reel_skills() -> void:
-	var level := SkillTree.total_capacity() + 1
-	_main.inventory.level = level
-	var order: Array[String] = []
-	var full := Skills.new()
-	var learned := true
-	while learned:
-		learned = false
-		for tree: String in SkillTree.trees():
-			for id: String in SkillTree.nodes_of(tree):
-				if full.rank_up(id, level):
-					order.append(id)
-					learned = true
-	order.erase(CAPSTONE)
-	var presses: Array[String] = order.slice(order.size() - 5)
-	presses.append(CAPSTONE)
-	var skills := Skills.new()
-	_learn(skills, order.slice(0, order.size() - 5), level)
-	_main.inventory.skills = skills
+	var presses := _grown_tree()
+	var skills: Skills = _main.inventory.skills
 	_main._resetting = true
 	await _light_start()
 	_main._on_skills_pressed()
@@ -293,8 +278,7 @@ func _reel_skills() -> void:
 	_cursor.position = Vector2(root.get_visible_rect().size) * Vector2(0.55, 0.9)
 	_cursor.show()
 	_say("GROW", 0.1, 1.4, Palette.BONE, 0.2)
-	# The burst pops BURST_GLINT + BURST_SHAKE after the last point goes in.
-	const LAST := 4.2
+	const LAST := 5.0
 	for i in presses.size():
 		var at := LAST if i == presses.size() - 1 else 0.9 + i * 0.5
 		var lead := 1.0 if i == presses.size() - 1 else 0.3
@@ -304,17 +288,12 @@ func _reel_skills() -> void:
 		var had := skills.rank_of(presses[i])
 		await _click()
 		if skills.rank_of(presses[i]) == had:
-			page._on_skill_pressed(presses[i])
-			page._stop_holding()
-	_say("MAX IT OUT", LAST, LAST + 3.2, Palette.GOLD, 0.2)
+			page._on_stone_pressed(presses[i])
+	_hit()
+	_say("LIGHT IT UP", LAST, LAST + 2.6, Palette.GOLD, 0.2)
 	await _until(LAST + 0.8)
 	_cursor.hide()
-	var pop := LAST + SkillsPage.BURST_GLINT + SkillsPage.BURST_SHAKE
-	await _until(pop)
-	_hit()
-	_say("THEN", pop, pop + 2.0, Palette.BONE, 0.12)
-	_say("BREAK IT", pop + 0.25, pop + 2.0, Palette.GOLD, 0.2)
-	await _until(pop + 2.2)
+	await _until(LAST + 2.8)
 	Achievements.earn(_main.inventory)
 	_main._resetting = false
 
@@ -395,6 +374,8 @@ func _reel_descent() -> void:
 	var map: HexMap = _main.map
 	var inventory: Inventory = _main.inventory
 	inventory.farthest_land = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
+	# Behind the first wall, by hand: Gollux's own unlock is the third wall's (`WallUnlocks.GOLLUX`).
+	view.place_cave(inventory.farthest_land)
 	_main._credit_walls()
 	var cave: Vector2i = view.cave
 	view.land_radius = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP

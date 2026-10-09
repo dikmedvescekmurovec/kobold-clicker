@@ -38,6 +38,8 @@ const FADE := 1.5
 const CARD_WIDTH := 164.0
 ## A card's button: its picture over its words, and both cards one size whatever they wear.
 const CARD_HEIGHT := 76.0
+## How tall a card's picture stands, padded to it (`_padded`).
+const CARD_MARK := 32.0
 const CARD_GAP := 12
 
 var _inventory: Inventory
@@ -55,6 +57,8 @@ var _warned := false
 var _choice: VBoxContainer
 var _create_page: BagPage
 var _upgrade_page: BagPage
+## The skill tree's: the bag's stones placed and crafted with the orbs left over (`BagPage`'s stones mode).
+var _stones_page: BagPage
 var _back: Button
 ## Under the arrow on the make-an-heirloom screen, while heirlooms are held: the crown turns the page to
 ## the heirlooms, to weigh the piece against them, and the chest turns it back to the items.
@@ -91,8 +95,9 @@ func _ready() -> void:
 	_inventory.pending_curses = []
 	_create_page = BagPage.new(_inventory, "", _ui_scale, false, true)
 	_upgrade_page = BagPage.new(_inventory, "", _ui_scale, true, true)
+	_stones_page = BagPage.new(_inventory, "", _ui_scale, false, true, true)
 	_create_page.heirloom_made.connect(_name_heirloom)
-	for page: BagPage in [_create_page, _upgrade_page]:
+	for page: BagPage in _pages():
 		page.hide()
 		page.closed.connect(_show_choice)
 		page.laid_out.connect(_place_back.bind(page))
@@ -116,10 +121,15 @@ func _ready() -> void:
 	fade.tween_callback(_show_choice)
 
 
-## The two cards and the way on, built again each time: what they say moves with what was done.
+## The three pages a card opens.
+func _pages() -> Array[BagPage]:
+	return [_create_page, _upgrade_page, _stones_page]
+
+
+## The cards and the way on, built again each time: what they say moves with what was done.
 func _show_choice() -> void:
-	_create_page.hide()
-	_upgrade_page.hide()
+	for page: BagPage in _pages():
+		page.hide()
 	_back.hide()
 	_swapping = false
 	_swap.hide()
@@ -131,10 +141,11 @@ func _show_choice() -> void:
 	_choice = UITheme.vbox(CARD_GAP)
 	_choice.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_choice)
-	# Side by side, or one over another on a window held upright, where three do not fit across.
-	var cards := BoxContainer.new()
-	cards.vertical = UITheme.narrow(get_viewport_rect().size, _ui_scale)
-	cards.add_theme_constant_override("separation", CARD_GAP)
+	# Two by two, or one over another on a window held upright, where two do not fit across.
+	var cards := GridContainer.new()
+	cards.columns = 1 if UITheme.narrow(get_viewport_rect().size, _ui_scale) else 2
+	cards.add_theme_constant_override("h_separation", CARD_GAP)
+	cards.add_theme_constant_override("v_separation", CARD_GAP)
 	_choice.add_child(cards)
 
 	var held := _inventory.stash().total() + _inventory.stash().equipment.worn.size()
@@ -154,6 +165,10 @@ func _show_choice() -> void:
 			"No skulls" if _budget == 0 else "0 of %d skulls" % _budget if taken.is_empty()
 			else "%s: %d of %d skulls" % [", ".join(taken), spent, _budget],
 			_show_curses))
+	# Always open: with no stone to place, the orbs left over still go into the placed ones.
+	var stones := _inventory.items.filter(func(item: Item) -> bool: return item.is_stone()).size()
+	cards.add_child(_card(SkillsPage.TITLE, SkillTree.icon("root"), true,
+			"None to place" if stones == 0 else "%d to place" % stones, _open.bind(_stones_page)))
 
 	var on := UITheme.button("Leave without an heirloom" if _warned and not _made
 			else "Enter the new world", "LightButton", "")
@@ -181,7 +196,7 @@ func _name_heirloom(item: Item) -> void:
 func _card(title: String, mark: Texture2D, live: bool, text: String, pressed: Callable) -> Control:
 	var card := UITheme.vbox(4, CARD_WIDTH)
 	var button := UITheme.button(title, "LightButton", "")
-	button.icon = mark
+	button.icon = _padded(mark)
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
 	button.custom_minimum_size = Vector2(CARD_WIDTH, CARD_HEIGHT)
@@ -195,6 +210,17 @@ func _card(title: String, mark: Texture2D, live: bool, text: String, pressed: Ca
 	words.custom_minimum_size.x = CARD_WIDTH
 	card.add_child(words)
 	return card
+
+
+## `mark` with clear rows above and below it to `CARD_MARK` tall, so every card's words stand at one
+## height whatever its picture: the crown and the skull are 16 px, the orb and the root 32.
+static func _padded(mark: Texture2D) -> Texture2D:
+	var padded := AtlasTexture.new()
+	padded.atlas = mark
+	padded.region = Rect2(Vector2.ZERO, mark.get_size())
+	var spare := maxf(0.0, CARD_MARK - mark.get_height())
+	padded.margin = Rect2(0.0, floorf(spare / 2.0), 0.0, spare)
+	return padded
 
 
 ## The curses for the world to come, as the character page's stats are written: a cream panel, and in
@@ -331,8 +357,8 @@ func _on_curse_toggled(on: bool, id: String) -> void:
 func _open(page: BagPage, swap := false) -> void:
 	_warned = false
 	_choice.hide()
-	_create_page.hide()
-	_upgrade_page.hide()
+	for each: BagPage in _pages():
+		each.hide()
 	_swapping = swap and _inventory.stash().total() + _inventory.stash().equipment.worn.size() > 0
 	_swap.icon = load(CROWN_ICON if page == _create_page else CHEST_ICON)
 	_swap.tooltip_text = "Your heirlooms" if page == _create_page else "Items"
@@ -375,7 +401,7 @@ func _layout() -> void:
 				(_back.get_combined_minimum_size().x + BagPage.WORN_GAP) * _ui_scale, 0.0)
 		# A face as wide as the window leaves the arrow nowhere to stand; its X is the same way back.
 		_back.visible = _back.position.x >= 0.0
-	for page: BagPage in [_create_page, _upgrade_page]:
+	for page: BagPage in _pages():
 		if page.visible:
 			page.layout()
 

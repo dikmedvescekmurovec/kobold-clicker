@@ -97,10 +97,11 @@ static func odds(item: Item) -> Array[Dictionary]:
 	if not why_not_appraise(item).is_empty():
 		return rows
 	var total := 0.0
-	for id in ModifierTable.pool_for(item.type):
-		total += float(ModifierTable.MODS[id]["weight"])
-	for id in ModifierTable.pool_for(item.type):
-		var weight := int(ModifierTable.MODS[id]["weight"])
+	var pool := ModifierTable.pool_for(item.type, item.stone_tier)
+	for id in pool:
+		total += ModifierTable.weight_of(id, item.stone_tier)
+	for id in pool:
+		var weight := ModifierTable.weight_of(id, item.stone_tier)
 		rows.append({"id": id, "line": ModifierTable.band_line(id, item.mod_level()), "weight": weight,
 				"share": 100.0 * weight / total})
 	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["weight"] > b["weight"])

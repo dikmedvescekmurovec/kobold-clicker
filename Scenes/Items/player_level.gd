@@ -12,11 +12,10 @@ extends RefCounted
 const BASE_KILLS := 85
 ## What each level multiplies that cost by. Higher thins the levels out as the map grows.
 const LEVEL_XP_GROWTH := 1.03
-## Past `LATE_LEVEL` -- the level the three skill trees are first full at -- each level multiplies the
-## cost by `LATE_XP_GROWTH` instead. The early game is untouched, and the levels the trees' bursts are
-## paid in stay within reach of farming: a kill's worth grows only with the land, so a 3% level would
-## put a second fill of the trees some 100,000 kills away behind the third wall, and 2% about 40,000
-## (the user's, 2026-09-29).
+## Past `LATE_LEVEL` each level multiplies the cost by `LATE_XP_GROWTH` instead. The early game is
+## untouched, and the late levels stay within reach of farming: a kill's worth grows only with the land,
+## so a 3% level would put twice the late levels some 100,000 kills away behind the third wall, and 2%
+## about 40,000 (the user's, 2026-09-29, when 70 was where the old fixed skill trees were first full).
 const LATE_LEVEL := 70
 const LATE_XP_GROWTH := 1.02
 

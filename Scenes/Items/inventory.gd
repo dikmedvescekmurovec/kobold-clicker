@@ -72,7 +72,12 @@ const SAVE_PATH := "user://inventory.json"
 ## 31 adds `name`, what the player calls their character; a version 30 save's is unnamed (`DEFAULT_NAME`).
 ## 32 adds `deepest_level`, a leaderboard's score; a version 31 save has charted none deeper than its
 ## own world (the main scene reads that off the map at start-up).
-const VERSION := 32
+## 33 replaces the three skill trees with the player's own tree of skill stones (`skill_tree`, path ->
+## stone, and `skill_ranks`): a version 32 save's `skills` and `skill_bursts` are not read, and it
+## starts from the starter tree with every point its level earned free.
+## 34 adds `runes` (name -> count) and `runed` (a tile's rune work by world spot, `RuneTable`); a version
+## 33 save holds none of either.
+const VERSION := 34
 
 ## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
 ## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
@@ -97,9 +102,9 @@ const ATTRIBUTE_GIVES := {"strength": "damage", "dexterity": "attack_speed", "in
 ## An amulet's line of all three (`ModifierTable`'s `added_all_attributes`): added to each where the
 ## attributes are summed (`_attribute_sums`), counted as an attribute line, and read nowhere else.
 const ALL_ATTRIBUTES := "all_attributes"
-## What a tree's id is followed by in the stat a helmet's line rolls for it: `power_skills`, ranks more on
-## every learned Power skill (`stats`).
-const SKILL_RANKS := "_skills"
+## What an attribute is followed by in the stat a helmet's line rolls for it: `strength_stones`, ranks
+## more on every strength stone holding a point (`_tree`).
+const SKILL_RANKS := "_stones"
 
 ## Rings a charted tile shows round it with no torch held; the Thick Fog takes all of it (`sight`).
 const BASE_SIGHT := 2
@@ -192,6 +197,11 @@ var deepest_level := 1
 ## Like the purse and unlike the bag: outside CAPACITY, never filtered by an autodiscard rule and
 ## never sorted into a level section. A count weighs nothing, so it never overencumbers anybody.
 var orbs := {}
+## The runes held, name -> count, the way the orbs are (`RuneTable`): found only in Gollux's cave.
+var runes := {}
+## What runes have done to the tiles of this world, by world spot as "x,y" (the towns' key): each a
+## `RuneTable` state. A transcension leaves it with the world, as it does the orbs and the runes.
+var runed := {}
 
 ## The player's level and the experience held towards the next one -- `PlayerLevel` says what a level
 ## costs. Kept here beside the purse for the purse's reason: it is carried, not explored. Every level
@@ -199,7 +209,7 @@ var orbs := {}
 var level := 1
 var xp := 0
 
-## What the player has learned with the points their level earned. Saved here beside the level for
+## The player's skill tree, and the points their level earned in it. Saved here beside the level for
 ## the level's reason, and because the points are counted off it.
 var skills := Skills.new()
 
@@ -371,6 +381,27 @@ func autodiscards(level: int) -> bool:
 	return autodiscard.has(level)
 
 
+## Whether a find is left behind as it drops (`CombatScene._on_loot_dropped`): its level's rule
+## (`autodiscards`), or once the sixth wall has opened it (`WallUnlocks.FILTER`) the loot filter's
+## (`Settings.filter_*`) -- never a unique nor a capstone, which the rarity says alike. A skill stone
+## answers to the rarity alone: it has no material, and its level is not what it is worth.
+func leaves_behind(item: Item) -> bool:
+	if item.rarity == ItemRarity.Rarity.UNIQUE:
+		return false
+	if autodiscards(item.level):
+		return true
+	if not WallUnlocks.has(walls_ever(), WallUnlocks.FILTER):
+		return false
+	if item.rarity < Settings.filter_rarity:
+		return true
+	if item.is_stone():
+		return false
+	if item.level < Settings.filter_level or (Settings.filter_ascended and item.plus < 1):
+		return true
+	var materials: Array = LootTable.KINDS[LootTable.kind_of(item.type)]["tiers"]
+	return materials.size() > 1 and int(LootTable.ITEMS[item.type]["material"]) < Settings.filter_material
+
+
 ## Turns the rule for a level on or off. It touches nothing already held -- a rule is about what
 ## arrives, and `discard_level` is the button beside it for what is there.
 func set_autodiscard(level: int, on: bool) -> void:
@@ -387,8 +418,9 @@ func set_autodiscard(level: int, on: bool) -> void:
 func discard_level(level: int, uniques := true, slot := "") -> Array[Item]:
 	var gone: Array[Item] = []
 	for i in range(items.size() - 1, -1, -1):
-		if items[i].level == level and not items[i].locked and (uniques or items[i].unique.is_empty()) \
-				and (slot.is_empty() or LootTable.slot_of(items[i].type) == slot):
+		# A capstone is spared with the uniques: the rarity says it, where `unique` would not.
+		if items[i].level == level and not items[i].locked \
+				and (uniques or items[i].rarity != ItemRarity.Rarity.UNIQUE) and (slot.is_empty() or LootTable.slot_of(items[i].type) == slot):
 			gone.append(items[i])
 			items.remove_at(i)
 	gone.reverse()
@@ -527,6 +559,51 @@ func add_orb(orb: String, count := 1) -> void:
 	orbs[orb] = orb_count(orb) + count
 
 
+## One rune found, the way `add_orb` takes an orb.
+func add_rune(rune: String, count := 1) -> void:
+	if RuneTable.has(rune) and count > 0:
+		runes[rune] = rune_count(rune) + count
+
+
+func rune_count(rune: String) -> int:
+	return int(runes.get(rune, 0))
+
+
+## The rune work on the tile at world `spot`, the very Dictionary kept here so a change to it is the
+## save's: a fresh one, kept, for a tile with none yet.
+func rune_state(spot: Vector2i) -> Dictionary:
+	var key := _spot_key(spot)
+	if not runed.has(key):
+		runed[key] = RuneTable.fresh()
+	return runed[key]
+
+
+## The rune work on the tile at world `spot` to read: a fresh one -- not kept -- for a tile with none.
+func rune_work(spot: Vector2i) -> Dictionary:
+	return runed.get(_spot_key(spot), RuneTable.fresh())
+
+
+## Whether runes have been spent on the tile at world `spot` in this world.
+func has_runes(spot: Vector2i) -> bool:
+	return runed.has(_spot_key(spot))
+
+
+static func _spot_key(spot: Vector2i) -> String:
+	return "%d,%d" % [spot.x, spot.y]
+
+
+## Spends one `rune` on the tile at world `spot`, which carries `own` modifiers of its own. Whether it did
+## anything; nothing is spent when it would not.
+func use_rune(rune: String, spot: Vector2i, own: Array, rng := RandomNumberGenerator.new()) -> bool:
+	# Asked of the work as read first, so a rune refused leaves no empty record on the tile.
+	if rune_count(rune) <= 0 or not RuneTable.can_apply(rune, own, rune_work(spot)) 			or not RuneTable.apply(rune, own, rune_state(spot), rng):
+		return false
+	runes[rune] = rune_count(rune) - 1
+	if rune_count(rune) <= 0:
+		runes.erase(rune)
+	return true
+
+
 ## How many of one orb are held. Zero for an orb never found, which is the tray's third state and
 ## has to be an ordinary answer rather than a missing key every caller checks for.
 func orb_count(orb: String) -> int:
@@ -578,16 +655,10 @@ func add_xp(amount: int) -> int:
 func stats() -> Dictionary:
 	var worn := effects()
 	var points := attributes()
-	# The Sage's Abacus at IV: every skill learned counts one rank higher.
-	var extra := 1 if "abacus" in worn and _peak("sages_abacus") else 0
 	var dolls := _counted_dolls()
-	# And a helmet's line, every skill learned of one tree (`<tree>_skills`, both dolls).
-	var gear := dolls[0].totals({}, {}, dolls[1])
-	var trees := {}
-	for tree: String in SkillTree.trees():
-		trees[tree] = roundi(float(gear.get(tree + SKILL_RANKS, 0.0)))
-	var flat := _skills_worth(skills.flat(extra, trees))
-	var percent := _skills_worth(skills.percent(extra, trees))
+	var tree := _tree()
+	var flat := _skills_worth(skills.flat(tree[0], tree[1]))
+	var percent := _skills_worth(skills.percent(tree[0], tree[1]))
 	if "spikes" in worn:
 		var armour := float(dolls[0].totals(flat, percent, dolls[1]).get("armor", 0.0))
 		flat["damage"] = float(flat.get("damage", 0.0)) + armour * _dial("spiked_helm", "share") / 100.0
@@ -706,13 +777,18 @@ static func _points(totals: Dictionary, attribute: String) -> float:
 ## The three attributes as everything that reads one counts them. **Added up over both dolls**, like
 ## any stat (the user's ruling), then the heirlooms' doll's again for every Heirloom's Echo worn, to its
 ## rank's times over; the Crown of Accord's test is of those sums, and the Zealot's Brand comes last,
-## so it can take what the Crown gave. Nothing but gear carries an attribute, so the skills are not asked.
-## The dolls are the counted ones (`_counted_dolls`), so an heirloom the Echo at IV lifts a plus lifts
-## its attribute lines with it.
+## so it can take what the Crown gave. The skill tree's go in with the gear's, before any of them: the
+## root's and every stone's holding a point (`Skills.attributes`), never at `skill_worth`, which the
+## Abacus reads them to work out. The dolls are the counted ones (`_counted_dolls`), so an heirloom the
+## Echo at IV lifts a plus lifts its attribute lines with it.
 func attributes() -> Dictionary:
 	var worn := effects()
 	var dolls := _counted_dolls()
 	var out := _attribute_sums(dolls[0], dolls[1])
+	var tree := _tree()
+	var grown := skills.attributes(tree[0], tree[1])
+	for attribute: String in out:
+		out[attribute] += float(grown[attribute])
 	if "echo" in worn:
 		var echo := dolls[1].totals()
 		var again := (_dial("heirlooms_echo", "times") - 1.0) * worn.count("echo")
@@ -735,9 +811,8 @@ func attributes() -> Dictionary:
 	return out
 
 
-## What one skill point is worth against what the tree says: double under Hard Lessons, and a percent
-## more for every so much intelligence (its rank's) under each Sage's Abacus. A skill's card writes it
-## by describing that many points (`SkillCard.fill`), so the card says what the fight gets.
+## What a stone's rank is worth against what it carries: double under Hard Lessons, half again under the
+## Specialist, and a percent more for every so much intelligence (its rank's) under each Sage's Abacus.
 func skill_worth() -> float:
 	var worth := 1.0 + (1.0 if Curses.HARD_LESSONS in curses else 0.0) \
 			+ (0.5 if Curses.SPECIALIST in curses else 0.0)
@@ -747,18 +822,43 @@ func skill_worth() -> float:
 	return worth
 
 
-## Why a point cannot go into skill `id`, or "" where it can: the trees' own rules, and before them
-## the Specialist's -- only one tree may hold points. The skills page asks here, never `skills`.
-func why_not_skill(id: String) -> String:
-	if Curses.SPECIALIST in curses:
-		for tree: String in SkillTree.trees():
-			if tree != SkillTree.tree_of(id) and skills.spent(tree) > 0:
-				return "Specialist: only one skill tree may hold points"
-	return skills.why_not(id, level)
+## Why a point cannot go into the stone at `path`, or "" where it can: the tree's own rules, and before
+## them the Specialist's -- only one of the root's three branches may hold points, the root on none of
+## them. The skills page asks here, never `skills`.
+func why_not_skill(path: String) -> String:
+	if Curses.SPECIALIST in curses and not path.is_empty():
+		for held: String in skills.ranks:
+			if not held.is_empty() and SkillTree.branch_of(held) != SkillTree.branch_of(path):
+				return "Specialist: only one branch may hold points"
+	return skills.why_not(path, level)
 
 
-func rank_up_skill(id: String) -> bool:
-	return why_not_skill(id).is_empty() and skills.rank_up(id, level)
+func rank_up_skill(path: String) -> bool:
+	return why_not_skill(path).is_empty() and skills.rank_up(path, level)
+
+
+## What the tree is told on top of its own ranks: [ranks more on every stone holding a point -- the
+## Sage's Abacus at IV -- and attribute -> ranks more on the stones of that base, a helmet's line on
+## either doll (`<attribute>_stones`)].
+func _tree() -> Array:
+	var extra := 1 if "abacus" in effects() and _peak("sages_abacus") else 0
+	var dolls := _counted_dolls()
+	var gear := dolls[0].totals({}, {}, dolls[1])
+	var bases := {}
+	for attribute: String in ATTRIBUTE_GIVES:
+		bases[attribute] = roundi(float(gear.get(attribute + SKILL_RANKS, 0.0)))
+	return [extra, bases]
+
+
+## Puts a stone from the bag into the tree at `path` (the black screen's, `TranscendPage`); what that
+## takes out of the tree goes into the bag, where the new world will not keep it. Refused, and nothing
+## moves, when the stone is not in the bag or may not stand there.
+func place_stone(stone: Item, path: String) -> bool:
+	if not items.has(stone) or not SkillTree.can_place(stone, path, skills.stones):
+		return false
+	items.erase(stone)
+	items.append_array(skills.place(stone, path))
+	return true
 
 
 ## What the learned skills add up to at `skill_worth`, as a copy: the capstones' effects are not
@@ -797,7 +897,7 @@ func salvage(item: Item) -> float:
 func salvage_orb(rng := RandomNumberGenerator.new()) -> String:
 	if not ("salvage" in effects() and _peak("rag_and_bone_sack")) or rng.randf() >= SALVAGE_ORB:
 		return ""
-	return OrbTable.roll("", rng, true, 0.0, walls_credited)
+	return OrbTable.roll("", rng, true, 0.0, walls_ever())
 
 
 ## One of a unique's numbers at the rank the player has of it (`Achievements.rank`), rank I for one
@@ -894,7 +994,25 @@ func reach(radius: int) -> bool:
 	if radius <= farthest_land:
 		return false
 	farthest_land = radius
+	# A wall broken deeper than any before may have grown the skill tree's root.
+	SkillTree.root_slots = WallUnlocks.root_branches(walls_ever())
 	return true
+
+
+## The tiles runes are still working on, as the save holds them.
+func _runed_to_save() -> Dictionary:
+	var kept := {}
+	for key: String in runed:
+		if RuneTable.working(runed[key]):
+			kept[key] = runed[key]
+	return kept
+
+
+## The deepest ice wall ever broken, in any world: how far the land has ever reached, in whole wall
+## steps from where it starts (so a Ring of Walls' half walls count by the land they opened). What every
+## wall's unlock reads (`WallUnlocks`), and Into the Dark's figure.
+func walls_ever() -> int:
+	return maxi(0, (farthest_land - MapBuilder.START_LAND_RADIUS) / MapBuilder.WALL_STEP)
 
 
 ## A tile of land level `level` is charted: remembered if it is the deepest in any world. Whether that was news.
@@ -939,7 +1057,9 @@ func _socket_of(item: Item) -> int:
 ## **How many may be made is not this file's business:** one a transcension, which is
 ## `TranscendPage`'s to count, because that is the only place one is made.
 func can_make_heirloom(item: Item) -> bool:
-	return item != null and not item.broken and (items.has(item) or _socket_of(item) >= 0)
+	# Never a skill stone: the heirlooms' doll has no socket for one.
+	return item != null and not item.broken and not item.is_stone() \
+			and (items.has(item) or _socket_of(item) >= 0)
 
 
 ## The piece leaves the bag, or comes straight off the doll without passing through the bag -- so a
@@ -983,6 +1103,8 @@ func transcended() -> Inventory:
 	next.first_sword_taken = true
 	next.first_orb_taken = true
 	next.super_orbs = super_orbs
+	# The skill tree, as it was built on the black screen; its points were this world's.
+	next.skills = Skills.from_dict(skills.tree_dict(), {}, 1)
 	# What was chosen on the black screen is the new world's, and the old world's curses end with it.
 	next.curses = Curses.known(pending_curses)
 	if Curses.THICK_FOG in next.curses:
@@ -1021,18 +1143,18 @@ func sell_for(price: float) -> void:
 
 
 ## What resetting `tree` would cost now.
-func respec_cost(tree: String) -> float:
-	return SkillTree.respec_cost(level, skills.spent(tree))
+func respec_cost() -> float:
+	return SkillTree.respec_cost(level, skills.spent())
 
 
-## Gives back every point in `tree`, paid for out of the purse. Refused when there is nothing to give
+## Gives back every point in the tree, paid for out of the purse. Refused when there is nothing to give
 ## back or the purse cannot cover it, and then nothing changes.
-func respec(tree: String) -> bool:
-	var cost := respec_cost(tree)
-	if skills.spent(tree) <= 0 or gold < cost:
+func respec() -> bool:
+	var cost := respec_cost()
+	if skills.spent() <= 0 or gold < cost:
 		return false
 	gold -= cost
-	skills.reset(tree)
+	skills.reset()
 	return true
 
 
@@ -1075,10 +1197,12 @@ func save(path := SAVE_PATH) -> bool:
 		"deepest_level": deepest_level,
 		"level": level,
 		"xp": xp,
-		"skills": skills.to_dict(),
-		"skill_bursts": skills.bursts,
+		"skill_tree": skills.tree_dict(),
+		"skill_ranks": skills.ranks.duplicate(),
 		"towns": towns.to_dict(),
 		"orbs": orbs,
+		"runes": runes,
+		"runed": _runed_to_save(),
 		"items": saved,
 		"equipped": equipment.to_dict(),
 		"autodiscard": autodiscard,
@@ -1107,6 +1231,10 @@ func save(path := SAVE_PATH) -> bool:
 ## the player owns with nothing. The same rule as `MapSave.load_from`, and an Array for its reason.
 static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var inventory := Inventory.new()
+	# The skill tree's root has the slots the player's walls opened (`SkillTree.root_slots`): none past
+	# its own until the save says how far the land has reached, so a missing file -- a Reset -- starts
+	# from the root's one.
+	SkillTree.root_slots = WallUnlocks.root_branches(0)
 	SafeFile.recover(path)
 	if not FileAccess.file_exists(path):
 		return inventory
@@ -1180,6 +1308,8 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var farthest: Variant = data.get("farthest_land", MapBuilder.START_LAND_RADIUS)
 	if typeof(farthest) in [TYPE_INT, TYPE_FLOAT]:
 		inventory.farthest_land = maxi(MapBuilder.START_LAND_RADIUS, int(farthest))
+	# Before the tree, which keeps a stone only in a slot the root has.
+	SkillTree.root_slots = WallUnlocks.root_branches(inventory.walls_ever())
 	var charted: Variant = data.get("deepest_level", 1)
 	if typeof(charted) in [TYPE_INT, TYPE_FLOAT]:
 		inventory.deepest_level = maxi(1, int(charted))
@@ -1194,12 +1324,10 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var saved_xp: Variant = data.get("xp", 0)
 	inventory.level = maxi(1, int(saved_level)) if typeof(saved_level) in [TYPE_INT, TYPE_FLOAT] else 1
 	inventory.add_xp(maxi(0, int(saved_xp)) if typeof(saved_xp) in [TYPE_INT, TYPE_FLOAT] else 0)
-	# Version 8 knew nothing about skills: an absent key is nothing learned. Read after the level,
-	# because what a save may have spent is counted off it.
-	# Version 30 added the bursts; an absent key is none.
-	var bursts: Variant = data.get("skill_bursts", 0)
-	inventory.skills = Skills.from_dict(data.get("skills", {}), inventory.level,
-			int(bursts) if typeof(bursts) in [TYPE_INT, TYPE_FLOAT] else 0)
+	# Version 33 made the skill tree the player's own: an absent tree is the starter's, with every point
+	# free. Read after the level, because what a save may have spent is counted off it.
+	inventory.skills = Skills.from_dict(data.get("skill_tree", null), data.get("skill_ranks", {}),
+			inventory.level)
 	# Version 9 knew nothing about towns, and an absent key reads as no settlement walked into yet --
 	# which is what every save had before there was anything in one to do.
 	inventory.towns = TownState.from_dict(data.get("towns", {}))
@@ -1217,6 +1345,19 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 			var held: Variant = currency[orb]
 			if typeof(held) in [TYPE_INT, TYPE_FLOAT]:
 				inventory.add_orb(named, maxi(0, int(held)))
+	# Version 33 knew nothing of runes: none held, none at work.
+	var found_runes: Variant = data.get("runes", {})
+	if typeof(found_runes) == TYPE_DICTIONARY:
+		for rune: Variant in found_runes:
+			var count: Variant = found_runes[rune]
+			if typeof(count) in [TYPE_INT, TYPE_FLOAT]:
+				inventory.add_rune(str(rune), maxi(0, int(count)))
+	var worked: Variant = data.get("runed", {})
+	if typeof(worked) == TYPE_DICTIONARY:
+		for key: Variant in worked:
+			var state := RuneTable.from_dict(worked[key])
+			if RuneTable.working(state):
+				inventory.runed[str(key)] = state
 	# Version 10 knew nothing about uniques: an absent key is none found. An id this build no longer
 	# has is dropped by name, the way a retired orb is.
 	var found: Variant = data.get("uniques_found", [])

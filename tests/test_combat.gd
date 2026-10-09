@@ -20,6 +20,7 @@ func _run() -> void:
 	_check(_test_a_won_fight() == true, "won fight tests ran to the end")
 	_check(_test_the_ice_wall() == true, "ice wall tests ran to the end")
 	_check(_test_the_dungeon() == true, "dungeon tests ran to the end")
+	_check(_test_runes_in_the_fight() == true, "rune fight tests ran to the end")
 	_check(_test_a_lost_fight() == true, "lost fight tests ran to the end")
 	_check(_test_enemy_strikes() == true, "enemy strike tests ran to the end")
 	_check(_test_guard_capstones() == true, "guard capstone tests ran to the end")
@@ -1951,6 +1952,61 @@ func _test_the_nightwalkers_fight_their_way() -> void:
 	_clear_saves()
 
 
+## The runes in a fight (`RuneTable`, the third wall's): the cave's bodies carry them once the main
+## scene says so (`runes_drop`), Gollux every time; a farm run Depth runes deeper fields bodies those
+## levels on, health and drops; an ascended one drops ascended finds; and a rune's modifier worn off
+## leaves the run (`forget_mod`).
+func _test_runes_in_the_fight() -> bool:
+	for drops in [false, true]:
+		var down := Encounter.for_dungeon()
+		down.runes_drop = drops
+		var found := []
+		down.rune_dropped.connect(func(_index: int, rune: String) -> void: found.append(rune))
+		down.arm({"damage": 1e15, "attack_speed": 10.0})
+		down.start()
+		for i in 100000:
+			if down.finished:
+				break
+			down.advance(0.05)
+		if drops:
+			_check(down.cleared() > 0 and found.size() >= down.cleared()
+					and found.all(func(rune: String) -> bool: return RuneTable.has(rune)),
+					"every Gollux leaves a rune, and the rest of the cave now and then (%d in %d depths)"
+					% [found.size(), down.cleared()])
+		else:
+			_check(found.is_empty(), "before the third wall the cave carries none")
+
+	var cell := Vector2i(8, 0)
+	var plain := Encounter.farm(cell, "grass")
+	var deep := Encounter.farm(cell, "grass", "", [], 2)
+	var body := plain.lineup[0]
+	var ratio := deep._raw_health_of(body) / plain._raw_health_of(body)
+	var want := pow(Encounter.HP_GROWTH, MapBuilder.LEVEL_TILES * 2)
+	_check(absf(ratio - want) / want < 0.02 and deep._level() == MapBuilder.level_of(cell) + 2,
+			"two Depths are two levels on: health as eight rings out, drops two levels up (%.2f)" % ratio)
+
+	var juiced := Encounter.farm(cell, "grass", "", ["thick_skinned", "thick_skinned", "elite_ground"])
+	var thick := juiced._raw_health_of(body)
+	var pace := juiced.elite_every
+	juiced.forget_mod("thick_skinned")
+	juiced.forget_mod("thick_skinned")
+	_check(juiced._raw_health_of(body) < thick and is_zero_approx(juiced._hp_more) and juiced.mods == ["elite_ground"],
+			"a modifier worn off takes its health with it")
+	juiced.forget_mod("elite_ground")
+	_check(pace < juiced.elite_every and juiced.elite_every == plain.elite_every, "and its elites, back to the tile's own pace")
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 31
+	var ascended := Encounter.farm(cell, "grass")
+	ascended.ascended = true
+	var pluses := [0, 0]
+	for i in 2000:
+		pluses[0] += ascended._lean(Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 3)).plus
+		pluses[1] += plain._lean(Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 3)).plus
+	_check(pluses[0] > 0 and pluses[1] == 0, "an ascended tile drops ascended finds, a plain one none (%s)" % [pluses])
+	return true
+
+
 ## A descent played to the end of its clock with a weapon worth `damage` a swing, `speed` swings a
 ## second, begun under `won` depths: the fight, finished.
 func _descended(damage: float, speed: float, won := 0) -> Encounter:
@@ -3649,8 +3705,8 @@ func _test_curses() -> bool:
 	return true
 
 
-## The dungeon from the main scene: no way down until a wall has fallen in some world, then the world's
-## cave, entered stood on; the hero feels it at the map's edge until it is seen; a descent pays nothing
+## The dungeon from the main scene: no way down until the third wall has fallen in some world (Gollux's
+## unlock, `WallUnlocks`), then the world's cave, entered stood on; the hero feels it at the map's edge until it is seen; a descent pays nothing
 ## and counts no kill, and a depth is written down only once its Gollux is dead.
 func _test_the_way_down() -> void:
 	_clear_saves()
@@ -3664,12 +3720,20 @@ func _test_the_way_down() -> void:
 		await process_frame
 	var view: MapBuilder = main.view
 	_check(view.cave == HexMap.NO_CELL, "no cave while no wall has fallen in any world")
-	# A wall once broken in some world: this one's cave goes down behind its first wall, and is saved.
-	main.inventory.farthest_land = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
+	# Two walls once broken in some world: still none, Gollux being the third wall's.
+	main.inventory.farthest_land = MapBuilder.START_LAND_RADIUS + 2 * MapBuilder.WALL_STEP
 	main._credit_walls()
+	_check(view.cave == HexMap.NO_CELL, "no cave before the third wall has fallen in any world")
+	# The third: this world's cave goes down somewhere in the land ever reached, and is saved.
+	main.inventory.farthest_land = MapBuilder.START_LAND_RADIUS + 3 * MapBuilder.WALL_STEP
+	main._credit_walls()
+	_check(view.cave != HexMap.NO_CELL and MapSave.load_from(SCRATCH_MAP).cave == view.cave,
+			"the third wall ever broken puts the world's cave down, and the map is saved with it (%s)" % view.cave)
+	# The rest happens behind the first wall, as much land as a test can afford to grow: the cave put down
+	# again with the first wall's reach.
+	view.cave = HexMap.NO_CELL
+	view.place_cave(MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP)
 	var cave: Vector2i = view.cave
-	_check(cave != HexMap.NO_CELL and MapSave.load_from(SCRATCH_MAP).cave == cave,
-			"the furthest land ever reached puts the world's cave down, and the map is saved with it (%s)" % cave)
 
 	# The cave felt from the hero: nothing while the wall in front of it stands, then a red light at the
 	# map's edge, and the hero says so.

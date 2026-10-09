@@ -280,7 +280,9 @@ func worn_for(item: Item) -> Item:
 ## Whether `item` would go on somewhere nothing is worn -- which `worn_for`'s null alone does not say,
 ## since the worn piece itself gets one too.
 func bare_for(item: Item) -> bool:
-	return equipment != null and not (item in equipment.worn.values()) and worn_for(item) == null
+	# A skill stone goes in no socket, so there is no socket to call bare.
+	return equipment != null and not (item in equipment.worn.values()) and worn_for(item) == null \
+			and not equipment.sockets_for(item).is_empty()
 
 
 ## `BARE` for the socket `item` would go in: "the ring slot", "the offhand slot".

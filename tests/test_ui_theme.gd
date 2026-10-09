@@ -218,8 +218,11 @@ func _test_icon_buttons(theme: Theme) -> bool:
 						"%s %s is never sliced" % [variation, state])
 				_check(box.get_content_margin(side) <= 0,
 						"%s %s pads nothing" % [variation, state])
-			_check(box.texture.region.size == Vector2(size),
-					"%s %s is the size the pack drew" % [variation, state])
+			_check(box.texture.region.size * UITheme.ICON_BUTTON_SCALE == Vector2(size),
+					"%s %s is a whole multiple of the size the pack drew" % [variation, state])
+			_check(box.axis_stretch_horizontal == StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
+					and box.axis_stretch_vertical == StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH,
+					"%s %s is one mark blown up, never tiled" % [variation, state])
 	return true
 
 
@@ -930,24 +933,25 @@ func _test_responsive() -> bool:
 			"and across a monitor it stands beside the bag again")
 	bag.queue_free()
 
-	# The skills, narrow: one tree up between the arrows, nothing to scroll, and an arrow turns to the next.
-	var skills := SkillsPage.new(Inventory.new(), "", 4.0)
+	# The skills, narrow, over a tree grown three deep: a sheet no taller than half the window, the tree
+	# drawn a whole number of window pixels a pixel and no wider than the window.
+	var grown := Inventory.new()
+	for path: String in ["0", "1", "2", "0.0", "0.1", "0.2", "1.0", "1.1", "1.2", "2.0", "2.1", "2.2"]:
+		var stone := Item.rolled("Strength Node", ItemRarity.Rarity.COMMON, RandomNumberGenerator.new(), 1, 3, 3)
+		grown.skills.stones[path] = stone
+	var skills := SkillsPage.new(grown, "", 4.0)
 	root.add_child(skills)
 	await process_frame
 	skills.layout()
-	var shown := func() -> Array:
-		return skills._trees.get_children().filter(func(column: Control) -> bool: return column.visible)
-	_check(skills._switcher.visible and shown.call().size() == 1 and shown.call()[0] == skills._trees.get_child(0)
-			and skills._scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED,
-			"held upright the skills page stands one tree at a time, with nothing to scroll")
-	skills._turn(-1)
-	_check(shown.call() == [skills._trees.get_child(skills._trees.get_child_count() - 1)]
-			and skills._shown_name.text == SkillTree.TREES[SkillTree.trees()[-1]]["label"],
-			"and the arrow before the first tree goes round to the last, named between them")
+	await process_frame
+	var upright := skills.get_viewport_rect().size
+	var pixels := skills._view._canvas.scale.x * 4.0
+	_check(skills._panel.size.y * 4.0 <= upright.y / 2.0 + 1.0, "held upright the skills page is a sheet of half the window")
+	_check(is_equal_approx(pixels, roundf(pixels)) and pixels >= 1.0, "its tree a whole window pixel a pixel (%s)" % pixels)
+	_check(skills._panel.size.x * 4.0 <= upright.x, "and no wider than the window (%s)" % skills._panel.size.x)
 	skills._ui_scale = 2.0
 	skills.layout()
-	_check(not skills._switcher.visible and shown.call().size() == skills._trees.get_child_count(),
-			"across a monitor every tree stands, and no arrows")
+	_check(skills._panel.size.y * 2.0 > upright.y / 2.0, "across a monitor it stands the window's height")
 	skills.queue_free()
 	return true
 

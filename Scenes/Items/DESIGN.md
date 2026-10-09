@@ -184,3 +184,48 @@ The user simplified the orbs so no two overlap. Alteration was Transmutation aga
 - **A tree's ranks go on learned skills only**, as the Sage's Abacus at IV does, and on no capstone's effect (those are not numbers).
 - **Parry's crit chance goes on the next blow, click or swing**, and the best of the dodges since is kept rather than summed. **Burn** is the deepest burn on a body, lit again by every blow it survives, `BURN_SECONDS` long -- bleed's rule, so a fast weapon does not burn twice as hard for free.
 - **Bands and weights are first guesses for the user's hand:** delay 10-25%, elite ward 10-25%, tile ward 10-25%, less health 5-12%, ranks 1, camp 10-25%, thorns 15-35%, recoup 10-25%, parry 20-50%, burn 10-30%, time on block 0.2-0.5s.
+
+## The walls' ladder (2026-10-09)
+**The complaint (the user's):** the game lasted about three walls, with no reason to push past them. **The answer (the user's design, worked out over several rounds of ideas in chat):** every wall broken opens something for good, and each one is **a change to how the game is played**, not a bigger number. The ladder is the user's own, wall by wall: 1 and 2 the orbs, 3 Gollux and the runes (dropped only in his cave), 4 distant charting, 5 two more branches off the skill tree's root, 6 the item filter, 7 the abilities (as unique skill stones, as many as the tree can fit), and from the 8th one more root branch a wall, "for now". `WallUnlocks` is the one table; everything that is gated asks it.
+
+**Permanent, off the deepest wall ever broken** (`Inventory.walls_ever`, `farthest_land` in whole wall steps). Breaking the first wall again in a later world opens nothing new. This is why the orbs moved off `walls_credited` (this world's walls; the user: "orbs become permanent"): a second world starts with every orb its player has opened. `walls_credited` is now the super orbs' business alone.
+
+**The wall shows what it opens.** The user asked for the unlocks on the wall's own description, "so that player has something to look forward to": the tile panel's Unlocks section (`main_scene._show_unlocks`). It names, and never explains on the page; the tooltip carries the one line.
+
+**Gollux moved from the first wall to the third.** A world already holding a cave keeps it; `_credit_walls` puts one down only once he is unlocked. His first health is still pegged to the second wall (`Encounter.gollux_hp`), so the first depths will come easily to a player who has broken the third. Whether to peg him to the third was asked and not yet answered.
+
+**Mine, not ruled on:**
+- Under the Ring of Walls, a half wall counts by the land it opened, as Into the Dark always counted (`walls_ever` is that figure).
+- A row an earlier world already opened is greyed (`OrbSlot.DIM`). Lighter text would break the cream's contrast rule.
+- The root's slot count is a static, `SkillTree.root_slots`, which `Inventory.load_from` sets between `farthest_land` and the tree, because the tree keeps a stone only in a slot that exists. This copies how `UniqueTable.ranks` works.
+- The stand-in marks: the skull for Gollux, the crystal for runes, the flag for distant charting, the filter for the filter, the star for abilities, the root's stone for branches. Each needs art once its system is built.
+
+**Distant charting (the fourth wall's).** The user's words were "pathing to distant charted tiles, but not to undiscovered tiles". Moving to a far charted tile already worked (`route_to`), so this is charting a far tile the player can **see**, with the way across seen land fought a tile at a time, the way the Nightwalkers' way into the dark is (`MapBuilder.distant`, `_way_in`). The unseen stays the Nightwalkers' alone. This reading is mine and unconfirmed.
+
+**The item filter (the sixth wall's)** keeps what is at least this rare, at least this material, at least this level, and optionally ascended pieces only. The rest is left behind as it drops, through the same one place autodiscard always was. My calls, none ruled on:
+- It is a setting (`Settings.filter_*`, on the settings page, which opens over a fight), as the uniques' Ask / Sell / Keep is, not part of the save.
+- A kind with one material, the jewellery, is never short of one.
+- A skill stone answers to the rarity alone.
+- The level is a least number between nudges, the balancing page's control.
+- The materials are named off the sword's line: Iron, Steel, Gold, Master.
+
+**The runes (the third wall's)** are the user's design, built over several answers on 2026-10-09:
+- Runes are a separate set of orbs, dropped only in Gollux's cave and spent on tiles.
+- The six and what each does: reroll tiers, reroll into different modifiers, add one whole, remove one whole, a level deeper, ascended drops.
+- Runes never touch the tile's own modifiers.
+- Depth stacks without limit; Ascent works once.
+- Farm runs yes, camps no.
+- Every modifier, every Depth and the Ascent lasts 100 kills on its own count.
+
+My calls, not ruled on:
+- Runes go only on tiles a farm run can be fought on, since that is the only fight a charted tile has.
+- Unrest draws only from the modifiers a farm run feels (`TileMods` `farm`). Today that is four (Thick-skinned, Elite Ground, Barren, Gilded), so Upheaval and Unrest have little room until more rows are made farm-worthy.
+- Shifting deals tiers I to III.
+- Upheaval keeps each modifier's tier and count.
+- A Depth is `LEVEL_TILES` rings out for health and purse and a level for experience and drops.
+- Ascent uses Lean Pickings' odds.
+- The drop chances are 4% a common, 20% an elite, every Gollux.
+- The tiles' work is saved in the inventory by world spot, as the towns are, so a rune spent and the tile it changed are one write.
+- The icons are the crystal mark tinted, to be replaced with real art after a mockup.
+
+**Built so far:** the ladder, the permanent orbs, the cave at the third wall, the root's branches, the panel, distant charting, the item filter and the runes. Not yet built: the abilities. Their unlock row is there to look forward to.

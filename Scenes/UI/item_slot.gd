@@ -223,6 +223,24 @@ static func shadow(item: Item, says: Callable, known := false) -> ItemSlot:
 	return slot
 
 
+## A piece drawn as `mark` alone at the mark's own size, with no socket, ring or corner marks: the skill
+## tree's small stones (`SkillTreeView`). In `GROUP` like any square, so the card writes it and the hand
+## shows over it.
+static func bare(item: Item, mark: Texture2D) -> ItemSlot:
+	var slot := ItemSlot.new()
+	slot.item = item
+	slot.add_to_group(GROUP)
+	slot.custom_minimum_size = mark.get_size()
+	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	slot.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	slot.tooltip_text = item.display_name()
+	var icon := TextureRect.new()
+	icon.texture = mark
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	slot.add_child(icon)
+	return slot
+
+
 ## A piece promised and not yet rolled -- a bounty's reward: `mark` on the socket in `rarity`'s frame,
 ## with `+n` on the corner if it is ascended. Not an `ItemSlot` in `GROUP`, since there is no piece
 ## for the card to write; `label` is its tooltip. `side` is `SIDE` or half of it: at half, `ui_scale` 2

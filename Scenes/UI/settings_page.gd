@@ -43,6 +43,14 @@ const UNIQUES_TIPS := ["A unique among the handful is asked about on its own",
 		"A unique among the handful is sold or discarded with the rest",
 		"A unique among the handful is left in the bag"]
 const UNIQUES_LABEL := "Uniques when a whole level is sold or discarded"
+## The loot filter's rows (`_draw_filter`): the least rarity kept, in `ItemRarity.Rarity`'s order from
+## common; the least material, in the materials' order (`LootTable` `material`); the steps the least
+## item level moves by.
+const FILTER_RARITIES := ["Any", "Uncommon", "Rare", "Epic"]
+const FILTER_MATERIALS := ["Any", "Iron", "Steel", "Gold", "Master"]
+const FILTER_MATERIAL_TIPS := ["Every material", "The second material or better", "The third material or better",
+		"The fourth material or better", "Masterwork only"]
+const FILTER_NUDGES := [-10, -1, 1, 10]
 const DETAILS_TIP := "Shows beside each modifier the lowest and highest it could have rolled at the item's level, like +14(8-20)% increased Damage"
 ## A volume row: the name's room, the percentage's, and the knob the slider is dragged by, drawn here
 ## pixel by pixel in the brown buttons' face (`_knob`), lit tan under the mouse.
@@ -173,6 +181,9 @@ func open() -> void:
 	_rows.add_child(BountyList.wrapped(UNIQUES_LABEL, WIDTH))
 	_rows.add_child(_choice(UNIQUES_NAMES, UNIQUES_TIPS, Settings.uniques,
 			func(rule: int) -> void: Settings.uniques = rule as Settings.Uniques))
+	# Once the sixth wall has fallen in some world (`WallUnlocks.FILTER`).
+	if inventory != null and WallUnlocks.has(inventory.walls_ever(), WallUnlocks.FILTER):
+		_draw_filter()
 	if cloud != null and cloud.enabled():
 		_deleting = false
 		_account = UITheme.vbox(ROW_GAP, WIDTH)
@@ -317,6 +328,39 @@ func _choice(names: Array, tips: Array, picked: int, write: Callable) -> HBoxCon
 			open.call_deferred())
 		row.add_child(pick)
 	return row
+
+
+## The loot filter (`Settings.filter_*`, which `Inventory.leaves_behind` reads as each find drops): the
+## least rarity and the least material kept, a row of choices each; the least item level between
+## `FILTER_NUDGES`, never under 1, which keeps every level; and ascended pieces only.
+func _draw_filter() -> void:
+	_rows.add_child(UITheme.section("Loot filter"))
+	_rows.add_child(UITheme.label("Rarity", null, true))
+	_rows.add_child(_choice(FILTER_RARITIES, [], Settings.filter_rarity,
+			func(at: int) -> void: Settings.filter_rarity = at))
+	_rows.add_child(UITheme.label("Material", null, true))
+	_rows.add_child(_choice(FILTER_MATERIALS, FILTER_MATERIAL_TIPS, Settings.filter_material,
+			func(at: int) -> void: Settings.filter_material = at))
+	_rows.add_child(UITheme.label("Item level", null, true))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 2)
+	for step: int in FILTER_NUDGES:
+		var next := maxi(1, Settings.filter_level + step)
+		var nudge := UITheme.button("%+d" % step, "SmallButton", "")
+		nudge.disabled = next == Settings.filter_level
+		nudge.pressed.connect(func() -> void:
+			Settings.filter_level = next
+			Settings.save()
+			open.call_deferred())
+		row.add_child(nudge)
+	var least := UITheme.label("Any" if Settings.filter_level <= 1 else "%d+" % Settings.filter_level)
+	least.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	least.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.add_child(least)
+	row.move_child(least, 2)
+	_rows.add_child(row)
+	_rows.add_child(_tick("Ascended items only", Settings.filter_ascended,
+			func(on: bool) -> void: Settings.filter_ascended = on))
 
 
 ## One tick-box row, the bag's own, already showing `on`. `write` puts a change into `Settings`, which

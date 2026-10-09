@@ -74,14 +74,14 @@ const KINDS := {
 		"slot": "helmet", "weight": 18, "needs": "strength",
 		"stats": {"armor": 3},
 		"affixes": ["time_on_hit", "strength", "intelligence", "xp_more", "blow_delay", "elite_ward",
-			"tile_ward", "less_health", "power_skills", "fortune_skills", "guard_skills"],
+			"tile_ward", "less_health", "strength_stones", "intelligence_stones", "dexterity_stones"],
 		"tiers": ["Leather Helmet", "Iron Helmet", "Steel Helm", "Golden Helm", "Masterwork Helm"],
 	},
 	"hood": {
 		"slot": "helmet", "weight": 18, "needs": "dexterity",
 		"stats": {"dodge": 3},
 		"affixes": ["armor", "dexterity", "intelligence", "xp_more", "blow_delay", "elite_ward",
-			"tile_ward", "less_health", "power_skills", "fortune_skills", "guard_skills"],
+			"tile_ward", "less_health", "strength_stones", "intelligence_stones", "dexterity_stones"],
 		"tiers": ["Hide Hood", "Leather Hood", "Studded Hood", "Shadow Hood", "Masterwork Hood"],
 	},
 	# --- Boots: every one of them keeps Move Speed, because that is what a boot is for.
@@ -284,6 +284,33 @@ const KINDS := {
 		"globals": ["damage", "attack_speed", "bleed", "armor", "dodge", "time_on_hit"],
 		"tiers": ["Emerald Amulet"],
 	},
+	# --- The skill stones (the user's, 2026-10-08): never worn, placed in the skill tree at a
+	# transcension (`SkillTree`, `Skills`). Weight 0, so they leave the gear's draw, the shelves and the
+	# bounties alone; `SkillTree.roll` drops them on a roll of their own. Their lines are not read off
+	# `affixes` but listed by tier in `SkillTree.LINES` (`ModifierTable.pool_for`), so they have none
+	# here. `icons` is the user's carved disc for each tier (`tools/skill_stones.py`), which `icon_path`
+	# fills in.
+	"strength_stone": {
+		"slot": "stone", "weight": 0,
+		"stats": {"strength": 5},
+		"affixes": [],
+		"tiers": ["Strength Node"],
+		"icons": "res://Assets/Skills/Stones/str_%d.png",
+	},
+	"dexterity_stone": {
+		"slot": "stone", "weight": 0,
+		"stats": {"dexterity": 5},
+		"affixes": [],
+		"tiers": ["Dexterity Node"],
+		"icons": "res://Assets/Skills/Stones/dex_%d.png",
+	},
+	"intelligence_stone": {
+		"slot": "stone", "weight": 0,
+		"stats": {"intelligence": 5},
+		"affixes": [],
+		"tiers": ["Intelligence Node"],
+		"icons": "res://Assets/Skills/Stones/int_%d.png",
+	},
 }
 
 ## The item level each material is found from, and what one is worth on top of the kind's own
@@ -320,6 +347,10 @@ const RENAMED := {
 	"Ranger's Boot": "Ranger's Boots",
 	"Shadow Boot": "Shadow Boots",
 	"Masterwork Boot": "Masterwork Boots",
+	# The skill tree's stones, which the player calls nodes (the user's, 2026-10-09).
+	"Strength Stone": "Strength Node",
+	"Dexterity Stone": "Dexterity Node",
+	"Intelligence Stone": "Intelligence Node",
 }
 
 
@@ -410,14 +441,16 @@ const STAT_LABELS := {
 	"elite_chance": "Elite Chance",
 	# The helmet's lines (`Encounter.arm`): how much later an enemy's first blow comes, how much less an
 	# elite's or a boss's blow takes, how much of a tile modifier's bite is gone, how much less health
-	# every body has -- and a rank more on every learned skill of one tree (`Skills.flat`).
+	# every body has -- and a rank more on every stone of one base holding a point (`Inventory._tree`).
 	"blow_delay": "Enemy First Blow Delay",
 	"elite_ward": "Elite Blow Reduction",
 	"tile_ward": "Tile Modifier Reduction",
 	"less_health": "Enemy Health Reduction",
-	"power_skills": "Power Skill Ranks",
-	"fortune_skills": "Fortune Skill Ranks",
-	"guard_skills": "Guard Skill Ranks",
+	"strength_stones": "Strength Node Ranks",
+	"intelligence_stones": "Intelligence Node Ranks",
+	"dexterity_stones": "Dexterity Node Ranks",
+	# A skill stone's own line: how many more points it takes than the one every stone does (`Skills`).
+	"stone_ranks": "Ranks",
 	# The body armour's: more gold and experience off a camp (`Camp.make`), bodies more or fewer in a
 	# fight, a share of the damage struck back at whatever lands a blow, and a share of what a blow took
 	# coming back over a few seconds.
@@ -466,11 +499,11 @@ const PERCENT_STATS := ["crit_chance", "crit_damage", "move_speed", "drop_rate",
 ## The helmet's, the body's and the offhand's shares are here for bleed's reason -- a share that
 ## compounded would be past everything -- and the three "less" ones (`Encounter.WARD_MOST`) and the
 ## recoup are capped besides. Camp earnings is a finder's number on a camp. The count of enemies and a
-## tree's ranks are whole steps no level moves.
+## stone's ranks are whole steps no level moves.
 const CHANCE_STATS := ["crit_chance", "drop_rate", "gold_find", "item_rarity", "orb_find", "bleed",
 	"sight", "spawn_speed", "fight_clock", "double_strike", "xp_more", "elite_chance", "blow_delay",
-	"elite_ward", "tile_ward", "less_health", "power_skills", "fortune_skills", "guard_skills",
-	"camp_earnings", "extra_enemies", "thorns", "recoup", "parry", "burn"]
+	"elite_ward", "tile_ward", "less_health", "strength_stones", "intelligence_stones", "dexterity_stones",
+	"stone_ranks", "camp_earnings", "extra_enemies", "thorns", "recoup", "parry", "burn"]
 ## The stats any piece at all may roll a FLAT modifier for, without being told so kind by kind.
 const ANY_AFFIXES := ["spawn_speed", "fight_clock"]
 ## Per second: attacks. The one stat that is neither a plain number nor a percentage.
@@ -521,11 +554,12 @@ const LEVEL_FLAT := {
 	# below: it is reached by wearing it, not by levelling.
 	"xp_more": 1.0, "elite_chance": 0.0,
 	# The helmet's, the body's and the offhand's shares take a point a level, as bleed does; what a
-	# blocked blow wins back takes time on hit's tenth. A count of bodies and a tree's ranks take nothing:
+	# blocked blow wins back takes time on hit's tenth. A count of bodies and a stone's ranks take nothing:
 	# they are whole steps, and the count's band is its own (`ModifierTable`'s `signed`).
 	"blow_delay": 1.0, "elite_ward": 1.0, "tile_ward": 1.0, "less_health": 1.0,
 	"camp_earnings": 1.0, "thorns": 1.0, "recoup": 1.0, "parry": 1.0, "burn": 1.0, "time_on_block": 1.0,
-	"extra_enemies": 0.0, "power_skills": 0.0, "fortune_skills": 0.0, "guard_skills": 0.0,
+	"extra_enemies": 0.0, "strength_stones": 0.0, "intelligence_stones": 0.0, "dexterity_stones": 0.0,
+	"stone_ranks": 0.0,
 	# The other finders. They take the same point a level drop rate does, which is all a CHANCE_STAT
 	# ever takes.
 	"item_rarity": 1.0, "gold_find": 1.0, "orb_find": 1.0,
@@ -568,9 +602,12 @@ static func items() -> PackedStringArray:
 ## first from the plainest of its kind, then from the first kind written for its slot, which is one of
 ## the eight the game shipped with. The same fallback `UniqueTable.icon` has, and for the same reason:
 ## a base is playable the day the table names it, and the art follows when it is approved. Under
-## `Settings.show_old_icons()` the picture it had before, where it had another.
-static func icon_path(item: String) -> String:
+## `Settings.show_old_icons()` the picture it had before, where it had another. A skill stone's is its
+## tier's (`icons`).
+static func icon_path(item: String, tier := 1) -> String:
 	var row: Dictionary = ITEMS[item]
+	if row.has("icons"):
+		return str(row["icons"]) % clampi(tier, 1, SkillTree.MOST_TIER)
 	if Settings.show_old_icons() and ResourceLoader.exists(OLD_ROOT + str(row["icon"])):
 		return OLD_ROOT + str(row["icon"])
 	var kind: Dictionary = KINDS[row["kind"]]
@@ -582,8 +619,8 @@ static func icon_path(item: String) -> String:
 	return ROOT + str(row["icon"])
 
 
-static func icon(item: String) -> Texture2D:
-	var path := icon_path(item)
+static func icon(item: String, tier := 1) -> Texture2D:
+	var path := icon_path(item, tier)
 	if not _icons.has(path):
 		_icons[path] = load(path)
 	return _icons[path]
@@ -864,8 +901,9 @@ static func _build_items() -> Dictionary:
 				"stats": row["tier_stats"][tier] if row.has("tier_stats") else row["stats"],
 				"affixes": row["affixes"], "kind": kind, "tier": tier, "material": first + tier,
 			}
-			if row.has("globals"):
-				item["globals"] = row["globals"]
+			for key: String in ["globals", "icons"]:
+				if row.has(key):
+					item[key] = row[key]
 			item.make_read_only()
 			out[name] = item
 	out.make_read_only()

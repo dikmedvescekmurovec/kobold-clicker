@@ -68,7 +68,7 @@ static func rerolls(drawer: Dictionary, key: String) -> int:
 
 
 ## Six of one kind. One shelf at a time, in a fixed order on the first stocking, so a seed deals the
-## same town twice. The orbs are those `walls` (down in this world) unlocks.
+## same town twice. The orbs are those `walls` (the deepest ever broken) unlocks.
 static func _fill(drawer: Dictionary, key: String, tier: int, cell: Vector2i,
 		rng: RandomNumberGenerator, walls: int) -> void:
 	var shelf := []

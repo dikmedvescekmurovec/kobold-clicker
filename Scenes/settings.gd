@@ -36,6 +36,15 @@ static var item_details := false
 ## writes the answer given here), sell it with the rest, or leave it in the bag.
 enum Uniques { ASK, SELL, KEEP }
 static var uniques := Uniques.ASK
+## The loot filter, the sixth wall's unlock (`WallUnlocks.FILTER`): what a find must be to be kept, the
+## rest left behind as it drops (`Inventory.leaves_behind`). The least rarity (`ItemRarity.Rarity`'s
+## order: 0 keeps every one), the least material (0 keeps every one; a kind with one material, the
+## jewellery, has none to fall short), the least item level (1 keeps every one) and whether only an
+## ascended piece (+1 or more) is kept.
+static var filter_rarity := 0
+static var filter_material := 0
+static var filter_level := 1
+static var filter_ascended := false
 ## Dev: the collection log draws every unique as found, and its trophy is there from the start. Read
 ## through `show_all_uniques()`, which a release build answers no to whatever the file says.
 static var all_uniques := false
@@ -75,6 +84,10 @@ static func load_settings() -> void:
 	animations = clampi(int(file.get_value(SECTION, "animations", animations)), Anim.NONE, Anim.DEFAULT) as Anim
 	item_details = bool(file.get_value(SECTION, "item_details", item_details))
 	uniques = clampi(int(file.get_value(SECTION, "uniques", uniques)), Uniques.ASK, Uniques.KEEP) as Uniques
+	filter_rarity = maxi(0, int(file.get_value(SECTION, "filter_rarity", filter_rarity)))
+	filter_material = maxi(0, int(file.get_value(SECTION, "filter_material", filter_material)))
+	filter_level = maxi(1, int(file.get_value(SECTION, "filter_level", filter_level)))
+	filter_ascended = bool(file.get_value(SECTION, "filter_ascended", filter_ascended))
 	all_uniques = bool(file.get_value(SECTION, "all_uniques", all_uniques))
 	all_chests = bool(file.get_value(SECTION, "all_chests", all_chests))
 	old_icons = bool(file.get_value(SECTION, "old_icons", old_icons))
@@ -97,6 +110,10 @@ static func save() -> void:
 	file.set_value(SECTION, "animations", int(animations))
 	file.set_value(SECTION, "item_details", item_details)
 	file.set_value(SECTION, "uniques", int(uniques))
+	file.set_value(SECTION, "filter_rarity", filter_rarity)
+	file.set_value(SECTION, "filter_material", filter_material)
+	file.set_value(SECTION, "filter_level", filter_level)
+	file.set_value(SECTION, "filter_ascended", filter_ascended)
 	file.set_value(SECTION, "all_uniques", all_uniques)
 	file.set_value(SECTION, "all_chests", all_chests)
 	file.set_value(SECTION, "old_icons", old_icons)

@@ -72,6 +72,8 @@ const REFUSAL_WIDTH := 300.0
 const REFUSAL_MARGIN := 32.0
 ## What a tile modifier's sentences wrap at on the tile panel, so a long one never widens the column.
 const MOD_WIDTH := 150.0
+## The square an ice wall's unlock is drawn in on its panel (`_show_unlocks`).
+const UNLOCK_ICON := 16
 ## The tile panel's air: `TILE_PAD` more padding round its body than a titled panel has, `TILE_GAP`
 ## between rows and twice that between its parts (the land, the services, the modifiers).
 const TILE_PAD := 4
@@ -109,14 +111,14 @@ const LEVEL_UP_FONT := 48
 ## itself after `BANNER_HOLD` while the mouse is off it -- never under a finger, where only its X or a
 ## tap off it once `BANNER_HOLD` has passed puts it down; `BANNER_GAP` is the air it keeps under the
 ## fight's own top-centre column, in screen pixels.
-const BANNER_HOLD := 3.0
+const BANNER_HOLD := 5.0
 const BANNER_WIDTH := ItemCard.WIDTH * 1.5
 const BANNER_FADE := 0.4
 const BANNER_GAP := 12.0
 ## The toast a counted bounty kill raises under the same column: how long it hangs, how far it rises,
 ## and how tall the monster's picture stands -- small for a common, the card's own 40 for an elite or a
 ## boss, whose picture wears a frame as well.
-const TOAST_TIME := 1.4
+const TOAST_TIME := 5.0
 const TOAST_RISE := 24.0
 const TOAST_PORTRAIT := 24
 const TOAST_BIG_PORTRAIT := BountyList.PORTRAIT
@@ -157,6 +159,12 @@ var _cave_button: Button
 var _service_rows: VBoxContainer
 ## What the land does to its own fight (`TileMods`), one row a modifier, under the services.
 var _mod_rows: VBoxContainer
+## What the ice wall opens for good once broken (`WallUnlocks`), on a wall tile alone.
+var _unlock_rows: VBoxContainer
+## The runes on a tile and the runes held to spend there (`_show_runes`), from the third wall.
+var _rune_rows: VBoxContainer
+## Runes found in the descent that is open, so leaving it saves them (`_bank_depths`).
+var _cave_runes := 0
 ## The settlement the player has walked into, on the right edge in the tile panel's place, and the
 ## cell it stands on -- kept because the map is still clickable behind the page, so the selection is
 ## not what the town is.
@@ -745,6 +753,10 @@ func _build_ui() -> void:
 	scrolled.add_child(_service_rows)
 	_mod_rows = UITheme.vbox(TILE_GAP)
 	scrolled.add_child(_mod_rows)
+	_rune_rows = UITheme.vbox(TILE_GAP)
+	scrolled.add_child(_rune_rows)
+	_unlock_rows = UITheme.vbox(TILE_GAP)
+	scrolled.add_child(_unlock_rows)
 
 	# Only the buttons that can be pressed are shown (`_update_buttons`), at the column's foot, where
 	# the scroll taking the slack leaves them.
@@ -869,7 +881,7 @@ func _is_cave(cell: Vector2i) -> bool:
 func _build_pages(layer: CanvasLayer) -> void:
 	# Each tooltip is the page's own name, and each button answers to a key (`HOTKEYS`), whose picture
 	# the tip card shows after the name (`TipCard.KEY`).
-	_skills_button = UITheme.icon_button(load(STAR_ICON), "Skills", ui_scale)
+	_skills_button = UITheme.icon_button(load(STAR_ICON), SkillsPage.TITLE, ui_scale)
 	_skills_button.pressed.connect(_on_skills_pressed)
 	layer.add_child(_skills_button)
 	_bag_button = UITheme.icon_button(load(CHEST_ICON), "Items", ui_scale)
@@ -1595,6 +1607,114 @@ func _show_mods(cell: Vector2i) -> void:
 			block.add_child(ItemDetails.line(lines[2], Palette.LEAF, MOD_WIDTH, true))
 
 
+## The runes on a tile (`RuneTable`), once the third wall has opened them, on ground a farm run can be
+## fought on: what they are doing to it -- each modifier written as the land's own are, the Depths and
+## the Ascent -- with the kills each has left, and a square for every rune held, pressed to spend it on
+## the tile. Nothing on a tile with neither.
+func _show_runes(cell: Vector2i) -> void:
+	UITheme.clear(_rune_rows)
+	if not WallUnlocks.has(inventory.walls_ever(), WallUnlocks.RUNES) or not view.can_farm_ground(cell):
+		return
+	var spot := view.origin + cell
+	var work := inventory.rune_work(spot)
+	if inventory.runes.is_empty() and not RuneTable.working(work):
+		return
+	_rune_rows.add_child(UITheme.section("Runes"))
+	for mod: Dictionary in work["mods"]:
+		var lines := TileMods.describe(mod["id"], int(mod["tier"]))
+		_rune_rows.add_child(_rune_block(lines[0], lines[1], lines[2], int(mod["left"])))
+	var depths: Array = work["depth"]
+	if not depths.is_empty():
+		_rune_rows.add_child(_rune_block("Depth +%d" % depths.size(),
+				"Enemies are %d level%s higher." % [depths.size(), "" if depths.size() == 1 else "s"], "",
+				int(depths.min())))
+	if RuneTable.ascended(work):
+		_rune_rows.add_child(_rune_block("Ascended", "What enemies drop may be ascended.", "", int(work["ascent"])))
+	var held := HFlowContainer.new()
+	held.add_theme_constant_override("h_separation", 2)
+	held.add_theme_constant_override("v_separation", 2)
+	for rune: String in RuneTable.names():
+		var count := inventory.rune_count(rune)
+		if count <= 0:
+			continue
+		var why := RuneTable.why_not(rune, TileMods.farmable(_mods_of(cell)), work)
+		var square := OrbSlot.new()
+		square.setup(rune, count, why.is_empty())
+		square.tooltip_text = rune + "\n" + (why if not why.is_empty() else str(RuneTable.RUNES[rune]["does"]))
+		square.pressed.connect(_on_rune_pressed)
+		held.add_child(square)
+	if held.get_child_count() > 0:
+		_rune_rows.add_child(held)
+
+
+## One thing a rune is doing to a tile, as `_show_mods` writes the land's own: its name, what it does,
+## what it pays in leaf, and the kills it has left.
+func _rune_block(title: String, does: String, pays: String, left: int) -> VBoxContainer:
+	var block := UITheme.vbox(2)
+	block.add_child(UITheme.label(title, Palette.TEXT))
+	block.add_child(ItemDetails.line(does, Palette.TEXT, MOD_WIDTH, true))
+	if not pays.is_empty():
+		block.add_child(ItemDetails.line(pays, Palette.LEAF, MOD_WIDTH, true))
+	block.add_child(ItemDetails.line("%d kill%s left" % [left, "" if left == 1 else "s"], Palette.TEXT_SOFT,
+			MOD_WIDTH, true))
+	return block
+
+
+## A rune pressed on the tile panel: spent on the selected tile, saved, and the panel says what it did.
+func _on_rune_pressed(rune: String) -> void:
+	var cell := map.selected_cell
+	if cell == HexMap.NO_CELL or not view.can_farm_ground(cell):
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	if inventory.use_rune(rune, view.origin + cell, TileMods.farmable(_mods_of(cell)), rng):
+		print("%s on %s" % [rune, cell])
+		inventory.save(inventory_path)
+		_show_runes(cell)
+		_rune_rows.visible = _rune_rows.get_child_count() > 0
+		_layout_ui()
+
+
+## What the ice wall on a tile opens for good once broken (`WallUnlocks.of_wall`), so the next wall is
+## something to look forward to: each its mark and its name, what it does in the tooltip, and one an
+## earlier world already opened greyed, as the orb tray greys an orb with nothing to do (`OrbSlot.DIM`). The wall standing is always the next to fall, so its
+## number is the one the land would reach past it, in whole wall steps as `Inventory.walls_ever` counts.
+func _show_unlocks(cell: Vector2i) -> void:
+	UITheme.clear(_unlock_rows)
+	if not view.is_wall(cell):
+		return
+	var wall := (view.land_radius + view.wall_step - MapBuilder.START_LAND_RADIUS) / MapBuilder.WALL_STEP
+	var unlocks := WallUnlocks.of_wall(wall)
+	if unlocks.is_empty():
+		return
+	_unlock_rows.add_child(UITheme.section("Unlocks"))
+	var opened := inventory.walls_ever() >= wall
+	for unlock: Dictionary in unlocks:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		row.tooltip_text = unlock["tip"]
+		var icon := TextureRect.new()
+		icon.texture = load(unlock["icon"])
+		# A 32 px picture (an orb, the root) halved, as the orb tray draws one; a 14 px mark as it is.
+		# The mode before the size, or the texture's own size wins (the root CLAUDE.md).
+		if icon.texture.get_width() > UNLOCK_ICON:
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		else:
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+		icon.custom_minimum_size = Vector2(UNLOCK_ICON, UNLOCK_ICON)
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(icon)
+		var named := UITheme.label(unlock["name"], Palette.TEXT, true)
+		named.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		named.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(named)
+		if opened:
+			row.modulate = OrbSlot.DIM
+		_unlock_rows.add_child(row)
+
+
 ## The tile panel is a full-height column against the right edge, its buttons at its foot. The
 ## left-hand pages lay themselves out against the other edge. Held upright, every page stands over the
 ## corner row, one at a time -- but a town, whose page stands over the bag.
@@ -1659,8 +1779,10 @@ func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
 	_show_environments(weights)
 	_show_services(cell)
 	_show_mods(cell)
+	_show_runes(cell)
+	_show_unlocks(cell)
 	# An empty section would still take its gap in the column.
-	for part: Control in [_env_rows, _service_rows, _mod_rows]:
+	for part: Control in [_env_rows, _service_rows, _mod_rows, _rune_rows, _unlock_rows]:
 		part.visible = part.get_child_count() > 0
 	# The rows are filled after _layout_ui ran, and the level line can be wider than the environment
 	# rows that pin the panel's width, so the panel is measured again now that it holds everything.
@@ -1702,8 +1824,9 @@ func _on_chart_pressed() -> void:
 	var cell := map.selected_cell
 	if not view.can_chart(cell) or inventory.encumbered():
 		return
-	# Not on it yet: walk onto it, and the fight opens on arrival. Already on it is a Retry. Further into
-	# the dark (the Nightwalkers), onto the first tile of the way, and the rest follow as each is won.
+	# Not on it yet: walk onto it, and the fight opens on arrival. Already on it is a Retry. Further out --
+	# into the dark under the Nightwalkers, across seen land under distant charting (the fourth wall's) --
+	# onto the first tile of the way, and the rest follow as each is won.
 	if view.player_cell != cell:
 		var way := view.dark_path(cell)
 		_dark_way = way.slice(2)
@@ -1736,7 +1859,12 @@ func _on_farm_pressed() -> void:
 	var env: String = map.get_tile_info(cell).get("env", "")
 	var variant := view.area_variant(cell)
 	print("Farming %s, %s (%s, %s)" % [view.name_of(cell), cell, env, variant])
-	_open_fight(Encounter.farm(cell, env, variant, _mods_of(cell)), cell, true)
+	# The runes working on the tile (`RuneTable`): their modifiers beside its own, a level a Depth, and
+	# the Ascent. A farm run alone carries them -- never the camp.
+	var work := inventory.rune_work(view.origin + cell)
+	var fight := Encounter.farm(cell, env, variant, _mods_of(cell) + RuneTable.mods_of(work), RuneTable.deeper(work))
+	fight.ascended = RuneTable.ascended(work)
+	_open_fight(fight, cell, true)
 
 
 ## Sends the player onto `cell` -- a charted tile to farm, or the uncharted one to chart, which they
@@ -1847,8 +1975,10 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# Until the Broken Sword has dropped, the first piece of gear is it, and an elite is promised it.
 	fight.first_sword = not inventory.first_sword_taken
 	fight.guarantee_elite = fight.first_sword
+	# Skill nodes from then on: the first find of any kind spends the sword's promise.
+	fight.stone_drops = inventory.first_sword_taken
 	fight.orbs_after = maxi(0, OrbTable.FIRST_ORB_KILLS - inventory.kills)
-	fight.walls_down = inventory.walls_credited
+	fight.walls_down = inventory.walls_ever()
 	# The second fight is promised a Transmutation and the first is not: a player with no kills yet
 	# is in their first.
 	fight.first_orb = not inventory.first_orb_taken and inventory.kills > 0
@@ -1869,7 +1999,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# Not `Encounter.loot_dropped`: the fight applies the player's autodiscard rule, and everything
 	# downstream believes the fight. A second listener applying the rule a second way is how the
 	# counter and the bag would come to disagree about what a fight found.
-	_combat.autodiscard = inventory.autodiscards
+	_combat.autodiscard = inventory.leaves_behind
 	# The Nightwalkers take a won tile's loot for the player, so a way into the dark runs by itself.
 	_combat.auto_collect = not farming and "nightwalker" in inventory.effects()
 	_combat.weapon_kind = _weapon_kind()
@@ -1945,9 +2075,13 @@ func _on_dungeon_pressed() -> void:
 	var fight := Encounter.for_dungeon(inventory.dungeon_depth)
 	fight.wear(inventory.effects(), Achievements.ranks(inventory))
 	fight.arm(inventory.stats())
+	# The runes are the third wall's, and Gollux's cave is the only place they fall.
+	fight.runes_drop = WallUnlocks.has(inventory.walls_ever(), WallUnlocks.RUNES)
+	_cave_runes = 0
 	print("Down the dungeon, depth %d" % fight.depth())
 	_combat = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 	_combat.finished.connect(_on_dungeon_finished)
+	_combat.rune_gained.connect(_on_rune_gained)
 	_let_bag_over()
 	add_child(_combat)
 	_combat.place = DUNGEON_NAME
@@ -1990,7 +2124,13 @@ func _play_music(kind: String) -> void:
 	_music.play()
 
 
-## Writes down the depths the descent that is open has won, if it has won any. On the way out of it
+## A rune off a body in the cave: the player's at once, written as the descent is left (`_bank_depths`).
+func _on_rune_gained(rune: String) -> void:
+	inventory.add_rune(rune)
+	_cave_runes += 1
+
+
+## Writes down the depths the descent that is open has won, if it has won any, and the runes it found. On the way out of it
 ## and on the way out of the game, so quitting under a dead Gollux cannot cost him.
 func _bank_depths() -> void:
 	var fight: Encounter = _combat.fight
@@ -1998,10 +2138,11 @@ func _bank_depths() -> void:
 	var floors := fight.first_floor + fight.index
 	print("Left the dungeon at depth %d, %d won, %s on the board" % [fight.depth(), fight.cleared(),
 			Cloud.score_text(floors)])
-	if fight.cleared() > 0 or won > inventory.dungeon_depth or floors > inventory.dungeon_floors:
+	if fight.cleared() > 0 or won > inventory.dungeon_depth or floors > inventory.dungeon_floors or _cave_runes > 0:
 		inventory.dungeon_depth = maxi(inventory.dungeon_depth, won)
 		inventory.dungeon_floors = maxi(inventory.dungeon_floors, floors)
 		inventory.save(inventory_path)
+		_cave_runes = 0
 	# The board is scored from the cloud save, so a descent goes up at once rather than at the next tick.
 	cloud.sync.call_deferred(true)
 
@@ -2051,6 +2192,9 @@ func _on_combat_finished(won: bool, cell: Vector2i, retrying := false) -> void:
 	ledger.farming = false
 	if map.selected_cell != HexMap.NO_CELL:
 		_panel.show()
+		# A run counts the runes on its tile down.
+		_show_runes(map.selected_cell)
+		_rune_rows.visible = _rune_rows.get_child_count() > 0
 	_update_buttons()
 	# After the fight, so a pop-up never covers one.
 	_check_tips()
@@ -2087,8 +2231,10 @@ func _credit_walls() -> void:
 	# How far the land has ever reached is the cave's bound in every world after this one.
 	if inventory.reach(view.land_radius) or paid or climbed or deeper:
 		inventory.save(inventory_path)
-	# One cave a world, once any wall in any world has fallen: now, or the moment the first one does.
-	if view.place_cave(inventory.farthest_land):
+	# Distant charting, once the fourth wall has fallen in any world.
+	view.distant = WallUnlocks.has(inventory.walls_ever(), WallUnlocks.DISTANT)
+	# One cave a world, once Gollux is unlocked (the third wall, in any world): now, or the moment it is.
+	if WallUnlocks.has(inventory.walls_ever(), WallUnlocks.GOLLUX) and view.place_cave(inventory.farthest_land):
 		print("The Gollux cave is at %s" % view.cave)
 		_save_map()
 
@@ -2338,10 +2484,28 @@ func _refresh_bag_room() -> void:
 		_combat.bag_room = inventory.room_left()
 
 
-## A body has fallen. What it was goes to the ledger, which hands it to the boards.
+## A body has fallen. What it was goes to the ledger, which hands it to the boards -- and on a farm
+## run, it counts down what the runes on the tile are doing (`RuneTable.count_kill`), and the fight
+## forgets whatever ran out from the next body on.
 func _on_enemy_died(index: int) -> void:
 	if _combat != null and index < _combat.fight.lineup.size():
 		ledger.add_kill(_combat.fight.lineup[index])
+	if _combat == null or not ledger.farming:
+		return
+	var fight: Encounter = _combat.fight
+	var spot := view.origin + fight.cell
+	if not inventory.has_runes(spot):
+		return
+	var gone := RuneTable.count_kill(inventory.rune_state(spot))
+	if not RuneTable.any_gone(gone):
+		return
+	for mod: Dictionary in gone["mods"]:
+		for tier in int(mod["tier"]):
+			fight.forget_mod(mod["id"])
+	fight.deeper -= int(gone["depth"])
+	if gone["ascent"]:
+		fight.ascended = false
+	_rearm()
 
 
 ## The ledger counted a body against the accepted bounty. The kill that fills it is the banner alone;
@@ -2748,13 +2912,10 @@ func _mark_new() -> void:
 		(button.get_node(^"New") as CanvasItem).visible = has_new[button]
 
 
-## Whether a rank can be bought anywhere: past a skill's most one point is not always enough.
+## Whether a rank can be bought anywhere in the skill tree.
 func _skill_point_free() -> bool:
-	for tree: String in SkillTree.trees():
-		for id: String in SkillTree.nodes_of(tree):
-			if inventory.why_not_skill(id).is_empty():
-				return true
-	return false
+	return inventory.skills.stones.keys().any(func(path: String) -> bool:
+		return inventory.why_not_skill(path).is_empty())
 
 
 ## Something new on the collection or achievements page hovered, or the page closed over it: kept.

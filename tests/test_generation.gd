@@ -20,6 +20,7 @@ func _run() -> void:
 	_check(_test_map_builder() == true, "map builder tests ran to the end")
 	_check(_test_sight() == true, "sight tests ran to the end")
 	_check(_test_dark_reach() == true, "dark reach tests ran to the end")
+	_check(_test_distant_charting() == true, "distant charting tests ran to the end")
 	_check(_test_ring_towns() == true, "ring town tests ran to the end")
 	_check(_test_tile_levels() == true, "tile level tests ran to the end")
 	_check(_test_map_saving() == true, "map save tests ran to the end")
@@ -730,6 +731,42 @@ func _test_dark_reach() -> bool:
 	_check(walls > 0, "the wall is within reach, as the end of a way")
 	map.queue_free()
 	return true
+
+## Distant charting, the fourth wall's (`MapBuilder.distant`): any tile the player has seen, however far,
+## so long as seen land leads to it from the charted -- never a hidden one, and never across the dark.
+## Its way is fought a tile at a time, as the Nightwalkers' is.
+func _test_distant_charting() -> bool:
+	var map: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
+	root.add_child(map)
+	var view := MapBuilder.create(map, TownWorld.generate(WORLD_SEED), Vector2i(128, 128), 99)
+	var line: Array[Vector2i] = [MapBuilder.CENTER]
+	for i in 10:
+		line.append(HexGrid.neighbor(line[-1], HexGrid.Edge.E))
+	var far := line[7]
+	view.distant = true
+	_check(not view.can_chart(far) and view.dark_path(far).is_empty(), "a hidden tile is never charted from afar")
+	# A patch out of the fog round it, with the dark still between it and the charted land.
+	view.scour(far)
+	_check(view.seen(far) and not view.seen(line[3]), "the patch is seen and the dark lies between")
+	_check(not view.can_chart(far), "no seen land leads there yet")
+	view.scour(line[3])
+	_check(view.can_chart(far), "with the way seen, it can be charted however far")
+	view.distant = false
+	_check(not view.can_chart(far) and view.dark_path(far).is_empty(), "and without the fourth wall's unlock it cannot")
+	view.distant = true
+	var way := view.dark_path(far)
+	_check(way.size() == 8 and way[0] == MapBuilder.CENTER and way[-1] == far,
+			"its way starts on the charted land and ends on it (%s)" % [way])
+	for i in range(1, way.size()):
+		_check(HexGrid.distance(way[i - 1], way[i]) == 1 and view.seen(way[i]) and not view.charted(way[i]),
+				"%s is the next step, seen and uncharted" % way[i])
+	_check(not view.seen(line[10]) and not view.can_chart(line[10]), "a hidden tile past the patch is still out of it")
+	_check(view.walk_onto(far).is_empty() and view.walk_onto(way[1]) == ([way[1]] as Array[Vector2i]),
+			"only the first tile of the way is walked onto")
+	map.player.finish_walk()
+	map.queue_free()
+	return true
+
 
 ## Every cell within `steps` of `cell`, spelled out here rather than asked of the map, so the test
 ## measures the reveal against the grid itself.

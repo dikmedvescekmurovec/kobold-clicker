@@ -389,7 +389,7 @@ const UNIQUES := {
 		"effect": "abacus",
 		"effect_text": "Your skills are 1% stronger for every {intelligence} intelligence.",
 		"ranks": {"intelligence": [5, 4, 3, 2]},
-		"peak": "Every skill you have learned counts one rank higher.",
+		"peak": "Every node holding a point counts one rank higher.",
 	},
 	"crown_of_accord": {
 		"name": "Crown of Accord", "base": "Hide Hood",

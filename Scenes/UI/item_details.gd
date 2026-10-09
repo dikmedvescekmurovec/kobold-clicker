@@ -103,6 +103,9 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 			" · Two-handed" if LootTable.two_handed(item.type) else "",
 			" · Rank %s" % Achievements.RANK_NAMES[UniqueTable.shown_rank(item.unique)] if ranked else ""],
 			Palette.TEXT_SOFT, width, true))
+	# A skill stone's shape: how deep it may sit and how many stones hang off it.
+	if item.is_stone():
+		rows.add_child(line(SkillTree.shape_text(item), Palette.TEXT_SOFT, width, true))
 	# What it asks before it goes on. Not coloured by whether it is met: this block knows no player,
 	# and a greyed Equip says it where it matters.
 	var needs := LootTable.requirement(item.type, item.level)

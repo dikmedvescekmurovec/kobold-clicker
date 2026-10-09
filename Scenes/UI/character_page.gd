@@ -43,8 +43,8 @@ const GROUPS := {
 	"Defence": ["armor", "dodge", "block", "time_on_hit", "time_on_block", "recoup", "blow_delay",
 		"elite_ward", "tile_ward", "fight_clock"],
 	"Rewards": ["drop_rate", "item_rarity", "gold_find", "orb_find", "xp_more", "elite_chance", "camp_earnings"],
-	"Utility": ["spawn_speed", "move_speed", "sight", "extra_enemies", "power_skills", "fortune_skills",
-		"guard_skills"],
+	"Utility": ["spawn_speed", "move_speed", "sight", "extra_enemies", "strength_stones", "dexterity_stones",
+		"intelligence_stones"],
 	"Misc": ["kills", "depth", "time"],
 }
 ## What a row is called where `LootTable.STAT_LABELS` does not say.
@@ -56,7 +56,7 @@ const ALWAYS := ["damage", "fight_clock", "sight", "kills", "time"]
 ## lift, a faster walk. A chance or a share of something is written bare.
 const SIGNED := ["crit_damage", "move_speed", "drop_rate", "item_rarity", "gold_find", "orb_find", "xp_more",
 	"click_damage", "swing_damage", "elite_damage", "first_blow", "camp_earnings", "extra_enemies",
-	"power_skills", "fortune_skills", "guard_skills", "parry"]
+	"strength_stones", "intelligence_stones", "dexterity_stones", "parry"]
 ## The rows the fight holds to a most (`Encounter.WARD_MOST`, certainty for the recoup), read off the
 ## fight (its fields of the same names) rather than the gear, so the page says what the hero has.
 const HELD := ["elite_ward", "tile_ward", "less_health", "recoup"]
@@ -359,20 +359,18 @@ func _curses() -> void:
 		cursed.add_child(block)
 
 
-## What changes how a fight plays rather than a number: every unique worn on either doll as its square
-## (its card under the cursor, held against nothing -- an heirloom's doll is not the one Alt compares
-## with), then every capstone learned as its badge, named with what it does in its tooltip. Left out
-## while there is none.
+## What changes how a fight plays rather than a number: every unique worn on either doll, then every
+## capstone in the skill tree holding a point, each as its square (its card under the cursor, held
+## against nothing -- an heirloom's doll is not the one Alt compares with, and a stone has none). Left
+## out while there is none.
 func _effects() -> void:
 	var pieces := (inventory.equipment.items() + inventory.stash().equipment.items()).filter(
 			func(piece: Item) -> bool: return not piece.unique.is_empty())
-	var capstones := []
-	for tree: String in SkillTree.trees():
-		var nodes: Dictionary = SkillTree.nodes_of(tree)
-		for id: String in nodes:
-			if nodes[id].has("effect") and inventory.skills.total_of(id) > 0:
-				capstones.append(id)
-	if pieces.is_empty() and capstones.is_empty():
+	for path: String in inventory.skills._stones_held():
+		var stone: Item = inventory.skills.stones[path]
+		if not stone.capstone.is_empty():
+			pieces.append(stone)
+	if pieces.is_empty():
 		return
 	var flow := HFlowContainer.new()
 	flow.add_theme_constant_override("h_separation", BagPage.SLOT_GAP)
@@ -382,27 +380,6 @@ func _effects() -> void:
 		var slot := ItemSlot.make(piece)
 		slot.set_meta(ItemCard.NO_COMPARE, true)
 		flow.add_child(slot)
-	for id: String in capstones:
-		flow.add_child(_capstone(id))
-
-
-## A capstone's badge, at the skills page's size in an item square's room so it lines up with the
-## uniques beside it; no socket, the pack's icons carrying their own frame (`SkillSlot`).
-static func _capstone(id: String) -> CenterContainer:
-	var node := SkillTree.node(id)
-	var holder := CenterContainer.new()
-	holder.custom_minimum_size = Vector2.ONE * ItemSlot.SIDE
-	holder.tooltip_text = "%s\n%s" % [node["name"], node["effect_text"]]
-	var icon := TextureRect.new()
-	# Mode before texture and size, for `OrbSlot`'s reason.
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_SCALE
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	icon.texture = SkillTree.icon(id)
-	icon.custom_minimum_size = Vector2.ONE * SkillSlot.SIDE
-	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	holder.add_child(icon)
-	return holder
 
 
 ## One heading's stats as a table, each that is something -- or that every hero has (`ALWAYS`) -- a row

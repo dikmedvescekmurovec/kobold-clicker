@@ -40,6 +40,9 @@ signal gold_gained(amount: float)
 ## fight is the one thing downstream listens to. Nothing here can refuse it -- there is no cap and no
 ## rule that filters currency -- so unlike a find it has no `kept`/`discarded` pair.
 signal orb_gained(orb: String)
+## A rune off a body in Gollux's cave (`Encounter.rune_dropped`), for the main scene to put in the
+## inventory: the dungeon has no ledger.
+signal rune_gained(rune: String)
 ## A body's experience, re-emitted from `Encounter.xp_dropped` for `gold_gained`'s reason. Emitted the
 ## moment the body falls, so the ledger is right however the player leaves.
 signal xp_gained(amount: int)
@@ -451,8 +454,9 @@ var _drops: Array[Item] = []
 var bag_room := -1
 ## How many the bag holds in all (`Inventory.capacity`), which the counter's face is a share of.
 var bag_size := Inventory.CAPACITY
-## Asked of each find's level: whether the player has told the game to stop bringing that level.
-## An unset Callable keeps everything, so a fight nobody has told anything behaves as it always did.
+## Asked of each find: whether the player has told the game to leave it behind -- its level's rule or
+## the loot filter (`Inventory.leaves_behind`). An unset Callable keeps everything, so a fight nobody
+## has told anything behaves as it always did.
 var autodiscard := Callable()
 ## Asked as Escape is pressed: whether a page of the main scene's (the bag) stands over the fight. The
 ## key is then the page's -- an orb put down, a selection cleared, the page closed -- never Terminate.
@@ -510,6 +514,7 @@ func begin(encounter: Encounter, for_cell: Vector2i, ui_scale: float, variant :=
 	fight.loot_dropped.connect(_on_loot_dropped)
 	fight.gold_dropped.connect(_on_gold_dropped)
 	fight.orb_dropped.connect(_on_orb_dropped)
+	fight.rune_dropped.connect(_on_rune_dropped)
 	fight.xp_dropped.connect(_on_xp_dropped)
 	fight.won.connect(_on_finished.bind(true))
 	fight.lost.connect(_on_finished.bind(false))
@@ -1590,13 +1595,13 @@ func _on_enemy_died(index: int) -> void:
 			Juice.hit_stop(get_tree(), STOP_KILL)
 
 
-## The one place a find is looked at. A level the player is done with is counted and passed on to
+## The one place a find is looked at. One the player has said to leave behind is counted and passed on to
 ## whoever is keeping the elite promise, and that is all that happens to it: it does not join
 ## `_drops`, does not move the counter, is never thrown into the arena and appears in neither list.
 ## Everything else goes on exactly as it did, and leaves by `loot_kept`.
 func _on_loot_dropped(index: int, item: Item) -> void:
-	# A rule about a level is a rule about ordinary gear: a unique is never thrown away unseen.
-	if item.unique.is_empty() and autodiscard.is_valid() and bool(autodiscard.call(item.level)):
+	# A rule is about ordinary gear: a unique -- or a capstone -- is never thrown away unseen.
+	if item.rarity != ItemRarity.Rarity.UNIQUE and autodiscard.is_valid() and bool(autodiscard.call(item)):
 		_auto_discarded += 1
 		loot_discarded.emit(index, item)
 		return
@@ -1741,6 +1746,13 @@ func _on_orb_dropped(_index: int, orb: String) -> void:
 	if _loot_panel.visible:
 		_fill_loot()
 	orb_gained.emit(orb)
+
+
+## A rune off a body in the cave, thrown out of it as an orb is, in the rare's beam and its own colour.
+func _on_rune_dropped(_index: int, rune: String) -> void:
+	_show_find(RuneTable.icon(rune), ItemRarity.Rarity.RARE, RuneTable.RUNES[rune]["glow"])
+	_land(_orb_sound)
+	rune_gained.emit(rune)
 
 
 func _on_loot_pressed() -> void:

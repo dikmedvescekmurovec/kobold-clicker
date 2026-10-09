@@ -70,7 +70,7 @@ const CURSES := {
 	THICK_FOG: {"name": "Thick Fog", "skulls": 2,
 		"text": "-2 Sight. You begin with a Broken Torch, which gives one back while held.", "reward": "Unique items drop twice as often."},
 	# A "less" on the finished experience, after every "more" has been added (`Encounter.LESSONS_XP`);
-	# the doubling is `Inventory.skill_worth`, read by `stats()` and by the skill's card.
+	# the doubling is `Inventory.skill_worth`, read by `stats()`.
 	HARD_LESSONS: {"name": "Hard Lessons", "skulls": 2,
 		"text": "Enemies give 75% less experience.", "reward": "Every skill point is worth double."},
 	# Three uniques' rules made a whole world's. **Each adds to its unique where both are had** (the
@@ -91,7 +91,7 @@ const CURSES := {
 		"text": "Only two kinds of land leave gear: the kind you start on, and one other. Chests and the ice wall still pay.",
 		"reward": "On those two, +80% item rarity, and uniques drop three times as often."},
 	SPECIALIST: {"name": "Specialist", "skulls": 2,
-		"text": "Only one skill tree may hold points.",
+		"text": "Only one branch of the skill tree may hold points.",
 		"reward": "Every skill point is worth 50% more."},
 	RESTLESS: {"name": "Restless", "skulls": 1,
 		"text": "A camp is full after 2 hours, not 8.",

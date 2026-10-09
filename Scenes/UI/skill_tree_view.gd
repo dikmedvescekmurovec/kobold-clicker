@@ -1,67 +1,438 @@
 class_name SkillTreeView
 extends Control
-## One tree, laid out the way it was sketched: its skills on SkillTree's grid of rows and columns, and
-## a line from every skill down to each skill it leads to.
+## The player's skill tree, drawn round its root the way the user sketched it (2026-10-08): the root in
+## the middle, its branch going straight down (three, down, up-left and up-right, until the root had one
+## slot), and every stone's connectors fanning out across the wedge of the circle its branch is given. A ring a tier, each wider than the
+## last and pushed out further wherever its squares would touch.
 ##
-## Placed by hand rather than by containers, for the reason the character sheet's sockets are: no
-## container says "under both of those, in the middle". The lines are drawn by this Control, which
-## Godot draws before its children, so they run under the icons rather than across them.
+## A stone is its base's small disc, no numeral, and a capstone its badge (`SkillTree.node_icon`, the
+## user's, 2026-10-09), round the user's grey stone as the root; the slots a stone's connectors leave
+## open are that grey stone small. A stone is still an item square (`ItemSlot.bare`), so the card under
+## the cursor is the bag's. The squares take no mouse, for the bag's reason; this Control hears the
+## presses and says which slot (`slot_pressed`). Two looks: the skills page's (`ranked`), a gold ring round
+## whatever a point can go into, the points on the corner of a stone that holds more than one, ink lines
+## into the stones learned and the stones with none faded; and the black screen's, where an empty slot
+## wears the tier its depth asks and a stone in the hand rings the slots it may go in and fades the rest.
+## Faded, never darkened, so a stone keeps its base's colour (the review of 2026-10-09).
+##
+## Everything stands on `_canvas`, which `fit` scales down by whole window pixels when the tree is
+## bigger than the room it has, so the squares stay as sharp as the rest of the game -- but for the words
+## on the corners, which stand over it in `_marks` at the page's own size whatever the tree is drawn at. The player zooms it
+## the same whole steps (the user's, 2026-10-09): the wheel and a trackpad's pinch about the point under
+## the cursor, as the map does, and `zoom_buttons` about the middle; a tree bigger than its box is
+## dragged about, so a press on a square counts when it lets go without having moved.
 
-## The gaps between squares, in panel pixels. Wide enough for a line to read as a line between two
-## framed icons, and for a count hanging off one square to clear the next. The rows are tighter than
-## the columns because height is what the page is short of: five rows have to fit a 648 px window at
-## `ui_scale` 2 with the title, the points and both resets.
-const GAP_X := 14
-const GAP_Y := 9
-## The line, in panel pixels: ink where nothing leads down it yet, gold where the skill above has a
-## point, so the path a player has taken reads down the tree before a single count is read.
+## A press on a stone or an empty slot, by path (`SkillTree`); never the root.
+signal slot_pressed(path: String)
+## The player zoomed: the page gives the tree its new room (`fit` keeps `zoom`).
+signal zoomed
+
+## The most of the circle a branch off the root is given: the third each had when the root had three
+## slots, so a lone branch hangs below the root and none of its lines cross it.
+const BRANCH_WEDGE := TAU / 3.0
+## The air left between any two slots, in the tree's pixels.
+const GAP := 10
+## The line between a stone and what hangs off it.
 const LINE := 2
+## How far a square's frame and its count reach past it, kept clear round the edge.
+const MARGIN := 4
+## A slot standing back: an empty one, and on the black screen whatever the stone in the hand cannot go
+## in, the root too. The lines stop at a slot's edge, so none shows through.
+const FAINT := Color(1, 1, 1, 0.45)
+## A stone on the skills page holding no point yet: back, but less than an empty slot, so its base's
+## colour still tells it from one at the smallest the tree is drawn.
+const UNLEARNED := Color(1, 1, 1, 0.7)
+## The ring round a slot something can go into -- a point on the skills page, the stone in the hand on the
+## black screen, empty or taking the place of the stone there -- drawn a pixel clear of it.
+const RING := Palette.GOLD
+const RING_GAP := 1.5
+## The tier a depth asks of the stone put there, on each empty slot the stone in the hand is too shallow
+## for: the numerals the bag's carved stones wear, so a "II" in the hand reads against the "III" it cannot
+## take. Never on a placed stone, where it would only crowd the tree.
+const NUMERALS := ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"]
+## The closest zoom, in window pixels a tree pixel for every step of `ui_scale`: 2 is twice the page's own.
+const ZOOM_MOST := 2
+## How far a trackpad's two fingers spread (or close, by its inverse) to step the zoom once: the map's.
+const PINCH_STEP := 1.3
 
-signal node_pressed(id: String)
-signal node_hovered(id: String, slot: SkillSlot)
-signal node_unhovered()
+## Window pixels a tree pixel the player has zoomed to, or 0 for `fit`'s own choice. Kept across redraws.
+var zoom := 0
 
-var tree := ""
-var _ranks := {}
-
-
-## Builds `which` for the learned `ranks`. Called again to redraw; nothing here remembers anything
-## the ranks do not say.
-func fill(which: String, ranks: Dictionary) -> void:
-	tree = which
-	_ranks = ranks
-	for child: Node in get_children():
-		remove_child(child)
-		child.queue_free()
-	custom_minimum_size = Vector2(
-			SkillTree.COLS * SkillSlot.SIDE + (SkillTree.COLS - 1) * GAP_X,
-			SkillTree.ROWS * SkillSlot.SIDE + (SkillTree.ROWS - 1) * GAP_Y + SkillSlot.COUNT_OVERHANG)
-	var nodes := SkillTree.nodes_of(which)
-	for id: String in nodes:
-		var slot := SkillSlot.make(id, int(ranks.get(id, 0)), SkillTree.is_open(id, ranks))
-		slot.position = corner_of(id)
-		slot.pressed.connect(func(pressed_id: String) -> void: node_pressed.emit(pressed_id))
-		slot.hovered.connect(func(hovered_id: String) -> void: node_hovered.emit(hovered_id, slot))
-		slot.unhovered.connect(func() -> void: node_unhovered.emit())
-		add_child(slot)
-	queue_redraw()
+## The slots drawn, path -> Control: an `ItemSlot` for a stone, the bare mark for the root and an empty slot.
+var squares := {}
+var _canvas: Control
+## Over the canvas and never scaled with it: the words on the slots' corners (`_mark_corner`).
+var _marks: Control
+var _skills: Skills
+var _ranked := true
+## The skill points to spend, which decide where the skills page's rings go.
+var _points := 0
+## The paths ringed (`RING`).
+var _rings: Array[String] = []
+## Path -> the centre of its square, the root's at the origin.
+var _centres := {}
+## Where the origin stands on the canvas.
+var _origin := Vector2.ZERO
+var _ui_scale := 1.0
+## A press: where it went down, and how far it has moved since (a drag past `BagPage.DRAG_THRESHOLD`
+## pans, and lets go as no press at all).
+var _press_at := Vector2.INF
+var _dragged := 0.0
+## A trackpad's pinch gathered since its last step.
+var _magnified := 1.0
 
 
-## The top-left corner of a skill's square.
-static func corner_of(id: String) -> Vector2:
-	var entry := SkillTree.node(id)
-	return Vector2(int(entry["col"]) * (SkillSlot.SIDE + GAP_X), int(entry["row"]) * (SkillSlot.SIDE + GAP_Y))
+func _init() -> void:
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	_canvas = Control.new()
+	_canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_canvas.draw.connect(_draw_tree)
+	add_child(_canvas)
+	_marks = Control.new()
+	_marks.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_marks)
+	# The whole of whatever box it stands in, the tree centred in it (`_centre`).
+	size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	size_flags_vertical = Control.SIZE_EXPAND_FILL
+	resized.connect(_centre)
 
 
-static func centre_of(id: String) -> Vector2:
-	return corner_of(id) + Vector2(SkillSlot.SIDE, SkillSlot.SIDE) / 2.0
+## Draws `skills`' tree: `ranked` the skills page's look, with `points` to spend, otherwise the black
+## screen's, where `held` (a stone in the hand, or null) rings the slots it may go in.
+func fill(skills: Skills, ranked := true, held: Item = null, points := 0) -> void:
+	_skills = skills
+	_ranked = ranked
+	_points = points
+	UITheme.clear(_canvas)
+	UITheme.clear(_marks)
+	squares = {}
+	_rings = []
+	_centres = _layout(skills.stones)
+	var low := Vector2.INF
+	var high := -Vector2.INF
+	for path: String in _centres:
+		var half := Vector2.ONE * _side(path, skills.stones) / 2.0
+		low = low.min(_centres[path] - half)
+		high = high.max(_centres[path] + half)
+	_origin = Vector2.ONE * MARGIN - low
+	_canvas.size = high - low + Vector2.ONE * MARGIN * 2.0
+	for path: String in _centres:
+		var square := _square(path, held)
+		square.position = (_origin + _centres[path] - Vector2.ONE * _side(path, skills.stones) / 2.0).round()
+		_canvas.add_child(square)
+		squares[path] = square
+	_canvas.queue_redraw()
+	_scaled(_canvas.scale.x)
 
 
-func _draw() -> void:
-	if tree.is_empty():
+func _square(path: String, held: Item) -> Control:
+	var stone: Item = _skills.stones.get(path)
+	var mark := _mark(path, _skills.stones)
+	var square: Control
+	if stone != null:
+		square = ItemSlot.bare(stone, mark)
+	else:
+		square = TextureRect.new()
+		(square as TextureRect).texture = mark
+		square.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_dress(square, path, stone, held)
+	return square
+
+
+## A slot's look. The black screen's: with a stone in the hand, a ring where it may go and everything
+## else faint, the empty slots too deep for it wearing the tier they ask; with none, the empty slots faint. The skills page's: a gold ring
+## where a point may go, the root included, an empty slot faint and a stone holding no point less so,
+## and on a corner the points in it -- a stone's only where it can hold more than one, the root's once
+## it holds any.
+func _dress(square: Control, path: String, stone: Item, held: Item) -> void:
+	var empty := stone == null and not path.is_empty()
+	if not _ranked:
+		if held != null and SkillTree.can_place(held, path, _skills.stones):
+			_rings.append(path)
+		elif held != null or empty:
+			square.modulate = FAINT
+		# Every slot there is that a stone cannot take is one too deep for it.
+		var depth := SkillTree.depth_of(path)
+		if held != null and empty and not path in _rings and depth <= NUMERALS.size():
+			_mark_corner(path, NUMERALS[depth - 1])
 		return
-	var nodes := SkillTree.nodes_of(tree)
-	for id: String in nodes:
-		for parent: String in nodes[id]["parents"]:
-			var lit := int(_ranks.get(parent, 0)) > 0
-			draw_line(centre_of(parent), centre_of(id), Palette.GOLD if lit else Palette.INK, LINE)
+	if empty:
+		square.modulate = FAINT
+		return
+	var rank := _skills.rank_of(path)
+	if SkillTree.can_rank(path, _skills.stones, _skills.ranks, _points):
+		_rings.append(path)
+	if path.is_empty():
+		if rank > 0:
+			_mark_corner(path, str(rank))
+		return
+	if rank == 0:
+		square.modulate = UNLEARNED
+	var most := SkillTree.most_ranks(stone)
+	if most > 1:
+		_mark_corner(path, "%d/%d" % [rank, most])
+
+
+## `text` hung off the corner of the slot at `path` the way an orb's count is, in `_marks`: at the
+## page's size however small the tree is drawn, and never faded with the slot. Placed by `_place_marks`.
+func _mark_corner(path: String, text: String) -> void:
+	var holder := Control.new()
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.set_meta("path", path)
+	var words := OrbSlot.count_label(text)
+	# Wider than a small slot, it grows off the corner it is aligned to rather than away from it.
+	words.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	words.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	holder.add_child(words)
+	_marks.add_child(holder)
+
+
+func _place_marks() -> void:
+	for holder: Control in _marks.get_children():
+		var square: Control = squares[holder.get_meta("path")]
+		holder.position = _canvas.position + square.position * _canvas.scale
+		holder.size = square.get_combined_minimum_size() * _canvas.scale
+
+
+## What stands at `path`: the root's grey stone, a placed stone's node (`SkillTree.node_icon`), or the
+## grey stone small where nothing is placed yet.
+static func _mark(path: String, stones: Dictionary) -> Texture2D:
+	if path.is_empty():
+		return SkillTree.icon("root")
+	return SkillTree.node_icon(stones[path]) if stones.has(path) else SkillTree.icon(SkillTree.EMPTY_NODE)
+
+
+## How wide the slot at `path` is drawn: its mark's own size, every one of them square.
+static func _side(path: String, stones: Dictionary) -> float:
+	return _mark(path, stones).get_width()
+
+
+## Every slot to draw -- the root's, and under each stone its connectors -- placed round the root:
+## path -> its centre. A slot's children share its wedge evenly, centred on it; the root's have a share
+## of the circle each, `BRANCH_WEDGE` at the most, the first straight down. A ring stands a small stone and a gap past the
+## last, and further while any of its slots would touch one already placed, each at its own size.
+static func _layout(stones: Dictionary) -> Dictionary:
+	var angle := {"": PI / 2.0}
+	var wedge := {"": TAU}
+	var rings: Array = [[""]]
+	var queue := [""]
+	while not queue.is_empty():
+		var path: String = queue.pop_front()
+		var count := SkillTree.connectors_of(path, stones)
+		for i in count:
+			var child := SkillTree.child_of(path, i)
+			var share: float = minf(wedge[path] / count, BRANCH_WEDGE) if path.is_empty() \
+					else wedge[path] / count
+			angle[child] = PI / 2.0 + i * share if path.is_empty() \
+					else float(angle[path]) - float(wedge[path]) / 2.0 + share * (i + 0.5)
+			wedge[child] = share
+			var depth := SkillTree.depth_of(child)
+			if rings.size() <= depth:
+				rings.append([])
+			rings[depth].append(child)
+			queue.append(child)
+	var centres := {"": Vector2.ZERO}
+	var step := _side("0", {}) + GAP
+	var radius := 0.0
+	for depth in range(1, rings.size()):
+		radius += step
+		# ponytail: pushed out two pixels at a time and every pair checked, which is nothing at the size a
+		# tree reaches in play; a placement that packs the rings would be the step up from here.
+		while _crowded(rings[depth], angle, radius, centres, stones) and radius < 100000.0:
+			radius += 2.0
+		for path: String in rings[depth]:
+			centres[path] = Vector2.from_angle(angle[path]) * radius
+	return centres
+
+
+## Whether a ring at `radius` would put a slot within a gap of another on it, or of one already placed,
+## each slot as wide as it is drawn (`_side`).
+static func _crowded(ring: Array, angle: Dictionary, radius: float, placed: Dictionary,
+		stones: Dictionary) -> bool:
+	var at := placed.duplicate()
+	for path: String in ring:
+		at[path] = Vector2.from_angle(angle[path]) * radius
+	for i in ring.size():
+		var path: String = ring[i]
+		for other: String in placed.keys() + ring.slice(i + 1):
+			var clear := (_side(path, stones) + _side(other, stones)) / 2.0 + GAP
+			var apart: Vector2 = (at[path] - at[other]).abs()
+			if apart.x < clear and apart.y < clear:
+				return true
+	return false
+
+
+## Under the squares: the lines, each stopping at the edges of the two slots it joins so a faint slot
+## shows none through it -- on the skills page ink into a stone holding a point (gold could not be seen on
+## the cream, the user's, 2026-10-09) and tan into any other,
+## on the black screen ink, and faint into an empty slot on either -- then the rings.
+func _draw_tree() -> void:
+	for path: String in _centres:
+		if path.is_empty():
+			continue
+		var parent := SkillTree.parent_of(path)
+		var from := _at(parent)
+		var to := _at(path)
+		var along := (to - from).normalized()
+		var colour := Palette.INK
+		if _ranked:
+			colour = Palette.INK if _skills.rank_of(path) > 0 and _skills.stones.has(path) else Palette.SLOT_TAN_DK
+		if not _skills.stones.has(path):
+			colour.a = FAINT.a
+		_canvas.draw_line(from + along * _reach(parent, along), to - along * _reach(path, along), colour, LINE)
+	for path: String in _rings:
+		var half := _side(path, _skills.stones) / 2.0 + RING_GAP
+		if _is_badge(path):
+			_canvas.draw_rect(Rect2(_at(path) - Vector2.ONE * half, Vector2.ONE * half * 2.0), RING, false, 1.0)
+		else:
+			_canvas.draw_arc(_at(path), half, 0.0, TAU, 48, RING, 1.0)
+
+
+## The middle of the slot at `path` as drawn, its square's whole pixels and all.
+func _at(path: String) -> Vector2:
+	var square: Control = squares[path]
+	return square.position + square.get_combined_minimum_size() / 2.0
+
+
+## How far from a slot's middle its edge is, `along` a line: a disc's radius, less the pixel its art
+## leaves clear, or a capstone's badge, which is square.
+func _reach(path: String, along: Vector2) -> float:
+	var half := _side(path, _skills.stones) / 2.0
+	return half / maxf(absf(along.x), absf(along.y)) if _is_badge(path) else half - 1.0
+
+
+func _is_badge(path: String) -> bool:
+	return _skills.stones.has(path) and not (_skills.stones[path] as Item).capstone.is_empty()
+
+
+## Scales the tree into `room` (the tree's parent's pixels, which are `ui_scale` window pixels each):
+## its own size when it fits, else the largest whole number of window pixels a tree pixel that does,
+## and at worst one, past which the page scrolls. Returns that size, which is the box the page stands
+## it in: once the player has zoomed (`zoom`), it is drawn at theirs and scrolls in the same box.
+func fit(room: Vector2, ui_scale: float) -> Vector2:
+	_ui_scale = maxf(1.0, roundf(ui_scale))
+	var pixels := int(_ui_scale)
+	var room_rect := Rect2(Vector2.ZERO, room)
+	while pixels > 1 and not room_rect.encloses(Rect2(Vector2.ZERO, _canvas.size * pixels / _ui_scale)):
+		pixels -= 1
+	var box := (_canvas.size * pixels / _ui_scale).ceil()
+	_scaled((clampi(zoom, 1, _most()) if zoom > 0 else pixels) / _ui_scale)
+	return box
+
+
+## One whole step closer (`step` 1) or further (-1), about `at` (this Control's own pixels; the middle of
+## what the scroll it stands in shows, by default), which stays where it was on screen.
+func zoom_by(step: int, at := Vector2.INF) -> void:
+	var now := roundi(_canvas.scale.x * _ui_scale)
+	var to := clampi(now + step, 1, _most())
+	if to == now:
+		return
+	var box := get_parent() as ScrollContainer
+	if at == Vector2.INF:
+		at = (box.size / 2.0 - position) if box != null else size / 2.0
+	var held := (at - _canvas.position) / _canvas.scale
+	var on_screen := at + position
+	zoom = to
+	_scaled(to / _ui_scale)
+	zoomed.emit()
+	if box != null:
+		# Once the scroll has taken the new size in, put the point back under where it was.
+		_hold_point(box, held, on_screen)
+
+
+func _hold_point(box: ScrollContainer, held: Vector2, on_screen: Vector2) -> void:
+	await get_tree().process_frame
+	var there := _canvas.position + held * _canvas.scale - on_screen
+	box.scroll_horizontal = roundi(there.x)
+	box.scroll_vertical = roundi(there.y)
+
+
+func _most() -> int:
+	return int(_ui_scale) * ZOOM_MOST
+
+
+## A − and a + for `view`, for whoever has no wheel (a finger) or wants one.
+static func zoom_buttons(view: SkillTreeView) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_END
+	for step: int in [-1, 1]:
+		var button := UITheme.button("-" if step < 0 else "+", "SmallButton",
+				"Zoom out" if step < 0 else "Zoom in")
+		button.pressed.connect(view.zoom_by.bind(step))
+		row.add_child(button)
+	return row
+
+
+func _scaled(by: float) -> void:
+	_canvas.scale = Vector2.ONE * by
+	custom_minimum_size = (_canvas.size * by).ceil()
+	_centre()
+
+
+## In the middle of whatever box it is given, across and down, with the corners' words over it.
+func _centre() -> void:
+	_canvas.position = ((size - custom_minimum_size).max(Vector2.ZERO) / 2.0).floor()
+	_place_marks()
+
+
+func _gui_input(event: InputEvent) -> void:
+	Cursors.over_squares(self, event, Cursors.holding())
+	if event is InputEventMagnifyGesture:
+		_magnified *= event.factor
+		if absf(log(_magnified)) >= log(PINCH_STEP):
+			zoom_by(int(signf(_magnified - 1.0)), event.position)
+			_magnified = 1.0
+		accept_event()
+	elif event is InputEventMouseButton and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		if event.pressed:
+			zoom_by(1 if event.button_index == MOUSE_BUTTON_WHEEL_UP else -1, event.position)
+		accept_event()
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		accept_event()
+		if event.pressed:
+			_press_at = event.position
+			_dragged = 0.0
+		elif _press_at != Vector2.INF and _dragged < _slop():
+			_press(_press_at)
+			_press_at = Vector2.INF
+	elif event is InputEventMouseMotion and _press_at != Vector2.INF \
+			and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+		_dragged += event.relative.length()
+		var box := get_parent() as ScrollContainer
+		if box != null and _dragged >= _slop():
+			box.scroll_horizontal -= roundi(event.relative.x)
+			box.scroll_vertical -= roundi(event.relative.y)
+		accept_event()
+
+
+## How far a press may travel and still be one: a finger's slop, or the bag's threshold.
+func _slop() -> float:
+	return Cursors.TOUCH_SLOP if Cursors.touched else BagPage.DRAG_THRESHOLD
+
+
+## The square under `at` (this Control's own pixels), pressed: the root only on the skills page, where
+## it takes points.
+func _press(at: Vector2) -> void:
+	var path: Variant = slot_at(at)
+	if path != null and (_ranked or not path.is_empty()):
+		slot_pressed.emit(path)
+
+
+## The path of the slot under `at` (this Control's own pixels), or null. The bag's too, for a stone
+## dropped on the tree.
+func slot_at(at: Vector2) -> Variant:
+	var on_tree := (at - _canvas.position) / _canvas.scale
+	for path: String in squares:
+		var square: Control = squares[path]
+		if Rect2(square.position, square.get_combined_minimum_size()).has_point(on_tree):
+			return path
+	return null
+
+
+## The root's lines under the cursor, the way a stone's card is: the points in it and what they add up to.
+func _get_tooltip(at: Vector2) -> String:
+	if _skills == null or slot_at(at) != "":
+		return ""
+	var rank := _skills.rank_of("")
+	return "%d point%s\n+%d Damage\n+%d%% increased Damage" % [rank, "" if rank == 1 else "s",
+			roundi(SkillTree.ROOT_DAMAGE * rank), roundi(SkillTree.ROOT_PERCENT * rank)]
