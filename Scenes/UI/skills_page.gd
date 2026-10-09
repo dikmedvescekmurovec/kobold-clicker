@@ -60,6 +60,7 @@ func _ready() -> void:
 	_view = SkillTreeView.new()
 	_view.slot_pressed.connect(_on_stone_pressed)
 	_view.zoomed.connect(layout)
+	_view.hold_ended.connect(func() -> void: inventory.save(_save_path))
 	_scroll.add_child(_view)
 	top.add_child(SkillTreeView.zoom_buttons(_view))
 	_reset = UITheme.priced_button("Reset", 0.0, "SmallButton", "Take back every point, for gold")
@@ -105,7 +106,8 @@ func layout() -> void:
 
 
 ## One point into a stone. A refused press does nothing: the card says what the stone is, and the count
-## on its corner whether it has room.
+## on its corner whether it has room. A press held down puts one in again and again, saved once it lets
+## go (`SkillTreeView.hold_ended`), so the save and the corner's damage float come once, not each point.
 func _on_stone_pressed(path: String) -> void:
 	# A finger has no hover: its first tap on a stone is what puts the card up, and the next learns it.
 	if Cursors.touched and _read != path:
@@ -113,7 +115,8 @@ func _on_stone_pressed(path: String) -> void:
 		return
 	if not inventory.rank_up_skill(path):
 		return
-	inventory.save(_save_path)
+	if not _view.repeating:
+		inventory.save(_save_path)
 	if path.is_empty():
 		print("Learned the root (%d)" % inventory.skills.rank_of(path))
 	else:

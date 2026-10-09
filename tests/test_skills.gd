@@ -368,6 +368,25 @@ func _test_page() -> bool:
 	_check(pressed == ["0", ""], "a press on the root is the root's (%s)" % [pressed])
 	_check("+%d Damage" % inventory.skills.rank_of("") in view._get_tooltip(centre),
 			view._get_tooltip(centre))
+	# A press held still puts a point in again and again, and letting go adds none more.
+	inventory.level = 20
+	page.open()
+	var ended: Array = []
+	view.hold_ended.connect(func() -> void: ended.append(true))
+	var grip: InputEventMouseButton = left.call(true)
+	grip.position = centre
+	view._gui_input(grip)
+	var before := inventory.skills.rank_of("")
+	view._process(SkillTreeView.HOLD_DELAY / 2.0)
+	_check(inventory.skills.rank_of("") == before, "nothing before the hold's first wait")
+	for i in 3:
+		view._process(SkillTreeView.HOLD_DELAY)
+	_check(inventory.skills.rank_of("") == before + 3, "then a point each time it runs out (%d)" % inventory.skills.rank_of(""))
+	var up: InputEventMouseButton = left.call(false)
+	up.position = centre
+	view._gui_input(up)
+	_check(inventory.skills.rank_of("") == before + 3 and ended.size() == 1,
+			"letting go adds none and ends the hold (%d, %d)" % [inventory.skills.rank_of(""), ended.size()])
 	page.queue_free()
 	await process_frame
 	return true

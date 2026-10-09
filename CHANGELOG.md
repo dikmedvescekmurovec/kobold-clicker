@@ -6,6 +6,11 @@ a player has not seen yet once, together, newest first (`main_scene.gd` `_show_c
 written for players. A section may hold a two-column table instead (`| left | right |`, a header row, then
 `|---|---|`): the game draws its rows as its own tables, the left column wrapping and the right kept short.
 
+## v0.3.1 (2026-10-09)
+
+### Skill tree
+- Hold the mouse button down on a skill node or the root to keep spending points on it, faster the longer you hold.
+
 ## v0.3.0 (2026-10-09)
 
 ### Skill tree

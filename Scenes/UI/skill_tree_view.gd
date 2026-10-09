@@ -26,6 +26,8 @@ extends Control
 signal slot_pressed(path: String)
 ## The player zoomed: the page gives the tree its new room (`fit` keeps `zoom`).
 signal zoomed
+## A press held on the skills page has let go after pressing at least once (`repeating`).
+signal hold_ended
 
 ## The most of the circle a branch off the root is given: the third each had when the root had three
 ## slots, so a lone branch hangs below the root and none of its lines cross it.
@@ -54,6 +56,11 @@ const NUMERALS := ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"]
 const ZOOM_MOST := 2
 ## How far a trackpad's two fingers spread (or close, by its inverse) to step the zoom once: the map's.
 const PINCH_STEP := 1.3
+## A press held still on the skills page presses again and again (the user's ask, 2026-10-09): the first
+## after `HOLD_DELAY` seconds, each after that `HOLD_SPEEDUP` of the wait before, down to `HOLD_FASTEST`.
+const HOLD_DELAY := 0.4
+const HOLD_SPEEDUP := 0.85
+const HOLD_FASTEST := 0.03
 
 ## Window pixels a tree pixel the player has zoomed to, or 0 for `fit`'s own choice. Kept across redraws.
 var zoom := 0
@@ -80,6 +87,11 @@ var _press_at := Vector2.INF
 var _dragged := 0.0
 ## A trackpad's pinch gathered since its last step.
 var _magnified := 1.0
+## Seconds until a held press presses again, INF while none is held, and the wait it was last given.
+var _hold_left := INF
+var _hold_every := HOLD_DELAY
+## Whether the press held down has pressed already, so letting go presses nothing more.
+var repeating := false
 
 
 func _init() -> void:
@@ -392,17 +404,46 @@ func _gui_input(event: InputEvent) -> void:
 		if event.pressed:
 			_press_at = event.position
 			_dragged = 0.0
-		elif _press_at != Vector2.INF and _dragged < _slop():
-			_press(_press_at)
+			# Only a point is pressed again: on the black screen a press places a stone or spends an orb.
+			_hold_left = HOLD_DELAY if _ranked else INF
+			_hold_every = HOLD_DELAY
+		else:
+			if _press_at != Vector2.INF and _dragged < _slop() and not repeating:
+				_press(_press_at)
 			_press_at = Vector2.INF
+			_end_hold()
 	elif event is InputEventMouseMotion and _press_at != Vector2.INF \
 			and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
 		_dragged += event.relative.length()
 		var box := get_parent() as ScrollContainer
-		if box != null and _dragged >= _slop():
-			box.scroll_horizontal -= roundi(event.relative.x)
-			box.scroll_vertical -= roundi(event.relative.y)
+		if _dragged >= _slop():
+			_hold_left = INF
+			if box != null:
+				box.scroll_horizontal -= roundi(event.relative.x)
+				box.scroll_vertical -= roundi(event.relative.y)
 		accept_event()
+
+
+## A press held still presses again each time its wait runs out, one press a frame at most.
+func _process(delta: float) -> void:
+	if _hold_left == INF:
+		return
+	if not is_visible_in_tree():
+		_end_hold()
+		return
+	_hold_left -= delta
+	if _hold_left <= 0.0:
+		repeating = true
+		_hold_every = maxf(_hold_every * HOLD_SPEEDUP, HOLD_FASTEST)
+		_hold_left = _hold_every
+		_press(_press_at)
+
+
+func _end_hold() -> void:
+	_hold_left = INF
+	if repeating:
+		repeating = false
+		hold_ended.emit()
 
 
 ## How far a press may travel and still be one: a finger's slop, or the bag's threshold.
