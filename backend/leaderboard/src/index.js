@@ -3,6 +3,8 @@
 // cheat. The API, the sign-in flow and how it is deployed: ../README.md.
 
 const NAME = /^[A-Za-z0-9 _-]{3,16}$/;
+// Something@something.something, no spaces, at most the 254 characters an address may be.
+const EMAIL = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]+$/;
 const TOP = 100;
 const LOGIN_MS = 10 * 60 * 1000;
 // Revisions kept a player, for putting an older one back by hand.
@@ -52,6 +54,7 @@ const ROUTES = {
   "DELETE /save": signedIn(deleteSave),
   "GET /leaderboard": board,
   "GET /privacy": privacy,
+  "POST /waitlist": joinWaitlist,
 };
 
 // The web build is served from another origin (../web). Sessions are bearer tokens, never cookies,
@@ -424,12 +427,24 @@ function signedIn(route) {
   };
 }
 
+// ---------------------------------------------------------------------------------------------------
+// The waiting list, from the landing page. Joining twice is not an error: the first time is kept.
+
+async function joinWaitlist(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const email = String(Object(body).email ?? "").trim();
+  if (email.length > 254 || !EMAIL.test(email)) return json({ error: "That is not an email address" }, 400);
+  await env.DB.prepare("INSERT OR IGNORE INTO waitlist (email, joined_at) VALUES (?, ?)").bind(email, Date.now()).run();
+  return json({ joined: true }, 201);
+}
+
 function privacy() {
   return page("Privacy", `<p>Kobold Clicker keeps, for each player who signs in:</p>
     <ul><li>the id Google or Discord gives your account (not your email, name or picture),</li>
     <li>the leaderboard name you choose,</li><li>your save, and when it was uploaded.</li></ul>
     <p>They are used for cloud saves and the leaderboards, and nothing else. Nothing is sold or
-    shared. Addresses are seen only to limit how often anyone may call, and are not kept.</p>
+    shared. An email given to the waiting list is kept only to tell you when the game comes out.
+    IP addresses are seen only to limit how often anyone may call, and are not kept.</p>
     <p>To delete all of it, choose <b>Delete cloud account</b> in the game's settings.</p>`);
 }
 

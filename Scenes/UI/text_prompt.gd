@@ -30,7 +30,7 @@ func _init(title: String, text: String, verb: String, most: int, ui_scale: float
 
 func _ready() -> void:
 	# On a CanvasLayer the anchors are the window's, so the holder follows it as it resizes.
-	set_anchors_preset(PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_panel = UITheme.titled_panel(_title, "", Callable())
 	add_child(_panel)
 	var body := UITheme.body_of(_panel)

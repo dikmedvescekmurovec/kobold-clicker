@@ -228,6 +228,14 @@ test("the web build, served from another origin, may call", async () => {
 });
 
 // The limiter counts in fixed minutes, so ten calls may straddle two of them: 21 cannot.
+test("the waiting list takes an email, again without complaint, and turns away what is not one", async () => {
+  const join = (email) => read("/waitlist", { method: "POST", body: { email } });
+  assert.equal((await join("kobold@example.com")).status, 201);
+  assert.equal((await join("KOBOLD@example.com")).status, 201);
+  assert.equal((await join("not an email")).status, 400);
+  assert.equal((await join(`${"a".repeat(250)}@b.cd`)).status, 400);
+});
+
 test("one address may start ten sign-ins a minute", async () => {
   const statuses = [];
   for (let at = 0; at < 21; at++) statuses.push((await read("/logins", { method: "POST", ip: "10.9.9.9" })).status);

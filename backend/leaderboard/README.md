@@ -292,6 +292,7 @@ sentence as it is. "Bearer" means `Authorization: Bearer <session token>`.
 | `DELETE /save` | Bearer | – | `{deleted}`: the cloud's saves gone, the board untouched | 401 |
 | `GET /leaderboard?board=walls&limit=50` | optional Bearer | – | `{top: [{rank, name, score, floors, reached_at}], me: {name, score, rank, ...}}` for `gollux` (left out: what builds before the other boards ask), `walls` or `deepest`; `reached_at` is that board's | 401 if a token is sent and unknown, 404 no such board |
 | `GET /privacy` | – | – | the privacy page (HTML) | – |
+| `POST /waitlist` | – | `{email}` | **201** `{joined}`, also for an address already on the list | 400 not an email |
 
 Rules:
 

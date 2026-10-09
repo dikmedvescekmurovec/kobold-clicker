@@ -6,6 +6,16 @@ a player has not seen yet once, together, newest first (`main_scene.gd` `_show_c
 written for players. A section may hold a two-column table instead (`| left | right |`, a header row, then
 `|---|---|`): the game draws its rows as its own tables, the left column wrapping and the right kept short.
 
+## v0.4.1 (2026-10-09)
+
+### Front page
+- Leave your email on the front page to join the waiting list and hear when the game comes out.
+- The game now waits behind the Golden door, which asks for a password.
+
+### Fixes
+- Typing on a phone now works in every text box: your email, the password and your hero's name.
+- The password box no longer slides into the top corner when a phone's keyboard opens.
+
 ## v0.4.0 (2026-10-09)
 
 ### Runes

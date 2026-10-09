@@ -88,6 +88,8 @@ GREEN_RAMP = ["#50a978", "#57c767", "#478773", "#6ae356", "#68c97e", "#80e87c", 
 # as a different kind of button rather than a dead one.
 DANGER_HUE, DANGER_SAT = 0.017, 0.55
 DISABLED_HUE, DISABLED_SAT, DISABLED_DIM = 0.07, 0.55, 1.45
+# GOLD is the landing page's Golden door, lettered in ink as the green face is.
+GOLD_HUE, GOLD_SAT, GOLD_DIM = 0.12, 0.95, 1.15
 # BROWN is the pack's own square button, read off it: the pack draws one at Buttons.png (336, 339),
 # 11x12, in four states on a 16 px pitch -- and that sprite cannot be used. Its face is a diagonal
 # gradient, so no margin leaves a centre flat enough for check() to pass, and at 11x12 it could not
@@ -1277,7 +1279,11 @@ BROWN = _recolor(BROWN_HUE, BROWN_SAT, BROWN_DIM)
 VARIANTS = {
     "normal": BROWN,
     "danger": _recolor(DANGER_HUE, DANGER_SAT),
+    "gold": _recolor(GOLD_HUE, GOLD_SAT, GOLD_DIM),
 }
+# A variant cut on only some surfaces; the rest go on every one. The gold door stands on no panel, so
+# it takes the wood row's drop shadow, as the brown face does.
+VARIANT_SURFACES = {"gold": ("wood",)}
 # The pack's own green, unrecoloured, for the one press a counter is there for (Buy, Accept, Claim,
 # Upgrade): brown says "a thing you can do", green says "the thing to do here". Cream surface only --
 # no wood panel carries one.
@@ -1390,6 +1396,8 @@ def build():
     w, h = BUTTON_SIZE
     for surface, row in BUTTON_ROW.items():
         for variant, table in VARIANTS.items():
+            if surface not in VARIANT_SURFACES.get(variant, BUTTON_ROW):
+                continue
             for state, x in BUTTON_STATE_X.items():
                 crop = sheet("Buttons").crop((x, row, x + w, row + h))
                 name = "ui_btn_%s_%s_%s" % (surface, variant, state)

@@ -57,9 +57,12 @@ const BUTTONS := {
 	"LightDangerButton": ["light", "danger"],
 	# The pack's own green, for the one press a counter is there for: Buy, Accept, Claim, Upgrade.
 	"LightGoButton": ["light", "go"],
+	# The landing page's Golden door.
+	"WoodGoldButton": ["wood", "gold"],
 }
-## The green face is lettered in ink, as the pack letters its green bar: cream on that green is too pale.
+## The green and gold faces are lettered in ink, as the pack letters its green bar: cream on them is too pale.
 const GO_BUTTON := "LightGoButton"
+const GOLD_BUTTON := "WoodGoldButton"
 const GO_FONT_COLOR := Palette.INK
 ## The same faces lettered in the body font, for a row of buttons inside a card (a bounty's Accept
 ## and Claim) where Pixellari's 16 px made the buttons outweigh what they act on. Each is the face it
@@ -295,7 +298,7 @@ static func build() -> Theme:
 			box.content_margin_bottom = BUTTON_MARGIN.y - sink
 			built.set_stylebox(state, variation, box)
 		for item: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
-			built.set_color(item, variation, GO_FONT_COLOR if variation == GO_BUTTON else FONT_COLOR)
+			built.set_color(item, variation, GO_FONT_COLOR if variation in [GO_BUTTON, GOLD_BUTTON] else FONT_COLOR)
 		built.set_color("font_disabled_color", variation, DISABLED_FONT_COLOR)
 		built.set_font("font", variation, font)
 		built.set_font_size("font_size", variation, FONT_SIZE)
