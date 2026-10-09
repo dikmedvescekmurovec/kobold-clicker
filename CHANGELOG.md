@@ -6,6 +6,29 @@ a player has not seen yet once, together, newest first (`main_scene.gd` `_show_c
 written for players. A section may hold a two-column table instead (`| left | right |`, a header row, then
 `|---|---|`): the game draws its rows as its own tables, the left column wrapping and the right kept short.
 
+## v0.4.0 (2026-10-09)
+
+### Runes
+- Runes now sit in a row above your orbs in the bag. Pick one up and click a tile on the map to spend it there.
+- A rune's effect now lasts 1000 kills instead of 100.
+- The arrow in the line above the orbs folds the orbs and runes away, and opens them again.
+
+### World
+- Gollux's cave now appears beside the ice wall you just broke: the third in your first world, the first in every world after.
+- From the fourth ice wall on, a wall has as much health as 150 enemies of the land just inside it.
+- Distant charting collects the loot of every tile you fight through on its own.
+- Breaking a later ice wall no longer freezes the game while the new land is made.
+
+### Achievements
+- An achievement past rank IV keeps counting, and shows the most you ever reached.
+
+### Skill tree
+- Spending points in a large tree no longer stutters.
+- The character panel stays in view while the skill tree is open.
+
+### Credits
+- Thanks to Benjamin Medvešček Murovec for ideas and testing.
+
 ## v0.3.1 (2026-10-09)
 
 ### Skill tree
