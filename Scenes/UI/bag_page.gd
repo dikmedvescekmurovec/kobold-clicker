@@ -93,6 +93,16 @@ const UPGRADE: Array[String] = [
 ]
 const UPGRADE_NAME := "Upgrade"
 static var _upgrade_texture: ImageTexture
+## The chevron in the middle of the tray's rule, there once the runes are (`_trays_hidden`): pointing down
+## while the runes and the orbs stand under it, up while they are folded away.
+const CHEVRON: Array[String] = [
+	"#.....#",
+	"##...##",
+	".##.##.",
+	"..###..",
+	"...#...",
+]
+static var _chevrons: Array[ImageTexture] = []
 ## How many squares short of the cap the count turns rust.
 const NEARLY_FULL := 4
 const WIDTH := GRID_COLS * ItemSlot.SIDE + (GRID_COLS - 1) * SLOT_GAP
@@ -208,7 +218,14 @@ var _tree: SkillTreeView
 ## The question standing over the page (`_ask`), or null.
 var _confirm: Control
 
-var _orb_rule: ColorRect
+## The rule over the tray, `_fold_button` in its middle.
+var _orb_rule: HBoxContainer
+var _fold_button: Button
+## The runes and the orbs folded away under the grid by the chevron. Kept for the session, not saved.
+var _trays_hidden := false
+## The six runes over the orbs, once one has been found: picked up as an orb is, and pressed on a tile of
+## the map rather than a piece (`rune_on`). The ordinary bag's alone.
+var _rune_tray: HBoxContainer
 var _orb_tray: HBoxContainer
 var _orb_card: OrbCard
 ## What a spent orb rolls with. Unseeded: a test that wants a known answer seeds it.
@@ -223,8 +240,10 @@ var _armed := "":
 		if orb == _armed:
 			return
 		_armed = orb
-		var mark: Texture2D = null if orb == "" 				else SuperOrbTable.icon(orb) if SuperOrbTable.has(orb) else OrbTable.icon(orb)
-		Cursors.hold(mark)
+		var mark: Texture2D = null if orb == "" else SuperOrbTable.icon(orb) if SuperOrbTable.has(orb) \
+				else RuneTable.icon(orb) if RuneTable.has(orb) else OrbTable.icon(orb)
+		# A rune's mark is made at the tray's 16, an orb's cut at 32.
+		Cursors.hold(mark, 2 if RuneTable.has(orb) else 1)
 		held_changed.emit(orb)
 
 ## A left press off any piece put the held orb down, and the bag waits for its release to redraw.
@@ -294,14 +313,30 @@ func _ready() -> void:
 	_sections = UITheme.vbox(SLOT_GAP, WIDTH)
 	_scroll.add_child(_sections)
 
-	# The tray comes after the grid, so it is a footer under it.
-	_orb_rule = UITheme.rule()
+	# The tray comes after the grid, so it is a footer under it: the rule with the chevron in its middle,
+	# then the runes over the orbs.
+	_orb_rule = HBoxContainer.new()
+	_orb_rule.add_theme_constant_override("separation", 0)
 	rows.add_child(_orb_rule)
-	_orb_tray = HBoxContainer.new()
-	_orb_tray.add_theme_constant_override("separation", ORB_GAP)
-	_orb_tray.alignment = BoxContainer.ALIGNMENT_CENTER
-	_orb_tray.custom_minimum_size = Vector2(WIDTH, 0)
-	rows.add_child(_orb_tray)
+	for half in 2:
+		var line := UITheme.rule()
+		line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		_orb_rule.add_child(line)
+		if half == 0:
+			_fold_button = UITheme.button("", UITheme.BARE_BUTTON, "")
+			_fold_button.pressed.connect(_on_trays_pressed)
+			_orb_rule.add_child(_fold_button)
+	for tray in 2:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", ORB_GAP)
+		row.alignment = BoxContainer.ALIGNMENT_CENTER
+		row.custom_minimum_size = Vector2(WIDTH, 0)
+		rows.add_child(row)
+		if tray == 0:
+			_rune_tray = row
+		else:
+			_orb_tray = row
 	if _transcending and not _heirlooms and not _stones:
 		_make_button = UITheme.button("Make heirloom", "LightButton", "")
 		_make_button.pressed.connect(_on_make_pressed)
@@ -715,11 +750,16 @@ func _input(event: InputEvent) -> void:
 		_armed = ""
 		refresh()
 	elif event.button_index == MOUSE_BUTTON_LEFT and _confirm == null \
-			and ItemCard.square_at(get_tree(), event.position) == null \
-			and not _orb_tray.get_children().any(func(orb: Control) -> bool:
-				return orb.get_global_rect().has_point(event.position)):
+			and ItemCard.square_at(get_tree(), event.position) == null and not _over_tray(event.position) \
+			and not (RuneTable.has(_armed) and get_viewport().gui_get_hovered_control() == null):
+		# A rune goes on the map: a press on bare map is the map's (`rune_on`), and keeps it in hand.
 		_armed = ""
 		_put_down = true
+
+
+func _over_tray(at: Vector2) -> bool:
+	return (_orb_tray.get_children() + _rune_tray.get_children()).any(func(orb: Control) -> bool:
+		return orb.is_visible_in_tree() and orb.get_global_rect().has_point(at))
 
 
 ## Whether one of the page's questions stands over the window, for a banner to wait behind.
@@ -1494,6 +1534,9 @@ func _open_piece() -> Item:
 ## super orbs too, since 2026-10-03 (the user's: "first click orb, then gear").
 func refresh_orbs() -> void:
 	UITheme.clear(_orb_tray)
+	UITheme.clear(_rune_tray)
+	_rune_tray.hide()
+	_fold_button.hide()
 	if _transcending and not _stones:
 		# Over the bag there is no tray at all, and over the heirlooms it is the super orbs: one count
 		# for the six of them (said in the corner, `_count`), so no square wears a number.
@@ -1507,17 +1550,66 @@ func refresh_orbs() -> void:
 			_orb_tray.add_child(slot)
 		_hide_orb_card()
 		return
-	# No tray until the first orb; once seen it stays, even with every orb spent.
-	_orb_tray.visible = _purse.total_orbs() > 0 or "first_orb" in _purse.tips
-	_orb_rule.visible = _orb_tray.visible
+	# No tray until the first orb; once seen it stays, even with every orb spent. The runes the same, over
+	# it and in the bag alone -- and with them the chevron that folds both away.
+	var orbs := _purse.total_orbs() > 0 or "first_orb" in _purse.tips
+	var runes := not (_heirlooms or _transcending) \
+			and (not _purse.runes.is_empty() or Inventory.FIRST_RUNE in _purse.tips)
+	_orb_rule.visible = orbs or runes
+	_fold_button.visible = runes
+	_fold_button.icon = _chevron(_trays_hidden)
+	_fold_button.tooltip_text = "Show the orbs and runes" if _trays_hidden else "Hide the orbs and runes"
+	_orb_tray.visible = orbs and not _trays_hidden
+	_rune_tray.visible = runes and not _trays_hidden
 	for orb: String in OrbTable.orbs():
-		var slot := OrbSlot.make(orb, _purse.orb_count(orb), true, orb == _armed)
-		slot.pressed.connect(_on_orb_pressed)
-		slot.hovered.connect(_on_orb_hovered.bind(slot))
-		slot.unhovered.connect(_hide_orb_card)
-		_orb_tray.add_child(slot)
+		_orb_tray.add_child(_tray_slot(orb, _purse.orb_count(orb)))
+	for rune: String in RuneTable.names() if runes else []:
+		_rune_tray.add_child(_tray_slot(rune, _purse.rune_count(rune)))
 	# The square it described has just been freed.
 	_hide_orb_card()
+
+
+func _tray_slot(orb: String, count: int) -> OrbSlot:
+	var slot := OrbSlot.make(orb, count, true, orb == _armed)
+	slot.pressed.connect(_on_orb_pressed)
+	slot.hovered.connect(_on_orb_hovered.bind(slot))
+	slot.unhovered.connect(_hide_orb_card)
+	return slot
+
+
+## `CHEVRON` in the button brown, pointing up when `up`. Made once.
+static func _chevron(up: bool) -> ImageTexture:
+	if _chevrons.is_empty():
+		for flip: bool in [false, true]:
+			var image := Image.create(CHEVRON[0].length(), CHEVRON.size(), false, Image.FORMAT_RGBA8)
+			for y in CHEVRON.size():
+				for x in CHEVRON[y].length():
+					if CHEVRON[y][x] == "#":
+						image.set_pixel(x, y, Palette.BUTTON_BROWN)
+			if flip:
+				image.flip_y()
+			_chevrons.append(ImageTexture.create_from_image(image))
+	return _chevrons[int(up)]
+
+
+func _on_trays_pressed() -> void:
+	_trays_hidden = not _trays_hidden
+	refresh()
+
+
+## The rune in hand pressed on the map's tile at world `spot`, which carries `own` modifiers: spent there
+## where it does something (`Inventory.use_rune`), saved, and kept in hand while any are left, as an orb
+## is. Whether it was spent.
+func rune_on(spot: Vector2i, own: Array) -> bool:
+	if not RuneTable.has(_armed) or not _purse.use_rune(_armed, spot, own, _craft_rng):
+		return false
+	print("Spent %s on %s" % [_armed, spot])
+	_save()
+	if _purse.rune_count(_armed) <= 0:
+		_armed = ""
+	refresh_orbs()
+	_orb_applied()
+	return true
 
 
 ## Picks the orb up (`_armed`), and a second press puts it down; the next piece pressed is crafted with
@@ -1533,9 +1625,11 @@ func _on_orb_pressed(orb: String) -> void:
 	refresh()
 
 
-## How many of `orb` the player has to spend: the one count all six super orbs share, or the orb's own.
+## How many of `orb` the player has to spend: the one count all six super orbs share, or the orb's (or
+## the rune's) own.
 func _count_of(orb: String) -> int:
-	return _purse.super_orbs if SuperOrbTable.has(orb) else _purse.orb_count(orb)
+	return _purse.super_orbs if SuperOrbTable.has(orb) else _purse.rune_count(orb) if RuneTable.has(orb) \
+			else _purse.orb_count(orb)
 
 
 ## A held super orb pressed on a piece. An aimed one asks which modifier, the only question any of them

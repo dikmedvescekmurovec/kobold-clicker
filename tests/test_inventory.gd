@@ -1414,12 +1414,15 @@ func _test_the_map_keeps_what_dropped() -> bool:
 			and main._skills_button.position.y > main._bag_button.position.y, "the buttons are a column")
 	main._on_skills_pressed()
 	_check(main.skills_page.visible and not main.bag_page.visible, "and one press goes from page to page")
-	_check(not main._character.visible and not main._character_button.visible,
-			"any other page covers the character panel's corner")
+	_check(main._character.visible and main._character.mirrored,
+			"the skill tree sends the character panel to the top-right too")
 	_check(main._bag_button.position.x >= main.skills_page.get_child(0).size.x * main.ui_scale,
 			"the column standing beside that one now")
-	main._on_skills_pressed()
-	_check(not main.skills_page.visible and main._character_button.visible, "a page's own button puts it away")
+	main._on_settings_pressed()
+	_check(not main._character.visible and not main._character_button.visible,
+			"any other page covers the character panel's corner")
+	main._on_settings_pressed()
+	_check(not main.settings_page.visible and main._character_button.visible, "a page's own button puts it away")
 	main.inventory.tips.erase("level_up")
 	main.inventory.tips.erase("opened_skills")
 	main._on_bag_pressed()
@@ -3793,13 +3796,13 @@ func _test_wall_unlocks() -> bool:
 	var branches := []
 	for walls in 11:
 		branches.append(WallUnlocks.root_branches(walls))
-	_check(branches == [1, 1, 1, 1, 1, 3, 3, 3, 4, 5, 6],
-			"the root's branches: one, three from the fifth wall, one more a wall from the eighth (%s)" % [branches])
+	_check(branches == [1, 1, 1, 2, 2, 3, 3, 3, 4, 5, 6],
+			"the root's branches: one, one more at the third and fifth walls and a wall from the eighth (%s)" % [branches])
 	var named := func(wall: int) -> Array:
 		return WallUnlocks.of_wall(wall).map(func(unlock: Dictionary) -> String: return unlock["name"])
 	_check(named.call(0).is_empty() and named.call(1) == ["Orb of Alchemy", "Orb of Divinity"]
-			and named.call(2) == ["Orb of Chaos", "Orb of Exaltation"] and named.call(3) == ["Gollux", "Runes"]
-			and named.call(4) == ["Distant charting"] and named.call(5) == ["+2 skill branches"]
+			and named.call(2) == ["Orb of Chaos", "Orb of Exaltation"] and named.call(3) == ["Gollux", "Runes", "+1 skill branch"]
+			and named.call(4) == ["Distant charting"] and named.call(5) == ["+1 skill branch"]
 			and named.call(6) == ["Item filter"] and named.call(7) == ["Abilities"]
 			and named.call(9) == ["+1 skill branch"],
 			"each wall's panel names what it opens (%s, %s)" % [named.call(3), named.call(9)])
@@ -4483,6 +4486,26 @@ func _test_tips() -> bool:
 	main.inventory.orbs.clear()
 	main.bag_page.refresh_orbs()
 	_check(not main.bag_page._orb_tray.visible, "gone again if it was never seen and none is held")
+	# The runes stand over the orbs once one is found, and the chevron on the rule folds both away.
+	var bag: BagPage = main.bag_page
+	_check(not bag._rune_tray.visible and not bag._fold_button.visible, "no runes before the first")
+	main.inventory.add_rune(RuneTable.UNREST)
+	bag.refresh_orbs()
+	_check(bag._rune_tray.visible and bag._rune_tray.get_child_count() == RuneTable.names().size()
+			and bag._fold_button.visible, "the first rune brings the runes' row and the chevron")
+	bag._fold_button.pressed.emit()
+	_check(not bag._rune_tray.visible and bag._fold_button.visible, "the chevron folds them away")
+	bag._fold_button.pressed.emit()
+	_check(bag._rune_tray.visible, "and brings them back")
+	# Picked up in the bag and pressed on a tile: the map is aimed at while one is held.
+	var ground: Vector2i = main.view.best_farm()
+	bag._on_orb_pressed(RuneTable.UNREST)
+	_check(ground != HexMap.NO_CELL and main.map.aim_radius == 0, "a rune in hand aims the map")
+	main._on_cell_aimed(ground)
+	_check(main.inventory.rune_count(RuneTable.UNREST) == 0 and main.inventory.has_runes(main.view.origin + ground)
+			and main.map.aim_radius == -1, "it is spent on the tile pressed, and the last one puts the aim away")
+	bag.refresh_orbs()
+	_check(bag._rune_tray.visible, "the row stays once a rune has been found")
 
 	main.inventory.add(_piece(ItemRarity.Rarity.COMMON, 1))
 	main.inventory.level = 2

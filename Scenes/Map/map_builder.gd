@@ -53,9 +53,9 @@ const START_TOWN_DISTANCE := 5
 ## waits in it: charting the tile fights it alone, and winning the tile takes the chest off the map.
 const CHEST_CHANCE := 0.03
 const CHEST_MIN_DISTANCE := 3
-## The Gollux cave, the one way down into the dungeon: one a world, never inside the first wall. The
-## nearest ring it may stand on is one past the first wall's own, so it is always behind the ice.
-const CAVE_FIRST_RING := START_LAND_RADIUS + 2
+## The Gollux cave, the one way down into the dungeon: one a world, at most this many steps from the
+## wall tile whose breaking put it down (`place_cave`), on the land that wall's fall opened.
+const CAVE_NEAR := 3
 ## The closed brown chest, top-left of the pack's sheet.
 const CHEST_TEXTURE := "res://Assets/Chests/Chests.png"
 const CHEST_REGION := Rect2(2, 12, 28, 20)
@@ -80,10 +80,13 @@ var env_seed: int
 var origin: Vector2i
 ## The small town START_TOWN_DISTANCE steps out, which a road connects to the center cell.
 var start_town: Vector2i
-## Where this world's Gollux cave stands, or `HexMap.NO_CELL` while there is none -- before any wall
-## has fallen in any world (`place_cave`). Saved: the land it is chosen on is generated as the walls
-## fall, and generation is never repeated.
+## Where this world's Gollux cave stands, or `HexMap.NO_CELL` while there is none -- before a wall has
+## fallen in it with Gollux unlocked (`place_cave`). Saved: the land it is chosen on is generated as the
+## walls fall, and generation is never repeated.
 var cave := HexMap.NO_CELL
+## The wall tile charted last, where a wall was broken, or `HexMap.NO_CELL` while none has been this
+## session: what the cave is put down beside. Not saved: it is only asked as the wall falls.
+var breach := HexMap.NO_CELL
 ## The cell the player stands on, which only changes once they have walked there.
 var player_cell := CENTER
 ## Whether the player is on their way somewhere, and so can't be sent anywhere else.
@@ -700,21 +703,19 @@ func can_enter_cave(cell: Vector2i) -> bool:
 	return not walking and cave != HexMap.NO_CELL and cell == cave and charted(cell) and cell == player_cell
 
 
-## Puts this world's cave down, once: on a cell from `CAVE_FIRST_RING` out to `reach` -- how far the
-## land has ever reached, in any world (`Inventory.farthest_land`) -- never on a ring a wall stands or
-## stood on, and never on a settlement. Nothing while `reach` is short of the first ring it may stand
-## on; the main scene asks only once Gollux is unlocked (`WallUnlocks.GOLLUX`, the third wall ever
-## broken, the user's 2026-10-09), so no world has one before that. Chosen off the map seed, so a world
-## reloaded before its first save chooses the same. Returns whether it was put down now.
-##
-## The land out there need not be generated yet: the cell is chosen by where it lies and nothing else,
-## and it is drawn in its ground's picture once the wall over it has fallen and it has been seen.
-func place_cave(reach: int) -> bool:
-	if cave != HexMap.NO_CELL or reach < CAVE_FIRST_RING:
+## Puts this world's cave down, once: within `CAVE_NEAR` steps of `near`, the wall tile just broken
+## (`breach`), on the land beyond it -- never on a ring a wall stands or stood on, and never on a
+## settlement (the user's, 2026-10-09: Gollux always near where the wall is broken). Nothing for
+## `HexMap.NO_CELL`; the main scene asks only once Gollux is unlocked (`WallUnlocks.GOLLUX`, the third
+## wall ever broken), so the first world has one past its third wall and every world after past its
+## first. Chosen off the map seed. Returns whether it was put down now.
+func place_cave(near: Vector2i) -> bool:
+	if cave != HexMap.NO_CELL or near == HexMap.NO_CELL:
 		return false
 	var cells: Array[Vector2i] = []
-	for cell in FortuneTeller.scour_cells(CENTER, reach):
-		if HexGrid.distance(CENTER, cell) >= CAVE_FIRST_RING and not on_wall_ring(cell) \
+	var wall := HexGrid.distance(CENTER, near)
+	for cell in FortuneTeller.scour_cells(near, CAVE_NEAR):
+		if HexGrid.distance(CENTER, cell) > wall and not on_wall_ring(cell) \
 				and not towns.has_town(_spot(cell)):
 			cells.append(cell)
 	if cells.is_empty():
@@ -971,6 +972,7 @@ func chart(cell: Vector2i, sight := 1) -> int:
 	# and it takes the whole way at once, so charted land still never stands apart.
 	var taken: Array[Vector2i] = dark_path(cell).slice(1)
 	if is_wall(cell):
+		breach = cell
 		_break_wall()
 	var shown := 0
 	for step in taken:

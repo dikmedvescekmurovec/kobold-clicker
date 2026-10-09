@@ -78,6 +78,8 @@ var _points := 0
 var _rings: Array[String] = []
 ## Path -> the centre of its square, the root's at the origin.
 var _centres := {}
+## What the squares were built for: the root's slots and the stones, path -> Item (`fill`).
+var _shape := []
 ## Where the origin stands on the canvas.
 var _origin := Vector2.ZERO
 var _ui_scale := 1.0
@@ -115,29 +117,42 @@ func fill(skills: Skills, ranked := true, held: Item = null, points := 0) -> voi
 	_skills = skills
 	_ranked = ranked
 	_points = points
-	UITheme.clear(_canvas)
 	UITheme.clear(_marks)
-	squares = {}
 	_rings = []
-	_centres = _layout(skills.stones)
+	# A point spent moves neither the root's slots nor what stands in them, so it only re-dresses the
+	# squares: building hundreds again on every point of a held press is what made a grown tree crawl.
+	var shape := [SkillTree.root_slots, skills.stones.duplicate()]
+	if shape != _shape:
+		_shape = shape
+		_build()
+	for path: String in squares:
+		var square: Control = squares[path]
+		square.modulate = Color.WHITE
+		_dress(square, path, skills.stones.get(path), held)
+	_canvas.queue_redraw()
+	_scaled(_canvas.scale.x)
+
+
+func _build() -> void:
+	UITheme.clear(_canvas)
+	squares = {}
+	_centres = _layout(_skills.stones)
 	var low := Vector2.INF
 	var high := -Vector2.INF
 	for path: String in _centres:
-		var half := Vector2.ONE * _side(path, skills.stones) / 2.0
+		var half := Vector2.ONE * _side(path, _skills.stones) / 2.0
 		low = low.min(_centres[path] - half)
 		high = high.max(_centres[path] + half)
 	_origin = Vector2.ONE * MARGIN - low
 	_canvas.size = high - low + Vector2.ONE * MARGIN * 2.0
 	for path: String in _centres:
-		var square := _square(path, held)
-		square.position = (_origin + _centres[path] - Vector2.ONE * _side(path, skills.stones) / 2.0).round()
+		var square := _square(path)
+		square.position = (_origin + _centres[path] - Vector2.ONE * _side(path, _skills.stones) / 2.0).round()
 		_canvas.add_child(square)
 		squares[path] = square
-	_canvas.queue_redraw()
-	_scaled(_canvas.scale.x)
 
 
-func _square(path: String, held: Item) -> Control:
+func _square(path: String) -> Control:
 	var stone: Item = _skills.stones.get(path)
 	var mark := _mark(path, _skills.stones)
 	var square: Control
@@ -147,7 +162,6 @@ func _square(path: String, held: Item) -> Control:
 		square = TextureRect.new()
 		(square as TextureRect).texture = mark
 		square.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_dress(square, path, stone, held)
 	return square
 
 
@@ -220,58 +234,73 @@ static func _side(path: String, stones: Dictionary) -> float:
 
 
 ## Every slot to draw -- the root's, and under each stone its connectors -- placed round the root:
-## path -> its centre. A slot's children share its wedge evenly, centred on it; the root's have a share
-## of the circle each, `BRANCH_WEDGE` at the most, the first straight down. A ring stands a small stone and a gap past the
-## last, and further while any of its slots would touch one already placed, each at its own size.
+## path -> its centre. A slot's children split its wedge by the slots at the ends of what hangs off each
+## (`leaves`), so a long arm takes the room it needs and a deep tree grows as wide as its ends, not
+## three times wider a ring; the root's have a share of the circle each, `BRANCH_WEDGE` at the most, the
+## first straight down. Each ring stands a gap past the last, and further where two slots side by side on
+## it would come within a gap, each as far round as it is drawn (`_room`). Worked out, never searched
+## for: a tree of hundreds of stones took seconds pushed out two pixels at a time (2026-10-09).
 static func _layout(stones: Dictionary) -> Dictionary:
+	# Every slot, shallowest first, which is round each ring in turn.
+	var order := [""]
+	var children := {}
+	var next := 0
+	while next < order.size():
+		var path: String = order[next]
+		children[path] = range(SkillTree.connectors_of(path, stones)).map(
+				func(i: int) -> String: return SkillTree.child_of(path, i))
+		order.append_array(children[path])
+		next += 1
+	var leaves := {}
+	for i in range(order.size() - 1, -1, -1):
+		var path: String = order[i]
+		leaves[path] = maxi(1, children[path].reduce(
+				func(sum: int, child: String) -> int: return sum + leaves[child], 0))
 	var angle := {"": PI / 2.0}
 	var wedge := {"": TAU}
-	var rings: Array = [[""]]
-	var queue := [""]
-	while not queue.is_empty():
-		var path: String = queue.pop_front()
-		var count := SkillTree.connectors_of(path, stones)
+	var rings: Array = [[]]
+	for path: String in order:
+		var count: int = children[path].size()
+		var from := float(angle[path]) - float(wedge[path]) / 2.0
 		for i in count:
-			var child := SkillTree.child_of(path, i)
-			var share: float = minf(wedge[path] / count, BRANCH_WEDGE) if path.is_empty() \
-					else wedge[path] / count
-			angle[child] = PI / 2.0 + i * share if path.is_empty() \
-					else float(angle[path]) - float(wedge[path]) / 2.0 + share * (i + 0.5)
-			wedge[child] = share
+			var child: String = children[path][i]
+			if path.is_empty():
+				wedge[child] = minf(TAU / count, BRANCH_WEDGE)
+				angle[child] = PI / 2.0 + i * float(wedge[child])
+			else:
+				wedge[child] = float(wedge[path]) * leaves[child] / leaves[path]
+				angle[child] = from + float(wedge[child]) / 2.0
+				from += float(wedge[child])
 			var depth := SkillTree.depth_of(child)
 			if rings.size() <= depth:
 				rings.append([])
 			rings[depth].append(child)
-			queue.append(child)
 	var centres := {"": Vector2.ZERO}
-	var step := _side("0", {}) + GAP
 	var radius := 0.0
+	var room_before := _room("", stones)
 	for depth in range(1, rings.size()):
-		radius += step
-		# ponytail: pushed out two pixels at a time and every pair checked, which is nothing at the size a
-		# tree reaches in play; a placement that packs the rings would be the step up from here.
-		while _crowded(rings[depth], angle, radius, centres, stones) and radius < 100000.0:
-			radius += 2.0
-		for path: String in rings[depth]:
+		var ring: Array = rings[depth]
+		var room: float = ring.map(func(path: String) -> float: return _room(path, stones)).max()
+		# Clear of every slot on the ring before, wherever round it they stand...
+		radius += room_before + room + GAP
+		# ...and of the slots either side on its own, the last of the first the long way round.
+		if ring.size() > 1:
+			for i in ring.size():
+				var a: String = ring[i]
+				var b: String = ring[(i + 1) % ring.size()]
+				var apart := fposmod(float(angle[b]) - float(angle[a]), TAU)
+				radius = maxf(radius, (_room(a, stones) + _room(b, stones) + GAP) / (2.0 * sin(apart / 2.0)))
+		for path: String in ring:
 			centres[path] = Vector2.from_angle(angle[path]) * radius
+		room_before = room
 	return centres
 
 
-## Whether a ring at `radius` would put a slot within a gap of another on it, or of one already placed,
-## each slot as wide as it is drawn (`_side`).
-static func _crowded(ring: Array, angle: Dictionary, radius: float, placed: Dictionary,
-		stones: Dictionary) -> bool:
-	var at := placed.duplicate()
-	for path: String in ring:
-		at[path] = Vector2.from_angle(angle[path]) * radius
-	for i in ring.size():
-		var path: String = ring[i]
-		for other: String in placed.keys() + ring.slice(i + 1):
-			var clear := (_side(path, stones) + _side(other, stones)) / 2.0 + GAP
-			var apart: Vector2 = (at[path] - at[other]).abs()
-			if apart.x < clear and apart.y < clear:
-				return true
-	return false
+## How far from its middle a slot needs the gap kept: a disc's half, and a capstone's square badge out to
+## its corners, so no two squares' boxes meet however they line up.
+static func _room(path: String, stones: Dictionary) -> float:
+	var half := _side(path, stones) / 2.0
+	return half * sqrt(2.0) if stones.has(path) and not (stones[path] as Item).capstone.is_empty() else half
 
 
 ## Under the squares: the lines, each stopping at the edges of the two slots it joins so a faint slot

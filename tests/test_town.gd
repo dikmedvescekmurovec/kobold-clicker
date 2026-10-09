@@ -1867,10 +1867,10 @@ func _test_fortune_page() -> void:
 	main.town_page.bag_changed(null)
 	await process_frame
 
-	# A world with a cave in it, as the rest of her spells are asked in: put down behind the first wall by
+	# A world with a cave in it, as the rest of her spells are asked in: put down beside a breach in the first wall by
 	# hand, Gollux's own unlock being the third wall's (`WallUnlocks.GOLLUX`).
 	main.inventory.farthest_land = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
-	main.view.place_cave(main.inventory.farthest_land)
+	main.view.place_cave(Vector2i(MapBuilder.START_LAND_RADIUS + 1, 0))
 	main._save_map()
 	main._credit_walls()
 	main.town_page.redraw()

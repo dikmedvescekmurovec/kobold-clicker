@@ -180,8 +180,9 @@ static func progress_bar(player: Inventory, id: String, rank: int, known: Dictio
 
 ## What the card beside a square says, after the user's pick (2026-10-07, `tools/qa/achievement_card_m2.png`):
 ## the achievement's name with the rank reached at its right end ("I / IV"), what the next rank asks,
-## and how far along the player is as the page's own bar -- full and gold, "Achieved", at IV. The unique
-## it unlocks is the square's Alt key's word (`tile`), never a line here.
+## and how far along the player is as the page's own bar -- full and gold at IV, the count running on
+## past the need ("1241 / 500"). The unique it unlocks is the square's Alt key's word (`tile`), never a
+## line here.
 static func write_card(rows: VBoxContainer, width: float, player: Inventory, id: String,
 		known: Dictionary) -> void:
 	UITheme.clear(rows)
@@ -197,17 +198,28 @@ static func write_card(rows: VBoxContainer, width: float, player: Inventory, id:
 		reached.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		head.add_child(reached)
 	rows.add_child(head)
+	var key := str(row["key"])
 	if rank >= UniqueTable.PEAK:
 		rows.add_child(ItemDetails.line(Achievements.text(id, rank), Palette.TEXT, width, true))
-		rows.add_child(bar(1.0, "Achieved", width, CARD_BAR_HEIGHT, true))
+		# The count goes on climbing past IV, and the bar says how far.
+		var peak := Achievements.need_at(id, rank)
+		var said := "Achieved"
+		if _counts(key, peak):
+			said = "%s / %s" % [BigNumber.format(Achievements.progress(player, id, known)), BigNumber.format(peak)]
+		rows.add_child(bar(1.0, said, width, CARD_BAR_HEIGHT, true))
 		return
 	rows.add_child(ItemDetails.line(Achievements.text(id, rank + 1), Palette.TEXT, width, true))
 	var need := Achievements.need_at(id, rank + 1)
 	var have := minf(Achievements.progress(player, id, known), need)
-	# A feat done at a wall is a number of walls out, not a count to watch climb.
-	if need > 1.0 and not str(row["key"]).begins_with("wall_") and row["key"] != "domino_wall":
+	if _counts(key, need):
 		rows.add_child(bar(have / need, "%s / %s" % [BigNumber.format(have), BigNumber.format(need)],
 				width, CARD_BAR_HEIGHT))
+
+
+## Whether a card's bar writes its figure: a feat done at a wall is a number of walls out, not a count
+## to watch climb.
+static func _counts(key: String, need: float) -> bool:
+	return need > 1.0 and not key.begins_with("wall_") and key != "domino_wall"
 
 
 ## Where the main scene stands the page, in window pixels: empty for the whole window.

@@ -462,7 +462,8 @@ var autodiscard := Callable()
 ## key is then the page's -- an orb put down, a selection cleared, the page closed -- never Terminate.
 var page_up := Callable()
 ## Whether a won tile fight takes its loot and leaves by itself, `AUTO_COLLECT_SECONDS` after its verdict
-## is up, as Collect would: the main scene's, while the Nightwalkers are worn, so a way into the dark is
+## is up, as Collect would: the main scene's, while the Nightwalkers are worn or distant charting is open
+## (the fourth wall's, the user's 2026-10-09), so a way into the dark or across seen land is
 ## fought through with nobody at the keys. A Timer child, so a pause (a tip) holds it and a scene freed
 ## first takes it along.
 var auto_collect := false

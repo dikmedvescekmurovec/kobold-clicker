@@ -63,8 +63,8 @@ func shown() -> bool:
 
 
 ## Whether the hero feels the cave (the user's, 2026-10-03): put down in this world, the wall in front of
-## it broken -- its cell is land now -- and not yet seen. In a world after a transcension the cave is
-## down from the start, often walls out, and stays unfelt until the land reaches it.
+## it broken -- its cell is land now -- and not yet seen. Since 2026-10-09 a cave goes down only beside a
+## wall just broken, so on land; the land check is for a world from before, whose cave could stand walls out.
 func felt() -> bool:
 	return _view.cave != HexMap.NO_CELL and _view.is_land(_view.cave) and not _view.seen(_view.cave)
 

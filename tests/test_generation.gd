@@ -1207,26 +1207,22 @@ func _weights_for(cell: Vector2i, layout: Dictionary[Vector2i, String]) -> Dicti
 ## change -- not the land, not the roads, not the settlements, not the fog -- so the round trip is
 ## checked cell by cell rather than by spot checks, and every refusal is checked to leave the file
 ## alone.
-## The Gollux cave: none before any wall has ever fallen, then one a world, between the ring past the
-## first wall's and the furthest the land has ever reached -- never on a wall's ring or a settlement --
-## and a set piece: no chest, no modifiers, no farming, no road through it, named for the cave, entered
-## only stood on, and saved with the map.
+## The Gollux cave: none before a wall is broken, then one a world, a few steps past the wall tile
+## broken -- never on a wall's ring or a settlement -- and a set piece: no chest, no modifiers, no
+## farming, no road through it, named for the cave, entered only stood on, and saved with the map.
 func _test_the_cave() -> bool:
 	_clear_map_save()
 	var map: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
 	root.add_child(map)
 	var view := MapBuilder.create(map, TownWorld.generate(WORLD_SEED), Vector2i(128, 128), 99)
-	_check(not view.place_cave(MapBuilder.START_LAND_RADIUS) and not view.place_cave(MapBuilder.CAVE_FIRST_RING - 1)
-			and view.cave == HexMap.NO_CELL, "no cave while no wall has ever fallen")
+	_check(not view.place_cave(view.breach) and view.cave == HexMap.NO_CELL, "no cave while no wall has been broken")
 	var reach := MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
-	_check(view.place_cave(reach), "one goes down once the first wall ever falls")
+	var breach := _broken_wall(view)
+	_check(view.place_cave(breach), "one goes down once a wall is broken")
 	var cave := view.cave
-	var steps := HexGrid.distance(MapBuilder.CENTER, cave)
-	_check(steps >= MapBuilder.CAVE_FIRST_RING and steps <= reach and not view.on_wall_ring(cave)
-			and not view.towns.has_town(view.origin + cave),
-			"behind the first wall and inside the furthest reach, off the walls and the settlements (%s, %d steps)"
-			% [cave, steps])
-	_check(not view.place_cave(reach + 30) and view.cave == cave, "and only one a world")
+	_check(_beside_breach(view, breach), "a few steps past the wall tile broken, off the walls and the settlements (%s, %d steps)"
+			% [cave, HexGrid.distance(breach, cave)])
+	_check(not view.place_cave(-breach) and view.cave == cave, "and only one a world")
 
 	_check(not view.is_home(cave), "a homecoming cannot land on it unseen")
 	# The wall down, so the cave's land is the player's, and all of it charted.
@@ -1259,19 +1255,34 @@ func _test_the_cave() -> bool:
 		save.save(TEST_MAP_PATH)
 		_check(MapSave.load_from(TEST_MAP_PATH, problem).cave == HexMap.NO_CELL, "and a world with none has none")
 
-	# Wherever the seed puts it, it keeps to the same bounds, out to a reach three walls deep.
+	# Wherever the seed puts it, it keeps beside the breach.
 	var strays := 0
 	for seed_value in 8:
 		var world := MapBuilder.create(map, TownWorld.generate(WORLD_SEED), Vector2i(128, 128), 1000 + seed_value)
-		world.place_cave(40)
-		var out := HexGrid.distance(MapBuilder.CENTER, world.cave)
-		if out < MapBuilder.CAVE_FIRST_RING or out > 40 or world.on_wall_ring(world.cave) \
-				or world.towns.has_town(world.origin + world.cave):
+		var broken := _broken_wall(world, seed_value)
+		if not world.place_cave(broken) or not _beside_breach(world, broken):
 			strays += 1
-	_check(strays == 0, "every seed keeps it in bounds (%d strays)" % strays)
+	_check(strays == 0, "every seed keeps it beside the breach (%d strays)" % strays)
 	map.queue_free()
 	_clear_map_save()
 	return true
+
+
+## The first wall broken at one of its tiles (the `nth` round it), as `MapBuilder.chart` breaks it: the
+## land moved out a wall step. Returns that tile.
+func _broken_wall(view: MapBuilder, nth := 0) -> Vector2i:
+	var wall := FortuneTeller.scour_cells(MapBuilder.CENTER, view.land_radius + 1).filter(view.is_wall)
+	view.land_radius += view.wall_step
+	return wall[nth * 7 % wall.size()]
+
+
+## Whether the cave stands where a wall broken at `breach` puts it: within `CAVE_NEAR` steps, past the
+## wall, on the land it opened, off every wall's ring and every settlement.
+func _beside_breach(view: MapBuilder, breach: Vector2i) -> bool:
+	var cave := view.cave
+	return HexGrid.distance(breach, cave) <= MapBuilder.CAVE_NEAR and view.is_land(cave) \
+			and HexGrid.distance(MapBuilder.CENTER, cave) > HexGrid.distance(MapBuilder.CENTER, breach) \
+			and not view.on_wall_ring(cave) and not view.towns.has_town(view.origin + cave)
 
 
 func _test_map_saving() -> bool:

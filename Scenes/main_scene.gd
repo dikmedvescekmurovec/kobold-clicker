@@ -812,10 +812,11 @@ func _build_character() -> void:
 	_sync_character()
 
 
-## Whether the character panel has the top-right corner: a bag page is up across a wide window, out of
-## a town, and the panel stands mirrored on the other side of it, so it stays in view.
+## Whether the character panel has the top-right corner: a bag page or the skill tree is up across a wide
+## window, out of a town, and the panel stands mirrored on the other side of it, so it stays in view.
 func _character_right() -> bool:
-	return _left_page() is BagPage and not town_page.visible and not _narrow()
+	var page := _left_page()
+	return (page is BagPage or page == skills_page) and not town_page.visible and not _narrow()
 
 
 ## The character panel in its corner -- the top-left, or mirrored in the top-right (`_character_right`),
@@ -1028,6 +1029,10 @@ func _build_pages(layer: CanvasLayer) -> void:
 	for page: BagPage in [bag_page, heirloom_page]:
 		page.crafted.connect(_item_card.shine)
 		page.held_changed.connect(func(orb: String) -> void: _item_card.held = orb)
+	# A rune in the bag's hand goes on a tile: the map is aimed at while one is held (`_rune_on`).
+	bag_page.held_changed.connect(func(orb: String) -> void:
+		if _aiming.is_empty():
+			map.aim_radius = 0 if RuneTable.has(orb) else -1)
 	# Every `tooltip_text` there is, on the same cream card and the same layer.
 	_character.get_parent().add_child(TipCard.new(ui_scale))
 
@@ -1609,15 +1614,15 @@ func _show_mods(cell: Vector2i) -> void:
 
 ## The runes on a tile (`RuneTable`), once the third wall has opened them, on ground a farm run can be
 ## fought on: what they are doing to it -- each modifier written as the land's own are, the Depths and
-## the Ascent -- with the kills each has left, and a square for every rune held, pressed to spend it on
-## the tile. Nothing on a tile with neither.
+## the Ascent -- with the kills each has left. Nothing on a tile with none. The runes held are the bag's,
+## picked up there and pressed on the map (`_rune_on`).
 func _show_runes(cell: Vector2i) -> void:
 	UITheme.clear(_rune_rows)
 	if not WallUnlocks.has(inventory.walls_ever(), WallUnlocks.RUNES) or not view.can_farm_ground(cell):
 		return
 	var spot := view.origin + cell
 	var work := inventory.rune_work(spot)
-	if inventory.runes.is_empty() and not RuneTable.working(work):
+	if not RuneTable.working(work):
 		return
 	_rune_rows.add_child(UITheme.section("Runes"))
 	for mod: Dictionary in work["mods"]:
@@ -1630,21 +1635,6 @@ func _show_runes(cell: Vector2i) -> void:
 				int(depths.min())))
 	if RuneTable.ascended(work):
 		_rune_rows.add_child(_rune_block("Ascended", "What enemies drop may be ascended.", "", int(work["ascent"])))
-	var held := HFlowContainer.new()
-	held.add_theme_constant_override("h_separation", 2)
-	held.add_theme_constant_override("v_separation", 2)
-	for rune: String in RuneTable.names():
-		var count := inventory.rune_count(rune)
-		if count <= 0:
-			continue
-		var why := RuneTable.why_not(rune, TileMods.farmable(_mods_of(cell)), work)
-		var square := OrbSlot.new()
-		square.setup(rune, count, why.is_empty())
-		square.tooltip_text = rune + "\n" + (why if not why.is_empty() else str(RuneTable.RUNES[rune]["does"]))
-		square.pressed.connect(_on_rune_pressed)
-		held.add_child(square)
-	if held.get_child_count() > 0:
-		_rune_rows.add_child(held)
 
 
 ## One thing a rune is doing to a tile, as `_show_mods` writes the land's own: its name, what it does,
@@ -1660,16 +1650,14 @@ func _rune_block(title: String, does: String, pays: String, left: int) -> VBoxCo
 	return block
 
 
-## A rune pressed on the tile panel: spent on the selected tile, saved, and the panel says what it did.
-func _on_rune_pressed(rune: String) -> void:
-	var cell := map.selected_cell
-	if cell == HexMap.NO_CELL or not view.can_farm_ground(cell):
+## The rune in the bag's hand pressed on a tile of the map, which is aimed at while one is held: spent
+## there where the tile is ground a farm run can be fought on and the rune does something to it
+## (`BagPage.rune_on`, which saves), and the tile panel says what it did if it shows that tile.
+func _rune_on(cell: Vector2i) -> void:
+	if _combat != null or not view.can_farm_ground(cell) \
+			or not bag_page.rune_on(view.origin + cell, TileMods.farmable(_mods_of(cell))):
 		return
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	if inventory.use_rune(rune, view.origin + cell, TileMods.farmable(_mods_of(cell)), rng):
-		print("%s on %s" % [rune, cell])
-		inventory.save(inventory_path)
+	if map.selected_cell == cell:
 		_show_runes(cell)
 		_rune_rows.visible = _rune_rows.get_child_count() > 0
 		_layout_ui()
@@ -2000,8 +1988,8 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# downstream believes the fight. A second listener applying the rule a second way is how the
 	# counter and the bag would come to disagree about what a fight found.
 	_combat.autodiscard = inventory.leaves_behind
-	# The Nightwalkers take a won tile's loot for the player, so a way into the dark runs by itself.
-	_combat.auto_collect = not farming and "nightwalker" in inventory.effects()
+	# The Nightwalkers and distant charting take a won tile's loot for the player, so a way runs by itself.
+	_combat.auto_collect = not farming and (view.distant or "nightwalker" in inventory.effects())
 	_combat.weapon_kind = _weapon_kind()
 	_combat.loot_kept.connect(_on_loot_dropped)
 	_combat.loot_discarded.connect(_on_loot_autodiscarded)
@@ -2128,6 +2116,7 @@ func _play_music(kind: String) -> void:
 func _on_rune_gained(rune: String) -> void:
 	inventory.add_rune(rune)
 	_cave_runes += 1
+	bag_page.refresh_orbs()
 
 
 ## Writes down the depths the descent that is open has won, if it has won any, and the runes it found. On the way out of it
@@ -2233,8 +2222,8 @@ func _credit_walls() -> void:
 		inventory.save(inventory_path)
 	# Distant charting, once the fourth wall has fallen in any world.
 	view.distant = WallUnlocks.has(inventory.walls_ever(), WallUnlocks.DISTANT)
-	# One cave a world, once Gollux is unlocked (the third wall, in any world): now, or the moment it is.
-	if WallUnlocks.has(inventory.walls_ever(), WallUnlocks.GOLLUX) and view.place_cave(inventory.farthest_land):
+	# One cave a world, once Gollux is unlocked (the third wall, in any world): beside the next wall broken.
+	if WallUnlocks.has(inventory.walls_ever(), WallUnlocks.GOLLUX) and view.place_cave(view.breach):
 		print("The Gollux cave is at %s" % view.cave)
 		_save_map()
 
@@ -3162,7 +3151,10 @@ func _on_spell_aimed(reading: String, price: float, spot: Vector2i) -> void:
 ## already or past the edge of what the map has made; a tile that is no settlement or cave the player has
 ## charted -- is refused and the aim stays up, so the town's one casting is never spent on nothing.
 func _on_cell_aimed(cell: Vector2i) -> void:
-	if _aiming.is_empty() or _aim_price <= 0.0 or inventory.gold < _aim_price:
+	if _aiming.is_empty():
+		_rune_on(cell)
+		return
+	if _aim_price <= 0.0 or inventory.gold < _aim_price:
 		return
 	var scouring := _aiming == FortuneTeller.SCOUR
 	var shown := view.scour(cell) if scouring else 0

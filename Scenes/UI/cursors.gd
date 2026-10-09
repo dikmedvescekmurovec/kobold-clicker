@@ -96,8 +96,9 @@ static func over_squares(control: Control, event: InputEvent, held := false) -> 
 
 
 ## `mark` in the arrow's place, centred on the point -- an orb in the hand -- or the arrow back for null.
-static func hold(mark: Texture2D) -> void:
-	_held = [] if mark == null else _pair(mark.get_image(), mark.get_size() / 2.0, 1)
+## `scale` blows up a mark made smaller than the 32 px an orb is cut at (a rune's).
+static func hold(mark: Texture2D, scale := 1) -> void:
+	_held = [] if mark == null else _pair(mark.get_image(), mark.get_size() / 2.0, scale)
 	_show(ARROW, false)
 
 

@@ -186,7 +186,7 @@ The user simplified the orbs so no two overlap. Alteration was Transmutation aga
 - **Bands and weights are first guesses for the user's hand:** delay 10-25%, elite ward 10-25%, tile ward 10-25%, less health 5-12%, ranks 1, camp 10-25%, thorns 15-35%, recoup 10-25%, parry 20-50%, burn 10-30%, time on block 0.2-0.5s.
 
 ## The walls' ladder (2026-10-09)
-**The complaint (the user's):** the game lasted about three walls, with no reason to push past them. **The answer (the user's design, worked out over several rounds of ideas in chat):** every wall broken opens something for good, and each one is **a change to how the game is played**, not a bigger number. The ladder is the user's own, wall by wall: 1 and 2 the orbs, 3 Gollux and the runes (dropped only in his cave), 4 distant charting, 5 two more branches off the skill tree's root, 6 the item filter, 7 the abilities (as unique skill stones, as many as the tree can fit), and from the 8th one more root branch a wall, "for now". `WallUnlocks` is the one table; everything that is gated asks it.
+**The complaint (the user's):** the game lasted about three walls, with no reason to push past them. **The answer (the user's design, worked out over several rounds of ideas in chat):** every wall broken opens something for good, and each one is **a change to how the game is played**, not a bigger number. The ladder is the user's own, wall by wall: 1 and 2 the orbs, 3 Gollux and the runes (dropped only in his cave) and a branch off the skill tree's root, 4 distant charting, 5 one more root branch (two until the user moved one to the 3rd, 2026-10-09), 6 the item filter, 7 the abilities (as unique skill stones, as many as the tree can fit), and from the 8th one more root branch a wall, "for now". `WallUnlocks` is the one table; everything that is gated asks it.
 
 **Permanent, off the deepest wall ever broken** (`Inventory.walls_ever`, `farthest_land` in whole wall steps). Breaking the first wall again in a later world opens nothing new. This is why the orbs moved off `walls_credited` (this world's walls; the user: "orbs become permanent"): a second world starts with every orb its player has opened. `walls_credited` is now the super orbs' business alone.
 
@@ -215,7 +215,7 @@ The user simplified the orbs so no two overlap. Alteration was Transmutation aga
 - Runes never touch the tile's own modifiers.
 - Depth stacks without limit; Ascent works once.
 - Farm runs yes, camps no.
-- Every modifier, every Depth and the Ascent lasts 100 kills on its own count.
+- Every modifier, every Depth and the Ascent lasts 1000 kills on its own count (100 at first; the user raised it the same day).
 
 My calls, not ruled on:
 - Runes go only on tiles a farm run can be fought on, since that is the only fight a charted tile has.

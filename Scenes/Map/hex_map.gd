@@ -161,10 +161,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 ## The cursor over bare map, which no Control answers for: the closed hand while the map is pulled
-## about, the pointing one over a tile a press would select.
+## about, the pointing one over a tile a press would select -- but the arrow, which wears it, while
+## something is in the hand (a rune, `Cursors.hold`).
 func _point() -> void:
 	Input.set_default_cursor_shape(Cursors.GRAB if _dragging
-			else Cursors.HAND if hovered_cell != NO_CELL else Cursors.ARROW)
+			else Cursors.HAND if hovered_cell != NO_CELL and not Cursors.holding() else Cursors.ARROW)
 
 
 ## Puts a ground tile down without touching the overlays. For a bulk load, where the caller

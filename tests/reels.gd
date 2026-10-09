@@ -374,8 +374,8 @@ func _reel_descent() -> void:
 	var map: HexMap = _main.map
 	var inventory: Inventory = _main.inventory
 	inventory.farthest_land = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
-	# Behind the first wall, by hand: Gollux's own unlock is the third wall's (`WallUnlocks.GOLLUX`).
-	view.place_cave(inventory.farthest_land)
+	# Beside a breach in the first wall, by hand: Gollux's own unlock is the third wall's (`WallUnlocks.GOLLUX`).
+	view.place_cave(Vector2i(MapBuilder.START_LAND_RADIUS + 1, 0))
 	_main._credit_walls()
 	var cave: Vector2i = view.cave
 	view.land_radius = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP

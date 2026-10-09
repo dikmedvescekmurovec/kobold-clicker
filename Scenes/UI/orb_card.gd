@@ -47,10 +47,11 @@ func fill(orb: String, held: int, note := "", note_tone := Palette.TEXT_SOFT) ->
 		child.queue_free()
 	_rows.add_child(ItemDetails.line(orb, Palette.TEXT, WIDTH))
 	# A super orb (`SuperOrbTable`) is the same card over another table; `held` is the one count the
-	# six of them share.
+	# six of them share. A rune (`RuneTable`) the same again.
 	var is_super := SuperOrbTable.has(orb)
-	_rows.add_child(ItemDetails.line(SuperOrbTable.describe(orb) if is_super else OrbTable.describe(orb),
-			Palette.TEXT_SOFT, WIDTH, true))
+	var does := SuperOrbTable.describe(orb) if is_super else str(RuneTable.RUNES[orb]["does"]) \
+			if RuneTable.has(orb) else OrbTable.describe(orb)
+	_rows.add_child(ItemDetails.line(does, Palette.TEXT_SOFT, WIDTH, true))
 	if not note.is_empty():
 		_rows.add_child(ItemDetails.line(note, note_tone, WIDTH, true))
 		reset_size()

@@ -37,8 +37,8 @@ const UNREST := "Rune of Unrest"
 const STILLNESS := "Rune of Stillness"
 const DEPTH := "Rune of Depth"
 const ASCENT := "Rune of Ascent"
-## How many kills on the tile each thing a rune did lasts (the user's, 2026-10-09).
-const KILLS := 100
+## How many kills on the tile each thing a rune did lasts (the user's, 2026-10-09: 100, then 1000 the same day).
+const KILLS := 1000
 ## The highest tier Shifting deals a modifier; a `once` row stays at I.
 const MOST_TIER := 3
 ## How often a body in the cave carries a rune, by what it was: Gollux always.

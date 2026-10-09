@@ -183,8 +183,8 @@ var dungeon_depth := 0
 ## (`Cloud.depth_and_floor` reads 44 as depth 3, floor 14). Only rises, and is carried like `dungeon_depth`.
 var dungeon_floors := 0
 ## How far the land has ever reached, in steps from the middle, in any world: the land radius the last
-## wall ever broken opened. The Gollux cave of every world after is put down no further out than this
-## (`MapBuilder.place_cave`). It only rises (`reach`), and every transcension carries it over.
+## wall ever broken opened, and so how many walls have ever fallen (`walls_ever`). It only rises
+## (`reach`), and every transcension carries it over.
 var farthest_land := MapBuilder.START_LAND_RADIUS
 ## The level of the deepest tile ever charted, in any world: the deepest leaderboard's score. Only
 ## rises (`chart`), and every transcension carries it over.
@@ -199,6 +199,8 @@ var deepest_level := 1
 var orbs := {}
 ## The runes held, name -> count, the way the orbs are (`RuneTable`): found only in Gollux's cave.
 var runes := {}
+## Written into `tips` with the first rune found, so the bag's rune row stays once seen, as the orbs' does.
+const FIRST_RUNE := "first_rune"
 ## What runes have done to the tiles of this world, by world spot as "x,y" (the towns' key): each a
 ## `RuneTable` state. A transcension leaves it with the world, as it does the orbs and the runes.
 var runed := {}
@@ -563,6 +565,8 @@ func add_orb(orb: String, count := 1) -> void:
 func add_rune(rune: String, count := 1) -> void:
 	if RuneTable.has(rune) and count > 0:
 		runes[rune] = rune_count(rune) + count
+		if FIRST_RUNE not in tips:
+			tips.append(FIRST_RUNE)
 
 
 func rune_count(rune: String) -> int:
@@ -1163,6 +1167,16 @@ func tick(key: String, n := 1) -> void:
 	tally[key] = int(tally.get(key, 0)) + n
 
 
+## Keeps the larger of what `key` holds in the `tally` and `value`: whole, an int while it fits one and
+## a float past it (gold held), so a figure reads back from the save as it was written.
+func keep_best(key: String, value: float) -> void:
+	var best := floorf(maxf(maxf(float(tally.get(key, 0)), value), 0.0))
+	if best < 9e18:
+		tally[key] = int(best)
+	else:
+		tally[key] = best
+
+
 ## Every orb held, counted together.
 func total_orbs() -> int:
 	var total := 0
@@ -1426,7 +1440,7 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	if typeof(counted) == TYPE_DICTIONARY:
 		for key: Variant in counted:
 			if typeof(counted[key]) in [TYPE_INT, TYPE_FLOAT]:
-				inventory.tally[str(key)] = maxi(0, int(counted[key]))
+				inventory.keep_best(str(key), float(counted[key]))
 	# Version 28 counted no wall ever broken: this world's are where the lifetime count starts.
 	if version < 29 and inventory.walls_credited > int(inventory.tally.get("walls", 0)):
 		inventory.tally["walls"] = inventory.walls_credited

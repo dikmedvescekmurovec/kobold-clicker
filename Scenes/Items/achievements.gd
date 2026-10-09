@@ -12,8 +12,8 @@ extends RefCounted
 ##
 ## Every achievement is one number reaching `need`: a count in `Inventory.tally` (kept by `record` as a
 ## fight ends and by `Inventory.tick` where the player does something), or a figure read off the player
-## as they are (`state`). `progress` takes whichever of the two the key names, so the page, the check
-## and a test read the same thing.
+## as they are (`state`), which `earn` also keeps at its best in the tally. `progress` takes the larger
+## of the two, so the page, the check and a test read the same thing -- the best ever reached.
 ##
 ## What counts where is the user's ruling: counts add up in tile fights and farm runs; the streaks and
 ## the ice-wall feats are one fight's doing and count only in a tile fight, which has a clock; the camp
@@ -223,6 +223,9 @@ static func progress(inventory: Inventory, id: String, known: Dictionary) -> flo
 ## returns the ones that rose. Ranks only ever rise. Nothing is saved: the caller does.
 static func earn(inventory: Inventory) -> Array[String]:
 	var known := state(inventory)
+	# Each figure read off the player kept at its best, so a card past IV says the most ever reached.
+	for key: String in known:
+		inventory.keep_best(key, known[key])
 	var earned: Array[String] = []
 	for id: String in ACHIEVEMENTS:
 		var have := progress(inventory, id, known)

@@ -2142,6 +2142,14 @@ func _test_the_ice_wall() -> bool:
 	_check(absf(second.hp / fight.hp / by_ring / Encounter.WALL_GROWTH - 1.0) < 0.01,
 			"the second wall is %.0f times the first on top of its ring (%s health)"
 			% [Encounter.WALL_GROWTH, BigNumber.format(second.hp)])
+	# From the fourth wall on, a wall is LATE_WALL_BODIES ordinary bodies of the ring just inside it.
+	var third := Encounter.for_wall(Vector2i(cell.x + 2 * MapBuilder.WALL_STEP, 0))
+	_check(is_equal_approx(third.hp, roundf(Encounter.hp_of(Encounter.WALL_NAME, third.cell, Encounter.WALL_GROWTH) * Encounter.WALL_HP)),
+			"the third wall is still WALL_HP over its own body")
+	var fourth := Encounter.for_wall(Vector2i(cell.x + 3 * MapBuilder.WALL_STEP, 0))
+	var inside := Vector2i(fourth.cell.x - 1, 0)
+	_check(is_equal_approx(fourth.hp, roundf(Encounter.base_hp(inside) * Encounter.hp_tuning(3) * Encounter.LATE_WALL_BODIES)),
+			"the fourth wall is %.0f bodies of the ring inside it (%s health)" % [Encounter.LATE_WALL_BODIES, BigNumber.format(fourth.hp)])
 	return true
 
 
@@ -3724,19 +3732,21 @@ func _test_the_way_down() -> void:
 	main.inventory.farthest_land = MapBuilder.START_LAND_RADIUS + 2 * MapBuilder.WALL_STEP
 	main._credit_walls()
 	_check(view.cave == HexMap.NO_CELL, "no cave before the third wall has fallen in any world")
-	# The third: this world's cave goes down somewhere in the land ever reached, and is saved.
+	# The third: with no wall broken in this world yet, still none.
 	main.inventory.farthest_land = MapBuilder.START_LAND_RADIUS + 3 * MapBuilder.WALL_STEP
 	main._credit_walls()
-	_check(view.cave != HexMap.NO_CELL and MapSave.load_from(SCRATCH_MAP).cave == view.cave,
-			"the third wall ever broken puts the world's cave down, and the map is saved with it (%s)" % view.cave)
-	# The rest happens behind the first wall, as much land as a test can afford to grow: the cave put down
-	# again with the first wall's reach.
-	view.cave = HexMap.NO_CELL
-	view.place_cave(MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP)
+	_check(view.cave == HexMap.NO_CELL, "Gollux unlocked, no cave until a wall is broken in this world")
+	# A wall tile due east broken (`chart` says where): the cave goes down beside it, and is saved.
+	var breach := Vector2i(MapBuilder.START_LAND_RADIUS + 1, 0)
+	view.breach = breach
+	main._credit_walls()
 	var cave: Vector2i = view.cave
+	_check(cave != HexMap.NO_CELL and HexGrid.distance(breach, cave) <= MapBuilder.CAVE_NEAR
+			and MapSave.load_from(SCRATCH_MAP).cave == cave,
+			"the wall broken puts the world's cave down beside the breach, and the map is saved with it (%s)" % cave)
 
-	# The cave felt from the hero: nothing while the wall in front of it stands, then a red light at the
-	# map's edge, and the hero says so.
+	# The cave felt from the hero: nothing while the wall in front of it stands -- the land here has not
+	# moved out yet -- then a red light at the map's edge, and the hero says so.
 	_check(not main._cave_sense.shown() and not main._tip_due("first_sense"),
 			"a cave behind a wall still standing is not felt")
 	view.land_radius = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP

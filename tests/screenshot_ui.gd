@@ -93,8 +93,8 @@ func _shoot_cave() -> void:
 		await process_frame
 	var view: MapBuilder = main.view
 	main.inventory.farthest_land = MapBuilder.START_LAND_RADIUS + MapBuilder.WALL_STEP
-	# Behind the first wall, by hand: Gollux's own unlock is the third wall's (`WallUnlocks.GOLLUX`).
-	view.place_cave(main.inventory.farthest_land)
+	# Beside a breach in the first wall, by hand: Gollux's own unlock is the third wall's (`WallUnlocks.GOLLUX`).
+	view.place_cave(Vector2i(MapBuilder.START_LAND_RADIUS + 1, 0))
 	main._credit_walls()
 	var cave: Vector2i = view.cave
 	# The wall in front of it broken, which is when the hero first feels it.

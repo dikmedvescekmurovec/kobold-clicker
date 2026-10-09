@@ -139,6 +139,12 @@ const WALL_GROWTH := 2.2
 ## (the user's ruling, 2026-09-27). The walls themselves and the size of a blow (`hit_of`) keep
 ## WALL_GROWTH, so this moves the land past a wall and nothing else.
 const LAND_GROWTH := 10.0
+## From the fourth wall on, a wall is this many ordinary common bodies of the ring just inside it,
+## and WALL_HP and WALL_GROWTH stop applying (the user's, 2026-10-09): the land stepping by
+## LAND_GROWTH and the wall by WALL_GROWTH left the sixth wall weaker than one body beside it.
+const LATE_WALL_BODIES := 150.0
+## `walls_inside` of the first wall LATE_WALL_BODIES sizes: the fourth has three inside it.
+const LATE_WALL_FROM := 3
 ## The dungeon: a block of fifteen floors that repeats for ever, an elite every fifth and a boss on
 ## the fifteenth, against one minute. `enemies` is the block, which is what the HUD's bar stands.
 const DUNGEON := {"enemies": 15, "seconds": 60.0, "elite_every": 5, "boss_last": true}
@@ -780,8 +786,12 @@ func _raw_health_of(enemy: String, position := -1) -> float:
 		# `hp_of` at WALL_GROWTH carries a step for every wall inside this one, and a wall's own ring
 		# counts none of itself, so the second wall comes out WALL_GROWTH times the first on top of
 		# the band's walk. Not LAND_GROWTH: that is the land's.
-		return roundf(hp_of(enemy, cell, WALL_GROWTH) * WALL_HP
-				* (LONG_WINTER_HP if Curses.effect(Curses.LONG_WINTER) in effects else 1.0))
+		var walls := walls_inside(cell)
+		var wall_hp := hp_of(enemy, cell, WALL_GROWTH) * WALL_HP
+		if walls >= LATE_WALL_FROM:
+			var inside := MapBuilder.CENTER + Vector2i(HexGrid.distance(MapBuilder.CENTER, cell) - 1, 0)
+			wall_hp = base_hp(inside) * hp_tuning(walls) * LATE_WALL_BODIES
+		return roundf(wall_hp * (LONG_WINTER_HP if Curses.effect(Curses.LONG_WINTER) in effects else 1.0))
 	var more := 1.0 + _hp_more
 	if enemy == MIMIC and Curses.effect(Curses.HUNGRY_MIMICS) in effects:
 		more += HUNGRY_HP

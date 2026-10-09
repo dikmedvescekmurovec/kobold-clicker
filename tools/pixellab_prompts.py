@@ -875,7 +875,7 @@ SKILL_FRAME = "\n".join([
     "No text, no letters, no numbers, no symbol, no shadow outside the badge."])
 
 
-def skill_prompt(symbol):
+def skill_prompt(symbol, size="about 3/4 width"):
     return "\n".join([
         symbol,
         # No colour word that names a thing (the user, 2026-09-25): "bone white" drew bones into the symbols. Light grey
@@ -885,7 +885,7 @@ def skill_prompt(symbol):
         "other colour, no blue.",
         # Asked for 22 of 32, the first sword came back 25x29 and ran over the frame's border; the user's own wording
         # (a fraction of the width, not a pixel count) brought the second in at a size that sits inside it.
-        "Size: the symbol fills about 3/4 width, centred, with clear empty space all round it.",
+        f"Size: the symbol fills {size}, centred, with clear empty space all round it.",
         "Single game ability icon symbol, 32x32 pixel art in the style of a classic fantasy RPG skill tree.",
         "Front view, flat and centred, seen straight on.",
         "Simple and bold: big clear shapes, a clean readable silhouette, no small details, nothing but the one symbol.",
@@ -1175,3 +1175,45 @@ VETERAN_PROMPTS = [
   "dark crimson shadow. Big simple shapes, no small details."),
 ]
 write_uniques("the veteran uniques", VETERAN_PROMPTS, "tools/qa/pixellab_veteran_prompts.md")
+
+
+# The six runes (2026-10-09), for now the crystal mark tinted (RuneTable.icon). Made as the skill badges are: one blank
+# tablet drawn once in greys, and each rune's glyph alone in muted white, which ui_kit can tint to the rune's own glow
+# (RuneTable.RUNES) -- so the icon matches the beam it falls in to the colour, where no chart word reaches those six
+# bright colours without naming a thing (moss, rose, plum, brick). The tablet is a pointy-top hexagon, the map's own
+# tile, since a rune is spent on a tile; that outline is neither an orb's rough stone or crystal nor a skill stone's
+# disc. The orb tray draws it at half size, so every glyph is thick strokes: a 1 px line would not survive.
+RUNE_TABLET = "\n".join([
+    "An empty six-sided stone tablet with nothing on it: a pointed top and a pointed bottom, two straight upright "
+    "sides, its corners a little worn, a bevel two pixels thick -- lighter along the upper-left edges, darker along "
+    "the lower-right -- and a plain, flat, dark face inside the bevel.",
+    "Shape: the tablet fills the 32x32 canvas from top to bottom; the face inside the bevel is completely empty and "
+    "flat, one colour, with no symbol, no pattern and no texture.",
+    "Single game inventory icon, 32x32 pixel art in the style of a classic fantasy RPG item pack.",
+    "Front view, flat, seen straight on.",
+    "Simple and clean: straight edges, even thickness all round, the six corners alike.",
+    "Palette: greys only: light grey #d1d1d1 and neutral grey #797e80 on the bevel, a darker grey #41454b in "
+    "the bevel's shadow, dark grey #2f3236 for the face. No other colour.",
+    "Soft light from the top-left.",
+    "No text, no letters, no numbers, no symbol, no shadow outside the tablet."])
+RUNE_STROKES = " Bold, thick strokes about three pixels wide, no thin lines."
+RUNE_SYMBOLS = [
+ ("shifting", "Rerolls the tiers of the modifiers runes gave a tile",
+  "Three upright bars side by side, one short, one tall and one in between, their bottoms level."),
+ ("upheaval", "Rerolls the modifiers runes gave a tile into different ones",
+  "Two curved arrows chasing each other round in a circle, each pointing at the other's tail."),
+ ("unrest", "Gives a tile a new modifier", "A plus sign: two thick bars crossing at their middles."),
+ ("stillness", "Takes away a modifier a rune gave a tile", "A minus sign: one thick bar lying flat."),
+ ("depth", "Makes a tile's enemies a level higher", "Three chevrons stacked one above the other, all pointing down."),
+ ("ascent", "Makes a tile's enemies ascended", "A tall arrow pointing straight up, with a pair of spread wings at its foot."),
+]
+out = ["# Pixellab prompts: runes", "",
+ "Settings: as the skill symbols (32x32, transparent background on, Direction and View None, Single color outline; "
+ "Pixen, low detail). Make the tablet and one glyph first and check them together before the rest.",
+ "Save the tablet as `Assets/Potential/Runes/tablet.png` and each glyph as `Assets/Potential/Runes/<its id>.png` (the id "
+ "starts each heading). ui_kit tints each glyph to its rune's colour and sets it on the tablet.", "",
+ "## Tablet (make once)", "", "```", RUNE_TABLET, "```", ""]
+for rune, does, symbol in RUNE_SYMBOLS:
+    out += [f"### {rune} -- {does}", "", "```", skill_prompt(symbol + RUNE_STROKES, "about 3/5 width"), "```", ""]
+open("tools/qa/pixellab_rune_prompts.md", "w", encoding="utf-8").write("\n".join(out))
+print(len(RUNE_SYMBOLS) + 1, "rune prompts")

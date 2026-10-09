@@ -177,29 +177,67 @@ static func _pick(weights: Dictionary[String, float], rng: RandomNumberGenerator
 
 ## Merges regions under MIN_REGION_SIZE into a neighboring region, smallest first, until none can be merged.
 ## Regions holding any cell of `frozen` are left alone: land the player may already have seen never changes.
+## The regions are found once and joined as they merge (`_join`): finding them all again after every merge
+## made a wall's fall quadratic in the whole map, 17 s of the third wall's and 80 s of the sixth's.
 static func _merge_small_regions(envs: Dictionary[Vector2i, String], frozen: Dictionary[Vector2i, bool] = {}) -> void:
+	var regions := find_regions(envs)
+	var region_of: Dictionary[Vector2i, int] = {}
+	var counts: Dictionary[String, int] = {}
+	var held: Array[bool] = []
+	held.resize(regions.size())
+	for i in regions.size():
+		for cell: Vector2i in regions[i]:
+			region_of[cell] = i
+			if frozen.has(cell):
+				held[i] = true
+			else:
+				counts[envs[cell]] = counts.get(envs[cell], 0) + 1
+	# A region only ever grows and only ever becomes held, so the small ones are all there will be.
+	var small: Array[int] = []
+	for i in regions.size():
+		small.append(i)
 	while true:
-		var regions := find_regions(envs)
-		var region_of: Dictionary[Vector2i, int] = {}
-		var counts: Dictionary[String, int] = {}
-		for i in regions.size():
-			for cell: Vector2i in regions[i]:
-				region_of[cell] = i
-				if not frozen.has(cell):
-					counts[envs[cell]] = counts.get(envs[cell], 0) + 1
-		var order := range(regions.size())
+		var order: Array[int] = []
+		for i in small:
+			if not regions[i].is_empty() and regions[i].size() < MIN_REGION_SIZE and not held[i]:
+				order.append(i)
+		small = order
 		order.sort_custom(func(a: int, b: int) -> bool: return regions[a].size() < regions[b].size())
 		var merged := false
 		for i: int in order:
-			if regions[i].size() >= MIN_REGION_SIZE:
-				break
-			if regions[i].any(func(cell: Vector2i) -> bool: return frozen.has(cell)):
-				continue
+			var was := envs[regions[i][0]]
 			if _absorb(regions, i, region_of, envs, counts):
+				counts[was] -= regions[i].size()
+				counts[envs[regions[i][0]]] = counts.get(envs[regions[i][0]], 0) + regions[i].size()
+				_join(regions, i, region_of, envs, held)
 				merged = true
-				break  # Regions changed; recompute them.
+				break
 		if not merged:
 			return
+
+
+## Joins the region at `index`, just recoloured, to every region of its new environment it touches. The
+## smaller ones' cells go into the largest, so a big region is never copied into a small one.
+static func _join(regions: Array[Array], index: int, region_of: Dictionary[Vector2i, int],
+		envs: Dictionary[Vector2i, String], held: Array[bool]) -> void:
+	var env := envs[regions[index][0]]
+	var parts: Dictionary[int, bool] = {index: true}
+	for cell: Vector2i in regions[index]:
+		for next in HexGrid.neighbors(cell):
+			if region_of.has(next) and envs[next] == env:
+				parts[region_of[next]] = true
+	var into := index
+	for part in parts:
+		if regions[part].size() > regions[into].size():
+			into = part
+	for part in parts:
+		if part == into:
+			continue
+		for cell: Vector2i in regions[part]:
+			region_of[cell] = into
+		regions[into].append_array(regions[part])
+		held[into] = held[into] or held[part]
+		regions[part] = []
 
 
 ## Recolors a region to the environment of a neighboring region that is allowed next to all of the region's
