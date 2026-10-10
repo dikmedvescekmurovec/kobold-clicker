@@ -6,6 +6,34 @@ a player has not seen yet once, together, newest first (`main_scene.gd` `_show_c
 written for players. A section may hold a two-column table instead (`| left | right |`, a header row, then
 `|---|---|`): the game draws its rows as its own tables, the left column wrapping and the right kept short.
 
+## v0.5.0 (2026-10-10)
+
+### First steps
+- The Broken Sword drops within the first 10 kills, an Orb of Transmutation by the 20th, an Orb of Augmentation by the 30th, the Squire's Blade by the 120th and a first skill node by the 170th.
+- The first Orb of Transmutation used on the Broken Sword always gives it +1 Damage.
+- A new skill tree starts as the root alone
+
+### Fortuneteller
+- New spell, Banish: once you have unlocked 24 uniques, the fortuneteller can keep a unique you pick from dropping in this world.
+
+### Map
+- Stop, a new button at the foot of the map, cuts a walk short on the next tile.
+- Enter town now works from afar on a settlement you have charted: your hero walks there and the town opens on arrival.
+
+### Skill tree
+- Improvements to visual clarity
+
+### Phones and tablets
+- A tap now selects and the next tap applies, so you can read a thing before you spend on it.
+- Tap a skill node to read it, then tap it again to spend a point. Keep your finger on it to automatically spend your skill points
+- Tap an orb to pick it up, tap a piece to read it, then tap the piece again to use the orb on it.
+- Tap a rune to pick it up, tap a tile to open its panel, then tap the tile again to spend the rune there.
+- Hold your finger on an orb or a rune to read what it does.
+- A fortuneteller's spell shows what it does on the first tap and is cast on the second. Scour and Return outline the land on the first tap.
+
+### Interface
+- The red dot on the bag button now marks a first of its kind: your first item, orb, skill node, unique and rune.
+
 ## v0.4.1 (2026-10-09)
 
 ### Front page
