@@ -6,13 +6,13 @@ One **Cloudflare Worker** (a small JavaScript program run on Cloudflare's server
 - **Signing in with Google or Discord.** It's optional; the game plays exactly the same without it.
 - **Cloud saves.** Play on one computer and carry on on another. If two devices both played offline,
   the player is asked which save to keep. A save is taken at its word: the player is trusted not to cheat.
-- **Three leaderboards.** Gollux: each signed-in player's deepest descent as **`depth.floor`**
-  (**3.14** is depth 3, 14 of its floors beaten). Walls: every ice wall they have broken, in every
-  world. Deepest: the level of the deepest tile they have charted, in any world. Each is the best any
+- **Three leaderboards.** Gollux: each signed-in player's deepest descent as a depth and a floor
+  (**Depth 3, floor 14** is depth 3 with 14 of its floors beaten). Walls: every ice wall they have
+  broken, in every world. Deepest: the level of the deepest tile they have charted, in any world. Each is the best any
   of their saves reached; of two equal scores, whoever reached it first stands higher.
 
 At this game's scale it costs **$0 a month**, with no servers to patch. The Worker is one JavaScript
-file, the database three migrations.
+file, the database a few short migrations (§7).
 
 **Live:** `https://gollux-leaderboard.kobold-clicker.workers.dev`, on the Cloudflare account
 *Dik.med.mur@gmail.com's Account*, workers.dev subdomain `kobold-clicker`. The Worker keeps the name
@@ -30,7 +30,7 @@ Mermaid Support* extension (`bierner.markdown-mermaid`) and open the preview (Ct
 2. [Signing in](#2-signing-in)
 3. [Cloud saves](#3-cloud-saves)
 4. [Cheating](#4-cheating)
-5. [The leaderboard](#5-the-leaderboard)
+5. [The leaderboards](#5-the-leaderboards)
 6. [The API](#6-the-api)
 7. [The database](#7-the-database)
 8. [The game's side](#8-the-games-side)
@@ -64,9 +64,9 @@ flowchart LR
 
     subgraph CF["Cloudflare (free plan)"]
         Edge["Edge network<br/>HTTPS, DDoS protection"]
-        RL["Rate limiters<br/>60 requests/min per IP<br/>10 sign-ins/min per IP"]
+        RL["Rate limiters, per IP<br/>60 requests/min<br/>10 sign-ins/min<br/>5 waiting-list emails/min"]
         W["Worker<br/>src/index.js"]
-        D1[("D1 database<br/>players, identities, sessions,<br/>logins, saves")]
+        D1[("D1 database<br/>players, identities, sessions,<br/>logins, saves, waitlist")]
         Edge --> RL --> W --> D1
     end
 
@@ -108,35 +108,43 @@ sequenceDiagram
 
     P->>G: presses Sign in (settings or leaderboard)
     G->>W: POST /logins (with the old anonymous token, if any)
-    W-->>G: code (secret), check letters K7RX, page address
-    G->>B: opens /login?code=...
+    W-->>G: code (secret, kept by the game), check letters K7RX, the page's address
+    G->>B: opens /login?page=... (the page's own id, not the code)
     G-->>P: shows K7RX
     loop every 2 s, up to 10 min
         G->>W: POST /logins/poll with the code
         W-->>G: 202 still waiting
     end
-    B->>W: GET /login?code=...
-    W-->>B: page showing K7RX and Continue with Google / Discord
+    B->>W: GET /login?page=...
+    W-->>B: page showing K7RX and Continue with Google / Discord, and a cookie
     P->>B: checks the letters match, picks Google
-    B->>W: GET /auth/google?code=...
+    B->>W: GET /auth/google?page=... (with the cookie)
     W-->>B: redirect to Google with a one-time state
     B->>Pr: signs in
     Pr-->>B: redirect to /auth/google/callback?code=...&state=...
-    B->>W: callback
+    B->>W: callback (with the cookie)
     W->>Pr: swaps the code for an access token (server to server)
     W->>Pr: asks whose token it is
     Pr-->>W: the account id (Google sub, Discord id)
-    W->>W: finds or makes the player, makes a session
+    W->>W: finds or makes the player, marks the login done
     W-->>B: You are signed in, go back to the game
     G->>W: POST /logins/poll
-    W-->>G: 200 session token (handed out once, then the login is deleted)
+    W-->>G: 200 a new session's token (made now, handed out once, the login deleted)
     G->>G: token saved to cloud.cfg, first sync
 ```
 
 - **The check letters** stop a phishing trick. Someone could start a sign-in on their own game and
   send you the link: if you signed in there, *their* game would be signed in as you. The page shows
   four letters, and the player only continues if their own game shows the same ones. The page says so.
-- **A login lasts 10 minutes.** Its session token is handed to the game once, then the row is deleted.
+  A link that skips the page cannot be followed: the page leaves a cookie (`__Host-login`, ten minutes,
+  `Secure; HttpOnly; SameSite=Lax`), and both steps after it, on to the provider (`/auth/...`) and back
+  from it (the callback), are refused without it (403). So neither a link straight to `/auth/...` nor
+  the provider's own address with someone else's `state` signs anybody in.
+- **A login has two secrets.** The game's `code` collects the session, and leaves the game only in the
+  body of its own poll. The address the browser opens carries the page's own id, which collects
+  nothing: a stream, a shared screen or a synced history shows nothing worth having.
+- **A login lasts 10 minutes.** The session is made at the one poll that collects it and its token goes
+  to the game; the login is deleted with it. No token is ever stored, only its SHA-256.
 - **One account per provider identity.** Signing in with the same Google account on two devices is
   one player with two sessions (one per device). Google and Discord are separate accounts: there is
   no linking of the two.
@@ -178,14 +186,20 @@ When it syncs:
 
 | When | What |
 |---|---|
-| Start-up | Right after the scene is built. It judges "this device changed" by the files **as the scene found them**, before start-up wrote anything (`Cloud.launched`). Otherwise a start-up's own writes (the map, a camp's pay) would make every change of device a question. |
-| Every 30 s while playing | Uploads when due (at most every `UPLOAD_EVERY`, 5 min). A download or a question waits until the game is **calm**: not in a fight, a camp, the black screen or another question. |
+| Start-up | Right after the scene is built. It judges "this device changed" by the files **as the scene found them**, before start-up wrote anything (`Cloud.launched`). Otherwise a start-up's own writes (the map, a camp's pay) would make every change of device a question. While it still holds that judgement and the game is not calm (a start-up that stands a camp up), the first sync waits: it goes as the camp is struck. |
+| Every 30 s while playing | Uploads when due (at most every `UPLOAD_EVERY`, 5 min). A download or a question waits until the game is **calm**: not in a fight, walking to one, a camp, the black screen or another question. |
 | After a descent | Uploads at once, so the board catches up. |
 | Opening the leaderboard page | Uploads at once, then reads the board. |
 | Closing the window | The scene closes (it banks the run and writes its saves), the upload goes with a 4 s timeout, then the game quits. On Android and iOS, when the app is paused. |
 
-**A download** writes both files through `SafeFile` and tells the main scene, which reloads without
-saving over them (`_on_cloud_replaced` sets `_resetting`).
+**A download** is read before it is written: an inventory that does not parse, or one (or a map) from
+a newer build than this one, writes nothing and is said on the page (`Cloud.problem`). Then both files
+go down through `SafeFile` and the main scene is told, which reloads without saving over them
+(`_on_cloud_replaced` sets `_resetting`).
+
+**A save this build refuses moves nothing.** When the main scene cannot read the inventory or the map
+(`_refuse_save`) it sets `Cloud.blocked`, and neither `sync` nor `push` calls anyone: an unreadable
+file never goes up over the cloud's readable one.
 
 **The question** shows both saves (level, time played, when saved, deepest descent) and nothing is
 replaced until the player picks:
@@ -220,6 +234,11 @@ sequenceDiagram
 the cloud's first save. The question says so. A **transcension** is an ordinary save as far as the
 cloud is concerned.
 
+**A revision is never used twice.** After a reset the next upload is numbered on from the last
+(`players.last_revision`), not from 1: another device still at an old revision finds the cloud
+changed, and downloads or is asked, as after any other upload. Until that upload, a stale one from
+such a device is a conflict with nothing to show (409, `summary: null`).
+
 ---
 
 ## 4. Cheating
@@ -247,9 +266,9 @@ Three boards, each a column of `players` and the column of when it last rose (`B
 
 A walls or deepest score fills in at a player's first upload after migration `0003_boards.sql`.
 
-Gollux's score is a number of dungeon floors, shown as depth and floor. 44 is 2 × 15 + 14, shown as **3.14**,
-and killing depth 3's Gollux is 45, shown as **4.00**. `Cloud.score_text` formats it, with two digits
-after the dot (`3.05`, never `3.5`).
+Gollux's score is a number of dungeon floors, shown as a depth and a floor. 44 is 2 × 15 + 14, shown as
+**Depth 3, floor 14**, and killing depth 3's Gollux is 45, shown as **Depth 4, floor 0**.
+`Cloud.score_text` writes it (it was `3.14` once, which read as a decimal).
 
 **A player's score is the best any of their saves reached:** an upload's own number. It only ever
 rises, so a restored backup or a reset never takes it down.
@@ -276,28 +295,35 @@ flowchart TD
 Every body is JSON, and every error is `{"error": "a sentence for the player"}`. The game shows that
 sentence as it is. "Bearer" means `Authorization: Bearer <session token>`.
 
-| Route | Auth | Body | Success | Errors |
-|---|---|---|---|---|
-| `POST /logins` | optional Bearer (an old anonymous token, to keep its name) | – | **201** `{code, check, url}` | 429 |
-| `GET /login?code=` | – | – | the sign-in page (HTML) | 404 page: expired |
-| `GET /auth/{google,discord}?code=` | – | – | 302 to the provider | 404 expired, 404 provider not set up |
-| `GET /auth/{google,discord}/callback` | – | – | the "signed in" page | 400 cancelled, 404 expired, 502 provider failed |
-| `POST /logins/poll` | – | `{code}` | **200** `{token, provider}` once; **202** `{pending}` | 404 expired or collected |
-| `GET /me` | Bearer | – | `{name, floors, reached_at, rank, providers, save: {revision, uploaded_at, summary} or null}` | 401 |
-| `PUT /me/name` | Bearer | `{name}` | the player's standing | 400 bad name, 409 taken |
-| `DELETE /me` | Bearer | – | `{deleted}`: everything about the player gone | 401 |
-| `DELETE /sessions/me` | Bearer | – | `{signed_out}`: this device's session gone | 401 |
-| `GET /save` | Bearer | – | `{revision, uploaded_at, summary, inventory, map}` (the two files as text) | 401, 404 none |
-| `PUT /save` | Bearer | `{base_revision, replace?, inventory, map}` | **200** `{revision, ...standing}` | 400 not a save, **409** `{revision, summary}` the cloud is newer, 413 |
-| `DELETE /save` | Bearer | – | `{deleted}`: the cloud's saves gone, the board untouched | 401 |
-| `GET /leaderboard?board=walls&limit=50` | optional Bearer | – | `{top: [{rank, name, score, floors, reached_at}], me: {name, score, rank, ...}}` for `gollux` (left out: what builds before the other boards ask), `walls` or `deepest`; `reached_at` is that board's | 401 if a token is sent and unknown, 404 no such board |
-| `GET /privacy` | – | – | the privacy page (HTML) | – |
-| `POST /waitlist` | – | `{email}` | **201** `{joined}`, also for an address already on the list | 400 not an email |
+**The contract is [`contract.json`](contract.json):** every route with who may call it, the fields it
+is sent, the fields it answers and its statuses. `npm test` walks it against the Worker ("every route
+answers as contract.json says") and checks it lists every route of `src/index.js`, so it is the one
+place a field is looked up or changed. What each route is for:
+
+| Route | For |
+|---|---|
+| `POST /logins` | Starts a sign-in: the game's `code`, the check letters and the page's address. An old anonymous token, if sent, keeps its board name |
+| `GET /login?page=` | The sign-in page (HTML). Leaves the cookie the next two need |
+| `GET /auth/{google,discord}?page=` | On to the provider (302) |
+| `GET /auth/{google,discord}/callback` | Back from the provider: the "Signed in" page |
+| `POST /logins/poll` | The game asking whether it is done: 202 while it waits, then the session's token, once |
+| `GET /me` | The player's standing (name, score, rank), providers and newest save's summary |
+| `PUT /me/name` | Chooses or changes the board name |
+| `DELETE /me` | Everything about the player gone |
+| `DELETE /sessions/me` | This device's session gone |
+| `GET /save` | The newest save: the two files as text |
+| `PUT /save` | An upload, naming the revision it grew from. **409** when the cloud's newest is another one, with its `revision` and its newest save's `summary`: null when the cloud holds no save (it was reset), left out when two uploads raced |
+| `DELETE /save` | The cloud's saves gone, the board untouched |
+| `GET /leaderboard?board=&limit=` | A board's top and, with a token, the player's own row: `gollux` (left out: what builds before the other boards ask), `walls` or `deepest`. A row keeps `floors` beside its `score`, as those builds read it |
+| `GET /privacy` | The privacy page (HTML) |
+| `POST /waitlist` | An email for the waiting list; one already on it is taken again without complaint |
 
 Rules:
 
 - **Every route:** 60 requests a minute per IP address.
-- **`POST /logins`:** 10 a minute per IP address.
+- **`POST /logins`:** 10 a minute per IP address. **`POST /waitlist`:** 5.
+- A rate limiter that fails lets the call through, and logs it.
+- **A body** is a JSON object of at most 4 MB. Anything else is 400, or 413.
 - A sign-in polls 30 times a minute.
 - A playing game makes about 2 requests a minute: the 30 s sync reads `/me`.
 
@@ -323,6 +349,7 @@ erDiagram
         INTEGER created_at
         INTEGER hidden "1 is off the board, silently"
         INTEGER linked "1 once signed in"
+        INTEGER last_revision "the highest revision its saves ever had"
         TEXT flag "unused: the last refusal, from when saves were checked"
     }
     IDENTITIES {
@@ -337,12 +364,14 @@ erDiagram
         INTEGER created_at
     }
     LOGINS {
-        TEXT code_hash PK
+        TEXT code_hash PK "SHA-256 of the game's code"
+        TEXT page_hash UK "SHA-256 of the page's id"
         TEXT check_code "four letters"
         TEXT state UK "OAuth state at the provider"
-        INTEGER player_id "old anonymous player to link"
+        INTEGER done "1 once the provider has answered"
+        INTEGER player_id "old anonymous player to link, then who signed in"
         TEXT provider
-        TEXT token "until the game collects it"
+        TEXT token "unused: no token is stored"
         INTEGER created_at "gone after 10 minutes"
     }
     SAVES {
@@ -354,14 +383,22 @@ erDiagram
         INTEGER checked "unused, always 0"
         INTEGER vouched "unused, always 0"
     }
+    WAITLIST {
+        TEXT email PK "whatever its case"
+        INTEGER joined_at
+    }
 ```
 
 - **`migrations/0001_players.sql`**: the anonymous leaderboard it started as.
 - **`migrations/0002_accounts.sql`**: accounts and saves. It rebuilds `players` (a name may be NULL,
   the token moved to `sessions`) and keeps every old row.
+- **`migrations/0003_boards.sql`**: the walls and deepest boards' columns on `players`.
+- **`migrations/0004_waitlist.sql`**: the waiting list, apart from everything else.
+- **`migrations/0005_login_pages.sql`**: a login's page id and its `done`; empties `logins` (§12).
+- **`migrations/0006_revisions.sql`**: `players.last_revision`, filled from each player's newest save.
 
-**Schema changes are migrations.** Add `migrations/0003_<what>.sql`, and never edit one that has been
-applied to the live database (`npx wrangler d1 migrations list DB --remote` shows which have been).
+**Schema changes are migrations.** Add the next numbered file (`migrations/0007_<what>.sql`), and never
+edit one that has been applied to the live database (`npx wrangler d1 migrations list DB --remote` shows which have been).
 
 ---
 
@@ -408,25 +445,39 @@ No Cloudflare account and no provider is needed for any of this.
 
 ```sh
 npm install                  # once
-npm test                     # ~15 s
+npm test                     # ~30 s
 ```
 
 **`npm test`** starts the Worker on a fresh local database with a **stand-in for Google's and Discord's
-servers**, so the real sign-in code runs end to end. It covers:
+servers**, so the real sign-in code runs end to end. The stand-in checks what the real ones do: the
+client's id and secret, the redirect address registered for it, and a code of its own, good once. It
+covers:
 
-- sign-in, and one player across devices;
-- the old name kept on the first sign-in;
-- expired codes refused;
+- sign-in, and one player across devices; the old name kept on the first sign-in;
+- a login nobody started, cancelled, refused by the provider or played back;
+- the game's code in no address and on no page, and nothing shown that collects the session;
+- the cookie: a link that skips the sign-in page refused;
+- no token stored while a login waits;
 - names;
-- a save round-tripping byte for byte;
-- the board taking a save's floors, and never going down;
-- conflicts, and replace;
-- a save taken at its word, and only a non-save turned away;
-- the board's order;
-- signing out and deleting;
-- the sign-in rate limit.
+- a save round-tripping byte for byte; conflicts, and replace;
+- a save taken at its word, and only a non-save or one too big turned away;
+- a reset: the board kept, a stale upload a conflict, no revision used twice;
+- a body that is not a JSON object;
+- every signed-in route without a token and with a wrong one; one player's calls never touching another's;
+- the three boards: their order, each only rising, and **the fields they read being the ones the game
+  writes** (`tests/fixtures/inventory_golden.json`, a save as `Inventory.save` writes it: a field
+  renamed there fails here, where it would otherwise score 0 for ever and nothing would say so);
+- signing out and deleting, and every table with a `player_id` emptied by a deletion;
+- the web build's calls from another origin;
+- the waiting list;
+- the three rate limits, and a limiter that fails;
+- `contract.json`, route by route.
 
 The stand-in is switched on only by `PROVIDER_ORIGIN`, which only the tests set.
+
+**On Windows, keep the `--persist-to` path short.** Past about 135 characters the local rate limiter
+throws `internal error` on every call. The Worker logs it and lets the call through, so it is the
+rate-limit tests that fail. The tests use `.wrangler/test`, relative to this folder.
 
 **A local server** for the game to talk to:
 
@@ -436,10 +487,11 @@ npx wrangler dev --var GOOGLE_CLIENT_ID:<id> --var GOOGLE_CLIENT_SECRET:<secret>
 ```
 
 Real sign-in on a local server also needs `http://127.0.0.1:8787/auth/google/callback` added to the
-Google client's redirect URIs.
+Google client's redirect URIs, and a browser that keeps the sign-in page's `Secure` cookie from
+plain-http localhost (Chrome and Firefox treat localhost as secure; not tried here).
 
-The game's side is covered by `python tests/run_all.py cloud`: decide, the summary, the account file,
-the question, and the mirrored numbers. `combat` and `inventory` cover the floors a descent banks.
+The game's side is covered by `python tests/run_all.py cloud`: decide, the summary, the score's
+words, the account file and the question. `combat` and `inventory` cover the floors a descent banks.
 
 ---
 
@@ -491,15 +543,29 @@ flowchart TD
 ```
 
 ```sh
-npm test
-npm run deploy      # = migrations to the live database, then the Worker
+npm run deploy      # = npm test, then migrations to the live database, then the Worker
 ```
 
+- **`npm run deploy` runs `npm test` first** (`predeploy`) and stops there if anything is red.
 - **A deploy switches over in seconds.** `npx wrangler rollback` puts the previous version back.
 - **A migration can't be rolled back that way.** Restore the database with Time Travel (§13) if one goes
   wrong.
 - **Never rename the Worker or drop a route a shipped build calls.** Add routes; don't change what old
   ones mean.
+
+**What the deploy after 2026-10-10 does, and how to undo it.** In order:
+
+1. `0005_login_pages.sql` adds `logins.page_hash` and `logins.done` and **empties `logins`**. A sign-in
+   under way at that moment says it ran out of time and is started again. Nobody is signed out.
+2. `0006_revisions.sql` adds `players.last_revision` and fills it from each player's newest save.
+3. The Worker, with its third rate limiter (`WAITLIST_LIMIT`, made from `wrangler.toml`: nothing to
+   create by hand).
+
+For the seconds between 2 and 3 the old Worker runs on the new tables, which it can: the migrations
+add columns and take none away. A sign-in started in that gap cannot be finished after it, and is
+started again. **To undo,** `npx wrangler rollback` is enough: the old Worker ignores the new
+columns, and when the new one comes back it numbers revisions from whichever is higher, the newest
+save or `last_revision`. The columns stay; nothing needs restoring.
 
 ---
 
@@ -561,7 +627,7 @@ This is Cloudflare's free plan as published at the time of writing. Check
 | Resource | Free plan | A player uses, per hour played |
 |---|---|---|
 | Worker requests | 100,000 / day | ~130: a `/me` every 30 s, and 12 uploads |
-| D1 rows written | 100,000 / day | ~40: an upload writes its row, prunes the 11th, may move the board |
+| D1 rows written | 100,000 / day | ~50: an upload writes its row, prunes the 11th, notes its revision, may move the board |
 | D1 rows read | 5 million / day | a few hundred |
 | D1 storage | 5 GB | 10 revisions × ~20 KB = ~200 KB a player, so ~25,000 players |
 
@@ -580,12 +646,13 @@ plays on, and syncs later. Nothing is lost, because the files on the device are 
 
 | Threat | Defence |
 |---|---|
-| Stealing a session | Tokens are 256 random bits, sent only over HTTPS, and stored only as SHA-256. A leaked database holds no token. |
-| A sign-in link sent by someone else | The four check letters on both screens; the page says to close it if they differ. |
+| Stealing a session | Tokens are 256 random bits, sent only over HTTPS, and stored only as SHA-256. A session is made at the poll that collects it, so not even a waiting login holds one: a leaked database holds no token. |
+| A sign-in link sent by someone else | The four check letters on both screens; the page says to close it if they differ. A link that skips the page (straight to `/auth/...`, or the provider's own address) is refused: both steps need the cookie the page left. |
+| The sign-in address seen by someone else (a stream, a shared screen, synced history) | It carries only the page's id. The code that collects the session leaves the game only in the body of its own poll, never in an address or a page. |
 | Forged OAuth callbacks | The one-time `state`, bound to one login and gone once used. The code is swapped server to server with the client secret, which never leaves Cloudflare. |
-| Replaying a login code | A login gives out its token once and is deleted. Codes expire after 10 minutes. |
-| The code leaking to the provider | Every page is sent with `Referrer-Policy: no-referrer`, a CSP of `default-src 'none'`, and `X-Frame-Options: DENY`. |
-| Spam | Per-IP rate limits and Cloudflare's DDoS protection. The body limit is 4 MB. |
+| Replaying a login code | A login's session is made and handed out once, and the login deleted with it. Codes expire after 10 minutes. |
+| The page's id leaking to the provider | Every page is sent with `Referrer-Policy: no-referrer`, a CSP of `default-src 'none'`, and `X-Frame-Options: DENY`. |
+| Spam | Per-IP rate limits (every call, sign-ins, the waiting list) and Cloudflare's DDoS protection. The body limit is 4 MB. |
 | Junk data | Names are whitelisted; saves are parsed; all SQL is parameterised. |
 | Personal data | Only a provider's id, the chosen name, the save and its times are kept. `/privacy` says so, and **Delete cloud account** removes all of it (GDPR's right to erasure). |
 
@@ -597,7 +664,8 @@ Cheating is §4.
 
 The web build is served from another origin (`../web`, by `tools/web.py`), so every JSON reply carries
 `Access-Control-Allow-Origin: *` and an `OPTIONS` preflight is answered before the rate limiter. Any
-origin is safe: sessions are bearer tokens, never cookies.
+origin is safe: sessions are bearer tokens, never cookies (the one cookie, the sign-in page's, is read
+only by the sign-in pages themselves).
 
 | You want | Change |
 |---|---|
@@ -637,10 +705,14 @@ for an id: the OAuth code is about 80 lines in `src/index.js`.
 | Google says access blocked, app not verified | The app isn't published (§11 Google, step 4), or it asks for more than `openid`. |
 | "The sign-in did not go through" | The token exchange failed: a wrong or missing secret. `npx wrangler tail` shows the provider's answer. |
 | "Signing in ran out of time" | The browser step took over 10 minutes, or the page was closed. Start again. |
+| The sign-in page says it was not opened in this browser | The cookie did not come back: cookies are blocked, or the page was opened in one browser and carried on in another. Start again from the game. |
 | The same question every start-up | Something writes the save before `_find_cloud` runs `launched()`. Keep `launched()` ahead of every write in `_ready`. |
+| Choose name does nothing | It did until 2026-10-10: every 409 was hidden. "That name is taken" is now shown; only a save's own 409 (the question) is not. |
 | "The cloud cannot be reached" | Offline, or the free limit is used up for today. It syncs on its own later. |
 | `no such table` | `npx wrangler d1 migrations apply DB --remote`. |
 | `npm test` hangs on Windows | An old `wrangler dev` holds the port or `.wrangler`. Stop it and delete `.wrangler/test`. |
+| Only the rate-limit tests fail, with `internal error` logged (Windows) | The `--persist-to` path is past about 135 characters (§10). |
+| "the boards read the fields the game's own save has" fails | `tests/fixtures/inventory_golden.json` is missing, or the game's save no longer has a field a board reads (`BOARDS` in `src/index.js`). |
 
 ---
 
@@ -649,19 +721,26 @@ for an id: the OAuth code is about 80 lines in `src/index.js`.
 ```
 backend/
 ├── .gdignore                  keeps Godot out of this folder
-└── leaderboard/
-    ├── README.md              this file
-    ├── wrangler.toml          the Worker, the D1 binding, rate limits, client ids, logs
-    ├── package.json           wrangler + the test / deploy scripts
-    ├── migrations/
-    │   ├── 0001_players.sql   the anonymous leaderboard
-    │   └── 0002_accounts.sql  accounts, sessions, sign-ins in progress, saves
-    ├── src/
-    │   └── index.js           the routes: sign-in, account, saves, board, pages
-    └── test.mjs               end to end on a local D1 with stand-in providers (npm test)
+├── leaderboard/
+│   ├── README.md              this file
+│   ├── wrangler.toml          the Worker, the D1 binding, rate limits, client ids, logs
+│   ├── package.json           wrangler + the test / deploy scripts
+│   ├── contract.json          every route: auth, fields sent, fields answered, statuses
+│   ├── migrations/
+│   │   ├── 0001_players.sql      the anonymous leaderboard
+│   │   ├── 0002_accounts.sql     accounts, sessions, sign-ins in progress, saves
+│   │   ├── 0003_boards.sql       the walls and deepest boards
+│   │   ├── 0004_waitlist.sql     the waiting list
+│   │   ├── 0005_login_pages.sql  a login's page id, and done
+│   │   └── 0006_revisions.sql    a player's highest revision
+│   ├── src/
+│   │   └── index.js           the routes: sign-in, account, saves, boards, waiting list, pages
+│   └── test.mjs               end to end on a local D1 with stand-in providers (npm test)
+└── web/                       the web build's own Worker, serving it out of R2 (tools/web.py)
 
-Scenes/cloud.gd                  the game's client
-Scenes/UI/cloud_question.gd      the question between two saves
-Scenes/UI/leaderboard_page.gd    the board page
-tests/test_cloud.gd              the game's side, and the mirrored numbers
+Scenes/cloud.gd                        the game's client
+Scenes/UI/cloud_question.gd            the question between two saves
+Scenes/UI/leaderboard_page.gd          the board page
+tests/test_cloud.gd                    the game's side
+tests/fixtures/inventory_golden.json   a save as the game writes it, read by test.mjs
 ```

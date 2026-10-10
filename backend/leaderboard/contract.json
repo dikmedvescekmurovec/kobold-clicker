@@ -1,0 +1,27 @@
+{
+  "about": [
+    "Every route of the Worker (src/index.js): who may call it, what it is sent and what it answers.",
+    "Written from the code and walked by test.mjs ('every route answers as contract.json says'), so it cannot drift: change a route and this file together.",
+    "auth -- none; bearer: 'Authorization: Bearer <session token>', or 401; bearer?: read if sent; cookie: the one GET /login leaves in the browser, or 403.",
+    "query, body -- the fields sent, in the address or as a JSON object. A '?' after a name: it may be left out.",
+    "reply -- the fields of the answer when all is well ('.' goes inside an object, '[]' is each row of a list), or 'html', or 'redirect'. A name, a rank, a reached_at, /me's save and /leaderboard's me may be null.",
+    "statuses -- every status the route answers with, the first when all is well. All the others answer {error}, a sentence the game shows as it is; a 409 from PUT /save also has the cloud's revision and its newest save's summary (null when it holds none; left out when two uploads raced). Any route may also answer 429 (60 calls a minute from one address) or 500."
+  ],
+  "routes": [
+    { "method": "POST", "path": "/logins", "auth": "bearer?", "reply": ["code", "check", "url"], "statuses": [201, 429] },
+    { "method": "GET", "path": "/login", "auth": "none", "query": ["page"], "reply": "html", "statuses": [200, 404] },
+    { "method": "GET", "path": "/auth/{provider}", "auth": "cookie", "query": ["page"], "reply": "redirect", "statuses": [302, 403, 404] },
+    { "method": "GET", "path": "/auth/{provider}/callback", "auth": "cookie", "query": ["code", "state"], "reply": "html", "statuses": [200, 400, 403, 404, 502] },
+    { "method": "POST", "path": "/logins/poll", "auth": "none", "body": ["code"], "reply": ["token", "provider"], "statuses": [200, 202, 400, 404, 413] },
+    { "method": "PUT", "path": "/me/name", "auth": "bearer", "body": ["name"], "reply": ["name", "floors", "score", "reached_at", "rank"], "statuses": [200, 400, 401, 409, 413] },
+    { "method": "PUT", "path": "/save", "auth": "bearer", "body": ["base_revision", "replace?", "inventory", "map"], "reply": ["revision", "name", "floors", "score", "reached_at", "rank"], "statuses": [200, 400, 401, 409, 413] },
+    { "method": "GET", "path": "/me", "auth": "bearer", "reply": ["name", "floors", "score", "reached_at", "rank", "providers[]", "save.revision", "save.uploaded_at", "save.summary.level", "save.summary.play_seconds", "save.summary.saved_at", "save.summary.dungeon_floors"], "statuses": [200, 401] },
+    { "method": "GET", "path": "/save", "auth": "bearer", "reply": ["revision", "uploaded_at", "summary.level", "summary.play_seconds", "summary.saved_at", "summary.dungeon_floors", "inventory", "map"], "statuses": [200, 401, 404] },
+    { "method": "GET", "path": "/leaderboard", "auth": "bearer?", "query": ["board?", "limit?"], "reply": ["top[].rank", "top[].name", "top[].floors", "top[].score", "top[].reached_at", "me.name", "me.floors", "me.score", "me.reached_at", "me.rank"], "statuses": [200, 401, 404] },
+    { "method": "DELETE", "path": "/save", "auth": "bearer", "reply": ["deleted"], "statuses": [200, 401] },
+    { "method": "GET", "path": "/privacy", "auth": "none", "reply": "html", "statuses": [200] },
+    { "method": "POST", "path": "/waitlist", "auth": "none", "body": ["email"], "reply": ["joined"], "statuses": [201, 400, 413, 429] },
+    { "method": "DELETE", "path": "/sessions/me", "auth": "bearer", "reply": ["signed_out"], "statuses": [200, 401] },
+    { "method": "DELETE", "path": "/me", "auth": "bearer", "reply": ["deleted"], "statuses": [200, 401] }
+  ]
+}

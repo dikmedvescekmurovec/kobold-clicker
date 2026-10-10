@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "test": "node --test test.mjs",
+    "predeploy": "npm test",
     "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy"
   },
   "type": "module",

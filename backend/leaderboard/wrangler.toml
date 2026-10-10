@@ -22,6 +22,12 @@ name = "LOGIN_LIMIT"
 namespace_id = "1002"
 simple = { limit = 10, period = 60 }
 
+# Emails given to the waiting list, per IP address: one visitor gives one.
+[[ratelimits]]
+name = "WAITLIST_LIMIT"
+namespace_id = "1003"
+simple = { limit = 5, period = 60 }
+
 # The sign-in apps' client ids (not secrets; README "Sign-in providers"). An empty one hides that
 # provider's button. The two client secrets are Worker secrets: `npx wrangler secret put GOOGLE_CLIENT_SECRET`.
 [vars]
