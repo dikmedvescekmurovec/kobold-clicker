@@ -2103,7 +2103,7 @@ func _test_fortune_page() -> void:
 	_check(FileAccess.file_exists(TEST_MAP_PATH) and main.inventory.gold > 0.0,
 			"the first press only asks")
 	var asked: Node = main.town_page._told
-	_check(asked != null and "lost" in _said(asked) and not "heirloom" in _said(asked),
+	_check(asked != null and "lose" in _said(asked) and not "heirloom" in _said(asked),
 			"in a popup that warns of what is lost, not of what is won")
 	_check(UITheme.price_of(_deep_button(asked, "Transcend")).is_empty(), "its Transcend a coin and no figure")
 	main.town_page._close_told()
