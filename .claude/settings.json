@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "ask": [
+      "Bash(npm run deploy*)",
+      "Bash(*wrangler deploy*)",
+      "Bash(*wrangler*--remote*)",
+      "Bash(*web.py*--deploy*)",
+      "PowerShell(npm run deploy*)",
+      "PowerShell(*wrangler deploy*)",
+      "PowerShell(*wrangler*--remote*)",
+      "PowerShell(*web.py*--deploy*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/tools/check.py\" --hook",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

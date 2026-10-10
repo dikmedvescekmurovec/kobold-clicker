@@ -226,7 +226,8 @@ func _explore() -> void:
 	camera.position = from
 	camera.zoom = Vector2(1.25, 1.25)
 	var zoom := camera.create_tween()
-	zoom.tween_property(camera, "zoom", Vector2.ONE, _seconds(6.0)) 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	zoom.tween_property(camera, "zoom", Vector2.ONE, _seconds(6.0)) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	_caption("EXPLORE", 34.0, 37.0)
 
 	for cell: Vector2i in view._tiles:

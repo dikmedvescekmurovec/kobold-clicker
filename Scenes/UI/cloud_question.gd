@@ -2,8 +2,9 @@ class_name CloudQuestion
 extends Control
 ## The cloud's question over the whole window (`Cloud.question`): two saves that both moved on, side by
 ## side, to keep one of. No X and no Escape: one of its two buttons is the answer, and nothing under it
-## can be pressed meanwhile. Built as the bag's question is
-## (`BagPage._ask`): a full-window holder under a titled panel, popped in by `Juice`.
+## can be pressed meanwhile, by the mouse or by a key. Built as the bag's question is (`BagPage._ask`):
+## a holder under a titled panel, which `Juice.popup` pops in and stands over the whole window however
+## it is resized or turned.
 
 ## `keep_cloud`: the cloud's save comes down over this device's; otherwise this device's goes up.
 signal answered(keep_cloud: bool)
@@ -24,14 +25,13 @@ func _init(question: Dictionary, ui_scale: float) -> void:
 
 
 func _ready() -> void:
-	size = get_viewport_rect().size
 	var panel := UITheme.titled_panel("Cloud save", "", Callable())
 	add_child(panel)
 	var body := UITheme.body_of(panel)
 	# Held upright the two saves stand one over the other, and the words over them are one column wide.
-	var narrow := UITheme.narrow(size, _ui_scale)
-	var width := COLUMN if narrow else 2 * COLUMN + GAP
-	body.add_child(BountyList.wrapped("Keep which save?", width))
+	var narrow := UITheme.narrow(get_viewport_rect().size, _ui_scale)
+	var asked := BountyList.wrapped("Keep which save?", COLUMN if narrow else 2 * COLUMN + GAP)
+	body.add_child(asked)
 	var sides := BoxContainer.new()
 	sides.vertical = narrow
 	sides.add_theme_constant_override("separation", GAP)
@@ -51,7 +51,23 @@ func _ready() -> void:
 	mine.pressed.connect(answered.emit.bind(false))
 	theirs.pressed.connect(answered.emit.bind(true))
 	body.add_child(buttons)
+	# Turned while it is up -- a phone in the hand -- it is arranged again for the window it is now in.
+	resized.connect(func() -> void:
+		var upright := UITheme.narrow(get_viewport_rect().size, _ui_scale)
+		if upright != sides.vertical:
+			asked.custom_minimum_size.x = COLUMN if upright else 2 * COLUMN + GAP
+			sides.vertical = upright
+			buttons.vertical = upright
+			panel.reset_size())
 	Juice.popup(self, panel, _ui_scale)
+
+
+## Every key stops here, Escape and a phone's back among them: no hotkey opens a page under the
+## question, and nothing closes one. In `_input`, before anything under it has the key, whatever
+## stands where in the tree.
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey or event.is_action("ui_cancel"):
+		get_viewport().set_input_as_handled()
 
 
 ## One save as the question shows it: a heading and four rows.

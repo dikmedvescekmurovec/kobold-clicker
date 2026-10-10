@@ -3,8 +3,8 @@ extends RefCounted
 ## The six orbs: what each one is, what it does to a piece, and how often a body carries one.
 ##
 ## The same shape as LootTable -- const tables and static accessors, no nodes -- and the same
-## philosophy about the drop rate: TIER_CHANCE and SIZE_CHANCE multiply into `chance_for`, so the
-## whole curve is two small tables rather than a number per enemy.
+## philosophy about the drop rate: TIER_CHANCE and `LootTable.SIZE_CHANCE` multiply into `chance_for`,
+## so the whole curve is two small tables rather than a number per enemy.
 ##
 ## An orb is not an Item and deliberately not one. It has no rarity, no level, no modifiers and no
 ## socket; it is a count, the way gold is, and the whole of it lives in Inventory.orbs as a name and
@@ -14,7 +14,8 @@ extends RefCounted
 ## What an orb *does* is the one thing here that cannot be a table. Six verbs, six branches of
 ## one match, in one file -- because the rule that decides whether an orb is offered (`can_apply`),
 ## the rule that carries it out (`apply`) and the sentence that explains a refusal (`why_not`) are
-## three faces of one piece of knowledge, and splitting them is how they come to disagree.
+## three faces of one piece of knowledge, and splitting them is how they come to disagree. The rule is
+## written once, in `why_not`: `can_apply` is that with nothing to say.
 ##
 ## No orb ever touches a piece's level or its base stats. Those are frozen when it is rolled and stay
 ## frozen; rarity and modifiers are what an orb exists to change. (A blacksmith's upgrade does move
@@ -108,15 +109,6 @@ const TIER_CHANCE := {
 	EnemyRoster.Tier.BOSS: 0.50,
 }
 
-## What the body itself is worth against that -- the same spread gear uses, for the same reason.
-const SIZE_CHANCE := {
-	EnemyRoster.Size.TINY: 0.5,
-	EnemyRoster.Size.SMALL: 0.8,
-	EnemyRoster.Size.MEDIUM: 1.0,
-	EnemyRoster.Size.LARGE: 1.3,
-	EnemyRoster.Size.HUGE: 1.6,
-}
-
 ## The rarity each of the three rarity orbs makes. UNIQUE is hand-crafted, weighted zero in every
 ## drop table, and must stay unreachable -- so the ladder stops at Exalted's elite.
 const RARITY_OF := {
@@ -174,55 +166,43 @@ static func describe(orb: String) -> String:
 	return str(ORBS[orb]["does"])
 
 
-## Whether this orb has anything to do to this piece. It is the whole rule: the tray lights a square
-## when this is true and greys it when it is false, and `apply` refuses on it rather than trusting
-## whoever called.
+## Whether this orb has anything to do to this piece: the tray lights a square when this is true and
+## greys it when it is false, and `apply` refuses on it rather than trusting whoever called. Nothing,
+## and an orb nobody has heard of, are refused without a word; every other refusal is `why_not`'s.
 static func can_apply(orb: String, item: Item) -> bool:
+	return item != null and ORBS.has(orb) and why_not(orb, item).is_empty()
+
+
+## Why this orb is greyed out, for the hover card. Empty when it is not -- so a caller can ask this
+## one question instead of asking `can_apply` and then inventing a sentence of its own. **The whole
+## rule is here**, the refusal and its reason in one place, so the two cannot drift apart.
+static func why_not(orb: String, item: Item) -> String:
 	if item == null or not ORBS.has(orb):
-		return false
+		return ""
 	# One answer for all six: a piece the hammer ruined is out of the game as far as crafting goes.
 	if item.broken:
-		return false
+		return "A broken item cannot be changed"
 	# A skill stone's capstone is what it dropped as, and stays it (the user's, 2026-10-08).
 	if not item.capstone.is_empty():
-		return false
+		return "A capstone cannot be changed"
 	# A unique's modifiers are its row's and stay: only their numbers may move, which is Divine and Chaos.
 	if item.rarity == ItemRarity.Rarity.UNIQUE and orb not in ["Orb of Divinity", "Orb of Chaos"]:
-		return false
+		return "Only an Orb of Divinity or Chaos can change a unique"
+	var piece := "%s %s" % [item.rarity_label().to_lower(), item.display_name()]
 	match orb:
 		"Orb of Transmutation", "Orb of Alchemy", "Orb of Exaltation":
 			# Each makes its own rarity whatever the piece was, lower as well as higher (the user's ruling,
 			# 2026-10-02): an epic transmuted is an uncommon with an uncommon's modifiers.
-			return true
+			return ""
 		"Orb of Augmentation":
-			return item.mods.size() < room(item)
-		"Orb of Divinity", "Orb of Chaos":
-			return not item.mods.is_empty()
-	return false
-
-
-## Why this orb is greyed out, for the hover card. Empty when it is not -- so a caller can ask this
-## one question instead of asking `can_apply` and then inventing a sentence of its own.
-##
-## It lives here rather than in the panel because the reason an orb is refused is the same knowledge
-## as the refusal, and the two written in two files is two places to drift apart.
-static func why_not(orb: String, item: Item) -> String:
-	if item == null or not ORBS.has(orb) or can_apply(orb, item):
-		return ""
-	var piece := "%s %s" % [item.rarity_label().to_lower(), item.display_name()]
-	if item.broken:
-		return "A broken item cannot be changed"
-	if not item.capstone.is_empty():
-		return "A capstone cannot be changed"
-	if item.rarity == ItemRarity.Rarity.UNIQUE:
-		return "Only an Orb of Divinity or Chaos can change a unique"
-	match orb:
-		"Orb of Augmentation":
+			if item.mods.size() < room(item):
+				return ""
 			if room(item) == 0:
 				return "A common item cannot carry a modifier"
 			return "This %s already carries all it can" % piece
 		"Orb of Divinity", "Orb of Chaos":
-			return "This %s has no modifiers to reroll" % piece
+			return "" if not item.mods.is_empty() else "This %s has no modifiers to reroll" % piece
+	# An orb the table names and no branch above knows is refused rather than spent on nothing.
 	return "Cannot be used on this %s" % piece
 
 
@@ -326,7 +306,8 @@ static func room(item: Item) -> int:
 ## lifts it the way `drop_rate` lifts the gear chance: 50 is half again as many orbs.
 static func chance_for(enemy_name: String, orb_find := 0.0) -> float:
 	var tier: float = TIER_CHANCE[EnemyRoster.tier_of(enemy_name)]
-	var size: float = SIZE_CHANCE[EnemyRoster.size_of(enemy_name)]
+	# What the body itself is worth against that: the same spread gear uses, for the same reason.
+	var size: float = LootTable.SIZE_CHANCE[EnemyRoster.size_of(enemy_name)]
 	return minf(tier * size * (1.0 + maxf(orb_find, 0.0) / 100.0), 1.0)
 
 
@@ -349,15 +330,7 @@ static func roll_favoured(rng: RandomNumberGenerator, walls := EVERY_WALL) -> St
 	return first if int(ORBS[first]["weight"]) <= int(ORBS[second]["weight"]) else second
 
 
-## An orb picked by weight among those `walls` unlocks. Integer weights, so walking the table cannot drift.
+## An orb picked by weight among those `walls` unlocks (`LootTable.weighted_index`).
 static func _weighted(rng: RandomNumberGenerator, walls := EVERY_WALL) -> String:
 	var pool := unlocked(walls)
-	var total := 0
-	for orb: String in pool:
-		total += int(ORBS[orb]["weight"])
-	var pick := rng.randi_range(0, total - 1)
-	for orb: String in pool:
-		pick -= int(ORBS[orb]["weight"])
-		if pick < 0:
-			return orb
-	return pool[0]
+	return pool[LootTable.weighted_index(pool.map(func(orb: String) -> int: return int(ORBS[orb]["weight"])), rng)]

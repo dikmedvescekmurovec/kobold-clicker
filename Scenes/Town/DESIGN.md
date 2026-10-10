@@ -430,3 +430,276 @@ Not built: any mark on a banished unique in the collection log -- the screen is 
 **Seen while checking it, and not this change's:** at 324 x 576, the smallest upright window, her tab
 with the doll's sheet open has room for its heading and nothing under it -- her two grids as much as
 this screen (`ui_town_fortune.png` there shows only "Readings"). At 360 x 780 both stand whole.
+
+## Reference (moved here from CLAUDE.md on 2026-10-10)
+
+What `CLAUDE.md` held before it was cut down to short rules, word for word. Its rules point here by
+heading.
+
+### Files in full
+
+#### town_services.gd
+
+Which counters a settlement has: `services_for(tier, spot, world_seed)` gives `BOUNTIES` / `GEAR` / `ORBS` / `SMITH` / `FORTUNE` in `ORDER`.
+A village is the board and one vendor picked by `hash([seed, spot, "vendor"])`, a town is the board and both, a fortress adds the smith; **every settlement has the fortuneteller**.
+`label(service)` is the one place a counter is named. -1 (no town) offers nothing; any other tier it has no counters for is a logged error
+
+#### town_prices.gd
+
+Every price, quoted in bodies.
+`gold_at_level(level)` = `Encounter.gold_at_steps` at the first step of that level band.
+`sell_price(item)` = that at the **item's** level times `RARITY_MULT[rarity]` times `SELL_BODIES`, **halved for a broken piece**; `buy_price(item)` is that divided by `SELL_SHARE`; `sell_total(items)` sums a handful.
+`upgrade_price(item)` / `lock_price(item)` are the smith's, off the piece's own level.
+`orb_value(orb, town_cell)` is inverse to `OrbTable.ORBS[orb].weight` against `commonest()`, pegged to the **town's** level, and is what a vendor asks.
+**Orbs are bought, never sold back.**
+`reroll_price(town_cell, rerolls)` is `REROLL_BODIES` at the town's level times `REROLL_GROWTH ^ rerolls`.
+`fortune_price(reading, town_cell)` is `FORTUNE_BODIES[reading]` at the town's level, the same every time it is asked -- **but `transcend`,
+which is bodies at `transcend_steps()`** (the second ring of land behind the first wall), the same in every town and world, and never cast twice -- **and `banish`, bodies on that same ground times `FORTUNE_GROWTH` (2)
+for every one paid for in this world** (`fortune_price(reading, cell, cast)`; nothing else passes `cast`).
+Dials: `SELL_BODIES`, `SELL_SHARE`, `ORB_BODIES`, `RARITY_MULT`, `UPGRADE_BODIES`, `LOCK_BODIES`, `REROLL_BODIES`, `REROLL_GROWTH`, `FORTUNE_BODIES`, `FORTUNE_GROWTH`
+
+#### blacksmith.gd
+
+What the fortress smith does to a piece, as `OrbTable`'s three faces: `can_upgrade(item, cap)` / `upgrade(item, cap, rng)` / `why_not_upgrade`, and `can_lock(item)` / `lock(item, rng)` / `why_not_lock`.
+An upgrade is level + 1 and `Item.scaled_stats` at the new level, and **leaves every modifier's tier and number as they were** (`Item.level_up`; a perfected line goes to the new top,
+and an heirloom's line climbs back towards the tier it had before its world ended, `"peak"`, as far as the new level allows); `BREAK_CHANCE` is how often it ruins the piece instead (`item.broken`, gold spent anyway);
+**`can_upgrade` refuses an heirloom under its `safe_level`** ("It climbs to level n on its own": it climbs there by itself with the land, `Inventory.raise_heirlooms`), so every blow he does strike risks `BREAK_CHANCE`.
+A lock pins one modifier the smith picks at random.
+`BROKEN` is the sentence both refusals share.
+The `cap` is handed in, not worked out here
+
+#### town_state.gd
+
+What the towns the player has walked into hold, saved inside the inventory as `inventory.towns`.
+Keyed by **world spot** as `"x,y"` (`key`); `visit(spot)` makes and returns a town's drawer, `visited(spot)`, `to_dict` / `from_dict`.
+It never reads what is in a drawer -- whoever puts something there knows its shape
+
+#### bounty_board.gd
+
+The work a settlement has posted, in that town's drawer: `restock(drawer, envs, cell, rng)` posts a fresh `COMMONS` + `ELITES` and is refused until the board is `cleared(drawer)` -- every posting handed in,
+or nothing on it; `bounties(drawer)` reads them back, `see(drawer)` / `seen` / `any_seen(state)` is whether the player has stood at the board (what puts the journal in the corner),
+`accept(state, bounty)` takes one on and is refused while `active(state)` is not empty, `is_active(bounty)`, `active_spot(state)` is the world spot of the town whose posting is out ("" for none;
+what `active` is built on, and what names the town on the filled banner), `takes(bounty, enemy, tile_level)` is whether a posting wants a body at all -- its monster, on land at least as deep as its town --
+and `count_kill(state, enemy, times, tile_level)` counts one it takes against the accepted bounty and nothing else, `ready(bounty)` and `claim(bounty)` are the hand-in,
+`abandon(bounty)` gives the accepted one up (unaccepted, `have` back to 0).
+A posting is `{enemy, need, have, gold, xp, orb, item, accepted, done, level}` (`orb` a list of names, `ORBS[tier]` of `OrbTable.roll_favoured`, read by `orbs_of`;
+an older save's one name is read as a list by `bounties`; `xp` is `Encounter.xp_of` times `xp_reward_of(tier)`, banked by the Claim, which emits `TownPage.xp_claimed` for the bar)
+(`level` is the posting town's `MapBuilder.level_of`); targets come only from `envs` (the caller's, `MapBuilder.envs_within`), so never the mimic and never a boss.
+**`item` is a promise, not a piece:** `{kind, rarity, plus}` rolled at posting (`_item_promise`: `ITEM_CHANCE` by the posting's tier, then `UNIQUE_CHANCE`,
+the ascensions by `plus_of` (at least +1/+2/+3/+4 at `PLUS_CHANCES` 25/5/1/0.1%, then `PLUS_TAIL` a tenth as likely each step, no ceiling), and the rarity the best of `RARITY_ROLLS[tier]` (2 common, 3 elite)
+off `ItemRarity.roll`'s BOSS row; a unique's `kind` is ""), read back by `item_of` (a kind or rarity this build has not got is no promise), put into words by `reward_text` ("an epic sword +1", "a unique item";
+the rarity as shown, `ItemRarity.label_of`), and paid by `reward_item(bounty, cell, rng)` at the hand-in -- the kind's material at the better of two levels under the town's ceiling for the posting's tier,
+a unique any the game has, ascended `plus` times -- so what the piece is exactly is written nowhere before it is in the bag.
+**A town's board has a tier, I to `BOARD_TIERS` (3):** `board_tier(drawer)` is 1 + `CLEARS` (the boards that town has cleared, a per-town record), and `restock` posts at it --
+`TIER_NEED_COMMON` / `TIER_NEED_ELITE` are the counts, `TIER_PAY` multiplies gold and XP, `TIER_ORBS` and `TIER_RARITY_ROLLS` add, `UNIQUE_CHANCE` is a list by board tier (2/3/5% common, 10/15/25% elite)
+and `TIER_PLUS` divides the draw `plus_of` reads (at least +1 at 25/33/50%).
+**`clear(drawer, cell, rng, unlocked, walls)`** -- asked by the Claim that clears a board, **before** `restock` -- writes `CHOICE` (`roll_choice` at the old tier) and counts the clear;
+refused on a board with work out or nothing posted.
+`roll_choice` is `CHOICES` (3) **different** kinds of `CHOICE_KINDS` drawn by the rng (never `shuffle`): `ASCENDED` (an epic at the boss ceiling, `EPIC_PLUS` ascensions and its modifiers the best of `EPIC_ROLLS`),
+`HIGH` (an epic `CHOICE_LEVELS` above it, its material the best of `HIGH_DRAWS` draws, `LootTable.tier_at(.., draws)`), `UNIQUE`, `ASCENDED_UNIQUE` (any of `unlocked`, at the ceiling, `UNIQUE_PLUS` ascensions),
+`RARE` (a rare at the ceiling, its modifiers the best of `RARE_ROLLS`), `ORB_BUNDLE` (`CHOICE_ORBS`: Divinity, Chaos or Exaltation, **only those `OrbTable.unlocked(walls)`**, and no bundle at all while none is),
+`GOLD_PILE` and `XP_PILE` (`pile_gold` / `pile_xp`: `PILE_GOLD` / `PILE_XP` bodies at the town's level).
+**Lucky is rolled again and the better kept** (`_lucky`: every modifier's tier and number, the higher number kept).
+Saved as `{item: Item.to_dict()}`, `{orb, count}`, `{gold}` or `{xp}`; `choice(drawer)` reads it back (`{item: Item}`, an unreadable entry skipped) and `take_choice(drawer, index)` returns one and erases the rest.
+Dials: `TIER_*`, `EPIC_PLUS`, `EPIC_ROLLS`, `CHOICE_LEVELS`, `HIGH_DRAWS`, `UNIQUE_PLUS`, `RARE_ROLLS`, `CHOICE_ORBS`, `PILE_GOLD`, `PILE_XP`, `REWARD_COMMON` / `REWARD_ELITE` (100 / 20 purses, via `reward_of(tier)`),
+`XP_COMMON` / `XP_ELITE` (50 / 10 bodies, via `xp_reward_of`), `ORBS`, `ITEM_CHANCE`, `UNIQUE_CHANCE`, `RARITY_ROLLS`, `PLUS_CHANCES`, `PLUS_TAIL`, `BOUNTY_RANGE`
+
+#### fortune_teller.gd
+
+What the fortuneteller can be asked, in `READINGS` order, in two halves: `COMMON` -- `ROADS` (every settlement between the walls round the town out of the fog, with the land `ROADS_RADIUS` round each since 2026-10-02,
+`MapBuilder.reveal_ring_towns`; no directions since 2026-09-25), `TREASURE` (the chest star) and `APPRAISE` (`odds(item)`: the piece's whole `ModifierTable.pool_for` as `{id, line, weight, share}`,
+`line` being `ModifierTable.band_line` at the piece's level; `why_not_appraise` refuses a unique) -- **asked as often as they are paid for, at the same price every time** (no count since 2026-10-01:
+an old save's `cast` key is ignored); and `GREAT` -- `SCOUR` (`scour_cells(center, radius)`, `SCOUR_RADIUS` 2 = 19 tiles) and `HOMECOMING` (labelled **Return**; `MapBuilder.jump_to`) -- **one a settlement**,
+written in that town's drawer as `ASKED` + the name and read by `asked(drawer, reading)`, which is also where a town's sold roads are kept.
+`TRANSCEND` is in neither: it is not a spell but the way out of the world (`Inventory.transcended`), on her list only once `MapBuilder.walls_fallen()` is above 0.
+**`BANISH` is in neither half either** (the user's, 2026-10-10): a unique the player picks is kept out of this world's drops, on her list only once `BANISH_FROM` (24)
+uniques are unlocked (or at once under the dev's `Settings.banish_unlocked()`, which `TownPage` asks and which lifts nothing else).
+`banished(fortunes)` (ids) and `banishes(fortunes)` (how many were ever paid for here: the price's exponent) read `inventory.fortunes`' `BANISHED` and `BANISH_PAID`;
+**`dropping(unlocked, fortunes)` is the unlocked list less the banished, and is what every source of a unique is handed**;
+`why_not_banish(id, unlocked, fortunes)` refuses one already gone and any that would leave fewer than `BANISH_LEAVES` (10) dropping; `banish(fortunes, id)` counts one more paid,
+`restore(fortunes, id)` brings one back for nothing and leaves the count.
+Also the key and reader of `inventory.fortunes`: `chest`.
+The Relic reading (a unique shown) was removed on 2026-09-28: the achievements page is how the player learns what to hunt, and an old save's `peeked` key is ignored
+
+#### vendor_stock.gd
+
+What a vendor has on its shelf, in that town's drawer: `restock(drawer, tier, cell, rng)` fills `items` and `orbs` on the first visit and **never again for free**; `items(drawer)` (null where one was bought)
+and `orbs(drawer)` ("" where one was) read it back; `take(drawer, key, index)` empties a square; `put(drawer, index, item)` writes a piece back where it stood,
+which is how an orb the player spends on a shelf piece (`TownPage._on_shelf_input`) survives `items` handing out fresh `Item`s; `reroll(drawer, key, tier, cell, rng)` is **one** fresh shelf (`ITEMS` or `ORBS`)
+bought with gold, counted per shelf in `rerolls(drawer, key)`, saved with the town and **never reset**.
+`roll_item` is the favourable roll: the better of two `roll_level`s under `level_of(cell) + TIER_LEVEL` (never `COMMON_REACH`, which is a body's; `ceiling(cell, tier)` and `roll_level(rarity, top, rng)`,
+which `BountyBoard` rolls its pieces by too), `ItemRarity.roll` at the tier **above** the town's rabble, and `LootTable`'s own weights for the type -- the level first, and handed to the draw,
+so no vendor deals a material the piece's own level has not unlocked.
+Dial: `SIZE` 6
+
+### Rules in full
+
+#### Never name `Inventory` in `TownState`
+
+**`TownState` must never name `Inventory`,** which names it: that is where Godot's cycle checker bites.
+`TownPrices.RARITY_MULT` is a **list** indexed by `ItemRarity.Rarity`'s own order for the same reason -- a `const` naming another class's enum is the other place it bites.
+
+#### Key by world spot
+
+**Keyed by world spot, never by map cell.**
+A cell is a place in the drawn window and the window moves; `MapBuilder.town_tier(cell)` and `view.origin + cell` are how a cell is crossed over.
+
+#### Quote prices in bodies
+
+**Every price is a number of bodies, never a number of gold.**
+Retuning `Encounter.BASE_GOLD` or `GOLD_GROWTH` has to retune the shops with it, so nothing here writes a gold figure of its own.
+
+#### Leave prices to the user
+
+**Prices are tuned by hand, by the user** (the balance table is gone).
+Where they stood when last measured: a shelf common 1.5 fights, an elite 21, an upgrade 2, a lock 25, a common bounty 7.5 and an elite 6.5, and selling a run's finds a fifth of what that run's bodies paid.
+
+#### Price a piece at its own level
+
+**A piece is priced at its own level and an orb at the town's.**
+A find carried home is worth what it is; an orb has no level, so what makes one worth more is where it is being sold.
+
+#### Derive services, write stock down
+
+**Services are derived, stock is written down.**
+What counters a town has is a pure function of its tier and its spot and may be asked twice; anything *rolled* goes in `TownState`, the way names and the town world do.
+A shelf is never re-derived from a seed, and a caller must not roll one of its own.
+
+#### Stock a vendor only on the way in
+
+**A vendor is stocked on the way in and nowhere else** (`TownPage.open`), so a shelf never changes while it is being looked at.
+A bought square stays, empty, until that shelf's **Restock** is paid for -- there is no free restock and no kills clock.
+
+#### Keep no clock on the board
+
+**The board keeps no clock at all:** new work is posted when every posting on it has been handed in (`BountyBoard.cleared`), asked on the way in and again at each Claim,
+so the third hand-in turns the board over there and then.
+
+#### Allow one bounty at a time
+
+**One bounty at a time, and only an accepted one counts.**
+The board's Accept (`BountyBoard.accept`) is refused while any posting anywhere is accepted and not yet **handed in** -- finished is not enough -- and `count_kill` moves that one posting and nothing else.
+A kill reaches it through `FightLedger.add_kill` as it falls, in any fight (`Scenes/CLAUDE.md`), never from the interface.
+`see` only puts the journal in the corner.
+**A kill counts only on a tile of the town's level or deeper:** the main scene gives `FightLedger.tile_level` the fought tile's level, which the ledger hands to `count_kill`.
+While a bounty is out a board shows that posting first (one taken elsewhere, with where to claim it) and the rest dimmed, Accept grey.
+
+#### Never reset a reroll count
+
+**A shelf can be rerolled for gold, and each costs `REROLL_GROWTH` times the last, for the whole playthrough:** the count lives in the town's drawer and nothing resets it, closing the game included.
+**The gear and orb shelves keep separate counts and are rerolled separately** -- Restock is the open tab's shelf at that vendor's own price.
+Paying never touches the board.
+
+#### Hand a bounty in where it was posted
+
+**A bounty is handed in at the town that posted it** (`TownPage`'s Claim), and `claim` is what makes that once: it refuses a posting that is not `ready` or is already `done`.
+A handed-in posting keeps its square, spent, until the whole board is cleared.
+**A promised piece goes in the bag by the vendor's own rule** (`_why_not`): over a full bag the Claim is greyed with "The bag is full" and a press pays nothing, since the gold and the piece go together;
+the page emits `item_claimed(piece)` before the log and the bag hear of it, which is how a unique new to the log gets its banner.
+
+#### Write a cleared board's options down
+
+**A cleared board offers three and pays one, and what it offers is written down:** the options are rolled whole at the clear and kept in the town's drawer until one is taken, so closing the game,
+the X or a full bag never loses or rerolls them.
+The tier is the town's own and is never shared between towns.
+
+#### Post only reachable targets
+
+**A target is somewhere the player can walk to.**
+`restock` posts only what lives on the environments handed to it, which is what the map actually generated within `BOUNTY_RANGE` of the town --
+so `BountyBoard` asks `MapBuilder` for nothing but a cell's level (`level_of`), never for land, and a board with no land around it posts nothing rather than guessing.
+
+#### Derive `buy_price` from `sell_price`
+
+**`buy_price` is `sell_price` divided by `SELL_SHARE`, never a second figure,** so buying back what was just sold costs five times what it fetched and no counter is a loop.
+
+#### Never add to a full bag
+
+**Never `Inventory.add` on a full bag:** past the cap the player is overencumbered and cannot fight, so a vendor must not be the one to put them there.
+The Buy is refused: greyed, with the reason in its tooltip.
+
+#### Write what she sells where it belongs
+
+**What the fortuneteller sells is written where it belongs, and `inventory.fortunes` is only what belongs to the player:** which readings were bought in a town in that town's drawer (`ASKED`),
+and the chest's world spot and the spent scour in `inventory.fortunes`.
+`Inventory` never names `FortuneTeller`; the dictionary is read through its statics.
+
+#### Keep a banished unique out of every draw
+
+**A banished unique is out of every draw and nothing else:** `FortuneTeller.dropping` is handed to the fight (`main_scene._open_fight`), a bounty's promised unique and a cleared board's options (`TownPage._dropping`)
+in `Achievements.unlocked`'s place, and nowhere else is it asked -- banished is still unlocked.
+A ban counts from the next fight opened, a board's options already written in a drawer stay as they were rolled, and both keys go with the world (`Inventory.transcended` carries no `fortunes`).
+**The floor is what keeps the list from emptying**, which `BountyBoard.reward_item` and `roll_choice` rely on: both index straight into it.
+Its screen is paid on the page, like a reading, and is never marked `ASKED`.
+
+#### Point Treasure at an unseen chest
+
+**Treasure only ever points at a chest the player has not seen** (`MapBuilder.nearest_chest(true)`): a seen chest is drawn on its tile, and `MapPointer` hides itself over one that is seen and on screen,
+so selling it would be selling nothing.
+
+#### Sell a great spell once a settlement
+
+**A reading is sold as often as it is paid for and a great spell once a settlement.**
+`FortuneTeller.COMMON` costs the town's price every time (the doubling per casting was taken out on 2026-10-01, the user's call, and the base prices raised instead).
+`FortuneTeller.GREAT` -- the scour and the road home -- is refused in a town that has cast it (`asked`), and offered by the next one.
+**The roads write the same drawer key:** once bought in a town, they are refused there ("Already bought here").
+
+#### Charge a great spell on the map
+
+**A great spell is aimed at the map and paid for there, not on the page:** `TownPage` only emits `spell_aimed(reading, price, spot)`; the main scene charges, and writes the town's drawer key,
+when the spell actually did something -- `MapBuilder.scour` showed at least one tile, or `MapBuilder.jump_to` found a charted settlement that is not the one underfoot.
+So neither is ever spent on land already seen, land not yet generated, or a tile with no town on it.
+Escape and the panel's X cost nothing.
+
+#### Write `FORTUNE_BODIES`' keys as literals
+
+**`FORTUNE_BODIES`' keys are `FortuneTeller`'s reading names as literals** (a `const` naming another class's const is where the cycle checker bites); `test_town` holds them together with `LABELS`,
+and `COMMON` + `GREAT` + `TRANSCEND` + `BANISH` against `READINGS`.
+Where the **first** casting stands: roads 15 fights, treasure 6, appraise 1.5, homecoming 20, scour 100, every time.
+
+#### Use a town only when it can be visited
+
+**A town is usable only when `MapBuilder.can_visit(cell)`:** charted, standing on it, not walking.
+
+#### Let only the smith raise a level
+
+**The smith is the one exception to "a piece's level and base stats never change"** (`Scenes/Items/CLAUDE.md`), and he pays for it: `BREAK_CHANCE` on every upgrade, and a cap of `MapBuilder.circle_level(town cell)` --
+gated per wall circle, not per tile level (the user's call, 2026-09-28): the level of the deepest land between the town's two walls (3 inside the first), the same for every fortress in that circle.
+A boss's `TIER_LEVEL` rode on top until 2026-10-03 (the user's).
+The caller works the cap out and hands it in; `Blacksmith` never names the map.
+
+#### Ask `can_upgrade` before charging
+
+**`upgrade` returns false for a break as well as for a refusal, and the gold is spent either way.**
+Ask `can_upgrade` before charging: that is what tells the two apart, and it is the whole contract.
+
+#### Draw her spells as two grids
+
+**Her spells are two grids of squares, the way a shelf is** (`TownPage._spell_square`, `FORTUNE_ICONS`, placeholder art in `Assets/Fortune/`): its mark with the price under it and its name only in the tooltip,
+a gold rim round a live one under the cursor, greyed where it stands with the reason in its tooltip when she will not read it, and "Bought" and no coin for the roads once they are paid for here.
+A small heading over each grid (`Readings` / `Great spells`, `UITheme.section`).
+The way out keeps its word and the full width under both.
+
+#### Ask before transcending, never charge
+
+**Transcending is asked for before it is done, and never charged:** its square among the great spells (the user's cracked orb, there once a wall has fallen) only asks, in a popup (`TownPage._ask_way_out`);
+her question is a warning in her own voice -- everything is lost, and you will say it was worth it, **never what waits** (`TRANSCEND_LINES`; the user's rule) -- with the price,
+over Cancel and a Transcend (a coin and no figure) that emits `TownPage.transcend_pressed`.
+`main_scene._on_transcend_pressed` checks the purse and fades to `TranscendPage`; only leaving that writes `inventory.transcended()`, deletes the map and reloads -- the purse is one of the things left behind,
+so nothing is deducted.
+It is never marked `ASKED`.
+
+#### Sell nobody the cave's hot and cold
+
+**`FortuneTeller.warmth(steps)` (`WARMTH`, `WARMTH_STEPS`) is the cave's hot and cold, and nobody sells it:** `CaveSense` (`Scenes/Map/`) reads it every frame.
+The Seeing Stone she sold went on 2026-10-03; a save's `seeing_stone` is ignored.
+
+#### Hold an heirloom up from its own page
+
+**An heirloom is held up to the smith, the appraisal and a held orb from the heirlooms' page,** which the crown swaps in at the counter (`main_scene._counter_page`).
+**A worn piece is his to work on too:** `_smith_why_not` refuses only what `Blacksmith` refuses and a purse that is short, so a set is improved without being stripped off.
+The ground's cap holds for an heirloom too, and he takes one only once it is back at its `safe_level`.
+
+#### Keep broken final and locked forever
+
+**Broken is final and locked is forever:** a broken piece takes no orb, no upgrade and no lock, and sells for half; a locked modifier survives all six orbs (`OrbTable`), and there is only ever one to a piece.

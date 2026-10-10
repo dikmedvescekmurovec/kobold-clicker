@@ -9,9 +9,11 @@ extends RefCounted
 ## it, and can't go there. CHARTED cells are drawn plainly and can be walked to and over.
 ##
 ## The player starts on the center cell (0, 0), the only charted one, with its six neighbors uncharted
-## around it. They chart a tile next to any charted one, which lifts the fog off the tiles behind it
-## and sends them walking onto it; they can also walk back to any tile they have charted. Everything is generated up front, so what a tile turns out to be never depends on
-## when it is found.
+## around it. They walk onto a tile next to any charted one and fight for it (`walk_onto`), and winning
+## charts it (`chart`), which lifts the fog off the tiles behind it; they can also walk back to any tile
+## they have charted. The land inside the wall and `WASTE_DEPTH` rings past it is generated up front
+## and the rest as each wall falls (`_cover`), so what a tile turns out to be never depends on when it
+## is found.
 
 ## The player has finished walking to `cell`.
 signal arrived(cell: Vector2i)
@@ -24,10 +26,11 @@ enum State { HIDDEN, UNCHARTED, CHARTED }
 const START_LAND_RADIUS := 11
 ## The ring just outside the land is the ice wall, and beating any one tile of it brings the whole ring
 ## down: the land then reaches this many rings further, to the next wall. A multiple of `LEVEL_TILES`,
-## with the first wall on one too, so every wall's ring starts a level: the land just past a wall is
-## a level above the land just inside it (the user's, 2026-09-28).
+## with the first wall on one too, so the ring of every wall this far apart starts a level: the land
+## just past a wall is a level above the land just inside it (the user's, 2026-09-28).
 const WALL_STEP := 12
-## And how many under the Ring of Walls curse (`wall_step`).
+## And how many under the Ring of Walls curse (`wall_step`). No multiple of `LEVEL_TILES`: every other
+## wall of that curse's stands in the middle of a level, the same on both sides of it.
 const RING_OF_WALLS_STEP := 6
 ## How many rings of distance one tile level spans: level 1 is rings 0-3, level 2 rings 4-7, and on.
 const LEVEL_TILES := 4
@@ -178,9 +181,8 @@ static func create(map: HexMap, towns: TownWorld, origin: Vector2i, env_seed: in
 ##
 ## Nothing here touches `map`: this is called from the main scene's _exit_tree, where the HexMap
 ## child may already be gone -- which is also why `walking` is not asked about. A walk in progress
-## is not part of a save. `player_cell` is the last tile actually reached, so a game closed
-## mid-step resumes on the tile behind; the tile being walked to was set CHARTED before the walk
-## started, so it costs the step and nothing else.
+## is not part of a save. `player_cell` moves only as a walk ends (`_on_player_arrived`), so a game
+## closed mid-walk resumes on the tile the walk set off from: it costs the walk and nothing else.
 func to_save() -> MapSave:
 	var save := MapSave.new()
 	save.sheet = MapSave.fingerprint(map.tileset)
@@ -266,15 +268,11 @@ func _draw_saved() -> void:
 			_ice.set_cell(cell, IceOverlay.Kind.WASTE)
 			continue
 		map.place_ground(cell, _tiles[cell])
-		_draw_road(cell)
-		_draw_rubble(cell)
 		if is_wall(cell):
 			_ice.set_cell(cell, IceOverlay.Kind.WALL, _ring_edges(cell))
 		if _states[cell] == State.UNCHARTED:
 			map.fog.add_cell(cell)
-		_draw_chest(cell)
-		_draw_town(cell)
-		_draw_cave(cell)
+		_draw_cell(cell)
 	for cell in _states:
 		if _tiles.has(cell):
 			map.refresh_blends(cell)
@@ -498,7 +496,7 @@ func _draw_chest(cell: Vector2i) -> void:
 
 
 ## The level of a tile, in even bands of `LEVEL_TILES` rings: rings 0-3 are level 1, 4-7 level 2,
-## and on. The walls stand on band edges, so beating one steps the level up. (It was bands that
+## and on. The walls stand on band edges (`WALL_STEP`), so beating one steps the level up. (It was bands that
 ## widened by one a level, which left a whole circle two levels deep past the first wall; replaced
 ## by the user, 2026-09-28.)
 ##
@@ -724,11 +722,16 @@ func place_cave(near: Vector2i) -> bool:
 	rng.seed = hash([env_seed, "cave"])
 	cave = cells[rng.randi() % cells.size()]
 	_chartable.clear()
-	# A road already drawn over it or into it is taken up at its edge, and a cell already seen shows it.
-	for cell: Vector2i in [cave] + HexGrid.neighbors(cave):
+	# A tile already seen was named for its land (`name_of`): it is named again, for the cave.
+	_names.erase(cave)
+	if seen(cave):
+		name_of(cave)
+	# A road already drawn into it is taken up at its edge, and a cell already seen shows the cave and
+	# nothing that stood there before it: no road through it, no chest.
+	for cell in HexGrid.neighbors(cave):
 		if _drawn_roads.has(cell):
 			_draw_road(cell)
-	_draw_cave(cave)
+	_draw_cell(cave)
 	return true
 
 
@@ -885,19 +888,14 @@ func _break_wall() -> void:
 	for cell in _states:
 		if HexGrid.distance(CENTER, cell) == old_wall:
 			_ice.remove_cell(cell)
-			_draw_rubble(cell)
-			_draw_town(cell)
-			_draw_cave(cell)
+			_draw_cell(cell)
 		elif _ice.kind_at(cell) == IceOverlay.Kind.WASTE and not is_wasteland(cell):
 			_ice.remove_cell(cell)
 			map.set_ground(cell, _tiles[cell])
-			_draw_road(cell)
 			map.fog.add_cell(cell)
 			if is_wall(cell):
 				_ice.set_cell(cell, IceOverlay.Kind.WALL, _ring_edges(cell))
-			_draw_chest(cell)
-			_draw_town(cell)
-			_draw_cave(cell)
+			_draw_cell(cell)
 
 
 ## Fills in everything the map needs for `area`: the environments of the cells it doesn't have yet, the tile
@@ -1066,8 +1064,6 @@ func _show(cell: Vector2i, to: State, lift := false) -> void:
 		return
 	if not seen(cell):
 		map.set_ground(cell, _tiles[cell])
-		_draw_road(cell)
-		_draw_rubble(cell)
 		if is_wall(cell):
 			_ice.set_cell(cell, IceOverlay.Kind.WALL, _ring_edges(cell))
 		else:
@@ -1077,6 +1073,17 @@ func _show(cell: Vector2i, to: State, lift := false) -> void:
 		map.fog.add_cell(cell)
 	else:
 		map.fog.remove_cell(cell)
+	_draw_cell(cell)
+
+
+## Everything that stands on a cell's ground, as the cell now is: its road, a fallen wall's rubble, its
+## chest, its settlement and the cave. Each puts down what belongs there and the road and the chest
+## take off what no longer does, so it is asked again whenever a cell changes -- seen, charted, loaded,
+## thawed by a falling wall, given the cave. The one list of them: kept three times over, a fallen
+## wall's ring went without its chests and the cave's tile kept one.
+func _draw_cell(cell: Vector2i) -> void:
+	_draw_road(cell)
+	_draw_rubble(cell)
 	_draw_chest(cell)
 	_draw_town(cell)
 	_draw_cave(cell)

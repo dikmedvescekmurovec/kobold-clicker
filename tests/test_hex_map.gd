@@ -1,6 +1,6 @@
 extends "res://tests/harness.gd"
 ## Headless checks for the hex map. Run from the project folder:
-##   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/test_hex_map.gd
+##   python tests/run_all.py hex_map
 
 ## Pixel offset to the neighbor across each HexGrid.Edge.
 const EDGE_OFFSETS := [
@@ -20,6 +20,8 @@ func _run() -> void:
 	_check(_test_player(map) == true, "player token tests ran to the end")
 	_check(_test_fog(map) == true, "fog tests ran to the end")
 	_check(_test_ice_sheets(map.tileset) == true, "ice sheet tests ran to the end")
+	_check(_test_cell_scatter(map) == true, "cell scatter tests ran to the end")
+	_check(_test_vocabularies(map.tileset) == true, "vocabulary tests ran to the end")
 	# The idle animation runs on its own; give it long enough to leave the frame it started on.
 	map.set_player_cell(Vector2i.ZERO)
 	var first_frame := map.player.frame
@@ -27,6 +29,52 @@ func _run() -> void:
 	_check(map.player.frame != first_frame, "the idle animation advances by itself")
 
 	_report("hex map")
+
+
+## What lies on a cell and is never saved comes off one scatter of its coordinates (`HexGrid.scatter`):
+## which rubble a fallen wall left there, which version of the wall's band, what is on the snow. So the
+## same map draws the same every load, in every build: the SHA-256 of all three over a window round the
+## middle, measured on 2026-10-10.
+func _test_cell_scatter(map: HexMap) -> bool:
+	map.clear_map()
+	var drawn := PackedStringArray()
+	for y in range(-40, 41):
+		for x in range(-40, 41):
+			var cell := Vector2i(x, y)
+			map.set_rubble(cell, 9)
+			drawn.append("%d,%d,%d" % [map.rubble_layer.get_cell_atlas_coords(cell).x, IceOverlay.accent_at(cell),
+					IceOverlay._roll(cell, 2) % IceOverlay.BAND_VERSIONS])
+	map.clear_map()
+	var digest := ";".join(drawn).sha256_text()
+	_check(digest == "7124c7d4aa6f02ea619aaf311dd2833f7c150e62aedd876e22ffab649760dbcf", "the rubble, the band and the snow's accents lie where they lay (%s)" % digest)
+	return true
+
+
+## The environments are named in the sheet's JSON and again, by hand, wherever something is kept per
+## environment. A word the sheet has that one of those lacks draws or names nothing and says nothing
+## (a missing picture is a null texture), and one it has not got is a line nothing reads.
+func _test_vocabularies(tileset: HexTileset) -> bool:
+	var envs := Array(tileset.environments)
+	var adjacent := SheetMeta.env_adjacency().keys()
+	envs.sort()
+	adjacent.sort()
+	_check(envs == adjacent, "the sheet's tiles and its adjacency table name the same environments (%s, %s)" % [envs, adjacent])
+	for tier: String in TownWorld.TIER_NAMES:
+		_check(TileNames.TOWN_FEATURES.has(tier), "a %s settlement has words to name it with" % tier)
+	for env: String in envs:
+		_check(TileNames.FEATURES.has(env), "%s has words to name its tiles with" % env)
+		_check(tileset.road_material_for(env) != "", "%s has a road material" % env)
+		_check(ResourceLoader.exists(HexMap.CAVE_ART % env), "%s has the cave's picture" % env)
+		for tier: String in TownWorld.TIER_NAMES:
+			_check(ResourceLoader.exists("res://Assets/Towns/town_%s_%s.png" % [env, tier]),
+					"%s has the buildings of a %s settlement" % [env, tier])
+	# These three name only some environments, on purpose -- the rest have clear air, or a name that
+	# is already a word for land -- so what is checked is that none names a land the sheet has not got.
+	for listed: Array in [["TileNames.FEATURES", TileNames.FEATURES], ["Ambient.WEATHER", Ambient.WEATHER],
+			["HexTileset.TERRAIN_NAMES", HexTileset.TERRAIN_NAMES]]:
+		for env: String in listed[1]:
+			_check(env in envs, "%s's %s is an environment the sheet has" % [listed[0], env])
+	return true
 
 
 ## IceOverlay's constants against the sheets build_ice.py wrote: a mismatch draws the wrong cell, not an error.
@@ -350,6 +398,13 @@ func _test_mouse(map: HexMap) -> bool:
 	map._unhandled_input(_mouse_motion(center + Vector2(2, 0), Vector2(2, 0)))
 	map._unhandled_input(_mouse_button(center + Vector2(2, 0), false))
 	_check(moves.size() == 1 and map.selected_cell == Vector2i.ZERO, "a wobble under the threshold still selects")
+
+	# The hover's tile info is a count of pixels, worked out only for somebody listening.
+	var hovered: Array[Dictionary] = []
+	map.tile_hovered.connect(func(_cell: Vector2i, info: Dictionary) -> void: hovered.append(info))
+	map._unhandled_input(_mouse_motion(east, Vector2.ZERO))
+	_check(map.hovered_cell == Vector2i(1, 0) and hovered.size() == 1 and hovered[0].get("cell") == Vector2i(1, 0)
+			and hovered[0].has("environments"), "a listener to the hover is told the tile and what is on it (%s)" % [hovered])
 	return true
 
 

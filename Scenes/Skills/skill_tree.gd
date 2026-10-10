@@ -40,8 +40,9 @@ const ROOT_DAMAGE := 1.0
 const ROOT_PERCENT := 1.0
 const ROOT_CONNECTORS := 1
 ## The root's slots now: `ROOT_CONNECTORS`, and more as the walls broken open them (`WallUnlocks.root_branches`,
-## the user's, 2026-10-09). The main scene sets it as the save loads and as a wall falls, the way
-## `UniqueTable.ranks` is set; a test that moves it puts it back.
+## the user's, 2026-10-09). `Inventory.load_from` sets it as the save loads and `Inventory.reach` as a
+## wall falls: one for the whole game, which only ever has the one inventory loaded, so a test that
+## loads another or moves it puts it back.
 static var root_slots := ROOT_CONNECTORS
 ## The three attributes, which the tree adds with the gear's rather than at a skill point's worth
 ## (`Skills.attributes`).
@@ -285,15 +286,7 @@ static func ranks_weight(tier: int) -> int:
 
 ## A weighted draw of `CONNECTOR_WEIGHTS`.
 static func _connectors(rng: RandomNumberGenerator) -> int:
-	var total := 0
-	for weight: int in CONNECTOR_WEIGHTS:
-		total += weight
-	var pick := rng.randi_range(1, total)
-	for count in CONNECTOR_WEIGHTS.size():
-		pick -= int(CONNECTOR_WEIGHTS[count])
-		if pick <= 0:
-			return count
-	return 0
+	return LootTable.weighted_index(CONNECTOR_WEIGHTS, rng)
 
 
 ## A stone's shape as its card writes it: "Tier 3 · 2 connectors", "Tier 2 · Leaf".

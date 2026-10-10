@@ -23,7 +23,8 @@ const SAVE_PATH := "user://map.json"
 ## 1 is the first shape there has been. 2 added the names of the tiles the player has seen; a
 ## version 1 save simply has none, and its tiles are named again as they are asked about. 3 added
 ## `land_radius`, the ice wall's place; an older save has none and MapBuilder puts the wall past it.
-## 4 added `cave`, the Gollux cave's cell; an older save has none, and the main scene puts one down.
+## 4 added `cave`, the Gollux cave's cell; an older save has none, and gets one beside the next wall
+## broken in it (`MapBuilder.place_cave`).
 const VERSION := 4
 
 ## MapBuilder.State by name, lowest value first. Written into every save as the legend its state
@@ -140,6 +141,10 @@ func save(path := SAVE_PATH) -> bool:
 ##   wrote it can still read it.
 ##
 ## `problem` is an out-parameter because an Array is shared where a String would be copied.
+##
+## **Every value is looked at before it is read** (`TownWorld.is_numbers`, `typeof`): a typed read of
+## the wrong thing -- `int()` of a list, a number assigned to an Array -- stops the function where it
+## stands, and the null that leaves has no reason in `problem`, which the caller takes for a first run.
 static func load_from(path := SAVE_PATH, problem: Array = [], expect_sheet := "") -> MapSave:
 	SafeFile.recover(path)
 	if not FileAccess.file_exists(path):
@@ -155,6 +160,14 @@ static func load_from(path := SAVE_PATH, problem: Array = [], expect_sheet := ""
 		problem.append("it is not a save file")
 		return null
 	var data: Dictionary = reader.data
+	for key: String in ["version", "world_seed", "map_seed", "land_radius"]:
+		if not TownWorld.is_numbers([data.get(key, 0)]):
+			problem.append("its %s is not a number" % key.replace("_", " "))
+			return null
+	for key: String in ["origin", "start_town", "player_cell"]:
+		if data.has(key) and not _is_cell(data[key]):
+			problem.append("its %s is not a place" % key.replace("_", " "))
+			return null
 	var version := int(data.get("version", 0))
 	if version > VERSION:
 		problem.append("it was written by a newer version of the game (%d)" % version)
@@ -172,12 +185,16 @@ static func load_from(path := SAVE_PATH, problem: Array = [], expect_sheet := ""
 	save.map_seed = int(data.get("map_seed", 0))
 	save.origin = _to_vector(data.get("origin", []))
 	save.start_town = _to_vector(data.get("start_town", []))
+	# `[]` is a world with no cave yet; anything else that is not a cell is a cave this would lose.
 	var saved_cave: Variant = data.get("cave", [])
-	if typeof(saved_cave) == TYPE_ARRAY and (saved_cave as Array).size() == 2:
+	if _is_cell(saved_cave):
 		save.cave = _to_vector(saved_cave)
+	elif typeof(saved_cave) != TYPE_ARRAY or not (saved_cave as Array).is_empty():
+		problem.append("its cave is not a place")
+		return null
 	save.player_cell = _to_vector(data.get("player_cell", []))
 	var saved_rect: Variant = data.get("rect", [])
-	if typeof(saved_rect) != TYPE_ARRAY or saved_rect.size() != 4:
+	if not TownWorld.is_numbers(saved_rect) or saved_rect.size() != 4:
 		problem.append("it has no window")
 		return null
 	save.rect = Rect2i(int(saved_rect[0]), int(saved_rect[1]), int(saved_rect[2]), int(saved_rect[3]))
@@ -189,17 +206,23 @@ static func load_from(path := SAVE_PATH, problem: Array = [], expect_sheet := ""
 		return null
 	save.towns = saved_towns
 
-	var env_names: Array = data.get("environments", [])
-	if typeof(env_names) != TYPE_ARRAY:
+	# A legend that is missing or empty would read every row under it as gaps: a map of no land at all.
+	var saved_envs: Variant = data.get("environments", [])
+	if typeof(saved_envs) != TYPE_ARRAY or (saved_envs as Array).is_empty():
 		problem.append("it has no environments")
 		return null
+	var env_names: Array = saved_envs
 	if not save._read_rows(data.get("env_rows", []), env_names.size(),
 			func(cell: Vector2i, index: int) -> void: save.envs[cell] = str(env_names[index])):
 		problem.append("its land does not fit its window")
 		return null
 	# States are resolved through the save's own legend, so an enum reordered since cannot shift.
+	var saved_states: Variant = data.get("states", [])
+	if typeof(saved_states) != TYPE_ARRAY or (saved_states as Array).is_empty():
+		problem.append("it does not say what it has explored")
+		return null
 	var state_legend: Array[int] = []
-	for name: Variant in data.get("states", []):
+	for name: Variant in saved_states:
 		state_legend.append(STATE_NAMES.find(OLD_STATE_NAMES.get(str(name), str(name))))
 	if state_legend.has(-1):
 		problem.append("it records a state this build has no name for")
@@ -227,12 +250,13 @@ static func load_from(path := SAVE_PATH, problem: Array = [], expect_sheet := ""
 			save.names[Vector2i(int(at[0]), int(at[1]))] = str(saved_names[key])
 
 	var road_list: Variant = data.get("roads", [])
-	if typeof(road_list) != TYPE_ARRAY or road_list.size() % 3 != 0:
+	var saved_links: Variant = data.get("routed_links", [])
+	if not TownWorld.is_numbers(road_list, 3) or typeof(saved_links) != TYPE_ARRAY:
 		problem.append("its roads cannot be read")
 		return null
 	for i in range(0, road_list.size(), 3):
 		save.roads[Vector2i(int(road_list[i]), int(road_list[i + 1]))] = int(road_list[i + 2])
-	for key: Variant in data.get("routed_links", []):
+	for key: Variant in saved_links:
 		save.routed_links[str(key)] = true
 	return save
 
@@ -286,7 +310,10 @@ func _read_rows(rows: Variant, legend_size: int, set_cell: Callable) -> bool:
 	return true
 
 
+## Whether `data` is a cell or a spot as the save writes one: `[x, y]`.
+static func _is_cell(data: Variant) -> bool:
+	return TownWorld.is_numbers(data) and (data as Array).size() == 2
+
+
 static func _to_vector(data: Variant) -> Vector2i:
-	if typeof(data) != TYPE_ARRAY or data.size() != 2:
-		return Vector2i.ZERO
-	return Vector2i(int(data[0]), int(data[1]))
+	return Vector2i(int(data[0]), int(data[1])) if _is_cell(data) else Vector2i.ZERO

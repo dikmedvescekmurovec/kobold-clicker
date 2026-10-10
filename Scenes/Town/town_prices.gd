@@ -103,11 +103,6 @@ static func sell_price(item: Item) -> float:
 	return maxf(1.0, roundf(gold_at_level(item.level) * step * SELL_BODIES))
 
 
-## What a merchant asks for a piece off its own shelf: what it would pay for one, the other way up.
-##
-## `SELL_SHARE` is the whole of why there is no loop to stand in at
-## one counter -- buying back what was just sold costs five times what it fetched. Read off
-## `sell_price` rather than written out again, so the two can never be tuned apart.
 ## What the Rag and Bone Sack pays for a piece thrown away: `share` of what a trader would give (its
 ## rank's, short of the whole, so a counter is still worth the walk). Here because every figure in gold
 ## is made here.
@@ -115,6 +110,11 @@ static func salvage_price(item: Item, share: float) -> float:
 	return maxf(1.0, roundf(sell_price(item) * share))
 
 
+## What a merchant asks for a piece off its own shelf: what it would pay for one, the other way up.
+##
+## `SELL_SHARE` is the whole of why there is no loop to stand in at
+## one counter -- buying back what was just sold costs five times what it fetched. Read off
+## `sell_price` rather than written out again, so the two can never be tuned apart.
 static func buy_price(item: Item) -> float:
 	var paid := sell_price(item)
 	return 0.0 if paid <= 0.0 else maxf(1.0, roundf(paid / SELL_SHARE))

@@ -60,8 +60,8 @@ static var _lock: ImageTexture
 ## What the square holds (null for an empty socket) and whether it is the one its page has open.
 var item: Item
 var selected := false
-## What `ItemCard` writes beside this square instead of the piece itself, as `hint.call(rows, width)`.
-## Only a `shadow` carries one.
+## What `ItemCard` writes beside this square instead of the piece itself, as `hint.call(rows, width)`:
+## a square of the collection log or the achievements, the skill tree's root, a unique to banish.
 var hint := Callable()
 
 

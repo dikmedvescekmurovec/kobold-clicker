@@ -85,15 +85,7 @@ static func icon(rune: String) -> Texture2D:
 static func roll(enemy: String, rng: RandomNumberGenerator) -> String:
 	if rng.randf() >= float(CHANCE[EnemyRoster.tier_of(enemy)]):
 		return ""
-	var total := 0
-	for rune: String in RUNES:
-		total += int(RUNES[rune]["weight"])
-	var pick := rng.randi_range(0, total - 1)
-	for rune: String in RUNES:
-		pick -= int(RUNES[rune]["weight"])
-		if pick < 0:
-			return rune
-	return ""
+	return names()[LootTable.weighted_index(RUNES.values().map(func(row: Dictionary) -> int: return int(row["weight"])), rng)]
 
 
 ## A tile with no rune work on it.
@@ -226,16 +218,26 @@ static func any_gone(gone: Dictionary) -> bool:
 	return not (gone["mods"] as Array).is_empty() or int(gone["depth"]) > 0 or bool(gone["ascent"])
 
 
-## A tile's rune work read back off a save: only rows that still exist and counts that make sense.
-static func from_dict(data: Variant) -> Dictionary:
+## A tile's rune work read back off a save: only rows that still exist and counts that make sense, a
+## count that is no number read as absent. A modifier this build has not got is named in `lost`.
+static func from_dict(data: Variant, lost: Array = []) -> Dictionary:
 	var state := fresh()
 	if typeof(data) != TYPE_DICTIONARY:
 		return state
-	for mod: Variant in data.get("mods", []):
-		if typeof(mod) == TYPE_DICTIONARY and TileMods.MODS.has(str(mod.get("id", ""))):
-			state["mods"].append({"id": str(mod["id"]), "tier": clampi(int(mod.get("tier", 1)), 1, MOST_TIER),
-					"left": clampi(int(mod.get("left", KILLS)), 1, KILLS)})
-	for left: Variant in data.get("depth", []):
+	var mods: Variant = data.get("mods")
+	for mod: Variant in (mods if mods is Array else []):
+		if typeof(mod) != TYPE_DICTIONARY:
+			continue
+		if not TileMods.MODS.has(str(mod.get("id", ""))):
+			lost.append(str(mod.get("id", "")))
+			continue
+		var tier: Variant = mod.get("tier")
+		var kills: Variant = mod.get("left")
+		state["mods"].append({"id": str(mod["id"]),
+				"tier": clampi(int(tier), 1, MOST_TIER) if typeof(tier) in [TYPE_INT, TYPE_FLOAT] else 1,
+				"left": clampi(int(kills), 1, KILLS) if typeof(kills) in [TYPE_INT, TYPE_FLOAT] else KILLS})
+	var depths: Variant = data.get("depth")
+	for left: Variant in (depths if depths is Array else []):
 		if typeof(left) in [TYPE_INT, TYPE_FLOAT] and int(left) > 0:
 			state["depth"].append(mini(int(left), KILLS))
 	var ascent: Variant = data.get("ascent", 0)
@@ -249,12 +251,4 @@ static func _once(id: String) -> bool:
 
 ## One of `ids`, by the weight its `TileMods` row is drawn at.
 static func _drawn(ids: Array, rng: RandomNumberGenerator) -> String:
-	var total := 0
-	for id: String in ids:
-		total += int(TileMods.MODS[id]["weight"])
-	var pick := rng.randi_range(0, total - 1)
-	for id: String in ids:
-		pick -= int(TileMods.MODS[id]["weight"])
-		if pick < 0:
-			return id
-	return ids[-1]
+	return ids[LootTable.weighted_index(ids.map(func(id: String) -> int: return int(TileMods.MODS[id]["weight"])), rng)]

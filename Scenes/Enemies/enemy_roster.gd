@@ -26,7 +26,7 @@ enum Tier {
 ## Flying Eye is the one entry that overrides its measurement -- the frame is nearly all wingspan.
 enum Size { TINY, SMALL, MEDIUM, LARGE, HUGE }
 
-## Which way a pack drew its creature. The packs do not agree -- most face left, nine face right --
+## Which way a pack drew its creature. The packs do not agree -- most face left, nineteen face right --
 ## so every entry says, read off its own idle frames, and CombatActor mirrors the ones that need it
 ## rather than mirroring the lot. An enemy that comes in facing away from the player is the bug this
 ## exists to stop.
@@ -638,11 +638,13 @@ static func frame_count(name: String, animation: String) -> int:
 	var path := sheet_path(name, animation)
 	if path.is_empty():
 		return frame_paths(name, animation).size()
-	var image := _sheet_image(path)
-	return 0 if image == null else image.get_width() / frame_size(name).x
+	# The texture knows its own width: reading the sheet back as an image to ask it was a slow way to
+	# count, five times a spawn.
+	var sheet: Texture2D = load(path)
+	return 0 if sheet == null else sheet.get_width() / frame_size(name).x
 
 
-## Sheets are read as images only to measure and check them; drawing uses AtlasTexture regions instead.
+## A sheet is read as an image only to measure it (`portrait`); drawing uses AtlasTexture regions instead.
 ## Textures have no readable image under --headless, so fall back to the file, as HexTileset does.
 static func _sheet_image(path: String) -> Image:
 	var texture: Texture2D = load(path)

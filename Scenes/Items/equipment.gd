@@ -218,7 +218,8 @@ func to_dict() -> Dictionary:
 ## Read back, skipping anything this build no longer understands -- a socket that has been retired,
 ## a piece whose type is gone, or a piece that no longer fits where it was saved. The same forgiving
 ## pruning `Inventory` has always done: a save that has drifted loses a piece, never the whole file.
-static func from_dict(data: Variant) -> Equipment:
+## Each piece it loses is named in `lost` (`Item.from_dict`).
+static func from_dict(data: Variant, lost: Array = []) -> Equipment:
 	var gear := Equipment.new()
 	if typeof(data) != TYPE_DICTIONARY:
 		return gear
@@ -226,12 +227,15 @@ static func from_dict(data: Variant) -> Equipment:
 		var key: String = NAMES[socket]
 		if not data.has(key):
 			continue
-		var item := Item.from_dict(data[key])
+		var item := Item.from_dict(data[key], lost)
 		if item != null and fits(socket, item):
 			gear.worn[socket] = item
+		elif item != null:
+			lost.append(item.type)
 	# A file holding an offhand beside a two-hander is a save that has drifted -- from a build before
 	# greatswords, or edited by hand. The weapon is what the player chose, so the offhand is the piece
 	# that goes, by the same pruning rule as a socket that no longer fits.
-	if gear.two_handed_worn():
+	if gear.two_handed_worn() and gear.worn.has(Socket.OFFHAND):
+		lost.append(gear.worn[Socket.OFFHAND].type)
 		gear.worn.erase(Socket.OFFHAND)
 	return gear

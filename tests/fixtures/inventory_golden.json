@@ -1,0 +1,1004 @@
+{
+	"achievements": {
+		"duelists_buckler": 2,
+		"hourglass_amulet": 1,
+		"ogres_knuckle": 1
+	},
+	"achievements_new": [
+		"ogres_knuckle"
+	],
+	"autodiscard": [
+		1,
+		2
+	],
+	"curses": [
+		"hard_lessons",
+		"homeland",
+		"forgotten"
+	],
+	"deepest_level": 11,
+	"dungeon_depth": 2,
+	"dungeon_floors": 37,
+	"equipped": {
+		"amulet": {
+			"broken": false,
+			"level": 7,
+			"mods": [
+				{
+					"id": "added_dexterity",
+					"value": 27
+				},
+				{
+					"id": "added_strength",
+					"under": 5,
+					"value": 10
+				},
+				{
+					"id": "added_time_on_hit",
+					"under": 4,
+					"value": 5
+				},
+				{
+					"id": "added_fight_clock",
+					"value": 32
+				}
+			],
+			"rarity": "rare",
+			"stats": {
+				"crit_damage": 50.0
+			},
+			"type": "Ruby Amulet"
+		},
+		"body": {
+			"broken": false,
+			"level": 6,
+			"mods": [
+				{
+					"id": "added_thorns",
+					"under": 2,
+					"value": 20
+				}
+			],
+			"rarity": "uncommon",
+			"stats": {
+				"armor": 28.0
+			},
+			"type": "Iron Armour"
+		},
+		"boots": {
+			"broken": false,
+			"level": 6,
+			"mods": [
+				{
+					"id": "increased_move_speed",
+					"under": 1,
+					"value": 27
+				},
+				{
+					"id": "added_armor",
+					"under": 5,
+					"value": 2
+				},
+				{
+					"id": "added_strength",
+					"under": 1,
+					"value": 18
+				}
+			],
+			"rarity": "rare",
+			"stats": {
+				"armor": 23.0,
+				"move_speed": 18.0
+			},
+			"type": "Iron Greaves"
+		},
+		"helmet": {
+			"broken": false,
+			"level": 5,
+			"mods": [
+				{
+					"id": "added_elite_ward",
+					"under": 1,
+					"value": 19
+				},
+				{
+					"id": "added_intelligence",
+					"value": 22
+				},
+				{
+					"id": "increased_dodge",
+					"value": 31
+				}
+			],
+			"rarity": "rare",
+			"stats": {
+				"dodge": 19.0
+			},
+			"type": "Leather Hood"
+		},
+		"ring_left": {
+			"broken": false,
+			"level": 7,
+			"mods": [
+				{
+					"id": "global_increased_damage",
+					"under": 3,
+					"value": 10
+				},
+				{
+					"id": "added_damage",
+					"under": 1,
+					"value": 5
+				},
+				{
+					"id": "added_spawn_speed",
+					"value": 5
+				},
+				{
+					"id": "added_experience",
+					"value": 15
+				},
+				{
+					"id": "added_intelligence",
+					"under": 2,
+					"value": 11
+				}
+			],
+			"rarity": "elite",
+			"stats": {
+				"gold_find": 26.0
+			},
+			"type": "Gold Ring"
+		},
+		"ring_right": {
+			"broken": false,
+			"level": 7,
+			"mods": [
+				{
+					"id": "added_damage",
+					"under": 3,
+					"value": 2
+				},
+				{
+					"id": "added_crit",
+					"under": 1,
+					"value": 11
+				}
+			],
+			"rarity": "unique",
+			"stats": {
+				"dodge": 16.0
+			},
+			"type": "Jade Ring",
+			"unique": "knucklebone_ring"
+		},
+		"weapon": {
+			"broken": false,
+			"level": 8,
+			"mods": [
+				{
+					"id": "added_crit_damage",
+					"under": 1,
+					"value": 67
+				},
+				{
+					"id": "added_strength",
+					"under": 1,
+					"value": 22
+				},
+				{
+					"id": "added_crit",
+					"under": 1,
+					"value": 13
+				},
+				{
+					"id": "added_fight_clock",
+					"value": 37
+				},
+				{
+					"id": "added_first_blow",
+					"under": 2,
+					"value": 113
+				}
+			],
+			"rarity": "elite",
+			"stats": {
+				"attack_speed": 1.5,
+				"crit_chance": 12.0,
+				"crit_damage": 301.0,
+				"damage": 17.0
+			},
+			"type": "Iron Claymore"
+		}
+	},
+	"farthest_land": 47,
+	"first_orb_taken": true,
+	"first_sword_taken": true,
+	"fortunes": {
+		"banish_paid": 1,
+		"banished": [
+			"magpies_band"
+		],
+		"chest": [
+			140,
+			133
+		]
+	},
+	"gold": 123456.0,
+	"heirlooms": {
+		"equipped": {
+			"weapon": {
+				"ascension": 1,
+				"broken": false,
+				"extra_slot": true,
+				"level": 3,
+				"mods": [
+					{
+						"id": "added_click_damage",
+						"peak": 12,
+						"perfect": true,
+						"value": 61
+					},
+					{
+						"at": 4,
+						"bound": true,
+						"id": "added_time_on_hit",
+						"peak": 6,
+						"value": 8
+					},
+					{
+						"id": "added_first_blow",
+						"peak": 5,
+						"under": 1,
+						"value": 98
+					},
+					{
+						"id": "added_elite_damage",
+						"peak": 7,
+						"value": 44
+					},
+					{
+						"id": "increased_crit",
+						"peak": 4,
+						"under": 2,
+						"value": 27
+					},
+					{
+						"id": "added_fight_clock",
+						"value": 15
+					},
+					{
+						"id": "added_double_strike",
+						"peak": 6,
+						"value": 14
+					}
+				],
+				"nickname": "Old Faithful",
+				"plus": 1,
+				"rarity": "elite",
+				"safe_level": 9,
+				"stats": {
+					"attack_speed": 1.4,
+					"crit_chance": 7.0,
+					"crit_damage": 145.0,
+					"damage": 4.0
+				},
+				"type": "Steel Sword"
+			}
+		},
+		"items": [
+			{
+				"broken": false,
+				"level": 1,
+				"mods": [
+					{
+						"id": "global_increased_crit",
+						"peak": 6,
+						"value": 6
+					},
+					{
+						"id": "added_orb_find",
+						"peak": 2,
+						"value": 13
+					},
+					{
+						"id": "added_strength",
+						"peak": 6,
+						"value": 8
+					}
+				],
+				"rarity": "rare",
+				"safe_level": 6,
+				"stats": {
+					"item_rarity": 15.0
+				},
+				"type": "Opal Ring"
+			}
+		]
+	},
+	"homeland": [
+		"grass",
+		"forest"
+	],
+	"items": [
+		{
+			"broken": false,
+			"level": 1,
+			"mods": [],
+			"rarity": "common",
+			"stats": {
+				"attack_speed": 1.0,
+				"crit_chance": 5.0,
+				"crit_damage": 50.0,
+				"damage": 1.0
+			},
+			"type": "Wooden Sword"
+		},
+		{
+			"broken": false,
+			"level": 4,
+			"mods": [
+				{
+					"id": "added_time_on_hit",
+					"under": 3,
+					"value": 1
+				},
+				{
+					"id": "added_armor",
+					"under": 1,
+					"value": 12
+				}
+			],
+			"rarity": "uncommon",
+			"stats": {
+				"armor": 15.0
+			},
+			"type": "Iron Helmet"
+		},
+		{
+			"broken": false,
+			"level": 6,
+			"mods": [
+				{
+					"id": "added_strength",
+					"under": 3,
+					"value": 14
+				},
+				{
+					"id": "added_dodge",
+					"under": 2,
+					"value": 14
+				},
+				{
+					"id": "added_dexterity",
+					"under": 3,
+					"value": 15
+				},
+				{
+					"id": "added_experience",
+					"under": 3,
+					"value": 17
+				}
+			],
+			"rarity": "rare",
+			"stats": {
+				"dodge": 14.0
+			},
+			"type": "Jade Ring"
+		},
+		{
+			"broken": false,
+			"level": 9,
+			"mods": [
+				{
+					"id": "added_strength",
+					"under": 3,
+					"value": 23
+				},
+				{
+					"id": "added_time_on_block",
+					"under": 8,
+					"value": 5
+				},
+				{
+					"id": "added_block",
+					"under": 5,
+					"value": 8
+				},
+				{
+					"id": "added_spawn_speed",
+					"value": 8
+				},
+				{
+					"id": "increased_block",
+					"under": 2,
+					"value": 72
+				}
+			],
+			"rarity": "elite",
+			"stats": {
+				"armor": 47.0,
+				"block": 26.0
+			},
+			"type": "Steel Kite Shield"
+		},
+		{
+			"broken": true,
+			"level": 7,
+			"mods": [
+				{
+					"id": "added_time_on_hit",
+					"value": 13
+				},
+				{
+					"id": "added_camp_earnings",
+					"value": 29
+				},
+				{
+					"id": "added_dexterity",
+					"under": 5,
+					"value": 5
+				},
+				{
+					"id": "added_armor",
+					"under": 2,
+					"value": 18
+				}
+			],
+			"rarity": "rare",
+			"stats": {
+				"dodge": 44.0
+			},
+			"type": "Studded Jerkin"
+		},
+		{
+			"broken": false,
+			"level": 8,
+			"locked": true,
+			"mods": [
+				{
+					"at": 8,
+					"id": "added_all_attributes",
+					"locked": true,
+					"under": 3,
+					"value": 9
+				},
+				{
+					"id": "added_spawn_speed",
+					"value": 5
+				},
+				{
+					"id": "global_increased_damage",
+					"under": 3,
+					"value": 15
+				},
+				{
+					"id": "global_increased_time_on_hit",
+					"under": 6,
+					"value": 6
+				},
+				{
+					"id": "added_damage",
+					"under": 3,
+					"value": 5
+				},
+				{
+					"id": "added_dexterity",
+					"under": 5,
+					"value": 13
+				}
+			],
+			"rarity": "elite",
+			"stats": {
+				"drop_rate": 12.0
+			},
+			"type": "Gold Amulet"
+		},
+		{
+			"broken": false,
+			"level": 10,
+			"mods": [
+				{
+					"id": "added_experience",
+					"under": 5,
+					"value": 22
+				},
+				{
+					"id": "added_block",
+					"under": 9,
+					"value": 1
+				}
+			],
+			"rarity": "uncommon",
+			"stats": {
+				"sight": 3.0
+			},
+			"type": "Masterwork Torch"
+		},
+		{
+			"broken": false,
+			"level": 7,
+			"mods": [
+				{
+					"id": "added_strength",
+					"under": 6,
+					"value": 9
+				},
+				{
+					"id": "added_crit_damage",
+					"value": 137
+				},
+				{
+					"id": "increased_damage",
+					"under": 1,
+					"value": 55
+				}
+			],
+			"plus": 1,
+			"rarity": "rare",
+			"stats": {
+				"attack_speed": 1.8,
+				"bleed": 26.0,
+				"crit_chance": 11.0,
+				"crit_damage": 297.0,
+				"damage": 11.0
+			},
+			"type": "Steel Morningstar"
+		},
+		{
+			"broken": false,
+			"level": 5,
+			"mods": [
+				{
+					"id": "increased_damage",
+					"value": 39
+				},
+				{
+					"id": "increased_attack_speed",
+					"under": 4,
+					"value": 6
+				}
+			],
+			"rarity": "unique",
+			"stats": {
+				"attack_speed": 1.8,
+				"crit_chance": 9.0,
+				"crit_damage": 99.0,
+				"damage": 3.0
+			},
+			"type": "Wooden Sword",
+			"unique": "squires_blade"
+		},
+		{
+			"broken": false,
+			"capstone": "midas",
+			"level": 6,
+			"mods": [
+				{
+					"id": "added_gold_find",
+					"value": 26
+				},
+				{
+					"id": "added_drop_rate",
+					"under": 3,
+					"value": 13
+				}
+			],
+			"rarity": "unique",
+			"stats": {
+				"intelligence": 14.0
+			},
+			"stone_tier": 2,
+			"type": "Intelligence Node"
+		},
+		{
+			"broken": false,
+			"connectors": 2,
+			"level": 6,
+			"mods": [
+				{
+					"id": "added_elite_chance",
+					"value": 8
+				},
+				{
+					"id": "added_stone_ranks",
+					"value": 7
+				}
+			],
+			"rarity": "rare",
+			"stats": {
+				"intelligence": 14.0
+			},
+			"stone_tier": 3,
+			"type": "Intelligence Node"
+		}
+	],
+	"kills": 4321,
+	"level": 14,
+	"name": "Cobalt",
+	"orbs": {
+		"Orb of Alchemy": 8,
+		"Orb of Augmentation": 10,
+		"Orb of Chaos": 4,
+		"Orb of Divinity": 6,
+		"Orb of Exaltation": 2,
+		"Orb of Transmutation": 12
+	},
+	"play_seconds": 7325.5,
+	"runed": {
+		"137,124": {
+			"ascent": 995,
+			"depth": [
+				995
+			],
+			"mods": [
+				{
+					"id": "elite_ground",
+					"left": 995,
+					"tier": 1
+				},
+				{
+					"id": "thick_skinned",
+					"left": 995,
+					"tier": 1
+				}
+			]
+		}
+	},
+	"runes": {
+		"Rune of Depth": 2,
+		"Rune of Shifting": 1,
+		"Rune of Unrest": 2
+	},
+	"saved_at": 1790000000.0,
+	"skill_ranks": {
+		"": 2,
+		"0": 1,
+		"0.0": 1,
+		"0.1": 1,
+		"1": 1
+	},
+	"skill_tree": {
+		"0": {
+			"broken": false,
+			"connectors": 3,
+			"level": 6,
+			"mods": [
+				{
+					"id": "added_block",
+					"under": 2,
+					"value": 8
+				},
+				{
+					"id": "added_armor",
+					"under": 1,
+					"value": 27
+				},
+				{
+					"id": "added_damage",
+					"under": 3,
+					"value": 3
+				}
+			],
+			"rarity": "elite",
+			"stats": {
+				"strength": 14.0
+			},
+			"stone_tier": 2,
+			"type": "Strength Node"
+		},
+		"0.0": {
+			"broken": false,
+			"connectors": 1,
+			"level": 5,
+			"mods": [
+				{
+					"id": "added_time_on_hit",
+					"under": 1,
+					"value": 9
+				},
+				{
+					"id": "added_move_speed",
+					"under": 4,
+					"value": 3
+				}
+			],
+			"rarity": "rare",
+			"stats": {
+				"dexterity": 12.0
+			},
+			"stone_tier": 2,
+			"type": "Dexterity Node"
+		},
+		"0.1": {
+			"broken": false,
+			"capstone": "titan",
+			"level": 6,
+			"mods": [
+				{
+					"id": "added_damage",
+					"value": 6
+				},
+				{
+					"id": "global_increased_damage",
+					"under": 5,
+					"value": 12
+				}
+			],
+			"rarity": "unique",
+			"stats": {
+				"strength": 14.0
+			},
+			"stone_tier": 2,
+			"type": "Strength Node"
+		},
+		"1": {
+			"broken": false,
+			"level": 4,
+			"mods": [
+				{
+					"id": "added_crit",
+					"value": 6
+				}
+			],
+			"rarity": "uncommon",
+			"stats": {
+				"intelligence": 10.0
+			},
+			"stone_tier": 1,
+			"type": "Intelligence Node"
+		}
+	},
+	"super_orbs": 3,
+	"tally": {
+		"clicks": 25000,
+		"crits": 1500,
+		"discarded": 130,
+		"dry_streak": 42,
+		"gold": 250000,
+		"kills:forest": 900,
+		"kills:grass": 2100,
+		"strength": 31,
+		"transcended": 1,
+		"walls": 3
+	},
+	"tips": [
+		"first_fight",
+		"opened_bag",
+		"had_augment",
+		"had_node",
+		"first_skill_point",
+		"first_rune"
+	],
+	"towns": {
+		"132,129": {
+			"board_seen": true,
+			"bounties": [
+				{
+					"accepted": true,
+					"done": false,
+					"enemy": "Grass Slime",
+					"gold": 400.0,
+					"have": 2,
+					"item": {},
+					"level": 2,
+					"need": 5,
+					"orb": [
+						"Orb of Chaos"
+					],
+					"xp": 50
+				},
+				{
+					"done": false,
+					"enemy": "Forest Slime",
+					"gold": 400.0,
+					"have": 0,
+					"item": {
+						"kind": "shield",
+						"plus": 0,
+						"rarity": "uncommon"
+					},
+					"level": 2,
+					"need": 5,
+					"orb": [
+						"Orb of Exaltation"
+					],
+					"xp": 50
+				},
+				{
+					"done": false,
+					"enemy": "Baby Dragon",
+					"gold": 480.0,
+					"have": 0,
+					"item": {
+						"kind": "shield",
+						"plus": 1,
+						"rarity": "uncommon"
+					},
+					"level": 2,
+					"need": 1,
+					"orb": [
+						"Orb of Chaos",
+						"Orb of Alchemy",
+						"Orb of Divinity"
+					],
+					"xp": 60
+				}
+			],
+			"fortune_roads": true,
+			"items": [
+				{
+					"broken": false,
+					"level": 3,
+					"mods": [
+						{
+							"id": "added_block",
+							"value": 6
+						},
+						{
+							"id": "added_intelligence",
+							"under": 1,
+							"value": 4
+						},
+						{
+							"id": "added_spawn_speed",
+							"value": 7
+						}
+					],
+					"rarity": "rare",
+					"stats": {
+						"sight": 1.0
+					},
+					"type": "Wooden Torch"
+				},
+				{
+					"broken": false,
+					"level": 5,
+					"mods": [
+						{
+							"id": "global_increased_crit",
+							"under": 3,
+							"value": 7
+						},
+						{
+							"id": "added_spawn_speed",
+							"value": 7
+						},
+						{
+							"id": "added_crit",
+							"value": 10
+						}
+					],
+					"rarity": "rare",
+					"stats": {
+						"orb_find": 19.0
+					},
+					"type": "Pearl Ring"
+				},
+				{
+					"broken": false,
+					"level": 2,
+					"mods": [],
+					"rarity": "common",
+					"stats": {
+						"item_rarity": 16.0
+					},
+					"type": "Opal Ring"
+				},
+				{
+					"broken": false,
+					"level": 3,
+					"mods": [
+						{
+							"id": "added_damage",
+							"value": 3
+						},
+						{
+							"id": "added_experience",
+							"under": 2,
+							"value": 6
+						},
+						{
+							"id": "global_increased_attack_speed",
+							"under": 2,
+							"value": 7
+						}
+					],
+					"rarity": "rare",
+					"stats": {
+						"dodge": 7.0
+					},
+					"type": "Jade Ring"
+				},
+				{
+					"broken": false,
+					"level": 5,
+					"mods": [
+						{
+							"id": "added_armor",
+							"under": 3,
+							"value": 6
+						},
+						{
+							"id": "added_dexterity",
+							"under": 1,
+							"value": 15
+						}
+					],
+					"rarity": "uncommon",
+					"stats": {
+						"dodge": 11.0,
+						"move_speed": 12.0
+					},
+					"type": "Leather Boots"
+				},
+				{
+					"broken": false,
+					"level": 5,
+					"mods": [
+						{
+							"id": "added_move_speed",
+							"under": 1,
+							"value": 11
+						},
+						{
+							"id": "increased_move_speed",
+							"under": 1,
+							"value": 17
+						},
+						{
+							"id": "added_dexterity",
+							"under": 2,
+							"value": 16
+						},
+						{
+							"id": "added_armor",
+							"under": 1,
+							"value": 19
+						},
+						{
+							"id": "added_spawn_speed",
+							"value": 14
+						},
+						{
+							"id": "added_dodge",
+							"under": 2,
+							"value": 13
+						}
+					],
+					"rarity": "elite",
+					"stats": {
+						"dodge": 11.0,
+						"move_speed": 12.0
+					},
+					"type": "Leather Boots"
+				}
+			],
+			"orbs": [
+				"Orb of Divinity",
+				"Orb of Transmutation",
+				"Orb of Alchemy",
+				"Orb of Divinity",
+				"Orb of Augmentation",
+				"Orb of Alchemy"
+			]
+		}
+	},
+	"uniques_doubled": [
+		"squires_blade",
+		"knucklebone_ring",
+		"worry_stone"
+	],
+	"uniques_found": [
+		"squires_blade",
+		"knucklebone_ring",
+		"worry_stone"
+	],
+	"uniques_new": [
+		"knucklebone_ring",
+		"worry_stone"
+	],
+	"version": 34,
+	"walls_credited": 3,
+	"xp": 41
+}

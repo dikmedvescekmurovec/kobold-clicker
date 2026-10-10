@@ -84,6 +84,306 @@ The user asked for saves that follow the player across devices and are "verified
 How it works is in `backend/leaderboard/README.md`; what is worth knowing here:
 
 - **The save is the game's own two files, byte for byte.** Nothing about `Inventory` or `MapSave` changed: the cloud moves the files and the server reads only the inventory's summary (level, time played, when saved, floors) out of it, so a new field in the save needs nothing from the cloud.
-- **A change of device is a download, not a question, because the first sync after a start-up judges the device by the files as the scene found them** (`Cloud.launched`). Start-up always writes (the map, a camp's pay); judged by the files after that, every change of device was a question. The e2e run found it.
+- **A change of device is a download, not a question, because the first sync after a start-up judges the device by the files as the scene found them** (`Cloud.launched`). Start-up always writes (the map, a camp's pay); judged by the files after that, every change of device was a question. The e2e run found it. **That first sync waits for calm whole** (2026-10-10): a start-up stands its camp up before it, a download is never made over a camp, and the hash was spent on the sync that could not act -- so the next tick read the camp's pay as play and asked. `Cloud.sync` now returns while it holds the launch's hash and the game is not calm, and `_break_camp` syncs. Keeping the hash only where a download was skipped was turned down: a fight opened while `/me` was out would keep it past real play, and the download that followed would overwrite that play.
 - **The checks are gone (2026-10-02).** The user: "Remove the cloud save check. It's not working. Assume player is not cheating." The server now takes every save at its word: no `consistent` / `follows`, no 422 and no refusal question, and the board takes the save's own `dungeon_floors` (it only ever rises) where it once counted only floors beaten under the checks (`saves.vouched`). The conflict question between two devices stays: it was never a check. The columns `saves.checked` / `saves.vouched` and `players.flag` are left in the database, unread.
 - **Level 3 (a server that replays the game) was turned down for now:** the rules are ~9,000 lines of GDScript that would have to run headless on a rented server, fights step on a variable frame delta, loot is deliberately unseeded, and the game would have to be online to be played.
+
+## Reference (moved here from CLAUDE.md on 2026-10-10)
+
+What `Scenes/CLAUDE.md` said in full until it was cut down to short rules, word for word. Each `####` heading is the name a short rule there points at.
+
+### What the main scene owns in full
+
+#### Exports
+**Exports:** `world_seed` / `map_seed` (0 = carry on from the save, else random; used seeds are printed), `map_origin` (even row), `zoom` (0 = `ZOOM_PER_UI` times `ui_scale`, rounded: 3 on the default window; the mouse wheel, a trackpad's pinch or two fingers (`_pinch`, `PINCH_STEP`) step it between `ZOOM_MIN` 1 and `ZOOM_MOST` times `ui_scale` about the cursor, `_zoom_at`, on bare map outside a fight and a town) and `ui_scale` (0 = `UITheme.pick_scale` of the window, picked first thing in `_ready`: 2 on the default window, 3 on a phone either way up), whole numbers only so a sprite pixel stays square, and `inventory_path` / `map_path`.
+Every counter in every settlement is the developer screen's "Show all services" (`Settings.all_services`).
+
+#### Start-up
+**Start-up (`_ready`):** a headless run left at the player's own two paths is moved onto `HEADLESS_INVENTORY` / `HEADLESS_MAP` first; then it finds the cloud (`_find_cloud`), loads the inventory, then the map; either one unreadable -- or a loader that hands back nothing and says nothing about a file that is there (`_unread`) -- stops everything (`_refuse_save`).
+Then builds or restores the map through `MapBuilder`, builds the UI, and saves the map once.
+
+#### The UI is built in code
+**The UI is built in code**, so the `.tscn` stays untouched while the editor has it open. Shared builders are statics on `UITheme` (`titled_panel`, `body_of`, `button`, `icon_button`, `label`, `rule`, `vbox`, `clear`).
+
+#### The tile panel
+Right edge: the tile panel (`_panel`), a full-height column where a town's `TownPage` also stands, padded and spaced wider than other panels (`TILE_PAD`, `TILE_GAP`): the tile's name in the bar, "Village · Level 4" under it (`SETTLEMENT_KINDS`), one row per environment by name (`HexTileset.env_name`, the share only on a blend), a settlement's counters one named row each under a small Services heading, then Modifiers, then **Runes** on ground a farm run can be fought on once the third wall has opened them (`_show_runes`: each modifier, Depth and Ascent a rune is working, as Modifiers writes the land's own with the kills it has left; nothing on a tile with none.
+**The runes held are the bag's** (the user's, 2026-10-09): picked up off its rune row, they aim the map (`map.aim_radius` 0 while `bag_page.held_changed` names a rune and no spell is aimed), and the tile pressed is `_on_cell_aimed` -> `_rune_on` -> `BagPage.rune_on`), on an ice wall **Unlocks** (`_show_unlocks`: `WallUnlocks.of_wall` of the wall the land would reach past it, each its mark at `UNLOCK_ICON` and its name, its line in the tooltip, greyed by `OrbSlot.DIM` where an earlier world already opened it), and **at its foot** Chart / Move here / Farm / Enter town, each **shown only while it can be pressed** (`_update_buttons`, which re-places the column through `_place_panel` because its width may have changed).
+**Buttons stand at the foot of every right-hand column:** the tile panel's, a vendor's Restock and Buy, the smith's two, a bounty card's row.
+
+#### The corner
+Top-left: `CharacterPanel` on its own `CanvasLayer` 3, above a fight (layer 2).
+**A page covers it, but a bag page (the bag or the heirlooms) or the skill tree across a wide window, out of a town, sends it mirrored to the top-right** (the user's, 2026-10-07; `_character_right`, `CharacterPanel.mirrored`), under the Terminate flag over a fight (`CombatScene.corner_bottom`): `_place_character` is the one place that decides its corner, its visibility (hidden by any other page and the black screen), `_character_button`'s rect and the gems' `xp_target`, run by `_layout_ui` and first thing in `_show_corner`; `_slide_character`, deferred to the frame's end so a page swapped for another bag page does not slide it twice, glides it in from its new side's edge when the side changed.
+The corner column's top never follows it: `_place_corner` measures from `CHARACTER_EDGE`. **Its damage line is `_show_damage`'s**: over a fight the live fight's numbers (`_combat.fight`, so the tile's modifiers and the curses are in them), anywhere else `CharacterPage.armed`'s; it runs on every `save_written` (deferred, after `_rearm`), as a fight opens and as one closes (`_sync_character`, `_on_dungeon_finished`).
+**Only the save's run announces a change** (`_show_damage(true)`: the figure flashes and floats `+n` / `-n`, the user's, 2026-10-07), since a save is where gear, skills and crafting land; a fight opening or closing moves the figures by its tile and says nothing.
+Under it the brown corner buttons (chest, the heirlooms' crown, star, scroll, cog, book, trophy, podium; each tooltip is its page's name, and each answers to a key -- `HOTKEYS`: I items, K skills, C character, J bounties, L collection, Y achievements, H heirlooms, P leaderboard, O settings -- pressed only while its button could be pressed by hand and with no modifier held, the key's picture on its tip card through `TipCard.KEY`) **in a column, the ones there are closed up** (`_place_corner`), which come and go together (`_show_corner`) -- a town takes them away (**a fight leaves every one**, until its verdict: `_fight_up`, the user's, 2026-10-07), **a page does not: the column moves to stand beside whichever page is up** (`BagPage.column_origin` and its `laid_out` for the bag, whose sheet comes and goes -- folded away, the column stands under the caret that brings it back; every other page's first child is its panel), so one press goes from page to page and a page's own button shuts it (`_toggle_left_page`, which also drops the selected tile outside a town, so nothing stays outlined behind the page; the other way round, a tile chosen outside a town closes whatever page is up, `_on_tile_clicked`, so a tile chosen has the screen to itself -- but never the bag while a rune in its hand aims the map); the scroll appears once a bounty board has been read, the cog -- the settings -- is there from the start, and the book -- the collection log (`BOOK_ICON`) -- once the first unique has been found (`inventory.uniques_found`), pulsing until pressed.
+**A press anywhere on the character panel opens `CharacterPage`:** the panel takes no mouse, so the press lands on `_character_button`, a see-through Button of the panel's size on the UI layer, shown and hidden by `_show_corner` with the rest -- **over a fight it stays, but disabled and taking no mouse**, only so the experience bar's tooltip under it (`CharacterPanel.xp_hover`, `MOUSE_FILTER_PASS`) still shows: a pass-through Control nothing handles lets the press reach the fight's `_unhandled_input` (checked in a real window, 4.7; headless pushes never reach the GUI, so a test cannot show it).
+
+#### The crown
+**The heirlooms' crown** is one of the eight corner buttons (stand-in mark `ui_icon_crown`), there while an heirloom is held, opening `heirloom_page` -- a second `BagPage`. **It is the one corner button a town leaves standing:** pressed there it swaps which bag page stands at the counter (`_counter_page`, which `_stand_at_counter` shops), and never closes the town.
+Both bag pages are wired to the town alike; a hidden one has nothing open and says nothing. `ItemCard.equipment` follows the page that is up, so Alt compares against the right doll.
+
+#### Sliding panels
+**The side panels slide** (`Juice.slides`, registered in `_build_pages`): the left-hand pages in from and out to the left, `TownPage` and the tile panel `_panel` to the right, and the corner column glides after them (`_place_corner` -> `Juice.glide`). Only the drawing moves: `visible` and `position` are the truth the moment a page is shown or hidden, so nothing that shows or hides one has to know.
+`screenshot_ui.gd` runs under `Anim.NONE` so its shots are of settled pages.
+
+#### Left-hand pages
+Left edge, nine pages: the two `BagPage`s (the bag and the heirlooms), `SkillsPage`, `BountyList`, `SettingsPage`, `CollectionPage`, `AchievementsPage`, `CharacterPage` and `LeaderboardPage` (`Scenes/UI/`). The bag pages, the skills and the journal take the inventory, the save path and `ui_scale` (the journal the map as well); each saves what it changes itself, and offers `open()`, `layout()` and `closed`.
+Only one is ever up, and `_left_pages()` is the one place that knows which pages there are: what is wired, laid out and closed is that list (`test_main` presses every corner button and key against it).
+
+#### The town page
+Right edge, in the tile panel's place: `TownPage`, opened by the tile panel's **Enter town** (`MapBuilder.can_visit`; **on a charted settlement Move here could reach the button is there too, and walks the player there first** -- `_town_target`, opened by `_on_player_arrived` as a walked-to fight is; the user's, 2026-10-10).
+It takes the inventory and the save path the way the left-hand pages do, marks the town visited, fills its vendors' shelves, and saves what it sells and what its smith changes.
+It puts the bag in shop mode beside it (`_stand_at_counter`: the open tab, plus the gear merchant whatever the tab when the town has one), the two hand each other the piece that is open (`offer_changed` / `selection_changed`), and `_close_town` is the one way back out -- the X on either page closes both.
+
+#### Promised piece
+**A bounty's promised piece** (`town_page.item_claimed`) is announced as a body's would be: `_is_new_unique` and `_announce_unique`, and nothing for any other piece.
+
+#### Bounty verdict
+**A bounty handed in raises the verdict's panel** (`town_page.bounty_paid` -> `_show_bounty_paid`): a `UITheme.titled_panel` with no X and "Bounty claimed" on its bar, the monster, gold and experience counting up behind their marks, and the orbs then the piece popping into a `DropsView` -- `Juice`'s, as the fight's verdict has -- on layer 3 behind a screen-wide catch, with **Collect** (or Escape) shrinking it away (`_leave_bounty_paid`, then `_close_bounty_paid`).
+Everything is already paid, so it only shows; the item card and tooltips are moved back over it.
+
+#### Board reward
+**A claim that clears its board puts the board's reward up as Collect takes the panel away** (`_show_board_choice`, also on `town_page.choice_asked`, the board's Reward): "Board cleared" over `BountyBoard.choice`'s three options side by side (`CHOICE_WIDTH`, three inside the 324 px phone budget), each its square (`ItemSlot.make`, so the card shows; an orb as `OrbSlot` at `ItemSlot.SIDE`; a pile of gold or experience the coin or the gem on a plain socket, `_pile_square`), its name and **Take** (`TownPage.take_choice`; greyed with `why_not_take`'s reason over a full bag).
+The X and Escape put it away untaken -- it waits in the town's drawer. Both overlays are built by `_catch` (the screen-wide catch, a titled panel named "Panel", the cards lifted). The first one ever has the smith speak over it: tip `first_board_cleared`, due while `_choice` is up and checked as it is raised.
+
+#### Chest pointer
+`MapPointer` (`Scenes/Map/`), the chest's (`_chest_pointer`): `_sync_chest` (start-up, every arrival, `TownPage.chest_bought`) points it at `FortuneTeller.chest(inventory.fortunes)` while that chest still stands, and forgets the chest once it is charted. No chest is pointed at for nothing.
+**It is up for as long as the chest is**, under whatever the interface has open (`z_index` -1); a fight or a camp takes it away with the map.
+
+#### Hero pointer
+The hero's `MapPointer` (`_hero_pointer`, the portrait's `HERO_FACE`), a button at the foot of the map: `_process` points it at `view.player_cell` every frame -- at nothing while walking (the camera follows) or under a left-hand page or a town -- and hands it `_map_room()` (the pages' room less the tile panel), so it is up only once the map is dragged or zoomed off the hero.
+A press is `_find_hero`: the hero glided into the middle of that room (`_glide_camera`, `CAMERA_LIFT`, which `_keep_above_sheet` shares). The trailer switches it off.
+
+#### Aimed spells
+The fortuneteller's two aimed spells, the scour and the road home: `TownPage.spell_aimed(reading, price, spot)` -> `_on_spell_aimed` closes the town and the tile panel, sets `map.aim_radius` (the scour's patch, or 0 -- one tile -- for the road home) and puts nothing up (the user's call: the spell's tooltip and the outline are enough); `map.cell_aimed` -> `_on_cell_aimed` does the deed (`view.scour` / `view.jump_to`), and **only where it did something** charges, marks `FortuneTeller.ASKED + reading` in that town's drawer and saves the inventory (and the map, for a scour); `_end_aim` (a right click, or Escape before anything else but a tip) costs nothing.
+
+#### Super orbs
+**Super orbs (`_credit_walls`):** `inventory.credit_walls(view.walls_fallen())`, saved when it pays, asked at start-up before the interface is built (which pays a save from before there were heirlooms for the walls it has down) and after every `view.chart`. It also climbs the heirlooms to `view.charted_level()` (`inventory.raise_heirlooms`), saving and refreshing both bag pages when one moved.
+The tip `first_heirloom` is due while one is unspent, and says only that a fortuneteller now knows a way out.
+
+#### Transcending
+**Transcending is two steps.** `_on_transcend_pressed` (the fortuneteller's question answered yes; the price checked, never taken) closes everything and stands `TranscendPage` on the UI layer, the black screen where one heirloom is made and the super orbs are spent -- **in memory only**.
+Its `finished` -> `_transcend`, which is Reset with the inventory written over rather than deleted: `inventory.transcended().save` first, then the map deleted (`SafeFile.remove`, which takes a half-written `.tmp` with it; a map that will not go puts the old inventory back and leaves the black screen up), then the reload, and `_resetting` keeps `_exit_tree` from writing the old world back.
+**Nothing may save the inventory while `_transcend_page` is up:** a game closed there has not transcended, which is what keeps closing it from being a way to make an heirloom and stay. **Every inventory save of the main scene's goes through `_save_inventory()`** (`_may_save`: no refused save, no reset, no black screen), the window's close among them. Escape does nothing to the main scene while it is up.
+
+#### Tile modifiers
+**Tile modifiers and curses:** `_mods_of(cell)` is `view.mods_of` under this world's Wild Tiles, handed to `Encounter.for_tile` / `farm` in all three places a fight is built (Chart, Farm, the camp); `_show_mods` writes them on the tile panel under the services in an `Accordion` (as the services are), each as its name with what it does and (in leaf) what it pays written under it, wrapped at `MOD_WIDTH` -- never in a tooltip -- **only for a seen tile**.
+`_sight()` loses its own ring under the Thick Fog, and `_cannot_camp()` answers for No Rest. **A tile under the fog can be clicked** (`HexMap.can_pick`): `_on_tile_clicked` gets an empty `info`, calls it "Unknown land" without asking `name_of`, shows its level and no rows, and `_on_chart_pressed` reads the terrain from `view.env_at`, never from what is drawn.
+
+#### Curses
+**Curses the main scene has a hand in:** at start-up, straight after the map is built, it sets `view.wall_step` for the Ring of Walls and runs `_settle_homeland()` -- the land under cell (0, 0) and one other seeded from the map, chosen once and saved with the inventory. `_cannot_camp()` answers for Berserker's World too.
+**No Second Chances:** `_on_combat_finished` ends on `_open_transcend(true)` when a tile's fight (never a run) was lost -- last, so the fight is banked and saved before the black screen, on which nothing may be -- and `_on_combat_retry` stops there. `_open_transcend(lost)` is the one way onto that screen; the fortuneteller's `_on_transcend_pressed` checks the price and calls it with false.
+
+#### The dungeon
+**The dungeon (`_on_cave_pressed`, `_on_dungeon_pressed`, `_on_dungeon_finished`, `_bank_depths`):** entered only by the tile panel's green **Enter cave** on the world's Gollux cave (`MapBuilder.can_enter_cave`: charted, stood on, not walking), whose tooltip says the depth the next descent begins in; the corner skull that opened it is gone.
+**It pays one thing: the runes, once the third wall has opened them** (`fight.runes_drop`, `_combat.rune_gained` -> `_on_rune_gained`, into the inventory at once, saved by `_bank_depths` with `_cave_runes`). The panel calls the tile "Cave · Level n" and writes nothing under it (`_is_cave`, `_show_services`).
+**The cave is put down by `_credit_walls`** (start-up and every chart): `inventory.reach(view.land_radius)` first, then `view.place_cave(view.breach)` -- **only once Gollux is unlocked** (`WallUnlocks.GOLLUX`, the third wall ever broken, the user's 2026-10-09), and beside the wall tile just broken (`breach`, the user's same day), so a new world has none until its first wall falls -- which is one a world, and the map is saved where it was.
+A world that already holds a cave keeps it. `_credit_walls` also sets `view.distant` (distant charting, `WallUnlocks.DISTANT`), whose way `_on_chart_pressed` walks as it walks the Nightwalkers' (`_dark_way`), and which collects a won tile's loot by itself as they do (`CombatScene.auto_collect`, the user's 2026-10-09).
+`_on_dungeon_pressed` opens `Encounter.for_dungeon(inventory.dungeon_depth)` in `CombatScene` the way `_open_fight` opens a fight but with **no ledger and nothing connected but `finished` and `rune_gained`**: it pays nothing in the fight but runes, no board hears of a body, and none of its kills are banked.
+`_bank_depths` adds the depths the descent won -- a Gollux each -- and the floors beaten (`dungeon_floors`, the leaderboard's score), saves, and syncs the cloud at once (`cloud.sync(true)`: the board is scored from the cloud save), on the way out of it and from `_exit_tree`, so quitting under a dead Gollux cannot cost him.
+**`dungeon_depth` only rises and is carried through every transcension** (the user's ruling), **and each depth won is exactly one skull on the black screen, the only skulls there are** (`Inventory.skull_allowance`, the user's 2026-10-03), kept with the depth through every transcension.
+
+#### The cloud
+**The cloud (`cloud`, a `Cloud`; `leaderboard_page`, `_cloud_question`) is on only beside the player's own save,** as `Settings` is: `_find_cloud` finds the run's one under the root (`Cloud.NODE`, which outlives every reload) or makes it -- a child that is off in a test or a screenshot -- and sets `auto_accept_quit` off so quitting goes through `Cloud.leave` (the scene closes, which banks and writes as ever, then the upload, then the quit).
+**`cloud.launched()` must run before `_ready` writes anything:** the first sync judges this device by the files as the scene found them, and a write before it turns every change of device into a question. A download writes the files and emits `replaced`: `_on_cloud_replaced` sets `_resetting` and reloads, so nothing of the old scene is written over them.
+A download or a question waits for `cloud.calm` (no fight, walk to a fight, camp, black screen or question up); an upload never waits -- but the sync that reads the launch's hash waits for calm whole, so a start-up that stands a camp up syncs as the camp is struck (`_break_camp`) and the camp's pay is not read as play.
+**A refused save blocks the cloud** (`cloud.blocked`, set by `_refuse_save` and cleared by the next scene's `_find_cloud`, which is why that runs before either save is loaded): nothing goes up and nothing comes down. A download is read before it is written (`Cloud._download`: a reply that is no save, or a save from a newer build, is left in the cloud).
+`_bank_depths` syncs at once, because the board is scored from the cloud save's own `dungeon_floors`, taken at its word (no checks since 2026-10-02). Reset awaits `cloud.forget_save()` before deleting the files. Everything the server does: `backend/leaderboard/README.md`.
+
+#### The cave felt
+**The cave felt (`_cave_sense`, a `CaveSense`; the user's, 2026-10-03, in place of the bought Seeing Stone):** a red light breathing at the edge of the map's room where the line from the hero toward the cave leaves it, up from the moment the wall in front of the cave falls (`CaveSense.felt`: its cell is land -- always, since a cave goes down only beside a broken wall, but not in a world from before 2026-10-09, whose cave could stand walls out) until it is seen, nothing to buy or press.
+`_process` hands it `_map_room()`, as it does the hero's pointer. The tips `first_sense` (the hero feels it: due with `felt`) and `first_cave` (the cave seen). **Never check tips in `_close_town`**, which is also the way onto the black screen, where nothing may save.
+
+#### Camps
+**Camps are automatic (`_camp_while_away`, `_break_camp`):** there is no button.
+`_ready` reads `inventory.saved_at` (stamped by every `Inventory.save`, and by `_notification` on the window's close) **before anything saves over it**, and last of all, where the game was shut for `CAMP_LEAST` or more, arms a farm run on `MapBuilder.best_farm()` (the farmable tile farthest out) exactly as `_open_fight` does, hands it to `Camp.make` from that hour, **pays `Camp.earned` at once** and saves, then stands `CampScene` over the hidden map the way a fight stands there.
+`_break_camp` only takes the screen away (and celebrates the levels it paid), then syncs the cloud, whose first sync waited for it. Escape does nothing while it is up, as on the transcension's black screen. `_cannot_camp()` is No Rest and Berserker's World, whose texts forbid a camp.
+
+#### Farm runes
+**Runes on a farm run (`_on_farm_pressed`, `_on_kill_paid`):** the run is built with the tile's rune work (`inventory.rune_work`: `RuneTable.mods_of` beside `_mods_of`, `deeper`, `ascended`); every body that falls in it counts the work down once its loot is handed over (`Encounter.kill_paid` -> `RuneTable.count_kill` on `inventory.rune_state`; never on `enemy_died`, which comes before the loot, or a rune's last body would be fought under it and paid without it), and whatever ran out leaves the fight there and then (`Encounter.forget_mod`, `deeper`, `ascended`, then `_rearm`).
+The camp builds its own run and carries none of it. A finished fight redraws the panel's Runes.
+
+#### Walking to a fight
+**Chart and Farm walk the player onto the tile first** (`_walk_to_fight`; for Chart `MapBuilder.walk_onto` steps onto the uncharted tile from the charted one beside it), and `_on_player_arrived` presses the button again, which opens the fight now they stand there.
+A won tile keeps them (`chart` arrives in place); a lost one runs them back to `_retreat_cell`, the charted tile they stepped onto it from (not where the walk began) -- not under Retry, which fights again from the tile (a Retry that opens no fight, the bag past its cap, runs them back as any loss does), nor No Second Chances.
+**`_save_map` never writes the player onto uncharted land:** mid-fight it saves them at `_retreat_cell`, so a game shut then comes back as a loss would.
+
+#### Stop
+**A walk can be cut short by Stop** (`_stop_button`, `_on_stop_pressed`; the user's, 2026-10-10): a button floating at the foot of the map's room, in the hero's badge's place (`_process`; never under a page), up only while more of the walk is left than the step being walked (`PlayerToken.can_stop`).
+The hero finishes that step and arrives there as at any walk's end, so the map is saved; **`_fight_target`, `_town_target` and `_dark_way` are dropped first**, or the arrival would press their button again. The last step is never stoppable, which is what keeps him off a tile not fought for and lets the run back off a lost one finish.
+
+#### Fights
+**Fights:** `_open_fight` arms an `Encounter` from `inventory.stats()`, makes a `FightLedger`, hides the map and every left-hand Control but the bag's button, and wires `CombatScene`'s signals to the ledger.
+`_on_combat_finished` banks the kills, charts the tile if it was won (`_chart_won`, which `_exit_tree` runs as well for a window closed on a won verdict: only Collect would have charted it), and brings the map back. The three kinds are armed by `_arm`, stood over the map by `_cover_map` and taken off it by `_uncover_map`.
+
+#### Bag over a fight
+**The bag opens over every fight** (the user's, 2026-10-02: tile fights, runs and the dungeon), its button and `I` left standing until the verdict, with the settings' cog and `O` (the user's, 2026-10-03), which opens over it the same way. The UI layer is a 3, over the fight's 2; the character's layer is a 3 as well and a later sibling, so cards, tips and banners still stand over the pages.
+`_let_bag_over` wires both kinds of fight: `CombatScene.panel_up` (the loot popup or the verdict coming up) puts the bag away through `_on_left_page_closed`, opening the bag puts the popup away (`close_loot`), and `CombatScene.page_up` hands Escape to the bag while it is up.
+**A piece put on, taken off or crafted mid-fight counts from the next blow:** `_rearm`, deferred on `inventory.save_written`, sets the fight's `effects` and `ranks` and calls `arm` again -- never `wear`, which would take the Dreadmask and the curses on over a lineup already being fought -- and `arm` moves the clock by what the gear's seconds changed, never refilling it.
+The clock and the blows run on while the bag is up. `_refresh_bag_room` runs every frame, since the bag now changes mid-fight. Not followed mid-fight: the hit sounds (`weapon_kind`, read in `_build`) and a Dreadmask put on.
+
+#### The banner
+**The banner (`_raise_banner`, `_banner`, `_close_banner`, `_place_banner`):** raised while a page's question, the fortuneteller's answer or the cloud's question is up (`_popup_up`, which the corner's keys ask too), it waits in `_held_banner` and goes up once the window is clear (`_process`) -- over a pop-up it lay on its title. one cream panel on the character's layer 3, centred under the fight's own top column (`CombatScene.hud_bottom`), a square beside a column of lines at `BANNER_WIDTH` -- half again the card's, because the banner has room across the screen and none down it.
+Two things raise it. **A unique new to the collection log (`_announce_unique`, `_is_new_unique`):** the piece as an `ItemSlot` beside its name, rarity line and rule, raised from `_on_loot_dropped` **before** `ledger.add_loot`, which is the last moment `uniques_found` can still answer "is this new?"; its slow motion is the find's own (`CombatScene.STOP_UNIQUE`), not the banner's.
+**A bounty filled (`_announce_bounty`):** the monster's picture (`BountyList.portrait_box`) beside its name, the count and "Claim it at <town>." (`bounty_page.town_name` off `BountyBoard.active_spot`).
+Every banner **wears its X from the start and goes by itself after `BANNER_HOLD` (5 s, as the toast's `TOAST_TIME`; the user's, 2026-10-09), but never while the mouse is on it (`_over_banner`; the panel takes no mouse, so it is its rect) and never under a finger (`Cursors.touched`)** (the user's rules, 2026-09-29 and 2026-10-03): `_process` counts `_banner_left` down.
+Once it has run out, a press anywhere off the banner puts it down too (`_input`, and the press still lands); before that a swing never touches it. `_close_banner` is the one way down: the timer, its X, a press off it, another banner, and `_break_camp`. A fight ending does not put it down; it goes by its own time.
+Placement re-runs on the panel's `resized`, and accounts for `pivot_offset`, about which a scaled Control is drawn.
+
+#### Bounty toast
+**A counted bounty kill is the toast (`_toast_bounty`, `_place_toast`, `_toast`):** "+1" beside the monster's picture on a small cream panel under the same column (under the banner while one is up), popped, risen `TOAST_RISE` and gone in `TOAST_TIME`; the latest wins, none at `Anim.NONE` (the journal carries the count).
+An elite's or a boss's stands taller, its picture framed and its count at `BOSS_FONT` behind the nameplate's mark (`BOUNTY_TIER`: the frame and the cream-half colour a tier wears).
+**The bounty's monster killed on land shallower than its posting counts for nothing and says so** (`FightLedger.bounty_too_low` -> `_on_bounty_too_low`): the same toast, the picture beside "Level too low" in brick over "Needs level N or higher", in place of the "+1" (`_toast_bounty`'s `too_low`); nothing once the bounty is filled.
+`_on_bounty_counted` picks: the kill that fills the bounty is the banner and no toast -- so an elite bounty, filled by its one kill, is the banner alone -- and every kill before it the toast; the banner puts any toast down.
+
+#### Tips
+**Tips (`TIPS`, `_check_tips`):** one-time pop-ups, one at a time, on layer 3. **Every tip is spoken, by the hero or an NPC, never a narrator** (the user's rule, 2026-09-26): a fourth entry (a portrait's name) puts it in a `DialogueBox` along the window's foot, its title the speaker (`HERO`, "Adventurer" for now) and its text a list of pages.
+The hero's are `player` and stand on the left (`first_stone` is the first skill node in the bag); the fortuneteller has `first_fortune` (her tab's first opening, `_on_town_tab_changed` checks) and `first_heirloom`; the blacksmith has `first_smith` (his tab's first opening) and `first_accept` (the first bounty taken on, `TownPage.bounty_accepted`: clear the board for something extra).
+**The copy is the user's own, word for word** -- change it only when asked. Seen ids live in `inventory.tips`, which also drives which corner buttons exist and whether they still pulse (`_flash`, `opened_bag` / `opened_heirlooms`).
+The book and the trophy flash the same way, until their first press (`opened_collection`, `opened_achievements`), and never again (the user's rule, 2026-09-30); a new find is the one square that glints in the log, until hovered or the page is closed (`inventory.uniques_new`; the achievements page the same with `achievements_new`), and either is saved through `_on_log_seen`.
+The star pulses on state instead (`_pulse`), while a rank can be bought.
+**A red pip** (`NEW_PIP`, every corner button's hidden `New` child) sits over a button's top-right corner while its page has something new (`_mark_new`, the user's ask, 2026-10-07): the chest only a first of its kind until the bag is next up (`BAG_FIRSTS`: the first item, orb, skill node, unique and rune, each `seen_<id>` in the tips once looked at, `_bag_first`; the user's, 2026-10-10 -- nothing else, the bag's own arrows say it), the star a rank to buy, the scroll a bounty filled and unclaimed (`BountyBoard.ready`), the book `uniques_new`, the trophy `achievements_new`.
+It is state, not a first press, so it is worked out again by `_show_corner` and after every save (`save_written`). A tip over a fight pauses the fight's processing, and so does one already up as a fight opens (`_open_fight`: a first find's under Retry). **A tip in `TIPS` needs its rule in `_tip_due`**, which logs an error for an id it does not know (`test_main` holds the two lists together).
+Each is checked where the thing it is about becomes true: `_open_fight` and `_on_combat_finished` for the fighting ones, `_on_player_arrived` for `first_town` (which is how a won settlement fight reaches it too). `_check_tips` puts the corner buttons back, so it asks about the fight; `_show_corner` itself knows a town is open.
+
+#### Changelog
+**The changelog (`_show_changelog`, `changelog()`):** the web build's start-up, on the player's own settings, puts up every `CHANGELOG.md` version newer than the one last shown, once, newest first (`CHANGELOG_VERSION_GAP` apart) -- through the tip queue, as the one plain panel left (not a tip, so nobody speaks it): its page (`_changelog_page`) in a scroll capped at what the window leaves, in four steps of type -- the bar's "What's new", the version in Pixellari with its date small at the right, each `### ` section as a `UITheme.section`, each change a body-font line behind a `SLOT_TAN_DK` bullet, its wrapped lines hanging clear of it -- or a section's markdown table (the new modifiers) as `UITheme.table_row`s, the header soft over a rule, the value kept on the name's first line (`can_stack` false).
+The newest version shown is `Settings.changelog_seen`, written as it is queued, so a browser sees each version once (one that has seen none sees them all) and a Reset does not bring it back. A new version is a new `## vX.Y.Z (YYYY-MM-DD)` heading with `### ` sections on top of `CHANGELOG.md`; `export_presets.cfg`'s include filter is what packs the file (`test_inventory` checks it).
+
+#### Achievements
+**Achievements (`_check_achievements`, `_announce_achievements`, `_on_achievements_pressed`):** `inventory.save_written` is connected deferred to `_check_achievements`, so every save is where one is noticed: `Achievements.earn`, then a save, `_show_corner(_combat == null)` and the banner -- the unique of the first in the square, each achievement's name (with its rank past I), what that rank asked and "Unlocks <unique>" -- or on a climb "Strengthens <unique>" and the unique's rule at its new numbers, with its rank IV line at IV -- headed "Achievement", "Rank Up" or "N Achievements".
+Never while the black screen is up, nor over a refused or reset save. A fight is counted by `Achievements.record(inventory, _combat.fight)` in `_on_combat_finished` (before `ledger.bank_kills`, whose save is what checks it) and in `_exit_tree`; a descent counts only the depth it wins (`dungeon_depth`, Kingslayer's figure); `_pay_salvage` ticks `discarded`.
+**`UniqueTable.ranks` is set from `Achievements.ranks` as the save loads and after every climb** -- what every card writes a unique's numbers at. The trophy corner button (`TROPHY_ICON`) is there once anything is earned and flashes until its first press; a new one glints on the page until hovered or the page is closed, as a new find does in the log.
+
+#### Window shape
+**The window's shape (`_layout_ui`, `_pages_room`, `_narrow`):** `_ready` turns the project's stretch off on a real window (never headless: the tests lay out against it) before it picks `ui_scale`.
+`_layout_ui` is the one place that hands every page its room (`area`, which its `layout()` docks into through `UITheme.dock`): the safe part of the window, and **held upright (`UITheme.narrow`)** less the corner row along its foot (`_place_corner_row`, `_corner_buttons`), the tile panel a sheet along its foot as every page is (`_place_panel`, `UITheme.dock`; a tile chosen under it is lifted into the middle of the map above it, `_keep_above_sheet`, over `CAMERA_LIFT`), a town its page over the bag -- `TOWN_SPLIT` of the room, less what the bag at the counter says it needs (`BagPage.least_height`) -- and every left-hand page in the bag's part.
+So upright, `_show_corner` and a town's tab (`_on_town_tab_changed`) lay everything out again, the row's height and the counter's tab being what they change. A banner (and a toast) off a fight stands under the character panel too, and a fight's top column stands under the character panel (`_fight_top` -> `CombatScene.hud_top`, set wherever `xp_target` is).
+On a monitor or a phone on its side every room is the whole window, and it all lays out as it always did.
+
+#### Under a finger
+**Under a finger** (`Cursors.touched`, fed by `_input` through `Cursors.feel`): Android's back button is Escape (`_notification` turns `NOTIFICATION_WM_GO_BACK_REQUEST` into a `ui_cancel` action; `quit_on_go_back` is off), and a tap where an aimed spell can do nothing puts it away as a right click does (`_on_cell_aimed`), since a phone has neither.
+**A finger's first tap on a tile the map is aimed at only chooses it, and the next there does the deed** (`Cursors.applies` in `_on_cell_aimed`; the user's, 2026-10-10, the rule in `Scenes/UI/CLAUDE.md`): the outline stands on it (`HexMap`), and under a held rune the tile is selected, so its panel comes up to be read -- **with the bag left standing**, since closing it puts the rune down: `_on_tile_clicked` closes no page while the map is aimed and brings the panel to the front (held upright both are sheets along the foot), `_character_right` gives the panel its edge, and the panel's X goes back to the bag with the rune still in hand.
+
+#### Escape
+**Escape (`ui_cancel`, `_unhandled_input`):** closes a tip if one is up, otherwise the pages, the town and the tile panel in one press.
+A fight gets the key first and answers for itself (`CombatScene._unhandled_input`: loot popup, then Back under a verdict, then Terminate on a run; a tile fight ignores it, and is given up only by its Terminate button) -- **unless the bag stands over it** (`page_up`), when the key is the bag's and closes it in the end.
+So does the bag (`BagPage._unhandled_input`): Escape over its question is Cancel, over a held orb puts it down, over a selected piece clears the selection -- each time the page stays up, and only a bare bag lets the key through to close it.
+
+#### Reset
+**Reset:** the settings page's **Reset save**, in every build, asks first and then emits `reset_pressed`; `_on_reset_pressed` deletes both saves (`SafeFile.remove`, each with any half-written `.tmp`) and reloads, and `_resetting` stops `_exit_tree` writing them back; a file that will not go is no reset, and the game carries on with what it holds written back. The settings file is not a save and stays.
+
+#### Play clock
+**The play clock:** `_process` adds every frame's delta to `inventory.play_seconds`, which is written whenever anything else writes the inventory -- so a quit loses the seconds since the last save. The character page's Misc table is the only thing that reads it.
+
+#### Character's name
+**The character's name (`_on_rename_pressed`, `_on_name_entered`):** the character page's pencil puts a `TextPrompt` up on the UI layer, and its answer is `Inventory.rename`'d and saved -- never over a refused save, a reset or the black screen. `inventory.hero()` is what the corner panel, the page's bar and the hero's spoken tips (a `TIPS` entry whose speaker is `HERO`) are titled with.
+
+### Rules in full
+
+#### Never pass Settings around
+**`Settings` (`Scenes/settings.gd`) is static and read where it matters, never passed around:** `Juice.shake` / `hit_stop` and `CombatScene`'s `_show_*` ask `Settings.animations`, `ItemDetails.fill` asks `Settings.item_details`, and the fight's sound plays on `Settings.SFX_BUS` (the two buses are made at runtime by `apply_audio` and set to the player's two volumes, the SFX one `SFX_DB` (-6) under the files' own levels, which `tools/sound_levels.py` sets; the main scene's `_play_music` plays a random `Sounds/Music/ogg/Ambient N` track on `Music`, a random `Action N` one while a fight or the dungeon is open (the pack's WAV and MP3 copies sit beside it under a `.gdignore`) -- read off the folder at start-up and looped in code; every `BaseButton` that enters the tree after the main scene clicks through `_on_any_button_pressed`: `Sounds/UI/click4.ogg` for a toggle with no `button_group`, `click1.ogg` for the rest; a page or the tile panel sliding in or out plays `bookFlip2.ogg` (once a frame), and `Inventory.traded` -- emitted by the `gold` setter on every drop, so every purchase, and by `sell_for`, every sale -- `handleCoins.ogg`).
+**Sound effects** are the user's picks in `Sounds/Selected/`, cut and levelled by `tools/sound_levels.py` into `Sounds/Sfx/` (the game loads only those): the fight's own (`CombatScene`, by the hero's `weapon_kind`, which the main scene's `_weapon_kind` hands it beside `hud_top`), a beam's hum (`LootBeam`), the dialogue's babble (`DialogueBox`), a level (`_celebrate_level`), a piece put on or taken off and an orb applied -- two layers at once, the user's pairing (`BagPage`) -- the ice wall falling (`MapBuilder._break_wall`) and the smith's anvil (`TownPage._strike`); a one-off moment plays through `Juice.sound`, on the root so a page closing cannot cut it, and every sound plays whatever the animation level -- one tied to a throw or a strike plays at once when nothing moves.
+**`Settings.path` is empty unless the main scene is on the player's own save,** so tests and screenshot scripts see the defaults and write nothing -- a test that moves a static puts it back. The main scene reads it **before it picks `ui_scale`**, so a game that starts full screen is measured full; on a real start the landing page has read it and gone full screen already (`landing.gd`), which no test passes through.
+
+#### Refuse an unreadable save
+**A save that cannot be read is refused, never overwritten.** `_refuse_save` runs before any UI exists, so nothing can write; `_save_blocked` also stops `_save_map` and `_exit_tree`, the cloud is blocked (`Cloud.blocked`), and the scene takes no frame and no input, which would reach for an interface never built. Only a *missing* file means a fresh start.
+
+#### Play headless on scratch files
+**A headless run left at the player's own paths plays on scratch files** (`HEADLESS_INVENTORY`, `HEADLESS_MAP`; first thing in `_ready`): the quick check that the game starts can never load, rewrite or upload the player's saves, and its settings and cloud are off with them.
+
+#### Write the map in six places
+**The map is written in six places:** the end of `_ready`, every arrival (`_on_player_arrived`), a paid scour (`_on_cell_aimed`), a fortuneteller's roads shown (`town_page.towns_revealed`), a cave put down (`_credit_walls`) and `_exit_tree`.
+
+#### Redirect both save paths
+**A non-zero seed in the scene wins over a save of another world**, and so does a changed `map_origin`. Every test and screenshot script pins a seed, so every one of them **must redirect `map_path` and `inventory_path`** or it replaces the player's saves.
+
+#### Take every gain as it lands
+**Every gain goes into the inventory as it lands, in every fight, and when it is written is `FightLedger`'s rule and nobody else's** (the pouch went on 2026-10-02, with the bag over a fight).
+A tile fight saves each find, purse, orb, experience and counted body as it lands; a farm run writes nothing of its own until `bank_kills`, which both ways out call (`_on_combat_finished`, `_exit_tree`) -- whatever else saves mid-run (the bag) writes it too.
+**The web build, whose tab closes with no close request and no `_exit_tree`, writes as it loses the focus** (`_keep_run`: the plain save, or `_bank_depths` in a descent -- each safe to repeat; a run's kills and its achievement tallies still wait for its end).
+**A body counted against a bounty goes the same way:** `_open_fight` connects the fight's `enemy_died` to `_on_enemy_died`, which hands the enemy's name to `ledger.add_kill`, which counts it on the board at once. Nothing in the interface counts a kill: what the screen hears is the ledger's `bounty_counted(enemy, have, need)` (`_on_bounty_counted`).
+**Whatever changes what the next body pays waits for `Encounter.kill_paid`,** emitted once a body's loot is rolled and handed over: `enemy_died` fires before it. Gold, orbs and experience can never be refused: the bag's cap and autodiscard apply to gear only.
+
+#### Autodiscard in one place
+**Autodiscard is applied in exactly one place, `CombatScene._on_loot_dropped`**, which asks `Inventory.leaves_behind(item)` (the main scene hands it over as `autodiscard`): a level's rule, and from the sixth wall the loot filter. The main scene listens to `loot_kept` / `loot_discarded`, never to `Encounter.loot_dropped`, so the counter and the bag cannot disagree.
+
+#### Keep the fight's corner clear
+**No Control may sit in the top-left corner during a fight but the corner buttons:** anything else there would take the mouse before the fight saw it and eat the player's swings. The one exception is the experience bar's tooltip, which passes every press through (`MOUSE_FILTER_PASS`, its button `MOUSE_FILTER_IGNORE`).
+`_open_fight` closes the pages and the tile panel; the corner buttons stay (`_show_corner` asks `_fight_up` itself); `CharacterPanel` ignores the mouse.
+
+#### No orb before kill 20
+**No orb is rolled before the player's 20th kill** (`OrbTable.FIRST_ORB_KILLS`; the promised Transmutation, below, falls inside them, in kills 11-20): `_open_fight` passes what is left to `Encounter.orbs_after`, and `FightLedger.bank_kills` adds a fight's kills when it ends or the game closes.
+
+#### No unique before kill 100
+**No unique drops before the player's 100th kill** (`UniqueTable.FIRST_UNIQUE_KILLS`, passed as `Encounter.uniques_after`), **nor one not unlocked** (`Achievements.unlocked`), **nor one a fortuneteller has banished from this world** (`FortuneTeller.dropping` of that list is what `_open_fight` passes as `Encounter.unlocked`, and what `TownPage` hands a bounty's promised unique and a cleared board's options), and after it pure chance: **no unique is promised but the first (`Encounter.PROMISED`, below) and a chest's** -- the mimic's coin toss (`Encounter.MIMIC_UNIQUE`) pays one unique, or else `MIMIC_ROLLS` certain pieces of gear, whatever the kill count.
+
+#### Deal a Broken Sword first
+**The player's first piece of gear is a Broken Sword** (`LootTable.FIRST_DROP`: 1 Damage and nothing else, always common and level 1, orbs work on it, and its first Transmutation -- the one on it while common -- is always "+1 Damage" alone (`OrbTable._reroll_at`, the user's 2026-10-10); weight 0 so nothing else deals one; while `Encounter.SWORD` is owed any gear that falls is it, until `inventory.first_sword_taken`, which the ledger sets on any drop, autodiscarded or not, as it lands; a save older than version 13 reads as taken).
+
+#### Script the first kills
+**A new player's first kills are scripted** (the user's, 2026-10-10; `Encounter.PROMISED`, find -> the lifetime kills it falls between; the why is `DESIGN.md`): the Broken Sword in kills 1-10, an Orb of Transmutation in 11-20, an Orb of Augmentation in 21-30 (`OrbTable.SECOND_ORB`), the Squire's Blade in 101-120 (`UniqueTable.FIRST_UNIQUE`) and a common Strength Node with three connectors in 151-170 (`SkillTree.first`).
+**Every kill of a promise's is as likely as the next and its last is certain** (`Encounter._due`). `_open_fight` hands the fight what is still owed (`Inventory.promised()`) and `inventory.kills` (`kills_before`), and nothing else: there is no promised elite any more (`guarantee_elite` is the tests' and the screenshots').
+- **Owed** is never had, its kills not run out, and no transcension yet -- so a save from before a promise and already past its kills gets nothing from it, and a second world none of them.
+- **Spent** as the find lands (`FightLedger`): the sword by any drop, the Transmutation by one (`first_orb_taken`; a save older than version 27 reads as taken), the Augmentation by one (`Inventory.FIRST_AUGMENT` in `tips`), the node by any node a fight leaves (`FIRST_NODE` in `tips`), and the unique by anything in the collection log, so one a chest, a bounty or a cleared board paid spends it.
+- **No skill node falls while the first is owed**; the two orbs come through `orbs_after`, which holds every other.
+
+#### Read only these stats
+**A fight reads the offensive stats, `bleed`, the defence, the three finders and `orb_find`:** `damage`, `crit_chance`, `crit_damage`, `attack_speed`, `bleed`, `armor`, `dodge`, `block`, `time_on_hit`, `drop_rate`, `item_rarity`, `gold_find`, `orb_find`, and `spawn_speed` (a share off the walk-in, capped at 100, where the next enemy is simply there), all read in `Encounter.arm()`.
+`fight_clock` (tenths, like block) adds to the clock, capped at `Encounter.CLOCK_MOST` and not on a run. **The attributes are read by `Inventory.stats()`, and by the fight only for the Brawler's Wraps:** each point is `Inventory.ATTRIBUTE_PERCENT` (0.2%) of the stat in `ATTRIBUTE_GIVES` -- strength of damage, dexterity of attack speed (both multiplied), intelligence added to `xp_more`.
+**Drop rate is the broad finder:** it lifts the gear roll and the unique roll, and in `_kill` it is **added** to `gold_find` for the purse and to `orb_find` for the orb roll, the way two global percents add. `gold_of` and `OrbTable.chance_for` themselves are untouched, so town prices -- quoted in bodies, with no player in them -- do not move.
+**`move_speed` is read by no fight either:** `PlayerToken.move_speed` (set in `_ready`) asks the worn set as each map walk sets off. **`sight` is the live stat no fight reads:** `main_scene._sight()` asks `Inventory.sight()` (`BASE_SIGHT`, none under the Thick Fog, plus the worn set's) where a won tile is charted (`_on_combat_finished`) and nowhere else -- the character page shows the same number.
+Capstone skills and worn uniques arrive together as `Encounter.effects` (`Inventory.effects()`).
+
+#### Turn the strikes on here
+**The enemies strike the clock, and the main scene is what turns it on** (`fight.strikes = true` in `_open_fight`; a hand-built fight is never struck, so every test that times a clock to the second still does).
+Armour takes a share of each blow, block (kept in **tenths of a second**, `LootTable.SECONDS_STATS`) a flat amount after it, dodge now and then all of it, and time on hit wins back what the blows took and never more. A farm run, a camp and the ice wall are never struck.
+Three uniques put defence to a second use: armour feeds damage under the Spiked Helm, armour buys clock under the Heartwood Plate, a blow blocked whole is answered with a swing under the Bulwark. Health, energy shield, regen, leech and the resistances are gone, with the hat, robe, slippers and Sapphire Amulet built on them.
+
+#### Let monsters outgrow gear
+**Monsters outgrow gear on purpose.** `HP_GROWTH` is per hex step, `LAND_GROWTH` is per ice wall behind the cell (`Encounter.walls_inside`, so the land a fallen wall opens is a frontier again and not a walkover), `LEVEL_GROWTH` is per level, and levels come in even bands of `MapBuilder.LEVEL_TILES` rings, every `WALL_STEP` wall on a band edge. Tuned by hand, with no test holding any of it (the root `CLAUDE.md`).
+Dials: `HP_GROWTH`, `CIRCLE_HP` (a circle's base health set by hand, which the dev balancing page overrides), `LAND_GROWTH`, `WALL_GROWTH`, `WALL_HP`, `LATE_WALL_BODIES` (walls 4 on), `LEVEL_GROWTH`, `LEVEL_FLAT`, `LootTable.TIER_POWER`, a kind's own `power`, `Encounter.SECONDS`.
+
+#### Keep the doll on a selection
+**Selecting a bag item draws nothing of what it would replace: the doll stays, and the worn piece is the hover card's second card under Alt** (`ItemCard.worn_for`, the first socket of `Equipment.sockets_for` that `displaced_by` finds anything in).
+Equip targets the emptiest socket the piece fits (`sockets_for(item)[BagPage._socket_pick]`); for a ring a **Swap** beside Equip in `_actions` turns it to the other finger, and every new selection starts on the emptiest again. Its tooltip names everything the press takes off.
+**Hide** (the caret in the doll's top-right corner) folds the doll away for the session (`_doll_hidden`, not saved) and leaves **Show** (the caret turned round, `_show_button`) against the bag's edge. No block anywhere shows deltas.
+
+#### No mouse on a bag square
+**A bag square takes no mouse input** (`MOUSE_FILTER_IGNORE`): the `ScrollContainer` must see every press to tell a click from a drag -- a scroll, or under a mouse a piece lifted for the doll or the tree -- so the clicked square is worked out from the cursor position.
+
+#### Keep tip copy in voice
+**Tip copy:** a short title-case title, then two or three plain sentences in the game's voice: what happened, then what to do, naming a button by its picture and corner. No system words ("pouch", "autodiscard"), no dashes, nothing Pixellari may not draw.
+
+#### Keep a town one thing
+**A town is one thing on screen, not two pages.** `TownPage` on the right and the bag in shop mode on the left open and close together, and the town's own cell (`_town_cell`) is what the bag is pointed at -- never `map.selected_cell`, which is still clickable behind the page. `_close_town` runs from `_open_fight` as well, so a town goes away with the left pages.
+
+#### Only the smith levels a piece
+**The one hand that moves a held piece's level and base stats is the fortress smith** (`Blacksmith`, reached from `TownPage`'s smith tab), and it works on what the **bag page** has open, carried or worn and never one off a shelf. (The orb tray does craft on a piece off a vendor's shelf: `BagPage.craft_held`, the town page's.) Its cap is set by the town's wall circle (`MapBuilder.circle_level`), not its tile's level.
+
+#### Make money only in TownPrices
+**Money has one place it is made, `TownPrices`, and one unit, bodies.** Anything that pays or charges asks there; nothing outside it writes a figure in gold. The purse it is quoted against is `Encounter.gold_at_steps`, which `base_gold` is also built on, so the tile's payout and the shop's prices cannot drift apart.
+
+#### Derive counters, save doings
+**A town's counters are derived and a town's doings are written down.**
+`TownServices.services_for` is a pure function of tier, spot and world seed and may be asked twice; anything rolled -- a vendor's shelf (`VendorStock`) and a board's postings (`BountyBoard`) -- goes in `TownState` inside `inventory.towns`, keyed by **world spot** as `"x,y"`, because a purchase moves the purse, the bag and the town together and one save is one write.
+
+#### Name a bounty's lands
+**A bounty says which lands its monster lives on, never which tile** (the user's, 2026-10-01): its card's swatches are the tile panel's own (`HexTileset.env_icon`), shown for nothing, and finding a tile of that land is the map's business -- there is no "Nearest" and no Show.
+
+#### Pay salvage in all four places
+**Gear thrown away pays `Inventory.salvage(item)` in all four places it can be thrown away** -- nothing unless the Rag and Bone Sack is worn: `_on_loot_autodiscarded` and `_on_drop_discarded` through `_pay_salvage` and `ledger.add_gold` (the verdict's only for a piece still in the bag), `BagPage._on_discard_pressed` and `_on_clear_level_pressed` straight to the purse -- and the Sack at rank IV now and then an orb the same four ways (`Inventory.salvage_orb`, `ledger.add_orb` or the purse).
+A full bag never destroys a piece: past `Inventory.capacity()` the player is overencumbered instead.
+
+#### Call wear before arm
+**`_arm` calls `fight.wear(inventory.effects(), Achievements.ranks(inventory))` before `fight.arm(inventory.stats())`,** for `_open_fight`, the camp and the dungeon alike: `arm` reads some effects, and every ranked unique's number is read at the rank `wear` was told.
+
+#### Add only drops to a full bag
+**Nothing calls `Inventory.add` where the bag may be full** except a drop.
+A drop past `CAPACITY` is kept and leaves the player **overencumbered** (`Inventory.encumbered()`): `_update_buttons` greys Chart and Farm (`ENCUMBERED_TIP`), their handlers refuse too (Retry and a walk-then-chart come through `_on_chart_pressed`), the token walks at `Inventory.ENCUMBERED_SPEED`, and `_process` re-runs `_update_buttons` the moment the bag crosses the cap, so a discard or a sale anywhere brings the buttons back.
+A purchase is refused instead, greyed with the reason, because it would overencumber the player at a counter. **Equip is greyed the same way** where a two-hander would hand two pieces back into a bag with room for one (`Inventory.can_equip`).
+
+#### Format growing numbers
+**A growing quantity is a whole-valued `float` and is written only through `BigNumber.format`** (`Scenes/big_number.gd`): gold, every price and reward, monster health and damage. Round with `roundf` / `maxf`, never `roundi` / `maxi`, which overflow at 9.2e18; print with `%s`, never `%d`.
+Below 100,000 it reads as the whole number, from there as `123K` / `1.23M` / `45.6B` / `789T` up to `Dc` (`SUFFIXES`), past that as `1.23e36`. Levels, kills, counts, percents, experience and modifier values stay `int`, **but every modifier number and percent stat is still written through it** (`ModifierTable.amount`, `LootTable.stat_value` / `stat_delta`).
+`round()` / `max()` return a Variant and will not parse under `:=`.

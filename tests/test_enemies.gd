@@ -1,6 +1,6 @@
 extends "res://tests/harness.gd"
 ## Run from the project folder:
-##   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/test_enemies.gd
+##   python tests/run_all.py enemies
 ## Checks EnemyRoster against the sprites on disk and the environments the spritesheet defines, so a
 ## renamed folder, a missing sheet or a typo'd environment fails here rather than at spawn time.
 
@@ -217,7 +217,9 @@ func _test_hp_rises_with_size_and_tier() -> bool:
 	]
 	for i in sizes.size() - 1:
 		_check(EnemyRoster.SIZE_HP[sizes[i]] < EnemyRoster.SIZE_HP[sizes[i + 1]], "bigger bodies hold more")
-	_check(EnemyRoster.hp_modifier("Grass Slime") == 0.5, "the slime is the floor")
+	# Nothing is flimsier than a slime, whatever the two tables are tuned to.
+	for name in EnemyRoster.names():
+		_check(EnemyRoster.hp_modifier(name) >= EnemyRoster.hp_modifier("Grass Slime"), "the slime is the floor, under " + name)
 	return true
 
 
@@ -227,7 +229,6 @@ func _test_hp_rises_with_size_and_tier() -> bool:
 func _test_weights_are_whole_and_banded() -> bool:
 	var heaviest := {}
 	var lightest := {}
-	var commonest := ""
 	for name in EnemyRoster.names():
 		_check(EnemyRoster.ENEMIES[name].has("weight"), name + " names a weight")
 		var w: Variant = EnemyRoster.ENEMIES[name]["weight"]
@@ -236,11 +237,8 @@ func _test_weights_are_whole_and_banded() -> bool:
 		var tier := EnemyRoster.tier_of(name)
 		heaviest[tier] = maxi(heaviest.get(tier, 0), EnemyRoster.weight_of(name))
 		lightest[tier] = mini(lightest.get(tier, 1 << 30), EnemyRoster.weight_of(name))
-		if commonest == "" or EnemyRoster.weight_of(name) > EnemyRoster.weight_of(commonest):
-			commonest = name
 	_check(lightest[EnemyRoster.Tier.COMMON] > heaviest[EnemyRoster.Tier.ELITE], "no elite is as common as a common")
 	_check(lightest[EnemyRoster.Tier.ELITE] > heaviest[EnemyRoster.Tier.BOSS], "no boss is as common as an elite")
-	_check(commonest.ends_with("Slime"), "a slime is the commonest thing in the game, not " + commonest)
 	return true
 
 

@@ -68,7 +68,6 @@ static func _links_in(towns: TownWorld, area: Rect2i) -> Array:
 static func _route(towns: TownWorld, from_town: Vector2i, to_town: Vector2i, area: Rect2i,
 		legal_masks: Dictionary, roads: Dictionary[Vector2i, int], target_is_town := true) -> bool:
 	var open := _Heap.new()
-	var target_outside := target_is_town and not area.has_point(to_town)
 	var cost: Dictionary[Vector3i, float] = {}
 	var came_from: Dictionary[Vector3i, Vector3i] = {}
 	for edge in HexGrid.EDGES:
@@ -99,12 +98,6 @@ static func _route(towns: TownWorld, from_town: Vector2i, to_town: Vector2i, are
 			if not legal_masks.has(existing | (1 << entry) | (1 << out)):
 				continue
 			var next := HexGrid.neighbor(cell, out)
-			if not area.has_point(next):
-				# The target town lies outside the area: leaving on its side is a valid ending, and the road
-				# carries on towards it off-area.
-				if not target_outside or HexGrid.distance(next, to_town) >= HexGrid.distance(cell, to_town):
-					continue
-				return _apply(_path_masks(came_from, state, out), legal_masks, roads)
 			if not _usable(towns, next, area):
 				continue
 			var next_state := Vector3i(next.x, next.y, HexGrid.opposite(out))

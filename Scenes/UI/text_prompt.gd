@@ -1,10 +1,11 @@
 class_name TextPrompt
 extends Control
 ## A line of text asked for over the whole window (the character's name), built as the cloud's question
-## is (`CloudQuestion`): a full-window holder under a titled panel with no X, popped in by `Juice`. The
-## field (`UITheme.text_field`) opens holding `text`, all of it selected, ready to type over. The verb
-## -- greyed while the field is blank -- and Enter hand back what was typed (`entered`); Cancel and
-## Escape hand back nothing. Either way it shrinks away and frees itself.
+## is (`CloudQuestion`): a holder under a titled panel with no X, which `Juice.popup` pops in and stands
+## over the whole window, however that is resized. The field (`UITheme.text_field`) opens holding
+## `text`, all of it selected, ready to type over. The verb -- greyed while the field is blank -- and
+## Enter hand back what was typed (`entered`); Cancel and Escape hand back nothing. Either way it
+## shrinks away and frees itself.
 
 ## What was typed, untrimmed: the caller decides what it will take.
 signal entered(text: String)
@@ -29,8 +30,6 @@ func _init(title: String, text: String, verb: String, most: int, ui_scale: float
 
 
 func _ready() -> void:
-	# On a CanvasLayer the anchors are the window's, so the holder follows it as it resizes.
-	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_panel = UITheme.titled_panel(_title, "", Callable())
 	add_child(_panel)
 	var body := UITheme.body_of(_panel)
@@ -49,14 +48,13 @@ func _ready() -> void:
 	_field.text_submitted.connect(func(_typed: String) -> void: _submit())
 	_field.text_changed.connect(func(now: String) -> void: _go.disabled = now.strip_edges().is_empty())
 	_go.disabled = _text.strip_edges().is_empty()
-	resized.connect(func() -> void: Juice.centre(_panel, size))
 	Juice.popup(self, _panel, _ui_scale)
 	_field.edit()
 	_field.select_all()
 
 
 func _submit() -> void:
-	if _go.disabled or _panel.has_meta("leaving"):
+	if _go.disabled or Juice.leaving(_panel):
 		return
 	entered.emit(_field.text)
 	_leave()

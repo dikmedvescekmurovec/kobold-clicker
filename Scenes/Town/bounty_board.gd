@@ -13,7 +13,7 @@ extends RefCounted
 ## town they belong to rather than worked out from a seed again. A caller hands in the environments
 ## and the town's cell rather than a map, so the rules can be read with no world around them.
 ##
-## A posting is `{enemy, need, have, gold, orb, item, accepted, done, level}`. Only an **accepted** posting counts
+## A posting is `{enemy, need, have, gold, xp, orb, item, accepted, done, level}`. Only an **accepted** posting counts
 ## kills, and only one posting anywhere may be accepted at a time -- a bounty is a job taken on, not a
 ## tally that runs by itself -- until it is handed in. `have` stops at `need`; `done` is a bounty
 ## handed in, which stays on the board, spent, until the whole board is `cleared` and posted afresh.
@@ -101,7 +101,7 @@ const CHOICE := "choice"
 ## What a clear may offer, three different ones a time: an epic piece at the town's ceiling, an epic
 ## piece above it, a unique, an ascended unique, a rare piece rolled lucky, a handful of one of the
 ## three dearest orbs, a pile of gold and a pile of experience. Every one is good; the board's tier
-## makes most of them better. "Lucky" is rolled twice and the better kept (`_lucky`, `LootTable._tier_at`).
+## makes most of them better. "Lucky" is rolled twice and the better kept (`_lucky`, `LootTable.tier_at`).
 const ASCENDED := "ascended"
 const HIGH := "high"
 const UNIQUE := "unique"
@@ -197,7 +197,7 @@ static func roll_choice(tier: int, cell: Vector2i, rng: RandomNumberGenerator,
 	if orbs.is_empty():
 		kinds.erase(ORB_BUNDLE)
 	var at := clampi(tier, 1, BOARD_TIERS) - 1
-	var ceiling := maxi(1, MapBuilder.level_of(cell) + int(LootTable.TIER_LEVEL[EnemyRoster.Tier.BOSS]))
+	var ceiling := VendorStock.ceiling(cell, EnemyRoster.Tier.BOSS)
 	var options := []
 	# Drawn by the caller's rng, not `shuffle`, which would ignore it.
 	for i in mini(CHOICES, kinds.size()):
@@ -218,11 +218,14 @@ static func roll_choice(tier: int, cell: Vector2i, rng: RandomNumberGenerator,
 			if kind == ASCENDED_UNIQUE:
 				for n in int(UNIQUE_PLUS[at]):
 					piece.ascend()
+		elif kind not in [ASCENDED, HIGH, RARE]:
+			push_error("BountyBoard: no reward is written for a choice of kind '%s'" % kind)
+			continue
 		else:
 			var level: int = ceiling + (int(CHOICE_LEVELS[at]) if kind == HIGH else 0)
 			var base := LootTable.roll_kind(rng)
 			var rarity := ItemRarity.Rarity.RARE if kind == RARE else ItemRarity.Rarity.ELITE
-			piece = Item.rolled(LootTable._tier_at(base, maxi(level, LootTable.first_level(base)), rng,
+			piece = Item.rolled(LootTable.tier_at(base, maxi(level, LootTable.first_level(base)), rng,
 					int(HIGH_DRAWS[at]) if kind == HIGH else 1), rarity, rng, level)
 			if kind == ASCENDED:
 				_lucky(piece, int(EPIC_ROLLS[at]), rng)
@@ -275,10 +278,12 @@ static func choice(drawer: Dictionary) -> Array:
 		elif entry.has(CHOICE_XP):
 			if int(entry[CHOICE_XP]) > 0:
 				offered.append({CHOICE_XP: int(entry[CHOICE_XP])})
-		else:
-			var orb := OrbTable.current(str(entry.get(CHOICE_ORB, "")))
+		elif entry.has(CHOICE_ORB):
+			var orb := OrbTable.current(str(entry[CHOICE_ORB]))
 			if OrbTable.ORBS.has(orb) and int(entry.get(CHOICE_COUNT, 0)) > 0:
 				offered.append({CHOICE_ORB: orb, CHOICE_COUNT: int(entry[CHOICE_COUNT])})
+		else:
+			push_error("BountyBoard: a saved choice of no kind this build reads (%s)" % [entry.keys()])
 	return offered
 
 
@@ -559,9 +564,7 @@ static func reward_item(bounty: Dictionary, cell: Vector2i, rng: RandomNumberGen
 	var rarity: ItemRarity.Rarity = ItemRarity.from_name(str(promise[ITEM_RARITY]))
 	var enemy := str(bounty.get(ENEMY, ""))
 	var tier := EnemyRoster.tier_of(enemy) if EnemyRoster.ENEMIES.has(enemy) else EnemyRoster.Tier.COMMON
-	var ceiling := maxi(1, MapBuilder.level_of(cell) + int(LootTable.TIER_LEVEL[tier]))
-	var level := maxi(ItemRarity.roll_level(rarity, ceiling, rng),
-			ItemRarity.roll_level(rarity, ceiling, rng))
+	var level := VendorStock.roll_level(rarity, VendorStock.ceiling(cell, tier), rng)
 	var item: Item
 	if rarity == ItemRarity.Rarity.UNIQUE:
 		item = Item.rolled_unique(str(unlocked[rng.randi_range(0, unlocked.size() - 1)]), rng, level)
@@ -570,7 +573,7 @@ static func reward_item(bounty: Dictionary, cell: Vector2i, rng: RandomNumberGen
 		# a kind that begins past the plainest (the greaves) is lifted to its first.
 		var kind := str(promise[ITEM_KIND])
 		var material := maxi(MapBuilder.level_of(cell), LootTable.first_level(kind))
-		item = Item.rolled(LootTable._tier_at(kind, material, rng), rarity, rng, level)
+		item = Item.rolled(LootTable.tier_at(kind, material, rng), rarity, rng, level)
 	for i in int(promise[ITEM_PLUS]):
 		item.ascend()
 	return item

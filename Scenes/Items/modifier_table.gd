@@ -421,18 +421,10 @@ static func weight_of(id: String, tier := SkillTree.MOST_TIER) -> int:
 	return int(MODS[id]["weight"])
 
 
-## One draw from what is left, by weight -- the same walk LootTable and EnemyRoster use.
+## One draw from what is left, by weight: the walk every table draws by (`LootTable.weighted_index`).
 static func _weighted(pool: PackedStringArray, rng: RandomNumberGenerator,
 		tier := SkillTree.MOST_TIER) -> String:
-	var total := 0
-	for id in pool:
-		total += weight_of(id, tier)
-	var pick := rng.randi_range(0, total - 1)
-	for id in pool:
-		pick -= weight_of(id, tier)
-		if pick < 0:
-			return id
-	return pool[0]
+	return pool[LootTable.weighted_index(Array(pool).map(func(id: String) -> int: return weight_of(id, tier)), rng)]
 
 
 ## A rolled modifier written for a person.

@@ -1,7 +1,7 @@
 extends "res://tests/harness.gd"
 ## Headless checks for the one formatter every growing quantity is written through. Run from the
 ## project folder:
-##   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/test_big_number.gd
+##   python tests/run_all.py big_number
 
 func _run() -> void:
 	_check(_test_whole_numbers() == true, "whole number tests ran to the end")

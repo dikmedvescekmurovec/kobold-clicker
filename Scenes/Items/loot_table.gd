@@ -6,8 +6,8 @@ extends RefCounted
 ## twenty thousand drops in a loop. And the same philosophy -- the drop chance is not written per
 ## enemy. TIER_CHANCE and SIZE_CHANCE multiply into `chance_for`, so the whole curve is tuned from
 ## two small tables rather than by editing thirty numbers. The one table that is not written out is
-## ITEMS, and it is built from KINDS for the same reason: seventy-one pieces written by hand are
-## seventy-one places for a number to go stale.
+## ITEMS, and it is built from KINDS for the same reason: seventy-five pieces written by hand are
+## seventy-five places for a number to go stale.
 ##
 ## A drop is not just a name any more: it rolls a rarity off the enemy that carried it and modifiers
 ## off ItemRarity's band, and every one is its own Item. What a worn set adds up to is
@@ -19,12 +19,12 @@ const OLD_ROOT := ROOT + "Old/"
 
 ## Every kind of gear the world holds, and the materials each kind is found in. Path of Exile's
 ## shape: a slot is not one piece with a level on it but several *kinds* that play differently -- a
-## dagger is quick and weak where a greatsword is slow and heavy -- and each kind comes in four
+## dagger is quick and weak where a greatsword is slow and heavy -- and each kind comes in five
 ## materials, the better ones only on ground deep enough to roll them.
 ##
 ## `tiers` names the pieces, weakest first, and each name is the item: a base has a name of its own
 ## rather than a number after a shared one. `weight` is the *kind's*, not a tier's, because which
-## kind drops is one draw and which of its materials is another (`_weighted`) -- so the weights below
+## kind drops is one draw and which of its materials is another (`weighted`) -- so the weights below
 ## are shares of a slot, and the slots' own shares of all drops are what they always were.
 ##
 ## Three stat lists, and the difference between them is the whole rule.
@@ -92,7 +92,7 @@ const KINDS := {
 		"tiers": ["Leather Boots", "Studded Boots", "Ranger's Boots", "Shadow Boots", "Masterwork Boots"],
 	},
 	# No first material: the Bronze Greaves went (the user's call, 2026-09-24), so the boots' tier one is
-	# the Leather Boots alone, and a greaves roll under level 3 is dealt as one (`_tier_at`).
+	# the Leather Boots alone, and a greaves roll under level 3 is dealt as one (`tier_at`).
 	"greaves": {
 		"slot": "boots", "weight": 24, "needs": "strength",
 		"stats": {"move_speed": 4, "armor": 3},
@@ -317,12 +317,13 @@ const KINDS := {
 ## numbers: half again of every quantity for each step up the materials, so the masterwork is worth
 ## 3 times the plainest (0.2 until 2026-09-28, when the user made the pieces that ask for an attribute
 ## -- every one with materials; the jewellery has one -- worth the asking). Both are dials. A kind may name levels of its own (`tier_levels`), as
-## the torch and the greaves do. A piece's step (`material`) counts up from the material its kind
-## begins at, so the greaves' first piece takes iron's step, not the plainest's.
+## the torch and the greaves do. A piece's step (`material`) is the material whose level its own
+## unlocks at, so the greaves' first piece takes iron's step, not the plainest's, and the torch's three
+## are the plainest's, steel's and the masterwork's.
 ##
 ## A material every two levels **of the tile the piece drops on**, never of the piece itself (the
 ## user's, 2026-09-28): tiles of level 1-2 deal wood alone, 3-4 wood and iron, 5-6 wood, iron and
-## steel, and on to the masterwork from 9 (`_tier_at` draws evenly among everything unlocked). A
+## steel, and on to the masterwork from 9 (`tier_at` draws evenly among everything unlocked). A
 ## masterwork with no art yet wears `tools/ui_kit.py`'s "!" (`MISSING`).
 const TIER_MIN_LEVEL := [1, 3, 5, 7, 9]
 const TIER_POWER := 0.5
@@ -362,9 +363,10 @@ static func current(type: String) -> String:
 ## Every piece a monster can leave, keyed by name: the row every caller has always read -- `icon`,
 ## `weight`, `slot`, `stats`, `affixes` and the jewellery's `globals` -- plus the `kind` it belongs to
 ## and which `tier` of that kind it is (its place in the kind's list), and its `material`, the step up
-## the materials it is worth (`tier` plus the material the kind begins at), which is what `power_of` reads.
+## the materials it is worth (where its own unlock level stands in `TIER_MIN_LEVEL`), which is what
+## `power_of` and the loot filter read.
 ##
-## Built from KINDS rather than written out, so a kind's numbers are stated once and the four names it
+## Built from KINDS rather than written out, so a kind's numbers are stated once and the names it
 ## is found under cannot drift apart. In the order the kinds are written, which is the order the
 ## panels list them in -- and within each slot the kind the game shipped with is written first, so
 ## anything asking for "a plain piece for this socket" still picks up the wooden one.
@@ -683,6 +685,8 @@ static func requirement(item: String, level: int) -> Array:
 	var attribute: String = KINDS[ITEMS[item]["kind"]].get("needs", "")
 	if attribute.is_empty() or level <= NEEDS_FROM:
 		return []
+	# ponytail: what it asks is a whole int, which passes int64 near item level 370 -- far past where a
+	# monster's health would have; `roundf` then.
 	return [attribute, roundi(scale(attribute, NEEDS_LINE, level))]
 
 
@@ -822,7 +826,7 @@ static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := f
 	var rarity := ItemRarity.roll(tier, rng, item_rarity) if forced < 0 else forced as ItemRarity.Rarity
 	var level := drop_level(tier, tile_level, rarity, rng)
 	# What it is made of is the tile's alone.
-	return Item.rolled(_weighted(rng, tile_level), rarity, rng, level)
+	return Item.rolled(weighted(rng, tile_level), rarity, rng, level)
 
 
 ## The level a body's drop comes out at. The tile's level and the body's tier give a ceiling and the
@@ -841,22 +845,30 @@ static func drop_level(tier: EnemyRoster.Tier, tile_level: int, rarity: ItemRari
 ##
 ## `level` is the tile's, not the piece's own: a poor roll on deep ground is a low piece of a good
 ## material.
-static func _weighted(rng: RandomNumberGenerator, level := 1) -> String:
-	return _tier_at(roll_kind(rng), level, rng)
+static func weighted(rng: RandomNumberGenerator, level := 1) -> String:
+	return tier_at(roll_kind(rng), level, rng)
 
 
 ## One kind by weight, and nothing more: what a bounty's card promises, the material being drawn
-## only when the piece is handed over. Integer weights, so walking the table cannot drift.
+## only when the piece is handed over.
 static func roll_kind(rng: RandomNumberGenerator) -> String:
+	return KINDS.keys()[weighted_index(KINDS.values().map(func(row: Dictionary) -> int: return int(row["weight"])), rng)]
+
+
+## One of `weights` by its place among them, drawn by them: one `randi_range` over their sum, then the
+## first weight the pick falls inside. Whole weights, so walking them cannot drift. Every weighted
+## pick in the tables is this walk -- a kind, a modifier, an orb, a rarity, a rune, a node's connectors
+## -- so what a seed draws from one of them is not that table's to change.
+static func weighted_index(weights: Array, rng: RandomNumberGenerator) -> int:
 	var total := 0
-	for kind: String in KINDS:
-		total += int(KINDS[kind]["weight"])
+	for weight: int in weights:
+		total += weight
 	var pick := rng.randi_range(0, total - 1)
-	for kind: String in KINDS:
-		pick -= int(KINDS[kind]["weight"])
+	for index in weights.size():
+		pick -= int(weights[index])
 		if pick < 0:
-			return kind
-	return KINDS.keys()[0]
+			return index
+	return 0
 
 
 ## One of a kind's materials: an even draw among every one `level` has unlocked, the plainest
@@ -865,7 +877,7 @@ static func roll_kind(rng: RandomNumberGenerator) -> String:
 ## material `level` has not reached (the greaves, which begin at iron) is dealt as its slot's
 ## plainest piece, so the slot drops as often as ever and never a material under the piece's level.
 ## `draws` is how many draws the material is the best of: a cleared board's high piece is lucky.
-static func _tier_at(kind: String, level: int, rng: RandomNumberGenerator, draws := 1) -> String:
+static func tier_at(kind: String, level: int, rng: RandomNumberGenerator, draws := 1) -> String:
 	var row: Dictionary = KINDS[kind]
 	var tiers: Array = row["tiers"]
 	var levels: Array = row.get("tier_levels", TIER_MIN_LEVEL)
@@ -894,13 +906,14 @@ static func _build_items() -> Dictionary:
 	for kind: String in KINDS:
 		var row: Dictionary = KINDS[kind]
 		var tiers: Array = row["tiers"]
-		var first := first_material(kind)
+		var levels: Array = row.get("tier_levels", TIER_MIN_LEVEL)
 		for tier in tiers.size():
 			var name := str(tiers[tier])
 			var item := {
 				"icon": name + ".png", "weight": int(row["weight"]), "slot": row["slot"],
 				"stats": row["tier_stats"][tier] if row.has("tier_stats") else row["stats"],
-				"affixes": row["affixes"], "kind": kind, "tier": tier, "material": first + tier,
+				"affixes": row["affixes"], "kind": kind, "tier": tier,
+				"material": maxi(TIER_MIN_LEVEL.find(int(levels[tier])), 0),
 			}
 			for key: String in ["globals", "icons"]:
 				if row.has(key):
@@ -909,11 +922,6 @@ static func _build_items() -> Dictionary:
 			out[name] = item
 	out.make_read_only()
 	return out
-
-
-## Which material a kind begins at, counted from the plainest: 0 for most, 1 for the greaves.
-static func first_material(kind: String) -> int:
-	return maxi(TIER_MIN_LEVEL.find(int(KINDS[kind].get("tier_levels", TIER_MIN_LEVEL)[0])), 0)
 
 
 ## The item level a kind's first material unlocks at.

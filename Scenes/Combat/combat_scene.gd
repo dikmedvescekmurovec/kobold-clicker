@@ -24,8 +24,9 @@ signal retry
 ## hears: the autodiscard rule is applied here and nowhere else, so the counter and the bag can never
 ## come to different answers about what a fight found.
 signal loot_kept(index: int, item: Item)
-## A find thrown away on sight by the player's own rule. It is counted and named here for whoever is
-## keeping the promise of a first elite drop, and it is never drawn.
+## A find thrown away on sight by the player's own rule. It is counted and named here for whoever
+## keeps the ledger -- a piece left behind still spends the promised Broken Sword -- and it is never
+## drawn.
 signal loot_discarded(index: int, item: Item)
 ## A find the player threw away by hand, from the verdict panel.
 signal drop_discarded(item: Item)
@@ -390,6 +391,10 @@ var _enemy: CombatActor
 ## The enemy's own scale, which a squash springs back to, and the tween doing it.
 var _enemy_scale := Vector2.ONE
 var _enemy_hit: Tween
+## What the enemy out now was stood up as (`_on_enemy_coming`): its size band's share of a fighter's
+## height and whether it is an elite, for standing it up again when the window changes (`_layout`).
+var _enemy_band := 1.0
+var _enemy_elite := false
 var _sound: AudioStreamPlayer
 var _hit_sound: AudioStreamPlayer
 var _crit_sound: AudioStreamPlayer
@@ -443,7 +448,7 @@ var _loot_kills: Label
 ## it: the sprites free themselves, and what anybody wants to know is whether something was announced
 ## at all, which is what `test_inventory` asks of an autodiscarded find.
 var _finds_shown := 0
-## Leaves a farm run. Only built for one -- a tile fight is left by beating it or running out.
+## The way out, in every fight: a run and a descent are ended by it, a tile fight given up.
 var _terminate: Button
 var _gave_up := false
 ## What this fight has turned up, in the order it fell. Autodiscarded finds are not in here.
@@ -520,6 +525,7 @@ func begin(encounter: Encounter, for_cell: Vector2i, ui_scale: float, variant :=
 	fight.won.connect(_on_finished.bind(true))
 	fight.lost.connect(_on_finished.bind(false))
 	_build()
+	get_viewport().size_changed.connect(_layout)
 	fight.start()
 	_refresh()
 
@@ -639,14 +645,14 @@ func _build() -> void:
 	add_child(arena)
 	_arena = arena
 
-	if fight != null and fight.dungeon:
+	if fight.dungeon:
 		_build_cave(arena, view)
 	else:
-		var backdrop := backdrop_layers(fight.env if fight != null else "", area_variant, area_layout,
-				area_sky)
+		var backdrop := backdrop_layers(fight.env, area_variant, area_layout, area_sky)
 		for i in backdrop.size():
 			# The sky's light falls on everything but the sky.
-			_add_layer(arena, view, backdrop[i][0], backdrop[i][1]).modulate = 					SKY_LIGHT[area_sky] if i > 0 else Color.WHITE
+			_add_layer(arena, view, backdrop[i][0], backdrop[i][1]).modulate = \
+					SKY_LIGHT[area_sky] if i > 0 else Color.WHITE
 
 	var light := Color.WHITE.lerp(_light(), SCENE_LIGHT)
 	_player = CombatActor.new()
@@ -662,7 +668,7 @@ func _build() -> void:
 	_enemy.self_modulate = light
 	arena.add_child(_enemy)
 	# The cave's nearest rock goes on after them both, so it is what they stand behind.
-	if fight != null and fight.dungeon:
+	if fight.dungeon:
 		_add_cave_layer(arena, view, CAVE_NEAREST)
 
 	_ground_drops = Node2D.new()
@@ -701,7 +707,7 @@ func _sfx_player(stream: AudioStream) -> AudioStreamPlayer:
 
 ## The light the fighters stand in: the cave's gloom, or the sky's.
 func _light() -> Color:
-	if fight != null and fight.dungeon:
+	if fight.dungeon:
 		return CAVE_HAZE
 	return SKY_LIGHT.get(area_sky, Color.WHITE)
 
@@ -746,33 +752,76 @@ func _add_cave_layer(arena: Node2D, view: Vector2, n: int) -> void:
 			float(CAVE_FARTHEST - n) / (CAVE_FARTHEST - CAVE_NEAREST))
 
 
-## Lays a backdrop layer on the arena over what is there, sliding at `rate` of `WALK_SPEED`. Every
-## layer is drawn on the same grid, so any of them gives the pixel the fighters snap to.
+## Lays a backdrop layer on the arena over what is there, sliding at `rate` of `WALK_SPEED`.
 func _add_layer(arena: Node2D, view: Vector2, art: Texture2D, rate: float) -> Sprite2D:
 	var sprite := layer_sprite(art)
-	_pixel = fit_layer(sprite, view, BACKDROP_BLEED)
-	sprite.position.y -= _lift(view)
 	arena.add_child(sprite)
 	_layers.append(sprite)
 	_rates.append(rate)
-	_underfoot(sprite, view, rate)
+	_fit(sprite, view)
 	return sprite
 
 
+## Fits a backdrop layer to `view`: covering it (`fit_layer`), lifted where the fight stands mid-window,
+## its foot filled in under it (`_underfoot`). Every layer is drawn on the same grid, so any of them
+## gives the pixel the fighters snap to.
+func _fit(layer: Sprite2D, view: Vector2) -> void:
+	_pixel = fit_layer(layer, view, BACKDROP_BLEED)
+	layer.position.y -= _lift(view)
+	_underfoot(layer, view)
+
+
 ## A lifted layer stops short of the window's foot: its own bottom rows (`UNDERFOOT_ROWS`) repeat on down
-## from its foot to the window's, a child drawn straight after it and sliding with it.
-func _underfoot(layer: Sprite2D, view: Vector2, rate: float) -> void:
+## from its foot to the window's, a child drawn straight after it and sliding with it -- made the first
+## time the layer falls short, and hidden whenever the window is one it reaches the foot of.
+func _underfoot(layer: Sprite2D, view: Vector2) -> void:
+	var under: Sprite2D = layer.get_child(0) if layer.get_child_count() > 0 else null
 	var foot := layer.position.y + layer.texture.get_height() * layer.scale.y
+	if under != null:
+		under.visible = foot < view.y
 	if foot >= view.y:
 		return
-	var art := layer.texture.get_image()
-	var rows := art.get_region(Rect2i(0, art.get_height() - UNDERFOOT_ROWS, art.get_width(), UNDERFOOT_ROWS))
-	var under := layer_sprite(ImageTexture.create_from_image(rows))
-	under.position = Vector2(0.0, art.get_height())
+	if under == null:
+		var art := layer.texture.get_image()
+		var rows := art.get_region(Rect2i(0, art.get_height() - UNDERFOOT_ROWS, art.get_width(), UNDERFOOT_ROWS))
+		under = layer_sprite(ImageTexture.create_from_image(rows))
+		under.position = Vector2(0.0, art.get_height())
+		# In step with a layer that has slid already.
+		under.region_rect.position.x = layer.region_rect.position.x
+		layer.add_child(under)
+		_layers.append(under)
+		_rates.append(_rates[_layers.find(layer)])
 	under.region_rect.size.y = ceilf((view.y - foot) / layer.scale.y)
-	layer.add_child(under)
-	_layers.append(under)
-	_rates.append(rate)
+
+
+## Lays the arena out to the window again when it changes -- a resize, a phone turned -- as `CampScene`
+## does: every backdrop layer fitted to it, both fighters at the size and on the ground it gives them,
+## and the HUD and whichever panel is up put back in their places. What a body threw stays where it
+## fell or was falling to: it is gone in a moment.
+func _layout() -> void:
+	if fight == null:
+		return
+	var view := _size()
+	for layer: Sprite2D in _layers.duplicate():
+		if layer.get_parent() == _arena:
+			_fit(layer, view)
+	# A hop or a jolt under way would land on the old ground, at the old size.
+	for tween: Tween in [_hop, _enemy_hit]:
+		if tween != null and tween.is_valid():
+			tween.kill()
+	_player.fit(_actor_height(view), _snap(view))
+	_player.position = Vector2(view.x * PLAYER_X, view.y * _ground())
+	if _enemy.sprite_frames != null:
+		_enemy.modulate = Color.WHITE
+		_enemy.fit(_actor_height(view) * _enemy_band, _snap(view), _enemy_elite)
+		_enemy_scale = _enemy.scale
+		_enemy.position = Vector2(view.x * ENEMY_X, view.y * _ground())
+		_slide_enemy()
+	_refresh()
+	if _result.visible:
+		_centre_result()
+	if _loot_panel.visible:
+		_centre_loot()
 
 
 ## The hero walking on: while the next body is coming in the backdrop slides past, the nearest layer
@@ -780,7 +829,8 @@ func _underfoot(layer: Sprite2D, view: Vector2, rate: float) -> void:
 ## show, so it asks the animation level, and the fight knows nothing of it. Each layer is wrapped
 ## round its width, which is where it repeats anyway.
 func _scroll(delta: float) -> void:
-	if fight.phase != Encounter.Phase.WALKING_IN or Settings.animations == Settings.Anim.NONE 			or not _walks_on():
+	if fight.phase != Encounter.Phase.WALKING_IN or Settings.animations == Settings.Anim.NONE \
+			or not _walks_on():
 		return
 	for i in _layers.size():
 		var region := _layers[i].region_rect
@@ -981,7 +1031,7 @@ func _build_hud() -> void:
 	_xp_label = _sum(sums, XP_GEM, Vector2(XP_GEM.get_width(), XP_GEM.get_height()) * XP_GEM_SCALE)
 	_xp_row = _xp_label.get_parent()
 	_xp_row.hide()
-	# The bodies, as a count behind a skull. The pack's 32 px skull at half size, the orb tray's 2:1.
+	# The bodies, as a count behind the crossed swords, at the coin's size.
 	_kills_label = _sum(sums, KILLS_MARK, Vector2(Coins.SIZE, Coins.SIZE))
 	# What the fight left behind, under the sums: the finds on the bag's light panel and the orbs in a
 	# row under them. Kept even when it was lost, so this is where that promise is visibly kept.
@@ -1151,8 +1201,10 @@ func _hop_player() -> void:
 	var ground := _size().y * _ground()
 	_player.position.y = ground
 	_hop = create_tween()
-	_hop.tween_property(_player, "position:y", ground - SWING_HOP, SWING_HOP_TIME / 2.0) 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	_hop.tween_property(_player, "position:y", ground, SWING_HOP_TIME / 2.0) 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	_hop.tween_property(_player, "position:y", ground - SWING_HOP, SWING_HOP_TIME / 2.0) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_hop.tween_property(_player, "position:y", ground, SWING_HOP_TIME / 2.0) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 
 
 ## The number that floats off the enemy. This is the only place the player can read what their gear
@@ -1366,13 +1418,16 @@ func _show_xp(amount: int) -> void:
 		# Up and out, the first half of a throw -- a gem never comes back down.
 		tween.set_parallel(true)
 		tween.tween_property(gem, "position:x", landed.x, XP_POP_TIME)
-		tween.tween_property(gem, "position:y", from.y - XP_POP_RISE, XP_POP_TIME) 				.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tween.tween_property(gem, "position:y", from.y - XP_POP_RISE, XP_POP_TIME) \
+				.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tween.set_parallel(false)
 		if xp_target.x >= 0.0:
 			# Then into the bar, gathering speed, shrinking and fading over the last stretch.
 			var fade := XP_FLY_TIME * XP_FADE_SHARE
-			tween.tween_property(gem, "position", xp_target, XP_FLY_TIME) 					.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-			tween.parallel().tween_property(gem, "scale", gem.scale * 0.5, fade) 					.set_delay(XP_FLY_TIME - fade)
+			tween.tween_property(gem, "position", xp_target, XP_FLY_TIME) \
+					.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+			tween.parallel().tween_property(gem, "scale", gem.scale * 0.5, fade) \
+					.set_delay(XP_FLY_TIME - fade)
 			tween.parallel().tween_property(gem, "modulate:a", 0.0, fade).set_delay(XP_FLY_TIME - fade)
 		else:
 			tween.tween_property(gem, "modulate:a", 0.0, THROW_FADE)
@@ -1461,11 +1516,12 @@ func _on_enemy_coming(_index: int, enemy_name: String, _hp: float) -> void:
 		return
 	var view := _size()
 	_enemy.show()
-	var band: float = SIZE_HEIGHT[EnemyRoster.size_of(enemy_name)]
+	_enemy_band = SIZE_HEIGHT[EnemyRoster.size_of(enemy_name)]
+	_enemy_elite = fight.on_elite()
 	if _enemy_hit != null and _enemy_hit.is_valid():
 		_enemy_hit.kill()
 	_enemy.modulate = Color.WHITE
-	_enemy.setup_enemy(enemy_name, _actor_height(view) * band, _snap(view), fight.on_elite())
+	_enemy.setup_enemy(enemy_name, _actor_height(view) * _enemy_band, _snap(view), _enemy_elite)
 	_enemy_scale = _enemy.scale
 	_enemy.position = Vector2(view.x * OFFSCREEN_X, view.y * _ground())
 	_enemy.play("walk")
@@ -1596,8 +1652,8 @@ func _on_enemy_died(index: int) -> void:
 			Juice.hit_stop(get_tree(), STOP_KILL)
 
 
-## The one place a find is looked at. One the player has said to leave behind is counted and passed on to
-## whoever is keeping the elite promise, and that is all that happens to it: it does not join
+## The one place a find is looked at. One the player has said to leave behind is counted and passed on
+## to whoever keeps the ledger, and that is all that happens to it: it does not join
 ## `_drops`, does not move the counter, is never thrown into the arena and appears in neither list.
 ## Everything else goes on exactly as it did, and leaves by `loot_kept`.
 func _on_loot_dropped(index: int, item: Item) -> void:
@@ -1733,9 +1789,8 @@ func _place_corners(view: Vector2) -> void:
 	var loot := _loot_button.get_combined_minimum_size() * _ui_scale
 	_loot_button.position = Vector2(safe.end.x - loot.x - HUD_MARGIN, safe.end.y - loot.y - HUD_MARGIN)
 	_tint_loot_button()
-	if _terminate != null:
-		var leave := _terminate.get_combined_minimum_size() * _ui_scale
-		_terminate.position = Vector2(safe.end.x - leave.x - HUD_MARGIN, safe.position.y + HUD_MARGIN)
+	var leave := _terminate.get_combined_minimum_size() * _ui_scale
+	_terminate.position = Vector2(safe.end.x - leave.x - HUD_MARGIN, safe.position.y + HUD_MARGIN)
 
 
 ## An orb off a body, thrown out of it the way a find is. Plain, but for a good orb, which stands the
@@ -1830,10 +1885,9 @@ func _on_finished(won: bool) -> void:
 		_auto_label.text = ("1 item discarded automatically" if _auto_discarded == 1
 				else "%d items discarded automatically" % _auto_discarded)
 		_auto_label.show()
-	# The way out of a run goes with the run. Leaving it standing under the verdict would put two
+	# The way out of a fight goes with the fight. Leaving it standing under the verdict would put two
 	# buttons on the screen for the one thing left to do.
-	if _terminate != null:
-		_terminate.hide()
+	_terminate.hide()
 	_result_drops.fill(_drops, fight.orbs)
 	_result.show()
 	Juice.pop_in(_result, _ui_scale)

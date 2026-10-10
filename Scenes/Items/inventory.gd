@@ -241,8 +241,10 @@ var achievements_new: Array[String] = []
 ## longest of each streak. Carried through a transcension with the achievements.
 var tally := {}
 
-## Said at the end of every `save`, which is what everything that changes the player ends in: the main
-## scene checks the achievements on it (`Achievements.newly_earned`).
+## Said at the end of every `save`, written or not, which is what everything that changes the player
+## ends in: the main scene checks the achievements on it (`Achievements.earn`), arms a fight again and
+## redraws what the corner says. All of that follows the player as they are, which a disk that refused
+## the write has not changed.
 signal save_written
 
 ## What the fortuneteller has sold that belongs to the player rather than to a town: the chest the
@@ -250,9 +252,13 @@ signal save_written
 ## keys are `FortuneTeller`'s, read through its accessors -- this file never names that class.
 var fortunes := {}
 
-## The unix hour this inventory was last written, stamped by `save` and read back by `load_from`.
-## What the main scene pays a camp from at start-up; 0 is never saved, and owed nothing.
+## The unix hour this inventory was last written, stamped by a `save` that got there and read back by
+## `load_from`. What the main scene pays a camp from at start-up; 0 is never saved, and owed nothing.
 var saved_at := 0.0
+## What the last `load_from` could not keep, by name: a piece, a modifier, a stat, an orb, a rune, a
+## curse, a unique or an achievement the save holds and this build has not got, or a piece with nowhere
+## left to go. Said in the log, since the next save writes it away. Never saved.
+var lost: Array[String] = []
 
 ## The levels the player has told the game to stop bringing. Levels rather than items, because a
 ## level is what a section of the bag is, and rarity is not consulted: a marked level is done with,
@@ -625,7 +631,8 @@ static func _spot_key(spot: Vector2i) -> String:
 ## anything; nothing is spent when it would not.
 func use_rune(rune: String, spot: Vector2i, own: Array, rng := RandomNumberGenerator.new()) -> bool:
 	# Asked of the work as read first, so a rune refused leaves no empty record on the tile.
-	if rune_count(rune) <= 0 or not RuneTable.can_apply(rune, own, rune_work(spot)) 			or not RuneTable.apply(rune, own, rune_state(spot), rng):
+	if rune_count(rune) <= 0 or not RuneTable.can_apply(rune, own, rune_work(spot)) \
+			or not RuneTable.apply(rune, own, rune_state(spot), rng):
 		return false
 	runes[rune] = rune_count(rune) - 1
 	if rune_count(rune) <= 0:
@@ -683,11 +690,12 @@ func add_xp(amount: int) -> int:
 ## are the counted ones, Crown, Brand and Echo done, so the fight and the character page read those.
 func stats() -> Dictionary:
 	var worn := effects()
-	var points := attributes()
-	var dolls := _counted_dolls()
-	var tree := _tree()
-	var flat := _skills_worth(skills.flat(tree[0], tree[1]))
-	var percent := _skills_worth(skills.percent(tree[0], tree[1]))
+	var dolls := _counted_dolls(worn)
+	var tree := _tree(worn, dolls)
+	var points := attributes(worn, dolls, tree)
+	var worth := skill_worth(worn, points)
+	var flat := _skills_worth(skills.flat(tree[0], tree[1]), worth)
+	var percent := _skills_worth(skills.percent(tree[0], tree[1]), worth)
 	if "spikes" in worn:
 		var armour := float(dolls[0].totals(flat, percent, dolls[1]).get("armor", 0.0))
 		flat["damage"] = float(flat.get("damage", 0.0)) + armour * _dial("spiked_helm", "share") / 100.0
@@ -732,7 +740,7 @@ func stats() -> Dictionary:
 			out.erase(attribute)
 			continue
 		out[attribute] = points[attribute]
-		var gift := attribute_gift(attribute, points[attribute])
+		var gift := attribute_gift(attribute, points[attribute], worn)
 		var stat: String = gift[0]
 		if stat == "xp_more":
 			out[stat] = float(out.get(stat, 0.0)) + gift[1]
@@ -766,8 +774,7 @@ static func attribute_bonus(points: float) -> float:
 ## What `points` of `attribute` add, as [the stat, the percent]: `ATTRIBUTE_GIVES`' stat at
 ## `attribute_bonus`, but intelligence gives damage at its rank's times under the Scholar's Circlet --
 ## and all of it a quarter more under the Zealot's Brand at IV.
-func attribute_gift(attribute: String, points: float) -> Array:
-	var worn := effects()
+func attribute_gift(attribute: String, points: float, worn := effects()) -> Array:
 	var gift := [ATTRIBUTE_GIVES[attribute], attribute_bonus(points)]
 	if attribute == "intelligence" and "scholar" in worn:
 		gift = ["damage", attribute_bonus(points) * _dial("scholars_circlet", "times")]
@@ -809,12 +816,10 @@ static func _points(totals: Dictionary, attribute: String) -> float:
 ## so it can take what the Crown gave. The skill tree's go in with the gear's, before any of them: the
 ## root's and every stone's holding a point (`Skills.attributes`), never at `skill_worth`, which the
 ## Abacus reads them to work out. The dolls are the counted ones (`_counted_dolls`), so an heirloom the
-## Echo at IV lifts a plus lifts its attribute lines with it.
-func attributes() -> Dictionary:
-	var worn := effects()
-	var dolls := _counted_dolls()
+## Echo at IV lifts a plus lifts its attribute lines with it. `stats` hands over what it has already
+## worked out; anyone else asks with nothing.
+func attributes(worn := effects(), dolls := _counted_dolls(worn), tree := _tree(worn, dolls)) -> Dictionary:
 	var out := _attribute_sums(dolls[0], dolls[1])
-	var tree := _tree()
 	var grown := skills.attributes(tree[0], tree[1])
 	for attribute: String in out:
 		out[attribute] += float(grown[attribute])
@@ -842,17 +847,19 @@ func attributes() -> Dictionary:
 
 ## What a stone's rank is worth against what it carries: double under Hard Lessons, half again under the
 ## Specialist, and a percent more for every so much intelligence (its rank's) under each Sage's Abacus.
-func skill_worth() -> float:
+func skill_worth(worn := effects(), points := {}) -> float:
 	var worth := 1.0 + (1.0 if Curses.HARD_LESSONS in curses else 0.0) \
 			+ (0.5 if Curses.SPECIALIST in curses else 0.0)
-	var abaci := effects().count("abacus")
+	var abaci := worn.count("abacus")
 	if abaci > 0:
-		worth *= 1.0 + abaci * float(attributes()["intelligence"]) / _dial("sages_abacus", "intelligence") / 100.0
+		if points.is_empty():
+			points = attributes(worn)
+		worth *= 1.0 + abaci * float(points["intelligence"]) / _dial("sages_abacus", "intelligence") / 100.0
 	return worth
 
 
 ## Why a point cannot go into the stone at `path`, or "" where it can: the tree's own rules, and before
-## them the Specialist's -- only one of the root's three branches may hold points, the root on none of
+## them the Specialist's -- only one of the root's branches may hold points, the root on none of
 ## them. The skills page asks here, never `skills`.
 func why_not_skill(path: String) -> String:
 	if Curses.SPECIALIST in curses and not path.is_empty():
@@ -873,9 +880,8 @@ func rank_up_skill(path: String) -> bool:
 ## What the tree is told on top of its own ranks: [ranks more on every stone holding a point -- the
 ## Sage's Abacus at IV -- and attribute -> ranks more on the stones of that base, a helmet's line on
 ## either doll (`<attribute>_stones`)].
-func _tree() -> Array:
-	var extra := 1 if "abacus" in effects() and _peak("sages_abacus") else 0
-	var dolls := _counted_dolls()
+func _tree(worn := effects(), dolls := _counted_dolls(worn)) -> Array:
+	var extra := 1 if "abacus" in worn and _peak("sages_abacus") else 0
 	var gear := dolls[0].totals({}, {}, dolls[1])
 	var bases := {}
 	for attribute: String in ATTRIBUTE_GIVES:
@@ -896,9 +902,8 @@ func place_stone(stone: Item, path: String) -> bool:
 
 ## What the learned skills add up to at `skill_worth`, as a copy: the capstones' effects are not
 ## numbers and are not doubled.
-func _skills_worth(sums: Dictionary) -> Dictionary:
+func _skills_worth(sums: Dictionary, worth := skill_worth()) -> Dictionary:
 	var out := {}
-	var worth := skill_worth()
 	for stat: String in sums:
 		out[stat] = float(sums[stat]) * worth
 	return out
@@ -957,8 +962,7 @@ static func _attribute_lines(piece: Item) -> int:
 ## Purist's Seal is worn, copies of them with every heirloom one plus higher (`Item.ascend`) and every
 ## pure piece's modifiers `PURIST_MODS` over. Copies, so nothing the player holds is changed by being
 ## counted; `stats` and `attributes` both total these.
-func _counted_dolls() -> Array[Equipment]:
-	var worn := effects()
+func _counted_dolls(worn := effects()) -> Array[Equipment]:
 	var echo := "echo" in worn and _peak("heirlooms_echo")
 	var purist := "purist" in worn and _peak("purists_seal")
 	var dolls: Array[Equipment] = [equipment, stash().equipment]
@@ -1223,7 +1227,7 @@ func save(path := SAVE_PATH) -> bool:
 	var kept := []
 	for item in stash().items:
 		kept.append(item.to_dict())
-	saved_at = Time.get_unix_time_from_system()
+	var stamp := Time.get_unix_time_from_system()
 	# Indented, so the save can be read and edited by a person.
 	var written := SafeFile.write(path, JSON.stringify({
 		"version": VERSION,
@@ -1252,7 +1256,7 @@ func save(path := SAVE_PATH) -> bool:
 		"uniques_found": uniques_found,
 		"uniques_new": uniques_new,
 		"fortunes": fortunes,
-		"saved_at": saved_at,
+		"saved_at": stamp,
 		"heirlooms": {"items": kept, "equipped": stash().equipment.to_dict()},
 		"super_orbs": super_orbs,
 		"walls_credited": walls_credited,
@@ -1263,6 +1267,8 @@ func save(path := SAVE_PATH) -> bool:
 		"achievements_new": achievements_new,
 		"tally": tally,
 	},"\t"))
+	if written:
+		saved_at = stamp
 	save_written.emit()
 	return written
 
@@ -1272,6 +1278,8 @@ func save(path := SAVE_PATH) -> bool:
 ## unparseable, the wrong shape, from a newer build -- also comes back empty, with the reason appended
 ## to `problem`: the caller must then **never save**, because the first write would replace everything
 ## the player owns with nothing. The same rule as `MapSave.load_from`, and an Array for its reason.
+## A field a hand-edited file wrote as the wrong kind of thing reads as if it were absent; what the
+## save holds and this build cannot keep is left out, named in `lost` and said in the log.
 static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var inventory := Inventory.new()
 	# The skill tree's root has the slots the player's walls opened (`SkillTree.root_slots`): none past
@@ -1291,13 +1299,23 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 		problem.append("it is not a save file")
 		return inventory
 	var data: Dictionary = reader.data
-	inventory.first_sword_taken = bool(data.get("first_sword_taken", true))
-	inventory.first_orb_taken = bool(data.get("first_orb_taken", true))
+	inventory.first_sword_taken = _flag(data.get("first_sword_taken"), true)
+	inventory.first_orb_taken = _flag(data.get("first_orb_taken"), true)
 	var seen: Variant = data.get("tips", [])
 	if typeof(seen) == TYPE_ARRAY:
 		for tip: Variant in seen:
 			inventory.tips.append(str(tip))
-	var version := int(data.get("version", 1))
+	# No version at all is the first shape there was. One that is not a number is a file nobody can say
+	# the shape of, and reading it as that first shape would hand back an empty bag to be saved over it.
+	# And one with neither a version nor that first shape's `counts` is some other file altogether.
+	if not data.has("version") and not data.has("counts"):
+		problem.append("it is not a save file")
+		return Inventory.new()
+	var stamp: Variant = data.get("version", 1)
+	if typeof(stamp) not in [TYPE_INT, TYPE_FLOAT]:
+		problem.append("it does not say which version of the game wrote it")
+		return Inventory.new()
+	var version := int(stamp)
 	if version > VERSION:
 		# A save from a newer build. Guessing at a shape never seen is how a save gets eaten; leaving
 		# it alone means the build that wrote it can still read it.
@@ -1305,19 +1323,20 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 		return Inventory.new()
 	if version < 2:
 		inventory._read_v1(data)
+		inventory._say_lost(path)
 		return inventory
 	var saved: Variant = data.get("items", [])
 	if typeof(saved) != TYPE_ARRAY:
 		problem.append("it has no list of items")
 		return Inventory.new()
 	for entry: Variant in saved:
-		var item := Item.from_dict(entry)
+		var item := Item.from_dict(entry, inventory.lost)
 		if item != null:
 			inventory.items.append(item)
 	# Version 2 knew nothing about wearing anything, so its whole save is bag and the player starts
 	# with bare hands. There is nothing to convert: `equipped` is simply absent, and an absent key
 	# and an empty set read the same.
-	inventory.equipment = Equipment.from_dict(data.get("equipped", {}))
+	inventory.equipment = Equipment.from_dict(data.get("equipped", {}), inventory.lost)
 	# Version 4 knew nothing about a rule, and an absent key reads as no rules -- which is what every
 	# bag had until now. Anything that is not a number is stepped over rather than guessed at.
 	var rules: Variant = data.get("autodiscard", [])
@@ -1370,7 +1389,7 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	# Version 33 made the skill tree the player's own: an absent tree is the root alone, with every point
 	# free. Read after the level, because what a save may have spent is counted off it.
 	inventory.skills = Skills.from_dict(data.get("skill_tree", null), data.get("skill_ranks", {}),
-			inventory.level)
+			inventory.level, inventory.lost)
 	# Version 9 knew nothing about towns, and an absent key reads as no settlement walked into yet --
 	# which is what every save had before there was anything in one to do.
 	inventory.towns = TownState.from_dict(data.get("towns", {}))
@@ -1384,6 +1403,7 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 		for orb: Variant in currency:
 			var named := OrbTable.current(str(orb))
 			if not OrbTable.ORBS.has(named):
+				inventory.lost.append(str(orb))
 				continue
 			var held: Variant = currency[orb]
 			if typeof(held) in [TYPE_INT, TYPE_FLOAT]:
@@ -1392,13 +1412,15 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var found_runes: Variant = data.get("runes", {})
 	if typeof(found_runes) == TYPE_DICTIONARY:
 		for rune: Variant in found_runes:
+			if not RuneTable.has(str(rune)):
+				inventory.lost.append(str(rune))
 			var count: Variant = found_runes[rune]
 			if typeof(count) in [TYPE_INT, TYPE_FLOAT]:
 				inventory.add_rune(str(rune), maxi(0, int(count)))
 	var worked: Variant = data.get("runed", {})
 	if typeof(worked) == TYPE_DICTIONARY:
 		for key: Variant in worked:
-			var state := RuneTable.from_dict(worked[key])
+			var state := RuneTable.from_dict(worked[key], inventory.lost)
 			if RuneTable.working(state):
 				inventory.runed[str(key)] = state
 	# Version 10 knew nothing about uniques: an absent key is none found. An id this build no longer
@@ -1406,6 +1428,8 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var found: Variant = data.get("uniques_found", [])
 	if typeof(found) == TYPE_ARRAY:
 		for id: Variant in found:
+			if not UniqueTable.UNIQUES.has(str(id)):
+				inventory.lost.append(str(id))
 			inventory.note_unique(str(id))
 	# Absent in an older save: nothing is new. Only what is also found counts.
 	inventory.uniques_new.clear()
@@ -1431,18 +1455,21 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 		var kept: Variant = heir.get("items", [])
 		if typeof(kept) == TYPE_ARRAY:
 			for entry: Variant in kept:
-				var item := Item.from_dict(entry)
+				var item := Item.from_dict(entry, inventory.lost)
 				if item != null:
 					inventory.stash().items.append(item)
-		inventory.stash().equipment = Equipment.from_dict(heir.get("equipped", {}))
+		inventory.stash().equipment = Equipment.from_dict(heir.get("equipped", {}), inventory.lost)
 	# Version 14 called them picks and spent them on making heirlooms; what is left of them are orbs.
-	inventory.super_orbs = maxi(0, int(data.get("super_orbs", data.get("heirloom_picks", 0))))
-	inventory.walls_credited = maxi(0, int(data.get("walls_credited", 0)))
+	inventory.super_orbs = maxi(0, _whole(data.get("super_orbs", data.get("heirloom_picks"))))
+	inventory.walls_credited = maxi(0, _whole(data.get("walls_credited")))
 	# Version 17 knew nothing about curses: an absent key is a world under none. One this build no
 	# longer has is dropped by name, the way a retired orb is.
 	var cursed: Variant = data.get("curses", [])
 	if typeof(cursed) == TYPE_ARRAY:
 		inventory.curses = Curses.known(cursed)
+		for curse: Variant in cursed:
+			if not Curses.CURSES.has(curse):
+				inventory.lost.append(str(curse))
 	# Version 19 knew nothing of either: no land chosen, no find counted twice. A name that is not a
 	# unique's is dropped, and one that is not a land's simply never matches a fight's.
 	for entry: Variant in _strings(data.get("homeland", [])):
@@ -1457,11 +1484,14 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 		for entry: String in _strings(earned):
 			if Achievements.ACHIEVEMENTS.has(entry):
 				inventory.achievements[entry] = 1
+			else:
+				inventory.lost.append(entry)
 	elif typeof(earned) == TYPE_DICTIONARY:
 		for entry: Variant in earned:
-			if Achievements.ACHIEVEMENTS.has(str(entry)) and typeof(earned[entry]) in [TYPE_INT, TYPE_FLOAT] \
-					and int(earned[entry]) >= 1:
-				inventory.achievements[str(entry)] = mini(int(earned[entry]), UniqueTable.PEAK)
+			if not Achievements.ACHIEVEMENTS.has(str(entry)):
+				inventory.lost.append(str(entry))
+			elif _whole(earned[entry]) >= 1:
+				inventory.achievements[str(entry)] = mini(_whole(earned[entry]), UniqueTable.PEAK)
 	for entry: String in _strings(data.get("achievements_new", [])):
 		if inventory.achievements.has(entry) and not inventory.achievements_new.has(entry):
 			inventory.achievements_new.append(entry)
@@ -1473,7 +1503,15 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	# Version 28 counted no wall ever broken: this world's are where the lifetime count starts.
 	if version < 29 and inventory.walls_credited > int(inventory.tally.get("walls", 0)):
 		inventory.tally["walls"] = inventory.walls_credited
+	inventory._say_lost(path)
 	return inventory
+
+
+## Says in the log what `load_from` could not keep (`lost`), which the next save writes away for good.
+func _say_lost(path: String) -> void:
+	if not lost.is_empty():
+		print("Inventory: %s holds %d thing(s) this build cannot keep, gone at the next save: %s"
+				% [path, lost.size(), ", ".join(PackedStringArray(lost))])
 
 
 ## The strings in a saved list, and nothing else that a hand-edited file put there.
@@ -1489,20 +1527,25 @@ static func _strings(saved: Variant) -> Array[String]:
 ## The old shape: item name -> how many were held. Each becomes that many plain common items with no
 ## modifiers, which is the honest reading of a save that never knew an item could be anything more.
 ## Handing them rarities would be handing the player power for having played earlier. The next save
-## writes the new shape, so this runs at most once per file.
+## writes the new shape, so this runs at most once per file. Read the way any saved piece is
+## (`Item.from_dict`), so a name since changed is the piece it is now (`LootTable.RENAMED`) and each
+## carries the table's numbers, as a piece saved before pieces kept their own does.
 func _read_v1(data: Dictionary) -> void:
 	var counts: Variant = data.get("counts", {})
 	if typeof(counts) != TYPE_DICTIONARY:
 		return
-	for type: String in counts:
-		if not LootTable.ITEMS.has(type):
-			continue
-		for i in int(counts[type]):
-			var item := Item.new()
-			item.type = type
-			items.append(item)
+	for type: Variant in counts:
+		for i in _whole(counts[type]):
+			var item := Item.from_dict({"type": type, "rarity": ItemRarity.NAMES[ItemRarity.Rarity.COMMON]}, lost)
+			if item != null:
+				items.append(item)
 
 
 ## A saved count read back as a whole number, or 0 where a hand-edited file holds anything else.
 static func _whole(value: Variant) -> int:
 	return int(value) if typeof(value) in [TYPE_INT, TYPE_FLOAT] else 0
+
+
+## A saved flag read back, or `otherwise` where a hand-edited file holds anything but one.
+static func _flag(value: Variant, otherwise := false) -> bool:
+	return bool(value) if typeof(value) in [TYPE_BOOL, TYPE_INT, TYPE_FLOAT] else otherwise

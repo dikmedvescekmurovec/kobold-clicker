@@ -29,3 +29,12 @@ static func write(path: String, text: String) -> bool:
 static func recover(path: String) -> void:
 	if not FileAccess.file_exists(path) and FileAccess.file_exists(path + TMP):
 		DirAccess.rename_absolute(path + TMP, path)
+
+
+## Deletes `path` and any write of it left half-way, which `recover` would otherwise put back as the
+## save. Whether both are gone: a file that is locked stays, and the caller must not go on as if it went.
+static func remove(path: String) -> bool:
+	for file: String in [path + TMP, path]:
+		if FileAccess.file_exists(file):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(file))
+	return not FileAccess.file_exists(path) and not FileAccess.file_exists(path + TMP)

@@ -1,6 +1,6 @@
 extends "res://tests/harness.gd"
 ## Headless checks for environment and town generation. Run from the project folder:
-##   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/test_generation.gd
+##   python tests/run_all.py generation
 
 const ENV_SEEDS := 200
 ## Never MapSave.SAVE_PATH: these tests write and delete, and that is the player's own map.
@@ -8,9 +8,33 @@ const TEST_MAP_PATH := "user://test_generation_map.json"
 const SCRATCH_INVENTORY := "user://test_generation_inventory.json"
 ## A window for the generator tests of their own, 20x11 around cell (0, 0): 220 cells.
 const GEN_RECT := Rect2i(-10, -5, 20, 11)
+## What two seeds generate, each part as the SHA-256 of a canonical spelling of it (`_test_golden_seeds`):
+## cells row by row and spots sorted, so a digest is of what was made and never of the order a dictionary
+## was filled in. SHA-256 rather than `hash()`, whose value is the engine's own business. Measured on
+## the generators as they stood on 2026-10-10. Every existing save holds land these made and derives the
+## rest from the same seeds, so a digest that moves is a world that moved under its player: put the
+## generator back, never the digest.
+const GOLDEN := {
+	7: {
+		"envs": "59442978a442c4a808bf322a68a925ce0496e1910c9425f4f0e6491e1ada2ec0",
+		"towns": "8647058ba4d753d6b722d79553527c93975a1d494987ddec36255a0565ae836d",
+		"map": "2e77f11ebdad2570833e4cc024051ba89bab8668f8b3d34e5952d4c04f13f6d9",
+	},
+	12345: {
+		"envs": "ae60f16cb763e25db1f1bdd785d3b7b392b26375b7bb49d63b0810883ff71d2b",
+		"towns": "73cf51a8034e4a6919f9494f795dfba323b1a9916e290daebc84f3c12d5188a0",
+		"map": "a5d776f418d1738a7cecdaed9eb31f707907f9e7dc56827c74af8ce6c2b90a30",
+	},
+}
+## Where the golden maps are built: the main scene's own `map_origin`.
+const GOLDEN_ORIGIN := Vector2i(128, 128)
 
 
 func _run() -> void:
+	_check(_test_golden_seeds() == true, "golden seed tests ran to the end")
+	_check(_test_engine_primitives() == true, "engine primitive tests ran to the end")
+	_check(_test_orders_and_edges() == true, "order and band edge tests ran to the end")
+	_check(_test_who_names_whom() == true, "naming rule tests ran to the end")
 	_check(_test_hex_grid() == true, "hex grid tests ran to the end")
 	_check(_test_environments() == true, "environment tests ran to the end")
 	_check(_test_environment_growth() == true, "environment growth tests ran to the end")
@@ -24,9 +48,132 @@ func _run() -> void:
 	_check(_test_ring_towns() == true, "ring town tests ran to the end")
 	_check(_test_tile_levels() == true, "tile level tests ran to the end")
 	_check(_test_map_saving() == true, "map save tests ran to the end")
+	_check(_test_old_saves() == true, "old save tests ran to the end")
 	_check(_test_the_cave() == true, "cave tests ran to the end")
+	_check(_test_what_a_fall_draws() == true, "wall fall drawing tests ran to the end")
 	_check(await _test_the_map_comes_back() == true, "map reload tests ran to the end")
 	_report("generation")
+
+
+## Seeds generate what they always generated: the environments of a window, the town world, and the map
+## `MapBuilder.create` makes of both -- its tiles, its roads and the links they were routed for, its chests
+## and its start town. Through `create` only: land grown after a reload is generated from another call
+## and legitimately differs.
+func _test_golden_seeds() -> bool:
+	var map: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
+	root.add_child(map)
+	for seed_value: int in GOLDEN:
+		var view := MapBuilder.create(map, TownWorld.generate(seed_value, GOLDEN_ORIGIN), GOLDEN_ORIGIN, seed_value)
+		var got := {
+			"envs": _spell_cells(EnvironmentGenerator.generate(GEN_RECT, seed_value), GEN_RECT),
+			"towns": _spell_towns(TownWorld.generate(seed_value).to_dict()),
+			"map": _spell_map(view),
+		}
+		for part: String in got:
+			var digest: String = got[part].sha256_text()
+			_check(digest == GOLDEN[seed_value][part],
+					"seed %d generates the %s it always did (%s)" % [seed_value, part, digest])
+	map.queue_free()
+	return true
+
+
+## One name a cell, row by row over `rect`, and "." where there is none.
+func _spell_cells(cells: Dictionary, rect: Rect2i) -> String:
+	var rows := PackedStringArray()
+	for y in range(rect.position.y, rect.end.y):
+		var row := PackedStringArray()
+		for x in range(rect.position.x, rect.end.x):
+			row.append(str(cells.get(Vector2i(x, y), ".")))
+		rows.append(",".join(row))
+	return "\n".join(rows)
+
+
+## A town world as `TownWorld.to_dict` writes it, its towns and its links sorted and the tiers by name.
+func _spell_towns(world: Dictionary) -> String:
+	var spots := PackedStringArray()
+	for i in range(0, world["spots"].size(), 3):
+		spots.append("%d,%d=%s" % [world["spots"][i], world["spots"][i + 1], world["tiers"][world["spots"][i + 2]]])
+	spots.sort()
+	var links := PackedStringArray()
+	for i in range(0, world["links"].size(), 4):
+		links.append("%d,%d-%d,%d" % [world["links"][i], world["links"][i + 1], world["links"][i + 2],
+				world["links"][i + 3]])
+	links.sort()
+	return "%dx%d|%d|%s|%s" % [world["size"][0], world["size"][1], world["seed"], ";".join(spots), ";".join(links)]
+
+
+## A freshly created map: its window, every cell's tile, the roads by spot, the links routed (the keys the
+## save writes), the cells that hold a chest and the start town.
+func _spell_map(view: MapBuilder) -> String:
+	var roads := PackedStringArray()
+	for spot: Vector2i in view._roads:
+		roads.append("%d,%d=%d" % [spot.x, spot.y, view._roads[spot]])
+	roads.sort()
+	var links := PackedStringArray(view._routed_links.keys())
+	links.sort()
+	var chests := PackedStringArray()
+	for y in range(view.rect.position.y, view.rect.end.y):
+		for x in range(view.rect.position.x, view.rect.end.x):
+			if view.has_chest(Vector2i(x, y)):
+				chests.append("%d,%d" % [x, y])
+	return "\n".join(["%d,%d,%d,%d" % [view.rect.position.x, view.rect.position.y, view.rect.size.x, view.rect.size.y],
+			_spell_cells(view._tiles, view.rect), ";".join(roads), ";".join(links), ";".join(chests),
+			"%d,%d" % [view.start_town.x, view.start_town.y]])
+
+
+## What a saved world leans on the engine for, measured on Godot 4.7.2. `hash([...])` seeds every fact that
+## is derived and never saved -- a tile's variant and accent, the chests, the tile modifiers, a village's
+## vendor --, every roll off those seeds is `RandomNumberGenerator`'s, and `RoadNetwork` saves keys spelt
+## by `%s` of a `Vector2i`. A Godot that changed any of them would move all of that under every existing
+## save without a word, and this is where it says so.
+func _test_engine_primitives() -> bool:
+	_check(hash([1, "chest", Vector2i(3, 4)]) == 3453935355, "hash() of a number, a word and a cell is what it was (%d)"
+			% hash([1, "chest", Vector2i(3, 4)]))
+	_check(hash([1, Rect2i(0, 0, 2, 2)]) == 2537321002, "and of a number and a window (%d)" % hash([1, Rect2i(0, 0, 2, 2)]))
+	_check("%s%s" % [Vector2i(1, -2), Vector2i(30, 4)] == "(1, -2)(30, 4)",
+			"two spots are spelt as a routed link's key spells them (%s)" % ("%s%s" % [Vector2i(1, -2), Vector2i(30, 4)]))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1
+	var rolls := [rng.randi(), rng.randi_range(0, 99), int(rng.randf() * 1000000.0)]
+	_check(rolls == [1811587497, 68, 276594], "a seeded stream rolls what it rolled (%s)" % [rolls])
+	return true
+
+
+## Two things written only in prose. `FortuneTeller.scour_cells` hands its cells out row by row, and the
+## start town (`MapBuilder.start_town_cells`) and the cave (`place_cave`) are picked off that list by
+## index, so its order is theirs. And the walls stand on level-band edges, which is what makes the land
+## past a wall a level above the land inside it.
+func _test_orders_and_edges() -> bool:
+	var cells := FortuneTeller.scour_cells(Vector2i(3, 5), 1)
+	_check(cells == ([Vector2i(3, 4), Vector2i(4, 4), Vector2i(2, 5), Vector2i(3, 5), Vector2i(4, 5), Vector2i(3, 6),
+			Vector2i(4, 6)] as Array[Vector2i]), "a scour's cells come row by row, each row from the west (%s)" % [cells])
+	_check((MapBuilder.START_LAND_RADIUS + 1) % MapBuilder.LEVEL_TILES == 0
+			and MapBuilder.WALL_STEP % MapBuilder.LEVEL_TILES == 0, "every wall stands on the first ring of a level")
+	return true
+
+
+## Who may not name whom, as the folders' notes rule it (`Scenes/Map/CLAUDE.md`, `Scenes/Town/CLAUDE.md`):
+## each is a class cycle Godot's checker bites on, or a file kept ignorant of the map on purpose. Read
+## off the sources themselves with the comments cut away, which may say a name the code may not. (A
+## `#` inside a string cuts its line short too, which can only hide a name, never invent one.)
+func _test_who_names_whom() -> bool:
+	const NEVER := {
+		"res://Scenes/Map/town_world.gd": ["MapBuilder", "MapSave"],
+		"res://Scenes/Map/map_save.gd": ["MapBuilder"],
+		"res://Scenes/Map/tile_names.gd": ["MapBuilder", "TownWorld"],
+		"res://Scenes/Town/town_state.gd": ["Inventory"],
+		"res://Scenes/Town/blacksmith.gd": ["MapBuilder"],
+		"res://Scenes/Items/inventory.gd": ["FortuneTeller"],
+	}
+	for path: String in NEVER:
+		var code := PackedStringArray()
+		for line in FileAccess.get_file_as_string(path).split("\n"):
+			code.append(line.get_slice("#", 0))
+		_check(code.size() > 1, "%s is there to be read" % path)
+		for name: String in NEVER[path]:
+			_check(RegEx.create_from_string("\\b%s\\b" % name).search("\n".join(code)) == null,
+					"%s never names %s" % [path.get_file(), name])
+	return true
 
 
 ## A tile's level, in even bands of `LEVEL_TILES` rings. It is what the panel shows and the ceiling on
@@ -111,12 +258,14 @@ func _test_environments() -> bool:
 		ENV_SEEDS, float(Time.get_ticks_msec() - start) / ENV_SEEDS, float(total_envs) / ENV_SEEDS,
 		float(total_regions) / ENV_SEEDS, 100.0 * same_pairs / pairs, small_regions])
 	_check(forbidden == 0, "no forbidden neighbors (found %d)" % forbidden)
-	# Every environment covers about a sixth of the land, whichever borders the table allows it.
+	# Every environment covers about its even share of the land, whichever borders the table allows it.
 	var cells_total := cells.get_area() * ENV_SEEDS
+	var even := 1.0 / EnvironmentGenerator.allowed().size()
 	for env: String in EnvironmentGenerator.allowed():
 		var share := float(shares.get(env, 0)) / cells_total
 		print("  %s %.1f%%" % [env, 100.0 * share])
-		_check(absf(share - 1.0 / 6.0) < 0.03, "%s covers about a sixth of the land (%.1f%%)" % [env, 100.0 * share])
+		_check(absf(share - even) < 0.03, "%s covers about its even share of the land (%.1f%% of %.1f%%)"
+				% [env, 100.0 * share, 100.0 * even])
 	# Cleanup can't merge a small region wedged between environments that may not touch each other (e.g. grass
 	# between desert and ice), so allow it on at most 1% of maps.
 	_check(small_regions <= ENV_SEEDS / 100, "at most 1%% of maps keep a region under MIN_REGION_SIZE (found %d)" % small_regions)
@@ -1285,6 +1434,93 @@ func _beside_breach(view: MapBuilder, breach: Vector2i) -> bool:
 			and not view.on_wall_ring(cave) and not view.towns.has_town(view.origin + cave)
 
 
+## Two things only an old save still needs, each kept by a few lines nothing else runs: the words the
+## states were written in before "discover" became "chart" (`MapSave.OLD_STATE_NAMES`), and the tiles of
+## a save from before tiles were named, which `MapBuilder.restore` names as it loads.
+func _test_old_saves() -> bool:
+	_clear_map_save()
+	var map: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
+	root.add_child(map)
+	var view := MapBuilder.create(map, TownWorld.generate(WORLD_SEED), Vector2i(128, 128), 99)
+	view.chart(HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E))
+	map.player.finish_walk()
+	var now := view.to_save()
+	now.save(TEST_MAP_PATH)
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(TEST_MAP_PATH))
+	var old_words := (data["states"] as Array).map(func(state: String) -> String:
+		var old: Variant = MapSave.OLD_STATE_NAMES.find_key(state)
+		return state if old == null else str(old))
+	_check(old_words != data["states"], "the states had other words once (%s)" % [old_words])
+	data["states"] = old_words
+	data["version"] = 1
+	data.erase("names")
+	var file := FileAccess.open(TEST_MAP_PATH, FileAccess.WRITE)
+	file.store_string(JSON.stringify(data))
+	file.close()
+	var problem: Array = []
+	var old := MapSave.load_from(TEST_MAP_PATH, problem, MapSave.fingerprint(map.tileset))
+	_check(old != null and problem.is_empty(), "a save in the old words still loads (%s)" % [problem])
+	if old != null:
+		_check(old.states == now.states, "with what was discovered read as charted, and the rest as it was")
+		_check(old.names.is_empty() and not now.names.is_empty(), "a save from before tiles were named carries no names")
+		var restored := MapBuilder.restore(map, TownWorld.from_dict(old.towns), old)
+		_check(restored.to_save().names == now.names, "and every tile it has seen is named as it loads")
+	map.queue_free()
+	_clear_map_save()
+	return true
+
+
+## What is on the map the moment a wall falls and the cave goes down, without a reload to put it right.
+## The fallen wall's own ring is land from then on, so a chest on it is drawn there and then; and the
+## cave, put down on a tile the breach has just shown, takes that tile's name and the chest off it.
+## The seed and the wall tile are a world where both happen -- a chest on the ring, and the cave on a
+## chest's tile -- and the checks of that say so if it ever stops being true.
+func _test_what_a_fall_draws() -> bool:
+	var map: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
+	root.add_child(map)
+	var wall := Vector2i(4, -12)
+	# The whole wall in sight before it falls.
+	var view := MapBuilder.create(map, TownWorld.generate(WORLD_SEED), Vector2i(128, 128), 7)
+	view.reveal_all()
+	var ring := FortuneTeller.scour_cells(MapBuilder.CENTER, view.land_radius + 1).filter(view.is_wall)
+	_check(wall in ring and view.chart(wall) >= 0, "the wall is broken at %s" % wall)
+	map.player.finish_walk()
+	var ring_chests := ring.filter(view.has_chest)
+	_check(not ring_chests.is_empty(), "this world has a chest on the fallen wall's ring")
+	_check(ring_chests.all(func(cell: Vector2i) -> bool: return cell in _chests_drawn(map)),
+			"a chest on the fallen wall's ring is drawn as the wall falls (%s)" % [ring_chests])
+
+	# The same world again with nothing past the wall seen until it falls: the dev's skip charts the whole
+	# way to the wall, and the land round the breach comes out of the fog as the land it now is.
+	view = MapBuilder.create(map, TownWorld.generate(WORLD_SEED), Vector2i(128, 128), 7)
+	var to_the_wall := view.land_radius + 1
+	view.dark_reach = func() -> int: return to_the_wall
+	_check(view.chart(wall, MapBuilder.CAVE_NEAR) > 0, "the wall is broken again, in the dark")
+	map.player.finish_walk()
+	var named := view.to_save().names.duplicate()
+	var chests := _chests_drawn(map)
+	_check(view.place_cave(view.breach), "the cave goes down beside the breach")
+	var cave := view.cave
+	# Read before anything asks for the name, which would give it one.
+	var carried: Variant = view.to_save().names.get(cave)
+	_check(named.has(cave) and cave in chests, "on a tile already seen and named, a chest drawn on it (%s)" % cave)
+	_check(view.name_of(cave).get_slice(" ", 1) in TileNames.CAVE_FEATURES and view.name_of(cave) != named.get(cave),
+			"the tile is called after the cave from then on (%s, was %s)" % [view.name_of(cave), named.get(cave)])
+	_check(carried == view.name_of(cave), "which is the name the save carries, unasked (%s)" % [carried])
+	_check(not view.has_chest(cave) and not (cave in _chests_drawn(map)), "and the chest's picture is off it")
+	map.queue_free()
+	return true
+
+
+## The cells a chest's picture stands on, read off the map's own sprites; one being freed is gone already.
+func _chests_drawn(map: HexMap) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for chest in map.chests.get_children():
+		if chest is Sprite2D and not chest.is_queued_for_deletion():
+			cells.append(map.ground_layer.local_to_map(chest.position))
+	return cells
+
+
 func _test_map_saving() -> bool:
 	_clear_map_save()
 	var map: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
@@ -1458,11 +1694,25 @@ func _test_save_refusals(map: HexMap) -> bool:
 	_check(MapSave.load_from(TEST_MAP_PATH, problem, sheet) == null and problem.is_empty(),
 			"no file at all is a first run, not a refusal")
 
-	for bad: Array in [
+	var cases: Array = [
 			["{ not a save file at all", "a file that is not JSON"],
 			["{\"version\": 99}", "a save from a newer build"],
 			["{\"version\": 1, \"sheet\": \"%s\"}" % sheet, "a save with no window"],
-			[good.replace(sheet, "0" + sheet.substr(1)), "a save drawn with other tiles"]]:
+			[good.replace(sheet, "0" + sheet.substr(1)), "a save drawn with other tiles"]]
+	# The save itself with one thing in it the wrong shape: still a file, still JSON, and refused with a
+	# reason all the same -- a null with none would pass for a first run and be written over.
+	var whole: Dictionary = JSON.parse_string(good)
+	var no_legend: Dictionary = (whole["towns"] as Dictionary).duplicate()
+	no_legend.erase("tiers")
+	var bent_towns: Dictionary = (whole["towns"] as Dictionary).duplicate()
+	bent_towns["spots"] = [[1], 2, 0]
+	for bent: Array in [["version", [MapSave.VERSION]], ["world_seed", {}], ["origin", "here"], ["cave", 7],
+			["rect", [[0], 0, 1, 1]], ["towns", no_legend], ["towns", bent_towns], ["environments", 5],
+			["environments", []], ["states", null], ["roads", [[1], 2, 3]], ["routed_links", null]]:
+		var data := whole.duplicate()
+		data[bent[0]] = bent[1]
+		cases.append([JSON.stringify(data), "a save whose %s is %s" % [bent[0], JSON.stringify(bent[1]).left(40)]])
+	for bad: Array in cases:
 		var file := FileAccess.open(TEST_MAP_PATH, FileAccess.WRITE)
 		file.store_string(str(bad[0]))
 		file.close()

@@ -96,7 +96,8 @@ static func over_squares(control: Control, event: InputEvent, held := false) -> 
 	var on := false
 	if not held:
 		for slot: ItemSlot in control.get_tree().get_nodes_in_group(ItemSlot.GROUP):
-			if slot.item != null and control.is_ancestor_of(slot) and slot.is_visible_in_tree() 					and slot.get_global_rect().has_point(event.global_position):
+			if slot.item != null and control.is_ancestor_of(slot) and slot.is_visible_in_tree() \
+					and slot.get_global_rect().has_point(event.global_position):
 				on = true
 				break
 	wear(control, HAND if on else ARROW)
@@ -145,7 +146,8 @@ static func applies(what: Variant) -> bool:
 ## later saw it): a left press tilts the cursor under it to the left for `TWITCH`, about the tile's
 ## bottom right corner. The click lands where it would have. Nothing at `Settings.Anim.NONE`.
 static func twitch(tree: SceneTree, event: InputEvent) -> void:
-	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed) 			or Settings.animations == Settings.Anim.NONE or _drawn.is_empty():
+	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed) \
+			or Settings.animations == Settings.Anim.NONE or _drawn.is_empty():
 		return
 	var shape := Input.get_current_cursor_shape()
 	if not _drawn.has(shape):
@@ -195,5 +197,6 @@ static func _show(shape: Input.CursorShape, tilted: bool) -> void:
 static func _on_node_added(node: Node) -> void:
 	# A button dead as it joins keeps the arrow. One that dies later keeps the hand: the pages here
 	# redraw their buttons rather than switch them off, so it has not been worth a watcher.
-	if node is BaseButton and not node.disabled 			and node.mouse_default_cursor_shape == Control.CURSOR_ARROW:
+	if node is BaseButton and not node.disabled \
+			and node.mouse_default_cursor_shape == Control.CURSOR_ARROW:
 		wear(node, HAND)

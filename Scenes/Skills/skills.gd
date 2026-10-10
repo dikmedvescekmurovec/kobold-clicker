@@ -159,8 +159,9 @@ func tree_dict() -> Dictionary:
 ## starts with the root alone. Stones are taken shallowest first and only where they may stand, so a
 ## stone whose parent is gone goes with it. A rank past a stone's most is cut to it; then, if what is
 ## left is more than the level has earned, or holds a point nothing leads to, every point is handed
-## back: after a change there is no honest way to guess which the player would have kept.
-static func from_dict(tree: Variant, saved_ranks: Variant, level: int) -> Skills:
+## back: after a change there is no honest way to guess which the player would have kept. A stone the
+## tree does not keep is named in `lost` (`Item.from_dict`).
+static func from_dict(tree: Variant, saved_ranks: Variant, level: int, lost: Array = []) -> Skills:
 	var skills := Skills.new()
 	if typeof(tree) != TYPE_DICTIONARY:
 		return skills
@@ -169,9 +170,11 @@ static func from_dict(tree: Variant, saved_ranks: Variant, level: int) -> Skills
 		var deep := SkillTree.depth_of(a) - SkillTree.depth_of(b)
 		return deep < 0 or deep == 0 and a < b)
 	for path: String in paths:
-		var stone := Item.from_dict(tree[path])
+		var stone := Item.from_dict(tree[path], lost)
 		if SkillTree.can_place(stone, path, skills.stones):
 			skills.stones[path] = stone
+		elif stone != null:
+			lost.append("%s at %s" % [stone.type, path])
 	if typeof(saved_ranks) != TYPE_DICTIONARY:
 		return skills
 	for key: Variant in saved_ranks:

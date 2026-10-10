@@ -92,10 +92,19 @@ static func _fill(drawer: Dictionary, key: String, tier: int, cell: Vector2i,
 static func roll_item(tier: int, cell: Vector2i, rng: RandomNumberGenerator) -> Item:
 	var carried := EnemyRoster.Tier.ELITE if tier == TownWorld.Tier.SMALL else EnemyRoster.Tier.BOSS
 	var rarity := ItemRarity.roll(carried, rng)
-	var ceiling := maxi(1, MapBuilder.level_of(cell) + int(LootTable.TIER_LEVEL[carried]))
-	var level := maxi(ItemRarity.roll_level(rarity, ceiling, rng),
-			ItemRarity.roll_level(rarity, ceiling, rng))
-	return Item.rolled(LootTable._weighted(rng, MapBuilder.level_of(cell)), rarity, rng, level)
+	var level := roll_level(rarity, ceiling(cell, carried), rng)
+	return Item.rolled(LootTable.weighted(rng, MapBuilder.level_of(cell)), rarity, rng, level)
+
+
+## The highest level a body of `tier` (an `EnemyRoster.Tier`) could drop a piece at on `cell`: what a
+## counter rolls under, the shelf's and the board's alike.
+static func ceiling(cell: Vector2i, tier: int) -> int:
+	return maxi(1, MapBuilder.level_of(cell) + int(LootTable.TIER_LEVEL[tier]))
+
+
+## A level for a piece off a counter: the better of two rolls under `top`.
+static func roll_level(rarity: ItemRarity.Rarity, top: int, rng: RandomNumberGenerator) -> int:
+	return maxi(ItemRarity.roll_level(rarity, top, rng), ItemRarity.roll_level(rarity, top, rng))
 
 
 ## The six pieces on the shelf, with a `null` where one has been bought. Empty for a town that has

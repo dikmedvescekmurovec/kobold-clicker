@@ -82,8 +82,14 @@ var problem := ""
 ## The main scene's say on whether a question may be put up or the save replaced now: never mid-fight,
 ## on the black screen or in a camp. A cloud with none set does neither.
 var calm := Callable()
+## Set by the main scene over a save it refused (`_refuse_save`), cleared by the next scene that starts:
+## nothing goes up and nothing comes down, so a file that cannot be read never replaces the cloud's.
+var blocked := false
 ## How the sign-in page is opened. Tests hand it a Callable that only keeps the address.
 var open_url := func(address: String) -> void: OS.shell_open(address)
+## How a request is sent, awaited: `(method, route, body, bearer) -> {status, data}`. Tests hand it a
+## Callable that answers from a script.
+var transport: Callable = _send
 
 var _out := 0
 var _syncing := false
@@ -239,6 +245,8 @@ func sign_in() -> void:
 			# A new account on this device: whatever the cloud holds, this device grew from none of it.
 			revision = 0
 			synced = ""
+			# Nor is it judged by what it held at the launch: nothing agrees with the cloud to compare against.
+			_launch_hash = ""
 			_save()
 			for legacy: String in LEGACY_PATHS:
 				if FileAccess.file_exists(legacy):
@@ -303,13 +311,19 @@ func refresh(board: String = BOARDS[0]) -> void:
 ## A start-up rewrites the map and may pay a camp, and without this every change of device would be a
 ## question rather than a download.
 func launched() -> void:
-	var saved := files()
+	# A cloud that is off (a test, a headless run) reads nobody's files.
+	var saved := files() if enabled() else {}
 	_launch_hash = hash_of(saved) if not saved.is_empty() else ""
 
 ## Brings this device and the cloud together (`decide`). An upload waits for `UPLOAD_EVERY` unless
 ## `now`; a download or a question waits for `calm`. Safe to call as often as wanted.
 func sync(now := false) -> void:
-	if not signed_in() or _syncing or not question.is_empty():
+	if blocked or not signed_in() or _syncing or not question.is_empty():
+		return
+	# The sync that reads the launch's hash waits for calm itself: a start-up may stand a camp up before
+	# it, and a hash spent on a sync that could not download leaves the camp's pay to be read as play,
+	# and a change of device to be asked about. The main scene syncs again as the camp is struck.
+	if not _launch_hash.is_empty() and not _calm():
 		return
 	_syncing = true
 	# Only the first sync after a start-up may read the launch's hash, reached or not: later, what was
@@ -347,7 +361,7 @@ func sync(now := false) -> void:
 ## way out of the game, where nothing may be asked or replaced. Quick to give up.
 func push() -> void:
 	var saved := files()
-	if not signed_in() or not question.is_empty() or saved.is_empty() or hash_of(saved) == synced:
+	if blocked or not signed_in() or not question.is_empty() or saved.is_empty() or hash_of(saved) == synced:
 		return
 	_timeout = QUIT_TIMEOUT
 	await _upload(saved, false)
@@ -364,21 +378,25 @@ func leave(scene: Node) -> void:
 	tree.quit()
 
 
-## The question answered for the cloud's save: it comes down over this device's files.
+## The question answered for the cloud's save: it comes down over this device's files. A sync of its
+## own, so a tick in the middle of it does not ask again.
 func keep_cloud() -> void:
 	question = {}
-	changed.emit()
+	_syncing = true
 	await _download()
+	_syncing = false
+	changed.emit()
 
 
 ## The question answered for this device's save: it goes up in the cloud's place.
 func keep_device() -> void:
 	question = {}
-	changed.emit()
 	var saved := files()
-	if saved.is_empty():
-		return
-	await _upload(saved, true)
+	if not saved.is_empty():
+		_syncing = true
+		await _upload(saved, true)
+		_syncing = false
+	changed.emit()
 
 
 ## Reset save: the cloud's copy goes too, and this device starts from none of it. Awaited before the
@@ -416,6 +434,12 @@ func _download() -> void:
 	if reply.status != 200 or not _calm():
 		return
 	var saved := {"inventory": str(reply.data.get("inventory", "")), "map": str(reply.data.get("map", ""))}
+	# Nothing is written that this build could not read back: a reply that is no save would empty the
+	# files, and a save from a newer build replace one that plays with one the next start-up refuses.
+	if not _reads(saved.inventory, Inventory.VERSION) \
+			or not (saved.map.is_empty() or _reads(saved.map, MapSave.VERSION)):
+		problem = "The cloud's save cannot be loaded by this version of the game"
+		return
 	if not SafeFile.write(inventory_path, saved.inventory):
 		return
 	if saved.map.is_empty():
@@ -427,6 +451,13 @@ func _download() -> void:
 	synced_at = Time.get_unix_time_from_system()
 	_save()
 	replaced.emit()
+
+
+## Whether `text` is a save file no newer than `newest`, the version this build writes.
+static func _reads(text: String, newest: int) -> bool:
+	var reader := JSON.new()
+	return reader.parse(text) == OK and reader.data is Dictionary \
+			and int((reader.data as Dictionary).get("version", 0)) <= newest
 
 
 func _ask(saved: Dictionary, cloud_summary: Variant) -> void:
@@ -470,19 +501,35 @@ func _forget() -> void:
 
 
 ## One request, awaited: `{status, data}`, status 0 where nothing came back. Sets `problem` from the
-## server's own sentence. A 401 on a signed-in call is a session the server no longer knows (signed out
-## or deleted elsewhere): this device forgets the account, and its files stay.
+## server's own sentence, and says so going in and coming out (`changed`), so a call that failed is on
+## the pages at once. A 401 on a signed-in call is a session the server no longer knows (signed out or
+## deleted elsewhere): this device forgets the account, and its files stay.
 func _call(method: HTTPClient.Method, route: String, body: Variant = null, bearer: Variant = null) -> Dictionary:
 	_out += 1
 	problem = ""
 	changed.emit()
+	var reply: Dictionary = await transport.call(method, route, body, token if bearer == null else str(bearer))
+	_out -= 1
+	var status: int = reply.status
+	if status == 0:
+		problem = "The cloud cannot be reached"
+	elif status >= 400:
+		problem = str(reply.data.get("error", "The cloud said no (%d)" % status))
+	if status == 401 and bearer == null and signed_in():
+		_forget()
+		problem = "You were signed out. Sign in again"
+	changed.emit()
+	return reply
+
+
+## The request itself, over HTTP: what `transport` is anywhere but a test.
+func _send(method: HTTPClient.Method, route: String, body: Variant, bearer: String) -> Dictionary:
 	var request := HTTPRequest.new()
 	request.timeout = _timeout
 	add_child(request)
-	var sent_token: String = token if bearer == null else str(bearer)
 	var headers := PackedStringArray(["Content-Type: application/json"])
-	if not sent_token.is_empty():
-		headers.append("Authorization: Bearer " + sent_token)
+	if not bearer.is_empty():
+		headers.append("Authorization: Bearer " + bearer)
 	var status := 0
 	var data := {}
 	if request.request(url() + route, headers, method, "" if body == null else JSON.stringify(body)) == OK:
@@ -494,14 +541,6 @@ func _call(method: HTTPClient.Method, route: String, body: Variant = null, beare
 					and reader.data is Dictionary:
 				data = reader.data
 	request.queue_free()
-	_out -= 1
-	if status == 0:
-		problem = "The cloud cannot be reached"
-	elif status >= 400 and status != 409:
-		problem = str(data.get("error", "The cloud said no (%d)" % status))
-	if status == 401 and bearer == null and signed_in():
-		_forget()
-		problem = "You were signed out. Sign in again"
 	return {"status": status, "data": data}
 
 

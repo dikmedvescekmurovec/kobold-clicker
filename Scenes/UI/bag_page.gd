@@ -25,17 +25,15 @@ signal heirloom_made(item: Item)
 ## it. The gutter is the pack's own seven-to-one square-to-gutter proportion.
 const GRID_COLS := 4
 const SLOT_GAP := ItemSlot.SIDE / 7
-## Fixed, so the panel keeps its width as the bag fills.
-## The marks on a level's two buttons, and how far Auto's face is darkened while it is held down.
-## Bare on the cream, so the pack's own brown cut of each mark; Auto's struck-through chest turns green while it
-## is on, as the pack turns its open tab green.
+## The marks on a level's two buttons and the count's chest. Bare on the cream, so the pack's own brown
+## cut of each mark; Auto's struck-through chest turns green while it is on, as the pack turns its open
+## tab green.
 const AUTO_ICON := "res://Assets/UI/ui_icon_auto_brown.png"
 const AUTO_ON_ICON := "res://Assets/UI/ui_icon_auto_green.png"
 const CLEAR_ICON := "res://Assets/UI/ui_icon_trash_brown.png"
 const SELL_ICON := "res://Assets/UI/ui_icon_coins_brown.png"
 const COUNT_ICON := "res://Assets/UI/ui_icon_chest_brown.png"
 const SWAP_ICON :="res://Assets/UI/ui_icon_swap.png"
-## Hide points back at the bag the doll folds into, Show out to where it opens.
 ## The filter's folder tabs over the grid (the user's pick of tools/qa/bag_filter_m1_b.png, 2026-10-07):
 ## "" for everything, then each `LootTable.slot_of`, with its mark and its name -- the skill stones'
 ## last (the user's, 2026-10-09). The town page's tabs, `FILTER_TAB` wide -- the least a mark and the face's
@@ -54,6 +52,7 @@ const FILTERS := {
 const FILTER_MARK := "res://Assets/UI/ui_icon_%s_%s.png"
 const FILTER_TAB := 18
 const FILTER_GAP := 1
+## Hide points back at the bag the doll folds into, Show out to where it opens.
 const HIDE_ICON := "res://Assets/UI/ui_icon_caret_left.png"
 const SHOW_ICON := "res://Assets/UI/ui_icon_caret_right.png"
 ## An orb taking to a piece, a super orb's included -- its knock and its swell together, the user's
@@ -70,7 +69,7 @@ const UNIQUES := "uniques"
 const CONFIRM_WIDTH := 150.0
 const TICK_NAME := "Tick"
 ## What a question's panel is called inside its holder, which the win's wash would otherwise push off
-## child 0 -- and which is how `_place_confirm` and the shrink find it.
+## child 0 -- and which is how the shrink finds it.
 const CONFIRM_PANEL := "Panel"
 const TICK: Array[String] = [
 	"......#",
@@ -105,6 +104,7 @@ const CHEVRON: Array[String] = [
 static var _chevrons: Array[ImageTexture] = []
 ## How many squares short of the cap the count turns rust.
 const NEARLY_FULL := 4
+## Fixed, so the panel keeps its width as the bag fills.
 const WIDTH := GRID_COLS * ItemSlot.SIDE + (GRID_COLS - 1) * SLOT_GAP
 ## All six orbs in one row across WIDTH; the whole-pixel gap leaves under a gap's worth of slack,
 ## which the centred tray splits (test_ui_theme holds the arithmetic).
@@ -368,11 +368,13 @@ func _ready() -> void:
 	_orb_card.hide()
 	add_child(_orb_card)
 
-	# However the bag goes away -- its X, another page, a fight -- an orb must not stay on the cursor.
+	# However the bag goes away -- its X, another page, a fight -- an orb must not stay on the cursor,
+	# nor a question stay asked where nobody can answer it (`asking`).
 	visibility_changed.connect(func() -> void:
 		if not is_visible_in_tree():
 			_armed = ""
-			_sorted_as.clear())
+			_sorted_as.clear()
+			_close_confirm())
 	refresh()
 
 
@@ -431,7 +433,6 @@ func layout() -> void:
 	else:
 		_side_by_side(room, _panel.get_combined_minimum_size().x)
 	_place_actions()
-	_place_confirm()
 	laid_out.emit()
 
 
@@ -651,18 +652,7 @@ func _ask(id: String, title: String, question: String, verb: String, variation: 
 	if can_skip and SKIP_CONFIRM + id in _purse.tips:
 		deed.call()
 		return
-	_close_confirm()
-	# The whole window, so nothing under the question can be pressed while it is up.
-	_confirm = Control.new()
-	_confirm.size = get_viewport_rect().size
-	add_child(_confirm)
-	# Over every other page too: held upright the town's counter stands over the bag, and the question
-	# is centred across both.
-	move_to_front()
-	# No X, as a reward's panel has none: its buttons and Escape are the way out.
-	var panel := UITheme.titled_panel(title, "", Callable())
-	panel.name = CONFIRM_PANEL
-	_confirm.add_child(panel)
+	var panel := _open_confirm(title)
 	var body := UITheme.body_of(panel)
 	var asked := UITheme.label(question, null, true)
 	asked.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -677,17 +667,38 @@ func _ask(id: String, title: String, question: String, verb: String, variation: 
 	for made: Button in [UITheme.button(no, "LightButton", ""), UITheme.button(verb, variation, "")]:
 		made.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		buttons.add_child(made)
+	# Answered once: either button can still be pressed while the question shrinks away, and a second
+	# Yes would do the deed again -- two orbs for one question.
 	buttons.get_child(0).pressed.connect(func() -> void:
-		_remember(id, ticked.call(), false)
-		_close_confirm())
+		if not Juice.leaving(panel):
+			_remember(id, ticked.call(), false)
+			_close_confirm())
 	buttons.get_child(1).pressed.connect(func() -> void:
-		_remember(id, ticked.call(), true)
-		_close_confirm()
-		deed.call())
+		if not Juice.leaving(panel):
+			_remember(id, ticked.call(), true)
+			_close_confirm()
+			deed.call())
 	# Built either way, so the Yes above has a tick to read; only shown where it may be ticked.
 	skip.visible = can_skip
 	body.add_child(skip)
 	Juice.popup(_confirm, panel, _ui_scale)
+
+
+## A question's holder and its panel, empty, in the place of whatever question was up: the holder is
+## the whole window's (`Juice.popup` stands it there), so nothing under the question can be pressed
+## while it is up, and the panel has no X, as a reward's has none -- its buttons and Escape are the
+## way out. Returns the panel, to fill and then bring up.
+func _open_confirm(title: String) -> VBoxContainer:
+	_close_confirm()
+	_confirm = Control.new()
+	add_child(_confirm)
+	# Over every other page too: held upright the town's counter stands over the bag, and the question
+	# is centred across both.
+	move_to_front()
+	var panel := UITheme.titled_panel(title, "", Callable())
+	panel.name = CONFIRM_PANEL
+	_confirm.add_child(panel)
+	return panel
 
 
 ## A ticked "Don't show this again". The uniques' question keeps the answer given -- Sell or Keep --
@@ -701,15 +712,6 @@ func _remember(id: String, ticked: bool, yes: bool) -> void:
 		Settings.save()
 	elif yes:
 		_purse.tips.append(SKIP_CONFIRM + id)
-
-
-## The window was resized under a question: the holder is made to cover it again and the question put
-## back in its middle. `Juice.popup` keeps it there as its contents settle.
-func _place_confirm() -> void:
-	if _confirm == null:
-		return
-	_confirm.size = get_viewport_rect().size
-	Juice.centre(_confirm.get_node(CONFIRM_PANEL), _confirm.size)
 
 
 ## Escape on a question is its Cancel, and the press stops here: the page under it stays up. With no
@@ -811,6 +813,7 @@ static func check_box(text: String) -> HBoxContainer:
 	words.mouse_filter = Control.MOUSE_FILTER_STOP
 	words.gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			words.accept_event()  # Before the tick, which may redraw the row out of the tree (the curses).
 			box.button_pressed = not box.button_pressed)
 	row.add_child(words)
 	return row
@@ -1040,7 +1043,8 @@ func _bag_keys() -> Dictionary:
 func _press_action(shift: bool) -> void:
 	var verbs := ["Equip", "Unequip"] if shift else ["Sell", "Discard"]
 	for button: Node in _action_box.get_children():
-		if button is Button and not (button as Button).disabled 				and verbs.any(func(verb: String) -> bool: return (button as Button).text.begins_with(verb)):
+		if button is Button and not (button as Button).disabled \
+				and verbs.any(func(verb: String) -> bool: return (button as Button).text.begins_with(verb)):
 			(button as Button).pressed.emit()
 			return
 
@@ -1645,25 +1649,18 @@ func _super_press(orb: String, item: Item) -> void:
 	if not SuperOrbTable.aimed(orb):
 		_super_craft(orb, item, -1)
 		return
-	_close_confirm()
-	_confirm = Control.new()
-	_confirm.size = get_viewport_rect().size
-	add_child(_confirm)
-	# Over every other page too: held upright the town's counter stands over the bag, and the question
-	# is centred across both.
-	move_to_front()
-	var panel := UITheme.titled_panel(orb, "", Callable())
-	panel.name = CONFIRM_PANEL
-	_confirm.add_child(panel)
+	var panel := _open_confirm(orb)
 	var body := UITheme.body_of(panel)
 	body.add_child(UITheme.label("Which modifier?", null, true))
 	for i in item.mods.size():
 		var line := UITheme.button(ModifierTable.line(item.mods[i]), "LightButton", "")
 		line.custom_minimum_size.x = CONFIRM_WIDTH
 		line.disabled = not SuperOrbTable.can_aim(orb, item, i)
+		# Once, as `_ask` answers: a line pressed again as the question shrinks would spend a second orb.
 		line.pressed.connect(func() -> void:
-			_close_confirm()
-			_super_craft(orb, item, i))
+			if not Juice.leaving(panel):
+				_close_confirm()
+				_super_craft(orb, item, i))
 		body.add_child(line)
 	# With no X the way back out is a button of its own, as every other question's Cancel is.
 	var cancel := UITheme.button("Cancel", "LightButton", "")

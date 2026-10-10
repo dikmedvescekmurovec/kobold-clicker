@@ -4,13 +4,14 @@ extends Control
 ## the player is paid for the world they are leaving: **one piece of it made an heirloom, and a super
 ## orb (`SuperOrbTable`) for every wall they broke**, spent on the heirlooms they hold.
 ##
-## Four faces, one up at a time: the choice (Create an heirloom / Upgrade an heirloom / Take on a
-## curse, and the way on under them), the curses (`Curses`: as many skulls as the dungeon's depths won,
-## `Inventory.skull_allowance`, for the world to come,
-## kept in `Inventory.pending_curses` and nowhere else until `transcended()` reads them), and behind
-## each of the first two cards a `BagPage` built for it (`transcending` true) -- over the bag
-## and the ordinary doll to choose the piece to keep, over the heirlooms with the super orbs for its
-## tray. Both go back to the choice by the arrow beside them, their X, or Escape.
+## Five faces, one up at a time: the choice (Create an heirloom / Upgrade an heirloom / Take on a
+## curse / Skill tree, and the way on under them), the curses (`Curses`: as many skulls as the
+## dungeon's depths won, `Inventory.skull_allowance`, for the world to come, kept in
+## `Inventory.pending_curses` and nowhere else until `transcended()` reads them), and behind the first
+## two cards and the fourth a `BagPage` built for it (`transcending` true) -- over the bag and the
+## ordinary doll to choose the piece to keep, over the heirlooms with the super orbs for its tray, and
+## over the bag's skill nodes with the tree in the doll's place. Each goes back to the choice by the
+## arrow beside it, its X, or Escape.
 ##
 ## **Nothing here is written to a file.** Everything it changes it changes in the inventory it was
 ## given, and `finished` is the main scene's cue to write `Inventory.transcended()` over the save in
@@ -133,10 +134,13 @@ func _show_choice() -> void:
 	_back.hide()
 	_swapping = false
 	_swap.hide()
+	# Out of the tree at once, each of them: a queued one would still be found, and pressed, this frame.
 	if _curse_face != null:
+		remove_child(_curse_face)
 		_curse_face.queue_free()
 		_curse_face = null
 	if _choice != null:
+		remove_child(_choice)
 		_choice.queue_free()
 	_choice = UITheme.vbox(CARD_GAP)
 	_choice.scale = Vector2(_ui_scale, _ui_scale)
@@ -234,6 +238,7 @@ func _show_curses() -> void:
 	var scrolled := 0
 	if _curse_face != null:
 		scrolled = _curse_scroll.scroll_vertical
+		remove_child(_curse_face)
 		_curse_face.queue_free()
 	var pending := _inventory.pending_curses
 	_curse_lines.clear()
@@ -429,10 +434,11 @@ func _can_make_any() -> bool:
 
 
 ## Escape is the way back from a page, after the page's own question has had it (`BagPage`), and on
-## the choice it is nothing: there is no way back into the world from here.
+## the choice it is nothing: there is no way back into the world from here. Asked of the choice and not
+## of the arrow, which has no room to stand beside a face as wide as a phone held upright.
 func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	get_viewport().set_input_as_handled()
-	if _back.visible:
+	if _choice != null and not _choice.visible:
 		_show_choice()

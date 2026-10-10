@@ -38,8 +38,12 @@ var _ui_scale: float
 var _panel: VBoxContainer
 var _rows: VBoxContainer
 var _refresh: Button
-## What was typed into the name field, kept across the redraws a call makes.
-var _typed := ""
+## The name field and the button under it. **The field outlives every redraw while a name is asked for**
+## (`_naming`): the cloud says `changed` at every call it makes -- its tick, a burst after a sign-in --
+## and a field built again mid-word would drop the cursor, the next letters landing on the corner's
+## hotkeys and closing the page.
+var _field: LineEdit
+var _join: Button
 ## The board whose tab is open.
 var _open: String = Cloud.BOARDS[0]
 
@@ -71,15 +75,25 @@ func _ready() -> void:
 	_draw()
 
 
-## Redraws it and reads the board again, after sending the save if it has moved since the cloud last took it.
+## Redraws it and reads the board again, once the save has been sent if it has moved since the cloud
+## last took it: a board read before the upload lands is a board without the descent just made.
 func open() -> void:
 	_draw()
-	_board.sync(true)
+	await _board.sync(true)
 	_board.refresh(_open)
 
 
+## Whether the page is asking for a board name: signed in, with none yet.
+func _naming() -> bool:
+	return _board.enabled() and _board.signing_check.is_empty() and _board.signed_in() \
+			and _board.player_name.is_empty()
+
+
 func _draw() -> void:
-	UITheme.clear(_rows)
+	# Everything but the name field, which is put back where it stood (`_draw_join`).
+	if not _naming():
+		_field = null
+	UITheme.clear(_rows, _field)
 	_refresh.visible = _board.enabled()
 	_refresh.disabled = _board.busy()
 	if not _board.enabled():
@@ -98,7 +112,7 @@ func _draw() -> void:
 		sign_in.disabled = _board.busy()
 		sign_in.pressed.connect(func() -> void: _board.sign_in())
 		_rows.add_child(sign_in)
-	elif _board.player_name.is_empty():
+	elif _naming():
 		_draw_join()
 	else:
 		_draw_me()
@@ -108,25 +122,31 @@ func _draw() -> void:
 
 
 ## A name and Choose. The server says whether it will have it; the field only stops what it never would.
+## The field is made once and moved back under "You" by every redraw after; the button is made again.
 func _draw_join() -> void:
-	var field := UITheme.text_field("Your name", 16, WIDTH)
-	field.text = _typed
-	_rows.add_child(field)
-	var join := UITheme.button("Choose name", UITheme.GO_BUTTON, "Put this name on the board")
-	var ready_to_join := func() -> void:
-		join.disabled = _board.busy() or _typed.strip_edges().length() < 3
-	field.text_changed.connect(func(now: String) -> void:
-		_typed = now
-		ready_to_join.call())
-	var send := func() -> void:
-		if not join.disabled:
-			await _board.choose_name(_typed)
-			if not _board.player_name.is_empty():
-				open()
-	join.pressed.connect(send)
-	field.text_submitted.connect(func(_text: String) -> void: send.call())
-	ready_to_join.call()
-	_rows.add_child(join)
+	if _field == null:
+		_field = UITheme.text_field("Your name", 16, WIDTH)
+		_field.text_changed.connect(func(_now: String) -> void: _ready_to_join())
+		_field.text_submitted.connect(func(_text: String) -> void: _send_name())
+		_rows.add_child(_field)
+	else:
+		_rows.move_child(_field, -1)
+	_join = UITheme.button("Choose name", UITheme.GO_BUTTON, "Put this name on the board")
+	_join.pressed.connect(_send_name)
+	_ready_to_join()
+	_rows.add_child(_join)
+
+
+func _ready_to_join() -> void:
+	_join.disabled = _board.busy() or _field.text.strip_edges().length() < 3
+
+
+func _send_name() -> void:
+	if _join.disabled:
+		return
+	await _board.choose_name(_field.text)
+	if not _board.player_name.is_empty():
+		open()
 
 
 ## The boards' folder tabs, the bag's filter tabs in words: the open one is the page, the rest stand

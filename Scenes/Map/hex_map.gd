@@ -3,7 +3,8 @@ extends Node2D
 ## Clickable hex map. Ground tiles (environments, towns) go on GroundLayer, blend overlays on one layer per
 ## spreading environment above it, and road overlays on RoadLayer.
 
-## Part of the node's public surface; nothing listens yet, the main scene only acts on clicks.
+## Part of the node's public surface; nothing listens yet, the main scene only acts on clicks. Its
+## `info` is worked out only while something does (`_set_hovered`).
 signal tile_hovered(cell: Vector2i, info: Dictionary)
 signal tile_clicked(cell: Vector2i, info: Dictionary)
 ## Mouse movement, in screen pixels, while dragging the map. Whoever owns the camera moves it.
@@ -205,7 +206,7 @@ func set_road(cell: Vector2i, tile_name: String) -> void:
 ## (`HexGrid.edge_mask`). Which version is fixed by the cell, so the same rubble lies there every load.
 @warning_ignore("integer_division")
 func set_rubble(cell: Vector2i, mask: int) -> void:
-	var version := posmod((cell.x * 73856093) ^ (cell.y * 19349663), HexTileset.RUBBLE_VERSIONS)
+	var version := posmod(HexGrid.scatter(cell), HexTileset.RUBBLE_VERSIONS)
 	rubble_layer.set_cell(cell, HexTileset.RUBBLE_ID, Vector2i(mask % 8 + 8 * version, mask / 8))
 
 
@@ -397,7 +398,8 @@ func _set_hovered(cell: Vector2i) -> void:
 		return
 	hovered_cell = cell
 	highlight.queue_redraw()
-	if cell != NO_CELL:
+	# The info counts the tile's pixels (`env_weights`): not on every move of the mouse for nobody.
+	if cell != NO_CELL and tile_hovered.has_connections():
 		tile_hovered.emit(cell, get_tile_info(cell))
 
 

@@ -24,6 +24,9 @@ func _run() -> void:
 	_check(await _test_settings_page() == true, "settings page tests ran to the end")
 	_check(_test_table_rows() == true, "table row tests ran to the end")
 	_check(_test_palette() == true, "palette tests ran to the end")
+	_check(_test_colours_in_code() == true, "colours in code tests ran to the end")
+	_check(_test_children_freed() == true, "freed children tests ran to the end")
+	_check(_test_continuation_lines() == true, "continuation line tests ran to the end")
 	_check(await _test_responsive() == true, "responsive layout tests ran to the end")
 	_check(await _test_fingers() == true, "finger tests ran to the end")
 	_report("UI theme")
@@ -51,6 +54,122 @@ func _test_palette() -> bool:
 		_check(ratio >= 4.5, "Palette.%s reads on the cream as a body line (%.2f:1)" % [name, ratio])
 	for colour: Color in ItemRarity.TEXT_COLORS.values():
 		_check(_contrast(colour, Palette.PANEL_CREAM) >= 3.0, "a rarity's name reads on the cream (%s)" % colour.to_html(false))
+	return true
+
+
+## The colours written in `Scenes/UI` outside `Palette` that are not ENDESGA 64, each with its file and
+## why it may stand: [file, the literal as written, why]. A new one is a decision, written down here;
+## one no longer in the code is taken out (`_test_colours_in_code` fails on either).
+const OFF_PALETTE := [
+	["character_page.gd", ".darkened(0.4)", "an attribute chip's edge: its own colour, darker"],
+	["character_panel.gd", "Color(1.8, 1.8, 1.8)", "a flash: a multiplier past white, not a paint"],
+	["item_slot.gd", "Color(0.65, 0.65, 0.65)", "a multiplier darkening a piece not yet found"],
+	["item_slot.gd", "Color.BLACK", "a multiplier: a locked piece's outline in black"],
+	["juice.gd", "Color(1.0, 0.95, 0.75, 0.35)", "a win's wash: warm light over the whole window"],
+	["orb_slot.gd", "Color(0.42, 0.42, 0.44)", "a multiplier greying an orb with nothing to do"],
+	["town_page.gd", "Color(1.2, 1.2, 1.2)", "a multiplier lifting a spell's mark under the cursor"],
+	["transcend_page.gd", "Color.BLACK", "the black screen between two worlds"],
+	["ui_theme.gd", "Color(1.25, 1.25, 1.25)", "a multiplier lifting a bare mark under the cursor"],
+]
+
+
+## Every `.gd` under `folder`, and under its folders too when `deep`.
+func _scripts(folder: String, deep := true) -> PackedStringArray:
+	var found := PackedStringArray()
+	for file: String in DirAccess.get_files_at(folder):
+		if file.get_extension() == "gd":
+			found.append(folder.path_join(file))
+	for inner: String in DirAccess.get_directories_at(folder) if deep else PackedStringArray():
+		found.append_array(_scripts(folder.path_join(inner)))
+	return found
+
+
+## The interface draws in ENDESGA 64 in code as well as in `Palette`: every colour written into a script
+## of `Scenes/UI` -- `Color(...)`, `Color8(...)`, a hex string, a named `Color.X`, a `darkened` or a
+## `lightened` -- is one of the 64, or is on `OFF_PALETTE` with its reason. Allowed by rule: nothing at
+## all (`Color.TRANSPARENT`), white with an alpha of its own (`Color(1, 1, 1, a)`, a modulate that only
+## fades), and a colour named elsewhere given an alpha (`Color(Palette.INK, 0.5)`).
+func _test_colours_in_code() -> bool:
+	var e64: Array = Palette.E64
+	var literal := RegEx.create_from_string("Color8?\\(([^()]*)\\)|\\.(?:darkened|lightened)\\([^()]*\\)"
+			+ "|Color\\.[A-Z_]+\\b|\"#?[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\"")
+	var comment := RegEx.create_from_string("\\s#\\s.*$")
+	var excused := {}
+	for path: String in _scripts("res://Scenes/UI", false):
+		var file := path.get_file()
+		if file == "palette.gd":
+			continue
+		var number := 0
+		for line: String in FileAccess.get_file_as_string(path).split("\n"):
+			number += 1
+			if line.strip_edges().begins_with("#"):
+				continue
+			for found: RegExMatch in literal.search_all(comment.sub(line, "")):
+				var written := found.get_string()
+				var hex := ""
+				if written.begins_with("Color."):
+					if written == "Color.TRANSPARENT":
+						continue
+					hex = Color.from_string(written.trim_prefix("Color."), Color.BLACK).to_html(false)
+				elif written.begins_with("\""):
+					hex = written.trim_prefix("\"").trim_suffix("\"").trim_prefix("#").left(6).to_lower()
+				elif written.begins_with("Color"):
+					var parts := found.get_string(1).split(",")
+					var first := parts[0].strip_edges()
+					if first.begins_with("\""):
+						hex = first.trim_prefix("\"").trim_suffix("\"").trim_prefix("#").left(6).to_lower()
+					elif not first.is_valid_float():
+						# A colour named elsewhere, with an alpha of its own.
+						continue
+					elif parts.size() >= 3:
+						var channels: Array = [first.to_float(), parts[1].to_float(), parts[2].to_float()]
+						if written.begins_with("Color8"):
+							hex = Color8(int(channels[0]), int(channels[1]), int(channels[2])).to_html(false)
+						elif channels == [1.0, 1.0, 1.0]:
+							continue
+						elif channels.max() <= 1.0:
+							hex = Color(channels[0], channels[1], channels[2]).to_html(false)
+				if hex in e64:
+					continue
+				var entry := [file, written]
+				var listed := OFF_PALETTE.any(func(row: Array) -> bool: return row.slice(0, 2) == entry)
+				excused[entry] = true
+				_check(listed, "%s:%d writes %s, which is neither ENDESGA 64 nor on the list of what may stand"
+						% [file, number, written])
+	for row: Array in OFF_PALETTE:
+		_check(excused.has(row.slice(0, 2)) and not str(row[2]).is_empty(),
+				"%s still writes %s, which the list excuses" % [row[0], row[1]])
+	return true
+
+
+## Children are freed through `UITheme.clear`, which takes each out of the tree as it frees it: a queued
+## child still counts in hit-tests, minimum sizes and whatever indexes its siblings until the frame
+## ends. No script of `Scenes/UI` loops over a node's children freeing them itself -- but `clear`.
+func _test_children_freed() -> bool:
+	var loop := RegEx.create_from_string(
+			"(?m)^(\\t*)for (\\w+)[^\\n]* in [^\\n]*get_children\\(\\):\\n((?:\\1\\t[^\\n]*\\n)+)")
+	var loops := PackedStringArray()
+	for path: String in _scripts("res://Scenes/UI", false):
+		for found: RegExMatch in loop.search_all(FileAccess.get_file_as_string(path)):
+			var freed := RegEx.create_from_string("\\b%s\\.(queue_free|free)\\(\\)" % found.get_string(2))
+			if freed.search(found.get_string(3)) != null:
+				loops.append(path.get_file())
+	_check(loops == PackedStringArray(["ui_theme.gd"]),
+			"only `UITheme.clear` frees a node's children in a loop (%s)" % [loops])
+	return true
+
+
+## A line continuation is a backslash and a real newline. One collapsed into a run of tabs still
+## parses -- the tabs are only white space -- and reads as one line three screens wide: a character,
+## three tabs or more, then code. Held of every script under `Scenes/` and `tests/`.
+func _test_continuation_lines() -> bool:
+	var collapsed := RegEx.create_from_string("[^\\t\\n]\\t{3,}[^\\s#]")
+	for path: String in _scripts("res://Scenes") + _scripts("res://tests"):
+		var number := 0
+		for line: String in FileAccess.get_file_as_string(path).split("\n"):
+			number += 1
+			_check(collapsed.search(line) == null, "%s:%d continues its line with a run of tabs"
+					% [path.trim_prefix("res://"), number])
 	return true
 
 

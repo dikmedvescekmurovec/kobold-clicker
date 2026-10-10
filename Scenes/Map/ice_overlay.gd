@@ -78,7 +78,7 @@ static func accent_at(cell: Vector2i) -> int:
 
 ## A number fixed by the cell, so the same snow is drawn there every time the map is.
 static func _roll(cell: Vector2i, salt: int) -> int:
-	return ((cell.x * 73856093) ^ (cell.y * 19349663) ^ (salt * 83492791)) & 0x7fffffff
+	return (HexGrid.scatter(cell) ^ (salt * 83492791)) & 0x7fffffff
 
 
 @warning_ignore("integer_division")

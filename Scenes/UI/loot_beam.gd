@@ -76,7 +76,8 @@ static func make(rarity: int, colour: Color, landed: float, cover: Vector2, pixe
 		layer.z_index = 0 if front else -1
 		beam.add_child(layer)
 		layer.tree_entered.connect(func() -> void:
-			layer.create_tween().tween_property(material, "shader_parameter/grow", 1.0, RISE) 					.set_delay(landed).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT), CONNECT_ONE_SHOT)
+			layer.create_tween().tween_property(material, "shader_parameter/grow", 1.0, RISE) \
+					.set_delay(landed).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT), CONNECT_ONE_SHOT)
 	# Its hum swells as it shoots up and fades as it sinks (`collapse`), every beam its own -- each
 	# from somewhere else in the loop, so beams standing together do not pulse in step. A fade is not
 	# a volume: it ends at the file's own level, which `sound_levels.py` sets.

@@ -21,7 +21,7 @@ Sampling rather than playing out the whole night is the one corner cut: the arra
 
 | File | Contents |
 |---|---|
-| `encounter.gd` (`Encounter`) | The rules, with no nodes: `for_tile(cell, env, variant)` rolls the tile's lineup, seeded from the cell so a tile always fields the same fight, and keeps `env` -- the terrain picked the enemies and it picks the backdrop. `PROFILES` is what the `variant` buys: one table saying, per thing the world can put on a tile, how many enemies, how long a clock, how often an elite and whether the last one is a **boss**. Open land and roads are `ORDINARY` (the old ten in thirty, ending on an elite), and village, town and fortress share one `SETTLEMENT` entry -- fifteen in sixty, an elite every fifth, a boss last -- because what makes a town a longer fight is that people live there, not how many of them. A fight built and told nothing is the ordinary one, which is what every `Encounter` made by hand gets. `farm(cell, env, variant)` is the same fight `endless`: one enemy to start, and `_append_enemy` puts the next on the end of the lineup the moment the last one falls, so it is never finished; it takes the tile's `elite_every` and never its boss -- a boss is what a set piece ends on, and a run does not end. `_append_enemy` is the one place that knows how an enemy joins a fight, which is what keeps a tile's lineup and a run's thousandth enemy built alike -- both from `tier_for(position)`, the fight's own rule, which is also why `on_elite()` asks `EnemyRoster.tier_of` rather than counting to the end. `stop()` ends a run at the player's word (a win, because a run is not a thing that can be lost) and `kills()` is the score it shows instead of a countdown. A settlement's last enemy is the only boss the game rolls. `always_drop` makes every body carry something -- nothing in the game turns it on, it is what lets the tests and the screenshot scripts show a pouch with three finds in it without grinding out the hundred-odd kills a 3% chance takes. `arm(stats)` reads `Inventory.stats()` (gear and skills) as the fight opens, and again whenever the gear changes in the bag mid-fight (since 2026-10-02 the bag opens over a fight; the clock moves by the change in the gear's seconds and is never refilled), and keeps `bleed` and the finders beside the four combat numbers -- `drop_rate` handed to `LootTable.roll` on every death -- and a fight nobody arms does `BARE_DAMAGE` a click with nothing swinging, which is the game this was before gear meant anything. `hit()` is one blow, `advance(delta)` runs the clock and the weapon's own swings, `won`/`lost` end it. Every death also emits `gold_dropped` and adds to `gold`, the fight's running purse -- `gold_of` is `base_gold(cell)` times the body's own `hp_modifier`, so a purse is worth exactly what the body was worth to kill and nobody keeps a second table in step with the first. `base_gold` grows with the walk **both ways at once**, `(BASE_GOLD + GOLD_PER_STEP * steps) * GOLD_GROWTH ^ steps`, off the same smooth distance the health does rather than the banded `level_of` -- so an ordinary common body in the middle of the map is worth exactly one gold, which is where the whole curve is pinned. `GOLD_GROWTH` is set near `LootTable.LEVEL_GROWTH` rather than near `HP_GROWTH`, so a purse keeps pace with the gear that has to kill for it rather than with the health it has to get through. `hit_landed(amount, crit, automatic)` is what the view draws numbers from. Crit damage is what a crit *adds*: 50 is half again, and `arm` clamps crit chance to `CRIT_CAP` so a pile of gear -- or a piece from a save written before chances stopped being multiplied -- can never make every hit a crit. An automatic swing only earns while an enemy is standing there, so nothing banks through a walk-in. Health is `hp_modifier` over a base that grows **exponentially** with the distance from cell (0, 0) and **steps once per ice wall behind the cell** -- `BASE_HP * HP_GROWTH ^ steps * WALL_GROWTH ^ walls_inside(cell)` -- so the frontier pulls away from whatever the player is carrying and farming is how they catch up. `BASE_HP` is tuned so the first ring is what it always was, and `HP_GROWTH` is the dial for how fast the map gets hard. The second term is why the land a fallen wall opens is a frontier again rather than a walkover: felling a wall proves some forty times the damage a second the land inside it asks for, and a whole band of ten rings only grows by `HP_GROWTH ^ 10`, about five. `walls_inside` counts none of a wall's own ring, so the step lands on the first ring past a wall and `for_wall` carries no growth term of its own -- the wall on ring 21 comes out `WALL_GROWTH` times the one on 11 because its ring's bodies already are. Gold does **not** step with it: a body past a wall is tougher for the purse it always carried, and so is the level it drops at -- the reasoning is in `Scenes/Map/DESIGN.md` |
+| `encounter.gd` (`Encounter`) | The rules, with no nodes: `for_tile(cell, env, variant)` rolls the tile's lineup, seeded from the cell so a tile always fields the same fight, and keeps `env` -- the terrain picked the enemies and it picks the backdrop. `PROFILES` is what the `variant` buys: one table saying, per thing the world can put on a tile, how many enemies, how long a clock, how often an elite and whether the last one is a **boss**. Open land and roads are `ORDINARY` (the old ten in thirty, ending on an elite), and village, town and fortress share one `SETTLEMENT` entry -- fifteen in sixty, an elite every fifth, a boss last -- because what makes a town a longer fight is that people live there, not how many of them. A fight built and told nothing is the ordinary one, which is what every `Encounter` made by hand gets. `farm(cell, env, variant)` is the same fight `endless`: one enemy to start, and `_append_enemy` puts the next on the end of the lineup the moment the last one falls, so it is never finished; it takes the tile's `elite_every` and never its boss -- a boss is what a set piece ends on, and a run does not end. `_append_enemy` is the one place that knows how an enemy joins a fight, which is what keeps a tile's lineup and a run's thousandth enemy built alike -- both from `tier_for(position)`, the fight's own rule, which is also why `on_elite()` asks `EnemyRoster.tier_of` rather than counting to the end. `stop()` ends a run at the player's word (a win, because a run is not a thing that can be lost) and `kills()` is the score it shows instead of a countdown. A settlement's last enemy is the only boss the game rolls. `always_drop` makes every body carry something -- nothing in the game turns it on, it is what lets the tests and the screenshot scripts show a pouch with three finds in it without grinding out the hundred-odd kills a 3% chance takes. `arm(stats)` reads `Inventory.stats()` (gear and skills) as the fight opens, and again whenever the gear changes in the bag mid-fight (since 2026-10-02 the bag opens over a fight; the clock moves by the change in the gear's seconds and is never refilled), and keeps `bleed` and the finders beside the four combat numbers -- `drop_rate` handed to `LootTable.roll` on every death -- and a fight nobody arms does `BARE_DAMAGE` a click with nothing swinging, which is the game this was before gear meant anything. `hit()` is one blow, `advance(delta)` runs the clock and the weapon's own swings, `won`/`lost` end it. Every death also emits `gold_dropped` and adds to `gold`, the fight's running purse -- `gold_of` is `base_gold(cell)` times the body's own `hp_modifier`, so a purse is worth exactly what the body was worth to kill and nobody keeps a second table in step with the first. `base_gold` grows with the walk **both ways at once**, `(BASE_GOLD + GOLD_PER_STEP * steps) * GOLD_GROWTH ^ steps`, off the same smooth distance the health does rather than the banded `level_of` -- so an ordinary common body in the middle of the map is worth exactly one gold, which is where the whole curve is pinned. `GOLD_GROWTH` is set near `LootTable.LEVEL_GROWTH` rather than near `HP_GROWTH`, so a purse keeps pace with the gear that has to kill for it rather than with the health it has to get through. `hit_landed(amount, crit, automatic)` is what the view draws numbers from. Crit damage is what a crit *adds*: 50 is half again, and `arm` clamps crit chance to `CRIT_CAP` so a pile of gear -- or a piece from a save written before chances stopped being multiplied -- can never make every hit a crit. An automatic swing only earns while an enemy is standing there, so nothing banks through a walk-in. Health is `hp_modifier` over a base that grows **exponentially** with the distance from cell (0, 0) and **steps once per ice wall behind the cell** -- `BASE_HP * HP_GROWTH ^ steps * LAND_GROWTH ^ walls_inside(cell)` (the walls themselves keep `WALL_GROWTH`, passed as `step`) -- so the frontier pulls away from whatever the player is carrying and farming is how they catch up. `BASE_HP` is tuned so the first ring is what it always was, and `HP_GROWTH` is the dial for how fast the map gets hard. The second term is why the land a fallen wall opens is a frontier again rather than a walkover: felling a wall proves some forty times the damage a second the land inside it asks for, and a whole band of ten rings only grows by `HP_GROWTH ^ 10`, about five. `walls_inside` counts none of a wall's own ring, so the step lands on the first ring past a wall and `for_wall` carries no growth term of its own -- the wall on ring 21 comes out `WALL_GROWTH` times the one on 11 because its ring's bodies already are. Gold does **not** step with it: a body past a wall is tougher for the purse it always carried, and so is the level it drops at -- the reasoning is in `Scenes/Map/DESIGN.md` |
 | `fight_ledger.gd` (`FightLedger`) | What one fight has turned up and when it is written: every find, purse, orb, experience and counted body reaches the inventory as it lands; a tile fight saves each, a farm run writes at `bank_kills` (run end and game close both call it) -- the pouch that held a run's gains until it ended went on 2026-10-02, when the bag came to open over a fight (`Scenes/DESIGN.md`). No nodes -- the main scene makes one per fight, feeds it from `CombatScene`'s signals and refreshes the bag. `bank_kills` is the lifetime count |
 | `drops_view.gd` (`DropsView`) | What a fight has turned up, as a grid of `ItemSlot` squares one of which can be opened into an `ItemDetails` block. The verdict panel and the loot popup are both one of these rather than the same layout written twice; the grid and the details swap rather than stack, the way `BagPage`'s `_scroll` and `_detail` do in the bag. `resized_contents` is how an owner that centres it knows to measure again. With `discardable` set, an open drop carries a Discard button beside its back arrow, one row as in the bag — the view never touches its own list, it emits `discarded(item)` and the owner takes it out and fills again, so there is one place that knows what the run is carrying |
 | `camp.gd` (`Camp`) | What the hours away are worth, with no nodes and no `Inventory` in sight: `rates` samples a real farm run played actively and takes `IDLE_SHARE` of it, `make` builds the camp, and `earned` is the arithmetic that camp and a clock come to |
@@ -61,6 +61,8 @@ Half of every piece's numbers did nothing: armour, health, block, dodge, energy 
 - **Everything else went** (the user's): health, energy shield, regen, leech and the resistances, and the four kinds built on them -- the hat, robe, slippers and Sapphire Amulet -- rather than finding them clock jobs of their own. The helmet and body are now armour (helm, plate) or dodge (hood, jerkin), and each slot kept its share of drops. Heartwood Plate reads armour where it read health, and the Bulwark answers a blow its block stops whole where it rolled a block chance.
 - **Block and time on hit are kept in tenths of a second** (mine). A blow near the start is a quarter of a second, and a modifier rolls whole numbers; counted in whole seconds, the smallest "+1 Block" was a wall against every blow in the first band, and the first probe had a plain shield making the first band untouchable. Tenths keep the numbers whole and the lines honest ("+0.3s Block").
 - **Strikes are a switch the main scene turns on** (`Encounter.strikes`), the bargain `uniques_after` already strikes: a fight nobody tells anything is the fight it always was, so the tests that time a clock to the second did not all need rewriting. The one line that matters is in `_open_fight`.
+- **No defence may bank time, and the clock's own bookkeeping is what holds that (2026-10-10).** Recoup was paid after the clock's tick and before its verdict, so any share still owed left a sliver on a clock that had run out, every frame, and a blow landing at nothing was written down whole as a wound and owed back again: with any Recoup at all a struck fight could not be lost. Now what is owed is paid before the clock runs; a blow takes only what the clock still had, and only that is a wound; and inside one `advance` the tick may take the clock under nothing, so a second won back in the frame it ran out has to pay for the whole of that frame first. The sum that has to hold is `time_left + wounds = seconds - the time run`, which a clamp in the middle of a step quietly broke by a frame each time.
+- **A body that fell before the clock did is a kill, whatever the frame rate (2026-10-10).** A death takes `DEATH` to play and the clock runs through it, so the last body felled with less than that left was a loss at sixty frames a second and a win in one long step, Gollux felled there was a depth not won though his rune had dropped, and a run ended mid-death banked a kill short. The clock running out, `stop()` and `give_up()` now end a fight through `_end`, which counts the body going down first. It counts it directly and does not walk the next body on (`_advance_phase`): that would announce an enemy to the view, and draw one on a run's generator, as the fight ends. A save (Second Wind, the Worry Stone) is not spent where that death wins the fight; where it does not, the save is taken and the death plays out on the clock it gave back.
 - **Where the dials sit, and what they were chosen against** (`HIT_SECONDS` 0.25, `ARMOUR_K` = `DODGE_K` = 50): a bare-handed first ring still won at eight clicks a second, and the first ring past the wall won in the farmed set of rares at four clicks a second with some 6 s to spare and **lost** with the set's armour, dodge and block taken off. Measured with a throwaway probe on the day, at the first, doubled rhythm (so the blows cost twice what they do now), over rings 1 to 20 in one seeded set per rarity: inside the first band a worn set of commons is struck for nothing and a stripped one already loses on ring 10 at four clicks a second; past the wall commons lose and rares need the clicks; by ring 20 damage runs out before defence does. With the flat share the same frontier fight struck the farmed set for 11 s and **time on hit won every second of it back** -- while blows come slower than a hit heals, time on hit cancels them outright; without armour the blows were 27 s and it could not keep up. Those are measurements, not settled design, and `balance_wall.gd` reports the seconds its played-out player lost to blows.
 
 ## Tile modifiers and world curses (2026-09-21)
@@ -68,7 +70,7 @@ Two systems for length: the land past the **second** wall rolls modifiers on its
 
 - **One rule for both: it takes on one side and pays on another,** so nothing nets to zero. "Prices doubled, +gold find" was turned down for that; a curse that costs power pays in loot, one that costs loot pays in experience.
 - **A tile's modifiers are derived, never saved** -- `hash([map seed, "mods", cell])`, like its chest and its variant -- so a world always fields the same ones and the next world others. Set pieces (a settlement, a chest, the wall) carry none.
-- **One more modifier every ring of land past the second wall, no dice** (the user's, 2026-09-24, over the first build's 1, 1-2, 2-3): counted in `MapBuilder.ring_of`, so under the Ring of Walls every five-ring loop adds one too and the modifiers begin past its closer second wall -- the curse's walls are real walls. **Draws are put back, and a repeat is a tier** (the user's, same day: "tougher and more rewarding"): Savage II hits 100% harder and pays +40%, a factor compounds (Piercing II leaves a quarter of the armour), Horde II is ten more with the elite still last, Elite Ground II fields one in three (never closer than one in two). Sparse, Barren and Gilded are `once`: a bigger boon is not tougher, and "no gold" has no second step. **Rings a wall stood on carry none**, fallen or not, though `ring_of` counts them with the land outside. Unplayed: a Short Day III is 24 s off the clock, the likeliest tier to make a tile unwinnable.
+- **One more modifier every ring of land past the second wall, no dice** (the user's, 2026-09-24, over the first build's 1, 1-2, 2-3): counted in `MapBuilder.ring_of`, so under the Ring of Walls every six-ring loop adds one too and the modifiers begin past its closer second wall -- the curse's walls are real walls. **Draws are put back, and a repeat is a tier** (the user's, same day: "tougher and more rewarding"): Savage II hits 100% harder and pays +40%, a factor compounds (Piercing II leaves a quarter of the armour), Horde II is ten more with the elite still last, Elite Ground II fields one in three (never closer than one in two). Sparse, Barren and Gilded are `once`: a bigger boon is not tougher, and "no gold" has no second step. **Rings a wall stood on carry none**, fallen or not, though `ring_of` counts them with the land outside. Unplayed: a Short Day III is 24 s off the clock, the likeliest tier to make a tile unwinnable.
 - **Shares add, they do not compound:** a tile's `hp` and Iron Foes, a tile's `hit` and the Bloodthirst, go into one sum each (`_hp_more`, `_hit_more`), the rule `unique_more` and the global percents already follow.
 - **A farm run and a camp carry only what can bite there** (`farm: true`: Thick-skinned, Elite Ground, Barren, Gilded), reward and all. A run has no clock and is never struck, so a clock or strike modifier there would be its reward for nothing. The user's ruling, over "charting fight only" (a modified tile would be a one-off) and "rewards always" (deep tiles would be the best farms by a mile).
 - **Sparse is a boon on purpose** (the user's): six bodies, the tile charted sooner, nothing paid -- four fewer bodies is the price. Horde moves the elite to the end (`elite_every` 15) so the fight still ends on it; Horde, Sparse and Elite Ground never share a tile because all three set `elite_every`.
@@ -81,14 +83,14 @@ Two systems for length: the land past the **second** wall rolls modifiers on its
 - **What `tests/balance_mods.gd` found on its first run, and it is about the strikes, not about these:** on the first ring past the second wall a common's blow is ~75 s of clock, ~24 s after a farmed rare set's armour and block. `hit_of` grows with `base_hp`, walls and all, and armour grows with the item's level, which is 7 out there -- so past the second wall one landed blow loses the fight and the tile is really "kill each body before it swings" (1 s a common, 2 s an elite). That is why Savage, Piercing, Keen-eyed, Sundering, Timeless and the Bloodthirst all read x1.00 in the table and Frenzied reads x1.33: they are free rewards until `HIT_SECONDS`' growth is looked at. Every number in both tables is an unplayed first guess.
 - **Blows got their own curve (2026-09-28, the user's).** Sized off `base_hp` (1.18 a ring, 2.2 a wall), a common's blow on ring 25 was 75.8 s, and 244 armour -- 83% of it -- still let 12.9 s through. Armour is a share, so past a few hundred what lands is about `hit * ARMOUR_K / armour`: a blow that grows exponentially outruns any armour an item's level can buy. Even with no wall step at all, 1.18 a ring alone was 15.7 s there. So `hit_of` now grows by `HIT_GROWTH` 1.1 a ring and `HIT_WALL_GROWTH` 1.5 a wall: ring 25 is 6.1 s, about 1 s through 244 armour, ring 12 0.78 s, ring 37 29 s. Turned down: 1.065 a ring with the 2.2 wall step (a flatter band, a cliff at each wall) and 1.135 a ring with no wall step (one smooth curve).
 - **Hard Lessons (the user's, added after the first ten): 75% less experience, every skill point worth double.** Both halves are multipliers on purpose. The experience is a "less" on the finished figure, so No Rest's and Pauper's +experience cannot buy it back point for point; the doubling is of what a point *adds* -- flat and percent sums alike, read through `Inventory.skill_worth` so the skill's card says what the fight gets -- and never of a capstone, which is not a number. **It is not "half the skill power", which is what was first written here:** a level costs only 3% more than the one before (`LEVEL_XP_GROWTH`), so a quarter of the experience is a quarter of the levels only at the start and a fixed ~47 levels behind later on. At the same experience earned it is 4 points' worth against 10 at level 11, 40 against 50 at level 51, level at about 78, and ahead from there -- and its real prize is the ceiling: the trees hold 69 ranks, so an uncursed player stops at 69 points' worth at level 70 and a cursed one goes on to 138. With No Rest and Pauper beside it (+65% experience, added before the "less") it is level by about 31. A curse for a long world, and one that turns the two experience curses from filler into its partners. Worked out by hand on 2026-09-21, not by a table in `tests/`; it ignores the overranks, which give an uncursed player somewhere to spend past 69 (and double what a Hard Lessons overrank adds too). The sentences in the table were cut to one line each when it arrived: eleven wrapped rows do not fit a 648 px window.
-- **The second batch (2026-09-21, the user's pick of five ideas and the four that pay in meta currency).** *Pacifist Hands, Berserker's World, Glass World* are the Metronome's, the Berserker's Band's and the Glass Edge's rules made a whole world's, and **each adds to its unique where both are had** (the user's ruling) -- through the unique's own sum, never a second multiplier. Pacifist Hands had to give bare hands a swing of their own (+1.5 a second, then everything doubled) or a new world, which begins with no weapon, could not kill anything; it and Berserker's World cannot be taken together, because no clicks and no swings is no damage at all (`not_with`, which the picker greys). *Raw Finds* makes a world where every find is a crafting base and orbs fall three times as often. *Homeland*: only two lands leave gear -- the one the start stands on, so the first fights are never barren, and one other -- chosen once the new map exists, because nobody knows what the start stands on before that; chests and the wall still pay, being no land's. *Specialist*: one tree, every point worth half again, its share **added** to Hard Lessons' (2.5, not 3); it also means no skill goes past its most that world (overranks need every tree full), which is part of its price. *Restless*: a camp full in 2 hours that pays double an hour -- the one curse that changes how often the game is opened. **The four that pay in meta:** *Forgotten* (no log damage this world; its new finds count twice for good), *Ring of Walls* (a wall every 5 rings; only where the wall stands moves -- `walls_inside` still counts in tens, so the land and the tile modifiers are where they were and the extra walls are extra gates, each paying its orb), *Lone Heir* (the heirlooms' doll begins bare and takes one piece; the heirloom made at that world's end is +1), *No Second Chances* (a lost tile is a lost world, +1 orb a wall, added to the Long Winter's). A world lost that way makes **no heirloom**: otherwise losing a fight on purpose would be the cheapest way out there is, with no price and no wall asked. All unplayed.
+- **The second batch (2026-09-21, the user's pick of five ideas and the four that pay in meta currency).** *Pacifist Hands, Berserker's World, Glass World* are the Metronome's, the Berserker's Band's and the Glass Edge's rules made a whole world's, and **each adds to its unique where both are had** (the user's ruling) -- through the unique's own sum, never a second multiplier. Pacifist Hands had to give bare hands a swing of their own (+1.5 a second, then everything doubled) or a new world, which begins with no weapon, could not kill anything; it and Berserker's World cannot be taken together, because no clicks and no swings is no damage at all (`not_with`, which the picker greys). *Raw Finds* makes a world where every find is a crafting base and orbs fall three times as often. *Homeland*: only two lands leave gear -- the one the start stands on, so the first fights are never barren, and one other -- chosen once the new map exists, because nobody knows what the start stands on before that; chests and the wall still pay, being no land's. *Specialist*: one tree, every point worth half again, its share **added** to Hard Lessons' (2.5, not 3); it also means no skill goes past its most that world (overranks need every tree full), which is part of its price. *Restless*: a camp full in 2 hours that pays double an hour -- the one curse that changes how often the game is opened. **The four that pay in meta:** *Forgotten* (no log damage this world; its new finds count twice for good), *Ring of Walls* (a wall every 6 rings, `MapBuilder.RING_OF_WALLS_STEP`; only where the wall stands moves -- `walls_inside` still counts in `WALL_STEP`s, so the land and the tile modifiers are where they were and the extra walls are extra gates, each paying its orb), *Lone Heir* (the heirlooms' doll begins bare and takes one piece; the heirloom made at that world's end is +1), *No Second Chances* (a lost tile is a lost world, +1 orb a wall, added to the Long Winter's). A world lost that way makes **no heirloom**: otherwise losing a fight on purpose would be the cheapest way out there is, with no price and no wall asked. All unplayed.
 
 ## The skull budget (2026-09-21)
 **History since 2026-10-03:** the user ruled that skulls come only from killing Gollux (`Inventory.skull_allowance`, see The dungeon), so the wall-earned budget below is gone and a player with no depth won has no curse to take. The reasoning is kept for what it turned down.
 
 The skulls were a label until the user asked how a player should earn them: now a transcension may take any curses whose skulls add up to `Inventory.skull_budget`, and **nothing else caps them** -- `MOST` (three) is gone, the user's ruling, with no cap on the budget either. The table itself is the ceiling (41 skulls with every row taken, one of Pacifist Hands and Berserker's World), and every row added raises it.
 - **The rule:** at each transcension the budget becomes `max(budget, depth + skulls carried)`, the skulls carried being only those the budget paid for (the dungeon's depth is added on top of the budget and never carried, see The dungeon). Put the other way, every wall broken is a skull and every skull of the budget left unspent cancels one: playing safe with 2 of 6 and breaking 4 walls earns nothing, and only a world that uses its budget climbs. It never falls, so a bad world costs only itself.
-- **Depth, not walls:** `walls_credited` counted in `WALL_STEP` rings. Counting walls would let the Ring of Walls (a wall every five rings) double the climb for three skulls; it still pays its extra super orbs.
+- **Depth, not walls:** `walls_credited` counted in `WALL_STEP` rings. Counting walls would let the Ring of Walls (a wall every six rings) double the climb for three skulls; it still pays its extra super orbs.
 - **A world lost to No Second Chances raises nothing** -- its depth and its skulls both go, the user's ruling ("an all or nothing gamble"). The raise stays whole for a world left through the fortuneteller however it went.
 - **Starts at 0:** the fortuneteller's way out waits for a wall, so a first transcension always has at least one skull to spend; only a world lost under No Second Chances can leave the curse card greyed.
 - **Turned down:** buying skulls with gold or super orbs (difficulty should be earned, not bought, and the orbs are spoken for), a Transcend tree node (would lose to every power node), a budget of transcensions made (grows with time played, not with what the player can take), Hades-style free curses with the pay gated (these pay row by row already).
@@ -145,3 +147,329 @@ The user asked what a good upper limit on attacks and clicks a second would be, 
 - **An allowance, not a least gap.** A hand at 12 a second leaves gaps from 50 to 120 ms, and a steady 16 a second clicks every 62.5 ms against a fifteenth's 66.7: a least gap would drop every second click and pay eight. The allowance (`CLICK_BURST` 3, filling at `CLICK_CAP`) lets 16 a second through whole for two seconds and then fifteen in sixteen -- 902 of a minute's 960. It fills on the fight's time, so the unique find's slow motion (a tenth of speed) is not a window to click through.
 - **Attacks: 10 a second** (`SWING_CAP`), after everything that multiplies them. Every swing plays the swing, a number, a jolt and a sound (four at once at most): past five the animation is always cut back, past ten the numbers smear and the sound buzzes, past sixty several land in one frame. A click and a swing are the same blow, so the hand's share is clicks over clicks and swings: a third at five clicks against ten swings, a fifth against twenty, and the clicker gone. The stacking had no top -- the Quickdraw Boots at IV turn spawn speed past 100 into attack speed with no limit, and Pacifist Hands is (speed + 1.5) x 2. Speed past the cap is a dead stat, as crit chance past 100 is; turning it into damage, as the Quickdraw Boots do spawn speed, was offered and not asked for.
 - **Where it bites:** fodder already caps speed -- once a body dies to one blow, the 1.1 s of walk-in and death is the pace -- so the cap is felt against walls, bosses and Gollux, which is where the board is decided.
+
+## Reference (moved here from CLAUDE.md on 2026-10-10)
+
+### Files in full
+
+#### encounter.gd
+The rules, no nodes. `for_tile(cell, env, variant, chest)` rolls a lineup seeded from the cell; `farm(...)` is the same fight `endless`. `PROFILES` (keyed by `MapBuilder.area_variant`):
+`ORDINARY` is ten enemies in 30 s ending on an elite, `SETTLEMENT` fifteen in 60 s with an elite every fifth and a boss last, `CHEST` a lone `MIMIC`. `for_wall(cell)` is the ice wall:
+`WALL` profile, the lone `WALL_NAME` in 60 s on the `ice` backdrop, health `hp_of * WALL_HP` and no growth term of its own -- `hp_of(.., WALL_GROWTH)` already steps once per wall, and a wall's ring counts none of itself,
+so the second wall is `WALL_GROWTH` times the first on top of the walk between them (`WALL_HP` is the dial for how hard a wall is).
+**From the fourth wall on** (`LATE_WALL_FROM`) a wall is instead `LATE_WALL_BODIES` (150) ordinary bodies of the ring just inside it, `base_hp * hp_tuning`. `arm(stats)` reads the player's stats once;
+`hit()` is a click (`click()` is the hand's, under `CLICK_CAP`: only the scene calls it), `advance(delta)` runs the clock, auto-swings, lets the enemy strike (`_be_struck`) and then wears the body down (`_wear_down`, the bleed), `stop()` ends a run, `kills()` is its score.
+**Strikes:** while `strikes` (the main scene's, off in a hand-built fight) a standing enemy hits every `ATTACK_EVERY[tier]` (common 1 s, elite 2, boss 4) for `hit_of(enemy, cell)` = `HIT_SECONDS * HIT_GROWTH ^ steps * HIT_WALL_GROWTH ^ walls_inside(cell) * HIT_TIER[tier]` seconds of clock;
+`_struck_by(hit)` rolls `dodge_chance()`, else takes `taken(hit)` = the hit less armour's share (`rating / (rating + ARMOUR_K)`, the same share of any blow) less block, adds it to `wounds`, and emits `player_hit(taken, dodged, blocked)`.
+A landed hit of the player's gives back `min(time_on_hit, wounds)`. Signals per enemy, hit, death and drop (`loot_dropped`, `gold_dropped`, `orb_dropped`, `xp_dropped`), then `won` / `lost`.
+**`enemy_died` goes out before the body's loot is rolled and `kill_paid(index)` once all of it has gone out** (a cave body's rune too), so whatever changes what the next body pays -- a rune running out -- waits for `kill_paid`.
+`tier_in(slot)` is the tier both `KillPips` and `HealthBar` read.
+Health is `BASE_HP * HP_GROWTH ^ steps * LAND_GROWTH ^ walls_inside(cell) * hp_modifier` -- **every wall behind a cell multiplies its bodies by `LAND_GROWTH` (10)**, while the walls themselves step by `WALL_GROWTH` (2.2),
+passed to `base_hp` / `hp_of` as `step`, and a blow (`hit_of`) grows on its own slower curve (`HIT_GROWTH` 1.1 a ring, `HIT_WALL_GROWTH` 1.5 a wall); which is what keeps the land a fallen wall opens from dying to one click;
+gold is `base_gold(cell) * hp_modifier` and does **not** step with it, and `base_gold` is `gold_at_steps(distance)` so a price can be quoted in bodies with no cell to point at (`TownPrices`)
+
+#### tile_mods.gd
+What land past the second wall does to its own fight, and what it pays.
+`MODS`: id -> `name`, `text` (dials in braces), `weight`, `farm`, `once`, `not_with`, and the dials `Encounter` reads by key -- `enemies` / `seconds` (added), `elite_every` (put in place, divided by the tier) / `elite_last`,
+`hp` / `hit` / `attack` (shares, added), `armor` / `dodge` / `block` / `time_on_hit` / `swing` / `walk_in` (factors), and the pay `drop_rate` / `item_rarity` / `gold_find` / `xp`.
+`for_cell(map_seed, cell, ring, wild)` is a pure function (none short of ring `FROM_WALLS` 2, then 1, 2, 3...: one more every ring of land, counted in the map's `wall_step`, so under the Ring of Walls each six-ring loop adds one;
+`wild` a wall sooner and one more). **Draws are put back: a modifier drawn twice is listed twice, and that is its tier** -- `total` adds and `factor` multiplies once a listing, so nothing else counts tiers;
+`value(id, key, tier)` for the one read by hand, `describe(id, tier, wild)` for the tile panel's name / text / pay -- the pay through `paid(percent, wild)`, Wild Tiles' lift and the one figure `Encounter.arm` adds too, so the panel and the fight cannot disagree.
+`once` rows (Sparse, Barren, Gilded) never repeat. `farmable`, `total`, `factor`. `MapBuilder.mods_of` is its one caller in the game
+
+#### curses.gd
+The twenty-two world curses as a table: id -> `name`, `skulls`, `text`, `reward`, and `stats` (what `Inventory.stats()` adds; `xp_more` is read by `Encounter.arm` alone).
+A figure a rule reads is written into its sentence from the rule's own constant (`Encounter`'s, `TileMods.WILD_REWARD`, `Camp`'s hours, `MapBuilder`'s wall steps), never typed in twice; the rows stay finished sentences, which the pages read as they stand.
+`skulls_of(taken)` is what a set of them costs and `fits(id, taken, budget)` whether one more is affordable and `allowed` (no cap on how many, only on skulls), `effect(id)` = `"curse:<id>"`, `known(saved)` drops ids this build has not got,
+`allowed(id, taken)` reads a row's `not_with` (Pacifist Hands and Berserker's World are no world together), `HOME_PREFIX` is how the Homeland's two lands reach a fight
+
+#### fight_ledger.gd
+What one fight has turned up (`drops`) and the one rule for when it is written (see `Scenes/CLAUDE.md`): every gain reaches the inventory as it lands; a tile fight saves each, a run (`farming`) writes at `bank_kills`.
+No nodes; the main scene makes one per fight.
+`add_loot/gold/orb/xp` (the Broken Sword's and the first orb's flags set as they land), `add_kill(enemy)` (a body for the bounty boards, `BountyBoard.count_kill`, then `bounty_counted(enemy, have, need)`
+-- a body past `need` is said by neither; the bounty's monster refused only for falling on land shallower than the posting's `level` is `bounty_too_low(enemy, level)` instead), `autodiscarded`,
+`discard` (false for a piece no longer in the bag), `bank_kills`
+
+#### drops_view.gd
+A fight's finds as a grid of `ItemSlot`s on the bag's light `TextPanel`, with the orbs it is handed in a row under them, one find openable into an `ItemDetails` block; used by both the verdict panel and the loot popup.
+With `discardable`, emits `discarded(item)` and never edits its own list. `resized_contents` tells the owner to re-centre.
+Past `MAX_ROWS` (3.5) the grid scrolls by the wheel in a barless `ScrollContainer`, the half row being the hint, under `ItemRarity.FRAME_HEAD` of room inside it so the first row's frames are not clipped; the box is sized by counting rows,
+since the grid is not laid out yet when `fill` runs `most_rows` is `MAX_ROWS` until the owner's panel is taller than the window:
+`fit_rows(over)` gives rows up, to `FEWEST_ROWS`, still ending on a half row (`CombatScene._fit_window`, before the verdict and the loot popup are centred, which also shrinks the panel back to its contents: a find opened is shorter than the grid).
+
+#### camp.gd
+The camp made for the hours the game was shut, all rules and no nodes. A camp is the tile's farm run played actively and cut to `IDLE_SHARE`:
+`rates(fight)` plays an armed endless `Encounter` clicked at `CLICK_RATE` (5 a second) for a sample (`SAMPLE_SECONDS` 120, on to `SAMPLE_KILLS` 5 bodies, `SAMPLE_MOST` 1800 either way,
+at `SAMPLE_STEP`) and hands back that share of what it earned a second in gold, experience and bodies -- **a full camp (`MAX_SECONDS`, 8 h) pays half an hour of active play**.
+`make(cell, place, fight, at)` is the camp -- `SINCE`, `CELL`, `PLACE`, `MOST` and those three rates -- and `earned(camp, at)` is rate times seconds, clamped to its `MOST` and never negative, in whole coins as in whole experience and bodies, with `full` saying the cap is what stopped it.
+`cell_of`, `spell_time`
+
+#### camp_scene.gd
+The camp on screen, already paid: the tile's own backdrop under the night sky (`SKY`, its light on the land, whatever the clock says) with **nobody on it**, and a centred panel -- the place, what a camp is,
+then Resting / Kills / Gold / Experience from the `earned` it is handed, the cap's sentence where it bit, and **Break camp**.
+`begin(camp, earned, env, variant, ui_scale)`, signal `broke_camp`. A `CanvasLayer` on the fight's own layer 2, for `CombatScene`'s reason
+
+#### combat_actor.gd
+An `AnimatedSprite2D` built from a sheet at runtime, for both sides. Scaled and stood up by its idle frames, so `position` is the middle of its feet.
+Given the backdrop's pixel (`CombatScene._pixel`: one texture pixel of any backdrop layer, a place's or the cave's) its scale snaps to half-steps of it between 1x and `PIXEL_MOST`, an elite a step coarser (`fit`,
+which the scene asks again when the window changes); what is read off a texture's pixels -- the standing box, the feet, the tint -- is kept in `_read`, since reading one back from the GPU is slow;
+a contact shadow (`_lay_shadow`) is its child, under what the idle draws in its bottom quarter.
+The scene tints both fighters `SCENE_LIGHT` of the way toward the light they stand in -- the cave's gloom (`CAVE_HAZE`) or the sky's (`SKY_LIGHT`; white by day) -- through `self_modulate`, which leaves `modulate` to the hit flash
+
+#### combat_scene.tscn / combat_scene.gd
+The view, a `CanvasLayer` (2) the main scene adds over the hidden map: `begin(fight, cell, ui_scale, variant, layout, sky)` (layout 0 the cell's, sky "" the clock's). Top centre: place name and level, `KillPips`, clock.
+Bottom centre: enemy name and `HealthBar`. Bottom-right: loot counter (opens `_loot_panel`). Top-right: Terminate (a run: `stop()`; a tile fight: `give_up()`, a loss whose verdict says "Given up"). Signals out:
+`finished(won)`, `retry`, `loot_kept`, `loot_discarded`, `drop_discarded`, `gold_gained`, `orb_gained`, `xp_gained`, `xp_absorbed`, `panel_up` (the loot popup or the verdict came up: the main scene puts its bag away). Set from outside:
+`autodiscard` (Callable), `page_up` (Callable: while it answers true, Escape is left to the bag), `bag_room` (-1 = unknown), `place`, `xp_target`. `close_loot()` puts the popup away.
+`hud_bottom()` is the bottom of the top-centre column, for anything the main scene stands over a fight and has to keep off it, and `corner_bottom()` the Terminate flag's, which the mirrored character panel stands under while the bag is up.
+**The backdrop is a parallax** (`backdrop_layers(env, variant, layout, sky)`, each `[texture, rate]`, laid by `_add_layer`): the sky (`Assets/Area/sky/<sky>.png`, still), the land's bands (`land/<env>_<layout>_<band>.png`, 1 the farthest,
+`BAND_SLOWEST`..`BAND_FASTEST` of the pace; as many as there are files) and the ground (`<env>_<variant>_<n>.png`, the whole pace), all 384x216 repeating textures (`layer_sprite`, `fit_layer`,
+which the camp and `tests/cover_art.gd` use too).
+`layout_for(cell)` picks the layout; `sky_at(hour)` the sky from the player's clock (`SKY_HOURS`), whose light (`SKY_LIGHT`) is a multiply on every layer but the sky.
+**A settlement is held, not walked through** (`_walks_on`: its `Encounter.PROFILES` entry is `SETTLEMENT`): the hero stays idle, the enemies come to him and nothing scrolls.
+**What a body throws lies on `_ground_drops`**, which `_scroll` slides with the ground; a piece the hero reaches (`drawn_size` past his feet) is picked up at once (`_pick_up`: its throw's tween, kept as the `THROWN` meta, killed, then `_fly_to_counter`, which moves it to the scene and leaves its beam on the ground).
+`hud_top` is how far down the top-centre column stands (`HUD_MARGIN`, or under the character panel on a window held upright: the main scene's `_fight_top`, set beside `xp_target`).
+**Sounds:** `weapon_kind` (`LootTable.KINDS`, "" bare-handed; set before `begin`) picks a hit's blow -- `BLUNT_HIT` for a `BLUNT` kind, the punch otherwise -- and its crit, which plays instead of it:
+`BLUNT_CRIT` bare-handed or blunt, `SLASH_CRIT` for a blade (the user's ruling), with `GENERAL_CRIT` over it (`_crit_layer`, the user's pairing, 2026-10-06).
+A blow that took time plays `STRUCK_SOUND` (dodged or blocked, nothing); a find, every coin of a purse (held back by its place in the burst, `THROW_STAGGER`; one at no animation) and an orb play as they land (`_land`:
+`THROW_TIME` on, on a tween so slow motion and a tip hold it; at once at no animation), a find by `drop_sound_of` (a unique its own, every other piece `item_drop`; an orb `orb_drop`: the user's, 2026-10-06; every find,
+coin and orb pitched at random within `DROP_PITCH`); experience as it reaches the bar (`xp_absorbed`); a lost fight's verdict `DEFEAT_SOUND`, and a won one nothing (its fanfare was annoying: the user's ruling, 2026-10-02).
+Takes of one sound are one `Juice.takes` pool.
+
+### Rules in full
+
+#### The dungeon measures damage only
+**The dungeon (`Encounter.for_dungeon(won)`, `dungeon`, `first_floor`, `depth()`, `cleared()`) measures damage and nothing else,** and every rule of it is one `if dungeon` in `Encounter`: a floor's health is `BASE_HP * DUNGEON_GROWTH ^ floor * DUNGEON_TIER_HP[tier]`,
+**Gollux's `gollux_hp()` (the second ice wall's, `for_wall`, to the nearest `GOLLUX_ROUND` 500k, the user's 2026-10-03) times `DUNGEON_GROWTH` a floor past the first depth's last**, and nothing of the roster's sizes,
+a tile's modifiers or a world's curses (`_health_of`, which is handed the position when `_take_curses` sizes bodies again);
+`tier_for` counts in **floors** (`first_floor + position`), an elite every fifth and Gollux every fifteenth for ever; nothing strikes;
+`_kill` returns before anything is rolled, so it pays **nothing** -- no gear, purse, experience, unique, orb or Hourglass second -- **but a rune** once the third wall has opened them (`runes_drop`, `RuneTable.roll` off `loot_rng`,
+`rune_dropped`, which `CombatScene` throws in the rare's beam and passes on as `rune_gained`); the clock runs as it does in any fight, walk-ins and deaths included (the user's, 2026-10-03); and the clock running out is `_finish(true)`,
+an end and not a loss.
+**A depth is fifteen floors and is won only when its Gollux has fallen:** `depth()` is `(first_floor + index) / enemies + 1`, so it moves as `index` passes him and never for a floor short of him, and `cleared()` is how many this descent has won.
+`for_dungeon(won)` begins at the top of the depth under the ones already won, with a whole clock, and a descent that kills Gollux goes on into the next depth on what is left of it. A click lands as it does anywhere (the user's ruling).
+**`endless` stays false:** anything that asks `endless` to mean "no clock" is right about the dungeon, and the four places that mean "the lineup grows" ask `dungeon` beside it (`_advance_phase`, `wear`, `KillPips.show_fight`, the view's Terminate).
+Reasoning and the turned-down shapes: `DESIGN.md`.
+
+#### Cave layer 1 goes in front
+**The view of it (`CombatScene`):** the backdrop is the cave's seven layers (`Assets/Area/cave/<n>.png`, **1 the nearest and 7 the flat dark; the pack's 0 is all of them put together, a preview, and is not exported** -- drawn as a layer it hid the rest and there was no parallax at all).
+`_build_cave` lays 7 down to 2 behind the fighters and `_build` adds **1 after them, so the nearest rock stands in front of the hero and the monsters**; each slides at its share of `WALK_SPEED` while the next floor walks in (`_scroll`,
+the farthest still and the nearest at the full pace) -- **the one scroll every fight has**: a place's layers go by the same way, the hero playing `walk` until the enemy stands (`_on_enemy_spawned`), none of it at `Settings.Anim.NONE`.
+**The fighters stand at `_ground()`, never at `GROUND`:** `CAVE_GROUND` down there, because the cave's floor lies lower than a backdrop's grass band and at `GROUND` everyone floated.
+The heading's gold half is "Depth n", rewritten in `_refresh`; no loot counter; Terminate is `stop()`; the verdict's word is the depth, its second line whether Gollux fell, no finds, and **Leave** in Collect's place.
+The main scene opens it with `_on_dungeon_pressed`, from the world's cave's Enter cave (`Scenes/CLAUDE.md`) -- no ledger, no board hears of a body, none of its kills are banked
+-- and `_bank_depths` writes `inventory.dungeon_depth` where the descent won any, and `inventory.dungeon_floors` (`first_floor + index`, the leaderboard's score) where it went further than ever, on the way out of it and out of the game.
+
+#### Tile modifiers reach a fight one way
+**A tile's modifiers reach a fight through `for_tile(.., mods)` / `farm(.., mods)` and nowhere else,** and a fight nobody tells has none.
+`_take_mods` shapes the fight right after the profile and before the lineup is rolled; what they do to the player's numbers and what they pay is the tail of `arm()`, added to the finders so `_kill` has no second path.
+**`farm` keeps only `TileMods.farmable`:** a run has no clock and is never struck, so a clock or strike modifier there would be pay for nothing. A chest and the wall carry none. Barren and Gilded are asked for by id in `_kill`.
+
+#### A curse is one `if`
+**A curse is one `if` on `Curses.effect(id) in effects`, like a worn unique's,** and the ones that shape the fight are taken on once in `wear` (`_take_curses`, `_cursed`):
+Iron Foes and the Bloodthirst add to the tile's own shares, Short Days cuts every clock with one, and a body's health is sized again through `_health_of` -- **only under a curse that moves health, so a fight built by hand keeps the health it was given**.
+`_health_of` is the one place a body's starting health is worked out; the ice wall answers there to `WALL_HP` and the Long Winter and to nothing else.
+
+#### Lift a finished chance with `_lifted`
+**A finished chance is halved or doubled through `_lifted(rate, factor)`,** never by adding points:
+Lean Pickings hands every gear roll `_gear_rate()` (the purse, the orbs and the unique roll keep the full `drop_rate`), the Thick Fog hands the unique roll twice its chance.
+`_lean(item)` is the curse's pay -- a find falls +1 or +2 (`LEAN_PLUS`, `Item.ascend`) -- drawn on `loot_rng` **only under the curse**, so nobody else's loot stream moves; never the Broken Sword.
+**Hard Lessons is a "less" too:** `_kill` multiplies the finished experience by `LESSONS_XP` after every `xp_more` has been added, so a camp, which samples a real run, is taught as slowly.
+
+#### A curse that is a unique's rule adds in the unique's place
+**A curse that is a unique's rule made a world's adds to the unique, in the unique's own place** (the user's ruling):
+Berserker's World is a line in `unique_more` beside the Band's, the Glass World is `_glass()` -- how many things are spending the clock -- so the clock is `GLASS_CLOCK ^ n` and the damage `GLASS_MORE * n`, and Pacifist Hands stills the click where the Metronome does.
+**`swings()` is the one answer to whether the weapon swings on its own** (`_swing_weapon`). Pacifist Hands' swings are in `Inventory.stats()`, not here, so the character page sees them.
+
+#### Raw Finds strips before `_lean`
+**Raw Finds and the Homeland are two more hands on `_kill`:** `_raw(item)` strips a gear find to a bare common (never a unique, and before `_lean`, so a raw find can still fall +1);
+a fight abroad (`Curses.effect(HOMELAND)` without `HOME_PREFIX + env`) rolls no gear exactly as a Gilded tile does -- **but never a mimic or the wall, which are no land's**
+-- and at home `arm` adds `HOME_RARITY` and the unique roll is lifted `HOME_UNIQUES` times, multiplied with the Thick Fog's.
+
+#### A Restless camp is still arithmetic
+**A Restless camp is still arithmetic:** `Camp.make` reads the curse off the fight's `effects`, doubles the two rates it pays and writes `MOST` (2 h) into the camp; `earned` clamps to its `MOST`, and one without fills at `MAX_SECONDS`.
+
+#### Keep `advance`'s clock order
+**The clock inside one `advance`:** what `recoup` owes is paid before the clock runs, the tick may take `time_left` under nothing for the rest of the step (so what is won back inside it pays the whole of what ran first), and the verdict at the foot is what stops it at nothing.
+A blow takes only what the clock still had (`_struck_by`'s `off`), and only that is a wound or owed back.
+
+#### `even_loot` replaces gear and unique rolls
+**`even_loot` (dev, set by the main scene from `Settings.even_loot_on()`) replaces a body's gear and unique rolls** with one find at `EVEN_LOOT_CHANCE` (1/3), its rarity drawn evenly from common to unique (`_even_find`, `LootTable.roll(.., forced)`);
+a chest keeps its own rules, and the purse and the orb are rolled as ever.
+
+#### A beaten gear roll rolls again
+**A gear find that beat the chance rolls again, to `MOST_DROPS` (4) pieces off one body,** at the same chance and never `guaranteed` -- which is what stops a drop rate at `chance_for`'s ceiling looping for ever.
+**A certain roll never cascades:** the promised sword's kill, a mimic's `MIMIC_ROLLS`, Trophy Hunter and `always_drop` each leave exactly one piece a roll.
+Lucky Wound still picks the better of two for the *first* find only, and the unique, the orb and the Magpie's purse-for-gear are separate single rolls.
+
+#### One listener to `loot_dropped`
+**`CombatScene._on_loot_dropped` is the only listener to `Encounter.loot_dropped`** and the only place autodiscard is applied (`autodiscard`, a Callable asked of the whole find:
+`Inventory.leaves_behind`, the level's rule and the loot filter); it forks into `loot_kept` / `loot_discarded`. A discarded find appears nowhere and is counted once under the verdict.
+
+#### A farm run carries its tile's runes
+**A farm run carries the runes on its tile** (`RuneTable`): their modifiers ride in `mods` with the tile's own, `farm(.., deeper)` sets the Depths before the first body (each `MapBuilder.LEVEL_TILES` rings' `HP_GROWTH` on a body's health and `GOLD_GROWTH` on its purse,
+and a level on its experience and on what drops, `_level()`), and `ascended` lets a find fall ascended as Lean Pickings' do (`_lean`).
+`forget_mod(id)` takes one listing of a worn-off modifier out of a run, its health, blows and elite pace (back to `_base_elite_every`) from the next body on; what it paid goes at the next `arm`. A camp carries none of it.
+
+#### Roll a promise only when owed
+**The promised finds (`PROMISED`, `promised`, `kills_before`, `_due(promise, rng)`; the rule is `Scenes/CLAUDE.md`'s).** The body going down is lifetime kill `kills_before + index + 1`.
+`_due` draws one chance in the kills the promise has left, on the find's own generator (`loot_rng` the sword, `orb_rng` the orbs, `unique_rng`, `stone_rng`), and **only for a promise owed**, so a fight nobody tells rolls exactly as it always did.
+Past its last kill inside one fight it is certain. A promise is erased as its find falls, luck's too: any gear while the sword is owed is the sword, an Augmentation off the table and a unique off the pool spend theirs.
+`guarantee_elite` (an elite's certain piece) is set by nothing in the game, like `always_drop`.
+
+#### Roll a unique beside the gear
+**A unique is rolled beside the gear, on `unique_rng`, and leaves through `loot_dropped` like any find.** `uniques_after` is `NO_UNIQUES` (-1) until the main scene sets it, so a hand-built fight drops none and every test that counts finds counts what it always did.
+Nothing promises one but a chest and the first (`PROMISED`'s `UNIQUE`: `UniqueTable.FIRST_UNIQUE`, off `unique_rng`, never a mimic's body, and spent by a unique luck finds first): past the wait it is `UniqueTable.chance_for` alone.
+**The mimic is the one exception:** `_kill` tosses `MIMIC_UNIQUE` on `loot_rng`, and heads is one guaranteed unique (`UniqueTable.roll(..., guaranteed)`, no wait) and nothing else, tails is `MIMIC_ROLLS` (4) certain gear rolls; it never takes the ordinary unique roll.
+Autodiscard never applies to one.
+
+#### Weapon lines are one sum, `gear_more`
+**The weapon's lines are one sum, `gear_more(automatic, big, first)`, applied in `_strike` just before `unique_more` and never inside it** (a gear line is not a unique):
+Click Damage on a click, Swing Damage on a swing (a riposte is one), Elite Damage where `big`, First Blow Damage where `first` (`_blows` was 0).
+**Double Strike** doubles a blow beside the Band's and the Chalice's, drawn on `crit_rng` only while `double_strike` is above 0. Both chances `arm` reads (`double_strike`, `elite_chance`) are clamped to 100.
+**Elite Chance promotes** (`_promote(at)`): a common comes on as an elite of `env` (`EnemyRoster.pick`, health by `_health_of`), on its own unseeded `elite_rng`, drawn only while there is a chance;
+the lineup already rolled once on the first `arm` (`_promoted`, the current body's `hp` with it), and every body `_append_enemy` adds after.
+Never the dungeon; the wall and a mimic are bosses and never asked.
+
+#### Change `average_blow` with `_strike`
+**`average_blow(automatic)` is `_strike` averaged** (crits, `gear_more` of a common's non-first blow, Double Strike, `unique_more`, the Band's tenth click, the Chalice's doubled crit, the Gambler's Die's mean; nothing of Giant Slayer,
+Elite or First Blow Damage, or a streak), for the character page's and the character panel's damage per second (`per_second()`: the average swing times the swings, the bleed and the burn, 0 where nothing swings) and per click:
+**a change to what a blow deals in `_strike` changes it too** (`test_combat` holds a few cases).
+
+#### Defence-slot lines are read in `arm`
+**The helmet's, the body's and the offhand's lines (2026-10-07), all read in `arm`:** `blow_delay` (`_advance_phase` starts `_attack` at minus that share of `_attack_every()` as a body takes its stand),
+`elite_ward` (a share less of what got through from an elite or a boss, in `_struck_by`), `tile_ward` (`_tile_factor` gives back that share of a tile's factor on armour, dodge, block, time on hit, swing and walk-in, `_softened` of its `hp`,
+`hit` and `attack`, each where it is used, so a modifier `forget_mod` takes out takes its share along, and `arm`'s clock `more` of a Dusk's seconds; the counts -- Horde, Sparse, Elite Ground -- and what a tile pays are untouched),
+`less_health` (`_health_of` is `_raw_health_of` less it, on every body: the wall's and the dungeon's too), `camp_more` (`Camp.make`'s pay), `extra_enemies` (`_take_extra`: commons put on or taken off the front of a tile fight,
+from `hash(["extra", cell])` so a tile fields the same ones; never the last body, a run, the dungeon, a wall or a mimic), `thorns` (`_wear_down` of `damage` times it after every blow not dodged),
+`recoup` (a share of each blow owed back over `RECOUP_SECONDS`, `_recouping`, paid in `advance` before the clock runs), `parry` (`_parry`, added to the next blow's crit chance under `CRIT_CAP` and spent by it), `burn` (`_burn`, the deepest,
+lit again by every blow a body survives, for `BURN_SECONDS`; cleared with the body) and `time_on_block` (a blow the block stops whole wins it back).
+**Everything that wins clock back goes through `_win_back`, out of `wounds` and never more.** The three "less" lines stop at `WARD_MOST` (75), the recoup at 100.
+**`_shape` is the once-a-fight say over the rolled lineup** (`_promoted`): the count, then health sized again only where the gear moved it (a hand-built fight keeps its own), then the elite chance.
+
+#### Unique damage is one sum, `unique_more`
+**Everything a unique adds to a blow goes into one sum, `unique_more(automatic)`, applied once** -- never a multiplier of its own: metronome (swings), berserk (clicks), home, glass_edge, knucklebone, ascetic (a bare socket),
+packmule (a bag piece), patchwork, purist and brawler at their rank's numbers (`_dial`), last_gasp +200% in its rank's window, momentum +2% a kill to +100%.
+Outside it: the Gambler's Die (a random factor on the finished blow, its own `gamble_rng`), Giant Slayer, crits, and the Bulwark's answer at its rank's share.
+**A new damage unique adds a line to that sum.** Its ranked numbers are its own row's (`UniqueTable`) and the fixed ones stand together above it, so a card's sentence and the fight agree.
+
+#### The Serpent's Eye stays out of `unique_more`
+**The Serpent's Eye is crit chance, not damage, so it stays out of that sum:** `_serpent` grows by its rank's step a Serpent's Eye (one on each doll counts twice, the user's ruling) for every blow that does not crit,
+is added to `crit_chance` under `CRIT_CAP` in `_strike`, and a crit empties it (at IV leaves `SERPENT_KEPT` of it).
+It lasts the whole fight, across bodies.
+
+#### Skill nodes roll on their own
+**Skill nodes drop on a roll of their own** (`SkillTree.roll`, on `stone_rng`), after the orbs and out through `loot_dropped` like gear, only while `stone_drops` is on -- the main scene turns it on once the first sword has dropped,
+and a fight nobody tells drops none -- and never while the first node is owed (`NODE in promised`): that one is `SkillTree.first` on its promised kill, no roll at all.
+Neither a curse nor a unique that keeps gear from falling keeps a stone. A capstone's effect reaches `effects` the way a unique's does (`Skills.effects`, once each).
+
+#### `wear` before `arm` before `start`
+**`wear(effects, ranks)` before `arm(stats)` before `start()`.** `wear` sets `effects` and `ranks` (unique id -> rank, `Achievements.ranks`; a unique it does not name is rank I, which is every hand-built fight) and takes the curses on
+-- after the Dreadmask (`_take_dread`, once, `_dreaded`): its rank's number of commons, less one a wall inside the tile, taken off the front of a tile fight's rolled lineup (with their `health`; elites, the boss and the last body stay,
+and `enemies` follows), never `endless` or `dungeon`.
+**`CombatScene.auto_collect`** (the main scene sets it while the Nightwalkers are worn or distant charting is open, never for a run) leaves a won tile fight by itself `AUTO_COLLECT_SECONDS` after the verdict,
+through the same `_leave` as Collect (`Juice.pop_out` leaves once, so a press first wins); it is a Timer child, so a tip, which disables the fight, holds it too.
+**`arm` may run again mid-fight** (the main scene's `_rearm`, after the gear changes in the bag): everything in it starts from the stats, and the clock moves by the change in the gear's seconds (`_clock_more`), never refilled.
+`arm` reads what needs a number:
+`overcrit` (its rank's times), `heartwood` (+1 s per `HEARTWOOD_ARMOUR` armour, its rank's most), the four defence stats (block and time on hit converted out of tenths by `LootTable.seconds_of`), and `bare_sockets` / `bag_pieces`, which `Inventory.stats()` puts in.
+Riposte is read in `_struck_by`: a blow block takes to nothing is answered by `_strike(true, true)`, at the Bulwark's rank's share. So are the Guard capstones:
+`afterimage` (a dodge wins back `min(AFTERIMAGE_SECONDS, wounds)`) and `shieldwall` (block doubled against an elite or boss, through `taken(hit, blocked)`);
+`second_wind` and the Worry Stone's `worry_stone` are read where the clock runs out in `advance`, once a fight each and the two adding up (`_saves_used`), never `endless`.
+`beginners_luck` is read in `arm` (the raw crit chance is `BEGINNERS_LUCK`, so the Overflowing Chalice gets nothing) and in `_strike` (the Serpent's Eye adds nothing to it).
+Setting `effects` by hand does all but take the curses on, at rank I.
+
+#### Deepen a wound, never stack it
+**A wound is deepened, never stacked.** `arm` reads `bleed` (the mace's base stat);
+`_strike` sets `_bleed = maxf(_bleed, dealt * bleed / 100.0)` only where the body **survived** the blow, so a weapon swinging twice as fast cannot bleed twice as hard for free.
+It is cleared in `_advance_phase` beside `_blows` -- unless the body died of it under a rank IV Butcher's Cleaver, which hands it to the next (`_bled_out`).
+
+#### `_wear_down` is the one path for damage nobody dealt
+**`_wear_down(a_second, delta)` is the one path for damage nobody dealt** -- the wound's share of the blow, after `_swing_weapon`, the torch's burn, the body's thorns, and the armour a rank IV Spiked Helm sends back (`_spikes_back`).
+`WAITING` only (a body walking in or going down takes none of it), and a death that way sets `_domino = false`, because it was nobody's blow.
+
+#### `_kill` is the one path to a death
+**`_kill(swung)` is the one path to a death,** out of `_strike` because a wound and Dominoes' carry kill with no blow; `swung` (the weapon's own swing felled it) is what a rank IV Metronome answers with the next swing ready.
+Per-enemy flags `_blows` / `_crit_kill` / `_walled` / `_bled_out` are cleared in `_advance_phase`; `_crit_kill` is whether the last blow critted, so Lucky Wound pays only where a crit felled the body (a wound's death clears it).
+`kills()` is `index`.
+**Dominoes carries `_carried`** -- its rank's share of a one-blow kill's overkill -- and deals it as the next body takes its stand (`_take_carried`); a body it fells is a one-blow kill and passes its own leftover on at the same share; an elite or a boss takes none of it (half at IV).
+Cleave's `_overkill`, and a rank IV Headsman's executed health, come off a body as it comes on and never fell one. Grazing, Flush out, Heatstroke, the Frozen clock, Giantsbane and Restless dead went with the Pilgrim's set (2026-09-29).
+
+#### A worn unique is one `if`
+**A worn unique's effect is one `if` in `Encounter`, beside the capstones',** and arrives in `effects` one entry a piece, so two of one ring are counted with `effects.count`. The first batch:
+`metronome` (a click lands nothing, the weapon's swing its rank's times), `headsman` + `execute` (`EXECUTE_SHARE`, a tenth, and the Headsman's rank's share, summed), `knucklebone` (clicks only;
+its rank's step a click within `KNUCKLE_WINDOW`, up to its rank's most a ring; a click that lands nothing still counts), `home:<env>` (its rank's times on that ground), `hourglass` (its rank's seconds a kill, never past `seconds`,
+never for a BOSS, never `endless`), `tithe` (no `LootTable.roll` at all; the purse its rank's times, two adding).
+**Anything new that touches the clock must ask `endless` and must not be able to bank time.**
+
+#### A rank IV line is one `if` beside its rule
+**A rank IV line is one `if` beside the rule it grows,** asking `_peak(id)` -- or `_home_peak()` on a home piece's own ground -- beside whether the piece is worn, its numbers consts after `MAGPIE_CHANCE` (`SERPENT_KEPT` ...
+`CHALICE_TWICE`).
+One that rolls draws only under its piece at IV (the Chalice on `crit_rng`, the second unique chance on `unique_rng`), so nobody else's rolls move; the clock ones (Rimeplate, Last Gasp, Hourglass, Heartwood) ask `endless` like the rest.
+
+#### Nothing strikes a missing clock, or a wall
+**Nothing strikes a clock that is not there, or a wall.** `_be_struck` asks `strikes`, `endless` and `WALL_NAME` first; time on hit asks `endless`.
+A blow grows by `HIT_GROWTH` a ring and `HIT_WALL_GROWTH` a wall, far slower than health, because armour is a share and could not keep up with health's curve, and `HIT_TIER` against `ATTACK_EVERY` keeps every tier's seconds-a-second equal.
+`test_combat._test_enemy_strikes` pins the user's example (100 s against 90% armour and 10 s of block is nothing). `HIT_SECONDS`, `HIT_GROWTH`, `HIT_WALL_GROWTH`, `ARMOUR_K` and `DODGE_K` (50 each: 50 is half, 450 is 90%) are the dials.
+
+#### Answer `player_hit` in `_on_player_hit`
+**The view answers `player_hit` in `_on_player_hit`:** the enemy plays `attack` (and `_on_enemy_hit` plays `hurt` only while it is not mid-attack, so a flinch never cuts a swing off), the clock flashes (`CLOCK_STRUCK`), and "-2.4s", "Dodge" or "Block" rises over the hero's head (`STRUCK_HEIGHT`, outlined).
+Everything that floats off a fight goes through `_float_text`.
+
+#### Orbs never enter `_drops`
+**Orbs never enter `_drops`:** the counter, discard, `bag_room` and autodiscard know nothing about them. They roll on their own generator beside gear, not against it.
+`DropsView.fill(items, orbs)` only draws them, as a row of `OrbSlot`s under the squares that press nothing and put the bag's own `OrbCard` up beside them on hover (top level, so it stands over the panel at its scale), and only the verdict hands them over -- so every `_result_drops.fill` passes `fight.orbs`.
+
+#### The verdict has no X
+**The verdict is a `UITheme.titled_panel` with no X** (the word on its green bar, `LightButton`s on its cream), popped in, counted up and revealed by `Juice` in `_on_finished`, celebrated unless lost, and left through `_leave` (Collect, the arrow, Retry and Escape all shrink it away first;
+`_on_back_pressed` itself is still immediate, which is what the tests call). `_centre_result` keeps it under `hud_bottom()` where the window has room.
+
+#### The verdict reads top to bottom
+**The verdict reads top to bottom:** the word -- on a red bar for a lost tile (`UITheme.danger_bar`), the green one otherwise -- one row of sums (coin, gem, the kills' crossed swords `KILLS_MARK` -- bare numbers, no `+`;
+the kills are there for a tile fight too; the skull they wore was a unique's icon and a curse's cost), then the finds and the orbs on the bag's `TextPanel`, then the autodiscard footnote and the way out, which `_on_finished` picks
+-- the word **Collect** (`_collect`) for a won tile and an ended run, the back arrow beside **Retry** (`_lost_row`) for a lost one.
+Retry emits `retry`, and the main scene's `_on_combat_retry` leaves through `_on_combat_finished(false, ..)` and comes back in through `_on_chart_pressed`, so a second go banks and opens like any other.
+Only a loss has a second line ("Out of time"); a win and a run say nothing under the word.
+
+#### Size a fighter with `_actor_height`
+**A fighter is `_actor_height(view)` tall: the lesser of `ACTOR_HEIGHT` of the view's height and `ACTOR_WIDE` of its width**, so held upright the two stay apart; across a monitor the height is always the lesser.
+**It snaps to `_snap(view)`: the backdrop's pixel, or half of it on a window held upright** (`UITheme.narrow`), whose backdrop is blown up to cover its height and would otherwise draw nobody smaller than a giant.
+The HUD's corners keep to `UITheme.safe_rect`.
+**Held upright the fight stands mid-window:** `_ground()` is `GROUND_UPRIGHT` (0.6) there and `_art_ground()` (`GROUND` or `CAVE_GROUND`) everywhere else, every layer is drawn `_lift(view)` higher to meet it (`_add_layer`;
+none across a monitor), each layer's own bottom `UNDERFOOT_ROWS` repeat under it to the window's foot (`_underfoot`, a child sprite in `_layers`, so it slides with its layer), and the nameplate stands `PLATE_UNDER` under the feet.
+Anything placed on the ground asks `_ground()`, never `GROUND`.
+
+#### Lay the arena out again on a resize
+**The arena is laid out again whenever the window changes** (`_layout`, on the viewport's `size_changed`, as `CampScene`'s is): every backdrop layer fitted (`_fit`,
+the rows under a lifted one made the first time it falls short and hidden when it does not), both fighters `fit` and stood on `_ground()`, a hop or a jolt under way dropped, the HUD and whichever panel is up put back.
+What a body threw stays where it fell: it is gone in a moment.
+
+#### Dress the nameplate once per enemy
+**The nameplate is dressed once per enemy, in `_dress_nameplate` (from `_on_enemy_coming`), never in `_refresh`:** the name in `TIER_COLOUR` between `TIER_MARK`s (a bone skull for an elite, a gilded crown at 2x for a boss),
+an elite's `Encounter.enemy_title()` in front of its name, a boss's under it in the body font with the name at `BOSS_FONT` (32, Pixellari's one other clean size).
+A boss's plate pops in white (`_plate_pop`, which `_place_corners` multiplies into the panel's scale) at `Settings.Anim.DEFAULT` only. **A title is for show:** bounties and everything else count `enemy_name()`.
+
+#### The loot popup is a summary and nothing more
+**The loot popup (`_loot_panel`) is built as the verdict is** -- "Loot" on the green bar, the sums row (`_sums_row` / `_sum`, shared with the verdict, every sum shown even at 0 and kept current by `_refresh` while it is open),
+finds and orbs (`_fill_loot`, hidden while there are neither), a Close `LightButton` at the foot.
+**It is a summary and nothing more** (the user's, 2026-10-02): every find is in the bag already, so its `DropsView` is not `discardable`; the verdict's still is. **The counter is never disabled:** at 0 finds it still opens the sums.
+
+#### The animation level thins the view, never the fight
+**`Settings.animations` thins the view and never the fight:** at `LOW` a body throws one coin and one gem, a number neither pops nor drifts, and `Juice` shakes and freezes nothing; at `NONE` nothing is thrown or written and no body bursts
+-- but `_show_xp` still emits `xp_absorbed` (at once), and gold, finds and orbs had already gone out by their own signals.
+Anything new that is only for show asks the level; anything that carries an amount must not be behind it.
+
+#### The `hit_stop` that ends last wins
+**`Juice.hit_stop`: the one that ends last wins,** so a kill's freeze cannot cut short an elite or unique find's slow-motion (`STOP_UNIQUE`: a tenth of speed for 1.6 s, easing back over 0.8).
+The unique banner raises none of its own; the find already did.
+
+#### Both hands are capped
+**Both hands are capped** (the user's, 2026-10-03):
+`arm` clamps `attack_speed` to `SWING_CAP` (10) last, after the tile's factor; the scene's clicks go through `click()`, an allowance that `advance` fills at `CLICK_CAP` (15) a second up to `CLICK_BURST` (3).
+A click past it is nothing -- no blow, no Knucklebone streak, no `clicks` tally -- though the scene still swings. **Tests and the camp call `hit()`, which is never capped**: tests click in loops without moving the clock.
+
+#### Only the main scene reads `tally`
+**A fight counts what it did for the achievements in `tally`, and nobody reads it but the main scene as the fight ends** (`Achievements.record` in `_on_combat_finished` and `_exit_tree`):
+`_count` for `clicks` (in `hit`, landed or not), `crits`, `crit_kills`, `bleed_kills` (`_wear_down(.., bleeding)`), `blows_taken` and `blocked` (in `_struck_by`, a dodge being neither),
+and `_best` for the longest `dry_streak` (blows without a crit) and `domino_streak` (kills by a first blow or by Dominoes' carry; a bleed kill breaks it).
+The camp's own fights keep a tally too and nobody reads it, which is why the camp counts nothing.
+**`unlocked`** is the uniques a body may carry (`Achievements.unlocked`, set by `_open_fight`); every `UniqueTable.roll` here passes it, and a fight nobody tells has none, so a hand-built one drops no unique, as it never did.

@@ -247,7 +247,7 @@ func _who(totals: Dictionary) -> PanelContainer:
 
 
 ## The character's name, the one heading in the card, with the pencil straight after it. A name past
-## the `room` the pencil leaves is cut with an ellipsis, as the corner panel cuts it.
+## the `room` the pencil leaves is cut with an ellipsis.
 func _name_row(room: float) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", NAME_GAP)

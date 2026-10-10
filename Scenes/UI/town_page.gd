@@ -7,8 +7,8 @@ extends Control
 ## A counter is two halves and the page is only one of them. **Buying** happens here, because a
 ## vendor's shelf is the vendor's; **selling** happens in the bag on the other edge, because what the
 ## player wants to sell is already laid out there and a second grid of the same items would be a
-## second place to hunt through. So a tab is six squares with their prices under a Buy heading, and
-## the bag's own Sell button is what says where the selling is done.
+## second place to hunt through. So a tab is six squares with their prices under them, and the bag's
+## own Sell button is what says where the selling is done.
 ##
 ## The smith is the same arrangement with no shelf at all: he works on whatever the bag has open, and
 ## his tab is the two prices for it and the reasons he will not. The board is the third shape again:
@@ -43,7 +43,8 @@ signal bounty_paid(enemy: String, gold: float, xp: int, orbs: Dictionary, piece:
 ## The board's Reward was pressed: the main scene puts the three options of a cleared board back up.
 signal choice_asked
 ## A posting was taken on and saved: the main scene checks the tips, the smith's first word on it.
-signal bounty_accepted## The roads lifted settlements out of the dark: the map has changed and wants saving.
+signal bounty_accepted
+## The roads lifted settlements out of the dark: the map has changed and wants saving.
 signal towns_revealed
 ## A spell that is aimed at the map was asked for, at `price`, in the town on `spot`. Nothing has been
 ## charged and nothing is written down: choosing the land happens on the map, which is the main
@@ -97,15 +98,13 @@ const TAB_ICONS := {
 	TownServices.FORTUNE: "crystal",
 }
 const TAB_MARK := "res://Assets/UI/ui_icon_%s_%s.png"
-## How far a choice that is not the one picked is faded, so the picked one is read off a row of them
-## at a glance: the settings' three-way rows, and a curse the skulls cannot pay for.
+## How far a row that cannot be taken now is faded: a posting while another bounty is out, and a curse
+## the skulls cannot pay for.
 const TAB_REST := Color(1, 1, 1, 0.55)
 
-## The counters this build has actually built, and so the only ones that get a tab: a service not
-## named here is listed in the tile panel and given none, which is how a town would advertise a
-## counter this build has not built yet without offering a tab that does nothing.
-const COUNTERS := [TownServices.BOUNTIES, TownServices.GEAR, TownServices.ORBS, TownServices.SMITH,
-		TownServices.FORTUNE]
+## The counters that get a tab: every service there is, in the order they are ever listed. One added
+## there with nothing here to draw it says so, loudly, and draws nothing (`_fill`).
+const COUNTERS := TownServices.ORDER
 
 ## What each of her readings wears on its square. Placeholder art, cut by `tools/ui_kit.py` off the
 ## skill icons' pack in the one colourway neither tree uses: purple is hers.
@@ -263,6 +262,11 @@ func _ready() -> void:
 	_title = UITheme.title_of(_panel)
 	_rows = UITheme.body_of(_panel)
 	_rows.add_theme_constant_override("separation", ROW_GAP)
+	# However the town goes away, her answer goes with it: left up, it would still be the window's to
+	# every hotkey and banner that asks (`telling`).
+	visibility_changed.connect(func() -> void:
+		if not is_visible_in_tree():
+			_close_told())
 	_scroll = UITheme.scroll()
 	_rows.add_child(_scroll)
 	_scroll_lines = UITheme.vbox(0, BODY_WIDTH)
@@ -366,6 +370,7 @@ var area := Rect2()
 ## Full window height against the right edge, where the tile panel stands when no town is open.
 func layout() -> void:
 	UITheme.dock(_panel, area, _ui_scale, UITheme.Dock.RIGHT, layout)
+	_place_told()
 
 
 func _fill() -> void:
@@ -410,6 +415,11 @@ func _fill() -> void:
 		return
 	if _open_tab == TownServices.FORTUNE:
 		_fill_fortune()
+		return
+	# Every other counter is a shelf, and there are two. A service with nothing above to draw it is one
+	# this page was never taught: said, rather than drawn as a gear shelf with a Restock.
+	if _open_tab != TownServices.GEAR and _open_tab != TownServices.ORBS:
+		push_error("TownPage has no counter for \"%s\"" % _open_tab)
 		return
 	if _offer != null:
 		_fill_offer()
@@ -641,7 +651,7 @@ func _fill_offer() -> void:
 	buy.disabled = not refused.is_empty()
 	buy.pressed.connect(_on_buy_item)
 	buy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	# One row, the arrow first, as under a piece open in the bag (`BagPage._action_row`).
+	# One row, the arrow first.
 	var row := HBoxContainer.new()
 	var back := UITheme.back_button("Back to what the vendor has")
 	back.pressed.connect(_close_offer.bind(true))
@@ -1194,6 +1204,7 @@ func _tell(reading: String) -> void:
 	_cast = ""
 	var body := _open_told(FortuneTeller.LABELS[reading])
 	_answer(reading, _told_scroll.get_child(0))
+	var panel: Control = _told.get_node(TOLD_PANEL)
 
 	var dismiss := UITheme.button("Dismiss", "LightButton", "")
 	dismiss.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -1202,7 +1213,10 @@ func _tell(reading: String) -> void:
 	skip.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	skip.visible = can_skip
 	body.add_child(skip)
+	# Once: pressed again as the answer shrinks away, a ticked Dismiss would write its reading twice.
 	dismiss.pressed.connect(func() -> void:
+		if Juice.leaving(panel):
+			return
 		if (skip.get_node(BagPage.TICK_NAME) as Button).button_pressed:
 			inventory.tips.append(SKIP_TOLD + reading)
 			inventory.save(_save_path)
@@ -1211,13 +1225,12 @@ func _tell(reading: String) -> void:
 	_show_told(true)
 
 
-## One of her popups, empty: a holder over the whole window, a titled panel with no X -- like a reward's,
-## its way out is at its foot (and Escape) -- and a scroll in `_told_scroll` for what she says. Returns
-## the body, for the buttons that go under the scroll.
+## One of her popups, empty: a holder for the whole window (`Juice.popup` stands it there), a titled
+## panel with no X -- like a reward's, its way out is at its foot (and Escape) -- and a scroll in
+## `_told_scroll` for what she says. Returns the body, for the buttons that go under the scroll.
 func _open_told(title: String) -> VBoxContainer:
 	_close_told()
 	_told = Control.new()
-	_told.size = get_viewport_rect().size
 	add_child(_told)
 	# Over the bag too, which a window held upright stands under this page (`BagPage._ask` does the same).
 	move_to_front()
@@ -1260,7 +1273,11 @@ func _ask_way_out() -> void:
 			else "Leave this world for %s gold" % BigNumber.format(price), false)
 	leave.disabled = not refused.is_empty()
 	leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# Not once Cancel has answered: the question takes a moment to shrink away, its buttons with it.
+	var panel: Control = _told.get_node(TOLD_PANEL)
 	leave.pressed.connect(func() -> void:
+		if Juice.leaving(panel):
+			return
 		_close_told()
 		transcend_pressed.emit())
 	answers.add_child(leave)
@@ -1293,15 +1310,18 @@ func _answer(reading: String, lines: VBoxContainer) -> void:
 				table.add_child(_odds_row(row, table.get_child_count() % 2 == 1, TOLD_WIDTH))
 
 
-## Her answer's scroll, as tall as the answer or as what the window leaves; `Juice.popup` keeps it centred.
+## Her answer's scroll, as tall as the answer or as what the window leaves, measured again whenever the
+## page is laid out; `Juice.popup` keeps its holder over the window and its panel in the middle. A
+## window made smaller leaves the scroll less, and a panel never shrinks to what it holds by itself.
 func _place_told() -> void:
 	if _told == null:
 		return
-	var view_size := get_viewport_rect().size
-	_told.size = view_size
 	var lines: Control = _told_scroll.get_child(0)
-	_told_scroll.custom_minimum_size.y = minf(lines.get_combined_minimum_size().y,
-			view_size.y / _ui_scale - TOLD_CHROME)
+	var tall := minf(lines.get_combined_minimum_size().y, get_viewport_rect().size.y / _ui_scale - TOLD_CHROME)
+	var less := tall < _told_scroll.custom_minimum_size.y
+	_told_scroll.custom_minimum_size.y = tall
+	if less:
+		(_told.get_node(TOLD_PANEL) as Control).reset_size()
 
 
 ## Whether one of her answers (or the way out's question) stands over the window, for a banner to wait behind.
@@ -1490,6 +1510,8 @@ func _on_reading_pressed(reading: String) -> void:
 			# The one drawer key a reading still writes: this town has sold the roads, and sells them no more.
 			_drawer[FortuneTeller.ASKED + reading] = true
 			if view.reveal_ring_towns(_cell) > 0:
+				# A chest the roads brought into sight is no longer one she may point at.
+				_near_chest = view.nearest_chest(true)
 				towns_revealed.emit()
 		FortuneTeller.TREASURE:
 			var spot := view.origin + _near_chest

@@ -154,15 +154,7 @@ const RARITY_PRECISION := 100
 ## for draw, so a player who has learned nothing sees the same drops a seed always gave.
 static func roll(tier: EnemyRoster.Tier, rng: RandomNumberGenerator, rarity := 0.0) -> Rarity:
 	var weights := weights_for(tier, rarity)
-	var total := 0
-	for step: Rarity in weights:
-		total += int(weights[step])
-	var pick := rng.randi_range(0, total - 1)
-	for step: Rarity in weights:
-		pick -= int(weights[step])
-		if pick < 0:
-			return step
-	return Rarity.COMMON
+	return weights.keys()[LootTable.weighted_index(weights.values(), rng)]
 
 
 ## A tier's weights with `rarity` percent increased item rarity applied. The table itself at nothing.

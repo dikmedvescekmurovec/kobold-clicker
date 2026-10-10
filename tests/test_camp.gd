@@ -1,6 +1,6 @@
 extends "res://tests/harness.gd"
 ## Headless checks for camping (`Scenes/Combat/camp.gd`). Run from the project folder:
-##   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/test_camp.gd
+##   python tests/run_all.py camp
 ## Samples real farm runs and does the arithmetic a night of one comes to, then camps through the scene.
 
 const SCRATCH_INVENTORY := "user://test_camp_inventory.json"
@@ -16,9 +16,10 @@ const ENV := "grass"
 func _run() -> void:
 	_check(_test_a_camp_is_the_farm_run_nobody_clicks() == true, "camp rate tests ran to the end")
 	_check(_test_what_a_camp_pays() == true, "camp earning tests ran to the end")
+	_check(_test_a_camp_pays_whole_coins() == true, "camp whole coin tests ran to the end")
 	_check(_test_camp_earnings() == true, "camp earnings line tests ran to the end")
 	_check(_test_a_camp_survives_the_save() == true, "camp save tests ran to the end")
-	await _test_the_map_camps_and_strikes_camp()
+	_check(await _test_the_map_camps_and_strikes_camp() == true, "the map camps and strikes camp tests ran to the end")
 	_report("camp")
 
 
@@ -50,8 +51,8 @@ func _test_what_a_camp_pays() -> bool:
 	var two := Camp.earned(camp, 1000.0 + 7200.0)
 	_check(float(hour["seconds"]) == 3600.0, "an hour of camp is an hour")
 	_check(float(hour[Camp.GOLD]) > 0.0, "and pays")
-	_check(is_equal_approx(float(two[Camp.GOLD]), float(hour[Camp.GOLD]) * 2.0),
-			"two hours pay twice one")
+	_check(absf(float(two[Camp.GOLD]) - float(hour[Camp.GOLD]) * 2.0) <= 1.0,
+			"two hours pay twice one, to the coin")
 	_check(not bool(hour["full"]), "an hour is not the whole a hero can hold")
 
 	var night := Camp.earned(camp, 1000.0 + Camp.MAX_SECONDS)
@@ -69,6 +70,20 @@ func _test_what_a_camp_pays() -> bool:
 	var near := Camp.make(Vector2i(1, 0), "Near", _armed_on(Vector2i(1, 0), 4.0, 40.0), 0.0)
 	var far := Camp.make(Vector2i(6, 0), "Far", _armed_on(Vector2i(6, 0), 4.0, 40.0), 0.0)
 	_check(float(far[Camp.GOLD]) > float(near[Camp.GOLD]), "a camp deeper out pays more an hour")
+	return true
+
+
+## A camp pays whole coins, as it pays whole experience and whole bodies: a rate is a fraction of a
+## coin a second, and a purse with that fraction left in it reads as a coin more than it can pay.
+func _test_a_camp_pays_whole_coins() -> bool:
+	var third := {Camp.SINCE: 0, Camp.GOLD: 1.0 / 3.0, Camp.XP: 1.0 / 3.0, Camp.KILLS: 1.0 / 3.0}
+	for seconds: float in [1.0, 100.0, 3601.0, Camp.MAX_SECONDS]:
+		var paid := Camp.earned(third, seconds)
+		var gold := float(paid[Camp.GOLD])
+		var owed := float(third[Camp.GOLD]) * seconds
+		_check(gold == floorf(gold) and gold <= owed and gold > owed - 1.0,
+				"%s s at a third of a coin a second is whole coins, the fraction left behind (%s of %s)" % [seconds, gold, owed])
+		_check(gold == float(int(paid[Camp.XP])), "as much gold as experience, which was always whole")
 	return true
 
 
@@ -120,7 +135,7 @@ func _test_a_camp_survives_the_save() -> bool:
 
 ## The whole of it through the real scene: nothing to press, a game opened hours after it was shut
 ## camps on the best ground taken, pays at once, and the way back to the map brings the map back.
-func _test_the_map_camps_and_strikes_camp() -> void:
+func _test_the_map_camps_and_strikes_camp() -> bool:
 	_clear_scene()
 	var main := await _launch()
 	_check(main._camp == null, "a first run has been nowhere")
@@ -169,6 +184,7 @@ func _test_the_map_camps_and_strikes_camp() -> void:
 	main.free()
 	await process_frame
 	_clear_scene()
+	return true
 
 
 func _launch() -> Node:

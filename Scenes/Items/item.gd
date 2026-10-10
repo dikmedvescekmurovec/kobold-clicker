@@ -11,20 +11,28 @@ extends RefCounted
 ## piece is rolled from and still owns the slot, the icon, the affix list and the labels; it is not
 ## where a piece already in the bag gets its numbers. The one hand that moves a level afterwards is
 ## the fortress smith (`Blacksmith`), and it moves the base stats with it, to exactly what
-## `scaled_stats` would have rolled there, and rolls the modifiers' numbers again in the new band.
+## `scaled_stats` would have rolled there, and leaves every modifier's tier and number where they were
+## (`level_up`).
 ##
 ## A drop is one object with two references -- the main scene's inventory and the fight's summary
-## both point at it. The verbs that change a held piece -- the orbs and the smith -- therefore work only
-## on one the bag page has open, when no fight is holding the other reference.
+## both point at it. The verbs that change a piece -- the orbs and the smith -- work on one the bag page
+## has open, or with an orb in hand on one still on a vendor's shelf (`BagPage.craft_held`).
 
 var type: String   ## a key of LootTable.ITEMS
 var rarity: ItemRarity.Rarity = ItemRarity.Rarity.COMMON
 ## How deep the tile was that gave this up. Scales everything the piece is worth, and is rolled
 ## under what that tile allowed rather than handed out at it.
 var level := 1
-## [{"id": String, "value": int}], in the order they were drawn. One of them may carry
-## `"locked": true`, which the smith puts there and every orb then works around. A held-fast line
-## (locked or bound) also carries `"at"`: the level its band is read at, frozen with its number.
+## One Dictionary a modifier, in the order they were drawn. Every key past the first two is written only
+## where it says something, so a rolled line and a saved one are the same dictionary:
+##   "id"       String: a key of `ModifierTable.MODS`.
+##   "value"    int: the number it rolled.
+##   "under"    int: how many tiers under its band level it sits (`tier_of`); absent at the top tier.
+##   "locked"   true: the smith's lock, which every orb works around (`locked_mod`).
+##   "bound"    true: an Orb of Binding's, the same (`held_fast` is either).
+##   "at"       int: the level a held-fast line's band is read at (`band_level`), frozen with its number.
+##   "perfect"  true: an Orb of Perfection's, kept at the top of its band (`refresh_perfect`).
+##   "peak"     int: the best tier an heirloom's line has had (`transcend`), which it climbs back to.
 var mods: Array[Dictionary] = []
 ## The piece's own numbers, scaled by its level when it was rolled. Stored rather than worked out
 ## on demand: that is what keeps a held piece the piece it was.
@@ -137,6 +145,8 @@ static func scaled_stats(item_type: String, item_level: int) -> Dictionary:
 	for stat: String in table:
 		var raw := LootTable.scale(stat, float(table[stat]), item_level)
 		raw *= LootTable.power_of(item_type, stat)
+		# ponytail: a stat is rounded through a whole int, which passes int64 near item level 370 -- far
+		# past where a monster's health would have; `roundf` then.
 		out[stat] = snappedf(raw, 0.1) if stat in LootTable.RATE_STATS else float(roundi(raw))
 	return out
 
@@ -489,19 +499,27 @@ func _to_dict() -> Dictionary:
 ## An item read back, or null when the save names a piece or a rarity this build no longer has -- the
 ## same pruning the inventory has always done by name. A modifier that no longer exists is gentler:
 ## the item keeps its place and simply loses that line, because a retired item is a ghost with no art
-## while a retired modifier is just one line fewer.
-static func from_dict(data: Variant) -> Item:
+## while a retired modifier is just one line fewer. Whatever is not kept -- the piece, a line, a stat --
+## is named in `lost`, for whoever loads a save to say (`Inventory.load_from`). A number or a flag a
+## hand-edited file wrote as anything else reads as none.
+static func from_dict(data: Variant, lost: Array = []) -> Item:
+	var item := _read(data, lost)
+	if item == null:
+		lost.append(str(data.get("unique", data.get("capstone", data.get("type", "an item with no name"))))
+				if data is Dictionary else "an item that cannot be read")
+	return item
+
+
+static func _read(data: Variant, lost: Array) -> Item:
 	if typeof(data) != TYPE_DICTIONARY:
 		return null
 	var saved: Dictionary = data
 	var item_type := LootTable.current(str(saved.get("type", "")))
-	if not LootTable.ITEMS.has(item_type):
-		return null
 	var step := ItemRarity.from_name(str(saved.get("rarity", "")))
 	if step < 0:
 		return null
 	# A unique this build no longer has goes the way a retired piece does: by name, and whole. One whose
-	# base has been moved keeps the base its row names now.
+	# base has been moved, or retired, is the piece its row names now.
 	var unique_id := str(saved.get("unique", ""))
 	if not unique_id.is_empty():
 		if not UniqueTable.UNIQUES.has(unique_id):
@@ -515,30 +533,36 @@ static func from_dict(data: Variant) -> Item:
 			return null
 		item_type = SkillTree.CAPSTONES[capstone_id]["base"]
 		step = ItemRarity.Rarity.UNIQUE
+	# Asked last: a unique's or a capstone's piece is its row's, not the one the save wrote.
+	if not LootTable.ITEMS.has(item_type):
+		return null
 	var item := Item.new()
 	item.unique = unique_id
 	item.capstone = capstone_id
 	# Before the modifiers, which read their bands at `mod_level` and so at the tier.
 	if LootTable.slot_of(item_type) == SkillTree.SLOT:
-		item.stone_tier = maxi(1, int(saved.get("stone_tier", 1)))
-		item.connectors = clampi(int(saved.get("connectors", 0)), 0, SkillTree.MOST_CONNECTORS)
+		item.stone_tier = maxi(1, Inventory._whole(saved.get("stone_tier")))
+		item.connectors = clampi(Inventory._whole(saved.get("connectors")), 0, SkillTree.MOST_CONNECTORS)
 	item.type = item_type
 	item.rarity = step
-	item.level = maxi(1, int(saved.get("level", 1)))
+	item.level = maxi(1, Inventory._whole(saved.get("level")))
 	# Absent is whole, which is what every save written before there was a smith to break one means.
-	item.broken = bool(saved.get("broken", false))
-	item.safe_level = maxi(0, int(saved.get("safe_level", 0)))
-	item.plus = maxi(0, int(saved.get("plus", 0)))
-	item.ascension = maxi(0, int(saved.get("ascension", 0)))
-	item.extra_slot = bool(saved.get("extra_slot", false))
-	item.locked = bool(saved.get("locked", false))
-	item.nickname = str(saved.get("nickname", ""))
+	item.broken = Inventory._flag(saved.get("broken"))
+	item.safe_level = maxi(0, Inventory._whole(saved.get("safe_level")))
+	item.plus = maxi(0, Inventory._whole(saved.get("plus")))
+	item.ascension = maxi(0, Inventory._whole(saved.get("ascension")))
+	item.extra_slot = Inventory._flag(saved.get("extra_slot"))
+	item.locked = Inventory._flag(saved.get("locked"))
+	if saved.get("nickname") is String:
+		item.nickname = saved["nickname"]
 	# A save written before pieces carried their own numbers has none to read, and what such a
 	# piece was worth when it was written is exactly the table unscaled -- so that is what it keeps.
 	var saved_stats: Variant = saved.get("stats", null)
 	if typeof(saved_stats) == TYPE_DICTIONARY:
 		for stat: Variant in saved_stats:
-			if LootTable.STAT_LABELS.has(str(stat)):
+			if not LootTable.STAT_LABELS.has(str(stat)):
+				lost.append("%s on %s" % [stat, item_type])
+			elif typeof(saved_stats[stat]) in [TYPE_INT, TYPE_FLOAT]:
 				item.stats[str(stat)] = float(saved_stats[stat])
 	else:
 		item.stats = LootTable.stats_of(item_type).duplicate()
@@ -550,7 +574,7 @@ static func from_dict(data: Variant) -> Item:
 			if typeof(entry) != TYPE_DICTIONARY:
 				continue
 			var id := str(entry.get("id", ""))
-			var value := int(entry.get("value", 0))
+			var value := Inventory._whole(entry.get("value"))
 			# A line saved under an id the table has since folded into another. A piece that already
 			# holds that other keeps its own, since a modifier never appears twice on one piece, and
 			# the folded one was never read by anything. Its number is not the new band's top, so it
@@ -562,21 +586,21 @@ static func from_dict(data: Variant) -> Item:
 				if item.mods.any(func(held: Dictionary) -> bool: return held["id"] == id):
 					continue
 			if not ModifierTable.MODS.has(id):
+				lost.append("%s on %s" % [id, item_type])
 				continue
 			var mod := {"id": id, "value": value}
 			# Written only where it is true, so a rolled modifier and a saved one are the same
 			# dictionary and nothing has to strip a false out of the comparison.
 			for flag: String in ["locked", "bound"] + ([] if not renamed.is_empty() else ["perfect"]):
-				if bool(entry.get(flag, false)):
+				if Inventory._flag(entry.get(flag)):
 					mod[flag] = true
-			if entry.has("at"):
-				mod["at"] = int(entry["at"])
-			if entry.has("peak"):
-				mod["peak"] = int(entry["peak"])
+			for key: String in ["at", "peak"]:
+				if typeof(entry.get(key)) in [TYPE_INT, TYPE_FLOAT]:
+					mod[key] = int(entry[key])
 			# Written only above 0. A line saved before there were tiers has none either, and is given
 			# the highest tier that holds its number -- which for a top-tier line is the top again, so
 			# asking every time is safe. A perfect line is the top by definition.
-			var under := int(entry.get("under", 0))
+			var under := Inventory._whole(entry.get("under"))
 			if not entry.has("under") and not mod.has("perfect"):
 				under = ModifierTable.fit_under(id, int(mod["value"]), item.band_level(mod))
 			if under > 0:

@@ -509,7 +509,8 @@ func _reel_transcend() -> void:
 	at = _beats_since(0.0)
 	_say("BEGIN AGAIN", at, at + 2.8)
 	_say("STRONGER", at + 0.5, at + 2.8, Palette.GOLD, LOW + 0.08)
-	camera.create_tween().tween_property(camera, "zoom", camera.zoom / 1.4, 2.6) 			.set_trans(Tween.TRANS_SINE)
+	camera.create_tween().tween_property(camera, "zoom", camera.zoom / 1.4, 2.6) \
+			.set_trans(Tween.TRANS_SINE)
 	await _until(at + 2.8)
 
 

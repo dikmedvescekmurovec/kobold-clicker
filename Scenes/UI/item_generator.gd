@@ -155,7 +155,7 @@ func _redraw() -> void:
 
 	var foot := HBoxContainer.new()
 	foot.add_theme_constant_override("separation", 2)
-	var back := UITheme.back_button("Back to the settings")
+	var back := UITheme.back_button("Back to the developer tools")
 	back.pressed.connect(_back)
 	foot.add_child(back)
 	var add := UITheme.button("Add to bag", "LightButton", "The bag is full" if _inventory.is_full() else "")

@@ -1,13 +1,13 @@
 class_name ItemCard
 extends PanelContainer
-## What a piece of gear is, shown while the cursor is over its square: the same `ItemDetails` block
-## the bag opens, in the pack's cream text panel, beside the square it describes.
+## What a piece of gear is, shown while the cursor is over its square: its `ItemDetails` block, in the
+## pack's cream text panel, beside the square it describes.
 ##
 ## One card for every square in the game rather than one per page. An `ItemSlot` takes no mouse input
 ## -- the bag's scroll has to see every press -- so no square can say it is hovered; instead every
-## square joins `ItemSlot.GROUP` and the card asks, each frame the cursor has moved, which of them it
-## is over. The bag's grid, the worn sockets and a vendor's shelf all get it for nothing, and so will
-## whatever draws a square next.
+## square joins `ItemSlot.GROUP` and the card asks, every frame, which of them the cursor is over. The
+## bag's grid, the worn sockets and a vendor's shelf all get it for nothing, and so will whatever
+## draws a square next.
 ##
 ## Not Godot's tooltip, for `OrbCard`'s reason: a tooltip is its own window and cannot inherit
 ## `ui_scale`. On `TextPanel`, as every card is, because the darker half of the rarity ramp that
@@ -342,9 +342,9 @@ func write_second(slot: ItemSlot) -> bool:
 	var worn := worn_for(slot.item)
 	if worn != null:
 		ItemDetails.fill(_worn_rows, worn, WIDTH)
-		# Said on the rarity line, the fill's second, rather than over the name: a heading would push
-		# every row a line below its fellow on the first card.
-		(_worn_rows.get_child(1) as Label).text += " · worn"
+		# Said on the rarity line rather than over the name: a heading would push every row a line
+		# below its fellow on the first card. Found by name: a plussed piece's bar stands over its name.
+		(_worn_rows.get_node(ItemDetails.RARITY_LINE) as Label).text += " · worn"
 		return true
 	if bare_for(slot.item):
 		# Alt answered, so a bare socket does not read as a key that did nothing.
@@ -359,7 +359,8 @@ func write_second(slot: ItemSlot) -> bool:
 func hints_for(slot: ItemSlot, alt: bool) -> Dictionary:
 	var hints := {}
 	# A square with a `hint` is not the player's piece, so it is held against nothing worn.
-	if not alt and not slot.hint.is_valid() and not slot.has_meta(NO_COMPARE) 			and (worn_for(slot.item) != null or bare_for(slot.item)):
+	if not alt and not slot.hint.is_valid() and not slot.has_meta(NO_COMPARE) \
+			and (worn_for(slot.item) != null or bare_for(slot.item)):
 		hints["alt"] = "compare"
 	hints.merge(slot.get_meta(KEYS, {}))
 	if alt:

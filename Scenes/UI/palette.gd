@@ -20,7 +20,6 @@ const GOLD_TEXT := Color("c64524")
 ## top edge in them round a unique's rule (`ItemDetails`).
 const FRAME_GOLD := Color("ffa214")
 const FRAME_GOLD_DK := Color("ed7614")
-const EARTH_DK := Color("391f21")
 ## A common piece's name: the one grey on the cream (a 16 px name, held to 3:1).
 const SLATE := Color("5d5d5d")
 

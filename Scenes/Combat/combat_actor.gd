@@ -45,6 +45,9 @@ var bounds: Rect2i
 ## attack or a death sprawl must not shrink the character or shove it off its feet.
 var standing: Rect2i
 var _shadow: Sprite2D
+## What has been read off a texture's pixels, by what was asked and of which texture: reading one back
+## from the GPU is slow, and every spawn and every death asked again for answers that never change.
+static var _read := {}
 
 
 ## The player, facing right. `height` is how tall to draw them on screen, in scene pixels; `pixel`, the
@@ -123,17 +126,23 @@ func _add(built: SpriteFrames, animation: String, textures: Array[AtlasTexture],
 
 
 ## Scales the fighter so that standing still it is `height` scene pixels tall (snapped to `pixel`'s
-## steps when one is given), and puts the middle of its feet on `position`. Measured off the idle
-## frames, so `position` means the same thing for a slime and a werewolf, and an attack that swings
-## outside the body changes neither.
-func _finish(built: SpriteFrames, height: float, mirror: bool, pixel := 0.0, elite := false) -> void:
-	sprite_frames = built
+## steps when one is given, an `elite` a step coarser). Asked again when the window changes, which
+## moves both.
+func fit(height: float, pixel := 0.0, elite := false) -> void:
 	var factor := height / float(standing.size.y)
 	if pixel > 0.0:
 		factor = clampf(snappedf(factor / pixel, PIXEL_STEP), 1.0, PIXEL_MOST) * pixel
 		if elite:
 			factor += PIXEL_STEP * pixel
 	scale = Vector2(factor, factor)
+
+
+## Stands the fighter up at its size (`fit`) and puts the middle of its feet on `position`. Measured off
+## the idle frames, so `position` means the same thing for a slime and a werewolf, and an attack that
+## swings outside the body changes neither.
+func _finish(built: SpriteFrames, height: float, mirror: bool, pixel := 0.0, elite := false) -> void:
+	sprite_frames = built
+	fit(height, pixel, elite)
 	# The drawn region is centred on the node, so shift it until the feet of the standing pose land there.
 	var middle := Vector2(bounds.position) + Vector2(bounds.size) / 2.0
 	var feet := Vector2(standing.position.x + standing.size.x / 2.0, standing.end.y)
@@ -153,18 +162,22 @@ func _finish(built: SpriteFrames, height: float, mirror: bool, pixel := 0.0, eli
 ## held out drags off to one side.
 func _lay_shadow() -> void:
 	var span := Vector2(standing.position.x, standing.end.x)
-	var image := sprite_frames.get_frame_texture("idle", 0).get_image()
-	if image != null and not image.is_empty():
-		if image.is_compressed():
-			image.decompress()
-		var low := Vector2(INF, -INF)
-		var bottom := standing.end.y - bounds.position.y
-		for y in range(maxi(0, bottom - maxi(1, standing.size.y / 4)), mini(bottom, image.get_height())):
-			for x in image.get_width():
-				if image.get_pixel(x, y).a > 0.5:
-					low = Vector2(minf(low.x, x), maxf(low.y, x + 1))
-		if low.x < low.y:
-			span = low + Vector2(bounds.position.x, bounds.position.x)
+	var key := _key("feet")
+	if not _read.has(key):
+		var drawn := Vector2(INF, -INF)
+		var image := sprite_frames.get_frame_texture("idle", 0).get_image()
+		if image != null and not image.is_empty():
+			if image.is_compressed():
+				image.decompress()
+			var bottom := standing.end.y - bounds.position.y
+			for y in range(maxi(0, bottom - maxi(1, standing.size.y / 4)), mini(bottom, image.get_height())):
+				for x in image.get_width():
+					if image.get_pixel(x, y).a > 0.5:
+						drawn = Vector2(minf(drawn.x, x), maxf(drawn.y, x + 1))
+		_read[key] = drawn
+	var low: Vector2 = _read[key]
+	if low.x < low.y:
+		span = low + Vector2(bounds.position.x, bounds.position.x)
 	var shift := (span.x + span.y) / 2.0 - (standing.position.x + standing.size.x / 2.0)
 	var wide := maxi(4, roundi(minf((span.y - span.x) * SHADOW_WIDE, standing.size.y * SHADOW_MOST_WIDE)))
 	if _shadow == null:
@@ -214,7 +227,22 @@ func drawn_size() -> Vector2:
 ## The body's own colour, roughly: the mean of the solid pixels of its first idle frame, lightened a
 ## touch because a mean is muddier than any pixel it came from. What a death bursts in.
 func tint() -> Color:
-	var image := sprite_frames.get_frame_texture("idle", 0).get_image() if sprite_frames != null else null
+	if sprite_frames == null:
+		return Palette.BONE
+	var key := _key("tint")
+	if not _read.has(key):
+		_read[key] = _mean_colour()
+	return _read[key]
+
+
+## Which of `_read`'s answers is this fighter's: its first idle frame says whose pixels they are.
+func _key(asked: String) -> String:
+	var first := sprite_frames.get_frame_texture("idle", 0) as AtlasTexture
+	return "%s|%s|%s" % [asked, first.atlas.resource_path, first.region]
+
+
+func _mean_colour() -> Color:
+	var image := sprite_frames.get_frame_texture("idle", 0).get_image()
 	if image == null or image.is_empty():
 		return Palette.BONE
 	if image.is_compressed():
@@ -235,18 +263,22 @@ func tint() -> Color:
 ## The part of a frame an idle sprite fills, across the animation. Uses Image.get_used_rect, which is
 ## native, so reading a sheet to measure it costs little.
 func _standing_rect(sheet: Texture2D, frame: Vector2i, count: int) -> Rect2i:
-	var image := sheet.get_image()
-	if image == null or image.is_empty():
-		image = Image.load_from_file(sheet.resource_path)
-	if image.is_compressed():
-		image.decompress()
-	var union := Rect2i()
-	for i in count:
-		var used := image.get_region(Rect2i(Vector2i(i * frame.x, 0), frame)).get_used_rect()
-		if used.size == Vector2i.ZERO:
-			continue
-		union = used if union.size == Vector2i.ZERO else union.merge(used)
-	return bounds if union.size == Vector2i.ZERO else union
+	var key := "standing|" + sheet.resource_path
+	if not _read.has(key):
+		var image := sheet.get_image()
+		if image == null or image.is_empty():
+			image = Image.load_from_file(sheet.resource_path)
+		if image.is_compressed():
+			image.decompress()
+		var union := Rect2i()
+		for i in count:
+			var used := image.get_region(Rect2i(Vector2i(i * frame.x, 0), frame)).get_used_rect()
+			if used.size == Vector2i.ZERO:
+				continue
+			union = used if union.size == Vector2i.ZERO else union.merge(used)
+		_read[key] = union
+	var read: Rect2i = _read[key]
+	return bounds if read.size == Vector2i.ZERO else read
 
 
 ## The same for an enemy, whose idle is either a sheet or one file per frame.
@@ -254,10 +286,14 @@ func _standing_enemy_rect(enemy_name: String, frame: Vector2i) -> Rect2i:
 	var path := EnemyRoster.sheet_path(enemy_name, "idle")
 	if not path.is_empty():
 		return _standing_rect(load(path), frame, EnemyRoster.frame_count(enemy_name, "idle"))
-	var union := Rect2i()
-	for file in EnemyRoster.frame_paths(enemy_name, "idle"):
-		var used: Rect2i = (load(file) as Texture2D).get_image().get_used_rect()
-		if used.size == Vector2i.ZERO:
-			continue
-		union = used if union.size == Vector2i.ZERO else union.merge(used)
-	return bounds if union.size == Vector2i.ZERO else union
+	var key := "standing|" + enemy_name
+	if not _read.has(key):
+		var union := Rect2i()
+		for file in EnemyRoster.frame_paths(enemy_name, "idle"):
+			var used: Rect2i = (load(file) as Texture2D).get_image().get_used_rect()
+			if used.size == Vector2i.ZERO:
+				continue
+			union = used if union.size == Vector2i.ZERO else union.merge(used)
+		_read[key] = union
+	var read: Rect2i = _read[key]
+	return bounds if read.size == Vector2i.ZERO else read

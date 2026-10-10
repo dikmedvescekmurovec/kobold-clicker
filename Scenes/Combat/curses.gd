@@ -44,12 +44,15 @@ const HOME_PREFIX := "homeland:"
 
 ## `stats` is what `Inventory.stats()` adds while the curse is on; `xp_more` is read by `Encounter.arm`
 ## and by nothing else. What is not a number is written where it is done, and named in the row's text.
+## **A figure a rule reads is written into its sentence from the rule's own constant** (`Encounter`'s,
+## `TileMods.WILD_REWARD`, `Camp`'s hours, `MapBuilder`'s wall steps), never typed in a second time; the
+## rows stay whole sentences, since the pages read `text` and `reward` as they stand.
 const CURSES := {
 	IRON_FOES: {"name": "Iron Foes", "skulls": 1,
-		"text": "Every enemy has 60% more health.", "reward": "+40% gold find",
+		"text": "Every enemy has %.0f%% more health." % (Encounter.IRON_HP * 100.0), "reward": "+40% gold find",
 		"stats": {"gold_find": 40.0}},
 	SHORT_DAYS: {"name": "Short Days", "skulls": 1,
-		"text": "Every fight has 8 seconds less on the clock.", "reward": "+20% drop rate",
+		"text": "Every fight has %.0f seconds less on the clock." % Encounter.SHORT_DAYS, "reward": "+20% drop rate",
 		"stats": {"drop_rate": 20.0}},
 	NO_REST: {"name": "No Rest", "skulls": 1,
 		"text": "You cannot set up camp.", "reward": "+25% experience",
@@ -57,7 +60,7 @@ const CURSES := {
 	HUNGRY_MIMICS: {"name": "Hungry Mimics", "skulls": 1,
 		"text": "A mimic has three times the health.", "reward": "A beaten chest holds six items, not four."},
 	BLOODTHIRST: {"name": "Bloodthirst", "skulls": 2,
-		"text": "Enemies hit 75% harder.", "reward": "+30% item rarity",
+		"text": "Enemies hit %.0f%% harder." % (Encounter.BLOODTHIRST_HIT * 100.0), "reward": "+30% item rarity",
 		"stats": {"item_rarity": 30.0}},
 	LEAN_PICKINGS: {"name": "Lean Pickings", "skulls": 2,
 		"text": "Gear drops half as often.", "reward": "One item in ten drops +1, and one in a hundred +2."},
@@ -66,13 +69,13 @@ const CURSES := {
 		"stats": {"xp_more": 40.0}},
 	WILD_TILES: {"name": "Wild Tiles", "skulls": 2,
 		"text": "Tile modifiers start past the first wall, not the second, and every tile has one more.",
-		"reward": "Every tile modifier pays 10% more."},
+		"reward": "Every tile modifier pays %.0f%% more." % ((TileMods.WILD_REWARD - 1.0) * 100.0)},
 	THICK_FOG: {"name": "Thick Fog", "skulls": 2,
 		"text": "-2 Sight. You begin with a Broken Torch, which gives one back while held.", "reward": "Unique items drop twice as often."},
 	# A "less" on the finished experience, after every "more" has been added (`Encounter.LESSONS_XP`);
 	# the doubling is `Inventory.skill_worth`, read by `stats()`.
 	HARD_LESSONS: {"name": "Hard Lessons", "skulls": 2,
-		"text": "Enemies give 75% less experience.", "reward": "Every skill point is worth double."},
+		"text": "Enemies give %.0f%% less experience." % ((1.0 - Encounter.LESSONS_XP) * 100.0), "reward": "Every skill point is worth double."},
 	# Three uniques' rules made a whole world's. **Each adds to its unique where both are had** (the
 	# user's ruling): the curse and the piece are two entries in the same sum.
 	PACIFIST_HANDS: {"name": "Pacifist Hands", "skulls": 2, "not_with": [BERSERKERS_WORLD],
@@ -83,18 +86,21 @@ const CURSES := {
 		"reward": "Clicks deal double damage. A Berserker's Band adds to it."},
 	GLASS_WORLD: {"name": "Glass World", "skulls": 2,
 		"text": "Every fight clock runs a third faster.",
-		"reward": "+100% damage in every fight that has a clock. The Glass Edge adds to it."},
+		"reward": "+%.0f%% damage in every fight that has a clock. The Glass Edge adds to it."
+				% (Encounter.GLASS_MORE * 100.0)},
 	RAW_FINDS: {"name": "Raw Finds", "skulls": 2,
 		"text": "Every item drops as a common, with no modifiers. Uniques are untouched.",
 		"reward": "Orbs drop three times as often."},
 	HOMELAND: {"name": "Homeland", "skulls": 2,
 		"text": "Only two kinds of land leave gear: the kind you start on, and one other. Chests and the ice wall still pay.",
-		"reward": "On those two, +80% item rarity, and uniques drop three times as often."},
+		"reward": "On those two, +%.0f%% item rarity, and uniques drop three times as often."
+				% Encounter.HOME_RARITY},
 	SPECIALIST: {"name": "Specialist", "skulls": 2,
 		"text": "Only one branch of the skill tree may hold points.",
 		"reward": "Every skill point is worth 50% more."},
 	RESTLESS: {"name": "Restless", "skulls": 1,
-		"text": "A camp is full after 2 hours, not 8.",
+		"text": "A camp is full after %.0f hours, not %.0f."
+				% [Camp.RESTLESS_SECONDS / 3600.0, Camp.MAX_SECONDS / 3600.0],
 		"reward": "A camp pays double for every hour."},
 	FORGOTTEN: {"name": "Forgotten", "skulls": 2,
 		"text": "The collection log adds no damage in this world.",
@@ -102,7 +108,8 @@ const CURSES := {
 	LONG_WINTER: {"name": "Long Winter", "skulls": 3,
 		"text": "The ice wall has twice the health.", "reward": "Every ice wall pays two super orbs, not one."},
 	RING_OF_WALLS: {"name": "Ring of Walls", "skulls": 3,
-		"text": "An ice wall stands every 6 rings, not every 12.",
+		"text": "An ice wall stands every %d rings, not every %d."
+				% [MapBuilder.RING_OF_WALLS_STEP, MapBuilder.WALL_STEP],
 		"reward": "Every wall still pays its super orb, so there are twice as many to earn."},
 	LONE_HEIR: {"name": "Lone Heir", "skulls": 3,
 		"text": "Only one heirloom may be worn. The rest come off as the world begins.",

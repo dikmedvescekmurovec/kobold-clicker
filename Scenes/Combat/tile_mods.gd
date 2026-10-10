@@ -116,9 +116,16 @@ static func value(id: String, key: String, tier: int) -> float:
 	return base * tier
 
 
+## What a tile's pay of `percent` comes to in this world, lifted under Wild Tiles (`wild`): the one
+## figure `Encounter.arm` adds to the finders and `describe` writes on the tile panel.
+static func paid(percent: float, wild: bool) -> float:
+	return percent * (WILD_REWARD if wild else 1.0)
+
+
 ## One modifier as the tile panel writes it, at `tier`: its name (with the tier past the first), what
-## it does and what it pays, the last "" for one that pays nothing.
-static func describe(id: String, tier: int) -> PackedStringArray:
+## it does and what it pays in a world under Wild Tiles or not (`wild`), the last "" for one that pays
+## nothing. A pay that is no whole percent keeps its tenth, so the panel says what the fight adds.
+static func describe(id: String, tier: int, wild := false) -> PackedStringArray:
 	var mod: Dictionary = MODS[id]
 	var text := str(mod["text"])
 	for key: String in mod:
@@ -133,7 +140,7 @@ static func describe(id: String, tier: int) -> PackedStringArray:
 	var pays := PackedStringArray()
 	for key: String in PAYS:
 		if mod.has(key):
-			pays.append("+%d%% %s" % [roundi(value(id, key, tier)), PAYS[key]])
+			pays.append("+%s%% %s" % [("%.1f" % paid(value(id, key, tier), wild)).trim_suffix(".0"), PAYS[key]])
 	var numeral: String = NUMERALS[tier] if tier < NUMERALS.size() else " %d" % tier
 	return PackedStringArray([str(mod["name"]) + numeral, text, ", ".join(pays)])
 

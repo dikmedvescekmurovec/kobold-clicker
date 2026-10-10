@@ -3,7 +3,7 @@ extends "res://tests/harness.gd"
 ## points are earned and spent, what the stones add up to and how that stacks with gear, the paid reset,
 ## placing stones on the black screen, the save, the capstones' effects, the page and its radial
 ## drawing, what the Fortune stats do to a drop, and how stones drop. Run from the project folder:
-##   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/test_skills.gd
+##   python tests/run_all.py skills
 
 ## Never Inventory.SAVE_PATH: these tests write and delete, and that is the player's own save.
 const TEST_PATH := "user://test_skills.json"
@@ -23,6 +23,7 @@ func _run() -> void:
 	_check(_test_layout() == true, "layout tests ran to the end")
 	_check(_test_rarity() == true, "rarity tests ran to the end")
 	_check(_test_gold_and_orbs() == true, "gold and orb find tests ran to the end")
+	_check(_test_wide_root() == true, "wide root tests ran to the end")
 	_check(_test_stone_drops() == true, "stone drop tests ran to the end")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_PATH))
 	_report("skill")
@@ -620,3 +621,43 @@ func _play_out(fight: Encounter) -> void:
 			return
 		if not fight.hit():
 			fight.advance(0.05)
+
+
+## A root the walls have widened past ten branches: a branch's step is then two digits long, where a
+## node's own are one, and nothing that reads a path takes branch 1 for branch 10 -- not a slot, not
+## what a narrower node pushes out, not the save, not the Specialist.
+func _test_wide_root() -> bool:
+	SkillTree.root_slots = 11
+	var skills := Skills.new()
+	_check(SkillTree.exists("10", skills.stones) and not SkillTree.exists("11", skills.stones),
+			"eleven branches: the eleventh is there, and no twelfth")
+	_check(SkillTree.index_of("10") == 10 and SkillTree.depth_of("10.2") == 2 and SkillTree.parent_of("10.2") == "10"
+			and SkillTree.branch_of("10.2.1") == "10" and SkillTree.child_of("10", 2) == "10.2",
+			"a two-digit step is one step")
+	skills.stones["1"] = _stone("Strength Node", 1, 3)
+	skills.stones["1.0"] = _stone("Dexterity Node", 2)
+	skills.stones["10"] = _stone("Strength Node", 1, 3)
+	skills.stones["10.2"] = _stone("Dexterity Node", 2, 1)
+	skills.stones["10.2.0"] = _stone("Intelligence Node", 3)
+	_check(SkillTree.exists("10.2.0", skills.stones) and not SkillTree.exists("10.10", skills.stones),
+			"under the eleventh branch a node's own steps are still its three")
+	skills.ranks = {"1": 1, "10": 1, "10.2": 1}
+	var out := skills.place(_stone("Intelligence Node", 1), "1")
+	_check(out.size() == 2 and skills.stones.has("10.2.0") and skills.ranks == {"10": 1, "10.2": 1},
+			"a leaf on branch 1 pushes out branch 1's nodes, and none of branch 10's (%d)" % out.size())
+	out = skills.place(_stone("Strength Node", 1, 2), "10")
+	_check(out.size() == 3 and not skills.stones.has("10.2") and not skills.stones.has("10.2.0"),
+			"a node with two connectors on branch 10 loses what hung off its third (%d)" % out.size())
+	skills.stones["10.1"] = _stone("Dexterity Node", 2)
+	skills.ranks = {"10": 1, "10.1": 1}
+	var back := Skills.from_dict(skills.tree_dict(), skills.ranks, 5)
+	_check(back.tree_dict() == skills.tree_dict() and back.ranks == skills.ranks,
+			"the save keeps a node on the eleventh branch, and its points (%s)" % [back.stones.keys()])
+	var player := Inventory.new()
+	player.level = 5
+	player.skills = back
+	player.curses = [Curses.SPECIALIST]
+	_check(player.why_not_skill("1").begins_with("Specialist") and not player.why_not_skill("10").begins_with("Specialist"),
+			"and the Specialist tells branch 1 from branch 10")
+	SkillTree.root_slots = SkillTree.ROOT_CONNECTORS
+	return true

@@ -84,7 +84,9 @@ static func make(cell: Vector2i, place: String, fight: Encounter, at: float) -> 
 	}
 
 
-## What a camp has earned by `at`: the seconds it has stood (capped), and the rates times those.
+## What a camp has earned by `at`: the seconds it has stood (capped), and the rates times those, in
+## whole coins, experience and bodies -- gold is a whole number wherever it is held (`BigNumber`), and
+## a purse with a fraction in it reads as a coin it cannot pay.
 ## `full` is whether the cap is what stopped it, which is the one thing the screen must say -- a
 ## player back after a week is owed an explanation, not a number that looks short.
 static func earned(camp: Dictionary, at: float) -> Dictionary:
@@ -94,7 +96,7 @@ static func earned(camp: Dictionary, at: float) -> Dictionary:
 	return {
 		"seconds": spent,
 		"full": spent >= most,
-		GOLD: float(camp.get(GOLD, 0.0)) * spent,
+		GOLD: floorf(float(camp.get(GOLD, 0.0)) * spent),
 		XP: int(float(camp.get(XP, 0.0)) * spent),
 		KILLS: int(float(camp.get(KILLS, 0.0)) * spent),
 	}

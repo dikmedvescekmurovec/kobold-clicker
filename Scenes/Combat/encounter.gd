@@ -49,6 +49,9 @@ signal enemy_hit(hp_left: float)
 signal hit_landed(amount: float, crit: bool, automatic: bool)
 ## The enemy's health reached zero; its death plays before the next one comes out.
 signal enemy_died(index: int)
+## Everything that body was carrying has been rolled and handed over: `enemy_died` comes before its
+## loot, so whatever changes what the next body pays (a rune running out) waits for this one.
+signal kill_paid(index: int)
 ## That enemy was carrying something. Emitted with the death, so the drop reads as coming off the
 ## body, and kept whatever the fight does afterwards: running out of time loses the tile, not what is
 ## already on the ground.
@@ -540,6 +543,11 @@ const MOMENTUM_MOST := 1.0
 const HEARTWOOD_ARMOUR := 50.0   ## armour a second on the clock
 const AFTERIMAGE_SECONDS := 1.0  ## the most a dodge wins back, of what blows have taken
 const SECOND_WIND_SECONDS := 5.0 ## given back once a fight, as the clock runs out
+const GIANT_SLAYER_TIMES := 2.0  ## a blow at an elite or a boss, Giant Slayer
+const SHIELD_WALL_TIMES := 2.0   ## block against an elite's or a boss's blow, Shield Wall
+const JACKPOT_CHANCE := 0.1      ## of purses that are JACKPOT_TIMES as full, Jackpot
+const JACKPOT_TIMES := 5.0
+const TWO_ORBS_CHANCE := 0.25    ## of orbs that fall as two, the Alchemist's `transmute`
 const MAGPIE_CHANCE := 0.05
 ## What the lines a unique gains at rank IV are tuned by (`UniqueTable`'s `peak` says each in words).
 const SERPENT_KEPT := 0.5        ## of the built chance a crit leaves, Serpent's Eye
@@ -556,7 +564,9 @@ const DOMINO_BIG := 0.5          ## of the carry an elite or a boss takes, Domin
 const HOURGLASS_BOSS := 5.0      ## seconds a boss kill puts back, Hourglass Amulet
 const BERSERK_EVERY := 10        ## clicks that land, one of which strikes twice, Berserker's Band
 const CHALICE_TWICE := 0.1       ## of crits that strike twice, Overflowing Chalice
-## What the world's curses are tuned by (`Curses`, which writes the same figures in words).
+## What the world's curses are tuned by. `Curses` writes its sentences' figures from these, so a row
+## cannot say one number and the fight play another; only what a sentence says in words ("three times",
+## "half") is written twice.
 const IRON_HP := 0.6             ## more health, added to a tile's own `hp`
 const SHORT_DAYS := 8.0          ## seconds off every clock
 const BLOODTHIRST_HIT := 0.75    ## more of every blow, added to a tile's own `hit`
@@ -806,7 +816,8 @@ func _raw_health_of(enemy: String, position := -1) -> float:
 			var inside := MapBuilder.CENTER + Vector2i(HexGrid.distance(MapBuilder.CENTER, cell) - 1, 0)
 			wall_hp = base_hp(inside) * hp_tuning(walls) * LATE_WALL_BODIES
 		return roundf(wall_hp * (LONG_WINTER_HP if Curses.effect(Curses.LONG_WINTER) in effects else 1.0))
-	var more := 1.0 + _hp_more
+	# Less what weaker tile modifiers take back of the tile's share, as of its `hit` and `attack`.
+	var more := 1.0 + _hp_more - _softened("hp")
 	if enemy == MIMIC and Curses.effect(Curses.HUNGRY_MIMICS) in effects:
 		more += HUNGRY_HP
 	return maxf(1.0, roundf(hp_of(enemy, cell) * more * pow(HP_GROWTH, MapBuilder.LEVEL_TILES * deeper)))
@@ -1015,7 +1026,7 @@ static func base_hp(cell: Vector2i, step := LAND_GROWTH) -> float:
 ## How many walls stand between the middle of the map and `cell`. A wall's own ring counts none of
 ## itself -- it is the edge of the land inside it -- and every ring past it counts that wall and the
 ## ones before. So it is the wall rings' own arithmetic, ceiling rather than floor, which agrees with
-## the floor exactly on a wall ring (11 -> 0, 21 -> 1, 31 -> 2) and steps up on the first ring past one.
+## the floor exactly on a wall ring (12 -> 0, 24 -> 1, 36 -> 2) and steps up on the first ring past one.
 static func walls_inside(cell: Vector2i) -> int:
 	return maxi(0, ceili(float(HexGrid.distance(MapBuilder.CENTER, cell)
 			- MapBuilder.START_LAND_RADIUS - 1) / float(MapBuilder.WALL_STEP)))
@@ -1227,11 +1238,11 @@ func arm(stats: Dictionary) -> void:
 		phase_left = minf(phase_left, walk_in)
 	if _cursed_with(Curses.HOMELAND) and _at_home():
 		item_rarity += HOME_RARITY
-	var pays := TileMods.WILD_REWARD if Curses.effect(Curses.WILD_TILES) in effects else 1.0
-	drop_rate += TileMods.total(mods, "drop_rate") * pays
-	item_rarity += TileMods.total(mods, "item_rarity") * pays
-	gold_find += TileMods.total(mods, "gold_find") * pays
-	xp_more += TileMods.total(mods, "xp") * pays
+	var wild := _cursed_with(Curses.WILD_TILES)
+	drop_rate += TileMods.paid(TileMods.total(mods, "drop_rate"), wild)
+	item_rarity += TileMods.paid(TileMods.total(mods, "item_rarity"), wild)
+	gold_find += TileMods.paid(TileMods.total(mods, "gold_find"), wild)
+	xp_more += TileMods.paid(TileMods.total(mods, "xp"), wild)
 
 
 ## What the gear does to the lineup already rolled, once, as the fight is first armed: bodies more or
@@ -1239,10 +1250,7 @@ func arm(stats: Dictionary) -> void:
 ## chance. Health is sized again only where the gear moved it, so a fight built by hand keeps its own.
 func _shape() -> void:
 	_take_extra()
-	var thinner := tile_ward > 0.0 and TileMods.total(mods, "hp") > 0.0
-	if thinner:
-		_hp_more -= TileMods.total(mods, "hp") * tile_ward / 100.0
-	if thinner or less_health > 0.0:
+	if _softened("hp") > 0.0 or less_health > 0.0:
 		for at in range(index, lineup.size()):
 			health[at] = _health_of(lineup[at], at)
 		if index < lineup.size():
@@ -1285,7 +1293,9 @@ func _tile_factor(key: String) -> float:
 	return 1.0 + (TileMods.factor(mods, key) - 1.0) * (1.0 - tile_ward / 100.0)
 
 
-## What the helmet's Tile Modifier Reduction takes back of an added lift the tile put on (`hit`, `attack`).
+## What the helmet's Tile Modifier Reduction takes back of an added lift the tile put on (`hp`, `hit`,
+## `attack`): asked where the lift is used, so a modifier that leaves the fight (`forget_mod`) takes
+## its share of this with it.
 func _softened(key: String) -> float:
 	return TileMods.total(mods, key) * tile_ward / 100.0
 
@@ -1395,7 +1405,7 @@ func _strike(automatic: bool, riposte := false) -> bool:
 	var crit_more := crit_damage * (2.0 if opening and big and _peak("duelists_buckler") else 1.0)
 	var dealt := maxf(1.0, roundf(damage * (1.0 + crit_more / 100.0))) if crit else damage
 	if "giant_slayer" in effects and big:
-		dealt *= 2
+		dealt *= GIANT_SLAYER_TIMES
 	# What the weapon's lines add to this kind of blow, and then everything the uniques add -- each
 	# summed and applied once, `gear_more` and `unique_more`.
 	dealt *= 1.0 + gear_more(automatic, big, first)
@@ -1578,6 +1588,7 @@ func _kill(swung := false) -> void:
 			var rune := RuneTable.roll(lineup[index], loot_rng)
 			if not rune.is_empty():
 				rune_dropped.emit(index, rune)
+		kill_paid.emit(index)
 		return
 	# The only path to a death, which is why drops survive a loss for free: nothing is rolled
 	# when the clock runs out.
@@ -1651,8 +1662,8 @@ func _kill(swung := false) -> void:
 	if env == "desert" and _home_peak():
 		purse *= HOME_PURSE
 	# Drawn only while Jackpot is learned, so a player without it rolls loot exactly as before.
-	if "jackpot" in effects and loot_rng.randf() < 0.1:
-		purse *= 5
+	if "jackpot" in effects and loot_rng.randf() < JACKPOT_CHANCE:
+		purse *= JACKPOT_TIMES
 	# The Magpie's Band: now and then the purse is a piece of gear instead. The Tithe wins where
 	# both are worn -- no ordinary gear means none -- and the purse stays a purse.
 	if "magpie" in effects and not no_gear and loot_rng.randf() < MAGPIE_CHANCE:
@@ -1732,7 +1743,7 @@ func _kill(swung := false) -> void:
 	if not orb.is_empty():
 		# Either promise is spent by its orb, however that came.
 		promised.erase(ORB_PROMISES.get(orb))
-		var count := 2 if "transmute" in effects and orb_rng.randf() < 0.25 else 1
+		var count := 2 if "transmute" in effects and orb_rng.randf() < TWO_ORBS_CHANCE else 1
 		for i in count:
 			orbs[orb] = int(orbs.get(orb, 0)) + 1
 			orb_dropped.emit(index, orb)
@@ -1747,6 +1758,7 @@ func _kill(swung := false) -> void:
 				item_rarity)
 		if stone != null:
 			loot_dropped.emit(index, stone)
+	kill_paid.emit(index)
 
 
 ## Whether the body going down is the one that leaves `promise` (`PROMISED`): owed, past the kills it
@@ -1776,13 +1788,19 @@ func advance(delta: float) -> void:
 	if finished:
 		return
 	if not endless:
+		# What the blows took coming back, before the clock runs: paid after it, a share still owed left
+		# a sliver on a clock that had run out, every frame, and the fight could not be lost.
+		if not _recouping.is_empty():
+			_recoup(delta)
 		var spent := delta
 		# The Glass Edge's price, and the Glass World's: each is a third faster, and both are both.
 		spent *= pow(GLASS_CLOCK, _glass())
 		# Rimeplate at IV: on ice the clock runs slower.
 		if env == "ice" and _home_peak():
 			spent *= HOME_CLOCK
-		time_left = maxf(time_left - spent, 0.0)
+		# Past nothing for the rest of this step, so whatever is won back inside it pays the whole of what
+		# ran first; the verdict at the foot is what stops it at nothing.
+		time_left -= spent
 	_since_click += delta
 	_clicks_left = minf(_clicks_left + delta * CLICK_CAP, CLICK_BURST)
 	if _since_click > KNUCKLE_WINDOW:
@@ -1803,18 +1821,18 @@ func advance(delta: float) -> void:
 		var burning := minf(delta, _burn_left)
 		_burn_left -= burning
 		_wear_down(_burn, burning)
-	# And what the blows took coming back, before the clock is asked whether it ran out.
-	if not endless and not _recouping.is_empty():
-		_recoup(delta)
-	if not endless and time_left <= 0.0 and not finished:
-		# Second Wind and the Worry Stone: once a fight each, the clock gets back SECOND_WIND_SECONDS
-		# rather than running out, and the two add up.
-		if _saves_used < effects.count("second_wind") + effects.count("worry_stone"):
-			_saves_used += 1
-			time_left = SECOND_WIND_SECONDS
-		else:
-			# A descent is not lost, only over: the floor it reached is the whole of it.
-			_finish(dungeon)
+	if endless or finished or time_left > 0.0:
+		return
+	time_left = 0.0
+	# Second Wind and the Worry Stone: once a fight each, the clock gets back SECOND_WIND_SECONDS
+	# rather than running out, and the two add up -- but none is spent where the last body is already
+	# going down, which wins the fight (`_end`).
+	if not _winning() and _saves_used < effects.count("second_wind") + effects.count("worry_stone"):
+		_saves_used += 1
+		time_left = SECOND_WIND_SECONDS
+	else:
+		# A descent is not lost, only over: the floor it reached is the whole of it.
+		_end(dungeon)
 
 
 ## A body wearing down with nobody touching it, at `a_second` damage a second. Only while it is
@@ -1838,7 +1856,8 @@ func _wear_down(a_second: float, delta: float, bleeding := false) -> void:
 ## The enemy standing there striking the clock, once every `ATTACK_EVERY` of its tier. Only in a
 ## fight with a clock to strike, and never the ice wall, which is a check on damage and nothing else.
 func _be_struck(delta: float) -> void:
-	if not strikes or endless or dungeon or finished or phase != Phase.WAITING or delta <= 0.0 			or lineup[index] == WALL_NAME:
+	if not strikes or endless or dungeon or finished or phase != Phase.WAITING or delta <= 0.0 \
+			or lineup[index] == WALL_NAME:
 		return
 	# Last Gasp at IV: in its last seconds the enemies hold their blows.
 	if "last_gasp" in effects and _peak("last_gasp") and time_left <= _dial("last_gasp", "seconds"):
@@ -1865,6 +1884,8 @@ func _struck_by(hit: float) -> void:
 	var walled := not _walled and "heartwood" in effects and _peak("heartwood_plate")
 	if walled:
 		_walled = true
+	# Drawn for every blow that gets this far, on the crits' generator and whatever the chance: unlike a
+	# crit or a Double Strike, a dodge nobody has still moves the stream.
 	elif crit_rng.randf() < dodge_chance():
 		# Afterimage: a dodge wins back some of what the blows took, never more, so it banks nothing.
 		if "afterimage" in effects:
@@ -1876,15 +1897,18 @@ func _struck_by(hit: float) -> void:
 		return
 	# Shield Wall: block counts double against an elite's or a boss's blow.
 	var big := index < lineup.size() and EnemyRoster.tier_of(lineup[index]) != EnemyRoster.Tier.COMMON
-	var lost := 0.0 if walled else taken(hit, block * (2.0 if big and "shieldwall" in effects else 1.0))
+	var lost := 0.0 if walled else taken(hit, block * (SHIELD_WALL_TIMES if big and "shieldwall" in effects else 1.0))
 	# The helmet's Elite Blow Reduction: a share less of whatever got through from an elite or a boss.
 	if big:
 		lost *= 1.0 - elite_ward / 100.0
-	time_left = maxf(time_left - lost, 0.0)
-	wounds += lost
+	# Only what the clock still had to lose is a wound: a blow on a clock that has run out takes nothing,
+	# so there is nothing of it to win back, and no defence can bank time.
+	var off := clampf(time_left, 0.0, lost)
+	time_left -= off
+	wounds += off
 	# The body's Recoup: a share of it coming back evenly over the next few seconds (`_recoup`).
-	if lost > 0.0 and recoup > 0.0:
-		var owed := lost * recoup / 100.0
+	if off > 0.0 and recoup > 0.0:
+		var owed := off * recoup / 100.0
 		_recouping.append([owed, owed / RECOUP_SECONDS])
 	_count("blows_taken")
 	if lost <= 0.0:
@@ -1903,9 +1927,10 @@ func _struck_by(hit: float) -> void:
 		_wear_down(damage * thorns / 100.0, 1.0)
 
 
-## Seconds back on the clock out of what the blows took (`wounds`), never more, so nothing is banked.
-func _win_back(seconds: float) -> void:
-	var back := minf(seconds, wounds)
+## `most` seconds back on the clock out of what the blows took (`wounds`), never more, so nothing is
+## banked.
+func _win_back(most: float) -> void:
+	var back := minf(most, wounds)
 	if back <= 0.0:
 		return
 	wounds -= back
@@ -1976,15 +2001,30 @@ func _swing_weapon(delta: float) -> void:
 
 ## Ends the fight at once, however much of it is left. For tests and for leaving early.
 func give_up() -> void:
-	if not finished:
-		_finish(false)
+	_end(false)
 
 
 ## Ends a run on the player's say-so. Not a loss: a farm run is not something that can be lost, only
 ## something the player decides is over, and the kills and the loot are theirs either way.
 func stop() -> void:
-	if not finished:
-		_finish(true)
+	_end(true)
+
+
+## Ends the fight where it stands, for the clock running out, `stop` and `give_up`. A body already
+## going down fell before the end came, so it is counted whatever the frame rate -- its death would
+## otherwise have to play out first -- and where it was the last of a tile's the fight is won.
+func _end(win: bool) -> void:
+	if finished:
+		return
+	win = win or _winning()
+	if phase == Phase.DYING:
+		index += 1
+	_finish(win)
+
+
+## Whether the body going down is the last of a tile's fight, whose death wins it.
+func _winning() -> bool:
+	return phase == Phase.DYING and not endless and not dungeon and index + 1 >= lineup.size()
 
 
 ## The walking-in or dying that just ran out: the enemy either takes its stand or leaves the field.
@@ -2044,6 +2084,8 @@ func _finish(win: bool) -> void:
 	finished = true
 	victory = win
 	phase = Phase.OVER
+	# A step may have run the clock under nothing before the last death played out (`advance`).
+	time_left = maxf(time_left, 0.0)
 	if win:
 		won.emit()
 	else:

@@ -134,7 +134,8 @@ func _size(size: int) -> void:
 
 
 func _width(text: String, size: int) -> float:
-	return _caption.get_theme_font("font").get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x 			+ 4 + size / 8
+	return _caption.get_theme_font("font").get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x \
+			+ 4 + size / 8
 
 
 ## The first tile `DISTANCE` steps out on `ENV` that can be farmed.
@@ -194,7 +195,8 @@ func _drop_seeds() -> Array:
 			if not finds.is_empty():
 				bodies.append(index)
 				rarities.append_array(finds.map(func(item: Item) -> int: return item.rarity))
-		if bodies.size() != TRASH - 1 or rarities.size() != bodies.size() 				or not ItemRarity.Rarity.RARE in rarities or not ItemRarity.Rarity.ELITE in rarities:
+		if bodies.size() != TRASH - 1 or rarities.size() != bodies.size() \
+				or not ItemRarity.Rarity.RARE in rarities or not ItemRarity.Rarity.ELITE in rarities:
 			continue
 		for orb: int in orb_at:
 			if not orb in bodies and _even(bodies + [orb]):

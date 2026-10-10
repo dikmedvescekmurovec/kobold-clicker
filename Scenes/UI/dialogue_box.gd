@@ -129,7 +129,11 @@ func pop_up(final: float) -> void:
 	if over > 0.0:
 		_words.custom_minimum_size.x = TEXT_WIDTH - over
 		(_words.get_parent() as Control).custom_minimum_size.x = TEXT_WIDTH - over
+		# The box took its wider size as it joined the tree, and a Control never shrinks back by itself.
+		_panel.reset_size()
 	_panel.resized.connect(_settle)
+	# And the window turned or resized under it: the box goes back to its foot.
+	resized.connect(_settle)
 	Juice.pop_in(_panel, final)
 	_settle()
 	if Settings.animations != Settings.Anim.NONE:

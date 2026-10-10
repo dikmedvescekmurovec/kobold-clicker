@@ -158,10 +158,16 @@ static func pop_in(panel: Control, final: float) -> void:
 	tween.tween_property(panel, "modulate:a", 1.0, POP_TIME * 0.5)
 
 
+## Whether `panel` is on its way out (`pop_out`). Its buttons stay under the cursor for the `LEAVE_TIME`
+## it takes to shrink away, so whatever one of them does asks this first: a popup is answered once.
+static func leaving(panel: Control) -> bool:
+	return panel.has_meta("leaving")
+
+
 ## Shrinks the panel away and then calls `then`, once: a second press while it goes is ignored, so a
 ## double-clicked Collect cannot leave twice.
 static func pop_out(panel: Control, then: Callable) -> void:
-	if panel.has_meta("leaving"):
+	if leaving(panel):
 		return
 	panel.set_meta("leaving", true)
 	if Settings.animations == Settings.Anim.NONE or not panel.is_inside_tree():
@@ -177,17 +183,28 @@ static func pop_out(panel: Control, then: Callable) -> void:
 ## Every popup comes up the way the rewards do (a bounty's pay, a fight's verdict): `panel` -- a titled
 ## panel with no X, its one way out a button at its foot -- swells in about its middle and is kept in
 ## the middle of the window as its contents settle, and with `win`, for something gained, the warm wash
-## and the sparks go under it once it stands still. `holder` is the full-window Control it stands in,
-## which eats the clicks under it (only `win` needs one). It leaves by `pop_out`.
+## and the sparks go under it once it stands still. `holder` is the Control it stands in, which eats
+## the clicks under it: given one, it is stood over the whole window here, and over it again however the
+## window is resized or turned, so no strip of what is under a question is left to press (a tip passes
+## none). It leaves by `pop_out`, and a press on one of its buttons while it does is no answer (`leaving`).
 static func popup(holder: Control, panel: Control, final: float, win := false) -> void:
 	var settle := func() -> void:
 		if is_instance_valid(panel) and panel.is_inside_tree():
 			centre(panel, panel.get_viewport_rect().size)
 	panel.resized.connect(settle)
+	if holder != null:
+		var view := holder.get_viewport()
+		var cover := func() -> void:
+			holder.size = holder.get_viewport_rect().size
+			settle.call()
+		cover.call()
+		# Let go of as the holder leaves the tree: the window outlives every popup.
+		view.size_changed.connect(cover)
+		holder.tree_exiting.connect(view.disconnect.bind(&"size_changed", cover), CONNECT_ONE_SHOT)
 	pop_in(panel, final)
 	settle.call()
 	await panel.get_tree().process_frame
-	if not is_instance_valid(panel) or panel.has_meta("leaving"):
+	if not is_instance_valid(panel) or leaving(panel):
 		return
 	settle.call()
 	if win and holder != null:
@@ -329,7 +346,8 @@ static func _slide_out(node: Control, rects: Array[Rect2], away: Vector2) -> voi
 	parent.add_child(ghost)
 	parent.move_child(ghost, node.get_index() + 1)
 	var tween := ghost.create_tween().set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
-	tween.tween_property(ghost, "position", away, SLIDE_OUT_TIME) 			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tween.tween_property(ghost, "position", away, SLIDE_OUT_TIME) \
+			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	tween.tween_callback(ghost.queue_free)
 
 

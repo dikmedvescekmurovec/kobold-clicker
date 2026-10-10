@@ -34,6 +34,9 @@ const HERO_FACE := Rect2(13, 3, 34, 34)
 ## reason `inventory_path` is -- and more sharply, since they all pin a seed, and a pinned seed that
 ## differs from a save is a request for another world that replaces it on the first write.
 @export var map_path := MapSave.SAVE_PATH
+## Where a headless run left at the two paths above plays instead (`_ready`).
+const HEADLESS_INVENTORY := "user://headless_inventory.json"
+const HEADLESS_MAP := "user://headless_map.json"
 
 ## The marks the corner buttons wear. The first three: a chest for what has been carried home, a star for what
 ## the player has become and a scroll for the work they have taken on: all three are places to go
@@ -138,7 +141,6 @@ const BOUNTY_TIER := {
 @onready var camera: Camera2D = $Camera2D
 
 var _chart_button: Button
-## Dev: charts the selected tile with no fight. Debug builds only.
 var _move_button: Button
 var _farm_button: Button
 ## What `_update_buttons` last greyed the fights for, so `_process` knows when the bag has crossed the cap.
@@ -384,14 +386,16 @@ var _aim_town := TownWorld.NO_SPOT
 ## the cloud closes the scene (which banks and writes the rest), uploads, and only then quits.
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		if inventory != null and not _save_blocked:
-			inventory.save(inventory_path)
+		_save_inventory()
 		if cloud != null and cloud.signed_in() and not _save_blocked and not _resetting:
 			cloud.leave.call_deferred(self)
 		else:
 			get_tree().quit()
 	elif what == NOTIFICATION_APPLICATION_PAUSED and cloud != null:
 		cloud.push()
+	elif (what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT) \
+			and OS.has_feature("web"):
+		_keep_run()
 	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		# Answered wherever Escape is -- a fight, the bag, a question, this scene -- by being Escape.
 		for down: bool in [true, false]:
@@ -399,6 +403,30 @@ func _notification(what: int) -> void:
 			back.action = "ui_cancel"
 			back.pressed = down
 			Input.parse_input_event(back)
+
+
+## Whether the inventory may be written now: never over a refused save or a reset, and never while the
+## black screen is up, where a game closed has not transcended.
+func _may_save() -> bool:
+	return inventory != null and not _resetting and not _save_blocked and _transcend_page == null
+
+
+## The one way this scene writes the inventory, and whether it was written (`_may_save`). The pages and
+## the ledger write their own, and none of them is up on the black screen.
+func _save_inventory() -> bool:
+	return _may_save() and inventory.save(inventory_path)
+
+
+## What is held and not yet on disk, written now, and safe to write again: a farm run's finds are in
+## the inventory as they land (`FightLedger`), and a descent's depths are each a most-ever
+## (`_bank_depths`). The web build's one chance at them: a tab closes with no close request and no
+## `_exit_tree`, so it writes as the tab loses the focus. A run's kills still wait for its end, since
+## `bank_kills` counts a fight's whole tally once.
+func _keep_run() -> void:
+	if _combat != null and _combat.fight != null and _combat.fight.dungeon:
+		_bank_depths()
+	else:
+		_save_inventory()
 
 
 ## Every button made from here on, in this scene or anywhere else in the tree, clicks when pressed.
@@ -438,6 +466,14 @@ func _on_any_button_pressed(button: BaseButton) -> void:
 
 
 func _ready() -> void:
+	# A headless run pointed nowhere -- the landing page's straight-through, a quick check that the
+	# game starts -- plays on scratch files, so code half-way through a change can never load, rewrite
+	# or upload the player's own saves (their settings and account go with the inventory's path).
+	if DisplayServer.get_name() == "headless":
+		if inventory_path == Inventory.SAVE_PATH:
+			inventory_path = HEADLESS_INVENTORY
+		if map_path == MapSave.SAVE_PATH:
+			map_path = HEADLESS_MAP
 	# A real window is drawn at its own pixels, and every scale in it is a whole number of them: the
 	# project's stretch would blow the default window up by a fraction on anything but its own size. A
 	# headless run keeps the stretch, whose window every test lays out against.
@@ -461,11 +497,6 @@ func _ready() -> void:
 	add_child(_toggle_sound)
 	add_child(_page_sound)
 	add_child(_coins_sound)
-	# Two different nulls: no file at all is a first run, and a file that cannot be honoured stops.
-	# Generating a world in its place would write over it on the player's first step, and a map lost
-	# to a bad read is worse than an error message.
-	# The inventory first, and by the same rule: it is what the player owns, and an empty bag saved over
-	# a file that could not be read is that file gone on the first kill.
 	_music = AudioStreamPlayer.new()
 	_music.bus = Settings.MUSIC_BUS
 	add_child(_music)
@@ -477,8 +508,17 @@ func _ready() -> void:
 				_tracks[kind].append(track)
 	_play_music(IDLE_MUSIC)
 	TownServices.show_all = Settings.show_all_services()
+	# Before either save is judged, so a refusal stops the cloud as well (`_refuse_save`), and before
+	# anything of this start-up is written (`Cloud.launched`).
+	_find_cloud()
+	# Two different nulls: no file at all is a first run, and a file that cannot be honoured stops.
+	# Generating a world in its place would write over it on the player's first step, and a map lost
+	# to a bad read is worse than an error message.
+	# The inventory first, and by the same rule: it is what the player owns, and an empty bag saved over
+	# a file that could not be read is that file gone on the first kill.
 	var problem: Array = []
 	inventory = Inventory.load_from(inventory_path, problem)
+	_unread(inventory_path, inventory, problem)
 	if not problem.is_empty():
 		_refuse_save("inventory", inventory_path, str(problem[0]))
 		return
@@ -488,8 +528,8 @@ func _ready() -> void:
 	# Before anything below saves over it: the hour the player left is what the camp pays from.
 	var left_at := inventory.saved_at
 	ledger = FightLedger.new(inventory, inventory_path)
-	_find_cloud()
 	var save := MapSave.load_from(map_path, problem, MapSave.fingerprint(map.tileset))
+	_unread(map_path, save, problem)
 	if not problem.is_empty():
 		_refuse_save("map", map_path, str(problem[0]))
 		return
@@ -562,11 +602,15 @@ func _find_cloud() -> void:
 			add_child(cloud)
 	if real:
 		get_tree().set_auto_accept_quit(false)
+	# Whatever an earlier scene refused, this one judges its own files (`_refuse_save`).
+	cloud.blocked = false
 	# Before anything of this start-up is written: what the device held is what it is judged by.
 	cloud.launched()
+	# Nor on the walk to a fight, which would open under the question (`_on_player_arrived`).
 	cloud.calm = func() -> bool:
 		return (is_inside_tree() and _combat == null and _transcend_page == null and _camp == null
-				and _cloud_question == null and not _save_blocked and not _resetting)
+				and _cloud_question == null and not _save_blocked and not _resetting
+				and _fight_target == HexMap.NO_CELL and _dark_way.is_empty())
 	cloud.replaced.connect(_on_cloud_replaced)
 	cloud.asked.connect(_on_cloud_asked)
 
@@ -603,7 +647,7 @@ func _sync_chest() -> void:
 	var cell := spot - view.origin if spot != TownWorld.NO_SPOT else HexMap.NO_CELL
 	if cell != HexMap.NO_CELL and not view.has_chest(cell):
 		inventory.fortunes.erase(FortuneTeller.CHEST)
-		inventory.save(inventory_path)
+		_save_inventory()
 		cell = HexMap.NO_CELL
 	_chest_pointer.target = cell
 	# Dev: a fallen wall adds hidden land, whose chests only a full pass draws.
@@ -624,12 +668,26 @@ func _save_map() -> void:
 	save.save(map_path)
 
 
+## A loader that handed back nothing and said nothing about a file that is there has failed some way it
+## did not foresee, and that is a refusal like any other: only a missing file is a first run.
+static func _unread(path: String, loaded: Object, problem: Array) -> void:
+	SafeFile.recover(path)
+	if loaded == null and problem.is_empty() and FileAccess.file_exists(path):
+		problem.append("it could not be read")
+
+
 ## A save that cannot be honoured, `what` being "map" or "inventory". Nothing is generated and nothing
 ## is written -- no UI is built, so nothing can reach either save; the player is told what happened
 ## and where the file is, because a console error is not something they can act on and a blank window
 ## is worse.
 func _refuse_save(what: String, path: String, reason: String) -> void:
 	_save_blocked = true
+	# Nor may the cloud move either file: a refused one sent up would come down on every other device.
+	cloud.blocked = true
+	# Nothing was built, so there is nothing for a frame, a key or the wheel to reach.
+	set_process(false)
+	set_process_input(false)
+	set_process_unhandled_input(false)
 	push_error("Refusing to load the saved %s %s -- %s" % [what, path, reason])
 	var layer := CanvasLayer.new()
 	layer.name = "UI"
@@ -702,9 +760,10 @@ func _over_banner(at: Vector2) -> bool:
 	return _banner != null and _banner.get_global_rect().has_point(at)
 
 
-## Whether a page's question or the fortuneteller's answer stands over the window.
+## Whether a page's question, the fortuneteller's answer or the cloud's question stands over the window.
 func _popup_up() -> bool:
-	return bag_page != null and (bag_page.asking() or heirloom_page.asking() or town_page.telling())
+	return _cloud_question != null \
+			or (bag_page != null and (bag_page.asking() or heirloom_page.asking() or town_page.telling()))
 
 
 ## Built in code so the scene file stays untouched while the Godot editor has it open.
@@ -992,12 +1051,12 @@ func _build_pages(layer: CanvasLayer) -> void:
 	# Dev only: an empty purse becomes 10, so the button always does something.
 	settings_page.cash_pressed.connect(func() -> void:
 		inventory.gold = maxf(inventory.gold, 1.0) * 10.0
-		inventory.save(inventory_path))
+		_save_inventory())
 	# Dev only: a skill point is a level (`Skills.earned`), never stored, so ten points are ten levels.
 	# The tips put the star up the first time, and light it.
 	settings_page.points_pressed.connect(func() -> void:
 		inventory.level += 10
-		inventory.save(inventory_path)
+		_save_inventory()
 		_sync_character()
 		_check_tips())
 	# The town page stands on the other edge, but it is closed by the same X rule and hidden by the
@@ -1037,8 +1096,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 		page.laid_out.connect(_place_corner)
 	settings_page.laid_out.connect(_place_corner)
 	leaderboard_page = LeaderboardPage.new(cloud, func() -> int: return inventory.dungeon_floors, ui_scale)
-	for page: Control in [skills_page, bag_page, heirloom_page, bounty_page, settings_page,
-			collection_page, achievements_page, character_page, leaderboard_page, town_page]:
+	for page: Control in _left_pages() + [town_page]:
 		page.hide()
 		page.closed.connect(_on_left_page_closed)
 		layer.add_child(page)
@@ -1350,8 +1408,6 @@ func _place_banner(spark := false) -> void:
 				Palette.GOLD, 28, 220.0, 3.0, 0.7)
 
 
-## Puts it down, from the timer, the X, another banner, or the fight ending -- so it is never left
-## standing over a verdict.
 ## What a bounty paid, laid out as a fight's verdict is and arriving the way it does: the pages' panel
 ## with the word on its green bar, the monster, the sums counting up behind their marks, and the orbs
 ## and the piece popping in on the bag's light panel. It is paid already -- Collect only puts the
@@ -1554,6 +1610,8 @@ func _close_board_choice() -> void:
 		_choice = null
 
 
+## Puts it down: from the timer, its X, a press off it once its time is up, another banner, or a camp
+## struck under it.
 func _close_banner() -> void:
 	if _banner == null:
 		return
@@ -1630,7 +1688,7 @@ func _show_mods(cell: Vector2i) -> void:
 		if shown.has(id):
 			continue
 		shown[id] = true
-		var lines := TileMods.describe(id, mods.count(id))
+		var lines := TileMods.describe(id, mods.count(id), Curses.WILD_TILES in inventory.curses)
 		# Each modifier its own tight block, with the column's gap between one and the next.
 		var block := UITheme.vbox(2)
 		_mod_rows.add_child(block)
@@ -1654,7 +1712,7 @@ func _show_runes(cell: Vector2i) -> void:
 		return
 	_rune_rows.add_child(UITheme.section("Runes"))
 	for mod: Dictionary in work["mods"]:
-		var lines := TileMods.describe(mod["id"], int(mod["tier"]))
+		var lines := TileMods.describe(mod["id"], int(mod["tier"]), Curses.WILD_TILES in inventory.curses)
 		_rune_rows.add_child(_rune_block(lines[0], lines[1], lines[2], int(mod["left"])))
 	var depths: Array = work["depth"]
 	if not depths.is_empty():
@@ -1750,15 +1808,8 @@ func _layout_ui() -> void:
 	for page in _left_pages():
 		page.set("area", left)
 	_place_panel()
-	bag_page.layout()
-	heirloom_page.layout()
-	skills_page.layout()
-	bounty_page.layout()
-	settings_page.layout()
-	collection_page.layout()
-	achievements_page.layout()
-	character_page.layout()
-	leaderboard_page.layout()
+	for page in _left_pages():
+		page.call("layout")
 	town_page.layout()
 	_place_corner()
 	if _combat != null:
@@ -1936,15 +1987,14 @@ func _camp_while_away(left_at: float) -> void:
 	# Armed exactly as `_open_fight` arms one, and for the same reason: a camp is that fight. What it
 	# is never given is the things a camp does not pay -- no first sword, no orbs, no uniques.
 	var fight := Encounter.farm(cell, env, view.area_variant(cell), _mods_of(cell))
-	fight.wear(inventory.effects(), Achievements.ranks(inventory))
-	fight.arm(inventory.stats())
+	_arm(fight)
 	var camp := Camp.make(cell, view.name_of(cell), fight, left_at)
 	var earned := Camp.earned(camp, now)
 	if float(earned[Camp.GOLD]) <= 0.0 and int(earned[Camp.XP]) <= 0:
 		return
 	inventory.gold += float(earned[Camp.GOLD])
 	_camp_levels = inventory.add_xp(int(earned[Camp.XP]))
-	inventory.save(inventory_path)
+	_save_inventory()
 	print("Camped %s on %s, %s: %s gold, %d experience, %d driven off"
 			% [Camp.spell_time(float(earned["seconds"])), view.name_of(cell), cell,
 				BigNumber.format(float(earned[Camp.GOLD])), int(earned[Camp.XP]), int(earned[Camp.KILLS])])
@@ -1952,13 +2002,7 @@ func _camp_while_away(left_at: float) -> void:
 	_camp.broke_camp.connect(_break_camp)
 	add_child(_camp)
 	_camp.begin(camp, earned, env, view.area_variant(cell), ui_scale)
-	map.hide()
-	map.process_mode = Node.PROCESS_MODE_DISABLED
-	_close_town()
-	_panel.hide()
-	_close_left_pages()
-	_show_corner(false)
-	_character.show()
+	_cover_map()
 
 
 ## Breaking camp: it was paid as it was made, so this takes its screen away and brings the map back
@@ -1969,10 +2013,8 @@ func _break_camp() -> void:
 	_camp.queue_free()
 	_camp = null
 	Input.set_default_cursor_shape(Cursors.ARROW)
-	map.process_mode = Node.PROCESS_MODE_INHERIT
-	map.show()
-	_show_corner(true)
-	# It was placed against the fight's HUD, which has just gone, and the verdict stands where it does.
+	_uncover_map()
+	# Whatever the camp's pay announced goes with its screen.
 	_close_banner()
 	if _toast != null:
 		_toast.queue_free()
@@ -1983,6 +2025,38 @@ func _break_camp() -> void:
 	if map.selected_cell != HexMap.NO_CELL:
 		_panel.show()
 	_update_buttons()
+	# The start-up's sync waited for this (`Cloud.sync`): now, so a save from another device comes down
+	# before anything is played over it.
+	cloud.sync(true)
+
+
+## A fight armed from what the hero stands up in -- a tile's, a run's, the dungeon's and a camp's alike.
+## What is worn and learned first, with the rank of every unique: `arm` reads some of it.
+func _arm(fight: Encounter) -> void:
+	fight.wear(inventory.effects(), Achievements.ranks(inventory))
+	fight.arm(inventory.stats())
+
+
+## The map and every Control out of the way of what stands over them: a fight, the dungeon or a camp.
+func _cover_map() -> void:
+	# The map keeps its state but stops running, so nothing walks on underneath.
+	map.hide()
+	map.process_mode = Node.PROCESS_MODE_DISABLED
+	# Before the panel is hidden: leaving a town brings the tile panel back, which a fight then takes away.
+	_close_town()
+	_panel.hide()
+	# The pages go and the corner buttons stay (`_show_corner`); the tile panel and the character
+	# button do not, since a Control takes the mouse before the fight sees it.
+	_close_left_pages()
+	_show_corner(false)
+	_character.show()
+
+
+## The map back and running, the corner buttons with it: what `_cover_map` took away.
+func _uncover_map() -> void:
+	map.process_mode = Node.PROCESS_MODE_INHERIT
+	map.show()
+	_show_corner(true)
 
 
 ## Puts a fight on the screen, whichever kind it is. Both kinds are opened exactly alike -- armed
@@ -1990,9 +2064,7 @@ func _break_camp() -> void:
 ## way -- so the one that comes later cannot quietly differ from the one that came first.
 func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# What the player is wearing as the fight opens; a change in the bag mid-fight arms it again (`_rearm`).
-	# What is worn and learned first, with the rank of every unique: `arm` reads some of it.
-	fight.wear(inventory.effects(), Achievements.ranks(inventory))
-	fight.arm(inventory.stats())
+	_arm(fight)
 	# What a new player's first kills are scripted to leave (`Encounter.PROMISED`): the Broken Sword, the
 	# two orbs to craft it with, the first unique and the first skill node, each inside its own kills.
 	fight.promised = inventory.promised()
@@ -2012,6 +2084,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# Straight off the fight rather than through the scene: what a body was is the fight's business,
 	# and the boards want the monster's name, not a drop.
 	fight.enemy_died.connect(_on_enemy_died)
+	fight.kill_paid.connect(_on_kill_paid)
 	ledger.bounty_counted.connect(_on_bounty_counted)
 	ledger.bounty_too_low.connect(_on_bounty_too_low)
 	_combat = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
@@ -2043,20 +2116,14 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	_combat.hud_top = _fight_top()
 	_combat.begin(fight, cell, ui_scale, view.area_variant(cell))
 	_play_music(BATTLE_MUSIC)
-	# The map keeps its state but stops running, so nothing walks on underneath the fight.
-	map.hide()
-	map.process_mode = Node.PROCESS_MODE_DISABLED
-	# Before the panel is hidden: leaving a town brings the tile panel back, which a fight then takes away.
-	_close_town()
-	_panel.hide()
-	# The pages go and the corner buttons stay (`_show_corner`); the tile panel and the character
-	# button do not, since a Control takes the mouse before the fight sees it.
-	_close_left_pages()
-	_show_corner(false)
-	_character.show()
+	_cover_map()
 	_show_damage()
 	# The tips about the fight itself come as it opens rather than after it, when they are needed.
 	_check_tips()
+	# A tip already up -- raised as the last fight closed, under a Retry -- holds this fight still as one
+	# shown over it does (`_show_next_tip`), so its clock does not run under words that take the clicks.
+	if _tip_panel != null:
+		_combat.process_mode = Node.PROCESS_MODE_DISABLED
 
 
 ## The bag can be opened over every fight: the loot popup and the verdict put it away, since the pages
@@ -2094,8 +2161,7 @@ func _on_cave_pressed() -> void:
 ## It begins under the depths already won, whichever world they were won in.
 func _on_dungeon_pressed() -> void:
 	var fight := Encounter.for_dungeon(inventory.dungeon_depth)
-	fight.wear(inventory.effects(), Achievements.ranks(inventory))
-	fight.arm(inventory.stats())
+	_arm(fight)
 	# The runes are the third wall's, and Gollux's cave is the only place they fall.
 	fight.runes_drop = WallUnlocks.has(inventory.walls_ever(), WallUnlocks.RUNES)
 	_cave_runes = 0
@@ -2110,13 +2176,7 @@ func _on_dungeon_pressed() -> void:
 	_combat.weapon_kind = _weapon_kind()
 	_combat.begin(fight, Vector2i.ZERO, ui_scale)
 	_play_music(BATTLE_MUSIC)
-	map.hide()
-	map.process_mode = Node.PROCESS_MODE_DISABLED
-	_close_town()
-	_panel.hide()
-	_close_left_pages()
-	_show_corner(false)
-	_character.show()
+	_cover_map()
 	_show_damage()
 
 
@@ -2127,9 +2187,7 @@ func _on_dungeon_finished(_won: bool) -> void:
 	_combat = null
 	_show_damage()
 	_play_music(IDLE_MUSIC)
-	map.process_mode = Node.PROCESS_MODE_INHERIT
-	map.show()
-	_show_corner(true)
+	_uncover_map()
 	if map.selected_cell != HexMap.NO_CELL:
 		_panel.show()
 	_update_buttons()
@@ -2163,7 +2221,7 @@ func _bank_depths() -> void:
 	if fight.cleared() > 0 or won > inventory.dungeon_depth or floors > inventory.dungeon_floors or _cave_runes > 0:
 		inventory.dungeon_depth = maxi(inventory.dungeon_depth, won)
 		inventory.dungeon_floors = maxi(inventory.dungeon_floors, floors)
-		inventory.save(inventory_path)
+		_save_inventory()
 		_cave_runes = 0
 	# The board is scored from the cloud save, so a descent goes up at once rather than at the next tick.
 	cloud.sync.call_deferred(true)
@@ -2184,9 +2242,7 @@ func _on_combat_finished(won: bool, cell: Vector2i, retrying := false) -> void:
 		_play_music(IDLE_MUSIC)
 	# Gems still in the air when the fight closed never arrive, so the panel is put back on the ledger.
 	_sync_character()
-	map.process_mode = Node.PROCESS_MODE_INHERIT
-	map.show()
-	_show_corner(true)
+	_uncover_map()
 	var turned_up := PackedStringArray()
 	for drop in ledger.drops:
 		turned_up.append("%s (%s)" % [drop.type, drop.rarity_name()])
@@ -2197,8 +2253,7 @@ func _on_combat_finished(won: bool, cell: Vector2i, retrying := false) -> void:
 		# Nothing about the map moves for a run. The tile was already taken; the loot is the whole of it.
 		print("Farmed %s, %d slain" % [cell, kills])
 	elif won:
-		print("Charted %s, showing %d tile(s) behind it" % [cell, view.chart(cell, _sight())])
-		_credit_walls()
+		_chart_won(cell)
 	else:
 		print("Lost the fight for %s; it stays uncharted" % cell)
 	var world_lost := not won and not ledger.farming and Curses.NO_SECOND_CHANCES in inventory.curses
@@ -2235,6 +2290,13 @@ func _on_combat_finished(won: bool, cell: Vector2i, retrying := false) -> void:
 		_open_transcend(true)
 
 
+## A tile's fight won: the tile charted with what it shows behind it, and what that brought down or put
+## down paid and placed (`_credit_walls`).
+func _chart_won(cell: Vector2i) -> void:
+	print("Charted %s, showing %d tile(s) behind it" % [cell, view.chart(cell, _sight())])
+	_credit_walls()
+
+
 ## Every wall down in this world that has not yet paid its super orb pays it, and the save says
 ## so; the heirlooms climb to the land charted, the land's furthest reach and its deepest tile are written down, and the world's cave is put down if it is due. Asked wherever a wall can have fallen -- a tile charted -- and once at start-up, which is what
 ## pays a save from before there were heirlooms for the walls it already has down.
@@ -2245,14 +2307,15 @@ func _credit_walls() -> void:
 	# The heirlooms climb with the land charted; a page already up shows the new levels.
 	var charted := view.charted_level()
 	var climbed := inventory.raise_heirlooms(charted)
-	if climbed and bag_page != null:
+	# Not before the pages are built, nor once they are gone (`_exit_tree` charts a tile won and not collected).
+	if climbed and bag_page != null and bag_page.is_inside_tree():
 		bag_page.refresh()
 		heirloom_page.refresh()
 	# The deepest tile ever charted is a leaderboard's score.
 	var deeper := inventory.chart(charted)
 	# How far the land has ever reached is the cave's bound in every world after this one.
 	if inventory.reach(view.land_radius) or paid or climbed or deeper:
-		inventory.save(inventory_path)
+		_save_inventory()
 	# Distant charting, once the fourth wall has fallen in any world.
 	view.distant = WallUnlocks.has(inventory.walls_ever(), WallUnlocks.DISTANT)
 	# One cave a world, once Gollux is unlocked (the third wall, in any world): beside the next wall broken.
@@ -2280,7 +2343,7 @@ func _settle_homeland() -> void:
 	others.sort()
 	inventory.homeland.assign([first, others[absi(hash([view.env_seed, "homeland"])) % others.size()]])
 	print("Homeland: %s" % [inventory.homeland])
-	inventory.save(inventory_path)
+	_save_inventory()
 
 
 ## What the land on `cell` does to its own fight, under this world's curses.
@@ -2299,6 +2362,12 @@ func _on_combat_retry(cell: Vector2i) -> void:
 	# A retry that did not open a fight (a full bag, No Second Chances) is back on the map.
 	if _combat == null:
 		_play_music(IDLE_MUSIC)
+		# And off land that is not theirs, as any loss leaves them, the rest of a way dropped with it.
+		# Not onto the black screen, where the world is already gone.
+		if _transcend_page == null:
+			_dark_way.clear()
+			view.move_to(_retreat_cell)
+			_update_buttons()
 
 
 ## The player walks to the tile; the tile panel's buttons stay hidden until they get there.
@@ -2523,12 +2592,17 @@ func _refresh_bag_room() -> void:
 		_combat.bag_room = inventory.room_left()
 
 
-## A body has fallen. What it was goes to the ledger, which hands it to the boards -- and on a farm
-## run, it counts down what the runes on the tile are doing (`RuneTable.count_kill`), and the fight
-## forgets whatever ran out from the next body on.
+## A body has fallen. What it was goes to the ledger, which hands it to the boards.
 func _on_enemy_died(index: int) -> void:
 	if _combat != null and index < _combat.fight.lineup.size():
 		ledger.add_kill(_combat.fight.lineup[index])
+
+
+## That body's loot has been rolled and handed over (`Encounter.kill_paid`): on a farm run it counts
+## down what the runes on the tile are doing (`RuneTable.count_kill`), and the fight forgets whatever
+## ran out from the next body on. Never sooner (`enemy_died` comes before the loot), or a rune's last
+## body would be fought under the rune and paid without it.
+func _on_kill_paid(_index: int) -> void:
 	if _combat == null or not ledger.farming:
 		return
 	var fight: Encounter = _combat.fight
@@ -2717,6 +2791,8 @@ func _tip_due(id: String) -> bool:
 		"first_sense":
 			# As the wall in front of the cave falls, its fight over, and the light comes up at the edge.
 			return _cave_sense != null and _cave_sense.felt()
+	# A tip in `TIPS` with no rule here would never come up, and say nothing about it.
+	push_error("No rule says when the tip \"%s\" is due" % id)
 	return false
 
 
@@ -2730,7 +2806,7 @@ func _check_tips() -> void:
 			added = true
 	# Not mid-fight: a run writes nothing until it ends, and `bank_kills` saves the seen tip then.
 	if added and _combat == null:
-		inventory.save(inventory_path)
+		_save_inventory()
 	# A tip can come due with a page up or a town open, and `_show_corner` knows about both.
 	_show_corner(_combat == null and _camp == null)
 	if _tip_panel == null:
@@ -2844,7 +2920,8 @@ static func _changelog_version(version: Dictionary, width: float) -> VBoxContain
 	return page
 
 
-## One tip at a time, in the middle of the window, built the way the refused-save panel is.
+## One tip at a time: someone speaking, in a `DialogueBox` along the window's foot, or the changelog --
+## the one plain panel left, in the middle of the window, built the way the refused-save panel is.
 func _show_next_tip() -> void:
 	if _tip_queue.is_empty():
 		return
@@ -2862,31 +2939,24 @@ func _show_next_tip() -> void:
 		_character.get_parent().add_child(box)
 		box.pop_up(ui_scale)
 		return
-	# No X: like a reward's panel, its one way out is the button at its foot (and Escape).
+	# The changelog (`_show_changelog`). No X: like a reward's panel, its one way out is the button at
+	# its foot (and Escape).
 	var panel := UITheme.titled_panel(tip[1], "", Callable())
 	_tip_panel = panel
 	# The character panel's layer, which stands over the fight's, so a tip can come up mid-run.
 	_character.get_parent().add_child(panel)
 	var width := minf(get_viewport().get_visible_rect().size.x / ui_scale - REFUSAL_MARGIN, REFUSAL_WIDTH)
-	if tip[0] == CHANGELOG:
-		# Scrolling past what the window leaves.
-		var scroll := UITheme.scroll()
-		var lines := _changelog_page(tip[2], width)
-		scroll.add_child(lines)
-		UITheme.body_of(panel).add_child(scroll)
-		# Twice: a wrapped label only knows how tall it is once it has been laid out once.
-		var fit := func() -> void:
-			scroll.custom_minimum_size.y = minf(lines.get_combined_minimum_size().y,
-					get_viewport().get_visible_rect().size.y / ui_scale - TownPage.TOLD_CHROME)
-		fit.call()
-		fit.call_deferred()
-	else:
-		var label := Label.new()
-		label.theme_type_variation = "PanelLabel"
-		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		label.custom_minimum_size.x = width
-		label.text = tip[2]
-		UITheme.body_of(panel).add_child(label)
+	# Scrolling past what the window leaves.
+	var scroll := UITheme.scroll()
+	var lines := _changelog_page(tip[2], width)
+	scroll.add_child(lines)
+	UITheme.body_of(panel).add_child(scroll)
+	# Twice: a wrapped label only knows how tall it is once it has been laid out once.
+	var fit := func() -> void:
+		scroll.custom_minimum_size.y = minf(lines.get_combined_minimum_size().y,
+				get_viewport().get_visible_rect().size.y / ui_scale - TownPage.TOLD_CHROME)
+	fit.call()
+	fit.call_deferred()
 	var close := UITheme.button("Got it", "LightButton", "")
 	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	close.pressed.connect(_on_tip_closed)
@@ -2920,7 +2990,7 @@ func _stop_flash(id: String) -> void:
 	if id in inventory.tips:
 		return
 	inventory.tips.append(id)
-	inventory.save(inventory_path)
+	_save_inventory()
 	_pulse(null, id, false)
 
 
@@ -2976,13 +3046,11 @@ func _skill_point_free() -> bool:
 ## Something new on the collection or achievements page hovered, or the page closed over it: kept.
 ## Never on the black screen, where nothing may save, nor over a refused or reset save.
 func _on_log_seen() -> void:
-	if _resetting or _save_blocked or _transcend_page != null:
-		return
-	inventory.save(inventory_path)
+	_save_inventory()
 
 
 ## Every page that stands against the left edge. They share it, so opening one closes the rest and
-## there is one place that knows which those are.
+## there is one place that knows which those are: what is wired, laid out and closed is this list.
 func _left_pages() -> Array[Control]:
 	return [bag_page, heirloom_page, skills_page, bounty_page, settings_page, collection_page,
 			achievements_page, character_page, leaderboard_page]
@@ -3108,14 +3176,14 @@ func _on_achievements_pressed() -> void:
 ## banner. Never while the black screen is up, where nothing may be saved, nor over a refused or reset
 ## save.
 func _check_achievements() -> void:
-	if _resetting or _save_blocked or _transcend_page != null:
+	if not _may_save():
 		return
 	var earned := Achievements.earn(inventory)
 	if earned.is_empty():
 		return
 	# Every card from here on writes the uniques at their new ranks.
 	UniqueTable.ranks = Achievements.ranks(inventory)
-	inventory.save(inventory_path)
+	_save_inventory()
 	_show_corner(_combat == null)
 	_announce_achievements(earned)
 
@@ -3163,9 +3231,9 @@ func _on_rename_pressed() -> void:
 ## What the text box handed back: the character's name from now on, unless it leaves nothing. It asks
 ## what every save asks: never over a refused save, a reset or the black screen.
 func _on_name_entered(text: String) -> void:
-	if _save_blocked or _resetting or _transcend_page != null or not inventory.rename(text):
+	if not _may_save() or not inventory.rename(text):
 		return
-	inventory.save(inventory_path)
+	_save_inventory()
 	if character_page.visible:
 		character_page.open()
 
@@ -3246,7 +3314,7 @@ func _on_cell_aimed(cell: Vector2i) -> void:
 	inventory.gold -= _aim_price
 	# A great spell is one a settlement, and it is this town that cast it.
 	inventory.towns.visit(_aim_town)[FortuneTeller.ASKED + _aiming] = true
-	inventory.save(inventory_path)
+	_save_inventory()
 	if scouring:
 		_save_map()
 		print("Scoured %d tiles round %s for %s gold" % [shown, cell, BigNumber.format(_aim_price)])
@@ -3306,6 +3374,11 @@ func _exit_tree() -> void:
 	elif _combat != null:
 		Achievements.record(inventory, _combat.fight)
 		ledger.bank_kills(_combat.fight.kills())
+		# Shut on a won verdict: Collect only puts the panel away, so the tile is charted as it would
+		# have been -- or a wall beaten stands again. Nobody is left to hear of the arrival.
+		if _combat.fight.victory and not ledger.farming:
+			view.arrived.disconnect(_on_player_arrived)
+			_chart_won(_combat.cell)
 	_save_map()
 
 
@@ -3315,10 +3388,18 @@ func _on_reset_pressed() -> void:
 	_resetting = true
 	# Signed in, the cloud's copy goes first: otherwise the next start-up would bring it back down.
 	await cloud.forget_save()
-	for path: String in [inventory_path, map_path]:
-		if FileAccess.file_exists(path):
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
-	get_tree().reload_current_scene()
+	# Each with any write of it left half-way, which would come back as the save (`SafeFile.remove`). A
+	# file that will not go is no reset: the game carries on as it was, and what it holds is written
+	# back over whatever did go.
+	if not SafeFile.remove(map_path) or not SafeFile.remove(inventory_path):
+		push_warning("Reset: a save file could not be deleted, so nothing was reset")
+		_resetting = false
+		_save_inventory()
+		_save_map()
+		return
+	# A test stands this scene under the root rather than as the current one, and has nothing to reload.
+	if get_tree().current_scene == self:
+		get_tree().reload_current_scene()
 
 
 ## The fortuneteller's way out, asked for and answered yes: everything on screen goes and the game
@@ -3353,20 +3434,27 @@ func _transcend() -> void:
 	print("Transcended with %d heirloom(s)" % (inventory.stash().total()
 			+ inventory.stash().equipment.worn.size()))
 	# Written before anything is deleted: a crash between the two leaves the new inventory on the old
-	# map, which plays, and never the old inventory on no map at all.
+	# map, which plays, and never the old inventory on no map at all. Not through `_save_inventory`:
+	# this is the next world's inventory, the one write the black screen is there to make.
+	var before := FileAccess.get_file_as_string(inventory_path)
 	if not inventory.transcended().save(inventory_path):
 		return
+	# The old map goes with it, and any write of it left half-way (`SafeFile.remove`): back under the
+	# new inventory, which has been paid for none of its walls, it would pay every one again. If it
+	# will not go, neither has the world: the old inventory is put back and the black screen stays up.
+	if not SafeFile.remove(map_path):
+		push_warning("Transcend: the map could not be deleted, so the world stays")
+		if not before.is_empty():
+			SafeFile.write(inventory_path, before)
+		return
 	_resetting = true
-	if FileAccess.file_exists(map_path):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(map_path))
 	# A test stands this scene under the root rather than as the current one, and has nothing to reload.
 	if get_tree().current_scene == self:
 		get_tree().reload_current_scene()
 
 
-## Escape is every X at once: the tip if one is up, otherwise the pages, the town and the tile panel
-## together. A fight answers for itself (`CombatScene._unhandled_input`) and gets the key first, being
-## further down the tree -- except under a tip, where it is not processing and the tip is what closes.
+## Every event, before the interface has it: the cursor's own (`Cursors`), a pinch, and a press off a
+## banner whose time is up, which puts it down and still lands.
 func _input(event: InputEvent) -> void:
 	Cursors.feel(event)
 	Cursors.twitch(get_tree(), event)
@@ -3408,6 +3496,10 @@ func _spread() -> float:
 	return (_fingers.values()[0] as Vector2).distance_to(_fingers.values()[1])
 
 
+## The wheel over bare map, a right click on an aimed spell, the corner's keys, and Escape, which is
+## every X at once: the tip if one is up, otherwise the pages, the town and the tile panel together. A
+## fight answers for itself (`CombatScene._unhandled_input`) and gets the key first, being further down
+## the tree -- except under a tip, where it is not processing and the tip is what closes.
 func _unhandled_input(event: InputEvent) -> void:
 	# A Control's STOP filter never stops the wheel (only an accepted one does), so a wheel over a
 	# panel or a page still lands here: it zooms only with nothing under the cursor but the map.

@@ -14,7 +14,7 @@
 | `environment_generator.gd` (`EnvironmentGenerator`) | Random-frontier growth under `allowed()`, the sheet's `env_adjacency`: prefers neighbors, boosts regions under `MIN_REGION_SIZE`, damps regions over `MAX_REGION_SIZE`, then merges small regions, every pick and merge leaning towards the environments the new land has least of (see **Even environments**). `extend()` grows an existing map into new cells without touching the old ones (they are frozen against merging), which is how the map enlarges. Tunables are at the top |
 | `town_world.gd` (`TownWorld`) | 256×256 world of towns (small 1%, medium 0.5%, fortress 0.1%, never on neighboring spots). Each town links to its 1/2/4 nearest towns (small/medium/fortress) within 20 steps, in both directions. `to_dict`/`from_dict` are the map save's copy of the whole world -- towns as flat `[x, y, tier]` against a legend of tier **names**, links once per pair with the lower spot first, and `_buckets` rebuilt rather than stored. It is written down rather than regenerated because "a pure function of its seed" is a property of this code today and not a promise to the player |
 | `road_network.gd` (`RoadNetwork`) | Routes roads along the town links with A*, using only shapes the sprites have (straight, 120° curve, 3/4/6-way). Roads stop at town edges and never cross a town tile. Terrain-independent, so a world always gives the same roads. `extend()` adds the links a window brings into reach, routing each inside its own box (around its two towns), so a road never moves once laid — growing the map only ever adds edges, sometimes turning a drawn road into a junction |
-| `map_builder.gd` (`MapBuilder`) | Generates the map (the hexagon of `land_radius` round cell (0, 0), which the camera centers on screen, its ice wall and `WASTE_DEPTH` rings of wasteland -- see **The ice wall** below) and draws it as the player uncovers it. `rect` is what the map has generated: it grows only when the wall falls (`_break_wall` -> `_cover`), generating the new land, its tiles and the roads it brings into reach, and redrawing the blends and roads of drawn tiles the new land touches. Everything already generated stays exactly as it is. Every cell is in one `State`: `HIDDEN` (the fog of war, nothing drawn), `UNCHARTED` (drawn under the grey fog, can't be walked to) or `CHARTED`. `create()` generates everything and draws `start_cells()`: the charted center, where the player starts, ringed by six uncharted tiles. `chart(cell, sight := 1)` takes the grey off a tile next to any charted one (`can_chart`; `chart_from` is the charted neighbour the player is fewest steps from), draws the land within `sight` steps of it as uncharted, and sends the player walking onto it. One ring is what a player carrying nothing sees; a torch is the only thing that widens it, and it is read once, by the caller, at the moment the tile is taken — so what a tile showed when it was charted is what it showed, whatever is worn afterwards. Both it and `scour` go through `_reveal_around`, there being one answer to "take the fog off everything within n steps that the map has generated and the player has not seen". `name_of(cell)` is what the tile is called: `_show` names it the first time the player lays eyes on it -- uncharted land is land they can see, so seeing it is the encounter -- and the name is kept in `_names` and written into the save. It is stored rather than worked out again even though `TileNames.generate` is a pure function of the seed and the cell, for the reason the town world is written down: a place somebody has fought over must not be renamed by a later build widening a word list. `level_of(cell)` is the tile's level, in bands that widen as they go (band `n` is `n` tiles wide, so level `n` starts at the nth triangular number) -- what the side panel shows and the ceiling on what can drop there. `area_variant(cell)` says which battle backdrop the tile fights on -- its town tier if it has one, else `road` where a road runs, else `plain`. `can_farm(cell)` is any charted tile that is not a settlement, with no walk under way -- farming asks nothing about where the player stands, because a run is a thing you choose to do rather than a step you take; and a town is fought for once and then visited, never farmed or camped on, or its counters would stand beside an endless hunt. `move_to(cell)` sends the player walking to a charted tile over `route_to(cell)`, a shortest path of charted tiles (`can_move_to` refuses anything else, and anything at all while `walking`); arriving emits `arrived(cell)` and charts nothing by itself. `reveal_all()` charts the lot. `origin` is the world spot at cell (0, 0): generated environments, plus that environment's town sprite where the world has a town. Before drawing, it clears any town within `START_TOWN_DISTANCE` (5) of the center and guarantees a small town exactly that far out, which a road links to cell (0, 0); that town's world spot is `start_town`. `_spot(cell)` is the crossing from map cells to world spots. `to_save()` and `restore()` are the map save's two ends: `restore` is the mirror of `create` and shorter than it, because the saved town world already has the clearing and the start town in it and the start road is among the saved roads, so it generates nothing and touches no town. It draws through `_draw_saved`, which lays every ground and road down first and refreshes each cell's blends once, rather than through `_show` -- `set_ground` refreshes a cell **and its six neighbours**, which is seven times the work when a whole map arrives at once |
+| `map_builder.gd` (`MapBuilder`) | Generates the map (the hexagon of `land_radius` round cell (0, 0), which the camera centers on screen, its ice wall and `WASTE_DEPTH` rings of wasteland -- see **The ice wall** below) and draws it as the player uncovers it. `rect` is what the map has generated: it grows only when the wall falls (`_break_wall` -> `_cover`), generating the new land, its tiles and the roads it brings into reach, and redrawing the blends and roads of drawn tiles the new land touches. Everything already generated stays exactly as it is. Every cell is in one `State`: `HIDDEN` (the fog of war, nothing drawn), `UNCHARTED` (drawn under the grey fog, can't be walked to) or `CHARTED`. `create()` generates everything and draws `start_cells()`: the charted center, where the player starts, ringed by six uncharted tiles. `chart(cell, sight := 1)` takes the grey off a tile next to any charted one (`can_chart`; `chart_from` is the charted neighbour the player is fewest steps from), draws the land within `sight` steps of it as uncharted, and -- unless they already stand on it, having walked onto it to fight for it (`walk_onto`) -- sends the player walking onto it. One ring is what a player carrying nothing sees; a torch is the only thing that widens it, and it is read once, by the caller, at the moment the tile is taken — so what a tile showed when it was charted is what it showed, whatever is worn afterwards. Both it and `scour` go through `_reveal_around`, there being one answer to "take the fog off everything within n steps that the map has generated and the player has not seen". `name_of(cell)` is what the tile is called: `_show` names it the first time the player lays eyes on it -- uncharted land is land they can see, so seeing it is the encounter -- and the name is kept in `_names` and written into the save. It is stored rather than worked out again even though `TileNames.generate` is a pure function of the seed and the cell, for the reason the town world is written down: a place somebody has fought over must not be renamed by a later build widening a word list. `level_of(cell)` is the tile's level, in even bands of `LEVEL_TILES` rings (level `n` starts at `first_step(n)`; see **Walls on level edges**) -- what the side panel shows and the ceiling on what can drop there. `area_variant(cell)` says which battle backdrop the tile fights on -- its town tier if it has one, else `road` where a road runs, else `plain`. `can_farm(cell)` is any charted tile that is not a settlement, with no walk under way -- farming asks nothing about where the player stands, because a run is a thing you choose to do rather than a step you take; and a town is fought for once and then visited, never farmed or camped on, or its counters would stand beside an endless hunt. `move_to(cell)` sends the player walking to a charted tile over `route_to(cell)`, a shortest path of charted tiles (`can_move_to` refuses anything else, and anything at all while `walking`); arriving emits `arrived(cell)` and charts nothing by itself. `reveal_all()` charts the lot. `origin` is the world spot at cell (0, 0): generated environments, plus that environment's town sprite where the world has a town. Before drawing, it clears any town within `START_TOWN_DISTANCE` (5) of the center and guarantees a small town exactly that far out, which a road links to cell (0, 0); that town's world spot is `start_town`. `_spot(cell)` is the crossing from map cells to world spots. `to_save()` and `restore()` are the map save's two ends: `restore` is the mirror of `create` and shorter than it, because the saved town world already has the clearing and the start town in it and the start road is among the saved roads, so it generates nothing and touches no town. It draws through `_draw_saved`, which lays every ground and road down first and refreshes each cell's blends once, rather than through `_show` -- `set_ground` refreshes a cell **and its six neighbours**, which is seven times the work when a whole map arrives at once |
 | `tile_names.gd` (`TileNames`) | What a tile is called: a made-up proper word (a head syllable and a tail one, five hundred pairs) and a feature word taken from the environment, or from the settlement's tier where there is one -- "Bralmere Keep" says more about a fortress than "Bralmere Meadow" does. `generate` is a pure function of the map seed and the cell, under its own `"name"` tag, so what a place is called has nothing to do with which sprite it is drawn with or which backdrop it fights on. It names neither `MapBuilder` nor `TownWorld` -- the caller passes the environment and the tier's name -- so it is a table and a dice roll and nothing else |
 | `map_save.gd` (`MapSave`) | The explored map at `user://map.json`: the seeds, the origin, the window, the whole town world, the land, the roads, the names of the tiles the player has seen, and what they have uncovered and where they stand. Version 2 added the names, written out as a plain `"x,y"` object rather than as rows against a legend -- a name is a whole word per cell and only the cells that have been looked at have one, so there is nothing for the alphabet to index; a version 1 save simply has none and its tiles are named again as they are asked about. `_tiles` and the fog are left out, being derived. The environments and the states are **one string per map row, one character per cell**, each indexing a legend written beside it -- which keeps the save small, keeps enum positions off the disk, and makes the env rows read as a picture of the map. `fingerprint(tileset)` is the SHA-256 of the three spritesheet tables a saved map is *read through* (`env_adjacency`, `blend_priority`, `legal_road_masks`) and nothing else, so a rebuilt sheet that only adds a variant costs nobody their map. `load_from` returns **two different nulls**: an empty `problem` is a first run, and a reason in it is a refusal. Never names `MapBuilder` -- that is the cycle Godot's checker bites on, so the states are raw ints here and `STATE_NAMES` is the legend |
 
@@ -55,4 +55,217 @@ The Thick Fog curse takes the player's own ring of sight, so `main_scene._sight(
 `HexMap.can_pick` (set to `can_chart` by the builder) is what lets the mouse land on a cell nothing is drawn on; the tile panel calls it "Unknown land", gives its level (which is only the walk out) and says nothing of what is there, and asking must not name it -- a tile is named as it comes out of the fog. The fight's terrain comes from `env_at`, not from what is drawn. A player can walk into the wall, a settlement's set piece or a mimic blind; that is the cost, and it is what makes the Broken Torch in the offhand a choice between seeing and blocking. The fortuneteller's scour and chest star are then the only ways to see ahead.
 
 ## Walls on level edges (2026-09-28)
-The user moved the first wall to ring 12 and set the walls 12 apart (`START_LAND_RADIUS` 11, `WALL_STEP` 12; the Ring of Walls halves that to 6), and replaced the widening level bands with even ones of `LEVEL_TILES` (4) rings. The point: beating a wall should put the very next monster at a higher item level. Under the old triangular bands the walls fell mid-band, and a whole circle past the first wall was only two levels deep. Now every wall stands on a band edge -- rings 11 and 13 are levels 3 and 4, 23 and 25 are 6 and 7 -- and a circle is three levels: 1-3, 4-6, 7-9, which is what `LootTable.CIRCLE_MATERIAL_LEVEL` gated materials on until the same change replaced it with a material every two tile levels (`TIER_MIN_LEVEL`, `Scenes/Items/CLAUDE.md`). Any ring numbers quoted above this section are the old layout's.
+The user moved the first wall to ring 12 and set the walls 12 apart (`START_LAND_RADIUS` 11, `WALL_STEP` 12; the Ring of Walls halves that to 6), and replaced the widening level bands with even ones of `LEVEL_TILES` (4) rings. The point: beating a wall should put the very next monster at a higher item level. Under the old triangular bands the walls fell mid-band, and a whole circle past the first wall was only two levels deep. Now every wall stands on a band edge (but every other one of the Ring of Walls', which is on ring 18, 30, ...) -- rings 11 and 13 are levels 3 and 4, 23 and 25 are 6 and 7 -- and a circle is three levels: 1-3, 4-6, 7-9, which is what `LootTable.CIRCLE_MATERIAL_LEVEL` gated materials on until the same change replaced it with a material every two tile levels (`TIER_MIN_LEVEL`, `Scenes/Items/CLAUDE.md`). Any ring numbers quoted above this section are the old layout's.
+
+## Reference (moved here from CLAUDE.md on 2026-10-10)
+The text `CLAUDE.md` carried until it was cut down to short rules, word for word. Its rules point here by heading.
+
+### Files in full
+
+#### hex_grid.gd (HexGrid)
+Pointy-top offset grid, odd rows shifted right (same as the TileMapLayers). `Edge` enum (E, SE, SW, W, NW, NE), `EDGES`, `neighbor`, `neighbors`, `opposite`, `distance`, `corners`, `edge_mask` / `mask_edges`, `scatter(cell)` (a number fixed by the cell, which the rubble's version and the snow are picked off)
+
+#### sheet_meta.gd (SheetMeta)
+Reads `AI-sprites/spritesheet/hex_tileset.json` once and hands out its `meta` block. `env_adjacency()` has each environment's self-entry stripped
+
+#### hex_tileset.gd (HexTileset)
+Builds the TileSet at runtime from that JSON (56x64 tiles), plus a second source, `RUBBLE_ID`: the fallen walls' rubble off `Assets/Ice/ice_rubble.png` (laid out like `IceOverlay.BAND`, `RUBBLE_VERSIONS`).
+`atlas_coords`, `road_name`, `blend_name`, `env_rank`, `can_border`, `opaque_mask`, `legal_road_masks`, `env_icon(env)` (the terrain swatch the tile panel and the bounty cards both show -- a bounty card's with `env_name(env)` in its tooltip: the tile's middle cut to the 14x16 hexagon `ENV_HEX_ROWS`, ringed one pixel in `ENV_HEX_EDGE`, cut once an environment and kept)
+
+#### hex_map.tscn / hex_map.gd (HexMap)
+GroundLayer, one `Blend_<env>` layer per spreading environment, the `Rubble` layer (`rubble_layer`, `set_rubble(cell, mask)`: a fallen wall's rubble along its ring, the version fixed by the cell; over the blends, under the roads and the fog), RoadLayer, Highlight, plus `fog`, `chests`, `towns` and the `player` token made in code.
+`set_town(cell, tile_name, charted)` / `has_town` draw a settlement's buildings (`Assets/Towns/`, placed by `TOWN_ANCHOR`) on the `towns` layer, over the fog, the ice and the chests, dimmed by `TOWN_UNCHARTED` until charted.
+`set_ground` redraws the blends of the cell **and its six neighbours**, reading undrawn cells through the `hidden_env` Callable.
+`get_tile_info` (incl.
+`blends`, `environments`).
+Signals `tile_hovered` (nothing listens, and its info is worked out only for a listener), `tile_clicked`, `dragged`, `cell_aimed`.
+`aim_radius` (-1 but while land is being chosen: the hover then follows the cursor over undrawn cells, `HexHighlight` outlines every cell within that radius, and a click emits `cell_aimed` instead of selecting).
+`select_cell`, `deselect`, `selected_cell`, `NO_CELL`, `DRAG_THRESHOLD` (in panel pixels, times `ui_scale`, which the main scene sets; `Cursors.TOUCH_SLOP` under a finger).
+Under a finger the hover is the tile last tapped, never where a drag went: a tap sets it and a finger's motion, only ever the map pulled about, does not
+
+#### player_token.gd (PlayerToken)
+The player's `AnimatedSprite2D` (idle, run), cropped by one shared `BOUNDS`.
+`walk(path)` (each walk asks the `move_speed` Callable once, so +100% halves `SECONDS_PER_TILE` and doubles the run cycle), `advance(delta)` (tests drive it), `finish_walk()`, `can_stop()` / `stop_walk()` (the step being walked becomes the last; never `stop`, the sprite's own), signal `arrived`.
+Dust comes from `_process`, so tests make none.
+Every `FOOTSTEP_EVERY` s (shortened by Move Speed) `_process` plays the next of `Sounds/Footsteps/footstep00-09.ogg` in turn on the SFX bus, and leaves a `FOOTPRINT` under the token that fades after `FOOTPRINT_HOLD` + `FOOTPRINT_LIFE` s.
+A child `Sprite2D` behind it lays the combat fighters' oval (`CombatActor.shadow_texture`) under the feet, darker, its `SHADOW_SHIFT` mirrored with `flip_h`
+
+#### backdrop.gdshader
+The thick fog behind the map, on the `Backdrop` `Polygon2D` `HexMap` puts first (`BACKDROP_REACH` each way): gradient-noise banks, stretched wide, in four grey-lavender shades, Bayer-dithered one step per world pixel
+
+#### cave_glow.gdshader
+The dark red light out of the Gollux cave's pit, added onto the map (`blend_add`) on a `Polygon2D` `HexMap.set_cave` hangs off the cave's sprite with its origin on the hole (`CAVE_GLOW_AT`, which must match `caves.HOLE`): a pool on the hole's floor and a plume over it, dithered in `STEPS` one step a world pixel, breathing (`breath`, `depth`) and flickering (`flicker`), all three set to 0 with animations off
+
+#### edge_fog.gd (EdgeFog)
+The backdrop's fog lapping `DEPTH` px onto every shown cell's edge that faces an unshown one (and `OVERHANG` px past it, over the sprites' rim pixels): bands in the same shader, vertex alpha 1 at the edge to 0 inside, which the shader dithers.
+`MapBuilder` adds each shown cell (`_show`, `_draw_saved`) and puts it under `chests` after the ice.
+A cell charting or a reveal shows (`_show(..., lift)`) clears as a front sweeping out from the player token (`LIFT_SPEED`, `LIFT_SOFT`), its neighbours' bands facing it going with it; a load, `create` and `reveal_all` show at once
+
+#### fog_overlay.gd (FogOverlay)
+The grey hex over seen-but-uncharted tiles. A removed cell fades over `LIFT_TIME`; `has_cell` is false at once
+
+#### ambient.gd (Ambient)
+Weather particles (`set_env`, from `WEATHER`) and a `CanvasModulate` day cycle. A child of `HexMap`, so it hides with it
+
+#### map_pointer.gd (MapPointer)
+A badge pinned to the window's edge toward the cell `target` -- a picture (`cut` of a sheet) clipped to an ink disc ringed with gold, a gold arrow beating towards the cell, drawn at `ui_scale` --; hidden only when the cell is inside `room` (the part of the window the map is seen through;
+empty is the whole window) and seen, or the map itself is hidden, at `z_index` -1 so every panel on the interface layer draws over it.
+A `pressed` Callable makes the disc a flat `Button`, which stands still at the foot of `room` and only turns its arrow (pinned to the edge it went under the panels, out of a press's reach).
+The main scene has two: the chest a fortuneteller was paid to find, and the hero
+
+#### cave_sense.gd (CaveSense) / cave_sense.gdshader
+The Gollux cave as the hero feels it: a `ColorRect` over `room` (the main scene's `_map_room()`) on the interface layer at `z_index` -1, its shader a dithered red band hugging the room's edge, thickest where the line from the hero toward `view.cave` leaves the room (`leaving`) and thinning away along the edge either side, reaching further in and along and brighter by `FortuneTeller.warmth` band (`REACH`, `SPAN`,
+`STRENGTH`), breathing at `BREATH` (still at `Anim.NONE`).
+`felt()`: a cave down, the wall in front of it broken (`is_land`), not yet seen; `shown()` is that with the map up.
+Which way and roughly how far, never which tile
+
+#### ice_overlay.gd (IceOverlay)
+The ice from the four sheets in `Assets/Ice/` (`AI-sprites-generator/build_ice.py`): every wall cell (`Kind.WALL`) and seen wasteland cell (`Kind.WASTE`) is snow, the tile at its column and row mod `WASTE_COLS` x `WASTE_ROWS`; a wall cell carries the band over it along the edge mask `set_cell` is given (`MapBuilder._ring_edges`); a wasteland cell has an accent where `accent_at` rolls one;
+every drawn land tile beside the ice gets the snow spill for `spill_mask`.
+`MapBuilder` adds it under `HexMap.chests` after `clear_map`, and redraws it when land is shown
+
+#### hex_highlight.gd
+Hover and selection outlines
+
+#### environment_generator.gd (EnvironmentGenerator)
+Random-frontier growth under `allowed()` (the sheet's `env_adjacency`), region size boosts and damping, small-region merge, and `SHARE_PULL` towards whichever environments the new land has least of, so each covers about a sixth. `extend()` grows into new cells and freezes the old. Tunables at the top
+
+#### town_world.gd (TownWorld)
+256x256 world of towns laid out **ring by ring round the map's origin** (`generate(seed, origin)`): each ring of land gets `round(spots * TIER_CHANCES)` of each tier (small 1%, medium 0.5%, fortress 0.1%), **the fortress floored at one**, none within `KEEP_OUT` of the origin, never adjacent; each linked to its 1/2/4 nearest within 20 steps.
+`ring_of(steps)`.
+`to_dict` / `from_dict` for the save (null for a value of the wrong shape or no `tiers` legend); `is_numbers(data, per)` is the shape check `MapSave` reads its lists through too
+
+#### road_network.gd (RoadNetwork)
+A* roads along town links, only in shapes the sprites have; roads stop at town edges. `extend()` adds links a bigger window reaches and never moves a laid road
+
+#### map_builder.gd (MapBuilder)
+Generates and draws the map.
+The land is the hexagon within `land_radius` (`START_LAND_RADIUS` 11, so the first wall is ring 12; saved) of cell (0, 0); ring `land_radius + 1` is the ice wall (`is_wall`), everything past it wasteland (`is_wasteland`), `is_land` the rest.
+`rect` covers `WASTE_DEPTH` rings past the wall (`_cover`).
+Charting a wall tile (`_break_wall`) moves `land_radius` out by `WALL_STEP` and thaws seen wasteland inside it.
+`migrated_radius(states)` places the wall for a pre-wall save.
+`_draw_cell` is the one list of what stands on a cell's ground (road, rubble, chest, settlement, cave), asked wherever a cell is drawn or changes (`_draw_saved`, `_show`, `_break_wall`, `place_cave`); `_draw_rubble` lays a fallen wall's rubble on every land tile of a ring a wall stood on (`on_wall_ring`) but a settlement's; `_ring_edges` is any cell's two neighbours on its own ring.
+`walls_fallen()` is how many have come down in this world (heirloom picks, and the fortuneteller's way out); `charted_level()` the level of the deepest charted tile (what the heirlooms climb to).
+Cell `State`: `HIDDEN`, `UNCHARTED`, `CHARTED`.
+`create` / `restore` / `to_save`; `chart(cell, sight := 1)` (the fog comes off every hidden tile within `sight` steps of the charted one, through the shared `_reveal_around`, which `scour` also uses), `can_chart`, `chart_from`, `walk_onto` (to `chart_from`, then the step onto the uncharted tile, where `player_cell` stands until the fight is decided;
+`chart` of the tile underfoot arrives in place), `move_to`, `can_move_to`, `route_to`, `can_farm`, `town_tier`, `can_visit` (charted, standing on it, not walking), `homes()` / `is_home(cell)` / `jump_to(cell)` (the fortuneteller's homecoming: every charted settlement and the charted Gollux cave but the one underfoot, and the player put down on one with no walk at all -- `_on_player_arrived` runs,
+so an arrival's every consequence follows), `walking`, signal `arrived`;
+`name_of`, `level_of`, `circle_of` (1 inside the first wall, +1 a `WALL_STEP` of distance, the wall ring counting with the land it opens; what a drop may be made of), `circle_level` (the level of a circle's outer ring;
+the smith's cap), `area_variant`, `seen`, `has_chest`, `nearest_chest`, `scour(center)` (the fortuneteller's: hidden tiles round `center` come out UNCHARTED, seen ones are left alone, returns how many), `envs_within(cell, steps)` (what a bounty board may post from), `reveal_all`.
+`origin` is the world spot at cell (0, 0); `_spot(cell)` crosses from cells to world spots
+
+#### tile_names.gd (TileNames)
+`generate`: a made-up word plus a feature word from the environment or the settlement tier. A pure function of map seed and cell; names neither `MapBuilder` nor `TownWorld`
+
+#### map_save.gd (MapSave)
+`user://map.json`: seeds, origin, window, the whole town world, land, roads, tile names, states, player cell.
+Env and state rows are one string per map row against a legend.
+`fingerprint(tileset)` hashes the three sheet tables a map is read through; `WIDENED_SHEETS` lets a save from a sheet with fewer borders load under the one sheet that widened them.
+`save` goes through `SafeFile`; `load_from(path, problem, expect_sheet)`
+
+### Rules in full
+One paragraph per bullet of the old "Rules and gotchas", under the title of its short rule in `CLAUDE.md`; the other short rules cut from the same bullet point at the same heading.
+
+#### Widen `env_adjacency` only with `WIDENED_SHEETS`
+**Widening `env_adjacency` (`terrain.ADJACENT`) changes `MapSave.fingerprint`, and every saved map would be refused:** add the old fingerprint to `WIDENED_SHEETS` against the new one. Narrowing it may not be done that way -- an old map could hold a border the new table forbids.
+
+#### Take generation rules from the sheet's meta
+**Generation rules come from the sheet's JSON meta** (`blend_rule`, `blend_priority`, `env_adjacency`) through `SheetMeta`: `HexTileset.can_border` and `EnvironmentGenerator.allowed()` are one table, so the generator cannot make a border the sprites cannot draw.
+
+#### Mirror `MapBuilder`'s rings in `TownWorld`
+**`TownWorld.RING`, `FIRST_RING` and `KEEP_OUT` are `MapBuilder.WALL_STEP`, `START_LAND_RADIUS` and `START_TOWN_DISTANCE`, held together by `test_generation`:** TownWorld may not name MapBuilder, which names it. Rings are counted in `WALL_STEP`s whatever the Ring of Walls says, like `Encounter.walls_inside`, so under that curse two of its six-wide rings share one fortress.
+
+#### Put map origins on even rows
+**Map origins must be on even rows** (`MapBuilder` asserts it), or world neighbours stop matching on-screen ones.
+
+#### Never regenerate
+**Nothing generated is ever regenerated.** Both generators are order-dependent, not seed-dependent, so the same seed and rect do *not* give the same land. Land, roads, the town world and tile names are all written into the save; growing the map only ever adds.
+
+#### Never move a `GOLDEN` digest
+**What a seed generates is pinned** (`test_generation`'s `GOLDEN`: SHA-256 digests of two seeds' environments, town world and created map, beside the engine's `hash([...])`, `%s` of a `Vector2i` and a seeded stream, which derived facts and saved keys lean on).
+Existing saves hold that land and derive the rest from the same seeds, so a digest that moves means the order or number of rolls, an iteration order, a sort or a `hash` seed moved: put the generator back, never the digest.
+
+#### Name a tile once
+**A tile is named once, when it first comes out of the fog (`_show`), and the name is saved.** Do not recompute names on load.
+
+#### Stop on a refused save
+**`MapSave.load_from` has two nulls:** empty `problem` is a first run; a reason in `problem` is a refusal, and the caller must stop and never write over the file. **Every value is checked for its shape before it is read** (`TownWorld.is_numbers`, `typeof`): a typed read of the wrong thing stops the function short of its reason, which leaves by the first null.
+
+#### Never name `MapBuilder` in `MapSave`
+**`MapSave` never names `MapBuilder`** (Godot's cycle checker): states are raw ints there, with `STATE_NAMES` as the legend.
+
+#### Draw a whole map through `_draw_saved`
+**Drawing a whole map goes through `_draw_saved`, not `_show`:** `set_ground` refreshes seven cells per call.
+
+#### Plant the start town in `create` only
+**`MapBuilder.create` clears towns within `START_TOWN_DISTANCE` (5) of the centre and guarantees a small one exactly that far out,** linked by road to cell (0, 0). `restore` does none of that: the saved world already has it.
+
+#### Draw a settlement as two pictures
+**A settlement is two pictures:** its ground (clearing, plate, shadows) is the `town_<env>_<tier>` tile on GroundLayer, and its buildings are an 84x96 sprite on `HexMap.towns`, bigger than the hex and over the fog, so a town reads across the map and before the land round it is charted.
+`MapBuilder._draw_town` puts it down wherever a cell is drawn (`_show`, `_draw_saved`, a wall falling) and only on seen land -- none on the wall or past it.
+`TOWN_ANCHOR` is the generator's `towns.ANCHOR`.
+
+#### Derive chests
+**Chests are derived, not saved:** `has_chest` is a per-cell roll (open land, `CHEST_MIN_DISTANCE` out) that holds until the tile is charted. A chest is drawn once seen, or anywhere under the dev's `Settings.show_all_chests()` (`redraw_chests` re-asks every cell). `nearest_chest()` scans every cell, so call it on arrival only, never per frame.
+
+#### Never scan per frame
+**`envs_within` scans like `nearest_chest`:** ask it when a town is walked into, never per frame.
+
+#### Let fog give way to gold in two places only
+**The fog gives way to gold in two places and nowhere else:** `scour` and the chest star, both the fortuneteller's.
+
+#### Keep the generator's constants in step
+**`IceOverlay`'s sheet constants are the generator's** (`ice_wall.WASTE_COLS` / `WASTE_ROWS`, `VARIANTS`, `ACCENT_KINDS`, `ACCENT_CHANCE`): change one, change both and rerun `build_ice.py`.
+
+#### Give nothing past the wall until it falls
+**Nothing past the wall is the player's until it falls.**
+Wasteland is seen as snow (no ground, no road, no fog veil, `name_of` is `WASTE_NAME`), never charted or walked to.
+A wall tile draws its real ground under the ice but reads as `WALL_NAME`, `area_variant` "plain" and `town_tier` -1.
+`has_chest`, `envs_within` and `town_tier` only answer for `is_land`.
+Wall and wasteland names are never saved, so the land under them is named once it thaws.
+
+#### Use `wall_step` for walls only
+**`wall_step` is where the next wall stands and where the fallen ones lie, and nothing else** (`WALL_STEP`, or `RING_OF_WALLS_STEP` under the curse, said by the main scene as the world is built and never saved -- to `restore` itself, which draws the rubble as it loads): `_break_wall` and `walls_fallen` read it.
+**`Encounter.walls_inside` goes on counting in `WALL_STEP`s**, so the land is as hard as it ever was, tile modifiers begin where they always did, and the extra walls are extra gates at the health their own ring gives them.
+
+#### Grow the map only when the wall falls
+**The map only grows when the wall falls** (`_break_wall` -> `_cover`).
+Arrival grows nothing.
+**Its environments are generated ahead, on a `WorkerThreadPool` task** (`_generate_ahead`, set off by `walk_onto` a wall tile), into a copy of `_envs` that `_generate` adopts when the area matches -- they are most of the fall's time (0.3 s for the first wall, 1.5 s for the sixth; the rest, on the main thread, under 0.2 s).
+**`_merge_small_regions` finds the regions once and joins them as they merge (`_join`)**: finding them all again after every merge was quadratic in the whole map, 17 s of the third wall's and 80 s of the sixth's.
+The task touches nothing but its copy and `EnvironmentGenerator`'s statics -- the adjacency table among them, built the first time it is asked for (`allowed()`), which after a load may be on the task's own thread; a lost fight leaves it for the next try, which is sound because `_envs` changes nowhere but `_generate`.
+The dev's skip and the tests' `chart` of a wall without a walk generate in place, as before.
+
+#### Chart the first tile blind
+**The first tile into the fog can be charted blind.**
+`can_chart` wants generated land or wall beside a charted tile, **seen or not**, and `chart` floors its sight at 0: none at all (the Thick Fog's, no torch held) uncovers the tile taken and nothing round it.
+With a ring of sight every such tile is already seen, so this is the old rule for everyone else.
+**Under the Nightwalkers the reach is further** (`dark_reach`, a Callable the main scene points at `Inventory.dark_reach`; `reach()` is 1 without it): any generated land or wall up to that many steps out, across land (the wall only ever ends a way).
+`can_chart` reads `_chartable`, one walk out from all charted land at once, cleared by `_show`, `_break_wall`, `place_cave` and a changed reach, because the hover asks on every mouse move.
+**Distant charting** (`distant`, the fourth wall's unlock, which the main scene's `_credit_walls` sets off `WallUnlocks.DISTANT`; its setter clears `_chartable`) adds every **seen** tile that seen land leads to from the charted, however far -- never a hidden one, never across the dark.
+`dark_path(cell)` is the way in (fewest tiles, then the start nearest the player;
+`_way_in` within `reach()` over any land first, then under `distant` over seen land with no count), **every tile of which is fought for in turn** -- the main scene's `_dark_way` -- so charting still only ever takes a tile beside the charted land: `walk_onto` refuses a tile further out, and `chart` takes the whole way at once only for the dev's skip.
+**A lost fight retreats to `chart_from(cell)`.**
+`HexMap.can_pick` (the builder sets it to `can_chart`) is what lets the hover and a click land on an undrawn cell; its `get_tile_info` is `{}`, so whoever handles the click asks the builder (`env_at`, `level_of`) and **must not ask `name_of`, which would name it**.
+
+#### Derive `mods_of`
+**`mods_of(cell, wild)` is derived, like `has_chest`:** `TileMods.for_cell` off `env_seed` and `ring_of` (not `Encounter.walls_inside`: the count follows the walls that actually stand, Ring of Walls and all), and `[]` for anything but open land -- a settlement, a chest, the wall, the wasteland, and any ring a wall stood on (`on_wall_ring`), fallen or not. `wild` is the Wild Tiles curse, which the builder cannot know.
+
+#### Keep one Gollux cave a world, saved
+**The Gollux cave (`cave`, `place_cave(near)`, `can_enter_cave`, `_draw_cave`) is one a world and saved** (`MapSave` version 4, `cave` absent for none): **placed beside the wall tile just broken** (the user's, 2026-10-09): `chart` keeps that tile as `breach` (not saved), and `place_cave(breach)` -- the main scene's, asked only once Gollux is unlocked: `WallUnlocks.GOLLUX`,
+the third wall ever -- takes a cell within `CAVE_NEAR` steps of it and further out, never on `on_wall_ring` or a settlement, by `hash([env_seed, "cave"])`.
+So the first world's goes down past its third wall, every later world's past its first; none while `breach` is `NO_CELL`.
+It is a set piece: `road_at`, `has_chest`, `mods_of`, `can_farm` / `can_farm_ground` (and so `best_farm`) all refuse it, and `name_of` names it from `TileNames.CAVE_FEATURES` (`place_cave` drops the land's name a tile already seen had been given).
+Drawn by `HexMap.set_cave` (`CAVE_ART`, one `CAVE_NODE` on the settlements' layer and anchor) once seen and on land; a missing picture draws nothing.
+
+#### Read a torch once, as a tile is charted
+**A torch is read at the moment a tile is charted and never again.**
+`main_scene._sight()` (`BASE_SIGHT` (2) + `inventory.stats().sight`, the base gone under the Thick Fog) is passed to `chart` there only, so putting a torch on uncovers nothing, taking one off hides nothing, and a torch that dropped in that same fight is in the bag and does not count.
+`_reveal_around` cannot reach past generated land either: `rect` reaches `WASTE_DEPTH` rings past the wall, and no chart is further out than the wall.
+
+#### Keep the walls on level edges
+**`level_of(cell)` comes in even bands of `LEVEL_TILES` (4) rings** (level `n` starts at `first_step(n)`), and `START_LAND_RADIUS + 1` and `WALL_STEP` are multiples of it (`test_generation` holds that), so the land past a wall is a level above the land inside it -- but for every other wall of the Ring of Walls, whose `RING_OF_WALLS_STEP` is no multiple; it is the tile panel's number and the ceiling on drops.
+Enemy health uses the smooth distance instead.
+
+#### Keep `can_farm` blind to where the player stands
+**`can_farm` asks nothing about where the player stands, and refuses every settlement** (Farm hangs off it); `best_farm()` is the farmable tile farthest out, where the camp stands; `can_move_to` refuses everything while `walking`.

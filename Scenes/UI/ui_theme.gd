@@ -198,10 +198,13 @@ static func _settle(panel: Control, again: Callable) -> void:
 	if not again.is_valid() or panel.has_meta(SETTLING) or not panel.is_inside_tree():
 		return
 	panel.set_meta(SETTLING, true)
+	# By its id: a lambda holding a panel freed before the frame comes round is an engine error.
+	var id := panel.get_instance_id()
 	panel.get_tree().process_frame.connect(func() -> void:
-		if is_instance_valid(panel) and again.is_valid():
+		var docked := instance_from_id(id) as Control
+		if docked != null and again.is_valid():
 			again.call()
-			panel.remove_meta(SETTLING), CONNECT_ONE_SHOT)
+			docked.remove_meta(SETTLING), CONNECT_ONE_SHOT)
 
 
 ## How tall `panel` would be with nothing in it scrolled: its minimum, which counts a scroll as nothing,

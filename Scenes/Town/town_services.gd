@@ -54,7 +54,10 @@ static func services_for(tier: int, spot: Vector2i, world_seed: int) -> PackedSt
 			offered[GEAR] = true
 			offered[ORBS] = true
 			offered[SMITH] = true
+		-1:
+			return PackedStringArray()
 		_:
+			push_error("TownServices: no counters are written for a settlement of tier %d" % tier)
 			return PackedStringArray()
 	var found := PackedStringArray()
 	for service: String in ORDER:

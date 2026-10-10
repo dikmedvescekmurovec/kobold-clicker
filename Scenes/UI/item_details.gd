@@ -17,6 +17,10 @@ const PEAK_ICON := "res://Assets/UI/ui_icon_trophy.png"
 ## height in panel pixels, the 1 px rim of the trough included.
 const ASCENSION_BAR := "AscensionBar"
 const ASCENSION_HEIGHT := 4
+## The line under a piece's name -- its rarity, its level and what else it is -- by name, for whoever
+## adds to it (the card under Alt's "· worn"): the bar above stands before the name on some pieces, so
+## it is no fixed child.
+const RARITY_LINE := "Rarity"
 ## What the row for a modifier the piece has room for and has not rolled says.
 const OPEN_ROW := "—"
 ## The crest cut off a unique's frame (`Item.frame`): its spikes and wings, the ring's top edge under
@@ -84,8 +88,7 @@ static func _gold_rule(item: Item, crest: bool) -> Control:
 ## every rank's numbers, "5/4/3/2", and its rank IV line greyed behind a trophy until it is reached.
 static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[Item] = [],
 		every_rank := false) -> void:
-	for child: Node in rows.get_children():
-		child.queue_free()
+	UITheme.clear(rows)
 	# On its way to the next plus, over the name the plus is written after: the Orbs of Ascension fed
 	# in against what that plus takes (`Item.ascension_cost`), a socket's tan filling with its brown.
 	if item.plus > 0 or item.ascension > 0:
@@ -98,11 +101,13 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 	var ranked := not item.unique.is_empty() and UniqueTable.is_ranked(item.unique)
 	# In the soft ink for every rarity: the name over it carries the rarity's colour, which at 10 px on
 	# cream is too pale to read a line by (2026-09-30). A named heirloom says here what it is underneath.
-	rows.add_child(line("%s%s · Level %d%s%s" % [item.rarity_label(),
+	var rarity := line("%s%s · Level %d%s%s" % [item.rarity_label(),
 			"" if item.nickname.is_empty() else " " + item.base_name(), item.level,
 			" · Two-handed" if LootTable.two_handed(item.type) else "",
 			" · Rank %s" % Achievements.RANK_NAMES[UniqueTable.shown_rank(item.unique)] if ranked else ""],
-			Palette.TEXT_SOFT, width, true))
+			Palette.TEXT_SOFT, width, true)
+	rarity.name = RARITY_LINE
+	rows.add_child(rarity)
 	# A skill stone's shape: how deep it may sit and how many stones hang off it.
 	if item.is_stone():
 		rows.add_child(line(SkillTree.shape_text(item), Palette.TEXT_SOFT, width, true))

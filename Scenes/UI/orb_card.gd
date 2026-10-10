@@ -42,9 +42,7 @@ func _init() -> void:
 ## Ink for the name and slate for the sentence: the card stands on the item card's cream page, which
 ## the darker half of the palette was picked to be read on.
 func fill(orb: String, held: int, note := "", note_tone := Palette.TEXT_SOFT) -> void:
-	for child: Node in _rows.get_children():
-		_rows.remove_child(child)
-		child.queue_free()
+	UITheme.clear(_rows)
 	_rows.add_child(ItemDetails.line(orb, Palette.TEXT, WIDTH))
 	# A super orb (`SuperOrbTable`) is the same card over another table; `held` is the one count the
 	# six of them share. A rune (`RuneTable`) the same again.

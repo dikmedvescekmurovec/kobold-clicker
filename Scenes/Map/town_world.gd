@@ -180,24 +180,30 @@ func to_dict() -> Dictionary:
 	}
 
 
-## The world `to_dict` wrote, or null if the data isn't one. A town whose tier is no longer a tier
-## this build knows is dropped along with its links, rather than coming back as some other tier.
+## The world `to_dict` wrote, or null if the data isn't one: a value of the wrong shape, or no `tiers`
+## legend to read the towns through. A town whose tier is no longer a tier this build knows is dropped
+## along with its links, rather than coming back as some other tier.
 static func from_dict(data: Dictionary) -> TownWorld:
 	if typeof(data) != TYPE_DICTIONARY:
 		return null
 	var world := TownWorld.new()
 	var saved_size: Variant = data.get("size", [])
-	if typeof(saved_size) != TYPE_ARRAY or saved_size.size() != 2:
+	var saved_seed: Variant = data.get("seed", 0)
+	if not is_numbers(saved_size) or saved_size.size() != 2 or not is_numbers([saved_seed]):
 		return null
 	world.size = Vector2i(int(saved_size[0]), int(saved_size[1]))
-	world.seed_value = int(data.get("seed", 0))
+	world.seed_value = int(saved_seed)
 
-	# Tiers are resolved through the saved legend, so reordering Tier can't reinterpret a file.
+	# Tiers are resolved through the saved legend, so reordering Tier can't reinterpret a file. With no
+	# legend every town would be dropped below, and the world would come back as empty land.
+	var tiers: Variant = data.get("tiers", [])
+	if typeof(tiers) != TYPE_ARRAY or tiers.is_empty():
+		return null
 	var legend: Array[int] = []
-	for name: Variant in data.get("tiers", []):
+	for name: Variant in tiers:
 		legend.append(TIER_NAMES.find(str(name)))
 	var spots: Variant = data.get("spots", [])
-	if typeof(spots) != TYPE_ARRAY or spots.size() % 3 != 0:
+	if not is_numbers(spots, 3):
 		return null
 	for i in range(0, spots.size(), 3):
 		var index := int(spots[i + 2])
@@ -211,7 +217,7 @@ static func from_dict(data: Dictionary) -> TownWorld:
 		world._bucket_for(spot).append(spot)
 
 	var links: Variant = data.get("links", [])
-	if typeof(links) != TYPE_ARRAY or links.size() % 4 != 0:
+	if not is_numbers(links, 4):
 		return null
 	for i in range(0, links.size(), 4):
 		var a := Vector2i(int(links[i]), int(links[i + 1]))
@@ -221,6 +227,19 @@ static func from_dict(data: Dictionary) -> TownWorld:
 		world._links[a].append(b)
 		world._links[b].append(a)
 	return world
+
+
+## Whether `data` is a list of numbers as JSON hands them back, ints or floats, in whole groups of
+## `per`. Asked of every list of the map's save before `int()` is: a typed read of anything else stops
+## the reader where it stands, short of its report. `MapSave` asks it too, and it is here because
+## `MapSave` names this class and never the other way round.
+static func is_numbers(data: Variant, per := 1) -> bool:
+	if typeof(data) != TYPE_ARRAY or (data as Array).size() % per != 0:
+		return false
+	for number: Variant in data as Array:
+		if typeof(number) not in [TYPE_INT, TYPE_FLOAT]:
+			return false
+	return true
 
 
 func _in_bounds(spot: Vector2i) -> bool:

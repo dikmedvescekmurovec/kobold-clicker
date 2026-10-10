@@ -36,10 +36,10 @@ var _backdrop: Node2D
 
 ## Puts the camp on the screen. `camp` is what `Camp.make` built and `earned` what `Camp.earned` said
 ## it came to; `env` and `variant` are the tile's, for the backdrop it would have fought on.
-func begin(camp: Dictionary, earned: Dictionary, env: String, variant: String, scale: float) -> void:
+func begin(camp: Dictionary, earned: Dictionary, env: String, variant: String, ui_scale: float) -> void:
 	_camp = camp
 	_earned = earned
-	_ui_scale = scale
+	_ui_scale = ui_scale
 	layer = LAYER
 	# Nothing here is clicked for damage, so the cursor is the one every other panel wears.
 	Input.set_default_cursor_shape(Cursors.ARROW)

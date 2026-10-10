@@ -57,6 +57,12 @@ static func mask_edges(mask: int) -> Array[int]:
 	return edges
 
 
+## A number fixed by the cell and scattered over the grid, for what is drawn by the cell and never
+## saved (a fallen wall's rubble, the snow): the same lies there every time the map is drawn.
+static func scatter(cell: Vector2i) -> int:
+	return (cell.x * 73856093) ^ (cell.y * 19349663)
+
+
 ## Number of steps between two cells.
 @warning_ignore("integer_division")
 static func distance(a: Vector2i, b: Vector2i) -> int:

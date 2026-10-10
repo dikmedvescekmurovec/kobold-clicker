@@ -4,7 +4,6 @@ extends Control
 ## door": the password typed into its prompt is the way into the game.
 
 const GAME := "res://Scenes/main_scene.tscn"
-const WAITLIST := Cloud.URL + "/waitlist"
 ## What "Golden door" takes, in any case.
 const PASSWORDS := ["goldenkey", "golden key"]
 ## The form's air below it, and the field's width, in panel pixels.
@@ -98,11 +97,19 @@ func _ask_password() -> void:
 	add_child(prompt)
 
 
+## Where Join posts: the Worker the cloud calls, so a run pointed at a local one (`LEADERBOARD_URL`)
+## never sends an address to the real list.
+static func waitlist() -> String:
+	return Cloud.url() + "/waitlist"
+
+
 func _sign_up() -> void:
 	if _join.disabled:
 		return
 	_join.disabled = true
 	var http := HTTPRequest.new()
+	# A server that never answers must not leave Join greyed for ever.
+	http.timeout = Cloud.TIMEOUT
 	add_child(http)
 	http.request_completed.connect(func(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 		http.queue_free()
@@ -117,7 +124,7 @@ func _sign_up() -> void:
 		_join.disabled = joined
 		_email.editable = not joined)
 	var body := JSON.stringify({"email": _email.text.strip_edges()})
-	if http.request(WAITLIST, ["Content-Type: application/json"], HTTPClient.METHOD_POST, body) != OK:
+	if http.request(waitlist(), ["Content-Type: application/json"], HTTPClient.METHOD_POST, body) != OK:
 		http.request_completed.emit(HTTPRequest.RESULT_CANT_CONNECT, 0, PackedStringArray(), PackedByteArray())
 
 
