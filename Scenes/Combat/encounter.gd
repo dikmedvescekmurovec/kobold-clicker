@@ -421,12 +421,31 @@ var crit_rng := RandomNumberGenerator.new()
 
 ## The terrain the fight is on. It picked the enemies, and it picks the backdrop they are drawn on.
 var env := ""
-## Whether an elite is promised a drop. The main scene turns it on only while the Broken Sword has not
-## dropped, so what the promise hands over is always that sword.
+## Whether an elite is promised a drop. Nothing in the game turns this on (it was the Broken Sword's
+## promise until 2026-10-10, which is `PROMISED`'s now): like `always_drop`, it is for the tests and the
+## screenshot scripts.
 var guarantee_elite := false
-## Whether the next piece of gear to fall is `LootTable.FIRST_DROP`, always common and level 1. The main scene turns it on until the player's
-## first drop (`Inventory.first_sword_taken`), and the first drop here spends it.
-var first_sword := false
+
+## The finds a new player's first kills are scripted to leave (the user's, 2026-10-10) -> the lifetime
+## kills each falls between: after the first of its pair and by the second, every kill of them as likely
+## as the next and the last one certain (`_due`). The Broken Sword (`LootTable.FIRST_DROP`), then the
+## orbs to craft it with in the order they are used (`OrbTable.FIRST_ORB`, `SECOND_ORB`), then the first
+## unique (`UniqueTable.FIRST_UNIQUE`) and the first skill node (`SkillTree.first`).
+const SWORD := "sword"
+const TRANSMUTE := "transmute"
+const AUGMENT := "augment"
+const UNIQUE := "unique"
+const NODE := "node"
+const PROMISED := {SWORD: [0, 10], TRANSMUTE: [10, 20], AUGMENT: [20, 30], UNIQUE: [100, 120], NODE: [150, 170]}
+## The orb that spends each orb promise.
+const ORB_PROMISES := {OrbTable.FIRST_ORB: TRANSMUTE, OrbTable.SECOND_ORB: AUGMENT}
+## The promises this player is still owed (`Inventory.promised`) and the kills they had made as the
+## fight opened, which a promise's kills are counted from. The main scene sets both; each is spent here
+## by the find it is. While the sword is owed any piece of gear that falls is it, common and level 1, so
+## it is the player's first whatever the table rolled; while the node is, no other node falls. A fight
+## nobody tells is owed nothing.
+var promised: Array = []
+var kills_before := 0
 
 ## Whether every body drops something. Nothing in the game turns this on: it is for the tests and the
 ## screenshot scripts, which want a pouch with several things in it and would otherwise have to grind
@@ -446,11 +465,6 @@ var orbs_after := 0
 ## The deepest wall ever broken (`Inventory.walls_ever`), which decides the orbs that can drop here
 ## (`OrbTable.unlocked`). The main scene sets it; a fight nobody tells drops every orb.
 var walls_down := OrbTable.EVERY_WALL
-
-## Whether the first body to fall here leaves `OrbTable.FIRST_ORB`, past `orbs_after` and the chance.
-## The main scene turns it on for every fight after the player's first until that orb has dropped
-## (`Inventory.first_orb_taken`), and the first kill here spends it.
-var first_orb := false
 
 ## What changes how this fight plays rather than a number, by effect id (`Inventory.effects()`): the
 ## capstone skills the player has learned and the uniques they are wearing. A worn unique is one entry
@@ -1593,11 +1607,13 @@ func _kill(swung := false) -> void:
 		if loot_rng.randf() < EVEN_LOOT_CHANCE:
 			loot_dropped.emit(index, _even_find())
 	var gear_rate := _gear_rate()
+	# The Broken Sword's kill: a certain piece, which the swap below makes the sword.
+	var sword := _due(SWORD, loot_rng)
 	for roll in rolls:
-		# Promised: the first elite's sword, Trophy Hunter's big bodies, and a forest elite under the
-		# Hunter's Lantern at IV.
+		# Promised: the sword, Trophy Hunter's big bodies, and a forest elite under the Hunter's Lantern
+		# at IV.
 		var certain: bool = always_drop or mimic or (roll == 0
-				and ((guarantee_elite and on_elite()) or (big and "trophy" in effects)
+				and (sword or (guarantee_elite and on_elite()) or (big and "trophy" in effects)
 				or (on_elite() and env == "forest" and _home_peak())))
 		var dropped := LootTable.roll(lineup[index], loot_rng, certain, _level(),
 				gear_rate, item_rarity)
@@ -1608,8 +1624,8 @@ func _kill(swung := false) -> void:
 						_level(), gear_rate, item_rarity))
 		var found := 0
 		while dropped != null:
-			if first_sword:
-				first_sword = false
+			if SWORD in promised:
+				promised.erase(SWORD)
 				dropped = Item.rolled(LootTable.FIRST_DROP, ItemRarity.Rarity.COMMON, loot_rng)
 			else:
 				dropped = _lean(_raw(dropped))
@@ -1661,11 +1677,16 @@ func _kill(swung := false) -> void:
 	# A unique, beside the gear and not from its table: any body can carry one, off the pool of what
 	# the player has unlocked. Through `loot_dropped` like any find, so the pouch, the bag and the
 	# verdict need no second path.
-	# None before the player's 100th kill, and pure chance after it.
+	# None before the player's 100th kill, then the promised first (`PROMISED`), and pure chance after it.
 	var boss := EnemyRoster.tier_of(lineup[index]) == EnemyRoster.Tier.BOSS
 	# A mimic's unique chance is its coin toss above, and nothing on top of it.
 	if chest_unique != null:
 		loot_dropped.emit(index, _lean(chest_unique))
+	elif not mimic and not even_loot and _due(UNIQUE, unique_rng):
+		# The first unique, promised: the one row, at a level the ground's as any unique's is.
+		promised.erase(UNIQUE)
+		loot_dropped.emit(index, _lean(UniqueTable.roll(lineup[index], [UniqueTable.FIRST_UNIQUE],
+				unique_rng, _level(), 0.0, true)))
 	elif not mimic and not even_loot and uniques_after != NO_UNIQUES and index >= uniques_after:
 		# Thick Fog's pay, and the Homeland's on its own two lands: factors on the finished chance,
 		# whatever the drop rate already made of it.
@@ -1681,6 +1702,8 @@ func _kill(swung := false) -> void:
 			found = UniqueTable.roll(lineup[index], unlocked, unique_rng, _level(),
 					unique_rate, false, item_rarity)
 		if found != null:
+			# Luck got there first: the promise is a first unique, and this is one.
+			promised.erase(UNIQUE)
 			loot_dropped.emit(index, _lean(found))
 	# The Hourglass: its rank's seconds back for anything but a boss -- and at IV a boss's own -- and
 	# never past what the fight began with, so the clock can be held but not banked. A run has no clock
@@ -1695,27 +1718,47 @@ func _kill(swung := false) -> void:
 	# independent numbers rather than one number split.
 	# Drop rate adds to orb find here for the reason it adds to gold find above, and `chance_for` is
 	# handed the sum rather than taught about a second stat.
+	# The two promised ones first, through `orbs_after` and the chance.
 	var orb := ""
-	if first_orb:
-		first_orb = false
+	if _due(TRANSMUTE, orb_rng):
 		orb = OrbTable.FIRST_ORB
+	elif _due(AUGMENT, orb_rng):
+		orb = OrbTable.SECOND_ORB
 	elif always_orb or index >= orbs_after:
 		# Raw Finds, and the Gravedigger's Charm at IV on dirt: factors on the finished chance.
 		orb = OrbTable.roll(lineup[index], orb_rng, always_orb, _lifted(orb_find + drop_rate,
 				(RAW_ORBS if _cursed_with(Curses.RAW_FINDS) else 1.0)
 				* (HOME_ORBS if env == "dirt" and _home_peak() else 1.0)), walls_down)
 	if not orb.is_empty():
+		# Either promise is spent by its orb, however that came.
+		promised.erase(ORB_PROMISES.get(orb))
 		var count := 2 if "transmute" in effects and orb_rng.randf() < 0.25 else 1
 		for i in count:
 			orbs[orb] = int(orbs.get(orb, 0)) + 1
 			orb_dropped.emit(index, orb)
 	# A fourth: a skill stone, gear's chance in a share, on its own generator. Not gear, so neither a
 	# curse nor a unique that keeps gear from falling keeps it.
-	if stone_drops:
+	# None before the promised first, which is no roll at all.
+	if _due(NODE, stone_rng):
+		promised.erase(NODE)
+		loot_dropped.emit(index, SkillTree.first(lineup[index], stone_rng, _level()))
+	elif stone_drops and NODE not in promised:
 		var stone := SkillTree.roll(lineup[index], stone_rng, _level(), drop_rate,
 				item_rarity)
 		if stone != null:
 			loot_dropped.emit(index, stone)
+
+
+## Whether the body going down is the one that leaves `promise` (`PROMISED`): owed, past the kills it
+## waits for, and the draw -- one chance in however many of its kills are left, so each is as likely as
+## the next and the last is certain, as is any after it that a fight runs on into. Drawn only for a
+## promise owed, so a fight owed nothing rolls as it always did.
+func _due(promise: String, rng: RandomNumberGenerator) -> bool:
+	if promise not in promised:
+		return false
+	var kill := kills_before + index + 1
+	return kill > int(PROMISED[promise][0]) \
+			and rng.randi_range(kill, maxi(kill, int(PROMISED[promise][1]))) == kill
 
 
 ## The better of two finds, either of which may be nothing: the higher rarity, then the higher level.

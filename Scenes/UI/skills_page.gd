@@ -15,6 +15,9 @@ const TITLE := "Skill tree"
 signal closed
 ## Redrawn, and the points to spend may have moved with it.
 signal changed
+## A point went into a node, whose light is `glow` (`SkillTreeView.glow_of`): the main scene hands it to
+## `ItemCard.flash`, the card under the cursor being that node's.
+signal learned(glow: Color)
 
 var inventory: Inventory
 var _save_path: String
@@ -76,6 +79,8 @@ func open() -> void:
 	var free := inventory.skills.points(inventory.level)
 	_points.text = "%d skill point%s" % [free, "" if free == 1 else "s"]
 	_points.add_theme_color_override("font_color", Palette.LEAF if free > 0 else Palette.TEXT_SOFT)
+	# A new player's cue for where a point goes, over once one has ever been spent.
+	_view.teaching = Inventory.FIRST_POINT not in inventory.tips and inventory.skills.spent() == 0
 	_view.fill(inventory.skills, true, null, free)
 	var spent := inventory.skills.spent()
 	var cost := inventory.respec_cost()
@@ -123,6 +128,7 @@ func _on_stone_pressed(path: String) -> void:
 		print("Learned %s at %s (%d/%d)" % [inventory.skills.stones[path].display_name(), path,
 				inventory.skills.rank_of(path), SkillTree.most_ranks(inventory.skills.stones[path])])
 	open()
+	learned.emit(SkillTreeView.glow_of(inventory.skills.stones.get(path)))
 
 
 func _on_respec_pressed() -> void:

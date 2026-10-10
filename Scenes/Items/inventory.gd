@@ -74,7 +74,7 @@ const SAVE_PATH := "user://inventory.json"
 ## own world (the main scene reads that off the map at start-up).
 ## 33 replaces the three skill trees with the player's own tree of skill stones (`skill_tree`, path ->
 ## stone, and `skill_ranks`): a version 32 save's `skills` and `skill_bursts` are not read, and it
-## starts from the starter tree with every point its level earned free.
+## starts with the root alone and every point its level earned free.
 ## 34 adds `runes` (name -> count) and `runed` (a tile's rune work by world spot, `RuneTable`); a version
 ## 33 save holds none of either.
 const VERSION := 34
@@ -130,12 +130,11 @@ var items: Array[Item] = []
 ## player has, and the main scene never has to remember there are two files' worth of state.
 var equipment := Equipment.new()
 
-## Whether the Broken Sword, the player's first piece of gear, has dropped. Until it has, the first
-## elite is promised a drop. It lives in the save, so it is once for the player.
+## Whether the Broken Sword, the player's first piece of gear, has dropped. Until it has it is promised
+## (`promised`). It lives in the save, so it is once for the player.
 var first_sword_taken := false
 
-## Whether the promised first orb (`OrbTable.FIRST_ORB`) has dropped. Until it has, the first body of
-## every fight after the player's first is promised it. Once for the player, like the sword.
+## Whether the promised first orb (`OrbTable.FIRST_ORB`) has dropped. Once for the player, like the sword.
 var first_orb_taken := false
 
 ## The first-time pop-ups already shown, and the buttons already pressed once, by id. The main scene
@@ -167,7 +166,8 @@ var gold := 0.0:
 signal traded
 
 ## Every enemy the player has ever killed. It is what holds orbs back until `OrbTable.FIRST_ORB_KILLS`,
-## and uniques until `UniqueTable.FIRST_UNIQUE_KILLS`.
+## and uniques until `UniqueTable.FIRST_UNIQUE_KILLS`, and what a new player's promised finds are
+## counted in (`promised`).
 var kills := 0
 
 ## How long the game has been open on this save, in seconds. The main scene adds each frame's delta;
@@ -201,6 +201,13 @@ var orbs := {}
 var runes := {}
 ## Written into `tips` with the first rune found, so the bag's rune row stays once seen, as the orbs' does.
 const FIRST_RUNE := "first_rune"
+## Written into `tips` with the first skill point ever spent: until then the light behind the
+## skills page's root breathes, a new player's cue for where a point goes (`SkillsPage`, the user's, 2026-10-10).
+const FIRST_POINT := "first_skill_point"
+## Written into `tips` as a fight leaves the promised Orb of Augmentation and the promised skill node
+## (`FightLedger`): once for the player, as `first_sword_taken` and `first_orb_taken` are.
+const FIRST_AUGMENT := "had_augment"
+const FIRST_NODE := "had_node"
 ## What runes have done to the tiles of this world, by world spot as "x,y" (the towns' key): each a
 ## `RuneTable` state. A transcension leaves it with the world, as it does the orbs and the runes.
 var runed := {}
@@ -289,6 +296,24 @@ var keeper: WeakRef = null
 ## Pacifist Hands: swings a second the hands make on their own, before everything is doubled.
 const PACIFIST_SWINGS := 1.5
 const PACIFIST_FASTER := 2.0
+
+
+## The finds of `Encounter.PROMISED` this player is still owed, for the next fight: never had, and their
+## kills not yet run out -- so a save from before a promise, already past its kills, gets nothing from it.
+## The unique is owed while the collection log is empty, so one a chest or a bounty paid spends it. None
+## after a transcension: a second world hands out none of the first one's helping hands.
+func promised() -> Array:
+	if int(tally.get("transcended", 0)) > 0:
+		return []
+	var had := {
+		Encounter.SWORD: first_sword_taken,
+		Encounter.TRANSMUTE: first_orb_taken,
+		Encounter.AUGMENT: FIRST_AUGMENT in tips,
+		Encounter.UNIQUE: not uniques_found.is_empty(),
+		Encounter.NODE: FIRST_NODE in tips,
+	}
+	return had.keys().filter(func(id: String) -> bool:
+		return not had[id] and kills < int(Encounter.PROMISED[id][1]))
 
 
 ## Puts `item` in the bag, full or not. Past CAPACITY the player is overencumbered (`encumbered`)
@@ -838,7 +863,11 @@ func why_not_skill(path: String) -> String:
 
 
 func rank_up_skill(path: String) -> bool:
-	return why_not_skill(path).is_empty() and skills.rank_up(path, level)
+	if not why_not_skill(path).is_empty() or not skills.rank_up(path, level):
+		return false
+	if FIRST_POINT not in tips:
+		tips.append(FIRST_POINT)
+	return true
 
 
 ## What the tree is told on top of its own ranks: [ranks more on every stone holding a point -- the
@@ -1338,7 +1367,7 @@ static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
 	var saved_xp: Variant = data.get("xp", 0)
 	inventory.level = maxi(1, int(saved_level)) if typeof(saved_level) in [TYPE_INT, TYPE_FLOAT] else 1
 	inventory.add_xp(maxi(0, int(saved_xp)) if typeof(saved_xp) in [TYPE_INT, TYPE_FLOAT] else 0)
-	# Version 33 made the skill tree the player's own: an absent tree is the starter's, with every point
+	# Version 33 made the skill tree the player's own: an absent tree is the root alone, with every point
 	# free. Read after the level, because what a save may have spent is counted off it.
 	inventory.skills = Skills.from_dict(data.get("skill_tree", null), data.get("skill_ranks", {}),
 			inventory.level)

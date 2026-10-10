@@ -35,6 +35,14 @@ const ALT_CARD := "alt_card"
 ## that is not its doll's (the character page's uniques), which the card would otherwise hold against
 ## the ordinary doll -- the wrong one for an heirloom.
 const NO_COMPARE := "no_compare"
+## The meta a square may carry whose own press is read on its card -- a skill point going into a node:
+## the card stays up through a press that stays on it, as it does under a held orb.
+const STAYS := "stays"
+## The meta a square may carry that keeps its card up while the cursor is on no square at all: the
+## unique picked on the fortuneteller's banishing screen, read while the button under it is found.
+const PINNED := "pinned"
+## How strong a skill point's light is, of an orb's 0 to 1 (`flash`): under the least that has rays.
+const POINT_POWER := 0.25
 const ORB_SHINE := preload("res://Scenes/UI/orb_shine.gdshader")
 ## How long the light behind the card takes to swell in, and to die after the least orb and after the
 ## best, in seconds (`shine`); and the most it reaches past the card's edges, in the card's pixels.
@@ -76,6 +84,8 @@ var held := ""
 ## The light `lights` stands behind the card, a `Node2D` for `shine`'s reasons, and drawn under it.
 var _hover := Node2D.new()
 var _hover_glow := ShaderMaterial.new()
+## Whether what the card reads moved under it (`flash`), so it is written again where it stands.
+var _stale := false
 
 
 func _init(ui_scale: float) -> void:
@@ -122,6 +132,8 @@ func _exit_tree() -> void:
 func _process(_delta: float) -> void:
 	var slot := hovered(get_viewport().get_mouse_position(),
 			Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
+	if slot == null:
+		slot = pinned()
 	# A square freed by a redraw compares equal to null, which would read as "still nothing" and leave
 	# the card of a square that is gone standing: a vendor's shelf does exactly that on a press.
 	# A finger has no Alt to hold: under one the worn piece is always the second card.
@@ -134,8 +146,10 @@ func _process(_delta: float) -> void:
 					(SuperOrbTable.ORBS if SuperOrbTable.has(held) else OrbTable.ORBS)[held].glow)
 			_hover.create_tween().tween_method(func(life: float) -> void:
 				_hover_glow.set_shader_parameter("life", life), 0.0, HOVER_LIFE, SHINE_RISE)
-	if alt == _alt and (is_instance_valid(_shown) and slot == _shown or (slot == null and not visible)):
+	if not _stale and alt == _alt \
+			and (is_instance_valid(_shown) and slot == _shown or (slot == null and not visible)):
 		return
+	_stale = false
 	_alt = alt
 	_shown = slot
 	_worn.hide()
@@ -181,6 +195,9 @@ func hovered(at: Vector2, pressed: bool) -> ItemSlot:
 	if _orb_press or Cursors.holding():
 		return slot
 	if pressed:
+		# Only the square the card was already on: a tree dragged about under the press says nothing.
+		if slot != null and slot == _shown and slot.has_meta(STAYS):
+			return slot
 		_muted = slot.get_global_rect() if slot != null else Rect2()
 		_pressed_at = at
 		return null
@@ -189,6 +206,14 @@ func hovered(at: Vector2, pressed: bool) -> ItemSlot:
 	_muted = Rect2()
 	_pressed_at = Vector2.INF
 	return slot
+
+
+## The square that keeps its card up with the cursor on none (`PINNED`), or null.
+func pinned() -> ItemSlot:
+	for slot: ItemSlot in get_tree().get_nodes_in_group(ItemSlot.GROUP):
+		if slot.has_meta(PINNED) and slot.is_visible_in_tree():
+			return slot
+	return null
 
 
 ## Whether the card over `slot` wears a faint, still light in the held orb's colour: the orb would go
@@ -201,19 +226,29 @@ func lights(slot: ItemSlot) -> bool:
 	return OrbTable.can_apply(held, slot.item)
 
 
-## Light from behind the card in `orb`'s colour (`glow`, `orb_shine.gdshader`), swelling in and dying
-## away: the orb has just gone into the piece, and the card is where the piece is read. The better the
-## orb, the more light -- its place in the tray, a super orb past them all -- and the longer. A second
-## orb puts the last one's light out. A `Node2D` drawn behind the card's panel, so the card (a container)
-## leaves it be and it can reach past the edges; it moves, scales and hides with the card, and outlives
-## a redraw, which only refills `_rows`.
+## `flash` in `orb`'s colour (`glow`): the orb has just gone into the piece. The better the orb, the
+## more light -- its place in the tray, a super orb past them all -- and the longer.
 func shine(orb: String) -> void:
+	var super_orb := SuperOrbTable.has(orb)
+	flash((SuperOrbTable.ORBS if super_orb else OrbTable.ORBS)[orb].glow,
+			1.0 if super_orb else (OrbTable.orbs().find(orb) + 1.0) / (OrbTable.orbs().size() + 1.0))
+
+
+## Light from behind the card in `colour` (`orb_shine.gdshader`), swelling in and dying away, more and
+## longer the more `power` (0 to 1): what the card reads has just changed under it -- an orb into its
+## piece, a skill point into its node (`SkillsPage.learned`) -- so it is written again as well. A second
+## one puts the last one's light out and swells on from where that had got to, so a press held down
+## holds the light up. A `Node2D` drawn behind the card's panel, so the card (a container) leaves it be
+## and it can reach past the edges; it moves, scales and hides with the card, and outlives a redraw,
+## which only refills `_rows`.
+func flash(colour: Color, power := POINT_POWER) -> void:
+	_stale = true
 	if Settings.animations == Settings.Anim.NONE:
 		return
-	var super_orb := SuperOrbTable.has(orb)
-	var power := 1.0 if super_orb else (OrbTable.orbs().find(orb) + 1.0) / (OrbTable.orbs().size() + 1.0)
-	var old := get_node_or_null(SHINE_NAME)
+	var from := 0.0
+	var old := get_node_or_null(SHINE_NAME) as Node2D
 	if old != null:
+		from = float((old.material as ShaderMaterial).get_shader_parameter("life"))
 		remove_child(old)
 		old.queue_free()
 	var light := Node2D.new()
@@ -221,9 +256,11 @@ func shine(orb: String) -> void:
 	light.show_behind_parent = true
 	var glow := ShaderMaterial.new()
 	glow.shader = ORB_SHINE
-	glow.set_shader_parameter("colour", (SuperOrbTable.ORBS if super_orb else OrbTable.ORBS)[orb].glow)
+	glow.set_shader_parameter("colour", colour)
 	glow.set_shader_parameter("power", power)
 	glow.set_shader_parameter("reach", SHINE_REACH)
+	# Set before the tween's first step: the next light may come in the same frame and reads it.
+	glow.set_shader_parameter("life", from)
 	light.material = glow
 	light.draw.connect(func() -> void:
 		light.draw_rect(Rect2(-Vector2.ONE * SHINE_REACH, size + Vector2.ONE * SHINE_REACH * 2.0), Color.WHITE))
@@ -234,7 +271,7 @@ func shine(orb: String) -> void:
 		glow.set_shader_parameter("card", size)
 		light.queue_redraw()
 	var fade := light.create_tween()
-	fade.tween_method(lit, 0.0, 1.0, SHINE_RISE).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	fade.tween_method(lit, from, 1.0, SHINE_RISE).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	fade.tween_method(lit, 1.0, 0.0, lerpf(SHINE_TIME.x, SHINE_TIME.y, power)) \
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	fade.tween_callback(light.queue_free)
@@ -249,7 +286,8 @@ func slot_at(at: Vector2) -> ItemSlot:
 ## `slot_at` for whoever has no card to ask: the bag, putting a held orb down off any square.
 static func square_at(tree: SceneTree, at: Vector2) -> ItemSlot:
 	for slot: ItemSlot in tree.get_nodes_in_group(ItemSlot.GROUP):
-		if slot.item == null or not slot.is_visible_in_tree() \
+		# A square with no piece still has a card where it carries its own words (the skill tree's root).
+		if (slot.item == null and not slot.hint.is_valid()) or not slot.is_visible_in_tree() \
 				or not slot.get_global_rect().has_point(at):
 			continue
 		var clipped := false

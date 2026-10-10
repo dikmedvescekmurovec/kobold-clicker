@@ -332,8 +332,9 @@ const TIER_POWER := 0.5
 ## the middle of `added_strength`'s level-1 band, grown by `scale` as the line is. Both are dials.
 const NEEDS_FROM := 5
 const NEEDS_LINE := 5.0
-## The player's first piece of gear, whatever the roll said it was: `Encounter.first_sword` swaps it
-## in at level 1, keeping the rarity, so it is always 1 Damage and the modifiers that rarity carries.
+## The player's first piece of gear, whatever the roll said it was: while it is owed
+## (`Encounter.PROMISED`'s `SWORD`) the fight swaps it in, common and level 1, so it is always 1 Damage
+## and nothing else.
 const FIRST_DROP := "Broken Sword"
 ## What a transcension under the Thick Fog puts in the new world's bag (`Inventory.transcended`).
 const BROKEN_TORCH := "Broken Torch"

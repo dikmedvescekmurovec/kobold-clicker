@@ -181,6 +181,18 @@ func finish_walk() -> void:
 		_finish_step()
 
 
+## Whether there is a walk to cut short: more of it is left than the step being walked.
+func can_stop() -> bool:
+	return _path.size() > 1
+
+
+## Cuts the walk short: the step being walked is its last, so `arrived` fires on that tile.
+## (Not `stop`, which is the sprite's own and stops the animation.)
+func stop_walk() -> void:
+	if can_stop():
+		_path.resize(1)
+
+
 func _start_step() -> void:
 	_from = _map.ground_layer.map_to_local(cell)
 	_to = _map.ground_layer.map_to_local(_path[0])

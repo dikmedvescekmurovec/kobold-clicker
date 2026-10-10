@@ -9,8 +9,10 @@ extends RefCounted
 ## The points to spend are not stored. A level is worth one, so the free points are the level less what
 ## is spent -- which means a save can never disagree with itself about how many there are.
 
-## The placed stones, path -> Item. The root is no stone and is not here.
-var stones := SkillTree.starter()
+## The placed stones, path -> Item. The root is no stone and is not here. A new hero has none: the root
+## alone, its one slot empty (the user's, 2026-10-10; a dexterity stone stood in it until then, and a save
+## that holds one keeps it).
+var stones := {}
 ## Only stones with points in them, the way `Inventory.orbs` holds only what is carried, and the root's
 ## under "" once it holds any.
 var ranks := {}
@@ -154,7 +156,7 @@ func tree_dict() -> Dictionary:
 
 
 ## Read back for a player at `level`. A save with no tree (from before there was one, or a new game)
-## starts from `SkillTree.starter`. Stones are taken shallowest first and only where they may stand, so a
+## starts with the root alone. Stones are taken shallowest first and only where they may stand, so a
 ## stone whose parent is gone goes with it. A rank past a stone's most is cut to it; then, if what is
 ## left is more than the level has earned, or holds a point nothing leads to, every point is handed
 ## back: after a change there is no honest way to guess which the player would have kept.
@@ -162,7 +164,6 @@ static func from_dict(tree: Variant, saved_ranks: Variant, level: int) -> Skills
 	var skills := Skills.new()
 	if typeof(tree) != TYPE_DICTIONARY:
 		return skills
-	skills.stones = {}
 	var paths: Array = (tree as Dictionary).keys().map(func(key: Variant) -> String: return str(key))
 	paths.sort_custom(func(a: String, b: String) -> bool:
 		var deep := SkillTree.depth_of(a) - SkillTree.depth_of(b)

@@ -63,6 +63,8 @@ func _stage_main(map_seed: int) -> void:
 			_main.inventory.tips.append(tip[0])
 	_main._hero_pointer.process_mode = Node.PROCESS_MODE_DISABLED
 	_main._hero_pointer.hide()
+	_main._stop_button.queue_free()
+	_main._stop_button = null
 	_main._chest_pointer.process_mode = Node.PROCESS_MODE_DISABLED
 	_main._chest_pointer.hide()
 	_main.map.highlight.hide()

@@ -35,8 +35,10 @@ func _init(inventory: Inventory, save_path: String, is_farming := false) -> void
 
 func add_loot(item: Item) -> void:
 	drops.append(item)
-	# Anything at all dropping spends the Broken Sword and the elite's promise of it.
+	# Anything at all dropping spends the Broken Sword's promise, and a skill node the promised node's.
 	_inventory.first_sword_taken = true
+	if item.is_stone():
+		_note(Inventory.FIRST_NODE)
 	# The collection log hears of a unique where the bag does.
 	_inventory.note_unique(item.unique)
 	_inventory.add(item)
@@ -51,6 +53,8 @@ func add_gold(amount: float) -> void:
 func add_orb(orb: String) -> void:
 	if orb == OrbTable.FIRST_ORB:
 		_inventory.first_orb_taken = true
+	elif orb == OrbTable.SECOND_ORB:
+		_note(Inventory.FIRST_AUGMENT)
 	_inventory.add_orb(orb)
 	_write()
 
@@ -99,6 +103,12 @@ func discard(item: Item) -> bool:
 func bank_kills(kills: int) -> void:
 	_inventory.kills += kills
 	_inventory.save(_path)
+
+
+## A promised find that is kept in `Inventory.tips` has landed.
+func _note(id: String) -> void:
+	if id not in _inventory.tips:
+		_inventory.tips.append(id)
 
 
 func _write() -> void:

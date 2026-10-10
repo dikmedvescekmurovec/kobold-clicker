@@ -55,6 +55,10 @@ const PODIUM_ICON := "res://Assets/UI/ui_icon_podium.png"
 const CROWN_ICON := "res://Assets/UI/ui_icon_crown.png"
 ## The red pip over a corner button's top-right corner while its page has something new (`_mark_new`).
 const NEW_PIP := "res://Assets/UI/ui_pip_new.png"
+## What the chest's pip is for, and nothing else in the bag is: the first of each of these to reach it,
+## by the id `inventory.tips` has it under. The next time the bag is up each is `SEEN` + its id there.
+const BAG_FIRSTS: Array[String] = ["first_item", "first_orb", "first_stone", "first_unique", Inventory.FIRST_RUNE]
+const SEEN := "seen_"
 ## The corner's keys -> the button each presses (`_unhandled_input`), whose tip card shows the key's
 ## picture (`TipCard.KEY`). Letters only, and none the item card answers to (Shift, Ctrl, Alt).
 const HOTKEYS := {
@@ -174,6 +178,8 @@ var _town_cell := HexMap.NO_CELL
 ## run (Farm) rather than the tile's own (Chart).
 var _fight_target := HexMap.NO_CELL
 var _fight_farms := false
+## The settlement the player is walking to to go inside (Enter town pressed from afar), NO_CELL when they aren't.
+var _town_target := HexMap.NO_CELL
 ## The charted tile the player stepped onto the fought-for one from: a lost fight runs them back there, and a save made
 ## while they stand on the uncharted tile puts them there.
 var _retreat_cell := HexMap.NO_CELL
@@ -274,6 +280,9 @@ const TIPS := [
 	["first_orb", HERO, [
 		"It's warm, and it's glowing. My gear would look good glowing.",
 	], "player"],
+	["first_stone", HERO, [
+		"Can't wear it. Can't eat it. I checked both. Maybe I can learn from it.",
+	], "player"],
 	["level_up", HERO, [
 		"I feel stronger. Taller, even.",
 		"well ...",
@@ -357,6 +366,8 @@ var _ambient: Ambient
 var _chest_pointer: MapPointer
 ## The badge pointing at the hero once they are off screen; a press brings the camera back (`_find_hero`).
 var _hero_pointer: MapPointer
+## Floating at the map's foot while a walk can be cut short (`_on_stop_pressed`).
+var _stop_button: Button
 ## The camera's glide under way (`_glide_camera`), if any.
 var _camera_glide: Tween
 ## The red light at the map's edge the way this world's Gollux cave lies, until it is seen.
@@ -669,6 +680,12 @@ func _process(delta: float) -> void:
 		var away := view.walking or _left_page_up() or town_page.visible
 		_hero_pointer.target = HexMap.NO_CELL if away else view.player_cell
 		_hero_pointer.room = _map_room()
+	if _stop_button != null:
+		# In the badge's place, which is never up during a walk, and like it not under a page.
+		_stop_button.visible = map.player.can_stop() and not _left_page_up()
+		var room := _map_room()
+		_stop_button.position = (Vector2(room.get_center().x, room.end.y - MapPointer.MARGIN)
+				- _stop_button.size * ui_scale / 2.0).round()
 	if _cave_sense != null:
 		_cave_sense.room = _map_room()
 	if not _held_banner.is_empty() and not _popup_up():
@@ -714,6 +731,13 @@ func _build_ui() -> void:
 	_hero_pointer = MapPointer.new(map, view, ui_scale, MapPointer.cut(
 			DialogueBox.PORTRAITS % DialogueBox.PLAYER, HERO_FACE), "Find the hero", _find_hero)
 	layer.add_child(_hero_pointer)
+	# Floating at the map's foot, where the hero's badge stands (`_process`), and under every panel as it is.
+	_stop_button = UITheme.button("Stop", "LightButton", "Stop on the next tile")
+	_stop_button.theme = UITheme.theme()
+	_stop_button.scale = Vector2(ui_scale, ui_scale)
+	_stop_button.pressed.connect(_on_stop_pressed)
+	_stop_button.hide()
+	layer.add_child(_stop_button)
 
 	_panel = UITheme.titled_panel("Tile", "Close and deselect the tile", _on_close_pressed)
 	_panel.scale = Vector2(ui_scale, ui_scale)
@@ -778,7 +802,8 @@ func _build_ui() -> void:
 	Cursors.wear(_farm_button, Cursors.SWORD)
 	buttons.add_child(_farm_button)
 	# And a fourth, on the tiles people live on: go inside and trade. It takes standing on the tile
-	# rather than looking at it, because visiting a town is being there.
+	# rather than looking at it, because visiting a town is being there -- so pressed from afar it
+	# walks the player there first (`_town_target`), as Chart and Farm do.
 	# Green: of the panel's presses, the one a settlement is for (`UITheme.GO_BUTTON`, as in town).
 	_town_button = UITheme.button("Enter town", UITheme.GO_BUTTON, "Go inside and see what is traded here")
 	_town_button.pressed.connect(_on_town_pressed)
@@ -1029,6 +1054,8 @@ func _build_pages(layer: CanvasLayer) -> void:
 	for page: BagPage in [bag_page, heirloom_page]:
 		page.crafted.connect(_item_card.shine)
 		page.held_changed.connect(func(orb: String) -> void: _item_card.held = orb)
+	# A skill point lights the card as an orb does, in its node's colour.
+	skills_page.learned.connect(_item_card.flash)
 	# A rune in the bag's hand goes on a tile: the map is aimed at while one is held (`_rune_on`).
 	bag_page.held_changed.connect(func(orb: String) -> void:
 		if _aiming.is_empty():
@@ -1960,18 +1987,18 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# What is worn and learned first, with the rank of every unique: `arm` reads some of it.
 	fight.wear(inventory.effects(), Achievements.ranks(inventory))
 	fight.arm(inventory.stats())
-	# Until the Broken Sword has dropped, the first piece of gear is it, and an elite is promised it.
-	fight.first_sword = not inventory.first_sword_taken
-	fight.guarantee_elite = fight.first_sword
-	# Skill nodes from then on: the first find of any kind spends the sword's promise.
+	# What a new player's first kills are scripted to leave (`Encounter.PROMISED`): the Broken Sword, the
+	# two orbs to craft it with, the first unique and the first skill node, each inside its own kills.
+	fight.promised = inventory.promised()
+	fight.kills_before = inventory.kills
+	# Skill nodes once the sword has dropped -- the first find of any kind spends its promise -- and,
+	# while the first node is owed, none but it (the fight's own rule).
 	fight.stone_drops = inventory.first_sword_taken
 	fight.orbs_after = maxi(0, OrbTable.FIRST_ORB_KILLS - inventory.kills)
 	fight.walls_down = inventory.walls_ever()
-	# The second fight is promised a Transmutation and the first is not: a player with no kills yet
-	# is in their first.
-	fight.first_orb = not inventory.first_orb_taken and inventory.kills > 0
 	fight.uniques_after = maxi(0, UniqueTable.FIRST_UNIQUE_KILLS - inventory.kills)
-	fight.unlocked = Achievements.unlocked(inventory)
+	# Less whatever a fortuneteller has banished from this world's drops.
+	fight.unlocked = FortuneTeller.dropping(Achievements.unlocked(inventory), inventory.fortunes)
 	fight.strikes = true
 	fight.even_loot = Settings.even_loot_on()
 	ledger = FightLedger.new(inventory, inventory_path, farming)
@@ -2275,6 +2302,17 @@ func _on_move_pressed() -> void:
 	_update_buttons()
 
 
+## The floating Stop: the walk ends on the tile being stepped onto. Whatever waited at its end -- a fight,
+## a town, the rest of a way -- is dropped first, or that arrival would press its button again.
+func _on_stop_pressed() -> void:
+	if not map.player.can_stop():
+		return
+	_fight_target = HexMap.NO_CELL
+	_town_target = HexMap.NO_CELL
+	_dark_way.clear()
+	map.player.stop_walk()
+
+
 ## Where the map's own state has changed: charting a tile walks the player onto it (and a paid scour
 ## is the one other change, `_on_cell_aimed`). So this is where it is written down, and a crash costs at most the step in
 ## progress rather than the session.
@@ -2293,6 +2331,11 @@ func _on_player_arrived(cell: Vector2i) -> void:
 			_on_farm_pressed()
 		else:
 			_on_chart_pressed()
+	if _town_target != HexMap.NO_CELL:
+		var target := _town_target
+		_town_target = HexMap.NO_CELL
+		map.select_cell(target)
+		_on_town_pressed()
 	# Where standing on a settlement becomes true: walking to one, and the walk a won settlement fight
 	# sends the player on when it charts the tile. Last, so a walk that ends in a fight has opened it
 	# first and a pop-up holds that fight still rather than letting its clock run under it.
@@ -2314,7 +2357,8 @@ func _update_buttons() -> void:
 	_farm_button.disabled = heavy
 	_farm_button.tooltip_text = too_heavy if heavy else FARM_TIP
 	_was_encumbered = heavy
-	_town_button.visible = view.can_visit(cell)
+	# Stood on, or a settlement Move here could reach: the press walks there first.
+	_town_button.visible = view.can_visit(cell) or (_move_button.visible and view.town_tier(cell) != -1)
 	_cave_button.visible = view.can_enter_cave(cell)
 	_cave_button.tooltip_text = "Go down to depth %d. Kill Gollux to go deeper: each depth won is a skull for your curses" % (inventory.dungeon_depth + 1)
 	_place_panel()
@@ -2639,6 +2683,8 @@ func _tip_due(id: String) -> bool:
 			return inventory.total() > 0
 		"first_orb":
 			return inventory.total_orbs() > 0
+		"first_stone":
+			return inventory.items.any(func(item: Item) -> bool: return item.is_stone())
 		"level_up":
 			return inventory.level > 1
 		"first_farm":
@@ -2888,10 +2934,11 @@ func _pulse(button: Button, id: String, on: bool) -> void:
 	_flashes.erase(id)
 
 
-## The red pip on each corner button whose page has something new: a rank to buy, a bounty to claim,
-## a find or an achievement not looked at yet. Never the bag's (the user's, 2026-10-07).
+## The red pip on each corner button whose page has something new: a first of its kind in the bag, a
+## rank to buy, a bounty to claim, a find or an achievement not looked at yet.
 func _mark_new() -> void:
 	var has_new := {
+		_bag_button: _bag_first(),
 		_skills_button: _skill_point_free(),
 		_bounty_button: BountyBoard.ready(BountyBoard.active(inventory.towns)),
 		_collection_button: not inventory.uniques_new.is_empty(),
@@ -2901,10 +2948,23 @@ func _mark_new() -> void:
 		(button.get_node(^"New") as CanvasItem).visible = has_new[button]
 
 
-## Whether a rank can be bought anywhere in the skill tree.
+## Whether a first of its kind (`BAG_FIRSTS`) has reached the bag since it was last up: the only thing
+## its pip is for (the user's, 2026-10-10; the bag's own arrows say the rest). The bag up is each of
+## them looked at, which the next save keeps.
+func _bag_first() -> bool:
+	var unseen := BAG_FIRSTS.filter(func(id: String) -> bool:
+		return id in inventory.tips and SEEN + id not in inventory.tips)
+	if bag_page.visible:
+		for id: String in unseen:
+			inventory.tips.append(SEEN + id)
+		return false
+	return not unseen.is_empty()
+
+
+## Whether a rank can be bought anywhere in the skill tree: the root takes every point there is and is
+## never refused, so while one is left to spend -- a new hero's tree being the root alone.
 func _skill_point_free() -> bool:
-	return inventory.skills.stones.keys().any(func(path: String) -> bool:
-		return inventory.why_not_skill(path).is_empty())
+	return inventory.why_not_skill("").is_empty()
 
 
 ## Something new on the collection or achievements page hovered, or the page closed over it: kept.
@@ -3113,6 +3173,11 @@ func _on_settings_pressed() -> void:
 ## counter buying it. The two are one thing on screen and close together.
 func _on_town_pressed() -> void:
 	var cell := map.selected_cell
+	# Not on it yet: walk there, and the town opens on arrival (`_on_player_arrived`).
+	if view.town_tier(cell) != -1 and view.can_move_to(cell):
+		_town_target = cell
+		_on_move_pressed()
+		return
 	if not view.can_visit(cell):
 		return
 	var spot := view.origin + cell

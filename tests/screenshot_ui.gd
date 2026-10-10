@@ -783,6 +783,39 @@ func _shoot_town() -> void:
 	print("Saved ", ProjectSettings.globalize_path("user://ui_town_transcend.png"))
 	main.town_page._close_told()
 
+	# Enough uniques unlocked: the banishing joins her list, and pressed it is a screen in her list's
+	# place -- one unique banished, another picked with its card past the page. What was earned and
+	# banished is put back after, so the shots that follow are of the player they always were.
+	var earned: Dictionary = main.inventory.achievements.duplicate()
+	for id: String in UniqueTable.ids():
+		if Achievements.unlocked(main.inventory).size() >= FortuneTeller.BANISH_FROM:
+			break
+		if not id in Achievements.STARTERS:
+			main.inventory.achievements[id] = 1
+	main.town_page.redraw()
+	for i in 2:
+		await process_frame
+	# The wall's achievement, which waited behind her question.
+	main._close_banner()
+	await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_town_banish_spell.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_town_banish_spell.png"))
+	main.town_page._on_reading_pressed(FortuneTeller.BANISH)
+	await process_frame
+	var hunted: Array = main.town_page._rows.find_children("", "ItemSlot", true, false)
+	FortuneTeller.banish(main.inventory.fortunes, (hunted[1] as ItemSlot).item.unique)
+	main.town_page._on_banish_picked((hunted[5] as ItemSlot).item.unique)
+	for i in 3:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("user://ui_town_banish.png")
+	print("Saved ", ProjectSettings.globalize_path("user://ui_town_banish.png"))
+	main.inventory.fortunes.erase(FortuneTeller.BANISHED)
+	main.inventory.fortunes.erase(FortuneTeller.BANISH_PAID)
+	main.inventory.achievements = earned
+	main.town_page._on_tab_pressed(TownServices.FORTUNE)
+
 	# Two heirlooms out of a world that has ended, one of them worn on the heirlooms' own doll, and the
 	# other held up to the smith from the heirlooms' page, which the crown swaps in at the counter: the
 	# three panels and the one corner button a town leaves standing have to share the window.

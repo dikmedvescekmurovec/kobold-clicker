@@ -210,8 +210,38 @@ would take the place of a stone" was tried and was invisible on the cream; the s
 **Words at the page's size.** `fit` steps the tree down a whole window pixel at a time, which at `ui_scale` 2 is
 from 2 straight to 1: a tree a few rows too tall halves, and the counts on its corners (children of the scaled canvas)
 came out five pixels tall. They now stand in a layer over the canvas at the page's own size. A count is written only on
-a stone that can hold more than one point (a 1/1 is said by the fade) and the root's once it holds any; its tooltip says
+a stone that can hold more than one point (a 1/1 is said by the fade) and the root's once it holds any; its card says
 how many it holds.
+
+**A light where a point can go, the root's breathing for the first, and the card lit as it goes in** (the user's,
+2026-10-10, over three rounds). Whatever a point can go into on the skills page is lit from behind -- grey behind the
+root, the base's colour behind a stone (red, green, blue) -- and nothing else marks it: the gold ring that did is gone
+from this page (the user's; the black screen keeps it for where a held stone may go, which I was not asked about). The
+tree's tutorial is on top of that: a new hero's tree is the root alone (the dexterity stone that stood under it is
+gone, so the first point has one place to go), and the root's light breathes until a point has ever been spent
+(`Inventory.FIRST_POINT` in the tips, so neither a Reset nor a new world brings it back); after that it stands still
+like any other. And a point going in flashes the node's card in the node's colour, as an orb flashes a piece's. How it
+got here: I first lit every slot with the card's own light (`orb_shine`) in white and the three colours, under the
+ring; the user asked for the root to pulse for the first point only, which I took to mean no other light at all, and
+took the stones' away; they then asked for the ring off, the lights back on every node, and grey for the root, white
+not being seen on the cream. The card's light could not be made to read at a node's size on cream -- its rim is
+whitened and its halo is two pixels -- so the nodes have a shader of their own (`node_glow`): the colour solid against
+the edge and gone a few pixels out. Strong for the tutorial alone (nine tenths solid, eight pixels): once the first
+point is spent the user wanted "a bit less, just a small indicator that separates usable nodes from unusable", so every
+light from then on, the root's included, is seven tenths solid and gone in five (my numbers). Three things followed
+from "the card flashes". The root's words were a
+tooltip, which waits half a second, stands beside the whole tree rather than the root and goes at a press, so nothing
+was ever up to light: the root is now a square with a card and no piece (`ItemSlot.bare` with only a `hint`). A press
+put every card away for good, so a node's card now stays through the press that spends its point (`ItemCard.STAYS`)
+-- only on the square it was already on, so dragging the tree still shows nothing. And a press held down spends a point
+every 0.03 s, each one starting a new light from nothing, which strobed: a light now swells on from where the last had
+got to. My calls: the three colours are `BRICK_LT`, `LEAF_LT` and `ICE`, the fills, not the chips' dark ones; the
+root's grey is ENDESGA 64's middle one (858585: b4b4b4 was as faint as the white, 5d5d5d read as a shadow), on its node
+and on its card alike; a point's flash on the card is under the least that has rays (`ItemCard.POINT_POWER`); the
+root breathes down to 30% about every second and a half, by the shader's clock (`pulse`), not a tween; the lights show
+at every animation level, since nothing else says where a point goes, and only the breathing stops; a stone holding no
+point is 70% solid, so its light shows through it; and a save from before the mark that holds a spent point is taken
+as taught.
 
 **The tier on the black screen.** A placed stone's numeral is gone in the tree (the user's small discs), and where a
 stone may go is depth against tier. While a stone is held, each empty slot too deep for it wears the tier it asks, in

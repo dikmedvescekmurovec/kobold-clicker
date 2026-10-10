@@ -116,6 +116,8 @@ const FORTUNE_ICONS := {
 	FortuneTeller.SCOUR: "res://Assets/Fortune/scour.png",
 	FortuneTeller.HOMECOMING: "res://Assets/Fortune/homecoming.png",
 	FortuneTeller.TRANSCEND: "res://Assets/Fortune/transcend.png",
+	# A stand-in: the retired Relic reading's badge, which is a unique's mark on a bounty card too.
+	FortuneTeller.BANISH: "res://Assets/Fortune/relic.png",
 }
 ## A spell's mark, at the 16 px it is drawn at doubled -- a whole-number step, as a skill's is.
 const SPELL_SIDE := 32
@@ -136,6 +138,8 @@ const FORTUNE_TIPS := {
 	FortuneTeller.SCOUR: "Brings a tile and the two rings of land around it, nineteen tiles, out of the fog",
 	FortuneTeller.HOMECOMING: "Moves you to a settlement or the Gollux cave you have already charted",
 	FortuneTeller.TRANSCEND: "Ends this world and starts a new one, worth far more",
+	# Nothing of the doubling (the user's, 2026-10-10): the price under the square says it has climbed.
+	FortuneTeller.BANISH: "Keeps a unique you choose from dropping in this world",
 }
 ## What stands over each half of her list. A reading is asked again and again at a climbing price; a
 ## great spell is one a settlement. Two words each: the rule itself is in every square's tooltip, and
@@ -153,6 +157,8 @@ const TOLD_WIDTH := 180.0
 ## tick under it. The answer scrolls in what the window has left after these.
 const TOLD_CHROME := 100.0
 const TOLD_PANEL := "Panel"
+## The arrow on the banishing's screen that goes back to her spells.
+const BANISH_BACK := "Back"
 
 ## What she says before the way out is taken, in the list's place, over the button that takes it.
 const TRANSCEND_LINES := [
@@ -226,6 +232,11 @@ var _scroll_for := []
 ## The last reading cast whose answer is not shown any more (ticked "Don't show this again"): the page
 ## says it in one line under her grids instead, until another counter is opened.
 var _cast := ""
+## The banishing's screen in her list's place (`_fill_banish`), the unique picked on it ("" for none),
+## and where the press on its grid went down: a press that travels is a finger scrolling it.
+var _banishing := false
+var _banish_pick := ""
+var _banish_press := Vector2.INF
 ## The town's world spot, which a spell aimed at the map is cast from, and the nearest unseen chest as the town was
 ## walked into -- the player does not move while the page is up, and finding it scans the whole map.
 var _spot := Vector2i.ZERO
@@ -284,6 +295,7 @@ func open(town_name: String, services: PackedStringArray, cell: Vector2i, spot: 
 	_spot = spot
 	_tier = tier
 	_cast = ""
+	_banishing = false
 	_close_told()
 	_near_chest = view.nearest_chest(true) if view != null else HexMap.NO_CELL
 	_title.text = town_name if not town_name.is_empty() else "Town"
@@ -498,8 +510,8 @@ func _scrolled(gap: int) -> VBoxContainer:
 	_rows.move_child(_scroll, _rows.get_child_count() - 1)
 	_scroll.show()
 	_scroll_lines.add_theme_constant_override("separation", gap)
-	if [_open_tab, _offer] != _scroll_for:
-		_scroll_for = [_open_tab, _offer]
+	if [_open_tab, _offer, _banishing] != _scroll_for:
+		_scroll_for = [_open_tab, _offer, _banishing]
 		_scroll.scroll_vertical = 0
 	return _scroll_lines
 
@@ -763,14 +775,14 @@ func _on_claim_pressed(bounty: Dictionary) -> void:
 		inventory.add_xp(xp)
 		xp_claimed.emit(xp)
 	# The promised piece, rolled now: the log hears of a unique as it would off a body.
-	var piece := BountyBoard.reward_item(bounty, _cell, _stock_rng, Achievements.unlocked(inventory))
+	var piece := BountyBoard.reward_item(bounty, _cell, _stock_rng, _dropping())
 	if piece != null:
 		item_claimed.emit(piece)
 		inventory.note_unique(piece.unique)
 		inventory.add(piece)
 	# The last one handed in clears the board, which offers its reward and raises the town's tier, and
 	# brings new work there and then -- in that order, so the new work is posted at the new tier.
-	BountyBoard.clear(_drawer, _cell, _stock_rng, Achievements.unlocked(inventory), inventory.walls_ever())
+	BountyBoard.clear(_drawer, _cell, _stock_rng, _dropping(), inventory.walls_ever())
 	BountyBoard.restock(_drawer, _board_land(), _cell, _stock_rng, inventory.walls_ever())
 	print("Claimed the bounty on %s for %s gold, %d experience and %s" % [str(bounty.get(BountyBoard.ENEMY, "")),
 			BigNumber.format(reward), xp, orbs])
@@ -1013,6 +1025,9 @@ func _smith_button(text: String, price: float, refused: String, tooltip: String,
 ## the last spell cast whose answer the player said not to show again. Her answers are popups (`_tell`),
 ## and so is the way out's question (`_ask_way_out`).
 func _fill_fortune() -> void:
+	if _banishing:
+		_fill_banish()
+		return
 	var body := _scrolled(ROW_GAP)
 	# Her spells on the shelf's own grid, each with its price under it: what she sells is bought the way
 	# everything else in a town is, and words in a column read as a menu rather than a shop. Two grids,
@@ -1025,9 +1040,144 @@ func _fill_fortune() -> void:
 	var great: Array = FortuneTeller.GREAT.duplicate()
 	if view != null and view.walls_fallen() > 0:
 		great.append(FortuneTeller.TRANSCEND)
+	# And the banishing, once enough uniques are unlocked for one to be in another's way -- or at
+	# once under the dev's switch.
+	if _unlocked().size() >= FortuneTeller.BANISH_FROM or Settings.banish_unlocked():
+		great.append(FortuneTeller.BANISH)
 	body.add_child(_spell_grid(FORTUNE_HEADINGS["great"], great))
 	if not _cast.is_empty():
 		_rows.add_child(_sign("You cast %s." % FortuneTeller.LABELS[_cast], Palette.TEXT_SOFT))
+
+
+## The banishing's screen, in her list's place as a shelf piece's is in the shelf's (`_fill_offer`; the
+## user's, 2026-10-10): every unlocked unique by name where a shelf's squares stand, a banished one
+## greyed where it is, and pinned at the foot the arrow back to her spells beside **Banish** with what
+## the next one costs -- or **Restore**, for nothing, while a banished one is picked. What a unique is
+## is its own card's to say: the picked square keeps it up past the page (`ItemCard.PINNED`, `BESIDE`).
+## The screen stays through as many as the player pays for.
+func _fill_banish() -> void:
+	var ids := _unlocked()
+	ids.sort_custom(func(a: String, b: String) -> bool:
+		return str(UniqueTable.UNIQUES[a]["name"]).naturalnocasecmp_to(str(UniqueTable.UNIQUES[b]["name"])) < 0)
+	var gone := FortuneTeller.banished(inventory.fortunes)
+	var grid := GridContainer.new()
+	grid.columns = STOCK_COLS
+	# The shelf's own pitch with no price cell round a square, centred as its squares are in theirs.
+	grid.add_theme_constant_override("h_separation", STOCK_CELL - ItemSlot.SIDE + STOCK_GAP)
+	grid.add_theme_constant_override("v_separation", STOCK_GAP)
+	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	# Pass, not stop: the scroll under it has to see a finger's drag (`_on_banish_input`).
+	grid.mouse_filter = Control.MOUSE_FILTER_PASS
+	for id: String in ids:
+		var piece := CollectionPage.specimen(id)
+		var slot := ItemSlot.make(piece, id == _banish_pick)
+		slot.still()
+		slot.hint = CollectionPage.write_hint.bind(piece, true)
+		# Past the whole page, never over the squares still to be looked at.
+		slot.set_meta(ItemCard.BESIDE, _panel)
+		if id == _banish_pick:
+			slot.set_meta(ItemCard.PINNED, true)
+		if gone.has(id):
+			slot.modulate = OrbSlot.DIM
+		grid.add_child(slot)
+	grid.gui_input.connect(_on_banish_input.bind(grid))
+	_scrolled(ROW_GAP).add_child(grid)
+
+	var row := HBoxContainer.new()
+	# No tooltip (the user's, 2026-10-10): the arrow says it. Named, which is how the tests find it.
+	var back := UITheme.back_button("")
+	back.name = BANISH_BACK
+	back.pressed.connect(func() -> void:
+		_banishing = false
+		_fill()
+		layout())
+	row.add_child(back)
+	# The small face: at Pixellari's 16 px the word, a six-figure price and the coin beside the arrow
+	# ran the page a dozen panel pixels past `BODY_WIDTH`, as the smith's two did side by side.
+	var verb: Button
+	if gone.has(_banish_pick):
+		verb = UITheme.button("Restore", "SmallButton", "")
+		verb.pressed.connect(_on_restore_pressed)
+	else:
+		var price := _fortune_price(FortuneTeller.BANISH)
+		# No tooltip but her floor's (the user's, 2026-10-10): the word and the price are on the button,
+		# and a dead one with nothing picked or a short purse says nothing.
+		verb = UITheme.priced_button("Banish", price, "SmallButton",
+				FortuneTeller.why_not_banish(_banish_pick, _unlocked(), inventory.fortunes))
+		verb.disabled = not _banish_why_not(price).is_empty()
+		verb.pressed.connect(_on_banish_pressed)
+	verb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(verb)
+	_rows.add_child(row)
+
+
+## The uniques this build has that the player has unlocked: what she counts before she offers the
+## banishing, and the squares its screen shows.
+func _unlocked() -> Array:
+	return UniqueTable.pool_for(Achievements.unlocked(inventory))
+
+
+## Why Banish is dead, or "" when it is not: nothing picked, her own refusal, or a short purse. Only
+## her floor is ever said, in the button's tooltip; the rest only grey it.
+func _banish_why_not(price: float) -> String:
+	if _banish_pick.is_empty():
+		return "Pick a unique"
+	var why := FortuneTeller.why_not_banish(_banish_pick, _unlocked(), inventory.fortunes)
+	return why if not why.is_empty() else _why_not(price, false)
+
+
+## A press on the banishing's grid, whose squares take no mouse. It counts as it lets go, and not one
+## that travelled: the grid is longer than the page, and under a finger a drag is how it is scrolled.
+func _on_banish_input(event: InputEvent, grid: Control) -> void:
+	Cursors.over_squares(grid, event)
+	var press := event as InputEventMouseButton
+	if press == null or press.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if press.pressed:
+		_banish_press = press.global_position
+		return
+	var travelled := press.global_position.distance_to(_banish_press) / _ui_scale
+	_banish_press = Vector2.INF
+	if travelled >= (Cursors.TOUCH_SLOP if Cursors.touched else BagPage.DRAG_THRESHOLD):
+		return
+	var slot := ItemCard.square_at(get_tree(), press.global_position)
+	if slot != null and grid.is_ancestor_of(slot):
+		grid.accept_event()  # Before the redraw frees it, which would let the release through to the map.
+		_on_banish_picked(slot.item.unique)
+
+
+## One unique picked on the banishing's screen, or put down again by a second press.
+func _on_banish_picked(id: String) -> void:
+	_banish_pick = "" if id == _banish_pick else id
+	_fill()
+	layout()
+
+
+## The picked unique out of this world's drops, paid for at the price the button showed.
+func _on_banish_pressed() -> void:
+	var price := _fortune_price(FortuneTeller.BANISH)
+	if not _banish_why_not(price).is_empty():
+		return
+	inventory.gold -= price
+	FortuneTeller.banish(inventory.fortunes, _banish_pick)
+	print("The fortuneteller banished %s for %s gold" % [_banish_pick, BigNumber.format(price)])
+	_after_banish()
+
+
+## The picked unique back in the drops, for nothing.
+func _on_restore_pressed() -> void:
+	FortuneTeller.restore(inventory.fortunes, _banish_pick)
+	_after_banish()
+
+
+## Written down and drawn again where it stands, nothing picked: the screen stays for the next one.
+func _after_banish() -> void:
+	_banish_pick = ""
+	inventory.save(_save_path)
+	_fill()
+	layout()
+	# Nothing is open, but the bag still has to hear: the purse it draws may have just moved.
+	offer_changed.emit(null)
 
 
 ## What she said, over the whole window as the bag's questions are (`BagPage._ask`): a titled panel
@@ -1262,9 +1412,15 @@ func _odds_row(row: Dictionary, striped: bool, width: float) -> PanelContainer:
 	return line
 
 
-## What a spell costs here, off the town's level.
+## What a spell costs here, off the town's level -- the banishing's doubled for each one paid for.
 func _fortune_price(reading: String) -> float:
-	return TownPrices.fortune_price(reading, _cell)
+	return TownPrices.fortune_price(reading, _cell,
+			FortuneTeller.banishes(inventory.fortunes) if reading == FortuneTeller.BANISH else 0)
+
+
+## The uniques a bounty may hand over: the unlocked ones less what she has banished.
+func _dropping() -> Array:
+	return FortuneTeller.dropping(Achievements.unlocked(inventory), inventory.fortunes)
 
 
 ## Whether this town has sold the roads already: once a town, as a great spell is.
@@ -1295,9 +1451,10 @@ func _fortune_why_not(reading: String) -> String:
 		FortuneTeller.HOMECOMING:
 			if view.homes().is_empty():
 				return "You have found nowhere else to stand"
-		FortuneTeller.TRANSCEND:
+		FortuneTeller.TRANSCEND, FortuneTeller.BANISH:
 			# Asking is free and is where the price is said; the Transcend in her question is what a
-			# short purse greys, and the price under the square is brick.
+			# short purse greys, and the price under the square is brick. The banishing's screen is
+			# also where one is brought back, for nothing.
 			return ""
 	return _why_not(_fortune_price(reading), false)
 
@@ -1314,6 +1471,13 @@ func _on_reading_pressed(reading: String) -> void:
 	# Asked for, not done: she says what it costs the player first, and the button under that is the deed.
 	if reading == FortuneTeller.TRANSCEND:
 		_ask_way_out()
+		return
+	# Its own screen in her list's place: which unique goes is picked there, and paid for there.
+	if reading == FortuneTeller.BANISH:
+		_banishing = true
+		_banish_pick = ""
+		_fill()
+		layout()
 		return
 	inventory.gold -= price
 	match reading:
@@ -1519,6 +1683,7 @@ func _on_tab_pressed(service: String) -> void:
 	_open_tab = service
 	_smith_note = ""
 	_cast = ""
+	_banishing = false
 	_close_told()
 	_close_offer(true)
 	tab_changed.emit(service)

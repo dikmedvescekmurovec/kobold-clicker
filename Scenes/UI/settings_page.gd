@@ -488,7 +488,7 @@ func _open_credits() -> void:
 			body.add_child(block)
 
 
-## Every dev tool, which a release build has none of: the five switches, the two cheats, the balancing
+## Every dev tool, which a release build has none of: the six switches, the two cheats, the balancing
 ## page and the item generator, which both come back here.
 func _open_dev() -> void:
 	var body := _screen(DEV_TITLE, open, "Back to the settings")
@@ -510,6 +510,9 @@ func _open_dev() -> void:
 	body.add_child(_dev_tick("Even loot", Settings.even_loot,
 			"A body drops loot one time in three, every rarity from common to unique as likely, from the next fight",
 			func(on: bool) -> void: Settings.even_loot = on))
+	body.add_child(_dev_tick("Unlock Banish", Settings.banish_now,
+			"The fortuneteller offers Banish however few uniques are unlocked, from the next time her tab is opened",
+			func(on: bool) -> void: Settings.banish_now = on))
 	body.add_child(_button("Gold x10", "LightButton", "Multiply your gold by ten", cash_pressed.emit))
 	body.add_child(_button("Skill points +10", "LightButton", "Ten levels, and the ten skill points they earn",
 			points_pressed.emit))

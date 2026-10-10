@@ -55,6 +55,9 @@ const REROLL_GROWTH := 2.0
 ## behind the first wall (`transcend_steps`), the same in every town and every world -- dear to whoever has
 ## only just brought that wall down, and a purse the second ring's monsters fill for anyone who stays
 ## to farm them. Two hundred fights' worth there; see `DESIGN.md` for the table it was set against.
+##
+## **Banishing a unique is priced on that same ground** (the user's, 2026-10-10), and is the one that
+## climbs: `FORTUNE_GROWTH` times the last for every one paid for in this world.
 const FORTUNE_BODIES := {
 	"roads": 300.0,
 	"treasure": 60.0,
@@ -62,7 +65,9 @@ const FORTUNE_BODIES := {
 	"scour": 1000.0,
 	"homecoming": 200.0,
 	"transcend": 2000.0,
+	"banish": 200.0,
 }
+const FORTUNE_GROWTH := 2.0
 
 ## What each rarity step multiplies a piece's price by, indexed by `ItemRarity.Rarity`'s own order:
 ## common, uncommon, rare, elite, unique. A list rather than a Dictionary keyed by the enum, because a
@@ -137,13 +142,15 @@ static func reroll_price(town_cell: Vector2i, rerolls: int) -> float:
 
 
 ## What the fortuneteller in the town on `town_cell` asks for `reading`. Pegged to the town, as an orb
-## is: knowledge has no level of its own. 0 for a reading this build does not have.
-static func fortune_price(reading: String, town_cell: Vector2i) -> float:
+## is: knowledge has no level of its own. 0 for a reading this build does not have. `cast` is how many
+## times it has been paid for already, which only the banishing counts.
+static func fortune_price(reading: String, town_cell: Vector2i, cast := 0) -> float:
 	if not FORTUNE_BODIES.has(reading):
 		return 0.0
-	# The way out is the same everywhere: bodies on the ground behind the first wall.
-	if reading == "transcend":
-		return maxf(1.0, roundf(Encounter.gold_at_steps(transcend_steps()) * float(FORTUNE_BODIES[reading])))
+	# The way out and the banishing are the same everywhere: bodies on the ground behind the first wall.
+	if reading == "transcend" or reading == "banish":
+		return maxf(1.0, roundf(Encounter.gold_at_steps(transcend_steps()) * float(FORTUNE_BODIES[reading])
+				* pow(FORTUNE_GROWTH, maxi(cast, 0))))
 	return maxf(1.0, roundf(gold_at_level(MapBuilder.level_of(town_cell)) * float(FORTUNE_BODIES[reading])))
 
 

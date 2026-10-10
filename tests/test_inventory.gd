@@ -44,6 +44,7 @@ func _run() -> void:
 	_check(_test_a_fight_drops() == true, "fight drop tests ran to the end")
 	_check(_test_drops_cascade() == true, "cascading drop tests ran to the end")
 	_check(_test_the_promised_elite() == true, "promised elite tests ran to the end")
+	_check(_test_promised_finds() == true, "promised find tests ran to the end")
 	_check(_test_counts() == true, "counting tests ran to the end")
 	_check(_test_level_rolls() == true, "level roll tests ran to the end")
 	_check(_test_item_levels() == true, "item level tests ran to the end")
@@ -842,7 +843,7 @@ func _test_defence_pools() -> bool:
 	# A base's ranks: on every stone of that base holding a point, none of another's, both dolls.
 	var player := Inventory.new()
 	player.level = 2
-	player.skills.stones["0"] = SkillTree._starter_stone("Strength Node", "added_damage")
+	player.skills.stones["0"] = _node("Strength Node", "added_damage")
 	player.rank_up_skill("0")
 	var damage := func() -> float:
 		var tree := player._tree()
@@ -989,7 +990,7 @@ func _test_rolls() -> bool:
 		var first := Encounter.for_tile(Vector2i(2, 2), "grass")
 		first.loot_rng.seed = attempt
 		first.always_drop = true
-		first.first_sword = true
+		first.promised = [Encounter.SWORD]
 		var found: Array[Item] = []
 		first.loot_dropped.connect(func(_index: int, item: Item) -> void: found.append(item))
 		_play(first)
@@ -1003,13 +1004,13 @@ func _test_rolls() -> bool:
 			for orb: String in OrbTable.ORBS:
 				some_orb_fits = some_orb_fits or OrbTable.can_apply(orb, found[0])
 			_check(some_orb_fits, "and an orb still works on it")
-		_check(not first.first_sword, "and the promise is spent")
+		_check(Encounter.SWORD not in first.promised, "and the promise is spent")
 	var kinds := {}
 	for attempt in 20:
 		var fight := Encounter.for_tile(Vector2i(2, 2), "grass")
 		fight.loot_rng.seed = attempt
 		fight.always_drop = true
-		fight.first_sword = true
+		fight.promised = [Encounter.SWORD]
 		fight.loot_dropped.connect(func(index: int, item: Item) -> void:
 			if index > 0:
 				kinds[LootTable.ITEMS[item.type]["kind"]] = true)
@@ -1132,6 +1133,120 @@ func _test_the_promised_elite() -> bool:
 				without.append(item))
 		_play(fight)
 	_check(without.size() < 100, "an unpromised elite does not always drop (%d of 100 did)" % without.size())
+	return true
+
+
+## A farm run owed `owed`, by a player `kills_before` kills in, that kills at a blow.
+func _owed_run(owed: Array, kills_before: int, seeded: int) -> Encounter:
+	var run := Encounter.farm(MapBuilder.CENTER + Vector2i(1, 0), "grass")
+	run.promised = owed
+	run.kills_before = kills_before
+	run.damage = 1.0e9
+	for rng: RandomNumberGenerator in [run.loot_rng, run.orb_rng, run.unique_rng, run.stone_rng]:
+		rng.seed = seeded
+	run.start()
+	return run
+
+
+func _kill_more(run: Encounter, bodies: int) -> void:
+	var until := run.kills() + bodies
+	while run.kills() < until:
+		run.hit()
+		run.advance(0.1)
+
+
+## What a new player's first kills are scripted to leave (`Encounter.PROMISED`): each once, on one of
+## its own kills -- any of them, the last for certain -- and only while it is owed (`Inventory.promised`).
+## The kills are read off the table, so retuning them moves nothing here.
+func _test_promised_finds() -> bool:
+	var sword: Array = Encounter.PROMISED[Encounter.SWORD]
+	var first: Array = Encounter.PROMISED[Encounter.TRANSMUTE]
+	var second: Array = Encounter.PROMISED[Encounter.AUGMENT]
+	var unique: Array = Encounter.PROMISED[Encounter.UNIQUE]
+	var node: Array = Encounter.PROMISED[Encounter.NODE]
+	var sword_kills := {}
+	var early := 30
+	for attempt in 30:
+		# The sword is the first piece of gear, by the last of its kills, and one sword only.
+		var armed := _owed_run([Encounter.SWORD], int(sword[0]), attempt)
+		var gear: Array = []
+		armed.loot_dropped.connect(func(index: int, item: Item) -> void: gear.append([index + 1, item.type]))
+		_kill_more(armed, int(sword[1]) - int(sword[0]))
+		_check(not gear.is_empty() and gear[0][1] == LootTable.FIRST_DROP,
+				"the Broken Sword is the first piece, inside its kills: %s" % [gear])
+		_check(gear.filter(func(found: Array) -> bool: return found[1] == LootTable.FIRST_DROP).size() == 1
+				and Encounter.SWORD not in armed.promised, "once, and the promise is spent")
+		if not gear.is_empty():
+			sword_kills[gear[0][0]] = true
+
+		# The two orbs in their order, each inside its own kills, through the gate that holds every other.
+		var crafted := _owed_run([Encounter.TRANSMUTE, Encounter.AUGMENT], 0, attempt)
+		crafted.orbs_after = 1000000
+		var orbs: Array = []
+		crafted.orb_dropped.connect(func(index: int, orb: String) -> void: orbs.append([index + 1, orb]))
+		_kill_more(crafted, int(second[1]) + early)
+		_check(orbs.size() == 2 and orbs[0][1] == OrbTable.FIRST_ORB and orbs[1][1] == OrbTable.SECOND_ORB,
+				"a Transmutation and then an Augmentation, and nothing else: %s" % [orbs])
+		if orbs.size() == 2:
+			_check(orbs[0][0] > first[0] and orbs[0][0] <= first[1] and orbs[1][0] > second[0]
+					and orbs[1][0] <= second[1], "each inside its own kills: %s" % [orbs])
+		_check(crafted.promised.is_empty(), "and both promises are spent")
+
+		# The last of a promise's kills is certain.
+		var last := _owed_run([Encounter.TRANSMUTE], int(first[1]) - 1, attempt)
+		last.orbs_after = 1000000
+		var last_orbs: Array = []
+		last.orb_dropped.connect(func(_index: int, orb: String) -> void: last_orbs.append(orb))
+		_kill_more(last, 1)
+		_check(last_orbs == [OrbTable.FIRST_ORB], "the last of its kills leaves it for certain: %s" % [last_orbs])
+
+		# The first unique is the one row, with no luck in it.
+		var lucky := _owed_run([Encounter.UNIQUE], int(unique[0]), attempt)
+		var uniques: Array = []
+		lucky.loot_dropped.connect(func(index: int, item: Item) -> void:
+			if not item.unique.is_empty():
+				uniques.append([index + 1, item.unique]))
+		_kill_more(lucky, int(unique[1]) - int(unique[0]) + early)
+		_check(uniques.size() == 1 and uniques[0][1] == UniqueTable.FIRST_UNIQUE
+				and uniques[0][0] <= int(unique[1]) - int(unique[0]),
+				"the promised unique falls inside its kills, once: %s" % [uniques])
+
+		# No node before the promised one, which is a common Strength Node with every connector; the
+		# table's own come after it. A drop rate that makes a node one body in four where it may fall.
+		var taught := _owed_run([Encounter.NODE], int(node[0]) - early, attempt)
+		taught.stone_drops = true
+		taught.drop_rate = 1.0e6
+		var nodes: Array = []
+		taught.loot_dropped.connect(func(index: int, item: Item) -> void:
+			if item.is_stone():
+				nodes.append([index + 1, item]))
+		_kill_more(taught, early + int(node[1]) - int(node[0]) + early)
+		_check(nodes.size() > 1, "the promised node falls, and others after it (%d)" % nodes.size())
+		if not nodes.is_empty():
+			var stone: Item = nodes[0][1]
+			_check(nodes[0][0] > early and nodes[0][0] <= early + int(node[1]) - int(node[0]),
+					"no node before the promised one's kills: the first at %d" % nodes[0][0])
+			_check(stone.type == SkillTree.BASES[0] and stone.rarity == ItemRarity.Rarity.COMMON
+					and stone.connectors == SkillTree.MOST_CONNECTORS and stone.capstone.is_empty()
+					and stone.stone_tier >= 1, "and it is a common Strength Node with every connector")
+	_check(sword_kills.size() > 1, "the sword falls on any of its kills, not one of them (%s)" % [sword_kills.keys()])
+
+	# What a player is still owed: never had, and its kills not run out.
+	var hero := Inventory.new()
+	_check(hero.promised() == Encounter.PROMISED.keys(), "a new player is owed every one")
+	hero.kills = int(first[1])
+	_check(Encounter.TRANSMUTE not in hero.promised() and Encounter.AUGMENT in hero.promised(),
+			"a promise whose kills have run out is owed no longer")
+	var ledger := FightLedger.new(hero, TEST_PATH, true)
+	ledger.add_orb(OrbTable.SECOND_ORB)
+	_check(Encounter.AUGMENT not in hero.promised(), "an Augmentation spends its promise")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WORLD_SEED
+	ledger.add_loot(SkillTree.first(Encounter.farm(MapBuilder.CENTER, "grass").lineup[0], rng))
+	_check(hero.promised() == [Encounter.UNIQUE], "a node its own, and any find the sword's: %s" % [hero.promised()])
+	ledger.add_loot(Item.rolled_unique("snowball", rng, 1))
+	_check(hero.promised().is_empty(), "and any unique in the collection log the first unique's")
+	_check(Inventory.new().transcended().promised().is_empty(), "a second world is owed none")
 	return true
 
 
@@ -1515,7 +1630,8 @@ func _test_the_map_keeps_what_dropped() -> bool:
 			and main._character.xp_hover.mouse_filter == Control.MOUSE_FILTER_PASS,
 			"the experience bar's tooltip stays over a fight, letting every press through to the swing")
 	var fight: Encounter = main._combat.fight
-	_check(fight.guarantee_elite, "the first elite is promised a drop")
+	_check(fight.promised == Encounter.PROMISED.keys() and fight.kills_before == 0,
+			"a new player's first fight is owed every promised find")
 	fight.loot_rng.seed = WORLD_SEED
 	_play(fight)
 	var combat: CombatScene = main._combat
@@ -1570,7 +1686,7 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	_check(main.inventory.total() == main.ledger.drops.size(),
 			"everything the fight dropped was kept: %d of %d" % [
 					main.inventory.total(), main.ledger.drops.size()])
-	_check(main.inventory.total() > 0, "the promised elite paid out")
+	_check(main.inventory.count(LootTable.FIRST_DROP) == 1, "the promised sword fell")
 	_check(main.inventory.first_sword_taken, "and is not promised again")
 	_check(main.bag_page._gold.text == BigNumber.format(main.inventory.gold),
 			"the bag's footer says what is in the purse: %s" % main.bag_page._gold.text)
@@ -1787,7 +1903,10 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	main.map.player.finish_walk()
 	_check(main._combat != null, "a second fight starts")
 	if main._combat != null:
-		_check(not main._combat.fight.guarantee_elite, "the second fight promises nothing")
+		_check(Encounter.SWORD not in main._combat.fight.promised
+				and Encounter.TRANSMUTE in main._combat.fight.promised
+				and main._combat.fight.kills_before == main.inventory.kills,
+				"the second fight is owed the rest, counted from the kills made")
 		main._combat.fight.give_up()
 		main._combat._on_back_pressed()
 		await process_frame
@@ -2190,7 +2309,8 @@ func _test_drag_and_drop() -> bool:
 	stone.connectors = 2
 	stone.stats = Item.scaled_stats(stone.type, 1)
 	inventory.add(stone)
-	var starter: Item = inventory.skills.stones["0"]
+	var starter := _node("Dexterity Node", "global_increased_attack_speed")
+	inventory.skills.stones["0"] = starter
 	var stones := BagPage.new(inventory, "", 2.0, false, true, true)
 	root.add_child(stones)
 	await process_frame
@@ -3017,7 +3137,7 @@ func _test_loot_filter() -> bool:
 	var ascended := _piece(ItemRarity.Rarity.COMMON, 3)
 	ascended.plus = 1
 	_check(player.leaves_behind(plain) and not player.leaves_behind(ascended), "ascended only keeps a +1")
-	var stone := SkillTree._starter_stone("Dexterity Node", "global_increased_attack_speed")
+	var stone := _node("Dexterity Node", "global_increased_attack_speed")
 	_check(not player.leaves_behind(stone), "a skill stone answers to the rarity alone")
 	Settings.filter_rarity = ItemRarity.Rarity.RARE
 	_check(player.leaves_behind(stone), "and an uncommon one is under rare")
@@ -3814,7 +3934,7 @@ func _test_wall_unlocks() -> bool:
 	# The root's slots: a stone on the third branch, out on a fifth wall, comes back off the save.
 	player.farthest_land = MapBuilder.START_LAND_RADIUS + 5 * MapBuilder.WALL_STEP
 	SkillTree.root_slots = WallUnlocks.root_branches(player.walls_ever())
-	var stone := SkillTree._starter_stone("Dexterity Node", "global_increased_attack_speed")
+	var stone := _node("Dexterity Node", "global_increased_attack_speed")
 	_check(player.skills.place(stone, "2").is_empty() and player.skills.stones.has("2"),
 			"three branches take a stone on the third")
 	player.save(TEST_PATH)
@@ -3948,6 +4068,16 @@ func _test_orb_verbs() -> bool:
 	_check(OrbTable.can_apply("Orb of Transmutation", magic), "an uncommon can be transmuted again")
 	_check(OrbTable.apply("Orb of Transmutation", magic, rng), "and the reroll lands")
 	_check(magic.rarity == ItemRarity.Rarity.UNCOMMON, "a transmuted uncommon stays uncommon")
+	# The first craft is a sure thing: a common Broken Sword transmuted carries "+1 Damage" alone, on
+	# any seed. Its own generator, so the draws below are what they were.
+	var sure_rng := RandomNumberGenerator.new()
+	for seed_value in 20:
+		sure_rng.seed = seed_value
+		var first := Item.rolled(LootTable.FIRST_DROP, ItemRarity.Rarity.COMMON, sure_rng)
+		OrbTable.apply("Orb of Transmutation", first, sure_rng)
+		_check(first.rarity == ItemRarity.Rarity.UNCOMMON and first.mods.size() == 1
+				and first.mods[0] == {"id": "added_damage", "value": 1},
+				"a Broken Sword's first transmutation is +1 Damage alone, got %s" % [first.mods])
 
 	# --- Alchemy: straight to rare from below, a reroll at rare, refused above ---
 	var climbing := Item.rolled("Leather Boots", ItemRarity.Rarity.COMMON, rng, 2)
@@ -4453,6 +4583,23 @@ func _test_crafting_from_the_bag() -> bool:
 	await process_frame
 	_clear_save()
 	return true
+## A skill stone made by hand: an uncommon leaf of tier 1 carrying `line` at 1, as every hero's first
+## stones once were.
+func _node(type: String, line: String) -> Item:
+	var stone := Item.new()
+	stone.type = type
+	stone.rarity = ItemRarity.Rarity.UNCOMMON
+	stone.stone_tier = 1
+	stone.stats = Item.scaled_stats(type, 1)
+	# Its tier read off its number the way a save reads one (`Item.from_dict`), so it saves as it is.
+	var mod := {"id": line, "value": 1}
+	var under := ModifierTable.fit_under(line, 1, stone.mod_level())
+	if under > 0:
+		mod["under"] = under
+	stone.mods = [mod]
+	return stone
+
+
 ## The colour the hover card's light is in (`ItemCard.shine`), or black with none up.
 func _card_lit(main: Node) -> Color:
 	var light: Node2D = main._item_card.get_node_or_null(ItemCard.SHINE_NAME)
@@ -4520,7 +4667,29 @@ func _test_tips() -> bool:
 	main._check_tips()
 	_check(main._tip_panel == null, "and none comes twice")
 
+	# The chest's red pip is for a first of its kind alone, until the bag is next up.
+	var pip: CanvasItem = main._bag_button.get_node(^"New")
+	_check(pip.visible, "a first find puts the red pip on the bag")
 	main._on_bag_pressed()
+	_check(not pip.visible, "and the bag opened puts it out")
+	main._on_bag_pressed()
+	main.inventory.add(_piece(ItemRarity.Rarity.COMMON, 1))
+	main._mark_new()
+	_check(not main.bag_page.visible and not pip.visible, "a second find is no first: no pip")
+	main.inventory.add_orb("Orb of Chaos")
+	main._check_tips()
+	main._on_tip_closed()
+	_check(pip.visible, "the first orb puts it back")
+	main._on_bag_pressed()
+	main._on_bag_pressed()
+	main.inventory.add(_node("Strength Node", "added_damage"))
+	main._check_tips()
+	_check("first_stone" in main.inventory.tips and main._tip_panel != null and pip.visible,
+			"and so does the first skill node, with a word from the hero")
+	main._on_tip_closed()
+	main._on_bag_pressed()
+	_check(not pip.visible and Inventory.load_from(TEST_PATH).tips.has(main.SEEN + "first_item"),
+			"until the bag is up again, and what was looked at is saved")
 	_check(not main._flashes.has("opened_bag") and main._bag_button.modulate == Color.WHITE,
 			"pressing the bag stops its pulse")
 	_check(main._flashes.has("skill_point"), "while the star keeps pulsing")
@@ -4956,8 +5125,9 @@ func _test_rank_four_uniques() -> bool:
 
 	# The Sage's Abacus: every stone holding a point counts one rank higher.
 	var sage := Inventory.new()
+	sage.skills.stones["0"] = _node("Dexterity Node", "global_increased_attack_speed")
 	sage.skills.ranks["0"] = 1
-	_check(not sage.skills.percent().is_empty(), "the starter's stone adds a percent")
+	_check(not sage.skills.percent().is_empty(), "a stone holding a point adds a percent")
 	for stat: String in sage.skills.percent():
 		_check(sage.skills.percent(1)[stat] == 2.0 * sage.skills.percent()[stat],
 				"a rank more is the rank's again (%s)" % stat)
@@ -5264,7 +5434,7 @@ func _test_achievements() -> bool:
 			and figures["accord"] == 0.0, "the Brand counts for the fight and not for an ask (%s)" % [figures])
 	# Mastery: the stones standing in the skill tree.
 	var scholar := Inventory.new()
-	_check(Achievements.state(scholar)["mastery"] == 1.0, "the starter tree is one stone")
+	_check(Achievements.state(scholar)["mastery"] == 0.0, "a new hero's tree holds no stone")
 	var stones := RandomNumberGenerator.new()
 	scholar.add(Item.rolled("Strength Node", ItemRarity.Rarity.COMMON, stones, 1, 1, 3))
 	scholar.place_stone(scholar.items[0], "0")
@@ -5923,7 +6093,7 @@ func _test_curses() -> bool:
 	# Hard Lessons' pay: every skill point counts double, flat and percent alike.
 	var student := Inventory.new()
 	student.level = 10
-	student.skills.stones["0"] = SkillTree._starter_stone("Strength Node", "added_damage")
+	student.skills.stones["0"] = _node("Strength Node", "added_damage")
 	_check(student.skills.rank_up("0", student.level), "a point goes into a strength stone")
 	var taught := float(student.stats().get("damage", 0.0))
 	student.curses = [Curses.HARD_LESSONS]
@@ -5997,8 +6167,8 @@ func _test_more_curses() -> bool:
 	student.level = 10
 	var first := "1"
 	var second := "2"
-	student.skills.stones[first] = SkillTree._starter_stone("Strength Node", "added_damage")
-	student.skills.stones[second] = SkillTree._starter_stone("Intelligence Node", "added_crit")
+	student.skills.stones[first] = _node("Strength Node", "added_damage")
+	student.skills.stones[second] = _node("Intelligence Node", "added_crit")
 	_check(student.rank_up_skill(first), "a point goes into the first branch")
 	_check(student.why_not_skill(second).is_empty(), "and without the curse the second branch is open")
 	student.curses = [Curses.SPECIALIST]

@@ -91,10 +91,13 @@ const ORBS := {
 ## they wait until the player has had time to find some.
 const FIRST_ORB_KILLS := 20
 
-## The orb the player's second fight is promised, whatever FIRST_ORB_KILLS says: the first body that
-## falls in any fight after the first leaves one until it has dropped (`Encounter.first_orb`,
-## `Inventory.first_orb_taken`), so crafting is met early and on the cheapest orb there is.
+## The orb a new player is promised before FIRST_ORB_KILLS are made (`Encounter.PROMISED`'s `TRANSMUTE`,
+## `Inventory.first_orb_taken`), so crafting is met early, on the cheapest orb there is and with the
+## Broken Sword already in hand to spend it on.
 const FIRST_ORB := "Orb of Transmutation"
+## The one promised next (`Encounter.PROMISED`'s `AUGMENT`, `Inventory.FIRST_AUGMENT`): a common takes no
+## modifier, so it comes after the orb that makes the sword uncommon, whose one sure line leaves room for it.
+const SECOND_ORB := "Orb of Augmentation"
 
 ## How often a body carries an orb at all. Read beside LootTable's own pair: an orb is a little more
 ## common than a piece of gear off the same body, because one piece of gear is worth a great many
@@ -284,6 +287,17 @@ static func reroll_tiers(item: Item, rng: RandomNumberGenerator) -> void:
 ## with no lock. `ModifierTable.add_one` already draws only what the piece is not carrying, which is
 ## what keeps the lock from being rolled a second time.
 static func _reroll_at(item: Item, rarity: ItemRarity.Rarity, rng: RandomNumberGenerator) -> void:
+	# The first craft is a sure thing (the user's, 2026-10-10): a common Broken Sword transmuted carries
+	# "+1 Damage" and nothing else. No orb makes a common, so a common one is on its first Transmutation.
+	if item.type == LootTable.FIRST_DROP and item.rarity == ItemRarity.Rarity.COMMON \
+			and rarity == ItemRarity.Rarity.UNCOMMON:
+		item.rarity = rarity
+		var sure := {"id": "added_damage", "value": 1}
+		# Tier 1, whose band the 1 is in, on a sword the smith has levelled.
+		if item.mod_level() > 1:
+			sure["under"] = item.mod_level() - 1
+		item.mods = [sure]
+		return
 	item.rarity = rarity
 	var count := ItemRarity.mod_count(rarity, rng, item.type) + int(item.extra_slot)
 	# The smith's lock and an Orb of Binding's: two at most, and both are of the handful.

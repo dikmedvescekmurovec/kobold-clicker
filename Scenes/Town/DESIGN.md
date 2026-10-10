@@ -376,3 +376,57 @@ experience at that tier (`PILE_GOLD`, `PILE_XP`, in bodies at the town's level).
 board's worth was too much. The postings changed with it: a
 unique is 2/3/5% of a common posting's piece and 10/15/25% of an elite's, and at least +1 is 25/33/50%,
 every later step moving by the same factor.
+
+## Banish (2026-10-10)
+The unique pool only grows -- eight starters, then one an achievement, forty-eight in all -- and
+`UniqueTable.roll` draws evenly from whatever is unlocked. So the further a player gets, the more the
+starters and everything already held stand in the way of the ones still wanted, and nothing they did
+could aim the hunt. The user's answer: "Once enough uniques are unlocked, a special spell is added to
+fortuneteller. She can prevent a unique from dropping. For a doubling cost." It never changes how often
+a unique falls (`chance_for` is untouched), only which.
+
+**The rules, all the user's.**
+- **Offered once 24 are unlocked** (`BANISH_FROM`, the starters counting): half the game's uniques,
+  which is about where the pool has become a crowd. Absent before, as the way out is before a wall.
+- **It lasts this world.** The bans and the count that prices them live in `inventory.fortunes`, which a
+  transcension does not carry -- so a new world starts with every unique dropping and the price at its
+  base, and nothing was added to the save's version or to `Inventory`.
+- **A ban can be lifted for nothing, and the price stays:** every one ever paid for in this world still
+  counts toward the doubling (`BANISH_PAID`, kept apart from the list for exactly this). So changing
+  one's mind is free once and dear ever after, which is what makes a ban a decision.
+- **The base is fixed, like the way out's:** bodies on the ground behind the first wall
+  (`TownPrices.transcend_steps`), the same in every town, times two for each one paid. The town's level
+  was offered and turned down -- with land worth ten times more past each wall, a starting village
+  would have sold the first several for nothing -- and so was the deepest land charted.
+- **At least ten stay in the draw** (`BANISH_LEAVES`): the hunt can be narrowed, never to one. It also
+  keeps the list from ever emptying under a bounty's promised unique, which indexes straight into it.
+- **The Banish button has no tooltip but the floor's**, "You need at least 10 uniques in the drop
+  pool": the word and the price are on it, and nothing picked or a short purse only greys it.
+- **Her tooltip says nothing of the doubling:** the price under the square shows it has climbed, the
+  rule her readings' tooltips kept while they doubled.
+
+**The screen, the user's.** My first plan was one of her popups: a grid, Cancel beside the verb,
+closed after each deed. The user asked for a screen in her list's place instead, with a back arrow,
+that stays up through as many as the player wants; the picked unique's description; and at its foot
+the word Banish and its price. It is built as a shelf piece's screen is (`_fill_offer`). Asked where
+the description should stand, the user picked the unique's own item card beside the page over a block
+written under the grid: the page is three squares wide, and a block would have left about two rows of
+the grid in view. So `ItemCard` learned one thing (`PINNED`): the picked square keeps its card up while
+the cursor is on none, standing past the whole page (`BESIDE` the panel), so it has one steady place
+however far the grid is scrolled.
+
+**Mine, and the user's to change.** The name. The base, 200 bodies, a tenth of the way out. That it
+covers every source of a unique -- a body, a chest, a bounty's promised piece, a cleared board's
+options -- since "prevent from dropping" with a back door through the board would be a ban in name.
+Its square standing after the way out among the great spells, though it is not one a settlement: a
+third heading for one square would cost the page a row. Its mark, the retired Relic reading's badge,
+which a bounty card already wears for "a unique"; a symbol of its own wants drawing. **Restore** in
+Banish's place while a banished one is picked, and a second press on a picked square putting it down.
+The verb on the small face: at Pixellari's 16 px the word, a six-figure price and the coin beside the
+arrow ran the page a dozen panel pixels past `BODY_WIDTH`, the smith's problem and the smith's fix.
+A press on the grid counting as it lets go, so that under a finger a drag scrolls forty-eight squares.
+Not built: any mark on a banished unique in the collection log -- the screen is where it is read.
+
+**Seen while checking it, and not this change's:** at 324 x 576, the smallest upright window, her tab
+with the doll's sheet open has room for its heading and nothing under it -- her two grids as much as
+this screen (`ui_town_fortune.png` there shows only "Readings"). At 360 x 780 both stand whole.

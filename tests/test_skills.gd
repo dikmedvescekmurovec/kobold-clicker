@@ -1,5 +1,5 @@
 extends "res://tests/harness.gd"
-## Headless checks for the skill tree: the starter tree, what a path is and where a stone may stand, how
+## Headless checks for the skill tree: a new hero's tree, what a path is and where a stone may stand, how
 ## points are earned and spent, what the stones add up to and how that stacks with gear, the paid reset,
 ## placing stones on the black screen, the save, the capstones' effects, the page and its radial
 ## drawing, what the Fortune stats do to a drop, and how stones drop. Run from the project folder:
@@ -41,23 +41,20 @@ func _stone(type: String, tier: int, connectors := 0, lines := []) -> Item:
 	return stone
 
 
-## Every hero starts with the root and, in its one slot, a dexterity stone: an uncommon leaf of tier 1.
+## Every hero starts with the root alone, its one slot empty.
 func _test_starter() -> bool:
 	var skills := Skills.new()
-	_check(SkillTree.ROOT_CONNECTORS == 1 and skills.stones.keys() == ["0"],
-			"one stone in the root's one slot (%s)" % [skills.stones.keys()])
-	var want := {"0": ["Dexterity Node", "global_increased_attack_speed"]}
-	for path: String in want:
-		var stone: Item = skills.stones[path]
-		_check(stone.type == want[path][0] and stone.stone_tier == 1 and stone.connectors == 0
-				and stone.rarity == ItemRarity.Rarity.UNCOMMON, "%s is a tier-1 uncommon leaf" % stone.type)
-		_check(stone.mods.size() == 1 and stone.mods[0]["id"] == want[path][1] and stone.mods[0]["value"] == 1,
-				"%s carries its one line (%s)" % [stone.type, stone.mod_lines()])
-		_check(float(stone.base_stats()[SkillTree.base_of(stone)]) == 5.0, "and 5 of its attribute")
+	_check(SkillTree.ROOT_CONNECTORS == 1 and skills.stones.is_empty(),
+			"no stone in the root's one slot (%s)" % [skills.stones.keys()])
+	_check(SkillTree.exists("0", skills.stones) and not SkillTree.exists("1", skills.stones),
+			"which is there to be filled, and the only one")
 	_check(skills.attributes() == {"strength": 0.0, "dexterity": 0.0, "intelligence": 0.0},
-			"with no point spent the tree adds no attribute")
+			"the tree adds no attribute")
 	_check(skills.flat().is_empty() and skills.percent().is_empty(), "and adds nothing else")
-	_check(Skills.new().stones["0"] != skills.stones["0"], "every tree's stones are its own")
+	_check(skills.rank_up("", 2) and skills.flat() == {"damage": SkillTree.ROOT_DAMAGE},
+			"the first point has the root to go into")
+	skills.stones["0"] = _stone("Dexterity Node", 1)
+	_check(Skills.new().stones.is_empty(), "every tree's stones are its own")
 	return true
 
 
@@ -134,6 +131,7 @@ func _test_spending() -> bool:
 			and is_equal_approx(rooted.percent()["damage"], SkillTree.ROOT_PERCENT * 6),
 			"each point a point of damage and a percent more (%s, %s)" % [rooted.flat(), rooted.percent()])
 	_check(rooted.attributes().values().max() == 0.0 and rooted.effects().is_empty(), "and nothing else")
+	rooted.stones["0"] = _stone("Dexterity Node", 1)
 	_check(rooted.why_not("0", 8).is_empty(), "the stone under it opens without a point in it")
 	var saved := Skills.from_dict(rooted.tree_dict(), rooted.ranks, 7)
 	_check(saved.rank_of("") == 6, "its points are saved (%d)" % saved.rank_of(""))
@@ -186,8 +184,8 @@ func _test_respec() -> bool:
 	var inventory := Inventory.new()
 	inventory.level = 6
 	_check(inventory.respec_cost() == 0.0 and not inventory.respec(), "nothing spent is nothing to reset")
-	for path: String in ["0", "", ""]:
-		inventory.rank_up_skill(path)
+	for i in 3:
+		inventory.rank_up_skill("")
 	var cost := inventory.respec_cost()
 	_check(cost == SkillTree.respec_cost(6, 3) and cost > 0.0, "three points cost what the table says")
 	inventory.gold = cost - 1.0
@@ -228,8 +226,9 @@ func _test_placing() -> bool:
 	var spare := _stone("Intelligence Node", 1)
 	inventory.add(found)
 	inventory.add(spare)
+	var was := _stone("Dexterity Node", 1)
+	inventory.skills.stones["0"] = was
 	inventory.rank_up_skill("0")
-	var was: Item = inventory.skills.stones["0"]
 	_check(not inventory.place_stone(_stone("Dexterity Node", 1), "0"), "only a stone from the bag")
 	_check(inventory.place_stone(found, "0") and inventory.items.has(was) and not inventory.items.has(found),
 			"the bag's stone goes in and the old one comes out to the bag")
@@ -265,7 +264,7 @@ func _test_save() -> bool:
 	file.close()
 	var old := Inventory.load_from(TEST_PATH)
 	_check(old.skills.tree_dict() == Skills.new().tree_dict() and old.skills.points(5) == 4,
-			"a save from before the tree is the starter, every point free")
+			"a save from before the tree is the root alone, every point free")
 
 	var loose := Skills.from_dict(inventory.skills.tree_dict(), {"0.0": 1}, 5)
 	_check(loose.ranks.is_empty(), "a point nothing leads to hands every point back")
@@ -295,6 +294,11 @@ func _test_effects() -> bool:
 	return true
 
 
+## The light behind the slot at `path` on the skills page.
+func _glow(view: SkillTreeView, path: String) -> ShaderMaterial:
+	return (view._lights[path] as Polygon2D).material as ShaderMaterial
+
+
 ## The page draws the tree, a press on a stone puts a point in it, and the Reset takes them back.
 func _test_page() -> bool:
 	var inventory := Inventory.new()
@@ -303,14 +307,58 @@ func _test_page() -> bool:
 	root.add_child(page)
 	await process_frame
 	var view: SkillTreeView = page._view
-	_check(view.squares.keys().size() == 2 and view.squares.has(""), "the root and its one stone")
+	_check(view.squares.keys().size() == 2 and view.squares[""] is ItemSlot and not view.squares["0"] is ItemSlot,
+			"the root and its one empty slot")
+	_check(view._rings == [""] and view.squares["0"].modulate == SkillTreeView.FAINT,
+			"with points to spend one can go into the root, the empty slot faint (%s)" % [view._rings])
+	# What a point can go into is lit from behind, the root in grey -- and breathing, a new player's cue,
+	# until their first point ever is spent.
+	var lit_in := func(path: String) -> Color:
+		return Color(_glow(view, path).get_shader_parameter("colour"), 1.0)
+	_check(view._lights[""].visible and lit_in.call("") == SkillTreeView.ROOT_GLOW
+			and _glow(view, "").get_shader_parameter("pulse") > 0.0
+			and _glow(view, "").get_shader_parameter("reach") == SkillTreeView.TEACH_REACH,
+			"the root is lit in grey, strong and breathing for the first point")
+	Settings.animations = Settings.Anim.NONE
+	page.open()
+	_check(view._lights[""].visible and _glow(view, "").get_shader_parameter("pulse") == 0.0,
+			"with animations off it is lit all the same, and still")
+	Settings.animations = Settings.Anim.DEFAULT
+	page.open()
+	var flashes: Array = []
+	page.learned.connect(func(lit: Color) -> void: flashes.append(lit))
+	view.slot_pressed.emit("")
+	_check(inventory.skills.rank_of("") == 1 and flashes == [SkillTreeView.ROOT_GLOW],
+			"the first point goes into the root, and lights its card in the root's grey (%s)" % [flashes])
+	_check(Inventory.FIRST_POINT in inventory.tips and view._lights[""].visible
+			and _glow(view, "").get_shader_parameter("pulse") == 0.0,
+			"and the breathing is over: the root stands lit and still while a point is left")
+	var small: Color = _glow(view, "").get_shader_parameter("colour")
+	_check(_glow(view, "").get_shader_parameter("reach") == SkillTreeView.GLOW_REACH
+			and is_equal_approx(small.a, SkillTreeView.GLOW_ALPHA)
+			and SkillTreeView.GLOW_REACH < SkillTreeView.TEACH_REACH and SkillTreeView.GLOW_ALPHA < SkillTreeView.TEACH_ALPHA,
+			"as a smaller mark, only to say a point can go in")
+	inventory.gold = 1.0e9
+	page.open()
+	page._reset.pressed.emit()
+	_check(inventory.skills.spent() == 0 and _glow(view, "").get_shader_parameter("pulse") == 0.0,
+			"nor does a Reset bring it back")
+	_check(Inventory.FIRST_POINT in inventory.transcended().tips, "nor a new world, which keeps what was learned")
+	# A stone in the root's slot: lit with the root in its base's colour, faint while it holds no point.
+	inventory.skills.stones["0"] = _stone("Dexterity Node", 1)
+	page.open()
 	_check(view._rings.has("") and view._rings.has("0") and view.squares["0"].modulate == SkillTreeView.UNLEARNED,
-			"with points to spend the root and the stone are ringed, the stone faint while it holds none")
+			"with points to spend one can go into the root or the stone, the stone faint while it holds none")
+	_check(view._lights["0"].visible and lit_in.call("0") == SkillTreeView.GLOWS["dexterity"]
+			and _glow(view, "0").get_shader_parameter("reach") == SkillTreeView.GLOW_REACH,
+			"and the dexterity stone wears the small mark in green (%s)" % [lit_in.call("0")])
 	_check(view._marks.get_child_count() == 0, "a stone of one rank and a root holding nothing carry no number")
 	view.slot_pressed.emit("0")
 	_check(inventory.skills.rank_of("0") == 1, "a press is a point")
 	_check(page._points.text == "1 skill point", page._points.text)
-	inventory.gold = 1.0e9
+	_check(flashes.back() == SkillTreeView.GLOWS["dexterity"], "which lights its card in the stone's colour (%s)" % [flashes])
+	_check(not view._lights["0"].visible and view._lights[""].visible,
+			"a stone at its most goes dark, the root stays lit while a point is left")
 	page.open()
 	page._reset.pressed.emit()
 	_check(inventory.skills.spent() == 0, "and the Reset takes it back")
@@ -319,7 +367,7 @@ func _test_page() -> bool:
 	# Zoom: whole window pixels a tree pixel, from one to `ZOOM_MOST` times the scale, by the buttons and
 	# the wheel, and kept when the page draws the tree again.
 	var pixels := func() -> int: return roundi(view._canvas.scale.x * 1.0)
-	_check(pixels.call() == 1, "the starter fits at the page's own size")
+	_check(pixels.call() == 1, "a small tree fits at the page's own size")
 	var buttons := page._panel.find_children("*", "Button", true, false)
 	var across := page._scroll.custom_minimum_size.x
 	(buttons.filter(func(b: Button) -> bool: return b.tooltip_text == "Zoom in")[0] as Button).pressed.emit()
@@ -366,8 +414,15 @@ func _test_page() -> bool:
 		event.position = centre
 		view._gui_input(event)
 	_check(pressed == ["0", ""], "a press on the root is the root's (%s)" % [pressed])
-	_check("+%d Damage" % inventory.skills.rank_of("") in view._get_tooltip(centre),
-			view._get_tooltip(centre))
+	_check(flashes.back() == SkillTreeView.ROOT_GLOW, "and lights its card in its grey (%s)" % [flashes])
+	# The root's card is its own words, written where a stone's would be.
+	var card := VBoxContainer.new()
+	(middle as ItemSlot).hint.call(card, ItemCard.WIDTH)
+	var said := card.get_children().map(func(row: Label) -> String: return row.text)
+	_check("+%d Damage" % inventory.skills.rank_of("") in said, str(said))
+	card.free()
+	_check(middle.has_meta(ItemCard.STAYS) and stone.has_meta(ItemCard.STAYS),
+			"and a card stays up through the press that spends a point")
 	# A press held still puts a point in again and again, and letting go adds none more.
 	inventory.level = 20
 	page.open()

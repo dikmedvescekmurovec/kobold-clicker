@@ -60,6 +60,9 @@ static var all_services := true
 ## Dev: a body drops one find a time in three, every rarity from common to unique as likely
 ## (`Encounter.even_loot`). Read through `even_loot_on()`, like the uniques.
 static var even_loot := false
+## Dev: the fortuneteller offers the banishing however few uniques are unlocked
+## (`FortuneTeller.BANISH_FROM`). Read through `banish_unlocked()`, like the uniques.
+static var banish_now := false
 ## Dev: the health an ordinary body has on the first ring of each circle of land, by how many walls
 ## stand inside it (`Encounter.walls_inside`): inside the first wall, between the first and second,
 ## between the second and third. 0 is the formula's own; every body in the circle scales with it
@@ -93,6 +96,7 @@ static func load_settings() -> void:
 	old_icons = bool(file.get_value(SECTION, "old_icons", old_icons))
 	all_services = bool(file.get_value(SECTION, "all_services", all_services))
 	even_loot = bool(file.get_value(SECTION, "even_loot", even_loot))
+	banish_now = bool(file.get_value(SECTION, "banish_now", banish_now))
 	changelog_seen = str(file.get_value(SECTION, "changelog_seen", changelog_seen))
 	var bases: Variant = file.get_value(SECTION, "wall_hp_base", wall_hp)
 	if bases is Array and bases.size() == wall_hp.size():
@@ -119,6 +123,7 @@ static func save() -> void:
 	file.set_value(SECTION, "old_icons", old_icons)
 	file.set_value(SECTION, "all_services", all_services)
 	file.set_value(SECTION, "even_loot", even_loot)
+	file.set_value(SECTION, "banish_now", banish_now)
 	file.set_value(SECTION, "changelog_seen", changelog_seen)
 	file.set_value(SECTION, "wall_hp_base", wall_hp)
 	if file.save(path) != OK:
@@ -148,6 +153,10 @@ static func show_old_icons() -> bool:
 
 static func even_loot_on() -> bool:
 	return even_loot and OS.is_debug_build()
+
+
+static func banish_unlocked() -> bool:
+	return banish_now and OS.is_debug_build()
 
 
 ## The balancing page's base health for the circle with `walls` walls inside it, or 0 for the

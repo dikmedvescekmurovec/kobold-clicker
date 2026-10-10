@@ -144,29 +144,6 @@ const CONNECTOR_WEIGHTS := [1, 5, 3, 1]
 static var _icons := {}
 
 
-## The tree every hero starts with: under the root's one slot, straight down (`SkillTreeView`), a
-## dexterity stone (5 dexterity, +1% attack speed), an uncommon leaf of tier 1. Until the root had one
-## slot (2026-10-09) a strength stone (+1 damage) and an intelligence one (+1% crit chance) stood beside
-## it, the user's; `_starter_stone` makes any of the three.
-static func starter() -> Dictionary:
-	return {"0": _starter_stone("Dexterity Node", "global_increased_attack_speed")}
-
-
-static func _starter_stone(type: String, line: String) -> Item:
-	var stone := Item.new()
-	stone.type = type
-	stone.rarity = ItemRarity.Rarity.UNCOMMON
-	stone.stone_tier = 1
-	stone.stats = Item.scaled_stats(type, 1)
-	# Its tier read off its number the way a save reads one (`Item.from_dict`), so it saves as it is.
-	var mod := {"id": line, "value": 1}
-	var under := ModifierTable.fit_under(line, 1, stone.mod_level())
-	if under > 0:
-		mod["under"] = under
-	stone.mods = [mod]
-	return stone
-
-
 ## How deep a slot is: 1 for the root's children.
 static func depth_of(path: String) -> int:
 	return 0 if path.is_empty() else path.count(".") + 1
@@ -280,6 +257,15 @@ static func roll(enemy_name: String, rng: RandomNumberGenerator, tile_level := 1
 	var level := LootTable.drop_level(body, tile_level, rarity, rng)
 	return Item.rolled(BASES[rng.randi_range(0, BASES.size() - 1)], rarity, rng, level, tier,
 			_connectors(rng))
+
+
+## The first node a player finds, promised (`Encounter.PROMISED`'s `NODE`; the user's, 2026-10-10): a
+## common Strength Node with every connector, so the root's one slot opens `MOST_CONNECTORS` more. Its
+## tier and its level are the ground's, as `roll`'s are.
+static func first(enemy_name: String, rng: RandomNumberGenerator, tile_level := 1) -> Item:
+	var level := LootTable.drop_level(EnemyRoster.tier_of(enemy_name), tile_level, ItemRarity.Rarity.COMMON, rng)
+	return Item.rolled(BASES[0], ItemRarity.Rarity.COMMON, rng, level,
+			rng.randi_range(1, deepest(tile_level)), MOST_CONNECTORS)
 
 
 ## The lines a stone of `item_type` at `tier` may roll: its base's, as far as the tier unlocks.

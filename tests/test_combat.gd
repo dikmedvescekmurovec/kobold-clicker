@@ -943,24 +943,7 @@ func _test_experience() -> bool:
 		gated.advance(0.1)
 	_check(not orb_kills.is_empty(), "orbs fall once the kills are made: %d" % orb_kills.size())
 	_check(orb_kills.is_empty() or orb_kills[0] >= 30, "and never before: first at kill %s" % [orb_kills.slice(0, 1)])
-
-	# The promised orb is the one exception: the first body leaves a Transmutation through the gate,
-	# and the gate holds for everything after it.
-	var promised := Encounter.farm(MapBuilder.CENTER + Vector2i(1, 0), "grass")
-	promised.orbs_after = 30
-	promised.first_orb = true
-	promised.damage = 1000000
-	promised.orb_rng.seed = WORLD_SEED
-	var promised_orbs: Array = []
-	promised.orb_dropped.connect(func(_i: int, orb: String) -> void:
-		promised_orbs.append([promised.kills(), orb]))
-	promised.start()
-	while promised.kills() < 30:
-		promised.hit()
-		promised.advance(0.1)
-	_check(promised_orbs.size() == 1 and promised_orbs[0][1] == OrbTable.FIRST_ORB
-			and promised_orbs[0][0] <= 1, "the promised orb falls off the first body, alone: %s" % [promised_orbs])
-	_check(not promised.first_orb, "and the promise is spent")
+	# The promised orbs come through that gate: `test_inventory`'s promised finds.
 	return true
 
 
@@ -1868,6 +1851,16 @@ func _test_the_map_hands_over_and_takes_back() -> void:
 	main._on_chart_pressed()
 	_check(main._combat == null and main.view.walking, "charting a tile out of reach walks there first")
 	_check(not main._chart_button.visible, "and hides the buttons on the way")
+	# Stop ends the walk on the tile being stepped onto, and the fight it was for never opens.
+	await process_frame
+	_check(main._stop_button.visible, "Stop floats over the map while tiles are still ahead")
+	main._on_stop_pressed()
+	main.map.player.finish_walk()
+	_check(main.view.player_cell == MapBuilder.CENTER and main._combat == null and main._chart_button.visible,
+			"a stopped walk ends a tile on, with no fight and Chart back")
+	await process_frame
+	_check(not main._stop_button.visible, "and Stop goes with the walk")
+	main._on_chart_pressed()
 	main.map.player.finish_walk()
 	_check(main.view.player_cell == far_side and main._combat != null, "the fight opens on arrival")
 	main._combat.fight.give_up()

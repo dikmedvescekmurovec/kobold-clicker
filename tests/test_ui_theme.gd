@@ -401,6 +401,36 @@ func _test_item_card() -> bool:
 	Cursors.hold(null)
 	_check(card.hovered(Vector2(110, 110), true) == seen and card.hovered(Vector2(110, 110), false) == seen,
 			"and so does the press that spent the last one")
+	# A square whose own press is read on its card (a skill node taking a point) keeps it too.
+	seen.set_meta(ItemCard.STAYS, true)
+	card._shown = seen
+	_check(card.hovered(Vector2(110, 110), true) == seen and card.hovered(Vector2(110, 110), false) == seen,
+			"a press on a square that says its card stays keeps it")
+	card._shown = null
+	_check(card.hovered(Vector2(110, 110), true) == null, "but not a press the card was not already under")
+	seen.remove_meta(ItemCard.STAYS)
+	card.hovered(Vector2(5, 5), false)
+	# A square with no piece has a card where it carries its own words, and no other does.
+	var wordless := ItemSlot.bare(null, sword.icon(), func(_rows: VBoxContainer, _width: float) -> void: pass)
+	wordless.position = Vector2(400, 100)
+	root.add_child(wordless)
+	_check(card.slot_at(Vector2(405, 105)) == wordless, "a square with only words of its own has a card")
+	wordless.hint = Callable()
+	_check(card.slot_at(Vector2(405, 105)) == null, "and one with neither a piece nor words has none")
+	wordless.free()
+	# A light swells on from where the last had got to, so a press held down holds it up.
+	card.flash(Color.WHITE)
+	var first: Node2D = card.get_node(ItemCard.SHINE_NAME)
+	# The second in the same frame, before the first has taken a step, then one part way up.
+	card.flash(Color.WHITE)
+	(card.get_node(ItemCard.SHINE_NAME).material as ShaderMaterial).set_shader_parameter("life", 0.5)
+	card.flash(Palette.ICE, 1.0)
+	var last: Node2D = card.get_node(ItemCard.SHINE_NAME)
+	var lit := last.material as ShaderMaterial
+	_check(last != first and lit.get_shader_parameter("colour") == Palette.ICE,
+			"a later light takes the first one's place, in its own colour")
+	_check(is_equal_approx(lit.get_shader_parameter("life"), 0.5), "and starts where that one had got to")
+	last.free()
 	_check(card.theme_type_variation == "TextPanel" and card.mouse_filter == Control.MOUSE_FILTER_IGNORE,
 			"it is a cream panel that never takes a press")
 	# The second card, under Alt: what is worn where the hovered piece would go.
@@ -827,7 +857,7 @@ func _test_settings_page() -> bool:
 		_check(top.contains(heading + "|"), "the settings carry %s (%s)" % [heading, top])
 	_check(page._rows.find_child("music_volume", true, false) is HSlider
 			and page._rows.find_child("sfx_volume", true, false) is HSlider, "the music and the effects are volumes")
-	for dev: String in ["Show all uniques", "Even loot", "Gold x10", "Balancing", "Item generator"]:
+	for dev: String in ["Show all uniques", "Even loot", "Unlock Banish", "Gold x10", "Balancing", "Item generator"]:
 		_check(not top.contains(dev), "and nothing of a developer's: %s" % dev)
 	_check(top.contains(SettingsPage.DEV_TITLE + "|") == OS.is_debug_build(), "whose screen is a button in a debug build only")
 
@@ -835,7 +865,7 @@ func _test_settings_page() -> bool:
 	var dev: String = said.call()
 	_check(UITheme.title_of(page._panel).text == SettingsPage.DEV_TITLE, "the developer screen says what it is")
 	for tool: String in ["Show all uniques", "Show all chests", "Show old icons", "Show all services", "Even loot",
-			"Gold x10", "Skill points +10", "Balancing"]:
+			"Unlock Banish", "Gold x10", "Skill points +10", "Balancing"]:
 		_check(dev.contains(tool + "|"), "and holds %s" % tool)
 	page._open_balance()
 	var back: Array = page._rows.find_children("*", "Button", true, false).filter(

@@ -1496,7 +1496,7 @@ func _test_entering() -> void:
 	main.view.reveal_all()
 	main.map.select_cell(town)
 	_check(not main.view.can_visit(town), "a town the player is not standing on cannot be entered")
-	_check(not main._town_button.visible, "so there is no button for it")
+	_check(main._town_button.visible, "but its button is there, to walk in by")
 
 	# Stood on, which with charted is the whole of what a visit takes.
 	main.view.player_cell = town
@@ -1571,6 +1571,21 @@ func _test_entering() -> void:
 	_check(main._panel.visible, "and the tile panel has its edge back")
 	_check(not main.bag_page._buys(TownServices.GEAR) and not main.bag_page._buys(TownServices.ORBS),
 			"the bag is not a shop any more")
+
+	# Enter town from afar: the player walks there, and the town opens as they arrive.
+	main.view.player_cell = MapBuilder.CENTER
+	main.map.set_player_cell(MapBuilder.CENTER)
+	main.map.select_cell(town)
+	main._on_town_pressed()
+	_check(main.view.walking and not main.town_page.visible, "Enter town on a town away from the player walks there first")
+	main.map.select_cell(MapBuilder.CENTER)
+	main.map.player.finish_walk()
+	_check(main.view.player_cell == town and main.town_page.visible and main._town_cell == town,
+			"and the town opens on arrival, whatever was clicked on the way")
+	main.town_page.closed.emit()
+	await process_frame
+	main.map.select_cell(town)
+	main._update_buttons()
 
 	# The journal: a corner button of its own once a board has been read, listing the same postings
 	# away from the town, with the lands the monster lives on.
@@ -1713,11 +1728,12 @@ func _test_fortune() -> bool:
 
 	# Her list is in two halves and every spell is in exactly one of them -- the lists are written out
 	# separately, so this is what holds them together.
-	var halves := (FortuneTeller.COMMON + FortuneTeller.GREAT + [FortuneTeller.TRANSCEND]).duplicate()
+	var halves := (FortuneTeller.COMMON + FortuneTeller.GREAT
+			+ [FortuneTeller.TRANSCEND, FortuneTeller.BANISH]).duplicate()
 	halves.sort()
 	var every := FortuneTeller.READINGS.duplicate()
 	every.sort()
-	_check(halves == every, "every spell is a reading or a great spell and never both (%s)" % [halves])
+	_check(halves == every, "every spell is a reading, a great spell, the way out or the banishing, and never two (%s)" % [halves])
 
 	# How near the cave feels: its bands, coldest first, by the steps to it.
 	var bands := []
@@ -1728,8 +1744,8 @@ func _test_fortune() -> bool:
 	for reading: String in FortuneTeller.READINGS:
 		_check(TownPrices.FORTUNE_BODIES.has(reading) and FortuneTeller.LABELS.has(reading),
 				"%s has a price and a name" % reading)
-		# The way out is priced on the ground behind the first wall, wherever it is asked for.
-		if reading == FortuneTeller.TRANSCEND:
+		# The way out and the banishing are priced on the ground behind the first wall, wherever they are asked for.
+		if reading in [FortuneTeller.TRANSCEND, FortuneTeller.BANISH]:
 			_check(TownPrices.fortune_price(reading, TOWN_CELL) == TownPrices.fortune_price(reading, Vector2i(1, 0)),
 					"%s costs the same in every town" % reading)
 			_check(TownPrices.fortune_price(reading, TOWN_CELL) == roundf(TownPrices.FORTUNE_BODIES[reading]
@@ -1743,13 +1759,38 @@ func _test_fortune() -> bool:
 	var patch := FortuneTeller.scour_cells(Vector2i(3, 3))
 	_check(patch.size() == 19 and Vector2i(3, 3) in patch, "a scour takes nineteen tiles round the one chosen")
 
+	# The banishing: each one paid for doubles the next, a banished unique is out of the drops until it is
+	# brought back, what was paid stays paid, and she always leaves some to find.
+	var first := TownPrices.fortune_price(FortuneTeller.BANISH, TOWN_CELL)
+	var fourfold := pow(TownPrices.FORTUNE_GROWTH, 3)
+	_check(absf(TownPrices.fortune_price(FortuneTeller.BANISH, TOWN_CELL, 3) - first * fourfold) <= fourfold,
+			"the fourth banishing costs three doublings of the first")
+	var told := {}
+	var hunted: Array = UniqueTable.ids().slice(0, FortuneTeller.BANISH_LEAVES + 2)
+	_check(FortuneTeller.dropping(hunted, told) == hunted and FortuneTeller.banishes(told) == 0,
+			"nothing is banished until she is paid")
+	FortuneTeller.banish(told, hunted[0])
+	_check(FortuneTeller.dropping(hunted, told) == hunted.slice(1), "a banished unique is out of the drops and the rest are not")
+	_check(not FortuneTeller.why_not_banish(hunted[0], hunted, told).is_empty(), "and is not banished twice")
+	FortuneTeller.banish(told, hunted[1])
+	_check(not FortuneTeller.why_not_banish(hunted[2], hunted, told).is_empty(),
+			"she leaves %d to find" % FortuneTeller.BANISH_LEAVES)
+	FortuneTeller.restore(told, hunted[0])
+	_check(FortuneTeller.dropping(hunted, told).has(hunted[0]) and FortuneTeller.banishes(told) == 2,
+			"one brought back drops again, and what was paid stays paid")
+	_check(FortuneTeller.why_not_banish(hunted[2], hunted, told).is_empty(), "which is room for another")
+
 	# What she sold the player is saved with the player, and comes back as it was written.
 	var inventory := Inventory.new()
 	inventory.fortunes[FortuneTeller.CHEST] = [12, 34]
+	FortuneTeller.banish(inventory.fortunes, hunted[0])
 	inventory.save(TEST_PATH)
 	var back := Inventory.load_from(TEST_PATH)
 	_check(FortuneTeller.chest(back.fortunes) == Vector2i(12, 34),
 			"what she sold survives the save (%s)" % [back.fortunes])
+	_check(FortuneTeller.banished(back.fortunes) == [hunted[0]] and FortuneTeller.banishes(back.fortunes) == 1,
+			"and so does what she banished")
+	_check(FortuneTeller.banished(inventory.transcended().fortunes).is_empty(), "which ends with the world")
 	_check(FortuneTeller.chest({}) == TownWorld.NO_SPOT, "and a save that bought nothing has nothing")
 
 	# A great spell is one a settlement, which is the drawer's key and not the player's count.
@@ -1790,12 +1831,22 @@ func _test_fortune_page() -> void:
 	main.town_page._on_tab_pressed(TownServices.FORTUNE)
 	await process_frame
 	for reading: String in FortuneTeller.READINGS:
-		# Her squares on the two grids; the way out is on neither while every wall still stands.
-		if reading == FortuneTeller.TRANSCEND:
-			_check(_spell(main, reading) == null, "the way out is not offered yet")
+		# Her squares on the two grids; the way out is on neither while every wall still stands, nor
+		# the banishing while only the starters are unlocked.
+		if reading in [FortuneTeller.TRANSCEND, FortuneTeller.BANISH]:
+			_check(_spell(main, reading) == null, "%s is not offered yet" % reading)
 			continue
 		_check(_spell(main, reading) != null, "she offers %s" % reading)
 	_check(_dead(main, FortuneTeller.APPRAISE), "no piece is open to read")
+	# The dev's switch offers the banishing at once, in a debug build only; put back after.
+	Settings.banish_now = true
+	main.town_page.redraw()
+	await process_frame
+	_check((_spell(main, FortuneTeller.BANISH) != null) == OS.is_debug_build(),
+			"under the dev's switch the banishing is offered from the start")
+	Settings.banish_now = false
+	main.town_page.redraw()
+	await process_frame
 
 	# The roads: three sentences, and not sold in this town again.
 	var purse: float = main.inventory.gold
@@ -1944,6 +1995,77 @@ func _test_fortune_page() -> void:
 	main.town_page._on_tab_pressed(TownServices.FORTUNE)
 	await process_frame
 	_check(not _dead(main, FortuneTeller.SCOUR), "and a great spell one town has cast is offered by the next")
+
+	# The banishing: on her list once enough uniques are unlocked, a screen of its own in her list's
+	# place, where one is picked, paid for at a price that doubles, and brought back for nothing.
+	for id: String in UniqueTable.ids():
+		if Achievements.unlocked(main.inventory).size() >= FortuneTeller.BANISH_FROM:
+			break
+		if not id in Achievements.STARTERS:
+			main.inventory.achievements[id] = 1
+	main.town_page.redraw()
+	await process_frame
+	_check(_spell(main, FortuneTeller.BANISH) != null and not _dead(main, FortuneTeller.BANISH),
+			"she offers the banishing once %d uniques are unlocked" % FortuneTeller.BANISH_FROM)
+	_ask(main, FortuneTeller.BANISH)
+	await process_frame
+	var page: TownPage = main.town_page
+	var squares := page._rows.find_children("", "ItemSlot", true, false)
+	_check(_spell(main, FortuneTeller.ROADS) == null and squares.size() == FortuneTeller.BANISH_FROM,
+			"its screen stands in her list's place, a square an unlocked unique (%d)" % squares.size())
+	_check(_deep_button(page._rows, "Banish").disabled, "with nothing picked there is nothing to banish")
+	var outcast: String = (squares[0] as ItemSlot).item.unique
+	var banish_price := _price(main, FortuneTeller.BANISH)
+	page._on_banish_picked(outcast)
+	for i in 2:
+		await process_frame
+	_check(main._item_card.visible and main._item_card._shown.item.unique == outcast,
+			"the picked unique's card stands up with the cursor off it")
+	_check(UITheme.price_of(_deep_button(page._rows, "Banish")) == BigNumber.format(banish_price)
+			and _deep_button(page._rows, "Banish").tooltip_text.is_empty(),
+			"and the button says what it costs, and nothing in a tooltip")
+	purse = main.inventory.gold
+	_deep_button(page._rows, "Banish").pressed.emit()
+	await process_frame
+	_check(main.inventory.gold == purse - banish_price
+			and FortuneTeller.banished(Inventory.load_from(TEST_PATH).fortunes) == [outcast],
+			"banished, paid for and saved")
+	_check(not FortuneTeller.dropping(Achievements.unlocked(main.inventory), main.inventory.fortunes).has(outcast),
+			"and out of the drops")
+	_check(page._banishing and _deep_button(page._rows, "Banish").disabled
+			and _price(main, FortuneTeller.BANISH) > banish_price,
+			"the screen stays for the next one, nothing picked, at a dearer price")
+	purse = main.inventory.gold
+	page._on_banish_picked(outcast)
+	await process_frame
+	_check(_deep_button(page._rows, "Banish") == null and _deep_button(page._rows, "Restore").tooltip_text.is_empty(),
+			"a banished one picked is not banished again, and Restore wears no tooltip")
+	_deep_button(page._rows, "Restore").pressed.emit()
+	await process_frame
+	_check(main.inventory.gold == purse and FortuneTeller.banished(main.inventory.fortunes).is_empty()
+			and _price(main, FortuneTeller.BANISH) > banish_price,
+			"brought back for nothing, and what was paid stays paid")
+	# At her floor the button is dead and its tooltip says so -- the one thing it ever says.
+	var unlocked: Array = Achievements.unlocked(main.inventory)
+	main.inventory.fortunes[FortuneTeller.BANISHED] = unlocked.slice(FortuneTeller.BANISH_LEAVES)
+	page._on_banish_picked(unlocked[0])
+	await process_frame
+	_check(_deep_button(page._rows, "Banish").disabled
+			and _deep_button(page._rows, "Banish").tooltip_text == "You need at least %d uniques in the drop pool"
+			% FortuneTeller.BANISH_LEAVES, "at her floor the button says why (%s)" % _deep_button(page._rows, "Banish").tooltip_text)
+	main.inventory.fortunes.erase(FortuneTeller.BANISHED)
+	page._on_banish_picked(unlocked[0])
+	main.inventory.gold = 1.0
+	page.redraw()
+	await process_frame
+	_check(_deep_button(page._rows, "Banish").disabled and _deep_button(page._rows, "Banish").tooltip_text.is_empty(),
+			"and a short purse greys it and says nothing")
+	main.inventory.gold = purse
+	var arrow: Button = page._rows.find_child(TownPage.BANISH_BACK, true, false)
+	_check(arrow.tooltip_text.is_empty(), "the arrow back wears no tooltip")
+	arrow.pressed.emit()
+	await process_frame
+	_check(not page._banishing and _spell(main, FortuneTeller.ROADS) != null, "and the arrow is the way back to her spells")
 
 	# The way out: on her list once a wall is down, a question first, then the black screen where one
 	# piece is kept and the wall's orb is spent, and then everything but the heirlooms and what the
@@ -2210,6 +2332,12 @@ func _test_tree_builder() -> void:
 	inventory.add(found)
 	inventory.add(Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng))
 	inventory.add_orb("Orb of Exaltation")
+	# A stone already standing in the root's one slot, for the new one to push out.
+	var old := Item.new()
+	old.type = "Dexterity Node"
+	old.stone_tier = 1
+	old.stats = Item.scaled_stats(old.type, 1)
+	inventory.skills.stones["0"] = old
 	var black := TranscendPage.new(inventory, 1.0)
 	root.add_child(black)
 	await process_frame
@@ -2232,7 +2360,6 @@ func _test_tree_builder() -> void:
 	lit.sort()
 	_check(lit == ["0"], "a tier-2 stone lights the root's one slot (%s)" % [lit])
 	_check(view.call()._rings == ["0"], "and rings it")
-	var old: Item = inventory.skills.stones["0"]
 	view.call().slot_pressed.emit("0")
 	_check(inventory.skills.stones["0"] == found and inventory.items.has(old) and not inventory.items.has(found),
 			"pressed, it stands there and the stone it took the place of is back in the bag")

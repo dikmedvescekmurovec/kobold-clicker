@@ -71,6 +71,9 @@ func _run() -> void:
 	# The film moves the camera off the hero on purpose: no badge calling it back.
 	_main._hero_pointer.process_mode = Node.PROCESS_MODE_DISABLED
 	_main._hero_pointer.hide()
+	# Nor a Stop over every walk.
+	_main._stop_button.queue_free()
+	_main._stop_button = null
 	_start =Engine.get_process_frames()
 	print("TRAILER_START ", Engine.get_frames_drawn())
 	# `-- --until=<beat>` (`tools/trailer.py --opening`) stops the film there, to work on one part.

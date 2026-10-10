@@ -225,15 +225,17 @@ static func shadow(item: Item, says: Callable, known := false) -> ItemSlot:
 
 ## A piece drawn as `mark` alone at the mark's own size, with no socket, ring or corner marks: the skill
 ## tree's small stones (`SkillTreeView`). In `GROUP` like any square, so the card writes it and the hand
-## shows over it.
-static func bare(item: Item, mark: Texture2D) -> ItemSlot:
+## shows over it. The tree's root is no piece: with no `item`, `says` is what its card writes (`hint`).
+static func bare(item: Item, mark: Texture2D, says := Callable()) -> ItemSlot:
 	var slot := ItemSlot.new()
 	slot.item = item
+	slot.hint = says
 	slot.add_to_group(GROUP)
 	slot.custom_minimum_size = mark.get_size()
 	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	slot.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
-	slot.tooltip_text = item.display_name()
+	if item != null:
+		slot.tooltip_text = item.display_name()
 	var icon := TextureRect.new()
 	icon.texture = mark
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE

@@ -288,6 +288,17 @@ func _test_player(map: HexMap) -> bool:
 	player.advance(PlayerToken.SECONDS_PER_TILE * 0.5)
 	_check(player.cell == east and arrivals == ([east] as Array[Vector2i]), "two tiles' time covers two tiles")
 
+	# Stopped, a walk ends on the tile being stepped onto, and says so as any arrival does.
+	arrivals.clear()
+	player.walk([Vector2i.ZERO, west] as Array[Vector2i])
+	_check(player.can_stop(), "a walk with tiles still ahead can be stopped")
+	player.advance(PlayerToken.SECONDS_PER_TILE / 2.0)
+	player.stop_walk()
+	_check(player.is_walking() and not player.can_stop(), "a stopped walk finishes the step it is on")
+	player.advance(PlayerToken.SECONDS_PER_TILE)
+	_check(not player.is_walking() and player.cell == Vector2i.ZERO and arrivals == ([Vector2i.ZERO] as Array[Vector2i]),
+			"and ends on that tile")
+
 	# Move Speed shortens the walk: +100% crosses a tile in half the time, legs and all.
 	player.move_speed = func() -> float: return 100.0
 	player.walk([Vector2i.ZERO] as Array[Vector2i])

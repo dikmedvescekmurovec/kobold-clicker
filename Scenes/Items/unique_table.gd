@@ -20,8 +20,11 @@ const ROOT := "res://Assets/Gear/Unique/"
 ## What a replaced icon looked like before (`tools/ui_kit.py`'s `UNIQUE_OLD`), for `Settings.old_icons`.
 const OLD_ROOT := ROOT + "Old/"
 
-## Lifetime kills before any unique can fall. After that it is chance alone: nothing is promised.
+## Lifetime kills before any unique can fall. After that it is chance alone, but for the first.
 const FIRST_UNIQUE_KILLS := 100
+## The first, which a player whose collection log is still empty is promised in the kills after those
+## (`Encounter.PROMISED`'s `UNIQUE`; the user's, 2026-10-10): the starters' sword.
+const FIRST_UNIQUE := "squires_blade"
 
 ## How often a body is carrying one, by what it was, before its size and the player's drop rate: any
 ## monster can, and the rabble almost never does. One common in two thousand, one elite in a hundred,
