@@ -162,8 +162,8 @@ const BANISH_BACK := "Back"
 
 ## What she says before the way out is taken, in the list's place, over the button that takes it.
 const TRANSCEND_LINES := [
-	"The ice will take this world back, and you will wake in another.",
-	"Your bag, gold, orbs, levels and this land are lost. What waits on the other side is worth far more.",
+	"The ice takes this world back, and you wake up in another.",
+	"You'll lose the bag, the gold, the orbs, the levels and the land. You'll say it was worth it. They always do.",
 ]
 
 var inventory: Inventory
@@ -1272,18 +1272,18 @@ func _answer(reading: String, lines: VBoxContainer) -> void:
 	match reading:
 		FortuneTeller.ROADS:
 			# That they are all on the map, and no more: where each one lies is the map's to show.
-			lines.add_child(BountyList.wrapped("Every settlement between these walls is now on your map.",
-					TOLD_WIDTH))
+			lines.add_child(BountyList.wrapped("There. Every settlement between these walls is on your map. "
+					+ "You'll walk past half of them anyway.", TOLD_WIDTH))
 		FortuneTeller.TREASURE:
-			lines.add_child(BountyList.wrapped("A star now stands over the nearest chest you have not seen.",
-					TOLD_WIDTH))
-			lines.add_child(BountyList.wrapped("It stays until that chest is opened.", TOLD_WIDTH,
+			lines.add_child(BountyList.wrapped("There's a star over the nearest chest you haven't seen. "
+					+ "Come back when you want another.", TOLD_WIDTH))
+			lines.add_child(BountyList.wrapped("It stays until you open it. I don't do refunds.", TOLD_WIDTH,
 					Palette.TEXT_SOFT))
 		FortuneTeller.APPRAISE:
 			lines.add_child(ItemDetails.line(_bag_piece.display_name(), _bag_piece.text_color(), TOLD_WIDTH))
 			# What the table is, since a column of lines and percentages says nothing on its own: the
 			# base's whole pool, not what this piece has.
-			lines.add_child(BountyList.wrapped("Every modifier a %s can roll" % _bag_piece.type, TOLD_WIDTH,
+			lines.add_child(BountyList.wrapped("%s: every modifier it can roll" % _bag_piece.type, TOLD_WIDTH,
 					Palette.TEXT_SOFT))
 			lines.add_child(UITheme.rule(TOLD_WIDTH))
 			# Its own box: the answer's row gap would pull the table's stripes apart.

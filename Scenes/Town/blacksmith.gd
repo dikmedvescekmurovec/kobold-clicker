@@ -27,10 +27,11 @@ extends RefCounted
 ## is no safer, dearer upgrade, because two buttons would turn every press into a sum.
 const BREAK_CHANCE := 0.05
 
-## What he says about a piece he has already ruined. `OrbTable` says the same thing in its own words
-## rather than reading it from here: the items know nothing about towns, and that is worth more than
-## one shared sentence.
-const BROKEN := "This item is broken"
+## What he says about a piece he has already ruined, in his own voice. `OrbTable` says the same thing
+## in its own words rather than reading it from here: the items know nothing about towns, and that is
+## worth more than one shared sentence. So does the black screen's Make heirloom (`BagPage`), where he
+## is not the one speaking.
+const BROKEN := "It's broken. Not my job to mend it."
 
 
 ## Whether this piece can be taken one level higher here. `cap` is the deepest level this town's

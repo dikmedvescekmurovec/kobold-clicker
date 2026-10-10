@@ -83,7 +83,7 @@ const SCOUR_RADIUS := 2
 const ROADS_RADIUS := 1
 
 ## What she says about a piece whose modifiers are its row's and nothing else's.
-const WRITTEN := "Its lines are already written"
+const WRITTEN := "A unique's lines are already written"
 
 
 ## How warm the cave feels `steps` from it: an index into `WARMTH`, 0 the coldest.

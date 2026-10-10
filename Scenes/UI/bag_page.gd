@@ -1197,7 +1197,7 @@ func _refresh_make() -> void:
 	var item := _open_piece()
 	_make_button.disabled = not _purse.can_make_heirloom(item)
 	_make_button.tooltip_text = ("Open the item you would keep" if item == null
-			else Blacksmith.BROKEN if item.broken else "Keep this when the world is left behind")
+			else "This item is broken" if item.broken else "Keep this when the world is left behind")
 
 
 func _on_make_pressed() -> void:

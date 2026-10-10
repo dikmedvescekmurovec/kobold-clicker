@@ -285,8 +285,8 @@ const TIPS := [
 	], "player"],
 	["level_up", HERO, [
 		"I feel stronger. Taller, even.",
-		"well ...",
-		"... probably not taller.",
+		"Well...",
+		"...probably not taller.",
 	], "player"],
 	["first_farm", HERO, [
 		"They just keep coming! Good. No rush, then.",
@@ -295,7 +295,7 @@ const TIPS := [
 		"Right, clock's ticking. I love it when the clock's ticking.",
 	], "player"],
 	["first_town", HERO, [
-		"Oh, it's a proper town. With a gate and everything.",
+		"Ohh ... a proper place. With a gate and everything.",
 		"Right. Plan. Sell the sticky stuff, keep the sharp stuff.",
 	], "player"],
 	["first_unique", HERO, [
@@ -303,31 +303,30 @@ const TIPS := [
 	], "player"],
 	["first_heirloom", "Fortuneteller", [
 		"The wall's down, then. Took you long enough.",
-		"Come see me when you want out. It'll cost you everything, but you'll thank me.",
+		"Come see me in town when you want out of this world. It'll cost you everything but you'll thank me in the next one.",
 	], "fortuneteller"],
 	["first_cave", HERO, [
 		"Something big lives at the bottom. I can hear it breathing.",
 	], "player"],
 	["first_sense", HERO, [
-		"Ugh. Something evil woke up out there. I can feel it pulling at my scales.",
+		"Ugh. Something evil woke up out there. I can feel it pulling at my scales. I should go and look.",
 	], "player"],
 	["first_accept", "Blacksmith", [
 		"Took one on, did you. Good.",
 		"Clear the whole board and there's something extra in it for you. My own work.",
 	], "blacksmith"],
 	["first_fortune", "Fortuneteller", [
-		"You'll want the chest. They always want the chest.",
-		"Then you'll want it again and again and again. And it'll cost you twice as much every time, and you'll look at me like I did something.",
-		"Choose other spells too if you like. The great ones I can only manage once though. I'm not young anymore.",
+		"You'll want to know where the chest is. They always want to know where the chest is.",
+		"Choose other spells too if you like. The great ones I can only manage once a town though. I'm not young anymore.",
 	], "fortuneteller"],
 	["first_smith", "Blacksmith", [
 		"Put it on the anvil. Don't touch anything else.",
-		"I can make it better quality. Whatever's on it stays on it.",
-		"Now and then the metal gives. That's the metal's fault, not mine. You still pay.",
+		"I can make it better quality. Whatever's on it stays on it. Pay more and I'll make one of them stay for good.",
+		"Now and then the metal breaks. That's the metal's fault, not mine. You still pay.",
 	], "blacksmith"],
 	["first_board_cleared", "Blacksmith", [
 		"Cleared the whole board, did you. Fine. You'll do.",
-		"Here. Some of my best work. Pick one. One.",
+		"Here. Best I've got. Pick one. One.",
 		"I'll tell them you're ready for the nasty jobs. Nasty pays better.",
 	], "blacksmith"],
 ]

@@ -357,7 +357,7 @@ promise could not offer. And nothing that happens before one is taken -- a close
 bag -- rerolls them or loses them: the board's **Reward** puts them back up.
 
 **The first clear has the smith say so** (`first_board_cleared`), over the choice he is handing over:
-the player is a proper adventurer, here is some of his best work, and he will tell the board they can
+the player is a proper adventurer, here is the best he has, and he will tell the board they can
 take the nastier jobs, which pay better. That is the tier explained in his voice instead of in a
 sentence on the page. He says it in a village too, where he has no counter.
 
