@@ -187,9 +187,10 @@ func _process(_delta: float) -> void:
 func hovered(at: Vector2, pressed: bool) -> ItemSlot:
 	var slot := slot_at(at)
 	# A finger has no hover: its tap is how a piece is asked about, so the card comes up as it lifts
-	# and stays until the next tap lands somewhere else.
+	# and stays until the next tap lands somewhere else -- and through a press on a node it is already
+	# on (`STAYS`), where a finger held down is spending points the card counts.
 	if pressed and Cursors.touched:
-		return null
+		return slot if slot != null and slot == _shown and slot.has_meta(STAYS) else null
 	if not pressed:
 		_orb_press = Cursors.holding()
 	if _orb_press or Cursors.holding():

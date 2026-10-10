@@ -751,10 +751,18 @@ func _input(event: InputEvent) -> void:
 		refresh()
 	elif event.button_index == MOUSE_BUTTON_LEFT and _confirm == null \
 			and ItemCard.square_at(get_tree(), event.position) == null and not _over_tray(event.position) \
-			and not (RuneTable.has(_armed) and get_viewport().gui_get_hovered_control() == null):
+			and not (RuneTable.has(_armed) and _off_the_bag()):
 		# A rune goes on the map: a press on bare map is the map's (`rune_on`), and keeps it in hand.
 		_armed = ""
 		_put_down = true
+
+
+## Whether the cursor is on nothing of this page's: bare map, or the tile panel a finger's first tap on
+## a tile puts up over the bag (the main scene's `_on_cell_aimed`), whose X goes back to the bag with the
+## rune still in hand.
+func _off_the_bag() -> bool:
+	var over := get_viewport().gui_get_hovered_control()
+	return over == null or not is_ancestor_of(over)
 
 
 func _over_tray(at: Vector2) -> bool:
@@ -895,7 +903,7 @@ func _on_clicked(at: Vector2, shift := false, ctrl := false) -> void:
 	if index < 0:
 		_select_item(-1)
 	elif _armed != "":
-		_craft(_armed, inventory.items[index])
+		_orb_on(inventory.items[index])
 	elif shift or ctrl:
 		_select_item(index)
 		_press_action(shift)
@@ -1415,7 +1423,7 @@ func _on_tree_pressed(path: String) -> void:
 	var placed: Item = _purse.skills.stones.get(path)
 	if _armed != "":
 		if placed != null:
-			_craft(_armed, placed)
+			_orb_on(placed)
 		return
 	_place(_open_piece(), path)
 
@@ -1479,7 +1487,7 @@ func _on_doll_input(event: InputEvent) -> void:
 	if socket < 0 or _dragged >= (Cursors.TOUCH_SLOP if Cursors.touched else DRAG_THRESHOLD):
 		return
 	if _armed != "":
-		_craft(_armed, inventory.equipment.item_at(socket))
+		_orb_on(inventory.equipment.item_at(socket))
 	elif press.shift_pressed or press.ctrl_pressed:
 		_select_socket(socket)
 		_press_action(press.shift_pressed)
@@ -1543,11 +1551,7 @@ func refresh_orbs() -> void:
 		_orb_tray.visible = _heirlooms
 		_orb_rule.visible = _heirlooms
 		for orb: String in SuperOrbTable.orbs() if _heirlooms else []:
-			var slot := OrbSlot.make(orb, mini(_purse.super_orbs, 1), true, orb == _armed)
-			slot.pressed.connect(_on_orb_pressed)
-			slot.hovered.connect(_on_orb_hovered.bind(slot))
-			slot.unhovered.connect(_hide_orb_card)
-			_orb_tray.add_child(slot)
+			_orb_tray.add_child(_tray_slot(orb, mini(_purse.super_orbs, 1)))
 		_hide_orb_card()
 		return
 	# No tray until the first orb; once seen it stays, even with every orb spent. The runes the same, over
@@ -1571,6 +1575,7 @@ func refresh_orbs() -> void:
 
 func _tray_slot(orb: String, count: int) -> OrbSlot:
 	var slot := OrbSlot.make(orb, count, true, orb == _armed)
+	slot.picks_up = true
 	slot.pressed.connect(_on_orb_pressed)
 	slot.hovered.connect(_on_orb_hovered.bind(slot))
 	slot.unhovered.connect(_hide_orb_card)
@@ -1686,6 +1691,14 @@ func _super_craft(orb: String, item: Item, index: int) -> void:
 func craft_held(item: Item, written: Callable) -> void:
 	if _armed != "":
 		_craft(_armed, item, written)
+
+
+## The held orb pressed on one of the player's own pieces: in the bag, worn, or a stone in the tree.
+## Under a finger the first tap only puts the piece's card up, and the next spends the orb
+## (`Cursors.applies`): with no hover, a tap is the only way the piece is read first.
+func _orb_on(item: Item) -> void:
+	if Cursors.applies(item):
+		_craft(_armed, item)
 
 
 ## An orb that would take a piece down a rarity asks first, with a tick to stop asking (the user's,

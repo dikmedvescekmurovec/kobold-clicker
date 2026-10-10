@@ -28,8 +28,6 @@ var _points: Label
 var _scroll: ScrollContainer
 var _view: SkillTreeView
 var _reset: Button
-## Under a finger (`Cursors.touched`): the stone a tap has put the card up for, which the next tap learns.
-var _read := ""
 
 ## Where the main scene stands the page, in window pixels: empty for the whole window.
 var area := Rect2()
@@ -114,9 +112,9 @@ func layout() -> void:
 ## on its corner whether it has room. A press held down puts one in again and again, saved once it lets
 ## go (`SkillTreeView.hold_ended`), so the save and the corner's damage float come once, not each point.
 func _on_stone_pressed(path: String) -> void:
-	# A finger has no hover: its first tap on a stone is what puts the card up, and the next learns it.
-	if Cursors.touched and _read != path:
-		_read = path
+	# A finger has no hover: its first tap on a stone is what puts the card up, and the next learns it --
+	# or a finger held on it then, point after point.
+	if not Cursors.applies("node:" + path):
 		return
 	if not inventory.rank_up_skill(path):
 		return

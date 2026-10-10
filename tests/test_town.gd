@@ -1976,7 +1976,13 @@ func _test_fortune_page() -> void:
 	main.view._show(other, MapBuilder.State.CHARTED)
 	main.town_page.redraw()
 	await process_frame
+	# Under a finger her square is read by the first tap and cast by the next (`Cursors.applies`).
+	Cursors.touched = true
 	_ask(main, FortuneTeller.HOMECOMING)
+	_check(main.town_page.visible and main.map.aim_radius == -1, "a finger's first tap on a spell only reads it")
+	Cursors.taps += 1
+	_ask(main, FortuneTeller.HOMECOMING)
+	Cursors.touched = false
 	await process_frame
 	_check(not main.town_page.visible and main.map.aim_radius == 0,
 			"the road home closes the town and aims at one tile")
@@ -1984,7 +1990,15 @@ func _test_fortune_page() -> void:
 	main._on_cell_aimed(dark)
 	_check(main.view.player_cell == town and main.inventory.gold == purse,
 			"land that is no charted settlement is refused")
+	# And so is the land it is aimed at: the first tap only chooses the tile.
+	Cursors.touched = true
+	Cursors.taps += 1
 	main._on_cell_aimed(other)
+	_check(main.view.player_cell == town and main.inventory.gold == purse and main.map.aim_radius == 0,
+			"a finger's first tap on the land aimed at casts nothing")
+	Cursors.taps += 1
+	main._on_cell_aimed(other)
+	Cursors.touched = false
 	await process_frame
 	_check(main.view.player_cell == other and main.map.player.cell == other, "the chosen town is walked to in no time")
 	_check(main.inventory.gold < purse and _spent(main, main.view.start_town, FortuneTeller.HOMECOMING),

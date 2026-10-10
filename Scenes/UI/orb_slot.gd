@@ -41,12 +41,18 @@ signal hovered(orb: String)
 signal unhovered()
 
 var orb := ""
+## Whether this is an orb to pick up and use on something else (the bag's trays), not one to buy. Under
+## a finger a tap then picks it up and says nothing, and its card is a finger held on it for
+## `TipCard.DELAY`, which picks nothing up (the user's, 2026-10-10): what is read first is the piece.
+var picks_up := false
 
 var _icon: TextureRect
 var _live := false
 ## Under a finger (`Cursors.touched`): whether the tap that put this square's card up has been had, so
 ## the next one presses it. Forgotten as the finger goes elsewhere.
 var _read := false
+## How long a finger has been down on an orb that `picks_up`, in seconds, or -1 with none on it.
+var _held := -1.0
 
 
 ## Draws this orb held `count` times. `usable` is whether it can do anything to whatever the bag has
@@ -101,16 +107,37 @@ func setup(which: String, count: int, usable: bool, armed := false, side := SIDE
 		if _live:
 			add_theme_stylebox_override("panel",
 					ItemRarity.slot_style(ItemRarity.Rarity.COMMON, true))
-		hovered.emit(orb))
+		# A finger's tap is what enters it, and on an orb to pick up that tap says nothing.
+		if not (picks_up and Cursors.touched):
+			hovered.emit(orb))
 	mouse_exited.connect(func() -> void:
 		_read = false
+		# A finger that slid off it is no longer held on it, and lifts on nothing.
+		_held = -1.0
+		set_process(false)
 		add_theme_stylebox_override("panel", rest)
 		unhovered.emit())
+
+
+## Godot starts whatever has a `_process`; this one runs only while a finger is down (`_finger`).
+func _ready() -> void:
+	set_process(false)
+
+
+## A finger held on an orb that `picks_up` puts its card up once it has stayed `TipCard.DELAY`.
+func _process(delta: float) -> void:
+	_held += delta
+	if _held >= TipCard.DELAY:
+		set_process(false)
+		hovered.emit(orb)
 
 
 ## A press on a lit square. A grey one still hovers -- the card is where the player finds out why it
 ## is grey -- and simply does nothing when clicked.
 func _gui_input(event: InputEvent) -> void:
+	if picks_up and Cursors.touched:
+		_finger(event)
+		return
 	if not _live:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -119,6 +146,26 @@ func _gui_input(event: InputEvent) -> void:
 		if Cursors.touched and not _read:
 			_read = true
 			return
+		pressed.emit(orb)
+
+
+## A finger on an orb that `picks_up`, which counts as it lifts: let go at once it presses the square,
+## and held until the card came up (`_process`) it only puts the card away again. A grey one is read
+## the same way and never pressed.
+func _finger(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
+		return
+	accept_event()  # Before the emit, which may redraw this slot out of the tree.
+	if event.pressed:
+		_held = 0.0
+		set_process(true)
+		return
+	var read := _held >= TipCard.DELAY
+	_held = -1.0
+	set_process(false)
+	if read:
+		unhovered.emit()
+	elif _live and Rect2(Vector2.ZERO, size).has_point(event.position):
 		pressed.emit(orb)
 
 

@@ -132,7 +132,10 @@ func _ready() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
-		_set_hovered(cell_at(world_position(event.position)))
+		# A finger has no hover, and its motion is only ever the map pulled about: its outline stands
+		# where it last tapped (below).
+		if not Cursors.touched:
+			_set_hovered(cell_at(world_position(event.position)))
 		if _pressing:
 			var slop := Cursors.TOUCH_SLOP if Cursors.touched else DRAG_THRESHOLD
 			if _press_at.distance_to(event.position) > slop * ui_scale:
@@ -149,6 +152,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			# A click selects a tile; a press that travelled was a drag, and only moved the map.
 			var cell := cell_at(world_position(event.position))
+			# A tap makes no motion, so it is what moves a finger's outline: onto the tile it chose.
+			if _pressing and not _dragging:
+				_set_hovered(cell)
 			if _pressing and not _dragging and aim_radius >= 0:
 				cell_aimed.emit(cell)
 				get_viewport().set_input_as_handled()

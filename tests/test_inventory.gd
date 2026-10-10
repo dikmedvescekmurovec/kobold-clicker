@@ -71,6 +71,7 @@ func _run() -> void:
 	_check(await _test_a_farm_run_holds_its_loot() == true, "farm run tests ran to the end")
 	_check(await _test_a_rule_keeps_finds_off_the_screen() == true, "autodiscard fight tests ran to the end")
 	_check(await _test_crafting_from_the_bag() == true, "crafting tests ran to the end")
+	_check(await _test_a_finger_selects_first() == true, "finger crafting tests ran to the end")
 	_check(await _test_tips() == true, "tip tests ran to the end")
 	_check(_test_fight_ledger() == true, "fight ledger tests ran to the end")
 	_check(_test_unique_table() == true, "unique table tests ran to the end")
@@ -4609,6 +4610,59 @@ func _card_lit(main: Node) -> Color:
 ## The right-hand edge of a panel on the UI layer, in window pixels.
 func _panel_right(panel: Control, ui_scale: float) -> float:
 	return panel.get_global_position().x + panel.size.x * ui_scale
+
+
+## Under a finger whatever a held orb or rune is pressed on is selected by the first tap and takes it on
+## the next (`Cursors.applies`): a piece keeps the orb unspent, and a tile puts its panel up over the bag.
+func _test_a_finger_selects_first() -> bool:
+	_clear_save()
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	main.inventory_path = TEST_PATH
+	main.map_path = TEST_MAP_PATH
+	root.add_child(main)
+	for i in 3:
+		await process_frame
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 99
+	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 4)
+	main.inventory.add(sword)
+	main.inventory.add_orb("Orb of Transmutation", 2)
+	main.inventory.add_rune(RuneTable.UNREST)
+	main._on_bag_pressed()
+	for i in 2:
+		await process_frame
+	var bag: BagPage = main.bag_page
+	var tap := func() -> void:
+		Cursors.taps += 1
+		var square: ItemSlot = _bag_squares(main).filter(func(s: ItemSlot) -> bool: return s.item == sword)[0]
+		bag._on_clicked(_square_spot(square))
+
+	Cursors.touched = true
+	bag._on_orb_pressed("Orb of Transmutation")
+	tap.call()
+	_check(sword.rarity == ItemRarity.Rarity.COMMON and main.inventory.orb_count("Orb of Transmutation") == 2
+			and bag._armed == "Orb of Transmutation", "a finger's first tap on a piece spends no orb")
+	tap.call()
+	_check(sword.rarity == ItemRarity.Rarity.UNCOMMON and main.inventory.orb_count("Orb of Transmutation") == 1,
+			"the next tap on it spends it")
+
+	var ground: Vector2i = main.view.best_farm()
+	bag._on_orb_pressed(RuneTable.UNREST)
+	Cursors.taps += 1
+	main._on_cell_aimed(ground)
+	_check(main._panel.visible and bag.visible and main.map.selected_cell == ground
+			and bag._armed == RuneTable.UNREST and main.inventory.rune_count(RuneTable.UNREST) == 1,
+			"a finger's first tap on a tile puts its panel up over the bag, the rune still in hand")
+	_check(main._panel.get_index() > bag.get_index(), "in front of the bag, which is drawn after it otherwise")
+	Cursors.taps += 1
+	main._on_cell_aimed(ground)
+	_check(main.inventory.rune_count(RuneTable.UNREST) == 0 and main.inventory.has_runes(main.view.origin + ground),
+			"and the next tap there spends it")
+	Cursors.touched = false
+	main.queue_free()
+	return true
 
 
 ## A first find and a first level each put up one pop-up, once, and bring on the corner button they

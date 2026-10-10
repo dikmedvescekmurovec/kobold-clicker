@@ -841,7 +841,9 @@ func _build_character() -> void:
 ## window, out of a town, and the panel stands mirrored on the other side of it, so it stays in view.
 func _character_right() -> bool:
 	var page := _left_page()
-	return (page is BagPage or page == skills_page) and not town_page.visible and not _narrow()
+	# Nor beside the tile panel, which has that edge: a rune in a finger's hand has both up (`_on_cell_aimed`).
+	return (page is BagPage or page == skills_page) and not town_page.visible and not _narrow() \
+			and not _panel.visible
 
 
 ## The character panel in its corner -- the top-left, or mirrored in the top-right (`_character_right`),
@@ -1767,7 +1769,12 @@ func _layout_ui() -> void:
 func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
 	# A tile chosen has the screen to itself: any page closes, as opening a page drops the tile
 	# (`_toggle_left_page`). Not in a town, whose page keeps the map's edge and the tile panel hidden.
-	if _town_cell == HexMap.NO_CELL and _left_page_up():
+	# Nor while a rune in the bag's hand aims the map (a finger's first tap on a tile, `_on_cell_aimed`):
+	# the bag put away would put the rune down, so the panel stands with it -- and in front of it, since
+	# held upright both are sheets along the foot and the pages are drawn after the panel.
+	if map.aim_radius >= 0:
+		_panel.move_to_front()
+	elif _town_cell == HexMap.NO_CELL and _left_page_up():
 		_on_left_page_closed()
 	_update_buttons()
 	# The map is still clickable behind an open town page, which has this edge until the player leaves
@@ -3216,6 +3223,13 @@ func _on_spell_aimed(reading: String, price: float, spot: Vector2i) -> void:
 ## already or past the edge of what the map has made; a tile that is no settlement or cave the player has
 ## charted -- is refused and the aim stays up, so the town's one casting is never spent on nothing.
 func _on_cell_aimed(cell: Vector2i) -> void:
+	# A finger's first tap on a tile only chooses it, and the next does the deed (`Cursors.applies`):
+	# the outline stands on it either way (`HexMap`), and under a rune its panel comes up to be read,
+	# the bag left standing (`_on_tile_clicked`).
+	if not Cursors.applies(cell):
+		if _aiming.is_empty() and map.has_tile(cell):
+			map.select_cell(cell)
+		return
 	if _aiming.is_empty():
 		_rune_on(cell)
 		return
@@ -3446,3 +3460,5 @@ func _on_close_pressed() -> void:
 	_panel.hide()
 	map.deselect()
 	_update_buttons()
+	# The character panel has the edge back where a bag page was up beside it (`_character_right`).
+	_place_character()

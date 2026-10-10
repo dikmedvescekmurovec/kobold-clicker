@@ -1022,6 +1022,34 @@ func _test_fingers() -> bool:
 	_check(presses.is_empty(), "a first tap on an orb puts its card up and spends nothing")
 	orb._gui_input(down)
 	_check(presses.size() == 1, "the second presses it")
+
+	# What a finger taps is selected first, and applied by the next tap on the same thing.
+	_check(not Cursors.applies("a"), "a finger's first tap on a thing only selects it")
+	Cursors.taps += 1
+	_check(Cursors.applies("a") and Cursors.applies("a"), "the next tap on it applies, and a hold of that tap goes on applying")
+	Cursors.taps += 2
+	_check(not Cursors.applies("a"), "a tap anywhere else between starts it over")
+	_check(not Cursors.applies("a"), "and a hold on what a tap has only just selected applies nothing")
+	Cursors.taps += 1
+	_check(not Cursors.applies(Vector2i.ZERO), "a tap on a thing of another kind selects that one")
+
+	# An orb in the bag's tray is picked up, not read: its card is a finger held on it.
+	var tray := OrbSlot.make("Orb of Transmutation", 3, true)
+	tray.picks_up = true
+	root.add_child(tray)
+	var picked: Array = []
+	var read: Array = []
+	tray.pressed.connect(func(which: String) -> void: picked.append(which))
+	tray.hovered.connect(func(which: String) -> void: read.append(which))
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	tray._gui_input(down)
+	tray._gui_input(up)
+	_check(picked.size() == 1 and read.is_empty(), "a tap on an orb in the tray picks it up and puts no card up")
+	tray._gui_input(down)
+	tray._process(TipCard.DELAY)
+	tray._gui_input(up)
+	_check(picked.size() == 1 and read.size() == 1, "a finger held on it reads its card and picks nothing up")
 	var tip := TipCard.new(2.0)
 	root.add_child(tip)
 	var info := Control.new()
@@ -1036,6 +1064,6 @@ func _test_fingers() -> bool:
 	_check(tip._asking(plain), "and a tooltip waits for a cursor at rest")
 	info.free()
 	plain.free()
-	for made: Node in [square, card, orb, tip]:
+	for made: Node in [square, card, orb, tray, tip]:
 		made.queue_free()
 	return true

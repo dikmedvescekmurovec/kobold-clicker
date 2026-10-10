@@ -1370,6 +1370,10 @@ func _spell_square(reading: String) -> Control:
 	# What a reading does, with no name before it (the user's call, 2026-09-25). Not how often it has
 	# been asked: the price under it already says it has climbed.
 	square.tooltip_text = refused if not refused.is_empty() else FORTUNE_TIPS[reading]
+	# A finger's first tap on a spell reads it and the next casts it (`Cursors.applies`), so under one
+	# its words come up with the tap and stay, as an info mark's do, rather than wait for a hover.
+	if Cursors.touched:
+		square.set_meta(TipCard.NOW, true)
 	var icon := TextureRect.new()
 	# Mode before texture and size, for the reason `_price_cell`'s coin gives: a TextureRect's minimum
 	# is its own texture until `expand_mode` says otherwise.
@@ -1398,7 +1402,8 @@ func _spell_square(reading: String) -> Control:
 		if (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT
 				and event.pressed):
 			square.accept_event()  # Before the redraw frees it, which would let the press through to the map.
-			_on_reading_pressed(reading))
+			if Cursors.applies("spell:" + reading):
+				_on_reading_pressed(reading))
 	return square
 
 
@@ -1607,9 +1612,12 @@ func _on_shelf_input(event: InputEvent, at: int) -> void:
 	# piece that is not theirs yet: the price under it is read off the rarity and moves with it. The
 	# shelf is drawn again when the orb lands, which a question about lowering it may put off.
 	if _held != "":
-		craft_held.call(shelf[at], func() -> void:
-			VendorStock.put(_drawer, at, shelf[at])
-			redraw())
+		# Under a finger the first tap only puts the piece's card up (`Cursors.applies`) -- asked by its
+		# place on the shelf, which makes its pieces anew every time it is drawn.
+		if Cursors.applies("shelf:%d" % at):
+			craft_held.call(shelf[at], func() -> void:
+				VendorStock.put(_drawer, at, shelf[at])
+				redraw())
 		return
 	_offer = shelf[at]
 	_offer_at = at

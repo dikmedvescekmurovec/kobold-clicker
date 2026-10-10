@@ -45,6 +45,13 @@ static var _drawn := {}
 static var touched := false
 ## How far a finger may wobble, in panel pixels, and its press still be a tap rather than a drag.
 const TOUCH_SLOP := 8.0
+## How many times a finger has come down (`feel`), which is how `applies` tells the next tap from a
+## later one. A test that calls a handler twice for two taps adds one between them.
+static var taps := 0
+## What a finger last tapped and on which of `taps`, and whether that tap applied (`applies`).
+static var _read: Variant = null
+static var _read_tap := -1
+static var _applying := false
 static var _scale := 1
 ## What stands in the arrow's place (`hold`), as the same pair, or empty.
 static var _held: Array = []
@@ -111,6 +118,27 @@ static func holding() -> bool:
 static func feel(event: InputEvent) -> void:
 	if event is InputEventScreenTouch or event is InputEventMouse:
 		touched = event is InputEventScreenTouch or event.device == InputEvent.DEVICE_ID_EMULATION
+	# The mouse Godot makes up from the finger, so a tap is counted once and not again for the touch.
+	if touched and event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		taps += 1
+
+
+## Whether a press on `what` does its work (the user's rule, 2026-10-10). A mouse's always does. A finger
+## has no hover to read by, so its first tap on a thing only selects it -- whoever asks puts up what it
+## is -- and the next tap on the same thing applies, as does every one after it until a tap lands
+## anywhere else. Asked again within one press (`SkillTreeView`'s hold) it answers as it did: a hold on
+## what was selected goes on applying, and one on something new only selects it.
+static func applies(what: Variant) -> bool:
+	if not touched:
+		return true
+	# Unlike types cannot be compared: a tile's cell against the node tapped before it.
+	var same: bool = typeof(what) == typeof(_read) and what == _read
+	if same and _read_tap == taps:
+		return _applying
+	_applying = same and _read_tap == taps - 1
+	_read = what
+	_read_tap = taps
+	return _applying
 
 
 ## Every event the main scene hears (`_input`, since a Control would eat a press before anything

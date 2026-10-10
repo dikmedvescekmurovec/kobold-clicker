@@ -442,6 +442,18 @@ func _test_page() -> bool:
 	view._gui_input(up)
 	_check(inventory.skills.rank_of("") == before + 3 and ended.size() == 1,
 			"letting go adds none and ends the hold (%d, %d)" % [inventory.skills.rank_of(""), ended.size()])
+	# Under a finger a tap on a node only selects it -- its card comes up -- and the next tap learns it.
+	Cursors.touched = true
+	before = inventory.skills.rank_of("")
+	view.slot_pressed.emit("")
+	view.slot_pressed.emit("")
+	_check(inventory.skills.rank_of("") == before, "a finger's first tap on a node spends nothing, held or not")
+	Cursors.taps += 1
+	view.slot_pressed.emit("")
+	view.slot_pressed.emit("")
+	_check(inventory.skills.rank_of("") == before + 2,
+			"the next tap learns it, and held goes on learning (%d)" % inventory.skills.rank_of(""))
+	Cursors.touched = false
 	page.queue_free()
 	await process_frame
 	return true
