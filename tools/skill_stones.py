@@ -10,8 +10,8 @@ also writes `Assets/Skills/Stones/<attr>_<n>.png`, `Assets/Skills/Stones/<attr>_
 A numeral is a groove in the stone's own dark colours, deepest on the wall that faces away from the light, with a
 broken lit lip on its lower and right side, where light from the top left would catch the far wall of a cut.
 """
+import argparse
 import os
-import sys
 
 from PIL import Image
 
@@ -164,6 +164,9 @@ def nodes_preview(stones, base):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--export", action="store_true", help="also write Assets/Skills/Stones/ and Assets/Skills/root.png")
+    args = parser.parse_args()
     stones = {a: Image.open(os.path.join(SRC, a + ".png")).convert("RGBA") for a in ATTRS}
     base = Image.open(os.path.join(SRC, BASE + ".png")).convert("RGBA")
     scale, pad = 6, 8
@@ -176,7 +179,7 @@ def main():
     os.makedirs(QA, exist_ok=True)
     sheet.save(os.path.join(QA, "skill_stones.png"))
     nodes_preview(stones, base).save(os.path.join(QA, "skill_nodes.png"))
-    if "--export" in sys.argv:
+    if args.export:
         os.makedirs(OUT, exist_ok=True)
         for a in ATTRS:
             for n in range(LEVELS):

@@ -1,0 +1,22 @@
+# The Python tools: tools/*.py and AI-sprites-generator/*.py. The game and its tests need none of it
+# (tests/run_all.py and tools/check.py are standard library only).
+#
+#   pip install -r requirements.txt
+#
+# Python 3.10 or newer, which is Pillow 12's own floor.
+
+# Image.get_flattened_data, which ten of the scripts call, arrived in 12.1.0 (with getdata's deprecation).
+Pillow>=12.1.0
+# Nothing newer than Generator (np.random.default_rng, 1.17) is used. The art in Assets/ was built
+# with 2.4.2: the backdrops' noise and the old gear icons' are drawn from that Generator, whose stream
+# numpy does not promise to keep from one version to the next, so "a second run changes nothing" is
+# claimed for that numpy only.
+numpy>=1.17
+
+# Not from pip:
+# - ffmpeg and ffprobe on the PATH: tools/sound_levels.py, trailer.py, reels.py, clip_video.py, and
+#   AI-sprites-generator/cover.py --export.
+# - Aseprite, for AI-sprites-generator/build.py alone (the hex tiles): set ASEPRITE to its executable.
+# - Godot 4.7.2, the console build, for the recorders and tools/web.py (with its web export templates):
+#   set GODOT to its executable.
+# - Node, for `tools/web.py --deploy` (wrangler, by `npm install` in backend/leaderboard/).

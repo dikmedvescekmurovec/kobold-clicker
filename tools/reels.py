@@ -7,16 +7,15 @@
 Needs Godot 4.7.2 and ffmpeg. Each reel is recorded at 360x640 (ui_scale 1, the narrow layout), blown up 3x
 with nearest neighbour to 1080x1920. Under it: one of the game's own Action tracks, started so a hit of the
 track (found by ear-less onset search, `MUSIC`) lands on the reel's punch (`REEL_HIT`), and the fight's own
-sounds recorded with it.
+sounds recorded with it. Set GODOT to use another executable.
 """
-import json, os, re, subprocess, sys, tempfile
+import argparse, json, os, re, subprocess, sys, tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-GODOT = r"C:\Users\Dik\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe"
+from recording import GODOT, ROOT, ready, viewport
+
 FRAMES = Path(tempfile.gettempdir()) / "reel_frames"
 OUT = ROOT / "build" / "reels"
-OVERRIDE = ROOT / "override.cfg"
 TRACK = str(ROOT / "Sounds" / "Music" / "ogg" / "Action {}.ogg")
 FPS = 60
 # The order they are numbered in, each with its track and the second of a section hit in it (where the
@@ -38,14 +37,11 @@ def record(name: str) -> dict:
         old.unlink()
     # Movie Maker records at the project's viewport size, not the window's, and takes no flag for it: an
     # override.cfg beside project.godot sets it for this run only.
-    OVERRIDE.write_text("[display]\n\nwindow/size/viewport_width=360\nwindow/size/viewport_height=640\n")
-    try:
+    with viewport(360, 640):
         run = subprocess.run([GODOT, "--path", str(ROOT), "--resolution", "360x640",
                               "--write-movie", str(frames / "f.png"), "--fixed-fps", str(FPS),
                               "-s", "res://tests/reels.gd", "--", f"--reel={name}"],
                              capture_output=True, text=True, encoding="utf-8", errors="replace")
-    finally:
-        OVERRIDE.unlink()
     out = run.stdout + run.stderr
     if "SCRIPT ERROR" in out or "REEL_END" not in out:
         print(out[-4000:])
@@ -83,10 +79,19 @@ def encode(name: str, marks: dict) -> None:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("names", nargs="*", metavar="name", help="which reels (all ten without): " + " ".join(REELS))
+    parser.add_argument("--encode", action="store_true", help="encode the last recording again, without recording")
+    args = parser.parse_args()
+    if set(args.names) - set(REELS):
+        parser.error("no such reel: " + " ".join(sorted(set(args.names) - set(REELS))))
     os.chdir(ROOT)
-    names = [a for a in sys.argv[1:] if not a.startswith("--")] or list(REELS)
+    names = args.names or list(REELS)
+    # Everything the reels need, asked for before the minute each takes to record.
+    marks = [FRAMES / name / "marks.txt" for name in names] if args.encode else []
+    ready(*sorted({TRACK.format(REELS[name][0]) for name in names}), *marks, record=not args.encode)
     for name in names:
-        if "--encode" in sys.argv:
+        if args.encode:
             encode(name, json.loads((FRAMES / name / "marks.txt").read_text()))
         else:
             encode(name, record(name))

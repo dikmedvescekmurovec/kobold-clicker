@@ -13,8 +13,8 @@ standing in the cave at the fight's own proportions -- and prints each creature'
 for `EnemyRoster`. `--export` writes `Assets/Enemies/<name>/<animation>.png` and
 `Assets/Area/cave/<n>.png`. Run the Godot import after it.
 """
+import argparse
 import shutil
-import sys
 from pathlib import Path
 
 from PIL import Image
@@ -173,11 +173,14 @@ def export(found: dict) -> None:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--export", action="store_true", help="also write Assets/Enemies/<name>/ and Assets/Area/cave/")
+    args = parser.parse_args()
     all_of_them = creatures()
     for who, its in all_of_them.items():
         side = 128 if who in STRIPS else CELL
         print(f'"{who}": frame ({side}, {side}), bounds {bounds_of(its, side)}, '
               + ", ".join(f"{anim} {strip.width // side}" for anim, strip in its.items()))
     preview(all_of_them)
-    if "--export" in sys.argv:
+    if args.export:
         export(all_of_them)

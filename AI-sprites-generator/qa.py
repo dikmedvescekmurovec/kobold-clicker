@@ -1,5 +1,7 @@
-"""QA for each phase. Usage: python qa.py <phase1|phase2|phase3|showcase|blends|ui|slimes|hpbar|gear> <tag>
+"""QA for each phase. Usage: python qa.py <phase> <tag>, the phases being `PHASES` at the foot of this
+file (`python qa.py --help` lists them).
 Images are written to qa/<name>_<tag>.png so every run can be viewed under a fresh filename."""
+import argparse
 import math
 import os
 import random
@@ -11,7 +13,6 @@ from buildlib import ceil_div
 from hexlib import BORDER, EDGE_MID, EDGE_NAMES, H, HEX_PIXELS, W, in_hex
 from preview import contact_sheet, tiled_map
 
-os.makedirs("qa", exist_ok=True)
 RING = [(x, y) for x, y in HEX_PIXELS if BORDER[y][x] < 1.5]
 OPP = {0: 3, 1: 4, 2: 5, 3: 0, 4: 1, 5: 2}
 
@@ -231,142 +232,6 @@ def _ui_font(size=16):
         return None
 
 
-def ui(tag):
-    from PIL import Image, ImageDraw
-
-    from hexlib import PALETTE
-    from preview import RGBA, nine_slice, tile_image
-    from ui import CELL, CHAMFER, SIZE, STATES, VARIANTS, all_ui, describe
-
-    tiles = all_ui()
-    by = {t.name: t for t in tiles}
-    print(f"ui: {len(tiles)} sprites")
-
-    bad_size = [t.name for t in tiles if (t.w, t.h) != (SIZE, SIZE)]
-    holes = {t.name: sorted({(x, y) for y in range(t.h) for x in range(t.w)
-                             if t.px[y][x] == 0} - set(CHAMFER)) for t in tiles}
-    silhouette = {t.name: {(x, y) for y in range(t.h) for x in range(t.w) if t.px[y][x] == 0} for t in tiles}
-    print("  wrong size:", bad_size or 0,
-          "| unexpected transparent pixels:", {k: v for k, v in holes.items() if v} or 0,
-          "| silhouettes identical:", len({frozenset(s) for s in silhouette.values()}) == 1)
-
-    # The one real 9-slice constraint: interior texture must be a pure function of (x % CELL, y % CELL),
-    # so repeated centre and edge cells join seamlessly at any size.
-    aperiodic = {}
-    for t in tiles:
-        groups = {}
-        for y in range(2, t.h - 2):
-            for x in range(2, t.w - 2):
-                groups.setdefault((x % CELL, y % CELL), set()).add(t.px[y][x])
-        off = {k: sorted(v) for k, v in groups.items() if len(v) > 1}
-        if off:
-            aperiodic[t.name] = off
-    print("  interior not 8-periodic:", aperiodic or 0)
-
-    outlines = {t.name: sorted({t.px[y][x] for x, y in
-                                [(x, 0) for x in range(1, SIZE - 1)] + [(x, SIZE - 1) for x in range(1, SIZE - 1)] +
-                                [(0, y) for y in range(1, SIZE - 1)] + [(SIZE - 1, y) for y in range(1, SIZE - 1)]})
-                for t in tiles}
-    print("  multi-colour outlines:", {k: v for k, v in outlines.items() if len(v) > 1} or 0)
-    used = sorted({c for t in tiles for c in t.flat() if c})
-    print("  palette indices used:", len(used), "of 31:", [PALETTE[i][0] for i in used])
-
-    def lum(i):
-        r, g, b = (v / 255 for v in RGBA[i][:3])
-        f = lambda u: u / 12.92 if u <= 0.04045 else ((u + 0.055) / 1.055) ** 2.4
-        return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
-
-    def contrast(a, b):
-        la, lb = sorted((lum(a), lum(b)))
-        return (lb + 0.05) / (la + 0.05)
-
-    face = lambda name: by[name].px[SIZE // 2][SIZE // 2]
-    for surface, panel in (("wood", "ui_panel_wood"), ("light", "ui_panel_white")):
-        bg = by[panel].px[SIZE // 2][SIZE // 2]
-        for variant in VARIANTS:
-            faces = {s: face(f"ui_btn_{surface}_{variant}_{s}") for s in STATES}
-            body = lambda s: {by[f"ui_btn_{surface}_{variant}_{s}"].px[y][x]
-                              for y in range(2, SIZE - 2) for x in range(2, SIZE - 2)}
-            print(f"  {surface}/{variant}: faces {[PALETTE[c][0] for c in faces.values()]} "
-                  f"contrast vs panel {[round(contrast(c, bg), 2) for c in faces.values()]} "
-                  f"hover differs from normal {body('hover') != body('normal')} "
-                  f"pressed keeps the hover face {body('pressed') == body('hover')}")
-
-    # ---- sheet: every sprite at 4x with its name
-    font = _ui_font(12)
-    cols, scale, pad, lab = 6, 4, 6, 30
-    cw, ch = SIZE * scale + pad * 2, SIZE * scale + pad + lab
-    rows = ceil_div(len(tiles), cols)
-    sheet = Image.new("RGBA", (cols * cw, rows * ch), (40, 40, 48, 255))
-    draw = ImageDraw.Draw(sheet)
-    for i, t in enumerate(tiles):
-        ox, oy = (i % cols) * cw, (i // cols) * ch
-        img = tile_image(t).resize((SIZE * scale, SIZE * scale), Image.NEAREST)
-        sheet.alpha_composite(img, (ox + pad, oy + pad))
-        d = describe(t)
-        for line, s in enumerate((f"{d['kind']} {d['surface']}", d["variant"] + " " + d["state"])):
-            if font:
-                draw.text((ox + pad, oy + pad + SIZE * scale + line * 13), s, font=font,
-                          fill=(220, 220, 230, 255))
-    sheet.save(f"qa/ui_sheet_{tag}.png")
-
-    # ---- mockup: the kit at realistic sizes, plus stretch proofs
-    BW, BH, GAP = 76, 22, 82                                      # button size and column pitch
-    mock = Image.new("RGBA", (460, 392), (28, 30, 40, 255))
-    draw = ImageDraw.Draw(mock)
-    ink, bone = RGBA[1], RGBA[31]
-
-    def text(xy, s, fill):
-        if font:
-            draw.text(xy, s, font=font, fill=fill)
-
-    def row(x, y, surface, variant, label):
-        """One button in each state, with the label colour picked for contrast against the face."""
-        for i, state in enumerate(STATES):
-            name = f"ui_btn_{surface}_{variant}_{state}"
-            mock.alpha_composite(nine_slice(by[name], BW, BH, CELL), (x + i * GAP, y))
-            on_dark = lum(face(name)) < 0.35
-            text((x + i * GAP + 8, y + 3 + (1 if state == "pressed" else 0)), label, bone if on_dark else ink)
-
-    def headings(x, y, fill):
-        for i, state in enumerate(STATES):
-            text((x + i * GAP, y), state, fill)
-
-    mock.alpha_composite(nine_slice(by["ui_panel_wood"], 348, 184, CELL), (8, 8))
-    mock.alpha_composite(nine_slice(by["ui_panel_white"], 316, 56, CELL), (24, 24))
-    text((32, 30), "Blackreach, a small town", ink)
-    text((32, 46), "grass 71%   forest 29%", ink)
-    headings(24, 88, bone)
-    row(24, 104, "wood", "normal", "Chart")
-    row(24, 134, "wood", "danger", "Abandon")
-    text((24, 164), "buttons on wood", bone)
-
-    mock.alpha_composite(nine_slice(by["ui_panel_white"], 348, 108, CELL), (8, 200))
-    headings(24, 212, ink)
-    row(24, 228, "light", "normal", "Confirm")
-    row(24, 258, "light", "danger", "Delete")
-    text((24, 288), "buttons on the white panel", ink)
-
-    text((364, 10), "min 16px", bone)
-    mock.alpha_composite(nine_slice(by["ui_panel_wood"], 16, 16, CELL), (364, 26))
-    mock.alpha_composite(nine_slice(by["ui_panel_white"], 16, 16, CELL), (388, 26))
-    mock.alpha_composite(nine_slice(by["ui_btn_wood_normal_normal"], 16, 16, CELL), (412, 26))
-    text((364, 48), "3x detail", bone)
-    for i, name in enumerate(("ui_btn_wood_normal_hover", "ui_btn_light_danger_pressed",
-                              "ui_btn_wood_normal_disabled")):
-        zoom = nine_slice(by[name], 30, 20, CELL)
-        mock.alpha_composite(zoom.resize((zoom.width * 3, zoom.height * 3), Image.NEAREST), (364, 64 + i * 66))
-
-    mock.alpha_composite(nine_slice(by["ui_panel_wood"], 444, 72, CELL), (8, 312))
-    mock.alpha_composite(nine_slice(by["ui_panel_white"], 428, 24, CELL), (16, 320))
-    mock.alpha_composite(nine_slice(by["ui_btn_wood_normal_normal"], 428, 24, CELL), (16, 352))
-    text((24, 323), "stretched to 428 px wide", ink)
-    text((24, 355), "a very wide button", ink)
-
-    mock.resize((mock.width * 3, mock.height * 3), Image.NEAREST).save(f"qa/ui_mock_{tag}.png")
-    print(f"  wrote qa/ui_sheet_{tag}.png and qa/ui_mock_{tag}.png")
-
-
 def slimes(tag):
     """The per-environment slimes: palette and silhouette checks, plus sheet and terrain previews."""
     import slimes as S
@@ -528,6 +393,8 @@ def gear(tag):
     drawn = {t[0] for _slot, tiers in K.BASE_KINDS.values() for t in tiers if t[1] == K.DRAWN}
     for label, names in (("drawn", drawn), ("cut", set(bases) - drawn)):
         shares = [K.outline_share(bases[n]) for n in names]
+        if not shares:  # no base is DRAWN since the pixellab pieces took every cell: nothing to take a min() of
+            continue
         problems["outline under the floor"] += sum(v < K.OUTLINE_FLOOR for v in shares)
         print("  %s: %d icons, edge in outline ink %.0f%%-%.0f%%" % (label, len(shares), 100 * min(shares),
                                                                      100 * max(shares)))
@@ -795,7 +662,16 @@ def RGBA_OF(c):
     from preview import RGBA
     return RGBA[c] if c else (0, 0, 0, 0)
 
+PHASES = {"phase1": phase1, "phase2": phase2, "phase3": phase3, "showcase": showcase,
+          "blends": blends, "slimes": slimes, "hpbar": hpbar, "gear": gear,
+          "icewall": icewall, "towns": towns, "caves": caves, "fallen": fallen}
+
 if __name__ == "__main__":
-    {"phase1": phase1, "phase2": phase2, "phase3": phase3, "showcase": showcase,
-     "blends": blends, "ui": ui, "slimes": slimes, "hpbar": hpbar, "gear": gear,
-     "icewall": icewall, "towns": towns, "caves": caves, "fallen": fallen}[sys.argv[1]](*sys.argv[2:])
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("phase", choices=PHASES)
+    parser.add_argument("tag", help="goes into every file name the phase writes")
+    args = parser.parse_args()
+    # Every path here is from this folder ("qa/", "../Assets/"), wherever it is run from.
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    os.makedirs("qa", exist_ok=True)
+    PHASES[args.phase](args.tag)

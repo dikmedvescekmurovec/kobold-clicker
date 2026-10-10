@@ -1,7 +1,8 @@
-"""Shared machinery for the two builds (build.py for the hex tiles, build_ui.py for the UI kit).
+"""What build.py, the hex tiles' build, does around its own tile list and metadata: hand the pixels to
+Aseprite through emit.lua, then read every PNG back and compare it to the source pixels, then report.
+(A module of its own because the old UI kit's build, gone since 2026-10-10, shared it.)
 
-Both do the same three things around their own tile lists and metadata: hand the pixels to Aseprite
-through emit.lua, then read every PNG back and compare it to the source pixels, then report.
+Set ASEPRITE to use another build of Aseprite than the one below.
 """
 import json
 import os
@@ -10,9 +11,10 @@ from collections import Counter
 
 from PIL import Image
 
-ASEPRITE = r"C:\Users\Dik\Documents\Git\aseprite\aseprite\build\bin\aseprite.exe"
-OUT = r"C:\Users\Dik\Documents\incremendal-side-scroller\AI-sprites"
+ASEPRITE = os.environ.get("ASEPRITE", r"C:\Users\Dik\Documents\Git\aseprite\aseprite\build\bin\aseprite.exe")
 HERE = os.path.dirname(os.path.abspath(__file__))
+# Beside this folder, in whichever checkout this file is: a worktree builds into its own AI-sprites/.
+OUT = os.path.join(os.path.dirname(HERE), "AI-sprites")
 
 
 def ceil_div(n, d):

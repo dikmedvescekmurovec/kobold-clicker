@@ -16,9 +16,10 @@ at its 384x216 grid and `CombatScene` scales it to cover the view, so on screen 
 is one of the hero's pixels. The landscapes, the skies, the ground, the plains' landmarks and the
 road are here; the six peoples' settlements are `sideview_kits.py`. The previews are at the foot.
 """
+import argparse
 import math
+import os
 import random
-import sys
 
 import numpy as np
 from PIL import Image
@@ -1474,18 +1475,28 @@ def seams():
 
 
 if __name__ == "__main__":
-    # sideview.py <tag> [env ...] [variant ...] [layout ...] [sky]: a sheet per place, variants down
-    #   and layouts across, under the place's own sky or the one named; one scene alone at 3x
-    # sideview.py skies <tag> [variant] [layout]: every land under every sky
-    # sideview.py scroll <tag> [env ...] [variant] [layout] [sky]: a GIF a place, the hero running
-    # sideview.py seams: every layer's join checked
-    mode = sys.argv[1] if len(sys.argv) > 1 else "t"
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
+                                     epilog="""\
+sideview.py <tag> [env ...] [variant ...] [layout ...] [sky]: a sheet per place, variants down
+  and layouts across, under the place's own sky or the one named; one scene alone at 3x
+sideview.py skies <tag> [variant] [layout]: every land under every sky
+sideview.py scroll <tag> [env ...] [variant] [layout] [sky]: a GIF a place, the hero running
+sideview.py seams: every layer's join checked""")
+    parser.add_argument("words", nargs="*", metavar="word", help="as below")
+    argv = parser.parse_args().words
+    # Every path here is from this folder ("qa/", "../Assets/"), wherever it is run from.
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    os.makedirs("qa", exist_ok=True)
+    mode = argv[0] if argv else "t"
     if mode == "seams":
         raise SystemExit(0 if seams() else 1)
     if mode in ("skies", "scroll"):
-        tag, args = (sys.argv[2] if len(sys.argv) > 2 else "t"), sys.argv[3:]
+        tag, args = (argv[1] if len(argv) > 1 else "t"), argv[2:]
     else:
-        tag, args = mode, sys.argv[2:]
+        tag, args = mode, argv[1:]
+    unknown = [x for x in args if not (x in PLACES or x in VARIANTS or x in SKIES or x.isdigit())]
+    if unknown:
+        parser.error("neither a place, a variant, a layout nor a sky: " + " ".join(unknown))
     envs = [x for x in args if x in PLACES] or list(PLACES)
     variants = [x for x in args if x in VARIANTS] or list(VARIANTS)
     layouts = [int(x) for x in args if x.isdigit()] or list(range(1, LAYOUTS + 1))

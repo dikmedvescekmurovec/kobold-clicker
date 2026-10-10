@@ -14,6 +14,7 @@ Three kinds of file, all on the 384x216 grid the fighters stand on (CombatScene 
 Run `python sideview.py skies <tag>` (and `scroll`) first and look at the previews; this overwrites
 files.
 """
+import argparse
 import os
 import re
 from collections import Counter
@@ -74,6 +75,7 @@ def _prune(keep):
 
 
 def main():
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     for folder in (OUT, SKY, LAND):
         os.makedirs(folder, exist_ok=True)
     held = _locked()

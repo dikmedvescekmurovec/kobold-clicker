@@ -7,6 +7,7 @@ build.py, and its buildings are a sprite of their own, bigger than a hex, which 
 Run `python qa.py phase3 <tag>` first and look at the images; this overwrites the files. Run build.py
 too, so the ground tiles under them match.
 """
+import argparse
 import os
 from collections import Counter
 
@@ -18,6 +19,7 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Assets", "
 
 
 def main():
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     made = towns.sprites()
     os.makedirs(OUT, exist_ok=True)
     keep = {name + ".png" for name in made}

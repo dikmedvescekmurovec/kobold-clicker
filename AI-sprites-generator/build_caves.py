@@ -6,6 +6,7 @@ land's own tile. Like build_towns.py this skips Aseprite: the sprites are RGBA a
 
 Run `python qa.py caves <tag>` first and look at the image; this overwrites the files.
 """
+import argparse
 import os
 from collections import Counter
 
@@ -18,6 +19,7 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Assets", "
 
 
 def main():
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     made = caves.sprites()
     os.makedirs(OUT, exist_ok=True)
     problems = Counter()

@@ -10,6 +10,7 @@ sheet. test_ui_theme also counts that sheet exactly, and a sprite added to it wo
 
 Run `python qa.py hpbar <tag>` first and look at the images; this overwrites the files.
 """
+import argparse
 import os
 from collections import Counter
 
@@ -22,6 +23,7 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Assets", "
 
 
 def main():
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     # In ENDESGA 64 with the rest of the interface (2026-09-30), each colour to its nearest.
     made = {name: hexlib.to_e64(image) for name, image in hpbar.parts().items()}
     os.makedirs(OUT, exist_ok=True)

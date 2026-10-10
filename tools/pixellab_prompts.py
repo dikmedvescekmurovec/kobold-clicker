@@ -5,6 +5,15 @@ Run from the project folder: `python tools/pixellab_prompts.py` writes every pro
 tools/DESIGN.md, *Pixellab prompts*. Older palettes (t1..t5, b1..b5) are kept where a piece that is
 already drawn was made from them.
 """
+import argparse
+import os
+
+argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
+# Every path below is from the project folder, wherever this is run from; tools/qa/ is git-ignored, so a
+# fresh clone has none.
+os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.makedirs("tools/qa", exist_ok=True)
+
 # The item bases' pixellab prompts, one kind at a time. Helmets first: the leather helmet the user chose
 # (Assets/Potential/Bases/Leather Helmet.png) sets the shape, and every material after it keeps that
 # shape word for word and adds one sturdier part.

@@ -21,4 +21,15 @@ Assets/Area/references/**
 __MACOSX/
 Thumbs.db
 desktop.ini
-*/Potential/*
+
+# Bought sound packs kept to pick from (564 MB); the sounds the game plays are the picks in
+# Sounds/Selected/ and their cuts in Sounds/Sfx/. Until 2026-10-10 this rule was */Potential/*, which
+# also hid every new file under Assets/Potential/ -- where tools/ cut the game's art from, so a clone
+# needs all of it: nothing under Assets/Potential/ is ignored now but the one pack named below.
+Sounds/Potential/*
+# A bought pack no tool reads (67 MB), which the old rule was hiding. Track it or keep this line.
+Assets/Potential/Other player characters/
+
+# The viewport override tools/reels.py and tools/clip_video.py leave beside project.godot while they
+# record (tools/recording.py). Godot reads it on every run, so it must never be committed.
+/override.cfg

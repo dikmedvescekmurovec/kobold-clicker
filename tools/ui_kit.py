@@ -15,6 +15,7 @@ Run from the project folder:  python tools/ui_kit.py
 Writes Assets/UI/ (the sheet, the loose sprites and ui_sheet.json) and tools/qa/ui_kit_tiling.png.
 """
 
+import argparse
 import colorsys
 import io
 import json
@@ -2497,6 +2498,12 @@ def preview(sprites, margins):
 
 
 def main():
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
+    # Every path here is from the project folder, wherever this is run from.
+    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    # Nothing is written into Assets/ until everything below that can refuse a sprite has run: a late
+    # refusal used to leave the folders half new. Each write waits here, in the order it was asked for.
+    writes = []
     sprites, margins = build()
     sprites = {name: _e64(image) for name, image in sprites.items()}
     # The lost fight's bar, and the body under it with the bar's drop line in the same red.
@@ -2509,27 +2516,27 @@ def main():
     preview(sprites, margins).save(os.path.join(QA, "ui_kit_tiling.png"))
 
     for name, image in parts().items():
-        _e64(image).save(os.path.join(OUT, name + ".png"))
+        writes.append((_e64(image), os.path.join(OUT, name + ".png")))
 
     unique = unique_gear()
     unique_preview(unique).save(os.path.join(QA, "ui_kit_uniques.png"))
     if UNIQUE_EXPORT:
         os.makedirs(UNIQUE_OUT, exist_ok=True)
         for name, image in unique.items():
-            image.save(os.path.join(UNIQUE_OUT, name + ".png"))
+            writes.append((image, os.path.join(UNIQUE_OUT, name + ".png")))
         os.makedirs(UNIQUE_OLD_OUT, exist_ok=True)
         for name, image in unique_old().items():
-            image.save(os.path.join(UNIQUE_OLD_OUT, name + ".png"))
+            writes.append((image, os.path.join(UNIQUE_OLD_OUT, name + ".png")))
 
 
     bases = base_gear()
     base_preview(bases).save(os.path.join(QA, "ui_kit_bases.png"))
     if BASES_EXPORT:
         for name, image in bases.items():
-            image.save(os.path.join(GEAR_OUT, name + ".png"))
+            writes.append((image, os.path.join(GEAR_OUT, name + ".png")))
         os.makedirs(BASE_OLD_OUT, exist_ok=True)
         for name, image in base_old().items():
-            image.save(os.path.join(BASE_OLD_OUT, name + ".png"))
+            writes.append((image, os.path.join(BASE_OLD_OUT, name + ".png")))
 
     # Loose as well, and for the same reason the parts are: a mark is drawn at its own size and the
     # face behind it is what stretches.
@@ -2537,7 +2544,7 @@ def main():
     icon_preview(mark, sprites, margins).save(os.path.join(QA, "ui_kit_icons.png"))
     bare_preview(mark, sprites, margins).save(os.path.join(QA, "ui_kit_bare.png"))
     for name, image in mark.items():
-        image.save(os.path.join(OUT, name + ".png"))
+        writes.append((image, os.path.join(OUT, name + ".png")))
 
     # Loose too: a patch is laid over a frame at its own size, never stretched.
     notch = {name: _e64(image) for name, image in notches().items()}
@@ -2546,13 +2553,13 @@ def main():
                                               {_rgb(green): _rgb(red) for green, red in GREEN_TO_RED.items()})
     notch_preview(notch, sprites, margins).save(os.path.join(QA, "ui_kit_notches.png"))
     for name, image in notch.items():
-        image.save(os.path.join(OUT, name + ".png"))
+        writes.append((image, os.path.join(OUT, name + ".png")))
 
     # Loose too, and at their own size: a key is drawn beside a word, never on a button.
     key = {name: _e64(image) for name, image in keys().items()}
     key_preview(key, sprites, margins).save(os.path.join(QA, "ui_kit_keys.png"))
     for name, image in key.items():
-        image.save(os.path.join(OUT, name + ".png"))
+        writes.append((image, os.path.join(OUT, name + ".png")))
 
     # Their own folder, not Assets/Gear: an orb is not a piece of gear and OrbTable loads it by its
     # own ROOT. Unlike GEAR_OUT this one is made here, because it did not exist before this chunk.
@@ -2560,14 +2567,14 @@ def main():
     orb = orbs()
     orb_preview(orb).save(os.path.join(QA, "ui_kit_orbs.png"))
     for name, image in orb.items():
-        image.save(os.path.join(ORB_OUT, name + ".png"))
+        writes.append((image, os.path.join(ORB_OUT, name + ".png")))
 
     # Their own folder too: SkillTree loads them by path, and a capstone's badge is neither gear nor an orb.
     os.makedirs(SKILL_OUT, exist_ok=True)
     skill = skills()
     skill_preview(skill).save(os.path.join(QA, "ui_kit_skills.png"))
     for name, image in skill.items():
-        image.save(os.path.join(SKILL_OUT, name + ".png"))
+        writes.append((image, os.path.join(SKILL_OUT, name + ".png")))
 
     # Hers, in their own folder for the same reason: TownPage loads them by path, and a reading is
     # neither a skill nor an orb. Cut like the skills -- whole files, their own frame, nothing trimmed.
@@ -2578,7 +2585,7 @@ def main():
             spell = _badge(frame, "teller", _cut((FORTUNE_PIXELLAB + name, 0, 0, SKILL_BADGE, SKILL_BADGE, 1)))
         else:
             spell = _cut((SKILL_ROOT + src, 0, 0, SKILL_SIDE, SKILL_SIDE, 1), trim=False)
-        spell.save(os.path.join(FORTUNE_OUT, name + ".png"))
+        writes.append((spell, os.path.join(FORTUNE_OUT, name + ".png")))
 
     # Loose as well: the frame and its bars are drawn at their own size, and the bars are clipped
     # rather than stretched as they empty.
@@ -2587,14 +2594,16 @@ def main():
     char = {name: image if name == "ui_char_portrait" else _e64(image) for name, image in char.items()}
     character_preview(char, portrait_at).save(os.path.join(QA, "ui_kit_character.png"))
     for name, image in char.items():
-        image.save(os.path.join(OUT, name + ".png"))
+        writes.append((image, os.path.join(OUT, name + ".png")))
     print("character panel: portrait at %s, %s" % (portrait_at, ", ".join(
         "%s %dx%d" % (n, i.width, i.height) for n, i in char.items())))
 
     sheet_image, meta, (cell_w, cell_h, columns, rows) = pack(sprites, margins)
-    sheet_image.save(os.path.join(OUT, SHEET))
+    writes.append((sheet_image, os.path.join(OUT, SHEET)))
     for name, image in sprites.items():
-        image.save(os.path.join(OUT, name + ".png"))
+        writes.append((image, os.path.join(OUT, name + ".png")))
+    for image, path in writes:
+        image.save(path)
     with open(os.path.join(OUT, "ui_sheet.json"), "w") as f:
         json.dump({
             "meta": {

@@ -4,18 +4,19 @@ Rebuilds the 432-sprite hex tileset in `../AI-sprites/` (36 environments, 63 roa
 the 120 battle backdrops in `../Assets/Area/`,
 the six per-environment slimes in `../Assets/Enemies/` (21 frames each, recoloured from the blue slime pack),
 the combat nameplate's health-bar parts in `../Assets/UI/`,
-and the gear icons no bought pack draws (55 item bases and ten uniques), which `../tools/ui_kit.py` imports and writes to `../Assets/Gear/`.
-The earlier 18-sprite 9-slice UI kit in `../AI-sprites/ui/` (2 panels, 16 buttons) is still buildable but no longer wired to anything: the interface is cut from a bought pack by `tools/ui_kit.py`.
+and the gear icons the game wore before the user's pixellab art (55 item bases and ten uniques), of which `../tools/ui_kit.py` still writes 42 bases and the ten uniques to `../Assets/Gear/Old/` and `../Assets/Gear/Unique/Old/` for the dev tick "Show old icons".
+The earlier 18-sprite 9-slice UI kit's generator (`ui.py`, `build_ui.py`, `qa.py ui`) was removed on 2026-10-10: the interface is cut from a bought pack by `tools/ui_kit.py`, and what the kit wrote to `../AI-sprites/ui/`, which nothing loaded, went with it.
 Everything is procedural and deterministic: the same code always produces the same pixels.
 
 Godot skips this folder because of `.gdignore`.
 
 ## Requirements
-- Python 3 with Pillow (`pip install pillow`)
-- Aseprite. `build.py` expects the source build at
-  `C:\Users\Dik\Documents\Git\aseprite\aseprite\build\bin\aseprite.exe`. Change `ASEPRITE` at the top of `build.py` if it moves.
+- Python 3.10+ with Pillow and numpy (`pip install -r ../requirements.txt`)
+- Aseprite, for `build.py` alone. It expects the source build at
+  `C:\Users\Dik\Documents\Git\aseprite\aseprite\build\bin\aseprite.exe`; set the environment variable `ASEPRITE` to use another (the default is in `buildlib.py`).
+- ffmpeg on the PATH, for `cover.py --export` alone.
 
-## Commands (run from this folder)
+## Commands (written as run from this folder; each finds it by itself, and takes `--help`)
 | Command | What it does |
 |---|---|
 | `python qa.py phase1 <tag>` | Environments: border-match check between variants, illegal-border check, plus `qa/p1_sheet_<tag>.png` and `qa/p1_map_<tag>.png` |
@@ -31,15 +32,13 @@ Godot skips this folder because of `.gdignore`.
 | `python sideview.py seams` | Checks every layer's join (each repeats as it scrolls); about a minute |
 | `python qa.py hpbar <tag>` | The health bar's nine parts: checks, plus `qa/hpbar_<tag>.png` |
 | `python qa.py gear <tag>` | The generated gear icons among the pack's own: doubling, soft alpha, outline room, determinism, colour count and outline-ink checks, plus `qa/gear_<tag>.png` |
-| `python qa.py ui <tag>` | The old 9-slice UI (unwired): size, silhouette, outline and 8-periodicity checks, plus `qa/ui_sheet_<tag>.png` and a `qa/ui_mock_<tag>.png` showing every state and the panels stretched from 16 px to 428 px |
 | `python build.py` | Exports every hex PNG through Aseprite into `../AI-sprites/`, writes the spritesheet and JSON, then verifies each file pixel by pixel |
-| `python build_ui.py` | The same for the UI sprites, into `../AI-sprites/ui/` with its own `ui_sheet.json` |
 | `python build_areas.py` | Writes the backdrops' layers at 384x216 into `../Assets/Area/`: `sky/<sky>.png`, `land/<env>_<layout>_<band>.png` and the 120 grounds `<env>_<variant>_<n>.png`; checks every join, prunes names it no longer writes, and reads every file back to check it. About a minute and a half; refuses to start while the Godot editor holds the files |
 | `python build_towns.py` | Writes the 18 settlement building sprites (84x96, RGBA) into `../Assets/Towns/` and reads every file back. No Aseprite. Run `build.py` too: the ground tiles under them are in the atlas |
 | `python build_hpbar.py` | Writes the health bar's parts loose into `../Assets/UI/` and reads every file back. No Aseprite |
 | `python build_slimes.py` | Writes the six slimes into `../Assets/Enemies/<Env> Slime/` and reads every file back to check it. No Aseprite: the source is already a PNG pack and these ship as ordinary RGBA sprites, not as part of an indexed atlas |
 
-`qa/` output is preview-only and git-ignored. `build.py` overwrites the files in `../AI-sprites/` (change `OUT` in `build.py` to write elsewhere).
+`qa/` output is preview-only and git-ignored. `build.py` overwrites the files in `../AI-sprites/` (`OUT` in `buildlib.py`: the `AI-sprites/` beside this folder, in whichever checkout this is).
 
 ## Files
 | File | Contents |
@@ -56,8 +55,7 @@ Godot skips this folder because of `.gdignore`.
 | `sideview_kits.py` | The six peoples' settlements: the parts (`block`, `courses`, `opening`, `lattice`, `roof`, `cone`, `dome`, `crenels`, `pennant`, `finial`, `frame`, `gallery`, `snow_load`, `mound`), the placing (`seat`, `row`), each people's pieces and its row of `PEOPLES`, the shared `village` / `town` / `fortress`, and `settle(a, env, variant, layout, seed, stage)` |
 | `hpbar.py` | The health bar's parts: a left cap, a right cap and a track in three tier colourways, in `hexlib.PALETTE` |
 | `gearlib.py`, `gear.py` | The gear icons: `gearlib` is the kit and what was measured off the RPG pack, `gear` one function a kind (`ICONS`) and a unique (`UNIQUES`). No build script: `tools/ui_kit.py` writes them |
-| `ui.py` | The old 9-slice UI (unwired): `RectTile` (rectangular, not hex), rect primitives, the two panels and the 16 buttons |
-| `build.py`, `build_ui.py`, `buildlib.py`, `emit.lua` | Export through Aseprite in batch mode, JSON metadata, verification. `emit.lua` takes per-sprite `w`/`h`, and `buildlib.py` holds the Aseprite call and the read-back, so both builds share them |
+| `build.py`, `buildlib.py`, `emit.lua` | Export through Aseprite in batch mode, JSON metadata, verification. `buildlib.py` holds the Aseprite call and the read-back (`emit.lua` still takes per-sprite `w`/`h` and a sheet `dir`, which only the removed UI kit's build used) |
 | `build_areas.py`, `build_slimes.py`, `build_hpbar.py` | The builds that skip Aseprite: straight to RGBA PNGs under `../Assets/`, every file read back and compared |
 
 ## Rules that keep the set consistent
@@ -66,7 +64,7 @@ Godot skips this folder because of `.gdignore`.
 - **`"base"` pseudo-variant:** `ENVS[env]("base")` renders only the shared data, so it equals every variant's border band. Blends depend on this. Route any new per-variant data through `mix()` / `details()` so `"base"` skips it.
 - **Roads:** centerlines run through edge midpoints on the center-to-center line, so they meet exactly. Rotation `_rK` means the canonical edges turned clockwise by K×60°.
 - **Atlas layout:** groups are laid out in `build.GROUPS` order (environments, roads, towns, blends). Append new groups at the end so existing atlas coordinates don't move.
-- **Palette:** all art uses `hexlib.PALETTE` (index 0 transparent). The first 32 entries are the original set and never move -- towns, roads, slimes and the UI index them. The terrain ramps (`gr` meadow, `fo`/`co` forest, `di` earth, `st` straw, `de` sand, `sn` snow, `ro` rock, `sc` scree, `wa` water, and for buildings `rf` terracotta and `pl` plaster) are appended after them; each runs dark to light and shifts hue as it goes, shadows cooler, lights warmer. Append, never insert.
+- **Palette:** all art uses `hexlib.PALETTE` (index 0 transparent). The first 32 entries are the original set and never move -- towns, roads, slimes and the health bar use them. The terrain ramps (`gr` meadow, `fo`/`co` forest, `di` earth, `st` straw, `de` sand, `sn` snow, `ro` rock, `sc` scree, `wa` water, and for buildings `rf` terracotta and `pl` plaster) are appended after them; each runs dark to light and shifts hue as it goes, shadows cooler, lights warmer. Append, never insert.
 - **Look:** light from the top-left, a dark outline (the ramp's darkest step, not ink) on the shaded side of objects only, no outline on terrain edges. Buildings use roofs from above plus a thin south-facing front wall.
 - **Aseprite quirk:** in Lua, `json.decode` returns floats, and `Image:drawPixel` silently writes palette index 1 for a float. `emit.lua` converts with `math.tointeger` and reads every pixel back.
 - **Build hiccup:** if `build.py` prints `Cannot save file ... in the given location` and reports a `sheet mismatch`, the spritesheet PNG was briefly locked (typically by the open Godot editor reimporting the new PNGs), and the JSON no longer matches the old sheet. Rerun `build.py` until `problems` are all zero.
@@ -86,14 +84,6 @@ Godot skips this folder because of `.gdignore`.
 - **The buildings are a sprite, not part of the tile.** Inside the tile a town could only be about 35 px wide and sat under the fog's veil, and on the map it hid (the user: "a bit hidden, make them pop"). The tile now holds only the ground -- clearing, plate, shadows, halo -- and the buildings are an 84x96 sprite, laid out in tile units and scaled by `K` (1.35), which Godot draws over the fog and past the hex. A tile pixel and a sprite pixel are the same size, so the tile's shadows line up under the sprite through `SHIFT`.
 - **A settlement must differ from its ground in value, not only hue.** Grass towns measured the same brightness as their meadow and vanished; the plate is a clear step lighter or darker than the land, and the buildings a clear step off the plate.
 - **The ground round a town is calmed** (a majority filter on the clearing), so the buildings are the busiest thing there.
-
-### 9-slice UI
-- **Geometry:** 24x24 sprites made of nine 8x8 cells, so a `StyleBoxTexture` with an 8 px texture margin stretches them to any size down to 16x16. The four corner pixels are transparent, which rounds every panel and button the same way.
-- **Periodicity:** Godot repeats the centre cell on both axes and the edge cells along theirs, so **all interior art must be a pure function of `(x % 8, y % 8)`**; borders and bevels must depend only on the distance to the sprite edge and stay in the outer cells. Tile the axes, never stretch them. `qa.py ui` fails if an interior pixel breaks this.
-- **Which is why a panel face gets one mark at most.** Periodicity turns any interior texture into a stripe every 8 px, and the wood panel runs the full height of the window, so four marked rows per cell came out as corduroy that the labels on it had to be read through. The face is now a single `earth` plank seam on `soil`: the lit row, the butt-joints and the second dark row are gone, and the ink outline and dark inner rim do the rest of the wooden read. The white panel's face stays bare. Detail belongs in the outer 2 px, the only rows that do not repeat.
-- **States:** normal (bevel out), hover (face one ramp step lighter), pressed (**the hover face with the bevel inverted**, so the dark rim merges with the ink outline and the button sinks - the label sinks 1 px with it), disabled (no bevel, one flat dull ring, face collapsed toward its own backdrop).
-- **Surfaces:** `wood` buttons are light-faced for the brown panel, `light` buttons dark-faced for the white one. The `danger` flavour runs deep red to bright red (`brick_dk` -> `brick`); the palette's lighter steps skew orange, so `rust` appears only as a 1 px lit rim.
-- **Own sheet:** the UI ships in `AI-sprites/ui/`, not the hex atlas, so hex atlas coordinates never move.
 
 ### Battle backdrops
 - **Drawn the way the fighters are.** Every fighter pack is ENDESGA 64 (97-100% of each idle sheet's pixels) with a #131313 outline, and the same artist's environment pack (`Assets/Potential/2D enemies/FULL_Fantasy Forest`) shows how their world is drawn; the backdrops copy it, and `render` refuses a scene with one pixel off the palette. The set before this one (the vista generator, measured off `Assets/Area/Summer2.png`, a lineless bought background) was soft, pastel and unoutlined: its darkest pixels sat at half value where the fighters' ink is near black, and the fighters looked pasted on. An ink pass laid over those scenes was previewed and set aside for a new render (2026-09-30).
@@ -126,7 +116,7 @@ Godot skips this folder because of `.gdignore`.
 ### Slimes
 - **A pure swap:** every environment slime is the blue pack under `Assets/Enemies/Slime` with its five-step body ramp exchanged for one built from `hexlib.PALETTE`, pixel for pixel. Nothing is drawn on top, so the silhouette, the shading and the animation timing stay the baseline's -- `qa.py slimes` fails on a single changed alpha pixel, an off-palette colour, a leftover baseline colour, or a frame whose colour count moved (a ramp step collapsing into its neighbour).
 - **Ramps start mid-dark:** the baseline spends its largest mass on the *darkest* step, so a ramp that starts at the palette's floor reads as a black blob with a lit rim. Every ramp begins one or two steps up from it.
-- **The eye stays red** (`brick_dk` / `brick` / `rust`) in all six: it is what makes them read as one creature. `rust` stands in for a light red because the palette's lighter steps skew orange, the same substitution the UI kit's danger buttons make.
+- **The eye stays red** (`brick_dk` / `brick` / `rust`) in all six: it is what makes them read as one creature. `rust` stands in for a light red because the palette's lighter steps skew orange.
 - **The blue original is the source, not an enemy.** It has no roster entry; `EnemyRoster` lists the six, each on its own environment.
 
 ### Environment adjacency

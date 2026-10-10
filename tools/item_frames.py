@@ -16,6 +16,7 @@ it. `ItemSlot` lays it over its socket `ItemRarity.FRAME_HEAD` above the square.
 Every colour is ENDESGA 64's, and each frame still goes through `hexlib.to_e64` with the rest of the
 interface.
 """
+import argparse
 import os
 import sys
 
@@ -231,13 +232,17 @@ def preview():
                 square.alpha_composite(frame(rarity, rank))
             sheet.alpha_composite(square, (pad + col * (SIDE + gap), pad + row * (SIDE + HEAD + pad)))
     out = os.path.join(ROOT, "tools", "qa", "item_frames.png")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
     sheet.resize((sheet.width * scale, sheet.height * scale), Image.NEAREST).save(out)
     print("wrote", out)
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--export", action="store_true", help="also write Assets/UI/item_frame_*.png")
+    args = parser.parse_args()
     preview()
-    if "--export" in sys.argv:
+    if args.export:
         for name, image in frames().items():
             image.save(os.path.join(ROOT, "Assets", "UI", name))
         print("wrote %d frames to Assets/UI/" % len(frames()))

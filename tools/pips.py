@@ -14,8 +14,8 @@ sprites and a bar's width is arithmetic on its count. A spent pip is its own sha
 above the ink so a dead skull still shows its face. Drawn at the interface's own pixel, every colour one of
 ENDESGA 64.
 """
+import argparse
 import os
-import sys
 
 from PIL import Image, ImageDraw
 
@@ -302,12 +302,15 @@ def board_tile(drawn):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--export", action="store_true", help="also write Assets/UI/ui_pip_*.png")
+    args = parser.parse_args()
     os.makedirs(QA, exist_ok=True)
     made = sprites()
     zoomed(made)
     in_place()
     print("wrote %s/pips.png and pips_sheet.png" % QA)
-    if "--export" in sys.argv:
+    if args.export:
         for name, image in made.items():
             image.save(os.path.join(OUT, name + ".png"))
         print("wrote %d pips to %s/" % (len(made), OUT))

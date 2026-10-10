@@ -2,13 +2,13 @@
 https://play.kobold-clicker.workers.dev: every file into the R2 bucket, then the Worker that
 serves them (backend/web/).
 
-    python tools/web.py               # export, upload, deploy
-    python tools/web.py --no-upload   # export only
+    python tools/web.py            # export only
+    python tools/web.py --deploy   # export, then upload and deploy: the live site changes
 
 Needs Godot 4.7.2 with its web export templates, and wrangler signed in (backend/leaderboard/'s, so
-`npm install` there first). Set GODOT to use another executable.
+`npm install` there first) to deploy. Set GODOT to use another executable.
 """
-import os, shutil, subprocess, sys
+import argparse, os, shutil, subprocess, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -25,7 +25,9 @@ def wrangler(*args: str) -> None:
 
 
 def export() -> None:
-    # The export's own PNGs would otherwise be imported into the next one.
+    # The export's own PNGs would otherwise be imported into the next one. build/ is git-ignored, so a
+    # fresh clone has none.
+    (ROOT / "build").mkdir(exist_ok=True)
     (ROOT / "build" / ".gdignore").touch()
     if OUT.exists():
         shutil.rmtree(OUT)
@@ -49,6 +51,13 @@ def upload() -> None:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    live = parser.add_mutually_exclusive_group()
+    live.add_argument("--deploy", action="store_true", help="after the export, upload it and deploy the Worker")
+    live.add_argument("--no-upload", action="store_true", help="export only: what no flag does too, kept for old habits")
+    args = parser.parse_args()
     export()
-    if "--no-upload" not in sys.argv:
+    if args.deploy:
         upload()
+    else:
+        print("Exported to build/web/ only. To put it live: python tools/web.py --deploy")

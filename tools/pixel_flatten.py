@@ -23,15 +23,16 @@ Pass a whole character at once:
 
 Preview only, into tools/qa/pixel_flatten.png. Add --export to overwrite the sprites.
 """
-import sys, glob, colorsys
+import argparse, colorsys, glob, os
 import numpy as np
 from PIL import Image
 
 COLOURS = 16       # the middle of the packs' 14-22
 STRETCH = 0.8      # how far towards the full lightness range the palette is pulled
 DARK, LIGHT = 0.10, 0.92
-REFERENCE = "Assets/Enemies/Minotaur/Sprites/with_outline/IDLE.png"
-QA = "tools/qa/pixel_flatten.png"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REFERENCE = os.path.join(ROOT, "Assets/Enemies/Minotaur/Sprites/with_outline/IDLE.png")
+QA = os.path.join(ROOT, "tools/qa/pixel_flatten.png")
 
 
 def palette(frames, colours):
@@ -115,23 +116,28 @@ def preview(before, after, scale=6):
             sheet.alpha_composite(cell, (x, tall * r + tall - cell.height))
             x += cell.width + 2
     sheet.alpha_composite(ref, (wide - ref.width, sheet.height - ref.height))
+    os.makedirs(os.path.dirname(QA), exist_ok=True)
     sheet.resize((sheet.width * scale, sheet.height * scale), Image.NEAREST).save(QA)
 
 
 if __name__ == "__main__":
-    flags = [a for a in sys.argv[1:] if a.startswith("--")]
-    paths = sorted({p for a in sys.argv[1:] if not a.startswith("--")
-                    for p in glob.glob(a, recursive=True)})
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("sprites", nargs="+", help="a file or a glob of them, ** for every folder under one")
+    parser.add_argument("--export", action="store_true", help="overwrite the sprites")
+    parser.add_argument("--colors", type=int, default=COLOURS, help="the palette's size (%(default)s)")
+    parser.add_argument("--stretch", type=float, default=STRETCH,
+                        help="how far towards the full lightness range (%(default)s)")
+    args = parser.parse_args()
+    paths = sorted({p for a in args.sprites for p in glob.glob(a, recursive=True)})
     if not paths:
-        sys.exit("no sprites matched")
-    colours = next((int(f.split("=")[1]) for f in flags if f.startswith("--colors=")), COLOURS)
-    amount = next((float(f.split("=")[1]) for f in flags if f.startswith("--stretch=")), STRETCH)
+        parser.error("no sprites matched")
+    colours, amount = args.colors, args.stretch
     before, after = flatten(paths, colours, amount)
     for p, b, a in zip(paths, before, after):
         print(f"{p}: {colours_in(b)} -> {colours_in(a)} colours")
     preview(before, after)
-    print(f"preview {QA} -- before above, after below, a Minotaur frame at the end for scale")
-    if "--export" in flags:
+    print("preview tools/qa/pixel_flatten.png -- before above, after below, a Minotaur frame at the end for scale")
+    if args.export:
         for p, a in zip(paths, after):
             Image.fromarray(a).save(p)
         print(f"wrote {len(paths)} sprites")

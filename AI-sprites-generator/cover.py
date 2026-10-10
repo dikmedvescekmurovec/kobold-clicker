@@ -10,9 +10,10 @@ logo are drawn here.
 `python cover.py [name...]` writes qa/cover_<name>.png for each composition named (all of them
 without names).
 """
+import argparse
+import os
 import random
 import re
-import sys
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -28,6 +29,9 @@ YY, XX, BY = sv.YY, sv.XX, sv._BY
 rgb, INK, WHITE = sv.rgb, sv.INK, sv.WHITE
 E64 = np.array([rgb(h) for h in sv.E64])
 
+# Every path here is from this folder, wherever it is run from; the fonts below load as the module does.
+if __name__ == "__main__":
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = "../Assets/"
 PIXELLARI = ImageFont.truetype(ASSETS + "Pixellari.ttf", 16)
 ARK = ImageFont.truetype(ASSETS + "ArkPixel10.ttf", 10)
@@ -1608,11 +1612,21 @@ def export():
         print(f"{LANDING}{name}.ogv")
 
 
-def main(names):
-    if "--export" in names:
+def main():
+    extras = ("animated", "animated_tall", "phones")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("names", nargs="*", metavar="name",
+                        help="a composition (%s), or one of %s" % (", ".join(COVERS), ", ".join(extras)))
+    parser.add_argument("--export", action="store_true",
+                        help="write the final covers to ../store/ and ../Assets/Landing/ instead")
+    args = parser.parse_args()
+    if set(args.names) - set(COVERS) - set(extras):
+        parser.error("no such cover: " + " ".join(sorted(set(args.names) - set(COVERS) - set(extras))))
+    if args.export:
         export()
         return
-    for name in names or COVERS:
+    os.makedirs("qa", exist_ok=True)
+    for name in args.names or COVERS:
         if name in ("animated", "animated_tall"):
             write_gif(animation(name == "animated_tall"), f"qa/cover_{name}.gif", GIF_SCALE)
             continue
@@ -1627,4 +1641,4 @@ def main(names):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main()

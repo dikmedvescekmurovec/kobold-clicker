@@ -1,5 +1,6 @@
 """Final build: generate all tiles, export indexed PNGs + spritesheet through Aseprite,
 write spritesheet JSON metadata, then verify every exported file against the source data."""
+import argparse
 import json
 import os
 from collections import Counter
@@ -32,6 +33,7 @@ def describe(t):
 
 
 def main():
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     tiles = all_environments() + all_roads() + all_towns() + all_blends()
     names = [t.name for t in tiles]
     assert len(set(names)) == len(names), "duplicate tile names"

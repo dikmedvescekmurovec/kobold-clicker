@@ -13,6 +13,7 @@ layer, `HexTileset.RUBBLE_ID`):
 
 Run `python qa.py icewall <tag>` (and `fallen <tag>` for the rubble) first and look at the images; this overwrites the files.
 """
+import argparse
 import os
 from collections import Counter
 from itertools import combinations
@@ -59,6 +60,7 @@ def sheets():
 
 
 def main():
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     made = sheets()
     os.makedirs(OUT, exist_ok=True)
     problems = Counter()

@@ -7,6 +7,7 @@ the speaker's own (the smith keeps his anvil).
 
 Plain Python with Pillow, no Godot. Run the Godot import after it.
 """
+import argparse
 from pathlib import Path
 
 from PIL import Image
@@ -32,6 +33,7 @@ PORTRAITS = {
 
 
 def main() -> None:
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     OUT.mkdir(exist_ok=True)
     for name, (sheet, frame, box) in PORTRAITS.items():
         src = Image.open(ROOT / sheet).convert("RGBA")

@@ -10,32 +10,28 @@ to an amazing roll), loot (a farm run clicked through to a unique) , travel (one
 between grounds and skies) and tree (a skill node crafted and placed on a transcension's tree).
 
 Opens a window for a minute or so and moves the mouse: leave the mouse and keyboard alone while it runs.
-Plain Python and ffmpeg beside the Godot 4.7.2 console build.
+Plain Python and ffmpeg beside the Godot 4.7.2 console build (set GODOT to use another executable).
 """
+import argparse
 import pathlib
 import re
 import shutil
 import subprocess
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-GODOT = pathlib.Path.home() / "Godot_v4.7.2-stable_win64.exe" / "Godot_v4.7.2-stable_win64_console.exe"
+from recording import GODOT, ROOT, ready, viewport
+
 WIDTH, HEIGHT, FPS = 360, 640, 60
 OUTPUT = (1080, 1920)
-# Movie Maker records at the project's viewport size, not the window's, so the run gets its own.
-OVERRIDE = f"[display]\nwindow/size/viewport_width={WIDTH}\nwindow/size/viewport_height={HEIGHT}\n"
 
 
 def record(name: str, frames: pathlib.Path, cuts: pathlib.Path) -> None:
     shutil.rmtree(frames, ignore_errors=True)
     frames.mkdir(parents=True)
-    override = ROOT / "override.cfg"
-    override.write_text(OVERRIDE)
-    try:
-        run = subprocess.run([str(GODOT), "--path", str(ROOT), "--write-movie", str(frames / "frame.png"),
+    # Movie Maker records at the project's viewport size, not the window's, so the run gets its own.
+    with viewport(WIDTH, HEIGHT):
+        run = subprocess.run([GODOT, "--path", str(ROOT), "--write-movie", str(frames / "frame.png"),
                               "-s", f"res://tests/{name}_video.gd"], capture_output=True, text=True)
-    finally:
-        override.unlink()
     print(run.stdout[-1500:])
     # A clip that falls back on a seed it could not find still runs to its end: say so.
     for line in run.stderr.splitlines():
@@ -75,10 +71,16 @@ def encode(name: str, frames: pathlib.Path, cuts: pathlib.Path) -> None:
 
 
 if __name__ == "__main__":
-    args = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
-    if len(args) != 1:
-        sys.exit(__doc__)
-    out = ROOT / "build" / f"{args[0]}_video"
-    if "--encode" not in sys.argv:
-        record(args[0], out / "frames", out / "cuts.txt")
-    encode(args[0], out / "frames", out / "cuts.txt")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("name", help="the clip: tests/<name>_video.gd")
+    parser.add_argument("--encode", action="store_true", help="encode the last recording again, without recording")
+    args = parser.parse_args()
+    out = ROOT / "build" / f"{args.name}_video"
+    # Everything the clip needs, asked for before the minute it takes to record.
+    script = ROOT / "tests" / f"{args.name}_video.gd"
+    if args.encode:
+        ready(script, out / "cuts.txt", record=False)
+    else:
+        ready(script)
+        record(args.name, out / "frames", out / "cuts.txt")
+    encode(args.name, out / "frames", out / "cuts.txt")

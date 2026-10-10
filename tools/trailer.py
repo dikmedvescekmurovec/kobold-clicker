@@ -6,13 +6,16 @@
 
 Needs Godot 4.7.2 and ffmpeg. The film is recorded at the game's 1152x648, blown up 3x with nearest
 neighbour so the pixels stay square, then brought down to 1080p. Under it: Sounds/Music/battle.mp3 from
-the beat trailer.gd counts from, and the fight's own sounds recorded with it.
+the beat trailer.gd counts from, and the fight's own sounds recorded with it. That track left the
+project with the old music (commit 1543e51, 2026-10-03): until it is put back, or `MUSIC`, `FIRST_BEAT`
+and `BEAT` here and trailer.gd's cuts are set to another, the tool says so and stops before it records.
+Set GODOT to use another executable.
 """
-import os, re, subprocess, sys, tempfile
+import argparse, os, re, subprocess, sys, tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-GODOT = r"C:\Users\Dik\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe"
+from recording import GODOT, ROOT, ready
+
 FRAMES = Path(tempfile.gettempdir()) / "trailer_frames"
 OUT = ROOT / "build" / "trailer.mp4"
 MUSIC = ROOT / "Sounds" / "Music" / "battle.mp3"
@@ -69,8 +72,18 @@ def encode(start: int, end_beat: float = END_BEAT, out: Path = OUT, fade_beats: 
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--encode", action="store_true", help="encode the last recording again, without recording")
+    parser.add_argument("--opening", action="store_true", help="only the words and the shatter")
+    args = parser.parse_args()
     os.chdir(ROOT)
-    if "--opening" in sys.argv:
+    # Everything the film needs, asked for before the three minutes it takes to record.
+    if args.opening:
+        ready(MUSIC)
         encode(record(OPENING_END), OPENING_END, OUT.with_name("trailer_opening.mp4"), fade_beats=1)
+    elif args.encode:
+        ready(MUSIC, FRAMES / "start.txt", record=False)
+        encode(int((FRAMES / "start.txt").read_text()))
     else:
-        encode(int((FRAMES / "start.txt").read_text()) if "--encode" in sys.argv else record())
+        ready(MUSIC)
+        encode(record())

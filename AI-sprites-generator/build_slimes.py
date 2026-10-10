@@ -1,12 +1,13 @@
 """Writes the per-environment slimes into Assets/Enemies/, then reads every file back and checks it.
 
-Unlike build.py and build_ui.py this one does not go through Aseprite: the source is already a PNG
+Unlike build.py this one does not go through Aseprite: the source is already a PNG
 pack rather than pixel data authored here, and these frames ship as ordinary RGBA sprites under
 Assets/ instead of joining the hex atlas, so there is no indexed sheet to emit. The verification pass
 is the same idea though -- every file on disk is compared pixel by pixel against what slimes.py built.
 
 Run `python qa.py slimes <tag>` first and look at the images; this overwrites the folders.
 """
+import argparse
 import os
 from collections import Counter
 
@@ -22,6 +23,7 @@ FOLDER = {"grass": "Grass Slime", "dirt": "Dirt Slime", "desert": "Desert Slime"
 
 
 def main():
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     written = []
     for env, name, img in slimes.variants():
         folder = os.path.join(OUT, FOLDER[env])

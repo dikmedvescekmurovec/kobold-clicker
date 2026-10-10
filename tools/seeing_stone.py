@@ -11,9 +11,9 @@ pixellab stone replaces the first.
     python tools/seeing_stone.py --export   also writes both into Assets/UI/, and her badge (the stone
                                             lit warm) into Assets/Fortune/stone.png
 """
+import argparse
 import math
 import os
-import sys
 
 from PIL import Image
 
@@ -116,11 +116,14 @@ def preview(base, light):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--export", action="store_true", help="also write Assets/UI/seeing_stone*.png and Assets/Fortune/stone.png")
+    args = parser.parse_args()
     base, light = stone(), glow()
     os.makedirs(QA, exist_ok=True)
     preview(base, light).save(os.path.join(QA, "seeing_stone.png"))
     print("wrote tools/qa/seeing_stone.png (at rest, then cold .. burning; on dark and on grass)")
-    if "--export" in sys.argv:
+    if args.export:
         base.save(os.path.join(OUT, "seeing_stone.png"))
         light.save(os.path.join(OUT, "seeing_stone_glow.png"))
         # Her badge is the stone lit warm on her spells' purple frame (ui_kit's), so it reads as one of

@@ -15,6 +15,7 @@ name. A file within TOLERANCE of its level is left alone, so a second run change
 that would push the peak past PEAK, or a file already over 0 dB, goes through a limiter. Run the
 Godot import after it.
 """
+import argparse
 import re
 import subprocess
 import sys
@@ -193,6 +194,7 @@ def make(name: str) -> str:
 
 
 def main() -> None:
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     (ROOT / SFX).mkdir(exist_ok=True)
     for name in {**CUTS, **LOOPS}:
         path = ROOT / name
