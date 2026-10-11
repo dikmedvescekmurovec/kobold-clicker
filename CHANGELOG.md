@@ -6,6 +6,33 @@ a player has not seen yet once, together, newest first (`main_scene.gd` `_show_c
 written for players. A section may hold a two-column table instead (`| left | right |`, a header row, then
 `|---|---|`): the game draws its rows as its own tables, the left column wrapping and the right kept short.
 
+## v0.6.0 (2026-10-11)
+
+### Characters
+- New page, Characters, behind the helmet button in the corner or the R key: 31 new heroes to buy and play as. Every one is free for now.
+
+### Interface
+- Five corner buttons have new pictures, so each shows what it opens: branching nodes for the Skill tree, a gleaming chest for Heirlooms, a tome for the Collection, a rosette for Achievements and a winner on a podium for the Leaderboard.
+
+### Dialogue
+- The hero, the fortuneteller and the blacksmith have new lines.
+
+### Fixes
+- Closing the game on the black screen between two worlds no longer changes your save: you have not transcended until you enter the new world.
+- A tile you won but had not collected yet is charted when you close the game.
+- A save the game cannot read is refused with a reason, never replaced by a new game.
+- Coming back to what your camp earned no longer makes the cloud ask which save to keep.
+- A fight whose clock has run out now ends, whatever your defences give back.
+- An enemy already dying when the clock runs out counts as a kill.
+- The last kill under a rune is paid with the rune's bonus.
+- The loot filter no longer leaves the Masterwork Torch behind.
+- The tile panel now shows what the Wild Tiles curse really pays.
+- A question answers once, however fast you press its button, and closes with its page.
+- The leaderboard's name box keeps your cursor while the board refreshes, and says when a name is taken.
+- The back arrow works on the black screen on a phone held upright.
+- A fight that opens while someone is speaking waits until they have finished.
+- The fortuneteller's appraisal no longer writes "a Iron Sword".
+
 ## v0.5.0 (2026-10-10)
 
 ### First steps
