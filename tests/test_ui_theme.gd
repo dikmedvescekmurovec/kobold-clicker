@@ -300,7 +300,7 @@ func _test_icon_faces(theme: Theme) -> bool:
 	# The main scene has no class_name, so its constants are read off the script resource itself.
 	var scene := preload("res://Scenes/main_scene.gd")
 	var side := 0
-	for path: String in [scene.CHEST_ICON, scene.STAR_ICON]:
+	for path: String in [scene.CHEST_ICON, scene.TREE_ICON, scene.HEIRLOOM_ICON, scene.ROSETTE_ICON]:
 		var texture: Texture2D = load(path)
 		_check(texture != null, "%s is on disk" % path)
 		if texture == null:

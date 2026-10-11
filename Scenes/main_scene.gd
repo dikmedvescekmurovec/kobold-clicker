@@ -42,14 +42,15 @@ const CAMP_LEAST := 60.0
 
 ## The corner buttons' marks.
 const CHEST_ICON := "res://Assets/UI/ui_icon_chest.png"
-const STAR_ICON := "res://Assets/UI/ui_icon_star.png"
+const TREE_ICON := "res://Assets/UI/ui_icon_tree.png"
 const SCROLL_ICON := "res://Assets/UI/ui_icon_scroll.png"
 const COG_ICON := "res://Assets/UI/ui_icon_cog.png"
-const TROPHY_ICON := "res://Assets/UI/ui_icon_trophy.png"
+const ROSETTE_ICON := "res://Assets/UI/ui_icon_rosette.png"
 const BOOK_ICON := "res://Assets/UI/ui_icon_book.png"
 const PODIUM_ICON := "res://Assets/UI/ui_icon_podium.png"
-## A stand-in from the pack until the heirlooms have a mark of their own.
-const CROWN_ICON := "res://Assets/UI/ui_icon_crown.png"
+## The items' chest with a gleam on its corner; the chest stands pixel for pixel where `CHEST_ICON`'s
+## does (the user's rule, 2026-10-11).
+const HEIRLOOM_ICON := "res://Assets/UI/ui_icon_heirloom.png"
 ## A stand-in too: the bag's helmet tab's mark, until the heroes have one.
 const ROSTER_ICON := "res://Assets/UI/ui_icon_slot_helmet.png"
 ## The red pip over a corner button's top-right corner while its page has something new (`_mark_new`).
@@ -402,7 +403,7 @@ func _ready() -> void:
 		var speed := float(inventory.stats().get("move_speed", 0.0))
 		# An overfull bag slows the whole pace, whatever the boots add to it.
 		return (100.0 + speed) * Inventory.ENCUMBERED_SPEED - 100.0 if inventory.encumbered() else speed
-	# Before the interface, which is what decides whether the crown stands in the corner.
+	# Before the interface, which is what decides whether the heirlooms' button stands in the corner.
 	_credit_walls()
 	_build_ui()
 	if OS.has_feature("web") and not Settings.path.is_empty():
@@ -741,16 +742,16 @@ func _show_damage(announce := false) -> void:
 func _build_pages(layer: CanvasLayer) -> void:
 	# In the order they join the layer. Each tooltip is the page's own name.
 	for made: Array in [
-			["_skills_button", STAR_ICON, SkillsPage.TITLE, _on_skills_pressed],
+			["_skills_button", TREE_ICON, SkillsPage.TITLE, _on_skills_pressed],
 			["_roster_button", ROSTER_ICON, RosterPage.TITLE, func() -> void: _toggle_left_page(roster_page)],
 			["_bag_button", CHEST_ICON, "Items", _on_bag_pressed],
 			["_bounty_button", SCROLL_ICON, "Bounties", _on_bounty_pressed],
 			["_settings_button", COG_ICON, "Settings", _on_settings_pressed],
 			["_collection_button", BOOK_ICON, "Collection", _on_collection_pressed],
-			["_achievements_button", TROPHY_ICON, "Achievements", _on_achievements_pressed],
+			["_achievements_button", ROSETTE_ICON, "Achievements", _on_achievements_pressed],
 			["_leaderboard_button", PODIUM_ICON, "Leaderboard",
 					func() -> void: _toggle_left_page(leaderboard_page)],
-			["_heirloom_button", CROWN_ICON, "Heirlooms", _on_heirlooms_pressed]]:
+			["_heirloom_button", HEIRLOOM_ICON, "Heirlooms", _on_heirlooms_pressed]]:
 		var button := UITheme.icon_button(load(made[1]), made[2], ui_scale)
 		button.pressed.connect(made[3])
 		layer.add_child(button)
@@ -1730,10 +1731,11 @@ func _place_corner_row() -> void:
 
 
 ## The corner buttons in the order they stand: what you carry (the bag, then the heirlooms), what you
-## are (the tree, then the hero), what you have promised to do, then the settings and the logs.
+## are (the tree, then the hero), what you have promised to do, the logs, and the settings last (the
+## user's, 2026-10-11).
 func _corner_buttons() -> Array[Button]:
-	return [_bag_button, _heirloom_button, _skills_button, _roster_button, _bounty_button, _settings_button,
-			_collection_button, _achievements_button, _leaderboard_button]
+	return [_bag_button, _heirloom_button, _skills_button, _roster_button, _bounty_button, _collection_button,
+			_achievements_button, _leaderboard_button, _settings_button]
 
 
 ## One corner button put `at`, gliding there after a page that comes or goes rather than jumping --
@@ -2096,7 +2098,7 @@ func _on_bag_pressed() -> void:
 	_toggle_left_page(bag_page)
 
 
-## The crown. On the map it is a page like the rest. In a town it swaps which of the two bag pages
+## The heirlooms' button. On the map it is a page like the rest. In a town it swaps which of the two bag pages
 ## stands at the counter, and never closes the town: the X does that.
 func _on_heirlooms_pressed() -> void:
 	_stop_flash("opened_heirlooms")
@@ -2110,7 +2112,7 @@ func _on_heirlooms_pressed() -> void:
 	_layout_ui()
 
 
-## Whichever bag page is standing beside the town: the bag, unless the crown has swapped it out.
+## Whichever bag page is standing beside the town: the bag, unless the heirlooms' button has swapped it out.
 func _counter_page() -> BagPage:
 	return heirloom_page if heirloom_page.visible else bag_page
 

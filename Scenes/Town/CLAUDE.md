@@ -64,7 +64,7 @@ Each file's functions and dials and each rule's full text: the end of `DESIGN.md
 - **Cap an upgrade at `MapBuilder.circle_level(town cell)`.** Per wall circle, not per tile level (the user's call, 2026-09-28; no boss's `TIER_LEVEL` on top since 2026-10-03, the user's). The caller hands the cap in: `Blacksmith` never names the map. (DESIGN.md: "Let only the smith raise a level")
 - **Leave modifiers alone on an upgrade.** Every tier and number stays as it was (`Item.level_up`); a perfected line goes to the new top, an heirloom's climbs back towards its `"peak"`. (DESIGN.md: "blacksmith.gd")
 - **Let the smith pick the locked modifier, at random.** `BROKEN` is the sentence both refusals share. (DESIGN.md: "blacksmith.gd")
-- **Hold an heirloom up from its own page,** which the crown swaps in at the counter (`main_scene._counter_page`). The ground's cap holds for it too, and `can_upgrade` refuses one under its `safe_level`. (DESIGN.md: "Hold an heirloom up from its own page")
+- **Hold an heirloom up from its own page,** which the heirlooms' button swaps in at the counter (`main_scene._counter_page`). The ground's cap holds for it too, and `can_upgrade` refuses one under its `safe_level`. (DESIGN.md: "Hold an heirloom up from its own page")
 - **Let the smith work on a worn piece.** `_smith_why_not` refuses only what `Blacksmith` refuses and a purse that is short. (DESIGN.md: "Hold an heirloom up from its own page")
 - **Keep broken final and locked forever.** Broken: no orb, no upgrade, no lock, a lower `sell_price`. Locked: survives every orb (`OrbTable`), only ever one to a piece. (DESIGN.md: "Keep broken final and locked forever")
 

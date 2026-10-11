@@ -697,7 +697,7 @@ The Seeing Stone she sold went on 2026-10-03; a save's `seeing_stone` is ignored
 
 #### Hold an heirloom up from its own page
 
-**An heirloom is held up to the smith, the appraisal and a held orb from the heirlooms' page,** which the crown swaps in at the counter (`main_scene._counter_page`).
+**An heirloom is held up to the smith, the appraisal and a held orb from the heirlooms' page,** which the heirlooms' button swaps in at the counter (`main_scene._counter_page`).
 **A worn piece is his to work on too:** `_smith_why_not` refuses only what `Blacksmith` refuses and a purse that is short, so a set is improved without being stripped off.
 The ground's cap holds for an heirloom too, and he takes one only once it is back at its `safe_level`.
 

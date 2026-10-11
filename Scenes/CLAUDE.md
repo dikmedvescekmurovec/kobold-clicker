@@ -12,7 +12,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **The UI is built in code** from `UITheme`'s static builders, so the `.tscn` stays untouched while the editor has it open. Four parts are classes of their own in `Scenes/UI/` that the scene owns one of and wires: `tile_panel` (`TilePanel`), `banner` (`Banner`), `rewards` (`BountyRewards`) and the static `Changelog`:
   - **The tile panel** (`tile_panel`, a `TilePanel`, right edge): name, kind and level, lands, services, modifiers, runes, a wall's unlocks (`TilePanel.fill`), its buttons (`TilePanel.update_buttons`); `_restore_panel` brings it back as a fight, a camp or a town gives the screen back.
   - **The corner** (top-left): `CharacterPanel` on `CanvasLayer` 3 over the corner buttons (`_place_character`, `_show_damage`, `_place_corner`, `_show_corner`, `HOTKEYS`).
-  - **The crown:** the corner button for `heirloom_page`, a second `BagPage`, there while an heirloom is held.
+  - **The heirlooms' button:** the corner button for `heirloom_page`, a second `BagPage`, there while an heirloom is held.
   - **Sliding panels** (`Juice.slides`, registered in `_build_pages`); the corner column glides after them (`Juice.glide`).
   - **Left-hand pages:** ten (`Scenes/UI/`), listed by `_left_pages()`.
   - **The town page** (`TownPage`, in the tile panel's place), the bag in shop mode beside it (`_stand_at_counter`).
@@ -138,12 +138,13 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Place the character panel only in `_place_character`:** a bag page or the skill tree across a wide window, out of a town, mirrors it top-right (the user's, 2026-10-07). The corner column's top never follows it (`_place_corner`, `CHARACTER_EDGE`). (DESIGN.md: "The corner")
 - **Announce a damage change only on the save's run** (`_show_damage(true)`, the user's, 2026-10-07); the line is the live fight's numbers over a fight, `CharacterPage.armed`'s elsewhere. (DESIGN.md: "The corner")
 - **Show and hide the corner buttons together** (`_show_corner`): a town takes them away, a fight leaves every one until its verdict (`_fight_up`, the user's, 2026-10-07), a page moves the column beside itself. A hotkey (`HOTKEYS`) answers only while its button could be pressed by hand and no modifier is held. (DESIGN.md: "The corner")
+- **Stand the corner buttons in `_corner_buttons()`'s order, the settings last** (the user's, 2026-10-11). What each wears, and what was turned down, is `tools/DESIGN.md`: "The corner buttons' marks (2026-10-11)". (DESIGN.md: "The corner")
 - **Swap pages in one press** (`_toggle_left_page`); a tile chosen outside a town closes the page (`_on_tile_clicked`), but never the bag while a rune in its hand aims the map. (DESIGN.md: "The corner")
 - **Open `CharacterPage` through `_character_button`:** the panel takes no mouse. Over a fight the button stays, disabled and taking no mouse, only so the experience bar's tooltip still shows. (DESIGN.md: "The corner")
 - **Dress the hero outside a fight only in `_wear_character`** (the token, the corner's face, the badge): at the end of `_build_ui` and on `roster_page.changed`. A fight is told in `_stage`, and the character page and a spoken tip ask `inventory.character` as they are drawn. (DESIGN.md: "The hero")
 - **Never stand the heroes' button over a fight** (`_roster_button`, on `shown` in `_show_corner`): a fighter is dressed as it is staged, never mid-swing. It is there from the first step, as the cog is. (DESIGN.md: "The hero")
 - **Never rename a `Characters` id:** a save holds it, and a renamed one is a hero bought and gone. `Characters` names no other class, so `Inventory`, `CombatActor` and `PlayerToken` may all name it. (DESIGN.md: "The hero")
-- **Leave the crown standing in a town:** it swaps which bag page stands at the counter (`_counter_page`) and never closes the town. Both bag pages are wired to the town alike, and `ItemCard.equipment` follows the one that is up. (DESIGN.md: "The crown")
+- **Leave the heirlooms' button standing in a town:** it swaps which bag page stands at the counter (`_counter_page`) and never closes the town. Both bag pages are wired to the town alike, and `ItemCard.equipment` follows the one that is up. (DESIGN.md: "The heirlooms' button")
 - **Slide only the drawing** (`Juice.slides`): `visible` and `position` are the truth the moment a page is shown or hidden. (DESIGN.md: "Sliding panels")
 - **Stand buttons at the foot of every right-hand column,** the tile panel's shown only while they can be pressed (`TilePanel.update_buttons`, which re-places the column through `TilePanel.place`). (DESIGN.md: "The tile panel")
 - **Hand every page its room only in `_layout_ui`** (`area`, `UITheme.dock`); held upright (`UITheme.narrow`), `_show_corner` and a town's tab lay everything out again. (DESIGN.md: "Window shape")
@@ -166,7 +167,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Give every tip in `TIPS` its rule in `_tip_due`,** which logs an error for an id it does not know. (DESIGN.md: "Tips")
 - **Check a tip where its thing becomes true** (`_open_fight`, `_on_combat_finished`, `_on_player_arrived` for `first_town`), never in `_close_town`, which is also the way onto the black screen. (DESIGN.md: "Tips", "The cave felt")
 - **Pause a fight under a tip,** one over it or one already up as it opens. (DESIGN.md: "Tips")
-- **Flash a corner button until its first press and never again** (`_flash`; the user's rule, 2026-09-30); seen ids live in `inventory.tips`, and the star pulses on state (`_pulse`). (DESIGN.md: "Tips")
+- **Flash a corner button until its first press and never again** (`_flash`; the user's rule, 2026-09-30); seen ids live in `inventory.tips`, and the skill tree's button pulses on state (`_pulse`). (DESIGN.md: "Tips")
 - **Work the red pip out from state,** in `_show_corner` and after every save (`_mark_new`; the user's ask, 2026-10-07); the chest wears it only for a first of its kind (`BAG_FIRSTS`, the user's, 2026-10-10). (DESIGN.md: "Tips")
 - **Put a banner down only through `Banner.close`.** It wears its X from the start and goes after `Banner.HOLD`, never while the mouse is on it or under a finger (the user's rules, 2026-09-29, 2026-10-03, 2026-10-09). (DESIGN.md: "The banner")
 - **Hold a banner while a pop-up is up** (`_popup_up`, `Banner._held`). A fight ending does not put one down, and a swing never touches it before its time has run out. (DESIGN.md: "The banner")

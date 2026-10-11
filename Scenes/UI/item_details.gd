@@ -6,7 +6,7 @@ extends RefCounted
 ## same everywhere. It fills a VBoxContainer the caller owns, so each keeps its own frame, width and way
 ## back. The lines are picked to be read on cream (`TextPanel`), never on wood.
 
-const PEAK_ICON := "res://Assets/UI/ui_icon_trophy.png"
+const PEAK_ICON := "res://Assets/UI/ui_icon_rosette.png"
 ## The bar over a piece's name that says how far it is to its next plus: its name, for tests, and its
 ## height in panel pixels, the 1 px rim of the trough included.
 const ASCENSION_BAR := "AscensionBar"
@@ -73,7 +73,7 @@ static func _gold_rule(item: Item, crest: bool) -> Control:
 ## `against` is everything wearing this would take off (a list: a greatsword takes the offhand off with
 ## the weapon); given any, the first table says what the swap would gain or lose.
 ## `every_rank` (the collection log under detailed descriptions) writes a ranked unique's rule with
-## every rank's numbers, "5/4/3/2", and its rank IV line greyed behind a trophy until it is reached.
+## every rank's numbers, "5/4/3/2", and its rank IV line greyed behind the achievements' rosette until it is reached.
 static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[Item] = [],
 		every_rank := false) -> void:
 	UITheme.clear(rows)
@@ -116,20 +116,20 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 	# What it gained at rank IV, as much the piece's rule as the first.
 	if not item.peak_text().is_empty():
 		rows.add_child(line(item.peak_text(), Palette.TEXT, width, true))
-	# Not reached yet: "<trophy> IV: the line", greyed as a dead button is -- the mark faded as a bare
+	# Not reached yet: "<rosette> IV: the line", greyed as a dead button is -- the mark faded as a bare
 	# one's, the words in a disabled face's colour.
 	elif every_rank and not UniqueTable.peak_text(item.unique).is_empty():
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 2)
-		var trophy := TextureRect.new()
-		trophy.texture = load(PEAK_ICON)
-		trophy.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
-		trophy.modulate = UITheme.BARE_DISABLED
+		var mark := TextureRect.new()
+		mark.texture = load(PEAK_ICON)
+		mark.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+		mark.modulate = UITheme.BARE_DISABLED
 		# Beside the sentence's first line, however many it wraps to.
-		trophy.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-		row.add_child(trophy)
+		mark.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		row.add_child(mark)
 		row.add_child(line("%s: %s" % [Achievements.RANK_NAMES[UniqueTable.PEAK], UniqueTable.peak_text(item.unique)],
-				UITheme.DISABLED_FONT_COLOR, width - trophy.texture.get_width() - 2, true))
+				UITheme.DISABLED_FONT_COLOR, width - mark.texture.get_width() - 2, true))
 		rows.add_child(row)
 	# The gold line under the rule stands in for the first table's rule.
 	var ruled := not rule.is_empty()

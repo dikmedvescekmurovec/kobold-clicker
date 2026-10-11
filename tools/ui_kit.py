@@ -581,7 +581,8 @@ NOTCHES = {
 ICONS = {
     "ui_icon_chest": ("2D Pixel UI/PNG/Icons", 34, 3, 12, 11, 1),
     "ui_icon_star": ("2D Pixel UI/PNG/Icons", 18, 18, 13, 12, 1),
-    # The collection log: the pack's own trophy, row 3, column 1.
+    # The pack's own trophy, row 3, column 1: what the leaderboard's medals are coloured from (`MEDALS`).
+    # No button wears it since the achievements took the rosette (2026-10-11).
     "ui_icon_trophy": ("2D Pixel UI/PNG/Icons", 18, 50, 13, 13, 1),
     # Either side of an elite's name on the fight's nameplate: the pack's skull, row 1, column 1.
     "ui_icon_skull": ("2D Pixel UI/PNG/Icons", 3, 2, 11, 11, 1),
@@ -955,38 +956,86 @@ ICONS_DRAWN = {
         ..o2222111o..
         ...ooooooo...
     """,
-    # The collection log's corner button (2026-09-30): a closed book, so the log no longer wears the
-    # trophy that the achievements' page does.
+    # The collection log's corner button: a tome with a gem on its cover, pale so it stands off the wood
+    # (the user's pick, 2026-10-11; the flat closed book before it read as a slab).
     "ui_icon_book": """
+        .oooooooooo.
+        o1444444443o
+        o1444444443o
+        o1444o44443o
+        o144o1o4433o
+        o14o121o433o
+        o144o1o3333o
+        o1444o33333o
+        o1443333332o
+        o1433333322o
+        o1oooooooooo
+        o144444444o.
         .ooooooooo..
-        o133333333o.
-        o1333333334o
-        o1333333334o
-        o1222222224o
-        o1224444224o
-        o1222222224o
-        o1222112224o
-        o1222222224o
-        o1222222224o
-        o1222222224o
-        .o444444444o
-        ..ooooooooo.
     """,
-    # The leaderboard's corner button (2026-09-30): a podium, first in the middle, second left.
+    # The leaderboard's corner button: a winner on a podium of three low blocks (the user's pick,
+    # 2026-10-11). Three tall bars with no figure read as a chart; one joined block as a thumbs-up.
     "ui_icon_podium": """
+        .....ooo.....
+        .....o4o.....
+        ....ooooo....
+        ....o443o....
+        ....ooooo....
+        ....o444o....
+        ooooo433o....
+        o444o433ooooo
+        o433o433o444o
+        o433o433o433o
+        o322o322o322o
+        ooooooooooooo
+    """,
+    # The skill tree's corner button: nodes branching down from a root, the page's own picture (the
+    # user's pick, 2026-10-11, in place of the star, which read as favourites or rewards).
+    "ui_icon_tree": """
         ....ooooo....
         ....o443o....
         ....o432o....
-        ooooo432o....
-        o443o432o....
-        o432o432ooooo
-        o432o432o443o
-        o432o432o432o
-        o432o432o432o
-        o321o321o321o
-        ooooooooooooo
+        ....o322o....
+        ....ooooo....
+        .....o3o.....
+        .ooooo3ooooo.
+        .o333333333o.
+        .o3ooooooo3o.
+        ooooo...ooooo
+        o443o...o443o
+        o432o...o432o
+        ooooo...ooooo
+    """,
+    # The achievements' corner button and an unreached rank's mark on an item card: a rosette (the
+    # user's pick, 2026-10-11: they did not want the cup).
+    "ui_icon_rosette": """
+        ..ooooooo..
+        .o4444433o.
+        o444ooo333o
+        o44o444o32o
+        o44o443o32o
+        o43o433o22o
+        o333ooo222o
+        .o3322222o.
+        .ooooooooo.
+        .o33o.o22o.
+        .o33o.o22o.
+        .o3oo.oo2o.
+        .oo.....oo.
     """,
 }
+# The heirlooms' corner button is the items' chest with this gleam on its top right corner (the user's
+# pick, 2026-10-11). `HEIRLOOM_GLEAM_AT` is where it goes on the ICON_SIDE square.
+HEIRLOOM_GLEAM = """
+    ...o...
+    ..o4o..
+    .oo4oo.
+    o44443o
+    .oo3oo.
+    ..o3o..
+    ...o...
+"""
+HEIRLOOM_GLEAM_AT = (7, 0)
 # The bag's filter tabs (BagPage.FILTERS), one an equipment slot -- the weapon's is the sword above --
 # "all", a two-by-two grid, and the skill stones', a disc with a carved I like the stones' own faces (the
 # user's pick, qa/bag_filter_stones.png, 2026-10-09). Silhouettes shaded by `_edged`, as the character panel's marks
@@ -2200,6 +2249,10 @@ def icons():
     marks = {name: _cut(entry) for name, entry in ICONS.items()}
     marks.update({name: _drawn(rows) for name, rows in ICONS_DRAWN.items()})
     marks.update({name: _drawn("\n".join(_edged(shape))) for name, shape in SLOT_MARKS.items()})
+    # A whole square, so `_squared_mark` moves nothing: the chest stands pixel for pixel where the items'
+    # does (the user's rule, 2026-10-11) and only the gleam is new.
+    marks["ui_icon_heirloom"] = _squared_mark(marks["ui_icon_chest"])
+    marks["ui_icon_heirloom"].alpha_composite(_drawn(HEIRLOOM_GLEAM), HEIRLOOM_GLEAM_AT)
     green ={_rgb(dark): _rgb(lit) for dark, lit in GREEN_KEY.items()}
     out = {}
     for name, art in marks.items():
