@@ -263,6 +263,7 @@ two-pixel ink bar on no track (`UITheme.SCROLL_BAR`), only while there is more t
 
 ## Popups over the whole window, after the review of 2026-10-10
 
+
 Five popups were five hand-built copies of one thing -- the bag's question, its aimed super orb's, the
 fortuneteller's answer, the cloud's question and the text prompt -- and each had the bugs the others had fixed.
 What they share now, and where:
@@ -300,6 +301,18 @@ fight under it; the prompt needs the keys its field leaves it).
 what must be true of all of them, and written out as text for whoever cannot look at a screenshot
 (`KOBOLD_LAYOUT_DUMP`). It found one thing: a speaker's box narrowed to a 324 px window kept the width it
 joined the tree with, the smith's 15 px past the right edge.
+
+## The heroes' page (2026-10-11)
+
+The user asked for a menu to buy more playable characters (free for now) and a screen to pick one, and chose, of three mock-ups, **one page with one grid**: every hero a square, the ones not bought dimmed, one button that reads Buy or Select.
+
+- **Two columns, where the mock-up had the hero over the grid.** The heroes are drawn at the size a fight draws them, and the tallest stand 103 to 125 px (the Samurai Archer under his bow, the Hell Knight under his flames). A box that tall pinned over the grid left the grid under two of its eight rows on the default window and one on the smallest upright one. Beside the grid it costs nothing down the page: the grid scrolls the page's whole height. The price is the one left page wider than the bag, 293 panel pixels of body, which is what a 324 px window has -- measured by `test_ui_pages`, which lays the page out in all four windows.
+- **The hero shown is the fight's own `CombatActor`,** not a picture of one: what is bought is what is fought with, snap and shadow included.
+- **A square is the hero's map badge,** the picture the find-the-hero pointer wears, so the grid needs no art of its own.
+- **No price is written.** Buying is free until the user says what it costs and in what; the button is a plain green Buy. When it has a price it is `UITheme.priced_button`, and the question of a confirm comes with it.
+- **The button is there from the first step,** as the cog is, **but never over a fight:** a fighter is dressed as its fight is staged, and nothing dresses one mid-swing. Its key is `R`.
+- **Titled "Characters",** the user's word, one letter from the stat sheet's "Character"; the code says `Roster` so the two cannot be mistyped for each other.
+- **The corner's face and the map's badge are one picture** (the user's, 2026-10-11): the same middle and the same zoom, the badge only wider. The dialogue portrait is nudged apart from them. The kobold's own two still differ as they always did -- a close-up of his snout in the corner, his whole head on the badge -- which the user saw and did not ask to change.
 
 ## Reference (moved here from CLAUDE.md on 2026-10-10)
 
@@ -478,6 +491,10 @@ A found piece that is locked (an old save's find, which must be earned again) is
 A found square carries a `hint` too, so `ItemCard` skips its Alt comparison, which is right for a `specimen`.
 **Under Alt a square shows its achievement's card** (`ItemCard.ALT_CARD` = `AchievementsPage.write_card`, `KEYS` `{alt: achievement}`; none on a starter), and an achievement's square shows its unique's (`CollectionPage.write_hint`, `{alt: unique}`) -- the user's, 2026-10-02.
 It changes nothing and saves nothing. `open()`, `layout()`, `closed`. Its static `grid()` is a grid of squares at the bag's columns and gaps, and `by_name(ids, table)` the order both this page and the achievements' stand in (the item generator's materials are a `grid()` too)
+
+#### roster_page.gd
+The heroes against the **left** edge under a bar reading **Characters** (`TITLE`), opened by the corner's helmet (`ROSTER_ICON`, a stand-in: the bag's helmet tab's mark) or `R`: in a scroll a grid (`BagPage.GRID_COLS`) of one square a hero of `Characters.ROSTER`, in the roster's order -- `ItemSlot.teaser` wearing the hero's map badge at its own 34 px, as `BountyRewards._pile_square` stands a mark, so it is in no `GROUP` and has no card; one not bought at `OrbSlot.DIM`, the one shown on the selected socket (`ItemRarity.slot_style(.., true)`), the one in use under a `USING_EDGE` px edge in `Palette.LEAF` (a `Panel` named `USING_NAME`). Beside it, `STAGE` wide: the hero shown as a real `CombatActor` (`setup_player` at `_fight_tall()` and a pixel of 1, so the half-step snap is the fight's) in a clipped tan box, its feet `FLOOR` up from the foot; its name in Pixellari, wrapped at `STAGE.x` (given that width, or it wraps at nothing on the first pass and the page stands taller than the window); and at the foot one `UITheme.GO_BUTTON` -- **Buy** for one not bought, **Select** for one bought, greyed with "In use" in its tooltip for the one the player is.
+The squares take no mouse: one `gui_input` on the grid (`_on_grid_input`, `MOUSE_FILTER_PASS`, the hand through `Cursors.wear`) counts a press as it lets go and not one that travelled, so a finger's drag scrolls. `pick(id)` redraws round a hero; `open()` is `pick` of the one in use. Buy is `Inventory.buy_character`, Select `use_character`; either is saved (nothing without a path) and said by `changed`. `RosterPage.new(inventory, save_path, ui_scale)`; `layout()` docks; `closed`.
 
 #### character_panel.gd
 The player in the top-left corner -- or with `mirrored`, the top-right (the main scene's, while a bag page or the skill tree is up): its `scale.x` turned negative, so the frame, the badge and the bar are drawn the other way round and `position` is its right edge, and every word and the portrait put through `_reads` (turned back about itself and moved over by its width) so it still reads and the kobold is never flipped;

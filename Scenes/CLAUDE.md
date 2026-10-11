@@ -14,7 +14,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
   - **The corner** (top-left): `CharacterPanel` on `CanvasLayer` 3 over the corner buttons (`_place_character`, `_show_damage`, `_place_corner`, `_show_corner`, `HOTKEYS`).
   - **The crown:** the corner button for `heirloom_page`, a second `BagPage`, there while an heirloom is held.
   - **Sliding panels** (`Juice.slides`, registered in `_build_pages`); the corner column glides after them (`Juice.glide`).
-  - **Left-hand pages:** nine (`Scenes/UI/`), listed by `_left_pages()`.
+  - **Left-hand pages:** ten (`Scenes/UI/`), listed by `_left_pages()`.
   - **The town page** (`TownPage`, in the tile panel's place), the bag in shop mode beside it (`_stand_at_counter`).
   - **Promised piece** (`town_page.item_claimed`): a bounty's is announced as a body's would be (`_is_new_unique`, `Banner.unique`), and nothing for any other piece.
   - **Bounty verdict** (`BountyRewards.show_paid`, `BountyRewards.close_paid`): what a handed-in bounty paid; everything is already paid, so it only shows.
@@ -47,6 +47,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Reset** (`_on_reset_pressed`): the settings page's Reset save.
 - **Play clock:** `_process` adds to `inventory.play_seconds`, written only when something else writes the inventory; only the character page's Misc table reads it.
 - **Character's name** (`_on_rename_pressed`, `_on_name_entered`): a `TextPrompt`, then `Inventory.rename`; `inventory.hero()` titles the panel, the page and the hero's tips.
+- **The hero** (`_wear_character`, `roster_page`, a `RosterPage`): which of `Characters` (`Scenes/characters.gd`) the player is, bought and picked on the page, worn by the map's token, the corner's face, the badge and each fight.
 
 ## Rules
 
@@ -139,6 +140,9 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Show and hide the corner buttons together** (`_show_corner`): a town takes them away, a fight leaves every one until its verdict (`_fight_up`, the user's, 2026-10-07), a page moves the column beside itself. A hotkey (`HOTKEYS`) answers only while its button could be pressed by hand and no modifier is held. (DESIGN.md: "The corner")
 - **Swap pages in one press** (`_toggle_left_page`); a tile chosen outside a town closes the page (`_on_tile_clicked`), but never the bag while a rune in its hand aims the map. (DESIGN.md: "The corner")
 - **Open `CharacterPage` through `_character_button`:** the panel takes no mouse. Over a fight the button stays, disabled and taking no mouse, only so the experience bar's tooltip still shows. (DESIGN.md: "The corner")
+- **Dress the hero outside a fight only in `_wear_character`** (the token, the corner's face, the badge): at the end of `_build_ui` and on `roster_page.changed`. A fight is told in `_stage`, and the character page and a spoken tip ask `inventory.character` as they are drawn. (DESIGN.md: "The hero")
+- **Never stand the heroes' button over a fight** (`_roster_button`, on `shown` in `_show_corner`): a fighter is dressed as it is staged, never mid-swing. It is there from the first step, as the cog is. (DESIGN.md: "The hero")
+- **Never rename a `Characters` id:** a save holds it, and a renamed one is a hero bought and gone. `Characters` names no other class, so `Inventory`, `CombatActor` and `PlayerToken` may all name it. (DESIGN.md: "The hero")
 - **Leave the crown standing in a town:** it swaps which bag page stands at the counter (`_counter_page`) and never closes the town. Both bag pages are wired to the town alike, and `ItemCard.equipment` follows the one that is up. (DESIGN.md: "The crown")
 - **Slide only the drawing** (`Juice.slides`): `visible` and `position` are the truth the moment a page is shown or hidden. (DESIGN.md: "Sliding panels")
 - **Stand buttons at the foot of every right-hand column,** the tile panel's shown only while they can be pressed (`TilePanel.update_buttons`, which re-places the column through `TilePanel.place`). (DESIGN.md: "The tile panel")

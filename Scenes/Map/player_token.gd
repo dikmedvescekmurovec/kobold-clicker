@@ -1,27 +1,18 @@
 class_name PlayerToken
 extends AnimatedSprite2D
-## The player's character: idles on a map cell, and walks from tile to tile when told to. The sheets'
-## frames are wide (room for the attack swing), so one crop, BOUNDS, cuts every frame of every animation
-## down to the character: sharing it keeps the character still when the animation changes.
+## The player's hero on the map (`Characters`; `dress` says which): idles on a cell, and walks from tile
+## to tile when told to. One crop cuts every frame of both animations, so the hero stays still as the
+## animation changes.
 
-const IDLE_SHEET := preload("res://Assets/Player/idle.png")
-const RUN_SHEET := preload("res://Assets/Player/run.png")
-const IDLE_FRAMES := 6
-const RUN_FRAMES := 8
-## Every frame of every sheet, laid out in one row.
-const FRAME_SIZE := Vector2i(148, 96)
-## The part of a frame the character occupies across both sheets.
-const BOUNDS := Rect2i(17, 29, 66, 62)
 const FPS := 8.0
-## Drawn at half size, so the character takes up about half a tile and the terrain stays readable underneath.
-const SCALE := 0.5
-## How far below the middle of the tile the character's feet stand, in map pixels.
+## How tall a hero stands, in map pixels: about half a tile, so the terrain stays readable underneath.
+## The kobold's 62 px at half size, and every other hero scaled to stand as tall.
+const TALL := 31.0
+## How far below the middle of the tile the hero's feet stand, in map pixels.
 const FOOT_OFFSET := 6
-## The shadow under the feet, in the sheet's pixels: about the span of the idle stance's feet, which
-## stand SHADOW_SHIFT right of the crop's middle (the tail fills the left). Darker than a fighter's, to
-## read on the map's busy ground.
-const SHADOW_WIDE := 36
-const SHADOW_SHIFT := 7
+## The shadow under the feet, as a share of the hero's standing height (36 px under the kobold's 62).
+## Darker than a fighter's, to read on the map's busy ground.
+const SHADOW_SHARE := 36.0 / 62.0
 const SHADOW_COLOUR := Color(0.06, 0.04, 0.09, 0.5)
 ## How long the character takes to cross one tile with no Move Speed.
 const SECONDS_PER_TILE := 2.0
@@ -63,27 +54,52 @@ var _footstep := 0
 var _footstep_left := 0.0
 var _sound: AudioStreamPlayer
 var _shadow: Sprite2D
+## How far the crop is shifted to put the hero's marked feet (`Characters.feet`) on the token while it
+## faces east, in the sprite's own pixels: `flip_h` does not mirror `offset`, so `_face` does.
+var _feet_shift := 0.0
 
 
 func setup(map: HexMap) -> void:
 	_map = map
-	sprite_frames = _frames()
-	scale = Vector2(SCALE, SCALE)
-	# The offset is in the sprite's own pixels, which `scale` shrinks, so it is divided to land the feet
-	# FOOT_OFFSET map pixels below the middle of the tile.
-	offset = Vector2(0, FOOT_OFFSET / SCALE - BOUNDS.size.y / 2.0)
-	play("idle")
 	# A child, so it walks, hides and scales with the token, and behind it, so the feet stand on it.
 	_shadow = Sprite2D.new()
-	_shadow.texture = CombatActor.shadow_texture(SHADOW_WIDE, SHADOW_COLOUR)
 	_shadow.show_behind_parent = true
-	_shadow.position = Vector2(SHADOW_SHIFT, FOOT_OFFSET / SCALE)
 	add_child(_shadow)
+	dress(Characters.FIRST)
 	for i in FOOTSTEPS:
 		_footsteps.append(load("res://Sounds/Footsteps/footstep%02d.ogg" % i))
 	_sound = AudioStreamPlayer.new()
 	_sound.bus = Settings.SFX_BUS
 	add_child(_sound)
+
+
+## Draws the token as the hero `id`: its idle and its walk under one crop, scaled to stand `TALL`, the
+## feet the user marked for it (2026-10-11) on the tile's foot point and its shadow under them. A hero
+## dressed mid-walk walks on at its pace.
+func dress(id: String) -> void:
+	var walking := sprite_frames != null and is_playing()
+	var playing := animation if walking else &"idle"
+	var pace := get_playing_speed() if walking else 1.0
+	var crop := Characters.bounds(id)
+	var stand := CombatActor.player_standing(id)
+	sprite_frames = _frames(id, crop)
+	var by := TALL / stand.size.y
+	scale = Vector2(by, by)
+	# The crop is drawn centred on the token. `offset` is in the sprite's own pixels, which `scale`
+	# shrinks, so the foot's drop is divided to land FOOT_OFFSET map pixels below the middle of the tile.
+	var middle := Vector2(crop.position) + Vector2(crop.size) / 2.0
+	_feet_shift = middle.x - Characters.feet(id)
+	offset.y = middle.y - stand.end.y + FOOT_OFFSET / by
+	_shadow.texture = CombatActor.shadow_texture(maxi(4, roundi(stand.size.y * SHADOW_SHARE)), SHADOW_COLOUR)
+	_shadow.position = Vector2(0, FOOT_OFFSET / by)
+	_face(flip_h)
+	play(playing, pace)
+
+
+## Turns the hero to face west or east, its feet staying where they stand.
+func _face(west: bool) -> void:
+	flip_h = west
+	offset.x = -_feet_shift if west else _feet_shift
 
 
 func _process(delta: float) -> void:
@@ -196,9 +212,7 @@ func _start_step() -> void:
 	_to = _map.ground_layer.map_to_local(_path[0])
 	_step = 0.0
 	# The art faces east, so a step that leads west is mirrored.
-	flip_h = _to.x < _from.x
-	# A child is not mirrored with its parent's picture, so the shadow's shift is.
-	_shadow.position.x = -SHADOW_SHIFT if flip_h else SHADOW_SHIFT
+	_face(_to.x < _from.x)
 
 
 func _finish_step() -> void:
@@ -212,20 +226,19 @@ func _finish_step() -> void:
 		arrived.emit(cell)
 
 
-func _frames() -> SpriteFrames:
+func _frames(id: String, crop: Rect2i) -> SpriteFrames:
 	var frames := SpriteFrames.new()
 	frames.rename_animation("default", "idle")
-	_add_animation(frames, "idle", IDLE_SHEET, IDLE_FRAMES)
 	frames.add_animation("run")
-	_add_animation(frames, "run", RUN_SHEET, RUN_FRAMES)
+	var wide := Characters.frame(id).x
+	# The sheet a fight plays as "walk" is the map's run.
+	for named: Array in [["idle", "idle"], ["run", "walk"]]:
+		frames.set_animation_speed(named[0], FPS)
+		frames.set_animation_loop(named[0], true)
+		var sheet: Texture2D = load(Characters.path(id, named[1]))
+		for i in sheet.get_width() / wide:
+			var atlas := AtlasTexture.new()
+			atlas.atlas = sheet
+			atlas.region = Rect2(Vector2i(i * wide, 0) + crop.position, crop.size)
+			frames.add_frame(named[0], atlas)
 	return frames
-
-
-func _add_animation(frames: SpriteFrames, name: String, sheet: Texture2D, count: int) -> void:
-	frames.set_animation_speed(name, FPS)
-	frames.set_animation_loop(name, true)
-	for i in count:
-		var atlas := AtlasTexture.new()
-		atlas.atlas = sheet
-		atlas.region = Rect2(Vector2i(i * FRAME_SIZE.x, 0) + BOUNDS.position, BOUNDS.size)
-		frames.add_frame(name, atlas)

@@ -74,6 +74,7 @@ const CREDITS := [
 		["Mattz Art", "The hero, the portraits and the enemies"],
 		["Admurin", "The dungeon's creatures, Gollux, the cave and the chest"],
 		["rvros", "The slime"],
+		["CraftPix.net", "The other playable characters"],
 		["PixelLab", "Made the item, unique, skill and spell icons"],
 	]],
 	["Interface", [

@@ -115,6 +115,7 @@ The bracket closing a rule names the heading in `DESIGN.md` that holds its full 
 - **Size a fighter with `_actor_height`** and snap it to `_snap(view)`, half the backdrop's pixel on a window held upright (`UITheme.narrow`), where the fight stands mid-window (`GROUND_UPRIGHT`). Anything placed on the ground asks `_ground()`, never `GROUND`. (DESIGN.md: "Size a fighter with `_actor_height`")
 - **Lay the arena out again on a resize** (`_layout`, on the viewport's `size_changed`, as `CampScene`'s is). (DESIGN.md: "Lay the arena out again on a resize")
 - **A `CombatActor`'s `position` is the middle of its feet.** Tint it through `self_modulate`, which leaves `modulate` to the hit flash. (DESIGN.md: "combat_actor.gd")
+- **Draw the player's fighter from `Characters`** (`CombatScene.character`, set before `begin`; `setup_player(.., id)`), stood by its row's `stand` where it has one. No hero's swing runs longer than the kobold's (`SWING_FRAMES`), so `_swing` cuts back a time into it, not a frame. (DESIGN.md: "combat_actor.gd")
 
 ### The HUD, loot popup and verdict (`FightHud`, the scene's `hud`)
 - **The HUD reads the Encounter and nothing of the scene's.** The scene tells it what happened (`keep`, `loot_changed`, `dress_nameplate`, `flash_clock`, `show_verdict`) and hears `back_pressed` / `retry_pressed`; the main scene sets `hud.hud_top` and `hud.bag_room` and hears `hud.panel_up` and `hud.drop_discarded`. (DESIGN.md: "fight_hud.gd")

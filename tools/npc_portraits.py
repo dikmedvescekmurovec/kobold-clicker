@@ -24,7 +24,7 @@ HEIGHT = 52
 PORTRAITS = {
     # The enchanter: her hat, face and the hand on her staff, clear of the cauldron's steam.
     "fortuneteller": (PACK + "ENCHANTER.png", 128, (64, 8, 116, 60)),
-    # The kobold's own idle (`CombatActor.PLAYER_FRAME`): ears, face, chest and the curl of his tail.
+    # The kobold's own idle (his `Characters.ROSTER` frame): ears, face, chest and the curl of his tail.
     "player": ("Assets/Player/idle.png", 148, (30, 26, 82, 78)),
     # The smith and his anvil (the user's ask), from his hat to the anvil's top: his boots and its
     # foot are cut to keep him at `HEIGHT`, the sparks off the anvil are kept.

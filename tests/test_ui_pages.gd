@@ -352,6 +352,16 @@ func _pages(hero: Inventory) -> Dictionary:
 			var page := CharacterPage.new(hero, scale)
 			root.add_child(page)
 			return page,
+		"roster": func(scale: float) -> Control:
+			var page := RosterPage.new(hero, "", scale)
+			root.add_child(page)
+			return page,
+		# The longest name there is, over Buy.
+		"roster_unbought": func(scale: float) -> Control:
+			var page := RosterPage.new(hero, "", scale)
+			root.add_child(page)
+			page.pick("samurai_commander")
+			return page,
 		"leaderboard_sign_in": func(scale: float) -> Control: return board.call(scale, false, ""),
 		"leaderboard_name": func(scale: float) -> Control: return board.call(scale, true, ""),
 		"leaderboard": func(scale: float) -> Control: return board.call(scale, true, "Adventurer"),
@@ -1063,7 +1073,8 @@ func _test_pages_in_the_scene() -> bool:
 		for at in 12:
 			main.inventory.add(Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 1 + at % 3))
 		main.inventory.gold = 1.0e9
-		for left: Control in [main.bag_page, main.skills_page, main.settings_page, main.character_page]:
+		for left: Control in [main.bag_page, main.skills_page, main.settings_page, main.character_page,
+				main.roster_page]:
 			main._toggle_left_page(left)
 			await _frames(3)
 			for wrong: String in _wrongs(left, Vector2(window)):

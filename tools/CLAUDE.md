@@ -17,6 +17,7 @@ That row and the rest of the old table are in `DESIGN.md` under "Files in full".
 | `pips.py` | Draws the pips of the fight's kill bar and the bounty boards, lit and spent (the user's design, 2026-10-03). |
 | `skill_stones.py` | Carves numerals I to IX into the user's three pixellab stones; draws the tree's 16 px nodes and its root. |
 | `npc_portraits.py` | Cuts the dialogue portraits out of the NPC pack, each speaker's idle as one strip for `DialogueBox`. |
+| `characters.py` | Cuts the other heroes out of the CraftPix packs: each one's idle, walk and attack, its dialogue portrait, corner face and map badge; prints the rows for `Characters.ROSTER`. |
 | `seeing_stone.py` | Draws the Seeing Stone: **unused since 2026-10-03**, when `CaveSense` replaced the stone, and nothing loads its files. |
 | `sound_levels.py` | Cuts the sound effects out of `Sounds/Selected/` into `Sounds/Sfx/`, then sets every file's level (`LEVELS`): the mix. |
 | `pixel_flatten.py` | Flattens an AI-generated creature's frames to the bought packs' look (one palette across every frame). |
@@ -32,7 +33,7 @@ A rule's old text is in `DESIGN.md` under "Rules in full", headed by the rule's 
 
 ### Running and writing
 - **Take `--help` and refuse an unknown argument** in every script (`argparse`): a typo must never start an export, a recording or a deploy. `web.py` exports only; `--deploy` is what uploads and deploys.
-- **Write only the preview without `--export`** in `item_frames.py`, `cave_dungeon.py`, `pips.py`, `skill_stones.py`, `seeing_stone.py` and `pixel_flatten.py`. (DESIGN.md: "Files in full")
+- **Write only the preview without `--export`** in `item_frames.py`, `cave_dungeon.py`, `characters.py`, `pips.py`, `skill_stones.py`, `seeing_stone.py` and `pixel_flatten.py`. (DESIGN.md: "Files in full")
 - **After cutting, run the Godot import** and commit the `.import` files.
 - **Write `Assets/` last:** `ui_kit.py`'s `main` holds every write (`writes`) until all that can refuse a sprite has run; only `tools/qa/` previews are written as it goes.
 - **Never read what the build writes:** every source is under `Assets/Potential/` or drawn, so two runs leave `Assets/` byte for byte the same; one read back out of `Assets/Gear` would be outlined again on each run.
@@ -82,6 +83,8 @@ A rule's old text is in `DESIGN.md` under "Rules in full", headed by the rule's 
 - **Carve a numeral with every stroke straight** (one stepped sideways read as a Z), in shades taken from the whole stone's lightness (`DEEP`, `DARK`, `LIGHT`), the user's approved look. (DESIGN.md: "skill_stones.py")
 - **Snap a 16 px node back onto the stone's own colours, its outer ring the darkest** (`small`), so the outline stays one pixel. Capstone badges are not drawn small: at 16 px they are mush. (DESIGN.md: "skill_stones.py")
 - **Cut every portrait `HEIGHT` (52, `DialogueBox.PORTRAIT_HEIGHT`) tall,** one crop for every frame of the idle. The user's picks stay: `player`'s 52 px crop, head to the curl of his tail, and `blacksmith` 68 wide to keep his anvil, cut at the anvil's top. (DESIGN.md: "npc_portraits.py")
+- **Cut a hero's three strips to one crop, facing right, a clear pixel round every cell** (`characters.py`), split at the clear column nearest each cell's edge; a cut that loses a pixel stops the tool. Never rename an id in `CHARACTERS`: a save holds it. (DESIGN.md: "characters.py")
+- **Take a hero's `feet` from the user's marks** (2026-10-11), and cut its corner face and its map badge round one point at one `zoom`, the badge only wider: the user's rule that the two show the same face. The dialogue portrait moves on its own (`portrait`). (DESIGN.md: "characters.py")
 
 ### Sound
 - **Tune the mix in `LEVELS`, never in a player:** no `AudioStreamPlayer` in the game sets a volume, and a sound added to the game gets a line there. (DESIGN.md: "sound_levels.py")

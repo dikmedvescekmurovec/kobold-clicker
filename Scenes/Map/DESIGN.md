@@ -84,11 +84,11 @@ Signals `tile_hovered` (nothing listens, and its info is worked out only for a l
 Under a finger the hover is the tile last tapped, never where a drag went: a tap sets it and a finger's motion, only ever the map pulled about, does not
 
 #### player_token.gd (PlayerToken)
-The player's `AnimatedSprite2D` (idle, run), cropped by one shared `BOUNDS`.
+The player's hero as an `AnimatedSprite2D` (idle, run). `dress(id)` (the main scene's `_wear_character`; `setup` dresses it as `Characters.FIRST`) builds both animations from the hero's sheets under its one crop (`Characters.bounds`; the sheet a fight plays as "walk" is the map's "run"), scales it to stand `TALL` (31 map pixels: the kobold's 62 at the half size he always was, and every other hero as tall, by `CombatActor.player_standing`), and shifts the crop until the hero's marked feet (`Characters.feet`, the user's own marks of 2026-10-11) stand on the tile's foot point, `FOOT_OFFSET` under its middle. Until then the kobold's crop's middle stood there, 5 map pixels right of his feet, because his tail is in the crop. `_face(west)` turns it: `flip_h` mirrors the picture in its box and leaves `offset` alone, so the shift is mirrored by hand and the feet stay where they stand. A hero dressed mid-walk plays on at its pace.
 `walk(path)` (each walk asks the `move_speed` Callable once, so +100% halves `SECONDS_PER_TILE` and doubles the run cycle), `advance(delta)` (tests drive it), `finish_walk()`, `can_stop()` / `stop_walk()` (the step being walked becomes the last; never `stop`, the sprite's own), signal `arrived`.
 Dust comes from `_process`, so tests make none.
 Every `FOOTSTEP_EVERY` s (shortened by Move Speed) `_process` plays the next of `Sounds/Footsteps/footstep00-09.ogg` in turn on the SFX bus, and leaves a `FOOTPRINT` under the token that fades after `FOOTPRINT_HOLD` + `FOOTPRINT_LIFE` s.
-A child `Sprite2D` behind it lays the combat fighters' oval (`CombatActor.shadow_texture`) under the feet, darker, its `SHADOW_SHIFT` mirrored with `flip_h`
+A child `Sprite2D` behind it lays the combat fighters' oval (`CombatActor.shadow_texture`) under the feet, darker, `SHADOW_SHARE` of the hero's standing height across (36 px under the kobold, as it was) and centred on the marked feet, so there is nothing to mirror
 
 #### backdrop.gdshader
 The thick fog behind the map, on the `Backdrop` `Polygon2D` `HexMap` puts first (`BACKDROP_REACH` each way): gradient-noise banks, stretched wide, in four grey-lavender shades, Bayer-dithered one step per world pixel

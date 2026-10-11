@@ -46,7 +46,7 @@ Full text, numbers and reasons: `DESIGN.md`, "Reference (moved here from CLAUDE.
 - **Let a version 24 save learn `farthest_land`** (version 25) in the main scene's `_credit_walls`; ignore the `seeing_stone` saved beside it until 2026-10-03. (DESIGN.md: "Only ever raise `farthest_land`")
 - **Read a version 25 save's `dungeon_floors` as `dungeon_depth * Encounter.DUNGEON.enemies`** (the field is version 26). (DESIGN.md: "Only ever raise `dungeon_floors`")
 - **Read a version 28 `achievements` list as rank I** (id -> rank since version 29; `achievements_new` and `tally` are version 28 too). (DESIGN.md: "Drop a unique only once it is unlocked")
-- **Mind the other versions** (the whole list heads `inventory_save.gd`): 20 the second batch of curses (`homeland`, `uniques_doubled`), 31 `hero_name`, 33 `skill_tree` and `skill_ranks`, 34 `runed` (only tiles still worked). (DESIGN.md: "Spend a skill point through the inventory, never `skills`", "inventory.gd", "Treat skill nodes as items you cannot wear")
+- **Mind the other versions** (the whole list heads `inventory_save.gd`): 20 the second batch of curses (`homeland`, `uniques_doubled`), 31 `hero_name`, 33 `skill_tree` and `skill_ranks`, 34 `runed` (only tiles still worked), 35 the heroes bought and the one in use (`characters`, `character`). (DESIGN.md: "Spend a skill point through the inventory, never `skills`", "inventory.gd", "Treat skill nodes as items you cannot wear")
 - **Set `SkillTree.root_slots` before the tree is read:** `load_from` sets the root's one at the top and the save's own after `farthest_land` and before the tree, which keeps a stone only in a slot the root has. (DESIGN.md: "Only ever raise `farthest_land`")
 - **Add a saved field in `InventorySave`, in `write` and in `_read_fields`, whose order is a rule:** the level before the tree, and the uniques found before the curses, or `note_unique` doubles every find of a Forgotten world. (DESIGN.md: "inventory_save.gd")
 - **Never save `most_worn`:** `stash()` sets it on the heirlooms. (DESIGN.md: "Spend a skill point through the inventory, never `skills`")
@@ -151,7 +151,8 @@ Full text, numbers and reasons: `DESIGN.md`, "Reference (moved here from CLAUDE.
   - **Work on copies in `transcended()`,** so a caller whose write fails still holds the heirlooms as they were.
   - **Carry through it the stash and its doll, unspent super orbs, `uniques_found`, `kills`, `tips`, and `first_sword_taken` forced true.**
 - **Leave the count of heirlooms to `TranscendPage`;** `Inventory.make_heirloom` takes a bag piece or a worn one, never a broken one. (DESIGN.md: "inventory.gd")
-- **Carry `play_seconds` and `hero_name` through a transcension; leave `runes` and `runed` with the world.** (DESIGN.md: "inventory.gd")
+- **Carry `play_seconds`, `hero_name` and the heroes (`owned_characters`, `character`) through a transcension; leave `runes` and `runed` with the world.** (DESIGN.md: "inventory.gd")
+- **Buy and pick a hero only through `buy_character` / `use_character`** (`Characters` ids): one is bought once, and only an owned one is picked. A saved id the roster has not got is named in `lost`, and a pick not owned reads as the first. (DESIGN.md: "inventory.gd")
 - **Use only `items` and `equipment` of `stash()`;** it keeps to `CAPACITY` where the bag asks `capacity()`. (DESIGN.md: "inventory.gd")
 - **Climb only a whole heirloom, and only to `min(safe_level, land_level)`** (`Inventory.raise_heirlooms`). (DESIGN.md: "inventory.gd")
 - **Keep `Inventory.curses` apart from `pending_curses`:** the first is the world's, the second only chosen, and `transcended()` is the one place the second becomes the first. (DESIGN.md)

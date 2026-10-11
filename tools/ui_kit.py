@@ -623,6 +623,7 @@ LETTERS = {
     "ui_key_l": (3, 3),
     "ui_key_o": (6, 3),
     "ui_key_p": (7, 3),
+    "ui_key_r": (1, 4),
     "ui_key_y": (0, 5),
 }
 

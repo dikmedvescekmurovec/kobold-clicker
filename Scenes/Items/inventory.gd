@@ -6,7 +6,7 @@ extends RefCounted
 
 const SAVE_PATH := "user://inventory.json"
 ## The save's shape. `InventorySave` lists what each step changed and reads every older one.
-const VERSION := 34
+const VERSION := 35
 
 ## Loose items the bag holds (`capacity()` is what it holds now). Worn gear is outside it, so putting a
 ## piece on frees a square.
@@ -83,6 +83,11 @@ var tips: Array[String] = []
 
 ## The player's name for their character; empty is `DEFAULT_NAME` (`hero()` is what is shown).
 var hero_name := ""
+
+## The heroes bought (`Characters` ids; the first is everyone's and never listed) and the one the player
+## is. Carried through a transcension, as the name is.
+var owned_characters: Array[String] = []
+var character := Characters.FIRST
 
 ## A whole number in a double, as every growing quantity is (`BigNumber`). Every drop in it is a
 ## purchase, and says so.
@@ -240,6 +245,26 @@ func rename(text: String) -> bool:
 	if called.is_empty() or called == hero_name:
 		return false
 	hero_name = called
+	return true
+
+
+func owns(id: String) -> bool:
+	return id == Characters.FIRST or id in owned_characters
+
+
+## Buys the hero `id`. False, and nothing changed, for one owned already or one the roster has not got.
+func buy_character(id: String) -> bool:
+	if not Characters.has(id) or owns(id):
+		return false
+	owned_characters.append(id)
+	return true
+
+
+## Makes `id` the hero the player is. False, and nothing changed, for one not owned or the one already.
+func use_character(id: String) -> bool:
+	if not owns(id) or id == character:
+		return false
+	character = id
 	return true
 
 
@@ -922,7 +947,7 @@ func make_heirloom(item: Item) -> bool:
 
 
 ## What is left of the player when the world is left behind: what the player knows and has done (the
-## log, the achievements, the tips, the name, the kills and the clock, and what the dungeon and the land
+## log, the achievements, the tips, the name, the heroes, the kills and the clock, and what the dungeon and the land
 ## reached), the super orbs not yet spent, the skill tree, and the heirlooms, each gone through
 ## `Item.transcend`. The kills, with both first finds read as taken, keep a second world from handing
 ## out the first one's promises again. Everything else is a fresh start.
@@ -930,6 +955,8 @@ func transcended() -> Inventory:
 	var next := Inventory.new()
 	next.tips = tips.duplicate()
 	next.hero_name = hero_name
+	next.owned_characters = owned_characters.duplicate()
+	next.character = character
 	next.uniques_found = uniques_found.duplicate()
 	next.uniques_new = uniques_new.duplicate()
 	next.uniques_doubled = uniques_doubled.duplicate()

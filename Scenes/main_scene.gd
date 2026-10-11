@@ -31,9 +31,6 @@ const PINCH_STEP := 1.3
 const TOWN_SPLIT := 0.5
 ## Seconds a camera glide takes (`_glide_camera`).
 const CAMERA_LIFT := 0.25
-## The hero's face in their portrait's first frame (`DialogueBox.PORTRAITS`): the disc of the badge that
-## points at them off screen (`MapPointer`) is cut from the middle of it.
-const HERO_FACE := Rect2(13, 3, 34, 34)
 ## Where a headless run left at the player's own two paths plays instead (`_ready`).
 const HEADLESS_INVENTORY := "user://headless_inventory.json"
 const HEADLESS_MAP := "user://headless_map.json"
@@ -53,6 +50,8 @@ const BOOK_ICON := "res://Assets/UI/ui_icon_book.png"
 const PODIUM_ICON := "res://Assets/UI/ui_icon_podium.png"
 ## A stand-in from the pack until the heirlooms have a mark of their own.
 const CROWN_ICON := "res://Assets/UI/ui_icon_crown.png"
+## A stand-in too: the bag's helmet tab's mark, until the heroes have one.
+const ROSTER_ICON := "res://Assets/UI/ui_icon_slot_helmet.png"
 ## The red pip over a corner button's top-right corner while its page has something new (`_mark_new`).
 const NEW_PIP := "res://Assets/UI/ui_pip_new.png"
 ## What the chest's pip is for, and nothing else in the bag is: the first of each of these to reach it,
@@ -64,7 +63,7 @@ const SEEN := "seen_"
 const HOTKEYS := {
 	KEY_I: "_bag_button", KEY_K: "_skills_button", KEY_C: "_character_button", KEY_J: "_bounty_button",
 	KEY_L: "_collection_button", KEY_Y: "_achievements_button", KEY_H: "_heirloom_button",
-	KEY_P: "_leaderboard_button", KEY_O: "_settings_button",
+	KEY_P: "_leaderboard_button", KEY_O: "_settings_button", KEY_R: "_roster_button",
 }
 ## The air between one corner button and the next, in panel pixels.
 const CORNER_GAP := 4.0
@@ -195,6 +194,7 @@ var collection_page: CollectionPage
 var achievements_page: AchievementsPage
 var character_page: CharacterPage
 var leaderboard_page: LeaderboardPage
+var roster_page: RosterPage
 ## The run's one `Cloud`: under the root on the player's own save (it outlives the reloads a download
 ## makes), a child that is off anywhere else.
 var cloud: Cloud
@@ -211,6 +211,7 @@ var _settings_button: Button
 var _collection_button: Button
 var _achievements_button: Button
 var _leaderboard_button: Button
+var _roster_button: Button
 ## There while an heirloom is held, and the one corner button a town leaves standing: pressed there it
 ## swaps the bag and the heirlooms at the counter.
 var _heirloom_button: Button
@@ -617,8 +618,8 @@ func _build_ui() -> void:
 	_chest_pointer = MapPointer.new(map, view, ui_scale,
 			MapPointer.cut(MapBuilder.CHEST_TEXTURE, MapBuilder.CHEST_REGION))
 	layer.add_child(_chest_pointer)
-	_hero_pointer = MapPointer.new(map, view, ui_scale, MapPointer.cut(
-			DialogueBox.PORTRAITS % DialogueBox.PLAYER, HERO_FACE), "Find the hero", _find_hero)
+	_hero_pointer = MapPointer.new(map, view, ui_scale, load(Characters.path(inventory.character, "badge")),
+			"Find the hero", _find_hero)
 	layer.add_child(_hero_pointer)
 	# Floating at the map's foot, where the hero's badge stands (`_process`), and under every panel as it is.
 	_stop_button = UITheme.button("Stop", "LightButton", "Stop on the next tile")
@@ -642,6 +643,7 @@ func _build_ui() -> void:
 
 	_build_character()
 	_build_pages(layer)
+	_wear_character()
 
 	get_viewport().size_changed.connect(_layout_ui)
 	_layout_ui.call_deferred()
@@ -740,6 +742,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 	# In the order they join the layer. Each tooltip is the page's own name.
 	for made: Array in [
 			["_skills_button", STAR_ICON, SkillsPage.TITLE, _on_skills_pressed],
+			["_roster_button", ROSTER_ICON, RosterPage.TITLE, func() -> void: _toggle_left_page(roster_page)],
 			["_bag_button", CHEST_ICON, "Items", _on_bag_pressed],
 			["_bounty_button", SCROLL_ICON, "Bounties", _on_bounty_pressed],
 			["_settings_button", COG_ICON, "Settings", _on_settings_pressed],
@@ -855,6 +858,8 @@ func _build_pages(layer: CanvasLayer) -> void:
 		page.laid_out.connect(_place_corner)
 	settings_page.laid_out.connect(_place_corner)
 	leaderboard_page = LeaderboardPage.new(cloud, func() -> int: return inventory.dungeon_floors, ui_scale)
+	roster_page = RosterPage.new(inventory, inventory_path, ui_scale)
+	roster_page.changed.connect(_wear_character)
 	for page: Control in _left_pages() + [town_page]:
 		page.hide()
 		page.closed.connect(_on_left_page_closed)
@@ -1204,6 +1209,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 ## from another: the bag free to open over it, the map and every Control out of its way.
 func _stage(fight: Encounter, cell: Vector2i, place: String, variant := "plain") -> void:
 	_combat.weapon_kind = _weapon_kind()
+	_combat.character = inventory.character
 	_let_bag_over()
 	add_child(_combat)
 	# Told before the fight is built, so a run that opens with a full bag says so on its first frame.
@@ -1724,9 +1730,9 @@ func _place_corner_row() -> void:
 
 
 ## The corner buttons in the order they stand: what you carry (the bag, then the heirlooms), what you
-## are, what you have promised to do, then the settings and the logs.
+## are (the tree, then the hero), what you have promised to do, then the settings and the logs.
 func _corner_buttons() -> Array[Button]:
-	return [_bag_button, _heirloom_button, _skills_button, _bounty_button, _settings_button,
+	return [_bag_button, _heirloom_button, _skills_button, _roster_button, _bounty_button, _settings_button,
 			_collection_button, _achievements_button, _leaderboard_button]
 
 
@@ -1766,6 +1772,8 @@ func _show_corner(shown: bool) -> void:
 	_bounty_button.visible = buttons and BountyBoard.any_seen(inventory.towns)
 	# Nothing earns the settings: they are there from the first step.
 	_settings_button.visible = buttons
+	# Nor the heroes, but never over a fight: a fighter is dressed as it is staged, not mid-swing.
+	_roster_button.visible = shown
 	_character_button.visible = (shown or _combat != null) and _character.visible
 	# Over a fight it stays only for the experience bar's tooltip (`xp_hover`, which lets every press
 	# through): the button itself takes no mouse there, no key and no hand.
@@ -1883,7 +1891,8 @@ func _show_next_tip() -> void:
 	if tip.size() > 3:
 		# The hero speaks under the name the player gave them.
 		var box := DialogueBox.new(inventory.hero() if tip[1] == HERO else tip[1], tip[2],
-				load(DialogueBox.PORTRAITS % tip[3]),
+				load(Characters.path(inventory.character, "portrait") if tip[3] == DialogueBox.PLAYER
+						else DialogueBox.PORTRAITS % tip[3]),
 				tip[3] == DialogueBox.PLAYER)
 		box.finished.connect(_on_tip_closed)
 		_tip_panel = box
@@ -1997,7 +2006,17 @@ func _skill_point_free() -> bool:
 ## there is one place that knows which those are: what is wired, laid out and closed is this list.
 func _left_pages() -> Array[Control]:
 	return [bag_page, heirloom_page, skills_page, bounty_page, settings_page, collection_page,
-			achievements_page, character_page, leaderboard_page]
+			achievements_page, character_page, leaderboard_page, roster_page]
+
+
+## The hero the player is (`inventory.character`) on everything that draws them outside a fight: the map's
+## token, the corner's face and the badge that points at them. A fight is told as it is staged (`_stage`),
+## and the character page and a spoken tip ask as they are drawn.
+func _wear_character() -> void:
+	var id := inventory.character
+	map.player.dress(id)
+	_character.set_portrait(load(Characters.path(id, "face")))
+	_hero_pointer.set_picture(load(Characters.path(id, "badge")))
 
 
 func _close_left_pages() -> void:

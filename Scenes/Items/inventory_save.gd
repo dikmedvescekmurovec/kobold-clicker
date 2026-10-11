@@ -30,6 +30,7 @@ extends RefCounted
 ## 33  `skill_tree`, `skill_ranks` for `skills` and `skill_bursts`: an older save has the root alone
 ##     and every point its level earned free
 ## 34  `runes`, `runed`
+## 35  `characters` (the heroes bought) and `character` (the one in use): an older save is the kobold alone
 
 
 ## Writes `inventory` to `path`, whole or not at all (`SafeFile`), stamped `stamp` (unix time). Whether
@@ -44,6 +45,8 @@ static func write(inventory: Inventory, path: String, stamp: float) -> bool:
 		"first_orb_taken": inventory.first_orb_taken,
 		"tips": inventory.tips,
 		"name": inventory.hero_name,
+		"characters": inventory.owned_characters,
+		"character": inventory.character,
 		"gold": inventory.gold,
 		"kills": inventory.kills,
 		"play_seconds": inventory.play_seconds,
@@ -255,6 +258,14 @@ static func _read_fields(inventory: Inventory, data: Dictionary, version: int) -
 	# A version 28 save counted no wall ever broken: this world's are where the lifetime count starts.
 	if version < 29 and inventory.walls_credited > int(inventory.tally.get("walls", 0)):
 		inventory.tally["walls"] = inventory.walls_credited
+	for id: String in _strings(data.get("characters")):
+		if not Characters.has(id):
+			lost.append(id)
+		inventory.buy_character(id)
+	# After the heroes bought: a pick that is not owned, or is no hero's name at all, is the first.
+	var being: Variant = data.get("character")
+	if typeof(being) == TYPE_STRING:
+		inventory.use_character(being)
 
 
 ## The pieces of a saved list this build can keep; the rest are named in `lost` (`Item.from_dict`).

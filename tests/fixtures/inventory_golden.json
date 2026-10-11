@@ -11,6 +11,11 @@
 		1,
 		2
 	],
+	"character": "samurai",
+	"characters": [
+		"samurai",
+		"mega_boss"
+	],
 	"curses": [
 		"hard_lessons",
 		"homeland",
@@ -998,7 +1003,7 @@
 		"knucklebone_ring",
 		"worry_stone"
 	],
-	"version": 34,
+	"version": 35,
 	"walls_credited": 3,
 	"xp": 41
 }

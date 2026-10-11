@@ -203,8 +203,8 @@ func _who(totals: Dictionary) -> PanelContainer:
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	portrait.stretch_mode = TextureRect.STRETCH_SCALE
 	portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	portrait.texture = CharacterPanel.PORTRAIT
-	portrait.custom_minimum_size = CharacterPanel.PORTRAIT.get_size() * PORTRAIT_SCALE
+	portrait.texture = load(Characters.path(inventory.character, "face"))
+	portrait.custom_minimum_size = portrait.texture.get_size() * PORTRAIT_SCALE
 	socket.add_child(portrait)
 	row.add_child(socket)
 	var lines := UITheme.vbox(2)

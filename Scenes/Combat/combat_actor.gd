@@ -8,14 +8,9 @@ const FPS := 10.0
 ## Played once, stopping on the last frame; the rest loop.
 const ONCE := ["attack", "death", "hurt"]
 
-const PLAYER_SHEETS := {
-	"idle": "res://Assets/Player/idle.png",
-	"walk": "res://Assets/Player/run.png",
-	"attack": "res://Assets/Player/attack.png",
-}
-const PLAYER_FRAME := Vector2i(148, 96)
-## The union of idle, run and attack: PlayerToken.BOUNDS (idle and run) would cut the sword off the swing.
-const PLAYER_BOUNDS := Rect2i(1, 29, 115, 62)
+## The kobold's swing, in frames: no hero's runs longer, so a longer sheet is played faster and the
+## scene's cut back into a swing (`CombatScene._swing`) lands on the blow whoever swings.
+const SWING_FRAMES := 5
 ## The packs draw at every resolution, so given the scene's pixel a fighter's scale snaps to steps of
 ## `PIXEL_STEP` of it, from one to `PIXEL_MOST`: three pixel sizes at most on screen, a band's height
 ## within about a sixth. Whole steps only were turned down: a Satyr Archer came out taller than a Cyclops.
@@ -37,18 +32,30 @@ var _shadow: Sprite2D
 static var _read := {}
 
 
-## The player, facing right, `height` scene pixels tall; `pixel` is the backdrop's pixel in scene pixels,
-## which the scale snaps to (0 leaves it free).
-func setup_player(height: float, pixel := 0.0) -> void:
-	bounds = PLAYER_BOUNDS
-	var idle: Texture2D = load(PLAYER_SHEETS["idle"])
-	standing = _standing_rect(idle, PLAYER_FRAME, idle.get_width() / PLAYER_FRAME.x)
+## The player as the hero `id` (`Characters`), facing right, `height` scene pixels tall; `pixel` is the
+## backdrop's pixel in scene pixels, which the scale snaps to (0 leaves it free).
+func setup_player(height: float, pixel := 0.0, id := Characters.FIRST) -> void:
+	bounds = Characters.bounds(id)
+	standing = player_standing(id)
+	var frame := Characters.frame(id)
 	var built := SpriteFrames.new()
-	for animation: String in PLAYER_SHEETS:
-		var sheet: Texture2D = load(PLAYER_SHEETS[animation])
-		var count := sheet.get_width() / PLAYER_FRAME.x
-		_add(built, animation, _sheet_frames(sheet, PLAYER_FRAME, PLAYER_BOUNDS, count))
+	for animation: String in Characters.ANIMATIONS:
+		var sheet: Texture2D = load(Characters.path(id, animation))
+		_add(built, animation, _sheet_frames(sheet, frame, bounds, sheet.get_width() / frame.x))
+	built.set_animation_speed("attack", FPS * maxf(1.0, built.get_frame_count("attack") / float(SWING_FRAMES)))
 	_finish(built, height, false, pixel)
+
+
+## What the hero `id` fills standing still, in its frame's pixels: its row's own box, else what its idle
+## draws. The map's token is scaled by it too.
+static func player_standing(id: String) -> Rect2i:
+	var own := Characters.stand(id)
+	if own.size != Vector2i.ZERO:
+		return own
+	var idle: Texture2D = load(Characters.path(id, "idle"))
+	var frame := Characters.frame(id)
+	var read := standing_rect(idle, frame, idle.get_width() / frame.x)
+	return Characters.bounds(id) if read.size == Vector2i.ZERO else read
 
 
 ## An enemy of `EnemyRoster`, turned to face left: only one drawn facing right is mirrored. An `elite`
@@ -238,6 +245,11 @@ func _mean_colour() -> Color:
 
 ## What an idle sheet's `count` frames fill between them, or `bounds` where they draw nothing.
 func _standing_rect(sheet: Texture2D, frame: Vector2i, count: int) -> Rect2i:
+	return _or_bounds(standing_rect(sheet, frame, count))
+
+
+## The same with no fighter to ask: an empty box where the frames draw nothing.
+static func standing_rect(sheet: Texture2D, frame: Vector2i, count: int) -> Rect2i:
 	var key := "standing|" + sheet.resource_path
 	if not _read.has(key):
 		var image := EnemyRoster.sheet_image(sheet.resource_path)
@@ -245,7 +257,7 @@ func _standing_rect(sheet: Texture2D, frame: Vector2i, count: int) -> Rect2i:
 		for i in count:
 			union = _grown(union, image.get_region(Rect2i(Vector2i(i * frame.x, 0), frame)).get_used_rect())
 		_read[key] = union
-	return _or_bounds(_read[key])
+	return _read[key]
 
 
 ## The same for an enemy, whose idle is either a sheet or one file per frame.

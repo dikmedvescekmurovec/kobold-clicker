@@ -27,6 +27,7 @@ var _view: MapBuilder
 var _needle := Node2D.new()
 ## The disc as a button, when the badge was given something to do.
 var _button: Button
+var _picture := Sprite2D.new()
 
 
 ## `picture` is cut to the disc, so a bigger one is a close-up. A `pressed` makes the disc a button.
@@ -42,10 +43,9 @@ func _init(map: HexMap, view: MapBuilder, ui_scale: float, picture: Texture2D, t
 	var disc := _disc(DISC_RADIUS, Palette.INK)
 	disc.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
 	add_child(disc)
-	var sprite := Sprite2D.new()
-	sprite.texture = picture
-	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	disc.add_child(sprite)
+	_picture.texture = picture
+	_picture.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	disc.add_child(_picture)
 	add_child(_needle)
 	# Ink under gold, a pixel larger all round, so the arrow keeps its edge on light ground too.
 	_needle.add_child(_arrow(1.5, Palette.INK))
@@ -60,6 +60,11 @@ func _init(map: HexMap, view: MapBuilder, ui_scale: float, picture: Texture2D, t
 		_button.pressed.connect(pressed)
 		add_child(_button)
 	hide()
+
+
+## Another picture on the disc: the hero's badge, as the player becomes another hero.
+func set_picture(picture: Texture2D) -> void:
+	_picture.texture = picture
 
 
 ## `region` of the sheet at `path`, as a picture for the disc.

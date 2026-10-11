@@ -11,6 +11,7 @@
 - **Admurin** ([admurin.itch.io](https://admurin.itch.io/)): the dungeon's creatures (Enemy Galore I), Gollux (Bosses: Gollux), the cave backdrop (Parallax Backgrounds: Cave) and the map's chest (Free Chest Animations).
   Licence: any game project, personal or commercial; may be modified; not to be resold or redistributed as a game asset; no NFTs; not to be used to train AI; credit appreciated, not required.
 - **rvros** ([Pixel Art Animated Slime](https://rvros.itch.io/pixel-art-animated-slime)): the slime, recoloured for each environment. Licence: CC0 1.0.
+- **CraftPix.net** ([craftpix.net](https://craftpix.net/)): the other playable characters -- the samurai, the anime warriors, the knights, the orcs, the yokai, the satyrs, the skeletons, the werewolves, the demons, the cave bosses and the mega boss. Licence: [CraftPix file licence](https://craftpix.net/file-licenses/).
 
 ### Interface
 - **CraftPix.net** ([Free Basic Pixel Art UI for RPG](https://craftpix.net/freebies/free-basic-pixel-art-ui-for-rpg/)): panels, buttons, the character panel. Licence: [CraftPix file licence](https://craftpix.net/file-licenses/).

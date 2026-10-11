@@ -128,6 +128,11 @@ func _notification(what: int) -> void:
 		xp_hover.free()
 
 
+## The hero in the circle: a `Characters` "face", every one the size of the kobold's.
+func set_portrait(face: Texture2D) -> void:
+	_portrait.texture = face
+
+
 func set_state(new_level: int, new_xp: int) -> void:
 	level = maxi(new_level, 1)
 	xp = maxi(new_xp, 0)

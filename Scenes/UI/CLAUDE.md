@@ -185,6 +185,9 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
   - **Keep `CREDITS` in step with `credits.md`:** `test_ui_theme` holds every name it thanks in bold to a line of it.
 - **Draw on `LeaderboardPage` only what the `Cloud` holds,** and keep its name field through every redraw (`_naming`), or the next letters would be the corner's hotkeys. (DESIGN.md: "leaderboard_page.gd")
 - **Take up a fresh piece after `ItemGenerator.add_to_bag()`,** so the bag's is never crafted on from the generator. (DESIGN.md: "item_generator.gd")
+- **Stand the picked hero beside `RosterPage`'s grid, never over it** (`STAGE`): the one left page wider than the bag, a hero up to 125 px tall over the grid having left it two rows of eight. It is as wide as the 324 px a window held upright has, so nothing more goes across. (DESIGN.md: "roster_page.gd")
+  - **Draw the hero shown as the fight's own `CombatActor` and a square as its badge;** dim one not bought, edge the one in use, and write nothing but its name, Buy and Select.
+  - **Let `RosterPage` save what it changes** and say `changed`; a press on its grid counts as it lets go, not one that travelled.
 - **Write a modifier as one row, its whole sentence** (`ItemDetails.fill`), and one the rarity still has room for as a row holding only `OPEN_ROW`, never on a broken piece. (DESIGN.md: "item_details.gd", "The open modifier row (2026-10-07)")
   - **Write "Broken" and "· Two-handed" in `ItemDetails`,** which the hover card, `DropsView` and a vendor's shelf all fill from.
   - **Pass `deltas(item, against)` an `Array[Item]`,** everything a swap takes off, and find the rarity line by name (`RARITY_LINE`), not by place.
@@ -239,6 +242,7 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
 | `item_generator.gd` (`ItemGenerator`) | Dev only: a piece made to order and added to the bag. |
 | `achievements_page.gd` (`AchievementsPage`) | The achievements on the left edge: a share bar over one grid of squares, each with its progress bar and card. |
 | `collection_page.gd` (`CollectionPage`) | The collection log on the left edge: every unique by name, found, known or locked, over the bonus and the count. |
+| `roster_page.gd` (`RosterPage`) | The heroes on the left edge: every one of `Characters` as a square, and beside the grid the picked one standing as a fight draws it, over Buy or Select. |
 | `character_panel.gd` (`CharacterPanel`) | The player in the top corner: portrait, level badge, damage line and experience bar. |
 | `character_page.gd` (`CharacterPage`) | The character sheet on the left edge: name card, the two headline damages, curses, effects and stat tables. |
 | `item_details.gd` (`ItemDetails`) | One item written into a `VBoxContainer` as a table (`fill`), and what a swap would change (`deltas`). |

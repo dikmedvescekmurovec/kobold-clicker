@@ -996,6 +996,14 @@ func _shoot_town() -> void:
 	print("Saved ", ProjectSettings.globalize_path("user://ui_achievements.png"))
 	root.warp_mouse(Vector2.ZERO)
 
+	# The heroes: one not yet bought shown beside the grid, the kobold in use.
+	main._on_left_page_closed()
+	main._toggle_left_page(main.roster_page)
+	main.roster_page.pick("samurai")
+	for i in 2:
+		await process_frame
+	await _save_window("ui_characters.png")
+
 	# The character page, behind a press on the corner's character panel.
 	main._on_left_page_closed()
 	main._on_character_pressed()

@@ -69,6 +69,7 @@ A procedurally generated hex map, uncovered tile by tile: a hexagon of land ring
 - **Under a finger the hover is the tile last tapped, never where a drag went.** `DRAG_THRESHOLD` is in panel pixels, times `ui_scale` (`Cursors.TOUCH_SLOP` under a finger). (DESIGN.md: "hex_map.tscn / hex_map.gd")
 - **While land is being chosen (`aim_radius` not -1) a click emits `cell_aimed`** instead of selecting. (DESIGN.md: "hex_map.tscn / hex_map.gd")
 - **Stop a walk with `PlayerToken.stop_walk()`, never `stop`,** the sprite's own. (DESIGN.md: "player_token.gd")
+- **Stand the token by its hero's marked feet** (`PlayerToken.dress`, `Characters.feet`; the user's, 2026-10-11): that column on the tile's foot point, the shadow under it, every hero `TALL`. `_face` mirrors the shift, since `flip_h` leaves `offset` alone. (DESIGN.md: "player_token.gd (PlayerToken)")
 - **Run `_on_player_arrived` from `jump_to(cell)`,** so an arrival's every consequence follows. (DESIGN.md: "map_builder.gd")
 
 ### The wall and the land past it

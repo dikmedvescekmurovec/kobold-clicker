@@ -210,6 +210,8 @@ var area_sky := "morning"
 var place := ""
 ## The kind of weapon the hero swings (`LootTable.KINDS`), "" bare-handed.
 var weapon_kind := ""
+## Which hero the player is (`Characters`), set before `begin` as `weapon_kind` is.
+var character := Characters.FIRST
 ## Asked of each find: whether the player has told the game to leave it behind
 ## (`Inventory.leaves_behind`). Unset keeps everything.
 var autodiscard := Callable()
@@ -413,7 +415,7 @@ func _build() -> void:
 	_player = CombatActor.new()
 	_player.name = "Player"
 	_arena.add_child(_player)
-	_player.setup_player(_actor_height(view), _snap(view))
+	_player.setup_player(_actor_height(view), _snap(view), character)
 	_player.self_modulate = light
 	_player.position = _feet(PLAYER_X)
 	_player.animation_finished.connect(func() -> void: _player.play("idle"))
@@ -661,8 +663,10 @@ func _jolt_enemy() -> void:
 ## instant, so clicking faster than the animation reads as a run of blows, not a stuck first frame.
 func _swing() -> void:
 	var again := _player.is_playing() and _player.animation == "attack"
-	_player.play_once("attack", SWING_RESTART_FRAME)
-	_sounds.swing.play(SWING_RESTART_FRAME / CombatActor.FPS if again else 0.0)
+	# As far into the swing as the sound is, whatever speed this hero's attack plays at.
+	var into := SWING_RESTART_FRAME / CombatActor.FPS
+	_player.play_once("attack", roundi(into * _player.sprite_frames.get_animation_speed("attack")))
+	_sounds.swing.play(into if again else 0.0)
 	_hop_player()
 
 
@@ -691,8 +695,11 @@ func _on_player_hit(taken: float, dodged: bool, blocked: bool) -> void:
 	if _enemy != null and _enemy.sprite_frames != null:
 		_enemy.play_once("attack")
 	var cost := not dodged and not blocked
+	# Over the hero's own head: one drawn taller than the fight's fighter (`CombatActor.PIXEL_STEP`) is not
+	# written across its chest.
+	var tall := maxf(1.0, _player.drawn_size().y / _actor_height(_size()))
 	_float_text("Dodge" if dodged else "Block" if blocked else "-%ss" % _seconds_written(taken),
-			FightHud.BAR_HEALTH if cost else Palette.BONE, DAMAGE_FONT, PLAYER_X, 1.0, STRUCK_HEIGHT, true)
+			FightHud.BAR_HEALTH if cost else Palette.BONE, DAMAGE_FONT, PLAYER_X, 1.0, STRUCK_HEIGHT * tall, true)
 	if cost:
 		hud.flash_clock()
 		_sounds.struck.play()

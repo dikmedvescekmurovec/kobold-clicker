@@ -300,26 +300,35 @@ func _test_fog(map: HexMap) -> bool:
 ## The player's character idles on its cell, cut out of the wide sheet frames.
 func _test_player(map: HexMap) -> bool:
 	var player := map.player
-	for animation: Array in [["idle", PlayerToken.IDLE_FRAMES, PlayerToken.IDLE_SHEET],
-			["run", PlayerToken.RUN_FRAMES, PlayerToken.RUN_SHEET]]:
+	# A token is the first hero until it is dressed as another: the kobold, his run under the name "run".
+	var crop := Characters.bounds(Characters.FIRST)
+	for animation: Array in [["idle", 6, "idle"], ["run", 8, "walk"]]:
 		var name: String = animation[0]
+		var sheet: Texture2D = load(Characters.path(Characters.FIRST, animation[2]))
 		_check(player.sprite_frames.has_animation(name), "the token has a %s animation" % name)
 		_check(player.sprite_frames.get_frame_count(name) == animation[1],
 				"the %s animation has every frame of its sheet" % name)
 		_check(player.sprite_frames.get_animation_loop(name), "the %s animation loops" % name)
 		for i: int in animation[1]:
 			var region: Rect2 = player.sprite_frames.get_frame_texture(name, i).region
-			_check(region.size == Vector2(PlayerToken.BOUNDS.size) and region.position.y == PlayerToken.BOUNDS.position.y,
+			_check(region.size == Vector2(crop.size) and region.position.y == crop.position.y,
 					"%s frame %d is cut to the character" % [name, i])
-			_check(region.end.x <= animation[2].get_width(), "%s frame %d stays on the sheet" % [name, i])
+			_check(region.end.x <= sheet.get_width(), "%s frame %d stays on the sheet" % [name, i])
 	_check(player.animation == "idle" and player.is_playing(), "it idles to begin with")
 
 	map.set_player_cell(Vector2i(2, 2))
 	_check(player.visible and player.position == map.ground_layer.map_to_local(Vector2i(2, 2)),
 			"the token stands on its cell")
-	_check(player.scale == Vector2(PlayerToken.SCALE, PlayerToken.SCALE), "it is drawn at half size")
-	_check((player.offset.y + PlayerToken.BOUNDS.size.y / 2.0) * PlayerToken.SCALE == PlayerToken.FOOT_OFFSET,
-			"its feet are on the tile")
+	_check(player.scale == Vector2(0.5, 0.5), "the kobold is drawn at half size")
+	# The crop is drawn centred on the token, `offset` moving it: where a point of it lands, in map pixels.
+	var stand := CombatActor.player_standing(Characters.FIRST)
+	var feet := Vector2(Characters.feet(Characters.FIRST), stand.end.y)
+	var stood := (feet - Vector2(crop.position) - Vector2(crop.size) / 2.0 + player.offset) * player.scale
+	_check(stood == Vector2(0, PlayerToken.FOOT_OFFSET),
+			"the feet marked for him stand on the tile's foot point (%s)" % stood)
+	var shadow := player.get_child(0) as Sprite2D
+	_check(shadow.position * player.scale == Vector2(0, PlayerToken.FOOT_OFFSET)
+			and shadow.texture.get_width() == 36, "and his shadow lies under them, as wide as it was")
 	# Walking: one tile every SECONDS_PER_TILE, straight from the middle of one tile to the middle of the next.
 	map.set_player_cell(Vector2i.ZERO)
 	var west := HexGrid.neighbor(Vector2i.ZERO, HexGrid.Edge.W)
