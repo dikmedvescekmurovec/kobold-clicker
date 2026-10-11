@@ -11,7 +11,8 @@ layer, `HexTileset.RUBBLE_ID`):
   ice_accents.png  ACCENT_KINDS across, 3 versions down: the things lying on the snow
   ice_rubble.png   24 x 8 like ice_band: what is left of a wall once it falls, along its ring, on land
 
-Run `python qa.py icewall <tag>` (and `fallen <tag>` for the rubble) first and look at the images; this overwrites the files.
+Run `python qa.py icewall <tag>` (and `fallen <tag>` for the rubble) first and look at the images; this overwrites
+the files.
 """
 import argparse
 import os

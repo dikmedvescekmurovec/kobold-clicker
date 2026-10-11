@@ -46,7 +46,8 @@ def record(name: str) -> dict:
     if "SCRIPT ERROR" in out or "REEL_END" not in out:
         print(out[-4000:])
         sys.exit(f"reels.gd failed on {name}")
-    marks = {key: float(re.search(rf"{key} (-?[\d.]+)", out).group(1)) for key in ("REEL_START", "REEL_END", "REEL_HIT")}
+    marks = {key: float(re.search(rf"{key} (-?[\d.]+)", out).group(1))
+            for key in ("REEL_START", "REEL_END", "REEL_HIT")}
     (frames / "marks.txt").write_text(json.dumps(marks))
     return marks
 

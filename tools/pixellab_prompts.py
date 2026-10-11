@@ -20,10 +20,12 @@ os.makedirs("tools/qa", exist_ok=True)
 
 # Every helmet's outline, the same words in every prompt so the five read as one helmet at five strengths.
 HELM_SHAPE = ("Shape: a rounded dome with a seam down the middle, a band round the brow, and long side "
-              "flaps that hang down well below the brow band and flare outward at the bottom; the face is a dark open gap between "
+              "flaps that hang down well below the brow band and flare outward at the bottom; the face is a dark open "
+                      "gap between "
               "the flaps.")
 POSE = {
- "HELM": "Front view, turned slightly to the left: the face opening sits a little left of centre and more of the right side flap shows.",
+ "HELM": "Front view, turned slightly to the left: the face opening sits a little left of centre and more of the "
+         "right side flap shows.",
  "BODY": ("Front view, turned slightly to the left, standing upright as if on an armour stand; "
           "more of the right shoulder shows."),
 }
@@ -32,7 +34,8 @@ PAL = {
  "iron": "warm grey #847767 and pale steel #a6aabb on the iron, warm brown #80553a on the leather",
  "steel": "pale steel #a6aabb and #cfd3de, slate #565a6e",
  "gold": "pale steel #a6aabb, slate #565a6e, dull gold #b2984e and #cba952 only on the gold parts",
- "master": "dark charcoal steel #34374a and #565a6e, pale grey #a6aabb only on the bevelled edges, dark crimson #7a2a36 and #923a35 only on the cloth and the eye glow",
+ "master": "dark charcoal steel #34374a and #565a6e, pale grey #a6aabb only on the bevelled edges, dark crimson "
+         "#7a2a36 and #923a35 only on the cloth and the eye glow",
  "master_plate": ("very dark charcoal steel #34374a and #565a6e, pale grey #a6aabb only on the thin bevelled edges, "
                   "dark crimson #7a2a36 only on the strips of cloth"),
 }
@@ -44,7 +47,8 @@ HELM_SIZE = "The helmet fills about 26 of the 32 pixels in height, centred, with
 PAL.update({
  "h1": ("tan orange leather #d16e2b and #a54919, bronze #8a4427, apricot highlights #d9985a, dark brown shadows "
         "#55291b and #463328"),
- "h2": ("iron grey #5e5c60 and #444851, slate #70747f, light grey highlights #a6a8ae, reddish brown leather #7f3b2e and "
+ "h2": ("iron grey #5e5c60 and #444851, slate #70747f, light grey highlights #a6a8ae, reddish brown leather #7f3b2e "
+         "and "
         "#57261b, dark brown shadows #441b14"),
  "h3": ("grey-brown steel #725138 and #5e422d, pale steel highlights #a1a6a2 and #c6b099, bronze leather #7c4421 and "
         "#a35e33, dark brown shadows #4a2e1f"),
@@ -60,7 +64,8 @@ HELM_LOOK = {
         "reddish brown leather; rivets as single light dots."),
  "h3": ("Look: warm grey-brown steel with pale steel highlights along the upper-left edges and dark brown in the "
         "shadows, strapped with bronze leather; plates overlapping in clear steps, rivets as single light dots."),
- "h4": ("Look: cool lilac grey steel with dusky plum in the shadows, trimmed with tan orange that shines bright gold at "
+ "h4": ("Look: cool lilac grey steel with dusky plum in the shadows, trimmed with tan orange that shines bright gold "
+         "at "
         "its highlights."),
  "h5": ("Look: dark navy steel, slate and dusty blue on the faces the light reaches, navy in the shadows, a thin light "
         "grey highlight along every bevelled edge, and no other colour."),
@@ -77,7 +82,8 @@ ITEMS = [
    "leather band round the brow, and long leather side flaps.\n"
    + HELM_LOOK["h1"] + "\n" + HELM_SHAPE + "\n" + HELM_SIZE + "\n" + OPEN_FACE),
   ("Iron Helmet", "HELM", "h2",
-   "An iron-capped helmet: a plain rounded iron cap with a raised ridge down the middle, riveted to a thick reddish brown "
+   "An iron-capped helmet: a plain rounded iron cap with a raised ridge down the middle, riveted to a thick reddish "
+           "brown "
    "leather brow band, with long reddish brown leather side flaps.\n"
    + HELM_LOOK["h2"] + "\n" + HELM_SHAPE + "\n" + HELM_SIZE + "\n" + OPEN_FACE),
   ("Steel Helm", "HELM", "h3",
@@ -90,7 +96,8 @@ ITEMS = [
    "edges.\n"
    + HELM_LOOK["h4"] + "\n" + HELM_SHAPE + "\n" + HELM_SIZE + "\n" + NOSE_GUARD),
   ("Masterwork Helm", "HELM", "h5",
-   "A masterwork helmet of dark navy steel, heavy and angular: a dome of broad flat faceted plates with a crown of short "
+   "A masterwork helmet of dark navy steel, heavy and angular: a dome of broad flat faceted plates with a crown of "
+           "short "
    "pointed spikes along the top, a thick brow band whose edge dips into a sharp V at the front, and side flaps of "
    "three broad angular plates, every plate with a thin bevelled edge. The side flaps flare outward past the width of "
    "the dome at the bottom.\n"
@@ -105,9 +112,12 @@ ITEMS = [
 # iron and golden pieces; steel and masterwork came back as other builds and are told this one outright.
 NO_BODY = "Only the empty armour: no arms, no head, no person inside it."
 # The steel set follows the Steel Helm as it came back (2026-09-23, the user's call): neutral grey steel with cool
-# pale highlights, bronze and warm brown leather, pale tan buckles -- measured off Assets/Potential/Bases/Steel Helm.png.
-PAL["s3"] = ("neutral grey steel #757a76 and #504c4e, pale steel highlights #a6b6ba and #d9eff7, bronze leather #93572e "
-             "and #ad6f48, warm brown #825d4a, dark brown shadows #5a392a and #652a11, pale tan #ede0b9 and #c1b298 only "
+# pale highlights, bronze and warm brown leather, pale tan buckles -- measured off Assets/Potential/Bases/Steel
+# Helm.png.
+PAL["s3"] = ("neutral grey steel #757a76 and #504c4e, pale steel highlights #a6b6ba and #d9eff7, bronze leather "
+        "#93572e "
+             "and #ad6f48, warm brown #825d4a, dark brown shadows #5a392a and #652a11, pale tan #ede0b9 and #c1b298 "
+                     "only "
              "on the buckles and rivets")
 STEEL_LOOK = ("Look: cool neutral grey steel, pale steel highlights along the upper-left edges and iron grey in the "
               "shadows, strapped and belted with bronze leather that turns dark brown in its folds; buckles and rivets "
@@ -133,7 +143,8 @@ LOOK = {
  "t2": ("Look: plain neutral grey iron, a near-white highlight along the upper-left of every curve and dark grey on "
         "the right, set against reddish-brown leather; rivets as single light dots."),
  "t3": ("Look: warm, slightly brownish grey steel, light highlights along the upper-left edges and dark brown in the "
-        "shadows, with bronze-brown in the deepest parts; plates overlapping in clear steps, rivets as single light dots."),
+        "shadows, with bronze-brown in the deepest parts; plates overlapping in clear steps, rivets as single light "
+                "dots."),
  "t4": ("Look: pale cool steel with a lavender tint and deep plum shadows, trimmed with orange gold that shines bright "
         "yellow at its highlights."),
  "t5": ("Look: very dark slate steel with a faint teal tint and dark grey shadows, a thin bone-white highlight along "
@@ -196,7 +207,8 @@ BOOT_SHAPE = ("Shape: each boot is tall and slim: the shaft rising to just below
 PAL.update({
  "t3_leather": ("taupe leather #7a6144, dark brown shadows #3c2410, pale steel #958980 and #b9b6b1 only on the "
                 "toe caps and buckles"),
- "t4_leather": ("plum brown leather #532630 and #472236, lavender grey highlights #8380ad and #bcc7e2, copper #b5602e with "
+ "t4_leather": ("plum brown leather #532630 and #472236, lavender grey highlights #8380ad and #bcc7e2, copper #b5602e "
+         "with "
                 "bright gold highlights #f6b62b only on the buckles"),
  # The masterwork follows the Masterwork Plate, the best of that set (the user's call): navy and blue slate with
  # pale grey edges and no crimson, measured off Assets/Potential/Bases/Masterwork Plate.png.
@@ -221,13 +233,15 @@ BOOT_LOOK = {
         "set against warm brown leather; rivets as single light dots."),
  "t3": ("Look: grey-brown steel, pale steel along the upper-left edges and dark brown in the shadows, with taupe in "
         "the deepest parts; plates overlapping in clear steps, rivets as single light dots."),
- "t4": ("Look: lavender grey steel with plum brown in the deepest shadows, trimmed with copper that shines bright gold at "
+ "t4": ("Look: lavender grey steel with plum brown in the deepest shadows, trimmed with copper that shines bright "
+         "gold at "
         "its highlights."),
  "t5": ("Look: dark navy steel, slate on the faces the light reaches and navy in the shadows, a thin light grey "
         "highlight along every bevelled edge, and no other colour."),
  "t3_leather": ("Look: tough taupe leather with dark brown shadows and a light grey highlight along the upper-left "
                 "of each fold; the toe caps and buckles in pale steel."),
- "t4_leather": ("Look: supple plum brown leather, lavender grey highlights along the upper-left edges and plum brown in "
+ "t4_leather": ("Look: supple plum brown leather, lavender grey highlights along the upper-left edges and plum brown "
+         "in "
                 "the deepest shadows; the copper buckles shine bright gold at their highlights."),
  "t5_leather": ("Look: dark navy leather, slate on the folds the light reaches and navy in the shadows, a thin light "
                 "grey stitched edge on every panel, slate plates, and no other colour."),
@@ -272,7 +286,8 @@ ITEMS.append(("Boots: strength", [
 PAL.update({
  "d1": PAL["h1"],
  "d2": ("reddish brown leather #7f3b2e and #57261b, warm brown #9b6247 where the light falls, dark brown shadows "
-        "#441b14, iron grey #5e5c60 and slate #70747f with light grey highlights #a6a8ae only on the studs and buckles"),
+        "#441b14, iron grey #5e5c60 and slate #70747f with light grey highlights #a6a8ae only on the studs and "
+        "buckles"),
  "d3": ("bronze leather #93572e and #ad6f48, warm brown #825d4a, dark brown shadows #5a392a and #652a11, neutral grey "
         "steel #757a76 and #504c4e with pale steel highlights #a6b6ba only on the studs, caps and buckles"),
  "d4": ("dusky plum leather #5e4473 and #3e2052, lilac grey highlights #a09eb9 and #847d9d along the folds, tan orange "
@@ -283,12 +298,14 @@ PAL.update({
 DEX_LOOK = {
  "d1": HELM_LOOK["h1"],
  "d2": ("Look: sturdy reddish brown leather, warm brown where the light falls on the upper-left of each fold and dark "
-        "brown in the shadows; iron grey studs and buckles as small light dots; stitched seams drawn as short dark dashes."),
+        "brown in the shadows; iron grey studs and buckles as small light dots; stitched seams drawn as short dark "
+                "dashes."),
  "d3": ("Look: tough bronze leather, lighter along the upper-left of each fold and dark brown in its folds, set with "
         "neutral grey steel: pale steel highlights on the studs, caps and buckles, which read as small light dots."),
  "d4": ("Look: supple dusky plum leather, lilac grey along the upper-left of each fold and deep dusky plum in the "
         "shadows; only the buckles and trim are gold: tan orange, shining bright gold at their highlights."),
- "d5": ("Look: dark navy leather, slate and dusty blue on the folds the light reaches, navy in the shadows, a thin light "
+ "d5": ("Look: dark navy leather, slate and dusty blue on the folds the light reaches, navy in the shadows, a thin "
+         "light "
         "grey stitched edge along every panel, and no other colour."),
 }
 ITEMS.append(("Boots: dexterity", [
@@ -297,7 +314,8 @@ ITEMS.append(("Boots: dexterity", [
    "the cuff, and an iron-buckled strap at each ankle.\n" + DEX_LOOK["d2"] + "\n" + BOOT_SHAPE + "\n" + NO_LEG),
   ("Ranger's Boot", "BOOT", "d3",
    "A pair of ranger's boots: tough bronze leather laced up the front with a leather cord, a wide folded cuff, a "
-   "neutral grey steel toe cap and a steel buckle at each ankle.\n" + DEX_LOOK["d3"] + "\n" + BOOT_SHAPE + "\n" + NO_LEG),
+   "neutral grey steel toe cap and a steel buckle at each ankle.\n" + DEX_LOOK["d3"] + "\n" + BOOT_SHAPE + "\n"
+   + NO_LEG),
   ("Shadow Boot", "BOOT", "d4",
    "A pair of shadow boots: supple dusky plum leather, a soft folded cuff, a slightly pointed toe, and two thin "
    "straps with gold buckles on each boot.\n" + DEX_LOOK["d4"] + "\n" + BOOT_SHAPE + "\n" + NO_LEG),
@@ -314,7 +332,8 @@ HOOD_SHAPE = ("Shape: a soft hood with a rounded top that comes to a slight poin
               "short cape at the bottom that spreads wider than the hood; the face is a dark open gap in the front, "
               "framed by the hood's edge. A soft leather hood, not a metal helmet and not a plain dome.")
 EMPTY_HOOD = "An empty hood with nothing inside it: the face opening is plain dark shadow."
-POSE["HOOD"] = ("Front view, turned slightly to the left: the face opening sits a little left of centre and more of the "
+POSE["HOOD"] = ("Front view, turned slightly to the left: the face opening sits a little left of centre and more of "
+        "the "
                 "hood's right side shows.")
 HOOD_SIZE = HELM_SIZE.replace("The helmet", "The hood")
 
@@ -328,7 +347,8 @@ ITEMS.append(("Hoods", [
         "short hide cape at the bottom with a ragged edge."),
   _hood("Leather Hood", "d2", "A leather hood: sturdy reddish brown leather, a stitched seam up the middle, a thicker "
         "leather band framing the face opening, and a short cape with a row of iron grey studs along its hem."),
-  _hood("Studded Hood", "d3", "A studded leather hood: tough bronze leather covered in rows of small neutral grey steel "
+  _hood("Studded Hood", "d3",
+          "A studded leather hood: tough bronze leather covered in rows of small neutral grey steel "
         "studs, a steel-riveted band framing the face opening, and a short cape of overlapping leather flaps."),
   _hood("Shadow Hood", "d4", "A shadow hood: supple dusky plum leather, a deep drooping hood with a pointed tip at the "
         "back, a gold clasp at the bottom of the face opening, and a short cape with a gold-trimmed hem."),
@@ -338,7 +358,8 @@ ITEMS.append(("Hoods", [
 ]))
 
 # Jerkins: the dexterity body. The plate's view and fill; its own outline. The first Shape line was the plate's
-# ("shaped to a chest ... narrowing to the waist ... a short skirt") in soft leather, and the Studded Jerkin came back as
+# ("shaped to a chest ... narrowing to the waist ... a short skirt") in soft leather, and the Studded Jerkin came back
+# as
 # a woman's body every time (2026-09-24): on steel those words are armour, in soft leather a fitted top and a skirt. So
 # a jerkin is boxy, stiff and straight-cut, as wide at the hem as at the top, with square flaps rather than a skirt.
 JERKIN_SHAPE = ("Shape: a boxy, straight-cut sleeveless jerkin of stiff, thick leather, flat-fronted and as wide at "
@@ -374,7 +395,8 @@ ITEMS.append(("Jerkins", [
 # hex are the charts' (tools/DESIGN.md), and every piece takes the polished lines (SHINE).
 POSE["RING"] = ("Seen from a slight three-quarter angle above: the band forms a thick oval, its widest part at the "
                 "top, the open middle showing the empty background.")
-POSE["PENDANT"] = ("Hanging straight down, front view: the necklace loops across the top, the pendant hangs centred below "
+POSE["PENDANT"] = ("Hanging straight down, front view: the necklace loops across the top, the pendant hangs centred "
+        "below "
                    "it.")
 RING_SHAPE = ("Shape: one thick ring, its open middle about a third of its width, the band thickest at the top where "
               "its main part sits and thinner at the bottom.")
@@ -442,7 +464,8 @@ PAL["w1"] = ("warm brown wood #80553a and #a6754b, sand highlights #c39a61, dark
 PAL["s3_sword"] = PAL["s3"].replace("on the buckles and rivets", "on the grip's rings")
 SWORD_LOOK = {
  "w1": ("Look: natural brown wood, never orange: warm brown with sand highlights along the upper-left edge and dark "
-        "brown in the grain and the shadows; only the grip is tan orange leather, its wrap drawn as short dark dashes."),
+        "brown in the grain and the shadows; only the grip is tan orange leather, its wrap drawn as short dark "
+        "dashes."),
  "h2": ("Look: cool iron grey, light grey along the upper-left edge of the blade and slate on the lower-right, set "
         "against reddish brown leather on the grip."),
  "s3": ("Look: cool neutral grey steel, pale steel highlights along the upper-left edge of the blade and iron grey in "
@@ -473,15 +496,18 @@ ITEMS.append(("Swords", [
 # Assets/Potential/Bases/<tier> Sword.png and named in chart words. Each kind keeps one Shape line for all five,
 # with the sword's lit and shaded halves and its ball pommel, and each material adds one part, as the swords did.
 # The iron is named in the charts' greys (slate, iron grey, dark grey), never "steel blue" or "navy": those words turned
-# the Iron Mace a bright blue that read as the masterwork (2026-09-24). Steel keeps its leather to the grip and loses the
+# the Iron Mace a bright blue that read as the masterwork (2026-09-24). Steel keeps its leather to the grip and loses
+# the
 # warm cream highlight: the Steel Morningstar came back with a brown wooden haft and a yellow glint on its head.
 PAL.update({
- "wp1": "warm brown wood #864b28 and #b2642e, light orange #df9138, apricot highlights #edbd8c, dark brown shadows #654237",
+ "wp1": "warm brown wood #864b28 and #b2642e, light orange #df9138, apricot highlights #edbd8c, dark brown shadows "
+         "#654237",
  "wp2": ("dull slate iron #616c79 and #566874, iron grey #41454b, blued steel highlights #777f85, dark grey shadows "
          "#2f3236, reddish brown leather #7f3b2e and #57261b only on the grip"),
  # The steel of both tiers, measured off the golden pieces the user matches the rest to (2026-09-24): the Golden
  # Sword's lit half #b5afd9 to near white and its shaded half #6a608f, the Golden Sceptre's #8986ab..#666286. Light all
- # over. Tried on the way: a neutral grey (too dark); "dusky plum" shadows and grip (the steel came back pink); iron grey
+ # over. Tried on the way: a neutral grey (too dark); "dusky plum" shadows and grip (the steel came back pink); iron
+ # grey
  # shadows with an aubergine grip and "deep shadows" (the Steel Zweihander's shaded half came back near-black navy
  # #0c0f29 with a purple edge). The golden tier is the steel tier colour for colour; only its gold parts differ.
  "wp3": ("lavender grey steel #b5afd9 and #8986ab, silver highlights #eee9f0, lilac grey on the shaded half #77739a "
@@ -494,7 +520,8 @@ PAL.update({
  "bone": ("bone white #f3f3dc and pale tan #e5cfb3 with sand shadows #cca67b on the blade, warm brown wood #864b28 "
           "and #b2642e, apricot highlights #edbd8c and dark brown shadows #654237 on the collar, grip and cap"),
  "broken": ("dull slate iron #616c79 and #566874, iron grey #41454b, blued steel highlights #777f85, dark grey shadows "
-            "#2f3236, rust orange #a33814 only in small patches on the blade, reddish brown leather #7f3b2e and #57261b "
+            "#2f3236, rust orange #a33814 only in small patches on the blade, reddish brown leather #7f3b2e and "
+                    "#57261b "
             "only on the grip"),
 })
 WEAPON_LOOK = {
@@ -510,7 +537,8 @@ WEAPON_LOOK = {
          "gold: tan orange, shining bright gold at their highlights. Every edge of the steel is steel colours only."),
  "wp5": ("Look: cool steel blue steel, dusty blue on the faces the light reaches, navy only in the deepest shadows, a "
          "thin light grey highlight along every edge, and no other colour."),
- "bone": ("Look: pale bone white with sand in the shadows and a pale tan middle tone on the blade; the collar, grip and "
+ "bone": ("Look: pale bone white with sand in the shadows and a pale tan middle tone on the blade; the collar, grip "
+         "and "
           "cap warm brown wood with apricot highlights, the grip's wrap drawn as short dark dashes."),
  "broken": ("Look: old, worn, dull slate grey iron: blued steel along the upper-left edge, iron grey in the middle "
             "tones and dark grey in the shadows, with a few small rust orange patches; the grip in worn reddish brown "
@@ -590,10 +618,12 @@ ITEMS.append(("Maces", [
           "An iron mace: a slate grey iron haft, a round slate grey iron head ringed with four short flat flanges, a "
           "short grip wrapped in reddish brown leather, and a round iron pommel.", MACE_SHAPE),
   _weapon("Steel Morningstar", "MACE", "wp3",
-          "A steel morningstar, all steel from the head to the grip: a lavender grey steel haft, a round steel ball head studded all round with short "
+          "A steel morningstar, all steel from the head to the grip: a lavender grey steel haft, a round steel ball "
+                  "head studded all round with short "
           "pointed spikes, a short grip wrapped in iron grey leather, and a round steel pommel.", MACE_SHAPE),
   _weapon("Golden Sceptre", "MACE", "wp4",
-          "A steel sceptre with gold fittings: a lavender grey steel haft, a head of six tall lavender grey steel flanges "
+          "A steel sceptre with gold fittings: a lavender grey steel haft, a head of six tall lavender grey steel "
+                  "flanges "
           "standing round the top like a crown, a gold collar under the head, a grip wrapped in "
           "iron grey leather, and a round gold pommel. Gold only on the collar and the pommel.",
           MACE_SHAPE),
@@ -606,19 +636,25 @@ ITEMS.append(("Maces", [
 ITEMS.append(("Greatswords", [
   _weapon("Wooden Greatsword", "WEAPON", "wp1",
           "A massive practice sword carved from plain brown wood: a thick wooden blade that widens toward its broad "
-          "slanted tip, a short thick wooden crossguard, a long grip wrapped in light orange leather, and a round wooden pommel.", GREAT_SHAPE),
+          "slanted tip, a short thick wooden crossguard, a long grip wrapped in light orange leather, and a round "
+                  "wooden pommel.", GREAT_SHAPE),
   _weapon("Iron Claymore", "WEAPON", "wp2",
-          "A massive iron two-handed sword: a slate grey iron blade that widens toward its broad slanted tip, with a dark "
-          "groove down its middle, a short thick iron crossguard whose two ends slope toward the tip, a long grip wrapped in reddish brown leather, and a round "
+          "A massive iron two-handed sword: a slate grey iron blade that widens toward its broad slanted tip, with a "
+                  "dark "
+          "groove down its middle, a short thick iron crossguard whose two ends slope toward the tip, a long grip "
+                  "wrapped in reddish brown leather, and a round "
           "iron pommel.", GREAT_SHAPE),
   _weapon("Steel Zweihander", "WEAPON", "wp3",
-          "A massive steel two-handed sword: a lavender grey steel blade that widens toward its broad slanted tip, with a groove "
+          "A massive steel two-handed sword: a lavender grey steel blade that widens toward its broad slanted tip, "
+                  "with a groove "
           "down its middle and two short hooks sticking out from its sides just above the crossguard, a short thick "
           "crossguard whose two ends curve "
           "gently toward the tip, a long grip wrapped in iron grey leather, and a round steel pommel.", GREAT_SHAPE),
   _weapon("Golden Greatsword", "WEAPON", "wp4",
-          "A massive steel two-handed sword with a gold hilt: a lavender grey steel blade that widens toward its broad slanted tip, "
-          "with a groove down its middle, a short thick gold crossguard whose two ends curve toward the tip, a long grip wrapped in iron grey "
+          "A massive steel two-handed sword with a gold hilt: a lavender grey steel blade that widens toward its "
+                  "broad slanted tip, "
+          "with a groove down its middle, a short thick gold crossguard whose two ends curve toward the tip, a long "
+                  "grip wrapped in iron grey "
           "leather, and a round gold pommel. Gold only on the crossguard and the pommel.", GREAT_SHAPE),
   _weapon("Masterwork Greatsword", "WEAPON", "wp5",
           "A massive masterwork two-handed sword of steel blue steel, sharp and angular: a very wide clean blade "
@@ -632,7 +668,8 @@ ITEMS.append(("Greatswords", [
 POSE["BROKEN"] = ("Lying diagonally, seen flat from the front: the grip at the bottom-left, the jagged end of the "
                   "blade toward the top-right, with empty space beyond it.")
 ONE["BROKEN"] = ONE["WEAPON"]
-BROKEN_SHAPE = SWORD_SHAPE.replace("taking up about two thirds of the length", "snapped off short, only about as long as "
+BROKEN_SHAPE = SWORD_SHAPE.replace("taking up about two thirds of the length",
+        "snapped off short, only about as long as "
                                    "the crossguard, grip and pommel together")
 ITEMS.append(("Broken sword", [
   _weapon("Broken Sword", "BROKEN", "broken",
@@ -644,7 +681,8 @@ ITEMS.append(("Broken sword", [
 
 # Shields (2026-09-24): a heater rather than a round one, so the steel tier's kite is the same outline. The Wooden
 # Shield came back (Assets/Potential/Bases/Wooden Shield.png) straight on, 24x30, with no edge showing, a rim two
-# pixels thick, five planks and a boss dead centre. The user took the boss off (a ball is too much), found the plain faces
+# pixels thick, five planks and a boss dead centre. The user took the boss off (a ball is too much), found the plain
+# faces
 # that followed too boring, and liked the first Iron Shield's double border (a broad riveted rim, an inner border,
 # a sunken face).
 # So the Shape line carries that border, and each material puts one flat device on the face in the boss's place:
@@ -657,21 +695,26 @@ SHIELD_SHAPE = ("Shape: one shield standing upright, about 24 pixels wide and 30
                 "a broad rim about three pixels wide studded with small round studs, and just inside it a second, "
                 "narrower raised border following the same outline, so the face sits in a sunken panel; one flat "
                 "device on the face, big enough to read at a glance.")
-WEAPON_LOOK["wp1_shield"] = ("Look: warm brown wood with apricot highlights along the upper-left edge of each plank and "
-                             "dark brown in the grain and in the lines between the planks; the rim bound in light orange "
+WEAPON_LOOK["wp1_shield"] = ("Look: warm brown wood with apricot highlights along the upper-left edge of each plank "
+        "and "
+                             "dark brown in the grain and in the lines between the planks; the rim bound in light "
+                                     "orange "
                              "leather, its stitching drawn as short dark dashes.")
 PAL["wp1_shield"] = PAL["wp1"]
 # A shield has no grip in view, so its palettes are the swords' less the grip's leather.
 for _t, _grip in (("wp2", ", reddish brown leather #7f3b2e and #57261b only on the grip"),
-                  ("wp3", ", iron grey leather #4a495b only on the grip"), ("wp4", ", iron grey leather #4a495b only on the grip"),
+                  ("wp3", ", iron grey leather #4a495b only on the grip"),
+                          ("wp4", ", iron grey leather #4a495b only on the grip"),
                   ("wp5", "")):
     PAL[_t + "_shield"] = PAL[_t].replace(_grip, "")
 WEAPON_LOOK["wp2_shield"] = ("Look: dull, plain slate grey iron, unpolished: blued steel along the upper-left edges, "
                              "iron grey in the middle tones and dark grey in the shadows; rivets as single light dots.")
 WEAPON_LOOK["wp3_shield"] = ("Look: pale, cool lavender grey steel, light all over: silver along the upper-left edges, "
                              "lavender grey on the lit half of the face, lilac grey on the shaded half, never dark.")
-WEAPON_LOOK["wp4_shield"] = WEAPON_LOOK["wp3_shield"] + (" Only the gold parts are gold: tan orange, shining bright gold "
-                                                         "at their highlights. Every edge of the steel is steel colours only.")
+WEAPON_LOOK["wp4_shield"] = WEAPON_LOOK["wp3_shield"] + (" Only the gold parts are gold: tan orange, shining bright "
+        "gold "
+                                                         "at their highlights. Every edge of the steel is steel "
+                                                                 "colours only.")
 WEAPON_LOOK["wp5_shield"] = WEAPON_LOOK["wp5"]
 ITEMS.append(("Shields", [
   _weapon("Wooden Shield", "SHIELD", "wp1_shield",
@@ -795,11 +838,13 @@ ITEMS.append(("Torches", [
 # Without this the golden and masterwork helms came out duller than the steel one (2026-09-23).
 SHINE = {"wp3": "the steel's upper-left edges", "wp4": "the gold parts", "wp5": "the thin light grey edges",
          "h4": "the tan orange and bright gold parts", "h5": "the thin light grey edges",
-         "gold": "the gold parts", "master": "the pale bevelled edges", "t4": "the gold parts", "t5": "the thin bone-white edges",
+         "gold": "the gold parts", "master": "the pale bevelled edges", "t4": "the gold parts",
+                 "t5": "the thin bone-white edges",
          "b4": "the copper and bright gold parts", "b5": "the thin light grey edges",
          "gold_ring": "the gold band and the stone", "iron_band": "the rivets and the band's rims",
          "jade_ring": "the jade's smooth face",
-         "opal_ring": "the milky stone and its glints", "pearl_ring": "the round pearl", "ruby_amulet": "the red stone", "gold_amulet": "the gold rim and dome",
+         "opal_ring": "the milky stone and its glints", "pearl_ring": "the round pearl", "ruby_amulet": "the red stone",
+                 "gold_amulet": "the gold rim and dome",
          "emerald_amulet": "the green stone and the silver frame"}
 # The leather line's top two: finer leather rather than polished metal.
 SHINE_LEATHER = {"t4_leather": "the copper buckles", "t5_leather": "the light grey stitched edges"}
@@ -837,13 +882,16 @@ def prompt(pose, pal, subject):
         muted = muted.replace("and deep shadows", "and soft, light shadows")
     # No outline line: pixellab's Outline setting draws its own, and `_outlined` repaints it in ink anyway.
     # A helmet and a dagger carry their own size lines (HELM_SIZE, DAGGER_SIZE), which this one would contradict.
-    margin = [] if pose in ("HELM", "HOOD", "DAGGER", "BROKEN") else ["Object fills most of the canvas with a 2-3 pixel margin, centred."]
+    margin = [] if pose in ("HELM", "HOOD", "DAGGER",
+            "BROKEN") else ["Object fills most of the canvas with a 2-3 pixel margin, centred."]
     return "\n".join([subject,
      "Single game inventory icon, 32x32 pixel art in the style of a classic fantasy RPG item pack.",
      POSE[pose]] + margin + [
-     "A plain, common item: simple shapes and a clean readable silhouette, no engraving, no decoration, no gems or trim beyond what is named.",
+     "A plain, common item: simple shapes and a clean readable silhouette, no engraving, no decoration, no gems or "
+             "trim beyond what is named.",
      muted,
-     f"Palette: {PAL[pal]}" + ("." if pal in NO_CREAM or pal.startswith("torch") else ", pale cream highlights #faedb1."),
+     f"Palette: {PAL[pal]}" + ("." if pal in NO_CREAM or pal.startswith("torch")
+             else ", pale cream highlights #faedb1."),
      light,
      "No text, no background, no shadow, no frame."])
 
@@ -913,8 +961,10 @@ SKILL_SYMBOLS = [
   ("keen_eye", "+Crit chance", "An open eye whose pupil is a small round target with a dot in its centre."),
   ("quick_hands", "+Attack speed", "A short dagger swinging to the right, trailed by three short curved speed lines."),
   ("battle_rhythm", "% Damage", "A round war drum seen from the front, with two drumsticks crossed above it."),
-  ("deadly_strikes", "+Crit chance, +Crit damage", "A dagger stabbing downward, a small jagged starburst bursting at its point."),
-  ("flurry", "% Attack speed", "Three curved slash marks side by side, swept in the same direction like a fast flurry of cuts."),
+  ("deadly_strikes", "+Crit chance, +Crit damage",
+          "A dagger stabbing downward, a small jagged starburst bursting at its point."),
+  ("flurry", "% Attack speed",
+          "Three curved slash marks side by side, swept in the same direction like a fast flurry of cuts."),
   ("might", "+Damage", "A heavy war hammer standing upright, its head big and square."),
   ("assassin", "Execute: a blow that leaves an enemy almost dead kills it",
    "A dagger driven straight down through a small cracked skull."),
@@ -934,8 +984,10 @@ SKILL_SYMBOLS = [
   ("greed", "+Gold find", "A tall stack of round coins, slightly leaning."),
   ("orb_seeker", "+Orb find", "A round glowing orb with a small four-pointed sparkle beside it."),
   ("collector", "Trophy: every elite and boss drops an item", "A trophy cup with two handles on a short stand."),
-  ("midas", "Jackpot: one purse in ten is five times fuller", "A tied coin purse bursting open, coins spilling out of the top."),
-  ("alchemist", "Transmute: an orb sometimes falls twice", "A round flask tipped over, two identical orbs rolling out of its neck."),
+  ("midas", "Jackpot: one purse in ten is five times fuller",
+          "A tied coin purse bursting open, coins spilling out of the top."),
+  ("alchemist", "Transmute: an orb sometimes falls twice",
+          "A round flask tipped over, two identical orbs rolling out of its neck."),
  ]),
  ("Guard", "guard", [
   ("toughness", "+Armour", "A chestplate seen from the front: a rounded chest plate with a round neck opening at the "
@@ -943,12 +995,14 @@ SKILL_SYMBOLS = [
   ("footwork", "+Dodge", "Boots, seen from the side."),
   ("steady_guard", "+Block", "A round shield held upright, facing the front."),
   ("resolve", "% Armour, % Dodge", "A single mountain peak, tall and pointed, standing firm."),
-  ("evasion", "% Dodge", "An arrow curving around a small round target and missing it, its path drawn as a dotted line."),
+  ("evasion", "% Dodge",
+          "An arrow curving around a small round target and missing it, its path drawn as a dotted line."),
   ("shield_mastery", "+Block", "A single tall kite shield, pointed at the bottom."),
   ("tenacity", "+Time on hit", "A single hourglass standing upright."),
   ("phantom", "Afterimage: a dodged blow wins back time",
    "A boot seen twice side by side: one solid, and one faded and see-through behind it like an afterimage."),
-  ("bastion", "Shield Wall: block counts double against elites and bosses", "A short castle wall with square battlements."),
+  ("bastion", "Shield Wall: block counts double against elites and bosses",
+          "A short castle wall with square battlements."),
   ("undying", "Second Wind: once a fight, running out of time gives back time",
    "Three curved wind lines blowing from left to right."),
  ]),
@@ -961,7 +1015,8 @@ SKILL_SYMBOLS = [
 out = ["# Pixellab prompts: skill icons", "",
  "Settings: 32x32, transparent background on, Direction and View None, Single color outline; the Pixen model, "
  "low detail. Make the frame and one symbol first and check them together before the rest.",
- "Save the frame as `Assets/Potential/Skills/frame.png` and each symbol as `Assets/Potential/Skills/<its id>.png` (the id "
+ "Save the frame as `Assets/Potential/Skills/frame.png` and each symbol as `Assets/Potential/Skills/<its id>.png` "
+         "(the id "
  "starts each heading). ui_kit tints the frame per tree and puts each symbol on it.", "",
  "## Frame (make once)", "", "```", SKILL_FRAME, "```", ""]
 n = 1
@@ -985,7 +1040,8 @@ def simple_prompt(symbol, colour="muted white"):
         "Size: the icon fills about 3/4 width, centred, with clear empty space all round it.",
         "Single game ability icon symbol, 32x32 pixel art in the style of a classic fantasy RPG skill tree.",
         "Front view, flat and centred, seen straight on.",
-        "Simple and bold: big clear shapes, a clean readable silhouette, no small details, nothing but the one symbol."])
+        "Simple and bold: big clear shapes, a clean readable silhouette, no small details, nothing but the one "
+        "symbol."])
 
 
 # Her colour is purple, as the pack's placeholders were (the user, 2026-09-25): said plainly, since every purple on the
@@ -1000,7 +1056,8 @@ FORTUNE_SYMBOLS = [
  ("homecoming", "The road home, walked in no time", "A small magical portal."),  # the user's own, which was drawn
 ]
 out = ["# Pixellab prompts: fortuneteller spells", "",
- "Settings: as the skill symbols. Save each as `Assets/Potential/Fortune/<its id>.png` (the id starts each heading).", ""]
+ "Settings: as the skill symbols. Save each as `Assets/Potential/Fortune/<its id>.png` (the id starts each heading).",
+         ""]
 for spell, does, symbol in FORTUNE_SYMBOLS:
     out += [f"### {spell} -- {does}", "", "```", simple_prompt(symbol, FORTUNE_COLOUR), "```", ""]
 open("tools/qa/pixellab_fortune_prompts.md", "w", encoding="utf-8").write("\n".join(out))
@@ -1214,12 +1271,14 @@ RUNE_SYMBOLS = [
  ("unrest", "Gives a tile a new modifier", "A plus sign: two thick bars crossing at their middles."),
  ("stillness", "Takes away a modifier a rune gave a tile", "A minus sign: one thick bar lying flat."),
  ("depth", "Makes a tile's enemies a level higher", "Three chevrons stacked one above the other, all pointing down."),
- ("ascent", "Makes a tile's enemies ascended", "A tall arrow pointing straight up, with a pair of spread wings at its foot."),
+ ("ascent", "Makes a tile's enemies ascended",
+         "A tall arrow pointing straight up, with a pair of spread wings at its foot."),
 ]
 out = ["# Pixellab prompts: runes", "",
  "Settings: as the skill symbols (32x32, transparent background on, Direction and View None, Single color outline; "
  "Pixen, low detail). Make the tablet and one glyph first and check them together before the rest.",
- "Save the tablet as `Assets/Potential/Runes/tablet.png` and each glyph as `Assets/Potential/Runes/<its id>.png` (the id "
+ "Save the tablet as `Assets/Potential/Runes/tablet.png` and each glyph as `Assets/Potential/Runes/<its id>.png` (the "
+         "id "
  "starts each heading). ui_kit tints each glyph to its rune's colour and sets it on the tablet.", "",
  "## Tablet (make once)", "", "```", RUNE_TABLET, "```", ""]
 for rune, does, symbol in RUNE_SYMBOLS:

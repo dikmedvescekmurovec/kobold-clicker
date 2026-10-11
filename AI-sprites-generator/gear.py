@@ -206,7 +206,8 @@ def _shield(tier):
     c.paint(f.poly(*far), rim, facet(0.3), seam=1.0)
     part(c, f.poly(*outline), rim, 0.72, 0.4, 0.9, seam=0.7)
     inner = f.poly(*_inset(outline, 0.78 if tier == "gold" else 0.76, centre))
-    c.paint(inner, field, np.clip(volume(inner, {"iron": 0.62, "steel": 0.46, "bulwark": 0.46, "gold": 0.26}[tier], 0.34, 3.0)
+    c.paint(inner, field,
+            np.clip(volume(inner, {"iron": 0.62, "steel": 0.46, "bulwark": 0.46, "gold": 0.26}[tier], 0.34, 3.0)
                                   + facet(0.0, 0.012, (1.0, -0.4)), 0, 1), seam=0.55)
     if tier == "iron":
         c.shade(f.poly((3.0, 0.0), (22.0, 0.0), (22.0, -7.6), (14.0, -7.4), (8.0, -4.6)), 0.8)
@@ -417,7 +418,8 @@ def _hat(tier):
         c.paint(patch * cone, "leather", np.clip(volume(patch, 0.66, 0.3, 0.6), 0, 1), seam=0.6)
         for a, b in (((10.6, 13.4), (14.2, 12.8)), ((14.2, 12.8), (14.8, 16.2)), ((14.8, 16.2), (11.0, 16.8)),
                      ((11.0, 16.8), (10.6, 13.4))):
-            c.shade(capsule(((a[0] * 2 + b[0]) / 3, (a[1] * 2 + b[1]) / 3), ((a[0] + b[0] * 2) / 3, (a[1] + b[1] * 2) / 3),
+            c.shade(capsule(((a[0] * 2 + b[0]) / 3, (a[1] * 2 + b[1]) / 3),
+                    ((a[0] + b[0] * 2) / 3, (a[1] + b[1] * 2) / 3),
                             0.4), 0.5)
         feather = poly((21.4, 22.0), (23.6, 13.0), (27.4, 6.4), (28.6, 8.0), (27.4, 14.6), (24.0, 22.6))
         c.paint(feather, "emerald", np.clip(volume(feather, 0.56, 0.4, 0.9), 0.3, 1), seam=0.6)
@@ -461,7 +463,8 @@ def _plate(tier):
         c.shade(curve([(11.4, 25.0 + drop), (16.0, 26.6 + drop), (23.2, 24.6 + drop)], 0.4), 1.4 if gold else 1.25)
     breast = poly((11.0, 5.6), (21.2, 5.0), (25.6, 10.0), (25.2, 17.0), (22.6, 22.4), (13.2, 23.4), (10.0, 18.0),
                   (9.4, 10.0))
-    c.paint(breast, metal, np.clip(volume(breast, 0.5 - sink, 0.55, 3.0) + facet(0.0, 0.024, (1.0, -0.3)), 0, 1), seam=0.45)
+    c.paint(breast, metal, np.clip(volume(breast, 0.5 - sink, 0.55, 3.0) + facet(0.0, 0.024, (1.0, -0.3)), 0, 1),
+            seam=0.45)
     c.shade(curve([(18.6, 7.4), (19.8, 14.0), (19.0, 22.4)], 0.6), 1.4)
     c.shade(curve([(19.6, 7.4), (20.8, 14.0), (20.0, 22.4)], 0.5), 0.72)
     for across in (-5.4, -2.8, 2.4, 4.4):
@@ -532,7 +535,8 @@ def _jerkin(tier):
     c.shade(poly((15.2, 21.8), (16.8, 21.8), (16.8, 23.8), (15.2, 23.8)), 0.45)
     if tier in ("studded", "shadow"):
         for side in (-1, 1):
-            cap = poly((16 + side * 4.6, 3.0), (16 + side * 10.6, 5.4), (16 + side * 11.6, 10.4), (16 + side * 7.6, 9.4))
+            cap = poly((16 + side * 4.6, 3.0), (16 + side * 10.6, 5.4), (16 + side * 11.6, 10.4),
+                    (16 + side * 7.6, 9.4))
             part(c, cap, ramp if tier == "studded" else "darkiron", 0.58 + side * 0.06, 0.45, 1.2)
     if tier == "studded":
         for side in (-1, 1):
@@ -546,7 +550,8 @@ def _jerkin(tier):
             strap = capsule((16 - side * 8.0, 6.6), (16 + side * 7.4, 20.6), 1.9)
             c.paint(strap * body, "leather", facet(0.4), seam=0.6)
             part(c, ellipse(16 + side * 3.2, 16.6, 1.3), "steel", 0.7, 0.4, 0.5)
-        collar = poly((11.4, 1.6), (14.0, 3.6), (16.0, 7.0), (18.0, 3.6), (20.6, 1.6), (21.4, 5.4), (16.0, 9.4), (10.6, 5.4))
+        collar = poly((11.4, 1.6), (14.0, 3.6), (16.0, 7.0), (18.0, 3.6), (20.6, 1.6), (21.4, 5.4), (16.0, 9.4),
+                (10.6, 5.4))
         part(c, collar, ramp, 0.62, 0.4, 0.9)
         part(c, poly((19.0, 23.6), (23.4, 23.6), (23.6, 27.8), (19.2, 27.8)), "leather", 0.45, 0.35, 0.7)
         rivet(c, 21.3, 25.0, "steel", 0.6)
@@ -582,7 +587,8 @@ def _robe(tier):
     facing = "gold" if tier == "archmage" else ramp
     for side in (-1, 1):
         c.paint(poly((16 + side * 0.6, 7.4), (16 + side * 2.6, 3.6), (16 + side * 4.0, 3.6), (16 + side * 2.0, 9.0),
-                     (16 + side * 2.0, 29.6), (16 + side * 0.6, 29.6)) * body, facing, facet(0.78 if side < 0 else 0.62),
+                     (16 + side * 2.0, 29.6), (16 + side * 0.6, 29.6)) * body, facing,
+                             facet(0.78 if side < 0 else 0.62),
                 seam=0.6)
     sash = poly((9.6, 15.0), (22.4, 15.0), (22.8, 18.2), (9.2, 18.2))
     part(c, sash, {"silk": "gold", "sage": "leather", "archmage": "gold"}[tier], 0.55, 0.35, 0.7, seam=0.6)
@@ -716,7 +722,8 @@ def _slipper(tier):
     if tier == "linen":
         shoe = poly((4.6, 15.0), (13.0, 15.6), (19.0, 18.6), (25.6, 21.4), (26.4, 24.8), (4.2, 24.8))
     else:
-        shoe = poly((4.6, 14.6), (13.0, 15.2), (19.0, 18.6), (25.0, 20.6), (29.4, 22.4 - curl * 1.4), (27.0, 24.8), (4.2, 24.8))
+        shoe = poly((4.6, 14.6), (13.0, 15.2), (19.0, 18.6), (25.0, 20.6), (29.4, 22.4 - curl * 1.4), (27.0, 24.8),
+                (4.2, 24.8))
     c.paint(shoe, ramp, np.clip(volume(shoe, 0.54, 0.5, 2.2), 0, 1))
     if curl:
         tip = curve([(27.6, 22.6), (29.6, 20.4 - curl), (28.6, 17.6 - curl * 1.6), (26.6, 17.8 - curl * 1.4)], 1.9)
@@ -794,15 +801,18 @@ def _amulet(tier):
             c.shade(capsule((16 + 3.0 * math.cos(turn), 22 + 3.0 * math.sin(turn)),
                             (16 + 4.4 * math.cos(turn), 22 + 4.4 * math.sin(turn)), 0.6), 0.6)
     elif tier == "sapphire":
-        drop = [(16.0, 14.8), (19.4, 19.0), (21.4, 23.4), (19.6, 27.6), (16.0, 29.0), (12.4, 27.6), (10.6, 23.4), (12.6, 19.0)]
+        drop = [(16.0, 14.8), (19.4, 19.0), (21.4, 23.4), (19.6, 27.6), (16.0, 29.0), (12.4, 27.6), (10.6, 23.4),
+                (12.6, 19.0)]
         part(c, poly(*drop), "gold", 0.62, 0.45, 1.0)
         inner = poly(*[(16 + (px - 16) * 0.7, 22.6 + (py - 22.6) * 0.72) for px, py in drop])
         c.paint(inner, "sapphire", np.clip(volume(inner, 0.5, 0.5, 2.2), 0.28, 1), seam=0.6)
         c.shade(poly((14.4, 19.6), (16.0, 18.4), (16.4, 21.6), (14.6, 22.4)), 1.6)
     else:
-        frame = poly((11.6, 15.6), (20.4, 15.6), (22.6, 17.8), (22.6, 26.4), (20.4, 28.6), (11.6, 28.6), (9.4, 26.4), (9.4, 17.8))
+        frame = poly((11.6, 15.6), (20.4, 15.6), (22.6, 17.8), (22.6, 26.4), (20.4, 28.6), (11.6, 28.6), (9.4, 26.4),
+                (9.4, 17.8))
         part(c, frame, "gold", 0.62, 0.45, 1.0)
-        stone = poly((12.4, 17.4), (19.6, 17.4), (20.8, 18.6), (20.8, 25.6), (19.6, 26.8), (12.4, 26.8), (11.2, 25.6), (11.2, 18.6))
+        stone = poly((12.4, 17.4), (19.6, 17.4), (20.8, 18.6), (20.8, 25.6), (19.6, 26.8), (12.4, 26.8), (11.2, 25.6),
+                (11.2, 18.6))
         c.paint(stone, "emerald", np.clip(volume(stone, 0.5, 0.45, 1.6), 0.4, 1), seam=0.6)
         table = poly((13.6, 19.4), (18.4, 19.4), (18.4, 24.8), (13.6, 24.8))
         c.paint(table, "emerald", facet(0.62, 0.03), seam=0.8)
@@ -859,7 +869,8 @@ def _unique_amulet(kind):
     _chain(c, "gold" if kind != "grave" else "darkiron")
     if kind == "hourglass":
         for py in (16.2, 28.4):
-            part(c, poly((10.6, py - 1.1), (21.4, py - 1.1), (21.4, py + 1.1), (10.6, py + 1.1)), "gold", 0.66, 0.4, 0.6)
+            part(c, poly((10.6, py - 1.1), (21.4, py - 1.1), (21.4, py + 1.1), (10.6, py + 1.1)), "gold", 0.66, 0.4,
+                    0.6)
         for px in (11.4, 20.6):
             part(c, capsule((px, 16.4), (px, 28.2), 1.0), "gold", 0.56, 0.4, 0.4, seam=0.8)
         glass = np.maximum(poly((12.2, 17.2), (19.8, 17.2), (16.7, 22.3), (15.3, 22.3)),

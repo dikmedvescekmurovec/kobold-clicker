@@ -165,7 +165,8 @@ def nodes_preview(stones, base):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--export", action="store_true", help="also write Assets/Skills/Stones/ and Assets/Skills/root.png")
+    parser.add_argument("--export", action="store_true",
+            help="also write Assets/Skills/Stones/ and Assets/Skills/root.png")
     args = parser.parse_args()
     stones = {a: Image.open(os.path.join(SRC, a + ".png")).convert("RGBA") for a in ATTRS}
     base = Image.open(os.path.join(SRC, BASE + ".png")).convert("RGBA")

@@ -271,7 +271,8 @@ def curtain(sc, a, b, wall, look, thick=3, crown="crenel"):
 def mound(sc, cx, cy, rx, ry, height):
     """The rock a mountain fortress stands on."""
     (cx, cy), rx, ry, height = mp(cx, cy), rx * K, ry * K, height * K
-    cells = {(x, y) for y in range(int(cy - ry) - 1, int(cy + ry) + 2) for x in range(int(cx - rx) - 1, int(cx + rx) + 2)
+    cells = {(x, y) for y in range(int(cy - ry) - 1, int(cy + ry) + 2)
+            for x in range(int(cx - rx) - 1, int(cx + rx) + 2)
              if ((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 <= 1.0}
 
     def h(x, y):

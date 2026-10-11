@@ -54,7 +54,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     live = parser.add_mutually_exclusive_group()
     live.add_argument("--deploy", action="store_true", help="after the export, upload it and deploy the Worker")
-    live.add_argument("--no-upload", action="store_true", help="export only: what no flag does too, kept for old habits")
+    live.add_argument("--no-upload", action="store_true",
+            help="export only: what no flag does too, kept for old habits")
     args = parser.parse_args()
     export()
     if args.deploy:

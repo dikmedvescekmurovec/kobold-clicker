@@ -23,7 +23,8 @@ ROOT = Path(__file__).resolve().parent.parent
 def changed() -> list[Path]:
     out = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=ROOT,
             capture_output=True, text=True).stdout
-    return [ROOT / line[3:].strip().strip('"') for line in out.splitlines() if line[3:].strip().strip('"').endswith(".gd")
+    return [ROOT / line[3:].strip().strip('"') for line in out.splitlines()
+            if line[3:].strip().strip('"').endswith(".gd")
             and not line.startswith(" D") and not line.startswith("D ")]
 
 
@@ -42,7 +43,8 @@ def hook() -> None:
     except ValueError:
         return
     said = payload.get("tool_response")
-    path = (said.get("filePath") if isinstance(said, dict) else None) or (payload.get("tool_input") or {}).get("file_path") or ""
+    path = (said.get("filePath") if isinstance(said, dict) else None) or (payload.get("tool_input")
+            or {}).get("file_path") or ""
     file = Path(path).resolve()
     if file.suffix != ".gd" or not file.exists() or ROOT not in file.parents:
         return

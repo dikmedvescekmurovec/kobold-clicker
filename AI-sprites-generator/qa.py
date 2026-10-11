@@ -95,13 +95,15 @@ def phase2(tag):
     from roads import MATERIAL_ENVS, MATERIALS, all_roads
     from terrain import ENVS
     roads = all_roads()
-    print("roads:", len(roads), Counter(t.name.split("_")[1] for t in roads), "spill:", containment(roads, solid=False)[0])
+    print("roads:", len(roads), Counter(t.name.split("_")[1] for t in roads), "spill:",
+            containment(roads, solid=False)[0])
     for mat in MATERIALS:
         bad = 0
         for name in EDGE_NAMES:
             mx, my = EDGE_MID[name]
             zone = [(x, y) for x, y in HEX_PIXELS if BORDER[y][x] < 4.0 and abs(x + .5 - mx) + abs(y + .5 - my) < 16]
-            sigs = {tuple(t.px[y][x] for x, y in zone) for t in roads if t.name.startswith(f"road_{mat}_") and name in t.edges}
+            sigs = {tuple(t.px[y][x] for x, y in zone) for t in roads if t.name.startswith(f"road_{mat}_")
+                    and name in t.edges}
             bad += len(sigs) != 1
         print(f"  {mat}: edges with differing edge zones = {bad}")
     lut = {m: {frozenset(t.edges): t for t in roads if t.name.startswith(f"road_{m}_")} for m in MATERIALS}
@@ -150,7 +152,8 @@ def showcase(tag):
             return "mountains" if r < 2 else "dirt" if c < 6 else "desert"
         return "mountains" if c == 8 else "ice"   # desert may not border ice
     print("illegal borders:", illegal_borders(region, rows, cols))
-    towns_at = {(2, 1): "small", (5, 2): "fortress", (4, 6): "medium", (1, 10): "small", (5, 9): "fortress", (3, 4): "small"}
+    towns_at = {(2, 1): "small", (5, 2): "fortress", (4, 6): "medium", (1, 10): "small", (5, 9): "fortress",
+            (3, 4): "small"}
     edges_of = road_network(rows, cols, lut["dirt"], seed=5, density=0.3, blocked=towns_at)
 
     def cell(r, c, _):
@@ -192,7 +195,8 @@ def blends(tag):
                 nr, nc = neighbor(r, c, e)
                 if 0 <= nr < rows and 0 <= nc < cols and RANK[env_at(nr, nc)] > RANK[own]:
                     near.setdefault(env_at(nr, nc), []).append(e)
-            return [envs[own][v]] + [blend_tile(n, tuple(es)) for n, es in sorted(near.items(), key=lambda kv: RANK[kv[0]])]
+            return [envs[own][v]] + [blend_tile(n, tuple(es)) for n,
+                    es in sorted(near.items(), key=lambda kv: RANK[kv[0]])]
         return [cell]
 
     pairs = [("forest", "grass"), ("grass", "dirt"), ("desert", "dirt"), ("mountains", "desert"), ("ice", "grass"),
@@ -265,7 +269,8 @@ def slimes(tag):
     # ---- sheet: the baseline on top, then one row per environment, every frame in order
     names = S.frame_names()
     fw, fh, scale = 32, 25, 4
-    rows = [("baseline", {n: S.source(n) for n in names})] +            [(env, {n: made[(env, n)] for n in names}) for env in S.ENVS]
+    rows = [("baseline", {n: S.source(n) for n in names})] +            [(env, {n: made[(env, n)] for n in names})
+            for env in S.ENVS]
     pad = 54
     sheet = Image.new("RGBA", (pad + len(names) * fw * scale, len(rows) * fh * scale),
                       (28, 30, 40, 255))
@@ -421,7 +426,8 @@ def gear(tag):
 
 def icewall(tag):
     """The wall ring round a patch of land with wasteland past it, and the wasteland block on its own."""
-    from ice_wall import ACCENT_CHANCE, ACCENTS, VARIANTS as IV, WASTE_COLS, WASTE_ROWS, accent, snow_spill, wall_band, waste
+    from ice_wall import (ACCENT_CHANCE, ACCENTS, VARIANTS as IV, WASTE_COLS, WASTE_ROWS, accent, snow_spill,
+            wall_band, waste)
     from terrain import ENVS, VARIANTS
     wastes = {(c, r): waste(c, r) for c in range(WASTE_COLS) for r in range(WASTE_ROWS)}
     accents = [accent(a) for a in ACCENTS]

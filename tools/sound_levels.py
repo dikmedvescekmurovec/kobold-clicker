@@ -41,7 +41,8 @@ def _takes(name: str, pick: str, windows: list[tuple[float, float]]) -> dict:
 
 
 ## Out path -> (the pick, start s, end s[, a filter run before its level]). The windows are read off each
-## pick's waveform: from just before its onset to where it has died away. `blunt critical` starts at its blow, past the whoosh in front of
+## pick's waveform: from just before its onset to where it has died away. `blunt critical` starts at its blow, past the
+## whoosh in front of
 ## it -- the swing already has one, and the crit has to land with its number.
 CUTS = {
     f"{SFX}/player_hit.ogg": ("player hit.mp3", 0.28, 0.95),

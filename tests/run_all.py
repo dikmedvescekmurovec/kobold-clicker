@@ -64,7 +64,8 @@ def unchecked(name: str) -> list[str]:
             # A test that hands back another's answer is checked where it is itself called.
             if "_check(" not in line and not line.strip().startswith("return "):
                 problems.append("%s: %s is called without its result checked" % (name, test))
-    return problems + ["%s: %s is never called" % (name, test) for test in DEFINED.findall(source) if test not in called]
+    return problems + ["%s: %s is never called" % (name, test) for test in DEFINED.findall(source)
+            if test not in called]
 
 
 def run(name: str, only: str, timeout: float) -> tuple[str, bool, float, list[str]]:
@@ -91,7 +92,8 @@ def run(name: str, only: str, timeout: float) -> tuple[str, bool, float, list[st
     lines = output.splitlines()
     wrong = []
     for at, line in enumerate(lines):
-        if line.startswith(("FAIL", "SCRIPT ERROR")) or (line.startswith("ERROR") and not any(skip in line for skip in IGNORE)):
+        if line.startswith(("FAIL", "SCRIPT ERROR")) or (line.startswith("ERROR")
+                and not any(skip in line for skip in IGNORE)):
             # An error's second line says where it was raised.
             wrong += [line] + [after for after in lines[at + 1:at + 2] if after.startswith("   at:")]
     if timed_out:
@@ -120,7 +122,8 @@ def main() -> None:
         sys.exit("--only takes one suite")
     # A video tool's override (a 360x640 viewport) left behind by a killed run would lay every suite out wrong.
     if os.path.exists(os.path.join(ROOT, "override.cfg")):
-        sys.exit("override.cfg is in the project folder (tools/reels.py or tools/clip_video.py is recording, or was killed): wait, or delete it")
+        sys.exit("override.cfg is in the project folder (tools/reels.py or tools/clip_video.py is recording, or was "
+                "killed): wait, or delete it")
     problems = [problem for name in names for problem in unchecked(name)]
     if problems:
         sys.exit("\n".join(problems))

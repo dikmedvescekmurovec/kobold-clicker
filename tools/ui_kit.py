@@ -102,7 +102,8 @@ BROWN_HUE, BROWN_SAT, BROWN_DIM = 0.08, 0.46, 0.62
 # The interface in ENDESGA 64 (the user's call, 2026-09-30): every sprite written to Assets/UI goes through
 # `hexlib.to_e64` last (`_e64`), each colour to its nearest in OKLab -- except these, picked by hand, the
 # pack's chrome, whose place in the palette decides how the whole interface reads. The cream is the
-# palette's second warm step and the slot's tan the third (the user's pick over the paler f9e6cf); the wood and the brown face its middle brown;
+# palette's second warm step and the slot's tan the third (the user's pick over the paler f9e6cf); the wood and the
+# brown face its middle brown;
 # the green face its mid green lettered in ink; the red face its red; the outline its warm near-black.
 # Palette.gd's PANEL_CREAM, SLOT_TAN, SLOT_TAN_DK and BUTTON_BROWN are these same hexes, since a slot
 # drawn in code has to match the panel it sits on. Gear, orb, skill and spell icons are not interface.
@@ -320,20 +321,24 @@ BASE_KINDS = {
     # All five the user's pixellab swords (2026-09-24), one silhouette at five strengths; what they replaced -- the
     # pack's wooden, iron and golden swords and the generator's steel one -- is in BASE_OLD.
     "sword": ("Weapon", [
-        ("Wooden Sword", (PIXELLAB_BASES + "Wooden Sword", 0, 0, 32, 32, 1)), ("Iron Sword", (PIXELLAB_BASES + "Iron Sword", 0, 0, 32, 32, 1)),
-        ("Steel Sword", (PIXELLAB_BASES + "Steel Sword", 0, 0, 32, 32, 1)), ("Golden Sword", (PIXELLAB_BASES + "Golden Sword", 0, 0, 32, 32, 1)),
+        ("Wooden Sword", (PIXELLAB_BASES + "Wooden Sword", 0, 0, 32, 32, 1)),
+                ("Iron Sword", (PIXELLAB_BASES + "Iron Sword", 0, 0, 32, 32, 1)),
+        ("Steel Sword", (PIXELLAB_BASES + "Steel Sword", 0, 0, 32, 32, 1)),
+                ("Golden Sword", (PIXELLAB_BASES + "Golden Sword", 0, 0, 32, 32, 1)),
         ("Masterwork Sword", (PIXELLAB_BASES + "Masterwork Sword", 0, 0, 32, 32, 1))]),
     # The user's pixellab daggers (2026-09-24), told from the swords by pointing the other way (BASE_TRANSPOSE); the
     # generator's four they replaced are in BASE_OLD.
     "dagger": ("Weapon", [
-        ("Bone Knife", (PIXELLAB_BASES + "Bone Knife", 0, 0, 32, 32, 1)), ("Iron Dagger", (PIXELLAB_BASES + "Iron Dagger", 0, 0, 32, 32, 1)),
+        ("Bone Knife", (PIXELLAB_BASES + "Bone Knife", 0, 0, 32, 32, 1)),
+                ("Iron Dagger", (PIXELLAB_BASES + "Iron Dagger", 0, 0, 32, 32, 1)),
         ("Steel Stiletto", (PIXELLAB_BASES + "Steel Stiletto", 0, 0, 32, 32, 1)),
         ("Golden Kris", (PIXELLAB_BASES + "Golden Kris", 0, 0, 32, 32, 1)),
         ("Masterwork Dagger", (PIXELLAB_BASES + "Masterwork Dagger", 0, 0, 32, 32, 1))]),
     # The user's pixellab maces (2026-09-24); the generator's four they replaced are in BASE_OLD. The Iron Mace is a
     # grey morningstar from the steel tries, picked by the user for the iron.
     "mace": ("Weapon", [
-        ("Wooden Club", (PIXELLAB_BASES + "Wooden Club", 0, 0, 32, 32, 1)), ("Iron Mace", (PIXELLAB_BASES + "Iron Mace", 0, 0, 32, 32, 1)),
+        ("Wooden Club", (PIXELLAB_BASES + "Wooden Club", 0, 0, 32, 32, 1)),
+                ("Iron Mace", (PIXELLAB_BASES + "Iron Mace", 0, 0, 32, 32, 1)),
         ("Steel Morningstar", (PIXELLAB_BASES + "Steel Morningstar", 0, 0, 32, 32, 1)),
         ("Golden Sceptre", (PIXELLAB_BASES + "Golden Sceptre", 0, 0, 32, 32, 1)),
         ("Masterwork Mace", (PIXELLAB_BASES + "Masterwork Mace", 0, 0, 32, 32, 1))]),
@@ -352,7 +357,8 @@ BASE_KINDS = {
     # The user's pixellab shields (2026-09-24): one heater at five strengths, each material a device of its own on the
     # face; the pack's wooden one and the generator's three are in BASE_OLD.
     "shield": ("Offhand", [
-        ("Wooden Shield", (PIXELLAB_BASES + "Wooden Shield", 0, 0, 32, 32, 1)), ("Iron Shield", (PIXELLAB_BASES + "Iron Shield", 0, 0, 32, 32, 1)),
+        ("Wooden Shield", (PIXELLAB_BASES + "Wooden Shield", 0, 0, 32, 32, 1)),
+                ("Iron Shield", (PIXELLAB_BASES + "Iron Shield", 0, 0, 32, 32, 1)),
         ("Steel Kite Shield", (PIXELLAB_BASES + "Steel Kite Shield", 0, 0, 32, 32, 1)),
         ("Golden Aegis", (PIXELLAB_BASES + "Golden Aegis", 0, 0, 32, 32, 1)),
         ("Masterwork Shield", (PIXELLAB_BASES + "Masterwork Shield", 0, 0, 32, 32, 1))]),
@@ -374,8 +380,10 @@ BASE_KINDS = {
     # The user's own pixellab set (PIXELLAB_BASES): one helmet at four strengths, grown from the
     # leather cap. What it replaced is in BASE_OLD.
     "helm": ("Helmet", [
-        ("Leather Helmet", (PIXELLAB_BASES + "Leather Helmet", 0, 0, 32, 32, 1)), ("Iron Helmet", (PIXELLAB_BASES + "Iron Helmet", 0, 0, 32, 32, 1)),
-        ("Steel Helm", (PIXELLAB_BASES + "Steel Helm", 0, 0, 32, 32, 1)), ("Golden Helm", (PIXELLAB_BASES + "Golden Helm", 0, 0, 32, 32, 1)),
+        ("Leather Helmet", (PIXELLAB_BASES + "Leather Helmet", 0, 0, 32, 32, 1)),
+                ("Iron Helmet", (PIXELLAB_BASES + "Iron Helmet", 0, 0, 32, 32, 1)),
+        ("Steel Helm", (PIXELLAB_BASES + "Steel Helm", 0, 0, 32, 32, 1)),
+                ("Golden Helm", (PIXELLAB_BASES + "Golden Helm", 0, 0, 32, 32, 1)),
         ("Masterwork Helm", (PIXELLAB_BASES + "Masterwork Helm", 0, 0, 32, 32, 1))]),
     "hood": ("Helmet", [
         ("Hide Hood", (PIXELLAB_BASES + "Hide Hood", 0, 0, 32, 32, 1)),
@@ -386,8 +394,10 @@ BASE_KINDS = {
 
     # Pixellab too, each piece matched to the helmet of its tier. What it replaced is in BASE_OLD.
     "plate": ("Body", [
-        ("Wooden Armour", (PIXELLAB_BASES + "Wooden Armor", 0, 0, 32, 32, 1)), ("Iron Armour", (PIXELLAB_BASES + "Iron Armor", 0, 0, 32, 32, 1)),
-        ("Steel Plate", (PIXELLAB_BASES + "Steel Plate", 0, 0, 32, 32, 1)), ("Golden Plate", (PIXELLAB_BASES + "Golden Plate", 0, 0, 32, 32, 1)),
+        ("Wooden Armour", (PIXELLAB_BASES + "Wooden Armor", 0, 0, 32, 32, 1)),
+                ("Iron Armour", (PIXELLAB_BASES + "Iron Armor", 0, 0, 32, 32, 1)),
+        ("Steel Plate", (PIXELLAB_BASES + "Steel Plate", 0, 0, 32, 32, 1)),
+                ("Golden Plate", (PIXELLAB_BASES + "Golden Plate", 0, 0, 32, 32, 1)),
         ("Masterwork Plate", (PIXELLAB_BASES + "Masterwork Plate", 0, 0, 32, 32, 1))]),
     # The pack calls a strapped backpack its leather armour (it is rag_and_bone_sack), so all drawn.
     "jerkin": ("Body", [
@@ -405,7 +415,8 @@ BASE_KINDS = {
         ("Masterwork Boots", (PIXELLAB_BASES + "Masterwork Boot", 0, 0, 32, 32, 1))]),
     "greaves": ("Boots", [
         ("Iron Greaves", (PIXELLAB_BASES + "Iron Greaves", 0, 0, 32, 32, 1)),
-        ("Steel Greaves", (PIXELLAB_BASES + "Steel Greaves", 0, 0, 32, 32, 1)), ("Golden Greaves", (PIXELLAB_BASES + "Golden Greaves", 0, 0, 32, 32, 1)),
+        ("Steel Greaves", (PIXELLAB_BASES + "Steel Greaves", 0, 0, 32, 32, 1)),
+                ("Golden Greaves", (PIXELLAB_BASES + "Golden Greaves", 0, 0, 32, 32, 1)),
         ("Masterwork Greaves", (PIXELLAB_BASES + "Masterwork Greaves", 0, 0, 32, 32, 1))]),
 
     # Untiered, so here the drawing parts one piece from the next rather than one tier from the
@@ -413,10 +424,16 @@ BASE_KINDS = {
     # silver, a pearl on a post; three pendants of three shapes. All pixellab (2026-09-24); what the
     # generator drew is in BASE_OLD. (The hat, robe, slippers and Sapphire Amulet went with energy
     # shield, 2026-09-21; their drawings are still in gear.py and their icons still in Assets/Gear, unused.)
-    "ring": ("Ring", [("Gold Ring", (PIXELLAB_BASES + "Gold Ring", 0, 0, 32, 32, 1)), ("Iron Band", (PIXELLAB_BASES + "Iron Band", 0, 0, 32, 32, 1)), ("Jade Ring", (PIXELLAB_BASES + "Jade Ring", 0, 0, 32, 32, 1)),
-        ("Opal Ring", (PIXELLAB_BASES + "Opal Ring", 0, 0, 32, 32, 1)), ("Pearl Ring", (PIXELLAB_BASES + "Pearl Ring", 0, 0, 32, 32, 1))]),
+    "ring": ("Ring",
+            [("Gold Ring", (PIXELLAB_BASES + "Gold Ring", 0, 0, 32, 32, 1)),
+                    ("Iron Band", (PIXELLAB_BASES + "Iron Band", 0, 0, 32, 32, 1)),
+                            ("Jade Ring", (PIXELLAB_BASES + "Jade Ring", 0, 0, 32, 32, 1)),
+        ("Opal Ring", (PIXELLAB_BASES + "Opal Ring", 0, 0, 32, 32, 1)),
+                ("Pearl Ring", (PIXELLAB_BASES + "Pearl Ring", 0, 0, 32, 32, 1))]),
     "amulet": ("Amulet", [
-        ("Ruby Amulet", (PIXELLAB_BASES + "Ruby Amulet", 0, 0, 32, 32, 1)), ("Gold Amulet", (PIXELLAB_BASES + "Gold Amulet", 0, 0, 32, 32, 1)), ("Emerald Amulet", (PIXELLAB_BASES + "Emerald Amulet", 0, 0, 32, 32, 1))]),
+        ("Ruby Amulet", (PIXELLAB_BASES + "Ruby Amulet", 0, 0, 32, 32, 1)),
+                ("Gold Amulet", (PIXELLAB_BASES + "Gold Amulet", 0, 0, 32, 32, 1)),
+                        ("Emerald Amulet", (PIXELLAB_BASES + "Emerald Amulet", 0, 0, 32, 32, 1))]),
 }
 # The one dye a cut piece takes, as `_shift` wants it: the pack's warm band landed on a hue, and the
 # greys given the same. Everything drawn is dyed where it is drawn (gearlib.TINTS).
@@ -971,7 +988,8 @@ ICONS_DRAWN = {
 }
 # The bag's filter tabs (BagPage.FILTERS), one an equipment slot -- the weapon's is the sword above --
 # "all", a two-by-two grid, and the skill stones', a disc with a carved I like the stones' own faces (the
-# user's pick, qa/bag_filter_stones.png, 2026-10-09). Silhouettes shaded by `_edged`, as the character panel's marks are; H
+# user's pick, qa/bag_filter_stones.png, 2026-10-09). Silhouettes shaded by `_edged`, as the character panel's marks
+# are; H
 # is the ramp's dark, k a gap in the outline's dark (the user's pick, qa/bag_filter_m1_b.png, 2026-10-07).
 SLOT_MARKS = {
     "ui_icon_slot_all": [
@@ -1098,11 +1116,15 @@ SKILL_BADGE = 32
 # the old power tree's red, intelligence and dexterity off the user's carved stones' own ramps
 # (`Assets/Skills/Stones/<attr>_5.png`), so a badge wears its disc's colour.
 SKILL_TINTS = {
-    "strength": [(0.0, "#2f3236"), (0.06, "#3f0e1d"), (0.15, "#5a1122"), (0.45, "#982a1e"), (0.73, "#ba3423"), (1.0, "#e1828f")],
-    "intelligence": [(0.0, "#2f3236"), (0.06, "#181e23"), (0.15, "#1d314a"), (0.45, "#3c6982"), (0.73, "#4b9cb5"), (1.0, "#8edbd4")],
-    "dexterity": [(0.0, "#2f3236"), (0.06, "#20292c"), (0.15, "#2a3e3a"), (0.45, "#3d7154"), (0.73, "#458459"), (1.0, "#7ab574")],
+    "strength": [(0.0, "#2f3236"), (0.06, "#3f0e1d"), (0.15, "#5a1122"), (0.45, "#982a1e"), (0.73, "#ba3423"),
+            (1.0, "#e1828f")],
+    "intelligence": [(0.0, "#2f3236"), (0.06, "#181e23"), (0.15, "#1d314a"), (0.45, "#3c6982"), (0.73, "#4b9cb5"),
+            (1.0, "#8edbd4")],
+    "dexterity": [(0.0, "#2f3236"), (0.06, "#20292c"), (0.15, "#2a3e3a"), (0.45, "#3d7154"), (0.73, "#458459"),
+            (1.0, "#7ab574")],
     # The fortuneteller's spells: purple, hers alone (the user, 2026-09-25), as the pack's placeholders were.
-    "teller": [(0.0, "#2f3236"), (0.06, "#221931"), (0.15, "#34264a"), (0.45, "#574175"), (0.73, "#7b70ad"), (1.0, "#c1b5cf")],
+    "teller": [(0.0, "#2f3236"), (0.06, "#221931"), (0.15, "#34264a"), (0.45, "#574175"), (0.73, "#7b70ad"),
+            (1.0, "#c1b5cf")],
 }
 # Her spells' pixellab symbols (`Fortune/<reading>.png`), laid on the same frame in the "teller" tint; a reading not
 # listed keeps its pack icon.
@@ -1152,7 +1174,8 @@ BONE_RAMP = {
 # changes nothing else. GREEN_KEY is measured off Icons.png, which draws its T, its pot and its
 # scissors in both colourways: 603928 -> 2c4645, 70492a -> 3f7168, 88682d -> 50a978, a07f2d ->
 # 57c767 -- the outline to the close button's teal family and the ramp to the bar's green.
-BARE = ["ui_icon_auto", "ui_icon_filter", "ui_icon_trash", "ui_icon_coins", "ui_icon_scroll", "ui_icon_sword", "ui_icon_chest",
+BARE = ["ui_icon_auto", "ui_icon_filter", "ui_icon_trash", "ui_icon_coins", "ui_icon_scroll", "ui_icon_sword",
+        "ui_icon_chest",
         "ui_icon_gem", "ui_icon_anvil", "ui_icon_crystal", "ui_icon_kills", "ui_icon_pencil", *SLOT_MARKS]
 GREEN_TABS = ["ui_icon_auto", "ui_icon_filter", "ui_icon_scroll", "ui_icon_sword", "ui_icon_gem", "ui_icon_anvil",
               "ui_icon_crystal", *SLOT_MARKS]
@@ -2066,7 +2089,7 @@ def skill_preview(cut):
 # It is put onto the old figure's six browns by lightness -- equal shares darkest to lightest, so it keeps its
 # relief and loses its colours and its contrast, which a backdrop behind translucent sockets must -- and stretched
 # to DOLL_SIDE high, nearest-neighbour (x1.13), so its shield, head, body and feet sit under the sockets. It is
-# drawn at 1x (bag_page's DOLL_SCALE), the icons' own pixel size.
+# drawn at 1x (Doll.SCALE), the icons' own pixel size.
 DOLL_SOURCE = "doll-pixellab.png"
 DOLL_SIDE = 128
 DOLL_RAMP = [(0x51, 0x2C, 0x24), (0x58, 0x31, 0x26), (0x60, 0x39, 0x28),

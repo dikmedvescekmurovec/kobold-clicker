@@ -9,7 +9,8 @@ environment so the wall stays the edge, and a few rare accents (tracks, a rock, 
 import math
 import random
 
-from hexlib import BORDER, C, ROW_OFFSET, STEP_X, STEP_Y, CENTER, EDGE_MID, EDGE_NAMES, HEX_PIXELS, in_hex, LATTICE_SHIFTS, SHADE, Tile, bayer, fbm, light, periodic_noise, ramp_pick, wrap
+from hexlib import (BORDER, C, ROW_OFFSET, STEP_X, STEP_Y, CENTER, EDGE_MID, EDGE_NAMES, HEX_PIXELS, in_hex,
+        LATTICE_SHIFTS, SHADE, Tile, bayer, fbm, light, periodic_noise, ramp_pick, wrap)
 from stamps import dome, edge_ring, line_pixels, scatter, shadow_set, tuft
 from terrain import hashf
 

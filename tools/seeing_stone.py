@@ -117,7 +117,8 @@ def preview(base, light):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--export", action="store_true", help="also write Assets/UI/seeing_stone*.png and Assets/Fortune/stone.png")
+    parser.add_argument("--export", action="store_true",
+            help="also write Assets/UI/seeing_stone*.png and Assets/Fortune/stone.png")
     args = parser.parse_args()
     base, light = stone(), glow()
     os.makedirs(QA, exist_ok=True)

@@ -198,8 +198,10 @@ def bar(spec):
 HUD = [
     ("combat_layout_grass_village_1.png", [(C, False)] * 3 + [(C, True)] * 6 + [(E, True)]),
     ("combat_area_ice_town_4_golden.png", [(C, True)] * 6 + [(E, True)] + [(C, True)] * 7 + [(B, True)]),
-    ("combat_area_mountains_plain_2_night.png", [(C, False)] * 3 + [(C, True)] * 3 + [(E, True)] + [(C, True)] * 7 + [(B, True)]),
-    ("combat_area_desert_village_3_alpine.png", [(C, False)] * 6 + [(E, False)] + [(C, False)] + [(C, True)] * 6 + [(B, True)]),
+    ("combat_area_mountains_plain_2_night.png",
+            [(C, False)] * 3 + [(C, True)] * 3 + [(E, True)] + [(C, True)] * 7 + [(B, True)]),
+    ("combat_area_desert_village_3_alpine.png",
+            [(C, False)] * 6 + [(E, False)] + [(C, False)] + [(C, True)] * 6 + [(B, True)]),
 ]
 # A board's heading: none handed in, one, two, and a reward waiting over a fresh board.
 BOARD = [(0, False), (1, False), (2, False), (0, True)]
