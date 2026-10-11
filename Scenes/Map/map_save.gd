@@ -1,30 +1,16 @@
 class_name MapSave
 extends RefCounted
-## The explored map on disk: what the world is, how much of it the player has lifted the fog off,
-## and where they are standing. Written at `user://map.json` beside the inventory's own save.
+## The explored map on disk, `user://map.json`. Nothing here is regenerated on load, and a save that
+## cannot be honoured exactly is refused rather than quietly replaced (`load_from`).
 ##
-## Nothing here is regenerated on load. Both map generators are order-dependent rather than
-## seed-dependent -- EnvironmentGenerator grows from a frontier seeded by the order cells were
-## inserted, and RoadNetwork routes each link into the roads already laid -- so the same seed and
-## the same final window do not give back the same land; only replaying the identical sequence of
-## windows would, and that would weld every save to one build of the generator. The town world is
-## written down too, although it *is* a pure function of its seed today, because that is a property
-## of the current code and not a promise to the player.
-##
-## Which is the rule the whole file follows: nothing on the map can change. A save that cannot be
-## honoured exactly is refused rather than quietly replaced -- see `load_from`.
-##
-## MapSave never names MapBuilder. MapBuilder.restore names MapSave, and a mention the other way is
-## the class cycle Godot's checker bites on -- the same reason ItemRarity never mentions Item. So
-## the states are raw ints here and STATE_NAMES is the legend they are written through; MapBuilder
-## does the casting, and a test pins the two lists against each other.
+## MapSave never names MapBuilder, which names it: that is the class cycle Godot's checker bites on. So
+## the states are raw ints here and STATE_NAMES is the legend they are written through; MapBuilder does
+## the casting, and a test pins the two lists against each other.
 
 const SAVE_PATH := "user://map.json"
-## 1 is the first shape there has been. 2 added the names of the tiles the player has seen; a
-## version 1 save simply has none, and its tiles are named again as they are asked about. 3 added
-## `land_radius`, the ice wall's place; an older save has none and MapBuilder puts the wall past it.
-## 4 added `cave`, the Gollux cave's cell; an older save has none, and gets one beside the next wall
-## broken in it (`MapBuilder.place_cave`).
+## 2 added `names`; a version 1 save has none, and its tiles are named again as they are asked about.
+## 3 added `land_radius`; an older save has none and MapBuilder puts the wall past it. 4 added `cave`;
+## an older save has none, and gets one beside the next wall broken in it (`MapBuilder.place_cave`).
 const VERSION := 4
 
 ## MapBuilder.State by name, lowest value first. Written into every save as the legend its state
@@ -41,11 +27,10 @@ const WIDENED_SHEETS := {
 			"82b7069bb4bdaef41496c6c17e76f44817cbb211f6aba52cf5def990a1ad4675",
 }
 
-## Indexes the legends, one character per cell. Six environments and three states need ten of
-## these; the encoder is given sixty-two so it has no ceiling to walk into later.
+## Indexes the legends, one character per cell.
 const ALPHABET := "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-## A cell of the window with no environment, which _generate makes impossible. A truncated or
-## hand-edited row then degrades to a gap rather than to the wrong tile.
+## A cell of the window with no environment, which `MapBuilder._generate` makes impossible. A truncated
+## or hand-edited row then degrades to a gap rather than to the wrong tile.
 const GAP := "."
 
 var sheet: String
@@ -62,9 +47,8 @@ var player_cell: Vector2i
 ## The whole town world, as TownWorld.to_dict wrote it.
 var towns: Dictionary = {}
 var envs: Dictionary[Vector2i, String] = {}
-## What each tile the player has seen is called. Sparse, and written out in full rather than as rows
-## against a legend: a name is a whole word per cell and there is one only for the cells that have
-## been looked at, so there is nothing for the alphabet to index.
+## What each tile the player has seen is called. Sparse, so written out in full under "x,y" keys rather
+## than as rows against a legend.
 var names: Dictionary[Vector2i, String] = {}
 ## MapBuilder.State per cell, as its raw value.
 var states: Dictionary[Vector2i, int] = {}
@@ -74,15 +58,11 @@ var roads: Dictionary[Vector2i, int] = {}
 var routed_links: Dictionary[String, bool] = {}
 
 
-## What a saved map is *read through*: the three spritesheet tables that decide what its names and
-## its bitmasks draw as. A change to any of them means the land does not come back as it was --
-## a border the adjacency table no longer allows, an overlay that now spreads the other way, a road
-## shape that has lost its sprite. Deliberately only these three: a rebuilt sheet that adds an
-## accent variant or retouches a pixel changes nothing a save depends on and must not cost the
-## player their map.
-##
-## SHA-256 of a canonical spelling rather than hash(), whose value is Godot's business and could
-## change under a player between one build and the next.
+## What a saved map is *read through*: the three spritesheet tables that decide what its names and its
+## bitmasks draw as. Deliberately only these three: a rebuilt sheet that adds an accent variant or
+## retouches a pixel changes nothing a save depends on and must not cost the player their map.
+## SHA-256 of a canonical spelling rather than hash(), whose value is Godot's business and could change
+## under a player between one build and the next.
 static func fingerprint(tileset: HexTileset) -> String:
 	var parts := PackedStringArray()
 	var adjacency := SheetMeta.env_adjacency()
@@ -133,12 +113,9 @@ func save(path := SAVE_PATH) -> bool:
 ## The map in `path`, or null. Two different nulls, which the caller has to tell apart:
 ##
 ## * `problem` left empty -- there is no file. A first run: generate a new world, say nothing.
-## * a reason appended to `problem` -- there is a file and it cannot be honoured. Unreadable,
-##   unparseable, the wrong shape, written by a newer build, or drawn against different sprite
-##   tables. The caller must **stop** rather than generate: a fresh world would be written over
-##   this one on the player's first step, and losing a map to a bad read is worse than an error
-##   message. It is the same reason Inventory leaves a newer-version file alone -- the build that
-##   wrote it can still read it.
+## * a reason appended to `problem` -- there is a file and it cannot be honoured. The caller must
+##   **stop** rather than generate: a fresh world would be written over this one on the player's
+##   first step.
 ##
 ## `problem` is an out-parameter because an Array is shared where a String would be copied.
 ##
@@ -151,36 +128,29 @@ static func load_from(path := SAVE_PATH, problem: Array = [], expect_sheet := ""
 		return null
 	var text := FileAccess.get_file_as_string(path)
 	if text.is_empty():
-		problem.append("it cannot be read")
-		return null
+		return _refuse(problem, "it cannot be read")
 	# A JSON instance rather than JSON.parse_string, which pushes an engine error of its own on bad
 	# input: a refused save is reported once, in the player's words, not twice in the engine's.
 	var reader := JSON.new()
 	if reader.parse(text) != OK or typeof(reader.data) != TYPE_DICTIONARY:
-		problem.append("it is not a save file")
-		return null
+		return _refuse(problem, "it is not a save file")
 	var data: Dictionary = reader.data
 	for key: String in ["version", "world_seed", "map_seed", "land_radius"]:
 		if not TownWorld.is_numbers([data.get(key, 0)]):
-			problem.append("its %s is not a number" % key.replace("_", " "))
-			return null
+			return _refuse(problem, "its %s is not a number" % key.replace("_", " "))
 	for key: String in ["origin", "start_town", "player_cell"]:
 		if data.has(key) and not _is_cell(data[key]):
-			problem.append("its %s is not a place" % key.replace("_", " "))
-			return null
+			return _refuse(problem, "its %s is not a place" % key.replace("_", " "))
 	var version := int(data.get("version", 0))
 	if version > VERSION:
-		problem.append("it was written by a newer version of the game (%d)" % version)
-		return null
+		return _refuse(problem, "it was written by a newer version of the game (%d)" % version)
 	if version < 1:
-		problem.append("it does not say which version wrote it")
-		return null
+		return _refuse(problem, "it does not say which version wrote it")
 
 	var save := MapSave.new()
 	save.sheet = str(data.get("sheet", ""))
 	if expect_sheet != "" and save.sheet != expect_sheet and WIDENED_SHEETS.get(save.sheet) != expect_sheet:
-		problem.append("it was drawn with a different set of tiles")
-		return null
+		return _refuse(problem, "it was drawn with a different set of tiles")
 	save.world_seed = int(data.get("world_seed", 0))
 	save.map_seed = int(data.get("map_seed", 0))
 	save.origin = _to_vector(data.get("origin", []))
@@ -190,60 +160,46 @@ static func load_from(path := SAVE_PATH, problem: Array = [], expect_sheet := ""
 	if _is_cell(saved_cave):
 		save.cave = _to_vector(saved_cave)
 	elif typeof(saved_cave) != TYPE_ARRAY or not (saved_cave as Array).is_empty():
-		problem.append("its cave is not a place")
-		return null
+		return _refuse(problem, "its cave is not a place")
 	save.player_cell = _to_vector(data.get("player_cell", []))
 	var saved_rect: Variant = data.get("rect", [])
 	if not TownWorld.is_numbers(saved_rect) or saved_rect.size() != 4:
-		problem.append("it has no window")
-		return null
+		return _refuse(problem, "it has no window")
 	save.rect = Rect2i(int(saved_rect[0]), int(saved_rect[1]), int(saved_rect[2]), int(saved_rect[3]))
 	save.land_radius = int(data.get("land_radius", 0))
 
 	var saved_towns: Variant = data.get("towns", {})
 	if typeof(saved_towns) != TYPE_DICTIONARY or TownWorld.from_dict(saved_towns) == null:
-		problem.append("its settlements cannot be read")
-		return null
+		return _refuse(problem, "its settlements cannot be read")
 	save.towns = saved_towns
 
 	# A legend that is missing or empty would read every row under it as gaps: a map of no land at all.
 	var saved_envs: Variant = data.get("environments", [])
 	if typeof(saved_envs) != TYPE_ARRAY or (saved_envs as Array).is_empty():
-		problem.append("it has no environments")
-		return null
+		return _refuse(problem, "it has no environments")
 	var env_names: Array = saved_envs
 	if not save._read_rows(data.get("env_rows", []), env_names.size(),
 			func(cell: Vector2i, index: int) -> void: save.envs[cell] = str(env_names[index])):
-		problem.append("its land does not fit its window")
-		return null
-	# States are resolved through the save's own legend, so an enum reordered since cannot shift.
+		return _refuse(problem, "its land does not fit its window")
 	var saved_states: Variant = data.get("states", [])
 	if typeof(saved_states) != TYPE_ARRAY or (saved_states as Array).is_empty():
-		problem.append("it does not say what it has explored")
-		return null
+		return _refuse(problem, "it does not say what it has explored")
 	var state_legend: Array[int] = []
 	for name: Variant in saved_states:
 		state_legend.append(STATE_NAMES.find(OLD_STATE_NAMES.get(str(name), str(name))))
 	if state_legend.has(-1):
-		problem.append("it records a state this build has no name for")
-		return null
-	# HIDDEN is the absence of an entry, here as in MapBuilder: a cell nothing is drawn for is one
-	# the map has never heard of. Storing it would put every unexplored cell of the window into a
-	# dictionary that is meant to hold only what has been seen.
+		return _refuse(problem, "it records a state this build has no name for")
+	# HIDDEN is the absence of an entry, here as in MapBuilder: `states` holds only what has been seen.
 	var hidden := STATE_NAMES.find("hidden")
 	if not save._read_rows(data.get("state_rows", []), state_legend.size(),
 			func(cell: Vector2i, index: int) -> void:
 				if state_legend[index] != hidden:
 					save.states[cell] = state_legend[index]):
-		problem.append("what it has explored does not fit its window")
-		return null
+		return _refuse(problem, "what it has explored does not fit its window")
 
-	# Names arrived in version 2. A save without them is not wrong, it is old: its tiles are named
-	# again the first time anything asks, and the same tables give the same names back.
 	var saved_names: Variant = data.get("names", {})
 	if typeof(saved_names) != TYPE_DICTIONARY:
-		problem.append("what it has named cannot be read")
-		return null
+		return _refuse(problem, "what it has named cannot be read")
 	for key: Variant in saved_names:
 		var at := str(key).split(",")
 		if at.size() == 2:
@@ -252,8 +208,7 @@ static func load_from(path := SAVE_PATH, problem: Array = [], expect_sheet := ""
 	var road_list: Variant = data.get("roads", [])
 	var saved_links: Variant = data.get("routed_links", [])
 	if not TownWorld.is_numbers(road_list, 3) or typeof(saved_links) != TYPE_ARRAY:
-		problem.append("its roads cannot be read")
-		return null
+		return _refuse(problem, "its roads cannot be read")
 	for i in range(0, road_list.size(), 3):
 		save.roads[Vector2i(int(road_list[i]), int(road_list[i + 1]))] = int(road_list[i + 2])
 	for key: Variant in saved_links:
@@ -261,8 +216,12 @@ static func load_from(path := SAVE_PATH, problem: Array = [], expect_sheet := ""
 	return save
 
 
-## The names keyed by "x,y", which is a cell written the way a person would write it -- the save is
-## indented to be read, and a JSON object's keys are strings whatever is put in them anyway.
+## Says why the file is refused, and hands back the null `load_from` leaves by.
+static func _refuse(problem: Array, reason: String) -> MapSave:
+	problem.append(reason)
+	return null
+
+
 func _name_dict() -> Dictionary:
 	var out := {}
 	for cell in names:
@@ -273,11 +232,11 @@ func _name_dict() -> Dictionary:
 ## Every environment on the map, in the order they were first laid down, which is the legend the
 ## env rows index.
 func _env_names() -> Array[String]:
-	var names: Array[String] = []
+	var legend: Array[String] = []
 	for cell in envs:
-		if not names.has(envs[cell]):
-			names.append(envs[cell])
-	return names
+		if not legend.has(envs[cell]):
+			legend.append(envs[cell])
+	return legend
 
 
 ## One string per row of the window, top row first, one character per cell: `index.call(cell)` into

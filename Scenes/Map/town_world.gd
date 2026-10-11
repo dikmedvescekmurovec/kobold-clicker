@@ -153,15 +153,10 @@ func ensure_small_town(spots: Array[Vector2i]) -> Vector2i:
 	return NO_SPOT
 
 
-## The whole world as plain data, for the map save. Written down rather than regenerated because
-## "a pure function of its seed" is a property of this code today, not a promise to the player:
-## retuning TIER_CHANCES, or a change to Godot's own hash(), would otherwise move every settlement
-## under land somebody had already walked.
-##
-## `spots` is flat [x, y, tier, ...] with the tier an index into `tiers`, which is written by name
-## for the reason rarities are -- an enum value is only a position. `_links` is symmetric, so
-## `links` holds each pair once, the lower spot first; from_dict fills both directions. `_buckets`
-## is a spatial index over `_tiers` and is rebuilt rather than stored.
+## The whole world as plain data, for the map save: it is written down, never regenerated.
+## `spots` is flat [x, y, tier, ...] with the tier an index into `tiers`, which is written by name: an
+## enum value is only a position. `_links` is symmetric, so `links` holds each pair once, the lower spot
+## first; from_dict fills both directions. `_buckets` is rebuilt rather than stored.
 func to_dict() -> Dictionary:
 	var spots: Array[int] = []
 	for spot in _tiers:
@@ -184,8 +179,6 @@ func to_dict() -> Dictionary:
 ## legend to read the towns through. A town whose tier is no longer a tier this build knows is dropped
 ## along with its links, rather than coming back as some other tier.
 static func from_dict(data: Dictionary) -> TownWorld:
-	if typeof(data) != TYPE_DICTIONARY:
-		return null
 	var world := TownWorld.new()
 	var saved_size: Variant = data.get("size", [])
 	var saved_seed: Variant = data.get("seed", 0)
@@ -231,8 +224,8 @@ static func from_dict(data: Dictionary) -> TownWorld:
 
 ## Whether `data` is a list of numbers as JSON hands them back, ints or floats, in whole groups of
 ## `per`. Asked of every list of the map's save before `int()` is: a typed read of anything else stops
-## the reader where it stands, short of its report. `MapSave` asks it too, and it is here because
-## `MapSave` names this class and never the other way round.
+## the reader where it stands, short of its report. Here because `MapSave`, which asks it too, names
+## this class and never the other way round.
 static func is_numbers(data: Variant, per := 1) -> bool:
 	if typeof(data) != TYPE_ARRAY or (data as Array).size() % per != 0:
 		return false

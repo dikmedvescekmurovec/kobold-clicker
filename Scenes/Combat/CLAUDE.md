@@ -17,7 +17,9 @@ The bracket closing a rule names the heading in `DESIGN.md` that holds its full 
 | `camp.gd` (`Camp`) | The camp made for the hours the game was shut, all rules and no nodes |
 | `camp_scene.gd` (`CampScene`) | The camp on screen, already paid: the tile's own backdrop under the night sky with nobody on it, and a centred panel |
 | `combat_actor.gd` (`CombatActor`) | An `AnimatedSprite2D` built from a sheet at runtime, for both sides |
-| `combat_scene.tscn` / `combat_scene.gd` (`CombatScene`) | The view, a `CanvasLayer` the main scene adds over the hidden map: the parallax backdrop, both fighters, the HUD, the loot popup, the verdict, the sounds |
+| `combat_scene.tscn` / `combat_scene.gd` (`CombatScene`) | The view, a `CanvasLayer` the main scene adds over the hidden map: the parallax backdrop, both fighters, the numbers, what a body throws; it makes the HUD (`hud`) and tells it what happened |
+| `fight_hud.gd` (`FightHud`) | Everything over the arena, one Control named "HUD": the place, pips and clock, the nameplate, the loot counter and Terminate, the loot popup, the verdict |
+| `fight_sounds.gd` (`FightSounds`) | A fight's sounds, a player each under one node the view makes: which blow and crit a weapon lands with, which sound a find lands with |
 
 `EnemyRoster` is in `Scenes/Enemies/`. Effects (`burst`, `hit_stop`, `shake`) come from `Juice` in `Scenes/UI/`.
 
@@ -26,9 +28,11 @@ The bracket closing a rule names the heading in `DESIGN.md` that holds its full 
 ### Order and single paths in `Encounter`
 - **`wear` before `arm` before `start`.** `effects` set by hand does all but take the curses on, at rank I; `arm` may run again mid-fight (the main scene's `_rearm`), starting from the stats and moving the clock by `_clock_more`, never refilling it. (DESIGN.md: "`wear` before `arm` before `start`")
 - **`_append_enemy` is the one place an enemy joins a fight,** from `tier_for(position)`. Ask `EnemyRoster.tier_of`, never "is it the last one": a run's elites come round forever. A boss is only ever rolled as a settlement's last enemy, never in a run.
-- **`_health_of` is the one place a body's starting health is worked out;** it is sized again only under a curse that moves health, so a fight built by hand keeps its own. The ice wall answers there to `WALL_HP` and the Long Winter and to nothing else. (DESIGN.md: "A curse is one `if`")
+- **A stat that lands on a field of its own name is a row of `ARM_STATS`** (the stat -> the most it may be, never under nought; `ARM_SECONDS` for the ones kept in tenths), which `arm` sets through `set`. So there is no `armor = ` to grep for, and a new plain stat is a row and a `var`. (DESIGN.md: "`wear` before `arm` before `start`")
+- **`_health_of` is the one place a body's starting health is worked out;** it is sized again (`_size_again`) only under a curse that moves health, so a fight built by hand keeps its own. The ice wall answers there to `WALL_HP` and the Long Winter and to nothing else. (DESIGN.md: "A curse is one `if`")
 - **`_shape` is the once-a-fight say over the rolled lineup** (`_promoted`): the count, health only where the gear moved it, then the elite chance. (DESIGN.md: "Defence-slot lines are read in `arm`")
 - **`_kill` is the one path to a death,** out of `_strike` because a wound and Dominoes' carry kill with no blow; the per-enemy flags are cleared in `_advance_phase`. (DESIGN.md: "`_kill` is the one path to a death")
+- **`_pay` is everything a land body leaves, and its steps stay in the order their generators are drawn and their signals go out:** the chest's toss, `_drop_gear`, `_drop_purse`, experience, `_drop_unique`, the Hourglass, `_drop_orb`, `_drop_stone`. `_roll_gear` and `_roll_unique` are the only calls to `LootTable.roll` and `UniqueTable.roll` here but `_even_find`'s forced one. (DESIGN.md: "`_kill` is the one path to a death")
 - **`_wear_down` is the one path for damage nobody dealt:** `WAITING` only, and a death that way sets `_domino = false`. (DESIGN.md: "`_wear_down` is the one path for damage nobody dealt")
 - **`enemy_died` goes out before the body's loot is rolled and `kill_paid(index)` once all of it has gone out,** so whatever changes what the next body pays waits for `kill_paid`. (DESIGN.md: "encounter.gd")
 - **`tier_in(slot)` is the tier both `KillPips` and `HealthBar` read.**
@@ -61,11 +65,11 @@ The bracket closing a rule names the heading in `DESIGN.md` that holds its full 
 ### Drops
 - **One listener to `loot_dropped`:** `CombatScene._on_loot_dropped`, the only place autodiscard is applied. A discarded find appears nowhere and is counted once under the verdict. (DESIGN.md: "One listener to `loot_dropped`")
 - **A beaten gear roll rolls again,** to `MOST_DROPS` pieces off one body and never `guaranteed`. A certain roll never cascades: each leaves exactly one piece a roll. (DESIGN.md: "A beaten gear roll rolls again")
-- **Drop rate is the broad finder and is *added* to a narrow one where they meet** (`_kill`): `gold_find + drop_rate` for the purse, `orb_find + drop_rate` for `OrbTable.roll`, the way two global percents add. `gold_of` and `OrbTable.chance_for` are untouched, so what a body is worth -- and so a town's prices -- does not move.
+- **Drop rate is the broad finder and is *added* to a narrow one where they meet** (`_drop_purse`, `_drop_orb`): `gold_find + drop_rate` for the purse, `orb_find + drop_rate` for `OrbTable.roll`, the way two global percents add. `gold_of` and `OrbTable.chance_for` are untouched, so what a body is worth -- and so a town's prices -- does not move.
 - **Gold does not step with the walls** (`base_gold(cell) * hp_modifier`); `gold_at_steps` lets `TownPrices` quote a price in bodies with no cell. (DESIGN.md: "encounter.gd")
 - **Roll a promise only when owed** (`PROMISED`, `_due`; the rule is `Scenes/CLAUDE.md`'s), on the find's own generator. A promise is erased as its find falls, luck's too. (DESIGN.md: "Roll a promise only when owed")
 - **Roll a unique beside the gear,** on `unique_rng`; autodiscard never applies to one, and `uniques_after` is `NO_UNIQUES` until the main scene sets it. Nothing promises one but a chest and the first, and the mimic never takes the ordinary roll (`MIMIC_UNIQUE`). (DESIGN.md: "Roll a unique beside the gear")
-- **Pass `unlocked` to every `UniqueTable.roll` here** (`Achievements.unlocked`); a fight nobody tells has none. (DESIGN.md: "Only the main scene reads `tally`")
+- **Pass `unlocked` to every `_roll_unique` here but the promised first's** (`Achievements.unlocked`); a fight nobody tells has none. (DESIGN.md: "Only the main scene reads `tally`")
 - **Skill nodes roll on their own** (`SkillTree.roll`, `stone_rng`), only while `stone_drops` is on and never while the first node is owed. Neither a curse nor a unique that keeps gear from falling keeps a stone. (DESIGN.md: "Skill nodes roll on their own")
 - **Orbs never enter `_drops`;** only the verdict hands them over, so every `_result_drops.fill` passes `fight.orbs`. (DESIGN.md: "Orbs never enter `_drops`")
 - **`even_loot` replaces gear and unique rolls** (dev, `_even_find`); a chest keeps its own rules, and the purse and the orb are rolled as ever. (DESIGN.md: "`even_loot` replaces gear and unique rolls")
@@ -112,26 +116,27 @@ The bracket closing a rule names the heading in `DESIGN.md` that holds its full 
 - **Lay the arena out again on a resize** (`_layout`, on the viewport's `size_changed`, as `CampScene`'s is). (DESIGN.md: "Lay the arena out again on a resize")
 - **A `CombatActor`'s `position` is the middle of its feet.** Tint it through `self_modulate`, which leaves `modulate` to the hit flash. (DESIGN.md: "combat_actor.gd")
 
-### The view: HUD, loot popup and verdict
+### The HUD, loot popup and verdict (`FightHud`, the scene's `hud`)
+- **The HUD reads the Encounter and nothing of the scene's.** The scene tells it what happened (`keep`, `loot_changed`, `dress_nameplate`, `flash_clock`, `show_verdict`) and hears `back_pressed` / `retry_pressed`; the main scene sets `hud.hud_top` and `hud.bag_room` and hears `hud.panel_up` and `hud.drop_discarded`. (DESIGN.md: "fight_hud.gd")
 - **The fight's `HUD` is drawn over everything else in the fight** (`z_index` `RenderingServer.CANVAS_ITEM_Z_MAX`, the user's, 2026-10-03): a find, its beam, a coin, a gem, a number or a burst carries a `z_index` of its own, and never one that reaches it. `test_combat` holds a beam under it.
 - **Everything in the HUD is placed by `_place_corners` every frame, not anchored:** it is scaled by `ui_scale`, which anchors know nothing about. Columns are centred, so a wider elite or boss bar grows evenly either side.
 - **The HUD's corners keep to `UITheme.safe_rect`.**
-- **HUD words stand on the backdrop with no panel:** use `_hud_label` (bone with a dark outline) and `BAR_BORDER`, never a plain `Label`.
-- **Keep what the main scene stands over a fight off the HUD** (`hud_bottom()`, `corner_bottom()`, `hud_top`). Terminate is `stop()` for a run and `give_up()` for a tile fight; while `page_up` answers true, Escape is left to the bag. (DESIGN.md: "combat_scene.tscn / combat_scene.gd")
-- **Dress the nameplate once per enemy,** in `_dress_nameplate` (from `_on_enemy_coming`), never in `_refresh`; a boss's plate pops in (`_plate_pop`) at `Settings.Anim.DEFAULT` only. A title is for show: bounties and everything else count `enemy_name()`. (DESIGN.md: "Dress the nameplate once per enemy")
+- **HUD words stand on the backdrop with no panel:** use `FightHud.hud_label` (bone with a dark outline) and `BAR_BORDER`, never a plain `Label`.
+- **Keep what the main scene stands over a fight off the HUD** (`hud_bottom()`, `corner_bottom()`, `hud_top`). Terminate is `stop()` for a run and `give_up()` for a tile fight; while `page_up` answers true, Escape is left to the bag. (DESIGN.md: "fight_hud.gd")
+- **Dress the nameplate once per enemy,** in `dress_nameplate` (from the scene's `_on_enemy_coming`), never in `refresh`; a boss's plate pops in (`_plate_pop`) at `Settings.Anim.DEFAULT` only. A title is for show: bounties and everything else count `enemy_name()`. (DESIGN.md: "Dress the nameplate once per enemy")
 - **Answer `player_hit` in `_on_player_hit`;** a flinch never cuts a swing off. Everything that floats off a fight goes through `_float_text`. (DESIGN.md: "Answer `player_hit` in `_on_player_hit`")
 - **The clock bar is `KillPips.width_for(slots)` less its border,** so pips and clock are one column to the pixel.
 - **Colours ramp, they do not switch:** `_clock_color` and the counter's face are both shares of the whole, so retuning `Encounter.SECONDS` or the bag's cap retunes them.
 - **`Palette.GOLD` is the unique item step:** the verdict's gold total is in the panel's own colour behind a coin.
 - **The loot popup is a summary and nothing more** (the user's, 2026-10-02): its `DropsView` is not `discardable`; the verdict's still is. The counter is never disabled. (DESIGN.md: "The loot popup is a summary and nothing more")
-- **The verdict has no X** and is left through `_leave`; `_on_back_pressed` itself is still immediate, which is what the tests call. (DESIGN.md: "The verdict has no X")
+- **The verdict has no X** and is left through `leave`; the scene's `_on_back_pressed` itself is still immediate, which is what the tests call. (DESIGN.md: "The verdict has no X")
 - **The verdict reads top to bottom:** the word, one row of sums (bare numbers, no `+`, the kills under `KILLS_MARK`, never a skull), finds and orbs, the autodiscard footnote, the way out; only a loss has a second line. A retry banks and opens like any other fight (`_on_combat_retry`). (DESIGN.md: "The verdict reads top to bottom")
-- **`auto_collect` leaves through the same `_leave` as Collect,** never for a run. It is a Timer child, so a tip holds it too, and `Juice.pop_out` leaves once, so a press first wins. (DESIGN.md: "`wear` before `arm` before `start`")
+- **`auto_collect` leaves through the same `leave` as Collect,** never for a run. It is a Timer child, so a tip holds it too, and `Juice.pop_out` leaves once, so a press first wins. (DESIGN.md: "`wear` before `arm` before `start`")
 - **Run `_fit_window` before the verdict and the loot popup are centred** (`DropsView.fit_rows`, still ending on a half row). (DESIGN.md: "drops_view.gd")
 
 ### Sounds and the animation level
-- **Set `weapon_kind` before `begin`.** A crit plays instead of the blow: `BLUNT_CRIT` bare-handed or blunt, `SLASH_CRIT` for a blade (the user's ruling), with `GENERAL_CRIT` over it (the user's pairing, 2026-10-06). (DESIGN.md: "combat_scene.tscn / combat_scene.gd")
-- **A won fight's verdict plays nothing** (the user's ruling, 2026-10-02). A find sounds as it lands, by `drop_sound_of` (the user's, 2026-10-06), and takes of one sound are one `Juice.takes` pool. (DESIGN.md: "combat_scene.tscn / combat_scene.gd")
+- **Set `weapon_kind` before `begin`:** the view makes its `FightSounds` from it. A crit plays instead of the blow: `BLUNT_CRIT` bare-handed or blunt, `SLASH_CRIT` for a blade (the user's ruling), with `GENERAL_CRIT` over it (the user's pairing, 2026-10-06). (DESIGN.md: "fight_sounds.gd")
+- **A won fight's verdict plays nothing** (the user's ruling, 2026-10-02). A find sounds as it lands (`CombatScene._land`), by `FightSounds.drop_sound_of` (the user's, 2026-10-06), and takes of one sound are one `Juice.takes` pool. (DESIGN.md: "fight_sounds.gd")
 - **The animation level thins the view, never the fight** (`Settings.animations`): anything new that is only for show asks the level; anything that carries an amount must not be behind it. (DESIGN.md: "The animation level thins the view, never the fight")
 - **The `hit_stop` that ends last wins** (`Juice.hit_stop`); the unique banner raises none of its own. (DESIGN.md: "The `hit_stop` that ends last wins")
 

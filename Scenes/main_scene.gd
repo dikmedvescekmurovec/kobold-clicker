@@ -1,14 +1,25 @@
 extends Node2D
+## The game on the map: start-up and the two saves, the corner buttons and which page is up, tips, and
+## opening and closing fights. What it owns and every rule it keeps: `Scenes/CLAUDE.md`.
 
-## Seeds for the town world and the rendered map. 0 carries on with the save's, or picks a random one when
-## there is no save; any other value replaces a save of another world. The used seeds are printed.
+## Seeds for the town world and the rendered map. 0 carries on with the save's, or picks a random one
+## when there is no save; any other value replaces a save of another world. The used seeds are printed.
 @export var world_seed := 0
 @export var map_seed := 0
 ## World spot shown at the map's center cell (0, 0), which is the middle of the screen. The row must be even.
 @export var map_origin := Vector2i(128, 128)
-## Whole-number pixel zoom, so sprite pixels stay square: 3 draws every sprite pixel as 3x3 on screen.
-## 0 is `ZOOM_PER_UI` times `ui_scale`, rounded: 3 on the default window, and as much bigger on a phone.
+## Whole-number pixel zoom, so sprite pixels stay square. 0 is `ZOOM_PER_UI` times `ui_scale`, rounded:
+## 3 on the default window.
 @export var zoom := 0.0
+## The interface's whole-number scale. 0 is picked from the window as the game starts
+## (`UITheme.pick_scale`): 2 on the default window.
+@export var ui_scale := 0.0
+## Where the two saves are kept. The tests and the screenshot scripts point both elsewhere before the
+## scene enters the tree: they all pin a seed, and a pinned seed that differs from a save is a request
+## for another world that replaces it on the first write.
+@export var inventory_path := Inventory.SAVE_PATH
+@export var map_path := MapSave.SAVE_PATH
+
 ## The map's zoom for each step of `ui_scale`, and how far the mouse wheel (or a pinch) takes it either
 ## way, in the same whole steps: from 1 to `ZOOM_MOST` times `ui_scale`.
 const ZOOM_PER_UI := 1.5
@@ -16,45 +27,31 @@ const ZOOM_MIN := 1.0
 const ZOOM_MOST := 3.0
 ## How far two fingers have to spread (or close, by its inverse) to step the zoom once.
 const PINCH_STEP := 1.3
-## The same for the UI panel. Pixellari only renders cleanly at its native 16 px, so the way to make
-## the interface smaller is to draw its pixels smaller, not to shrink the font. 0 is picked from the
-## window as the game starts (`UITheme.pick_scale`): 2 on the default window.
-@export var ui_scale := 0.0
-## Held upright (`UITheme.narrow`) a town is its page over the bag, the page this share of the room, and
-## the map takes this long, in seconds, to bring a tile up out from under the tile panel's sheet.
+## Held upright (`UITheme.narrow`) a town is its page over the bag, the page this share of the room.
 const TOWN_SPLIT := 0.5
+## Seconds a camera glide takes (`_glide_camera`).
 const CAMERA_LIFT := 0.25
 ## The hero's face in their portrait's first frame (`DialogueBox.PORTRAITS`): the disc of the badge that
 ## points at them off screen (`MapPointer`) is cut from the middle of it.
 const HERO_FACE := Rect2(13, 3, 34, 34)
-## Where the inventory is kept. The tests and the screenshot scripts point this somewhere else
-## before the scene enters the tree, so they never read or overwrite the player's own inventory.
-@export var inventory_path := Inventory.SAVE_PATH
-## Where the explored map is kept. Pointed elsewhere by the tests and the screenshot scripts for the
-## reason `inventory_path` is -- and more sharply, since they all pin a seed, and a pinned seed that
-## differs from a save is a request for another world that replaces it on the first write.
-@export var map_path := MapSave.SAVE_PATH
-## Where a headless run left at the two paths above plays instead (`_ready`).
+## Where a headless run left at the player's own two paths plays instead (`_ready`).
 const HEADLESS_INVENTORY := "user://headless_inventory.json"
 const HEADLESS_MAP := "user://headless_map.json"
+const COMBAT_SCENE := "res://Scenes/Combat/combat_scene.tscn"
+## What the dungeon is called over its fight.
+const DUNGEON_NAME := "The Descent"
+## How long the game has to have been shut for a camp to be worth a screen, in seconds.
+const CAMP_LEAST := 60.0
 
-## The marks the corner buttons wear. The first three: a chest for what has been carried home, a star for what
-## the player has become and a scroll for the work they have taken on: all three are places to go
-## rather than actions to take, which is what the brown face says and what puts them in a row of their
-## own rather than among the panels' green buttons.
+## The corner buttons' marks.
 const CHEST_ICON := "res://Assets/UI/ui_icon_chest.png"
 const STAR_ICON := "res://Assets/UI/ui_icon_star.png"
 const SCROLL_ICON := "res://Assets/UI/ui_icon_scroll.png"
-## And a fourth that is about the game rather than the player: the settings, behind a cog.
 const COG_ICON := "res://Assets/UI/ui_icon_cog.png"
-## What the dungeon is called over its fight and on the cave's tile.
-const DUNGEON_NAME := "The Descent"
-## The achievements' trophy and the collection log's book: the log wore the trophy until 2026-09-30,
-## beside a medal for the achievements that read as a television.
 const TROPHY_ICON := "res://Assets/UI/ui_icon_trophy.png"
 const BOOK_ICON := "res://Assets/UI/ui_icon_book.png"
 const PODIUM_ICON := "res://Assets/UI/ui_icon_podium.png"
-## The heirlooms'. A stand-in from the pack until they have a mark of their own.
+## A stand-in from the pack until the heirlooms have a mark of their own.
 const CROWN_ICON := "res://Assets/UI/ui_icon_crown.png"
 ## The red pip over a corner button's top-right corner while its page has something new (`_mark_new`).
 const NEW_PIP := "res://Assets/UI/ui_pip_new.png"
@@ -62,218 +59,31 @@ const NEW_PIP := "res://Assets/UI/ui_pip_new.png"
 ## by the id `inventory.tips` has it under. The next time the bag is up each is `SEEN` + its id there.
 const BAG_FIRSTS: Array[String] = ["first_item", "first_orb", "first_stone", "first_unique", Inventory.FIRST_RUNE]
 const SEEN := "seen_"
-## The corner's keys -> the button each presses (`_unhandled_input`), whose tip card shows the key's
-## picture (`TipCard.KEY`). Letters only, and none the item card answers to (Shift, Ctrl, Alt).
+## The corner's keys -> the button each presses (`_unhandled_input`). Letters only, and none the item
+## card answers to (Shift, Ctrl, Alt).
 const HOTKEYS := {
 	KEY_I: "_bag_button", KEY_K: "_skills_button", KEY_C: "_character_button", KEY_J: "_bounty_button",
 	KEY_L: "_collection_button", KEY_Y: "_achievements_button", KEY_H: "_heirloom_button",
 	KEY_P: "_leaderboard_button", KEY_O: "_settings_button",
 }
-## The air between one and the next, in panel pixels.
+## The air between one corner button and the next, in panel pixels.
 const CORNER_GAP := 4.0
 ## How far the character panel stands in from the window's corner, in window pixels.
 const CHARACTER_EDGE := Vector2(8, 8)
-## The panel that stands in for the map when its save cannot be read: how wide it is allowed to be
-## in panel pixels, and the air it keeps either side of it on a window too narrow for that.
+## A panel of plain words (the refused save's, the changelog's): how wide it may be in panel pixels,
+## and the air it keeps either side of it on a window too narrow for that.
 const REFUSAL_WIDTH := 300.0
 const REFUSAL_MARGIN := 32.0
-## What a tile modifier's sentences wrap at on the tile panel, so a long one never widens the column.
-const MOD_WIDTH := 150.0
-## The square an ice wall's unlock is drawn in on its panel (`_show_unlocks`).
-const UNLOCK_ICON := 16
-## The tile panel's air: `TILE_PAD` more padding round its body than a titled panel has, `TILE_GAP`
-## between rows and twice that between its parts (the land, the services, the modifiers).
-const TILE_PAD := 4
-const TILE_GAP := 8
-## What the tile panel calls a settlement, by `TownWorld.Tier`, ahead of the tile's level.
-const SETTLEMENT_KINDS: Array[String] = ["Village", "Town", "Fortress"]
-## The music: one of the pack's ten `Ambient` tracks on the map -- not its `Dark Ambient` or `Light
-## Ambient` ones, which start otherwise -- and one of its five `Action` tracks while a fight or the
-## dungeon is on the screen, picked at random each time the one gives way to the other (the user's
-## choice, 2026-10-02). Read off the folder, so a track dropped in is played with no line here.
-const MUSIC_DIR := "res://Sounds/Music/ogg"
-const IDLE_MUSIC := "Ambient"
-const BATTLE_MUSIC := "Action"
-## What a press of any button plays, and of a toggle (a button held down on its own, not a tab of a group).
-const BUTTON_SOUND := preload("res://Sounds/UI/click1.ogg")
-const TOGGLE_SOUND := preload("res://Sounds/UI/click4.ogg")
-## A side panel sliding in or out, and anything bought or sold.
-const PAGE_SOUND := preload("res://Sounds/UI/bookFlip2.ogg")
-const COINS_SOUND := preload("res://Sounds/UI/handleCoins.ogg")
-## A level gained, over a fight or the map alike.
-const LEVEL_UP_SOUND := preload("res://Sounds/Sfx/level_up.ogg")
+const FLASH_BRIGHT := Color(1.6, 1.6, 1.6)
+const FLASH_SECONDS := 0.5
 
-var towns: TownWorld
-var view: MapBuilder
-## Everything the player has picked up, loaded from `inventory_path` and written back as it grows.
-var inventory: Inventory
-
-## The level-up fanfare: how bright the screen flashes, how long the words hang and how big they
-## arrive before settling at LEVEL_UP_FONT, which is a whole multiple of Pixellari's 16.
-const LEVEL_UP_FLASH := Color(1.0, 0.95, 0.75, 0.35)
-const LEVEL_UP_TIME := 1.6
-const LEVEL_UP_FONT := 48
-
-## The banner a unique new to the collection log raises. It wears its X from the start and goes by
-## itself after `BANNER_HOLD` while the mouse is off it -- never under a finger, where only its X or a
-## tap off it once `BANNER_HOLD` has passed puts it down; `BANNER_GAP` is the air it keeps under the
-## fight's own top-centre column, in screen pixels.
-const BANNER_HOLD := 5.0
-const BANNER_WIDTH := ItemCard.WIDTH * 1.5
-const BANNER_FADE := 0.4
-const BANNER_GAP := 12.0
-## The toast a counted bounty kill raises under the same column: how long it hangs, how far it rises,
-## and how tall the monster's picture stands -- small for a common, the card's own 40 for an elite or a
-## boss, whose picture wears a frame as well.
-const TOAST_TIME := 5.0
-const TOAST_RISE := 24.0
-const TOAST_PORTRAIT := 24
-const TOAST_BIG_PORTRAIT := BountyList.PORTRAIT
-## How an elite's or a boss's bounty toast and banner are set apart: the frame round its picture and
-## the colour its count is written in -- the cream half of the ramp, since `LEAF_LT` and `GOLD` are for
-## the backdrop and cannot be read on a card. The mark beside it is the nameplate's own (`TIER_MARK`).
-const BOUNTY_TIER := {
-	EnemyRoster.Tier.ELITE: {"frame": ItemRarity.Rarity.ELITE, "colour": Palette.LEAF},
-	EnemyRoster.Tier.BOSS: {"frame": ItemRarity.Rarity.UNIQUE, "colour": Palette.SLOT_TAN_DK},
-}
-
-@onready var map: HexMap = $HexMap
-@onready var camera: Camera2D = $Camera2D
-
-var _chart_button: Button
-var _move_button: Button
-var _farm_button: Button
-## What `_update_buttons` last greyed the fights for, so `_process` knows when the bag has crossed the cap.
-var _was_encumbered := false
-var _music: AudioStreamPlayer
-## Every track of `MUSIC_DIR`, looped, under the name it starts with (`IDLE_MUSIC`, `BATTLE_MUSIC`).
-var _tracks := {IDLE_MUSIC: [], BATTLE_MUSIC: []}
-var _button_sound: AudioStreamPlayer
-var _toggle_sound: AudioStreamPlayer
-var _page_sound: AudioStreamPlayer
-var _page_flipped_at := -1
-## The fingers on the screen, by index, where each is now; how far apart two of them were when the map
-## last stepped its zoom; and a trackpad's pinch gathered since its last step (`_pinch`).
-var _fingers := {}
-var _pinch_from := 0.0
-var _magnified := 1.0
-var _coins_sound: AudioStreamPlayer
-var _town_button: Button
-## Down into the cave, on the cave's own tile: green, as Enter town is.
-var _cave_button: Button
-## What a town on the selected tile offers, listed under the land it stands on.
-var _service_rows: VBoxContainer
-## What the land does to its own fight (`TileMods`), one row a modifier, under the services.
-var _mod_rows: VBoxContainer
-## What the ice wall opens for good once broken (`WallUnlocks`), on a wall tile alone.
-var _unlock_rows: VBoxContainer
-## The runes on a tile and the runes held to spend there (`_show_runes`), from the third wall.
-var _rune_rows: VBoxContainer
-## Runes found in the descent that is open, so leaving it saves them (`_bank_depths`).
-var _cave_runes := 0
-## The settlement the player has walked into, on the right edge in the tile panel's place, and the
-## cell it stands on -- kept because the map is still clickable behind the page, so the selection is
-## not what the town is.
-var town_page: TownPage
-var _town_cell := HexMap.NO_CELL
-## The tile the player is walking onto to fight on, NO_CELL when they aren't, and whether that fight is a
-## run (Farm) rather than the tile's own (Chart).
-var _fight_target := HexMap.NO_CELL
-var _fight_farms := false
-## The settlement the player is walking to to go inside (Enter town pressed from afar), NO_CELL when they aren't.
-var _town_target := HexMap.NO_CELL
-## The charted tile the player stepped onto the fought-for one from: a lost fight runs them back there, and a save made
-## while they stand on the uncharted tile puts them there.
-var _retreat_cell := HexMap.NO_CELL
-## The Nightwalkers' way into the dark still to fight for, the goal last (`MapBuilder.dark_path`): each
-## won fight walks on to the next by itself. A loss ends it, and so does anything that stops the next
-## fight opening; Retry keeps it.
-var _dark_way: Array[Vector2i] = []
-var _env_rows: VBoxContainer
-var _tile_title: Label
-var _level_label: Label
-var _panel: VBoxContainer
-## The left-hand pages and the corner buttons that open them. They share the edge, so only one page is
-## ever up: opening any of them closes the rest.
-var bag_page: BagPage
-## The heirlooms: a second bag page over `inventory.stash()`, with its own grid and its own doll. The
-## one left-hand page that can also stand at a town's counter, in the bag's place (`_counter_page`).
-var heirloom_page: BagPage
-var skills_page: SkillsPage
-## The bounties taken on, everywhere: a left-hand page like the rest, so progress and the walk to
-## the monster are readable away from the town that posted the work.
-var bounty_page: BountyList
-## Sound, animations, what an item says, and Reset. A left-hand page like the rest, always on offer.
-var settings_page: SettingsPage
-## The account, the cloud save and the Gollux board: the run's one `Cloud`, under the root on the
-## player's own save (it outlives the reloads a download makes), a child that is off anywhere else.
-var cloud: Cloud
-var leaderboard_page: LeaderboardPage
-## The question the cloud asked (which of two saves to keep), while it is up; null otherwise.
-var _cloud_question: Control
-var collection_page: CollectionPage
-var achievements_page: AchievementsPage
-## What the player adds up to, opened by a press anywhere on the character panel.
-var character_page: CharacterPage
-## See-through, over the character panel, which takes no mouse itself because it stands over fights
-## too. This one comes and goes with the corner buttons, so a fight never finds it there.
-var _character_button: Button
-var _bag_button: Button
-var _skills_button: Button
-var _bounty_button: Button
-var _settings_button: Button
-var _collection_button: Button
-var _achievements_button: Button
-var _leaderboard_button: Button
-## There while an heirloom is held, and the one corner button a
-## town leaves standing: pressed there it swaps the bag and the heirlooms at the counter.
-var _heirloom_button: Button
-## The card beside the square under the cursor. Kept so its Alt comparison can follow the doll of
-## whichever bag page is up.
-var _item_card: ItemCard
-## The player in the top-left corner, over the map and over a fight alike -- or mirrored in the
-## top-right while a bag page is up (`_place_character`).
-var _character: CharacterPanel
-## The side the panel last slid in on, so it slides only when it changes (`_slide_character`).
-var _character_slid_right := false
-## The banner under the fight's column, while one is up; null otherwise: a unique the log has never
-## held, or a bounty filled. `_banner_head` is the row its heading sits in, the X at its end.
-var _banner: Control
-## Seconds until the banner may go (`BANNER_HOLD` as it rises), counted down in `_process`.
-var _banner_left := 0.0
-## A banner raised while a pop-up was up, as `_raise_banner`'s four arguments; empty with none waiting.
-var _held_banner: Array = []
-## What a bounty handed in paid, up over the town until Collect: a screen-wide catch with the verdict's
-## wood panel in the middle of it.
-var _paid: Control
-## A cleared board's options, up over the town until one is taken or they are put away; null otherwise.
-var _choice: Control
-## Each option's column on it, and the gap between them, in panel pixels: three and two gaps inside the
-## narrowest window's 324.
-const CHOICE_WIDTH := 92.0
-const CHOICE_GAP := 8
-var _banner_head: HBoxContainer
-## The toast over the last counted bounty kill, while it is up. The next one puts it down.
-var _toast: Control
-
-## What the fight going on now has earned, and how it is written down. Never null: between fights
-## it is the last fight's, or an empty one, so `ledger.farming` can always be asked.
-var ledger: FightLedger
-## The fight in front of the map, while there is one.
-var _combat: CombatScene
-## Whether the map on disk was refused, which stops every write to it. A refused save is never
-## written over: overwriting is how a save gets eaten, and the build that wrote it can still read it.
-var _save_blocked := false
-
-## What marks a tip as the hero's: his box is titled with the name the player has given him
+## What marks a tip as the hero's: their box is titled with the name the player has given them
 ## (`Inventory.hero`).
 const HERO := "Adventurer"
-
-## First-time pop-ups, in the order they are shown: id, title, what it says. Each is shown once for the
-## player, after the fight that earned it, and the corner button it is about only appears with it.
-## One with a fourth entry is spoken instead: the title is the speaker, what it says is its pages, and
-## the fourth is their portrait's name under `DialogueBox.PORTRAITS` (`DialogueBox.PLAYER` for the hero,
-## whose portrait stands on the left).
+## First-time tips, in the order they are shown, each `[id, speaker, pages, portrait]`, the portrait a
+## name under `DialogueBox.PORTRAITS` (`DialogueBox.PLAYER` for the hero, who stands on the left). Each
+## is shown once, after the fight that earned it, and the corner button it is about only appears with
+## it. Every id needs its rule in `_tip_due`. The copy is the user's own: change it only when asked.
 const TIPS := [
 	["first_item", HERO, [
 		"That one dropped something. Mine now.",
@@ -332,29 +142,105 @@ const TIPS := [
 		"I'll tell them you're ready for the nasty jobs. Nasty pays better.",
 	], "blacksmith"],
 ]
-## What changed, newest version first (`changelog`); packed into the web build by `export_presets.cfg`'s
-## include filter, since it is no resource.
-const CHANGELOG := "res://CHANGELOG.md"
-const CHANGELOG_TITLE := "What's new"
-## Between one version and the next, and within one between its heading and each section; within a
-## section the rows are `BagPage.SLOT_GAP` apart.
-const CHANGELOG_VERSION_GAP := 16
-const CHANGELOG_SECTION_GAP := 8
-## A change's bullet, square, and how far its words stand in from the edge.
-const CHANGELOG_BULLET := 2.0
-const CHANGELOG_INDENT := 7.0
-const FLASH_BRIGHT := Color(1.6, 1.6, 1.6)
-const FLASH_SECONDS := 0.5
 
+var towns: TownWorld
+var view: MapBuilder
+## Everything the player has picked up, loaded from `inventory_path` and written back as it grows.
+var inventory: Inventory
+
+@onready var map: HexMap = $HexMap
+@onready var camera: Camera2D = $Camera2D
+
+## The music and every click, from `_enter_tree` on.
+var sounds: Jukebox
+## The selected tile's panel against the right edge, its buttons at its foot.
+var tile_panel: TilePanel
+## The banner, the bounty toast and the level-up fanfare.
+var banner: Banner
+## A claimed bounty's verdict and a cleared board's options, up over the town.
+var rewards: BountyRewards
+## The fingers on the screen, by index, where each is now; how far apart two of them were when the map
+## last stepped its zoom; and a trackpad's pinch gathered since its last step (`_pinch`).
+var _fingers := {}
+var _pinch_from := 0.0
+var _magnified := 1.0
+## Runes found in the descent that is open, so leaving it saves them (`_bank_depths`).
+var _cave_runes := 0
+## The settlement the player has walked into, in the tile panel's place, and the cell it stands on --
+## kept because the map is still clickable behind the page, so the selection is not what the town is.
+var town_page: TownPage
+var _town_cell := HexMap.NO_CELL
+## The tile the player is walking onto to fight on, NO_CELL when they aren't, and whether that fight is a
+## run (Farm) rather than the tile's own (Chart).
+var _fight_target := HexMap.NO_CELL
+var _fight_farms := false
+## The settlement the player is walking to to go inside (Enter town pressed from afar), NO_CELL when they aren't.
+var _town_target := HexMap.NO_CELL
+## The charted tile the player stepped onto the fought-for one from: a lost fight runs them back there,
+## and a save made while they stand on the uncharted tile puts them there.
+var _retreat_cell := HexMap.NO_CELL
+## The Nightwalkers' way into the dark still to fight for, the goal last (`MapBuilder.dark_path`): each
+## won fight walks on to the next by itself. A loss ends it, and so does anything that stops the next
+## fight opening; Retry keeps it.
+var _dark_way: Array[Vector2i] = []
+## The left-hand pages (`_left_pages`). They share the edge, so only one is ever up.
+var bag_page: BagPage
+## The heirlooms: a second bag page over `inventory.stash()`, and the one left-hand page that can also
+## stand at a town's counter, in the bag's place (`_counter_page`).
+var heirloom_page: BagPage
+var skills_page: SkillsPage
+var bounty_page: BountyList
+var settings_page: SettingsPage
+var collection_page: CollectionPage
+var achievements_page: AchievementsPage
+var character_page: CharacterPage
+var leaderboard_page: LeaderboardPage
+## The run's one `Cloud`: under the root on the player's own save (it outlives the reloads a download
+## makes), a child that is off anywhere else.
+var cloud: Cloud
+## The question the cloud asked (which of two saves to keep), while it is up; null otherwise.
+var _cloud_question: Control
+## See-through, over the character panel, which takes no mouse itself because it stands over fights
+## too. This one comes and goes with the corner buttons.
+var _character_button: Button
+## The corner buttons (`_corner_buttons`), set by name in `_build_pages` and named by `HOTKEYS`.
+var _bag_button: Button
+var _skills_button: Button
+var _bounty_button: Button
+var _settings_button: Button
+var _collection_button: Button
+var _achievements_button: Button
+var _leaderboard_button: Button
+## There while an heirloom is held, and the one corner button a town leaves standing: pressed there it
+## swaps the bag and the heirlooms at the counter.
+var _heirloom_button: Button
+## The card beside the square under the cursor. Its Alt comparison follows the doll of whichever bag
+## page is up.
+var _item_card: ItemCard
+## The player in the top-left corner, over the map and over a fight alike -- or mirrored in the
+## top-right while a bag page is up (`_place_character`).
+var _character: CharacterPanel
+## The side the panel last slid in on, so it slides only when it changes (`_slide_character`).
+var _character_slid_right := false
+
+## What the fight going on now has earned, and how it is written down. Never null: between fights
+## it is the last fight's, or an empty one, so `ledger.farming` can always be asked.
+var ledger: FightLedger
+## The fight in front of the map, while there is one.
+var _combat: CombatScene
+## Whether a save on disk was refused, which stops every write: a refused save is never written over.
+var _save_blocked := false
 var _ui_layer: CanvasLayer
-## Set by the settings page's Reset, which wipes both saves: it keeps `_exit_tree` from writing them back.
+## Set as the files are replaced under the scene (Reset, a cloud download, a transcension): it keeps
+## `_exit_tree` from writing the old ones back.
 var _resetting := false
 ## The black screen between two worlds, while the player is on it; null otherwise.
 var _transcend_page: TranscendPage
-## Tips earned but not shown yet, and the one that is up.
+## Tips earned but not shown yet, and the one that is up. A queued entry of three is the changelog
+## (`_show_changelog`).
 var _tip_queue: Array = []
 var _tip_panel: Control
-## Pulses on corner buttons that have not been pressed yet: the pressed-once id -> its tween.
+## Pulses on corner buttons: the id -> `[tween, button]`.
 var _flashes := {}
 ## What the hero's camp paid for the hours the game was shut, while its screen is up; null otherwise.
 ## Like a fight, it stands over the hidden map on layer 2 and takes the corner buttons away.
@@ -369,14 +255,11 @@ var _chest_pointer: MapPointer
 var _hero_pointer: MapPointer
 ## Floating at the map's foot while a walk can be cut short (`_on_stop_pressed`).
 var _stop_button: Button
-## The camera's glide under way (`_glide_camera`), if any.
 var _camera_glide: Tween
 ## The red light at the map's edge the way this world's Gollux cave lies, until it is seen.
 var _cave_sense: CaveSense
 ## The fortuneteller's aimed spell while its land is being chosen: which one it is ("" when nobody is
-## choosing), what the click will cost, and the town whose drawer it is spent out of. Nothing is put up
-## to say what to do: the spell's own tooltip and the outline under the cursor are enough (the user's
-## call, 2026-09-26).
+## choosing), what the click will cost, and the town whose drawer it is spent out of.
 var _aiming := ""
 var _aim_price := 0.0
 var _aim_town := TownWorld.NO_SPOT
@@ -417,11 +300,10 @@ func _save_inventory() -> bool:
 	return _may_save() and inventory.save(inventory_path)
 
 
-## What is held and not yet on disk, written now, and safe to write again: a farm run's finds are in
-## the inventory as they land (`FightLedger`), and a descent's depths are each a most-ever
-## (`_bank_depths`). The web build's one chance at them: a tab closes with no close request and no
-## `_exit_tree`, so it writes as the tab loses the focus. A run's kills still wait for its end, since
-## `bank_kills` counts a fight's whole tally once.
+## What is held and not yet on disk, written now, and safe to write again: the web build's one chance,
+## whose tab closes with no close request and no `_exit_tree`. A farm run's finds are in the inventory
+## as they land (`FightLedger`) and a descent's depths are each a most-ever (`_bank_depths`); a run's
+## kills still wait for its end, since `bank_kills` counts a fight's whole tally once.
 func _keep_run() -> void:
 	if _combat != null and _combat.fight != null and _combat.fight.dungeon:
 		_bank_depths()
@@ -429,40 +311,10 @@ func _keep_run() -> void:
 		_save_inventory()
 
 
-## Every button made from here on, in this scene or anywhere else in the tree, clicks when pressed.
-## Hooked before the scene's own children enter, so none is missed.
+## Before the scene's own children enter, so the jukebox hears every button made.
 func _enter_tree() -> void:
-	_button_sound = _sfx_player(BUTTON_SOUND)
-	_toggle_sound = _sfx_player(TOGGLE_SOUND)
-	_page_sound = _sfx_player(PAGE_SOUND)
-	_coins_sound = _sfx_player(COINS_SOUND)
-	get_tree().node_added.connect(_on_node_added)
-
-
-func _sfx_player(stream: AudioStream) -> AudioStreamPlayer:
-	var player := AudioStreamPlayer.new()
-	player.stream = stream
-	player.bus = Settings.SFX_BUS
-	player.max_polyphony = 4
-	return player
-
-
-func _on_node_added(node: Node) -> void:
-	if node is BaseButton:
-		node.pressed.connect(_on_any_button_pressed.bind(node))
-
-
-## In or out alike, and once a frame: one page swapped for another is one flip.
-func _on_panel_slid() -> void:
-	if _page_flipped_at != Engine.get_process_frames():
-		_page_flipped_at = Engine.get_process_frames()
-		_page_sound.play()
-
-
-## Asked at the press rather than as the button is made, which may set its toggle mode after.
-func _on_any_button_pressed(button: BaseButton) -> void:
-	var toggle := button.toggle_mode and button.button_group == null
-	(_toggle_sound if toggle else _button_sound).play()
+	sounds = Jukebox.new()
+	add_child(sounds)
 
 
 func _ready() -> void:
@@ -493,36 +345,20 @@ func _ready() -> void:
 	map.ui_scale = ui_scale
 	# A phone's back button is Escape (`_notification`), never a way out of the game.
 	get_tree().quit_on_go_back = false
-	add_child(_button_sound)
-	add_child(_toggle_sound)
-	add_child(_page_sound)
-	add_child(_coins_sound)
-	_music = AudioStreamPlayer.new()
-	_music.bus = Settings.MUSIC_BUS
-	add_child(_music)
-	for file in ResourceLoader.list_directory(MUSIC_DIR):
-		for kind: String in _tracks:
-			if file.begins_with(kind):
-				var track: AudioStream = load(MUSIC_DIR.path_join(file))
-				track.loop = true
-				_tracks[kind].append(track)
-	_play_music(IDLE_MUSIC)
+	sounds.play_music(Jukebox.IDLE)
 	TownServices.show_all = Settings.show_all_services()
 	# Before either save is judged, so a refusal stops the cloud as well (`_refuse_save`), and before
 	# anything of this start-up is written (`Cloud.launched`).
 	_find_cloud()
-	# Two different nulls: no file at all is a first run, and a file that cannot be honoured stops.
-	# Generating a world in its place would write over it on the player's first step, and a map lost
-	# to a bad read is worse than an error message.
-	# The inventory first, and by the same rule: it is what the player owns, and an empty bag saved over
-	# a file that could not be read is that file gone on the first kill.
+	# No file at all is a first run; a file that cannot be honoured stops everything (`_refuse_save`):
+	# a world or an empty bag made in its place would be written over it on the first step or kill.
 	var problem: Array = []
 	inventory = Inventory.load_from(inventory_path, problem)
 	_unread(inventory_path, inventory, problem)
 	if not problem.is_empty():
 		_refuse_save("inventory", inventory_path, str(problem[0]))
 		return
-	inventory.traded.connect(_coins_sound.play)
+	inventory.traded.connect(sounds.coins.play)
 	# What every card writes a unique's numbers at, from the first card drawn.
 	UniqueTable.ranks = Achievements.ranks(inventory)
 	# Before anything below saves over it: the hour the player left is what the camp pays from.
@@ -543,11 +379,13 @@ func _ready() -> void:
 	var used_map_seed := map_seed if map_seed != 0 else (save.map_seed if save else randi())
 	# What the Ring of Walls asks of the map, said before anything is drawn, charted or paid: a saved map
 	# draws the rubble of the walls that fell, which stood every `step` rings.
-	var step := MapBuilder.RING_OF_WALLS_STEP if Curses.RING_OF_WALLS in inventory.curses else MapBuilder.WALL_STEP
+	var step := (MapBuilder.RING_OF_WALLS_STEP if Curses.RING_OF_WALLS in inventory.curses
+			else MapBuilder.WALL_STEP)
 	if save != null:
 		view = MapBuilder.restore(map, TownWorld.from_dict(save.towns), save, step)
 	else:
-		view = MapBuilder.create(map, TownWorld.generate(used_world_seed, map_origin), map_origin, used_map_seed)
+		view = MapBuilder.create(map, TownWorld.generate(used_world_seed, map_origin), map_origin,
+				used_map_seed)
 	view.wall_step = step
 	towns = view.towns
 	_settle_homeland()
@@ -619,6 +457,12 @@ func _find_cloud() -> void:
 func _on_cloud_replaced() -> void:
 	_resetting = true
 	print("Loaded the cloud's save, revision %d" % cloud.revision)
+	_reload()
+
+
+## The scene loaded again from the files as they now stand. A test stands this scene under the root
+## rather than as the current one, and has nothing to reload.
+func _reload() -> void:
 	if get_tree().current_scene == self:
 		get_tree().reload_current_scene()
 
@@ -676,10 +520,8 @@ static func _unread(path: String, loaded: Object, problem: Array) -> void:
 		problem.append("it could not be read")
 
 
-## A save that cannot be honoured, `what` being "map" or "inventory". Nothing is generated and nothing
-## is written -- no UI is built, so nothing can reach either save; the player is told what happened
-## and where the file is, because a console error is not something they can act on and a blank window
-## is worse.
+## A save that cannot be honoured, `what` being "map" or "inventory". Nothing is generated, written or
+## built, so nothing can reach either save, and the player is told what happened and where the file is.
 func _refuse_save(what: String, path: String, reason: String) -> void:
 	_save_blocked = true
 	# Nor may the cloud move either file: a refused one sent up would come down on every other device.
@@ -700,7 +542,7 @@ func _refuse_save(what: String, path: String, reason: String) -> void:
 	# worth guessing at, and left to size itself the panel runs off both edges of the window and
 	# takes its own close button with it. Arbitrary wrapping, since a path need not break on spaces.
 	var rows := UITheme.body_of(panel)
-	var width := minf(get_viewport().get_visible_rect().size.x / ui_scale - REFUSAL_MARGIN, REFUSAL_WIDTH)
+	var width := _notice_width()
 	for line in ["The saved %s could not be loaded:" % what, reason + ".",
 			"", "It has been left exactly as it is, at", ProjectSettings.globalize_path(path),
 			"", "Move that file aside to start over without it."]:
@@ -720,14 +562,17 @@ func _center_panel(panel: Control) -> void:
 	panel.position = (Vector2(get_viewport().get_visible_rect().size) - panel.size * ui_scale) / 2.0
 
 
-## The camera keeps up with the walking player, so they never walk off screen. Standing still, it only moves
-## where the player drags it. The play clock is wound on here: every frame the game is open counts.
+## How wide a panel of plain words may be, in panel pixels.
+func _notice_width() -> float:
+	return minf(get_viewport().get_visible_rect().size.x / ui_scale - REFUSAL_MARGIN, REFUSAL_WIDTH)
+
+
+## The camera keeps up with the walking player and otherwise moves only where it is dragged. The play
+## clock is wound on here: every frame the game is open counts.
 func _process(delta: float) -> void:
 	inventory.play_seconds += delta
-	# The bag is emptied from several pages (a discard, a sale, Clear level); watched here rather than
-	# wired to each, so the fight buttons come back the moment it is under the cap again.
-	if _panel != null and inventory.encumbered() != _was_encumbered:
-		_update_buttons()
+	if tile_panel != null:
+		tile_panel.watch_bag()
 	_refresh_bag_room()
 	if view != null and view.walking:
 		camera.position = _clamp_to_map(map.player.position)
@@ -745,19 +590,8 @@ func _process(delta: float) -> void:
 				- _stop_button.size * ui_scale / 2.0).round()
 	if _cave_sense != null:
 		_cave_sense.room = _map_room()
-	if not _held_banner.is_empty() and not _popup_up():
-		var held := _held_banner
-		_held_banner = []
-		_raise_banner(held[0], held[1], held[2], held[3])
-	if _banner != null:
-		_banner_left -= delta
-		if _banner_left <= 0.0 and not Cursors.touched and not _over_banner(get_viewport().get_mouse_position()):
-			_close_banner()
-
-
-## Whether `at` (window pixels) is on the banner, which takes no mouse of its own.
-func _over_banner(at: Vector2) -> bool:
-	return _banner != null and _banner.get_global_rect().has_point(at)
+	if banner != null:
+		banner.tick(delta)
 
 
 ## Whether a page's question, the fortuneteller's answer or the cloud's question stands over the window.
@@ -767,9 +601,6 @@ func _popup_up() -> bool:
 
 
 ## Built in code so the scene file stays untouched while the Godot editor has it open.
-## The side panel is laid out in sprite pixels and scaled by `ui_scale`. It stays hidden until a
-## tile is selected, and _layout_ui keeps it flush against the right edge, running the full height
-## of the window, whenever that window resizes.
 func _build_ui() -> void:
 	# Before the first button exists: it hands each one the pointing hand as it joins the tree.
 	Cursors.install(get_tree(), int(ui_scale))
@@ -797,78 +628,17 @@ func _build_ui() -> void:
 	_stop_button.hide()
 	layer.add_child(_stop_button)
 
-	_panel = UITheme.titled_panel("Tile", "Close and deselect the tile", _on_close_pressed)
-	_panel.scale = Vector2(ui_scale, ui_scale)
-	_panel.hide()
-	layer.add_child(_panel)
-	_tile_title = UITheme.title_of(_panel)
-	var rows := UITheme.body_of(_panel)
-	# More air than a titled panel's default, round the edge and between the parts (the user: "give it
-	# more white space").
-	var body := _panel.get_child(1) as PanelContainer
-	var padded := body.get_theme_stylebox("panel").duplicate() as StyleBox
-	for side: Side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
-		padded.set_content_margin(side, padded.get_content_margin(side) + TILE_PAD)
-	body.add_theme_stylebox_override("panel", padded)
-	rows.add_theme_constant_override("separation", TILE_GAP)
-
-	# What the place is and how far out, which is both how hard it fights and the ceiling on what drops
-	# here: "Village · Level 4". Small, under the name in the bar, which is the heading.
-	_level_label = UITheme.label("", Palette.TEXT_SOFT, true)
-	rows.add_child(_level_label)
-
-	# The land, the services and the modifiers scroll, the level and the buttons stay pinned: a
-	# fortress past the second wall carries more rows than a 648 px window holds.
-	var scroll := UITheme.scroll()
-	rows.add_child(scroll)
-	# One width for every tile, so the column does not jump as a name or a row comes and goes.
-	var scrolled := UITheme.vbox(TILE_GAP * 2, MOD_WIDTH)
-	scroll.add_child(scrolled)
-	_env_rows = VBoxContainer.new()
-	_env_rows.add_theme_constant_override("separation", TILE_GAP)
-	scrolled.add_child(_env_rows)
-
-	# What a settlement on the tile offers, under the land it is built on: the tile says what is there
-	# before the player has walked to it, so the walk can be worth taking for a fortress's smith.
-	_service_rows = VBoxContainer.new()
-	_service_rows.add_theme_constant_override("separation", TILE_GAP)
-	scrolled.add_child(_service_rows)
-	_mod_rows = UITheme.vbox(TILE_GAP)
-	scrolled.add_child(_mod_rows)
-	_rune_rows = UITheme.vbox(TILE_GAP)
-	scrolled.add_child(_rune_rows)
-	_unlock_rows = UITheme.vbox(TILE_GAP)
-	scrolled.add_child(_unlock_rows)
-
-	# Only the buttons that can be pressed are shown (`_update_buttons`), at the column's foot, where
-	# the scroll taking the slack leaves them.
-	var buttons := VBoxContainer.new()
-	buttons.add_theme_constant_override("separation", TILE_GAP)
-	rows.add_child(buttons)
-	_chart_button = UITheme.button("Chart", "LightButton", CHART_TIP)
-	_chart_button.pressed.connect(_on_chart_pressed)
-	Cursors.wear(_chart_button, Cursors.SWORD)
-	buttons.add_child(_chart_button)
-	_move_button =UITheme.button("Move here", "LightButton", "Walk to the selected tile")
-	_move_button.pressed.connect(_on_move_pressed)
-	Cursors.wear(_move_button, Cursors.BOOT)
-	buttons.add_child(_move_button)
-	# And a third thing to do with a tile you have already taken: stand on it and fight until you
-	# have had enough. Nothing is won by it but what the bodies were carrying.
-	_farm_button = UITheme.button("Farm", "LightButton", FARM_TIP)
-	_farm_button.pressed.connect(_on_farm_pressed)
-	Cursors.wear(_farm_button, Cursors.SWORD)
-	buttons.add_child(_farm_button)
-	# And a fourth, on the tiles people live on: go inside and trade. It takes standing on the tile
-	# rather than looking at it, because visiting a town is being there -- so pressed from afar it
-	# walks the player there first (`_town_target`), as Chart and Farm do.
-	# Green: of the panel's presses, the one a settlement is for (`UITheme.GO_BUTTON`, as in town).
-	_town_button = UITheme.button("Enter town", UITheme.GO_BUTTON, "Go inside and see what is traded here")
-	_town_button.pressed.connect(_on_town_pressed)
-	buttons.add_child(_town_button)
-	_cave_button = UITheme.button("Enter cave", UITheme.GO_BUTTON, "")
-	_cave_button.pressed.connect(_on_cave_pressed)
-	buttons.add_child(_cave_button)
+	tile_panel = TilePanel.new(layer, map, view, inventory, ui_scale)
+	tile_panel.room = _pages_room
+	tile_panel.mods_of = _mods_of
+	tile_panel.closed.connect(_on_close_pressed)
+	tile_panel.chart_button.pressed.connect(_on_chart_pressed)
+	tile_panel.move_button.pressed.connect(_on_move_pressed)
+	tile_panel.farm_button.pressed.connect(_on_farm_pressed)
+	# Visiting a town is being there: pressed from afar it walks the player there first
+	# (`_town_target`), as Chart and Farm do.
+	tile_panel.town_button.pressed.connect(_on_town_pressed)
+	tile_panel.cave_button.pressed.connect(_on_cave_pressed)
 
 	_build_character()
 	_build_pages(layer)
@@ -879,10 +649,9 @@ func _build_ui() -> void:
 	_show_corner(true)
 
 
-## The character panel, on a layer of its own above the fight: `CombatScene` is a CanvasLayer on
-## layer 2, so anything on layer 2 or under it is drawn under the fight's backdrop. Its 3 is the UI
-## layer's too, and it comes after that one, so it stands over the pages. It takes no mouse input
-## anywhere, so standing over a fight costs the player no swings.
+## The character panel, on a layer of its own. Its 3 is the UI layer's too and it comes after that one,
+## so it stands over the pages and over a fight (`CombatScene` is a CanvasLayer on 2). It takes no
+## mouse input anywhere, so standing over a fight costs the player no swings.
 func _build_character() -> void:
 	var layer := CanvasLayer.new()
 	layer.name = "Character"
@@ -892,7 +661,15 @@ func _build_character() -> void:
 	_character.scale = Vector2(ui_scale, ui_scale)
 	_character.position = CHARACTER_EDGE
 	layer.add_child(_character)
+	banner = Banner.new(ui_scale, _banner_top, _popup_up)
+	layer.add_child(banner)
 	_sync_character()
+
+
+## Where a fight's top column ends, in window pixels, which the banner and the toast hang under: off
+## a fight the window's top, or held upright under the character panel they would cover.
+func _banner_top() -> float:
+	return _combat.hud.hud_bottom() if _combat != null else _fight_top()
 
 
 ## Whether the character panel has the top-right corner: a bag page or the skill tree is up across a wide
@@ -901,7 +678,7 @@ func _character_right() -> bool:
 	var page := _left_page()
 	# Nor beside the tile panel, which has that edge: a rune in a finger's hand has both up (`_on_cell_aimed`).
 	return (page is BagPage or page == skills_page) and not town_page.visible and not _narrow() \
-			and not _panel.visible
+			and not tile_panel.panel.visible
 
 
 ## The character panel in its corner -- the top-left, or mirrored in the top-right (`_character_right`),
@@ -916,7 +693,7 @@ func _place_character() -> void:
 		# Mirrored, the panel's position is its right edge.
 		_character.position.x = safe.end.x - CHARACTER_EDGE.x
 		if _combat != null:
-			_character.position.y = _combat.corner_bottom() + CombatScene.HUD_MARGIN
+			_character.position.y = _combat.hud.corner_bottom() + FightHud.HUD_MARGIN
 	_character.visible = _transcend_page == null and (right or _left_page() == null)
 	var drawn := _character.get_transform() * Rect2(Vector2.ZERO, _character.size)
 	_character_button.position = drawn.position
@@ -957,40 +734,24 @@ func _show_damage(announce := false) -> void:
 	_character.set_damage(fight.average_blow(false), fight.per_second(), announce)
 
 
-## Whether `cell` is this world's cave, as far as the player can tell: seen, and not under the ice.
-func _is_cave(cell: Vector2i) -> bool:
-	return cell == view.cave and view.seen(cell) and view.is_land(cell)
-
-
-## The left-hand pages and the square buttons that open them. The pages are built before the first
-## `_layout_ui`, which places all of them.
+## The left-hand pages and the corner buttons that open them, built before the first `_layout_ui`,
+## which places all of them.
 func _build_pages(layer: CanvasLayer) -> void:
-	# Each tooltip is the page's own name, and each button answers to a key (`HOTKEYS`), whose picture
-	# the tip card shows after the name (`TipCard.KEY`).
-	_skills_button = UITheme.icon_button(load(STAR_ICON), SkillsPage.TITLE, ui_scale)
-	_skills_button.pressed.connect(_on_skills_pressed)
-	layer.add_child(_skills_button)
-	_bag_button = UITheme.icon_button(load(CHEST_ICON), "Items", ui_scale)
-	_bag_button.pressed.connect(_on_bag_pressed)
-	layer.add_child(_bag_button)
-	_bounty_button = UITheme.icon_button(load(SCROLL_ICON), "Bounties", ui_scale)
-	_bounty_button.pressed.connect(_on_bounty_pressed)
-	layer.add_child(_bounty_button)
-	_settings_button = UITheme.icon_button(load(COG_ICON), "Settings", ui_scale)
-	_settings_button.pressed.connect(_on_settings_pressed)
-	layer.add_child(_settings_button)
-	_collection_button = UITheme.icon_button(load(BOOK_ICON), "Collection", ui_scale)
-	_collection_button.pressed.connect(_on_collection_pressed)
-	layer.add_child(_collection_button)
-	_achievements_button = UITheme.icon_button(load(TROPHY_ICON), "Achievements", ui_scale)
-	_achievements_button.pressed.connect(_on_achievements_pressed)
-	layer.add_child(_achievements_button)
-	_leaderboard_button = UITheme.icon_button(load(PODIUM_ICON), "Leaderboard", ui_scale)
-	_leaderboard_button.pressed.connect(func() -> void: _toggle_left_page(leaderboard_page))
-	layer.add_child(_leaderboard_button)
-	_heirloom_button = UITheme.icon_button(load(CROWN_ICON), "Heirlooms", ui_scale)
-	_heirloom_button.pressed.connect(_on_heirlooms_pressed)
-	layer.add_child(_heirloom_button)
+	# In the order they join the layer. Each tooltip is the page's own name.
+	for made: Array in [
+			["_skills_button", STAR_ICON, SkillsPage.TITLE, _on_skills_pressed],
+			["_bag_button", CHEST_ICON, "Items", _on_bag_pressed],
+			["_bounty_button", SCROLL_ICON, "Bounties", _on_bounty_pressed],
+			["_settings_button", COG_ICON, "Settings", _on_settings_pressed],
+			["_collection_button", BOOK_ICON, "Collection", _on_collection_pressed],
+			["_achievements_button", TROPHY_ICON, "Achievements", _on_achievements_pressed],
+			["_leaderboard_button", PODIUM_ICON, "Leaderboard",
+					func() -> void: _toggle_left_page(leaderboard_page)],
+			["_heirloom_button", CROWN_ICON, "Heirlooms", _on_heirlooms_pressed]]:
+		var button := UITheme.icon_button(load(made[1]), made[2], ui_scale)
+		button.pressed.connect(made[3])
+		layer.add_child(button)
+		set(made[0], button)
 	# Every corner button gets one, hidden: `_mark_new` says which pages have something new.
 	for button in _corner_buttons():
 		var pip := TextureRect.new()
@@ -1017,22 +778,19 @@ func _build_pages(layer: CanvasLayer) -> void:
 	# fight, where the button takes no mouse, on to the swing (`_show_corner`).
 	_character.xp_hover.mouse_filter = Control.MOUSE_FILTER_PASS
 	_character_button.add_child(_character.xp_hover)
-	for key: int in HOTKEYS:
-		(get(HOTKEYS[key]) as Button).set_meta(TipCard.KEY, OS.get_keycode_string(key).to_lower())
 	character_page = CharacterPage.new(inventory, ui_scale)
 	character_page.rename_pressed.connect(_on_rename_pressed)
+	# Something new hovered on either log, or the page closed over it, is seen, and that is kept.
 	collection_page = CollectionPage.new(inventory, ui_scale)
-	collection_page.seen.connect(_on_log_seen)
+	collection_page.seen.connect(_save_inventory)
 	achievements_page = AchievementsPage.new(inventory, ui_scale)
-	achievements_page.seen.connect(_on_log_seen)
-	# Everything that changes the player ends in a save, so a save is where an achievement is noticed.
-	inventory.save_written.connect(_check_achievements, CONNECT_DEFERRED)
-	# And so is where a piece put on, taken off or crafted in the bag mid-fight reaches the fight.
-	inventory.save_written.connect(_rearm, CONNECT_DEFERRED)
-	# And the character panel's damage line, after the fight it may read is armed again.
-	inventory.save_written.connect(_show_damage.bind(true), CONNECT_DEFERRED)
-	# And the corner buttons' red pips: a find looked at, a rank bought, a bounty claimed all save.
-	inventory.save_written.connect(_mark_new, CONNECT_DEFERRED)
+	achievements_page.seen.connect(_save_inventory)
+	# Everything that changes the player ends in a save, so a save is where an achievement is noticed,
+	# where a piece put on, taken off or crafted in the bag mid-fight reaches the fight, where the
+	# character panel's damage line moves (after the fight it may read is armed again) and where the
+	# corner buttons' red pips change.
+	for heard: Callable in [_check_achievements, _rearm, _show_damage.bind(true), _mark_new]:
+		inventory.save_written.connect(heard, CONNECT_DEFERRED)
 	skills_page = SkillsPage.new(inventory, inventory_path, ui_scale)
 	skills_page.changed.connect(func() -> void: _pulse(_skills_button, "skill_point", _skill_point_free()))
 	bag_page = BagPage.new(inventory, inventory_path, ui_scale)
@@ -1042,9 +800,13 @@ func _build_pages(layer: CanvasLayer) -> void:
 	settings_page.cloud = cloud
 	settings_page.inventory = inventory
 	settings_page.inventory_path = inventory_path
-	# The controls screen's list: each corner button's key beside its page's name, which is its tooltip.
+	# Each corner button's key: its picture on the button's tip card (`TipCard.KEY`), and on the
+	# settings' controls screen beside the page's name, which is the button's tooltip.
 	for key: int in HOTKEYS:
-		settings_page.hotkeys.append([OS.get_keycode_string(key).to_lower(), (get(HOTKEYS[key]) as Button).tooltip_text])
+		var button: Button = get(HOTKEYS[key])
+		var named := OS.get_keycode_string(key).to_lower()
+		button.set_meta(TipCard.KEY, named)
+		settings_page.hotkeys.append([named, button.tooltip_text])
 	settings_page.reset_pressed.connect(_on_reset_pressed)
 	settings_page.uniques_toggled.connect(_show_corner.bind(true))
 	settings_page.chests_toggled.connect(view.redraw_chests)
@@ -1060,7 +822,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 		_sync_character()
 		_check_tips())
 	# The town page stands on the other edge, but it is closed by the same X rule and hidden by the
-	# same fight, so it is built and wired here with the two that share the left one.
+	# same fight, so it is built and wired here with the pages that share the left one.
 	town_page = TownPage.new(inventory, inventory_path, ui_scale)
 	town_page.view = view
 	town_page.tab_changed.connect(_on_town_tab_changed)
@@ -1069,24 +831,21 @@ func _build_pages(layer: CanvasLayer) -> void:
 	town_page.towns_revealed.connect(_save_map)
 	town_page.transcend_pressed.connect(_on_transcend_pressed)
 	town_page.xp_claimed.connect(_on_xp_absorbed)
-	town_page.bounty_paid.connect(_show_bounty_paid)
-	town_page.choice_asked.connect(_show_board_choice)
 	town_page.bounty_accepted.connect(_check_tips)
 	# A bounty's piece is announced as a body's would be: only a unique the log has never held.
 	town_page.item_claimed.connect(func(item: Item) -> void:
 		if _is_new_unique(item):
-			_announce_unique(item))
+			banner.unique(item))
 	# A bounty given up on the journal frees the board standing open on the other edge.
 	bounty_page.abandoned.connect(town_page.redraw)
 	bounty_page.town_shown.connect(_show_town)
 	# What the counter does goes straight to the bag: a purchase reaches the purse and the grid by the
-	# same redraw (`offer`; the bag draws nothing of the shelf piece itself). Back the other
-	# way, the counter redraws around whatever the bag has open, so a piece sold to make room unlocks
-	# the Buy that was greyed out for a full bag.
-	# An orb in the bag's hand works on a shelf piece too; the bag still does the spending and saving.
-	# Both bag pages are wired alike, and only the one that is up ever speaks: a hidden page has nothing
-	# open and no orb in hand, and standing it at the counter (`shop`) forgets any offer it overheard.
-	# `craft_held` goes through `_counter_page`, which is whichever of them that is.
+	# same redraw (`offer`; the bag draws nothing of the shelf piece itself). Back the other way, the
+	# counter redraws around whatever the bag has open, so a piece sold to make room unlocks the Buy
+	# that was greyed out for a full bag. An orb in the bag's hand works on a shelf piece too; the bag
+	# still does the spending and saving. Both bag pages are wired alike, and only the one that is up
+	# ever speaks (`_counter_page`): a hidden page has nothing open and no orb in hand, and standing it
+	# at the counter (`shop`) forgets any offer it overheard.
 	town_page.craft_held = func(item: Item, written: Callable) -> void:
 		_counter_page().craft_held(item, written)
 	for page: BagPage in [bag_page, heirloom_page]:
@@ -1102,14 +861,15 @@ func _build_pages(layer: CanvasLayer) -> void:
 		layer.add_child(page)
 		# In from its own edge and back out to it, whatever shows or hides it (`Juice.slides`).
 		Juice.slides(page, page != town_page)
-		page.visibility_changed.connect(_on_panel_slid)
-	Juice.slides(_panel, false)
-	_panel.visibility_changed.connect(_on_panel_slid)
+		page.visibility_changed.connect(sounds.page_slid)
+	Juice.slides(tile_panel.panel, false)
+	tile_panel.panel.visibility_changed.connect(sounds.page_slid)
 	# On the character's layer, over the pages and over a fight (layer 2), so a find in the loot
 	# popup or under the verdict gets its card too. It takes no mouse, so it costs no swings.
+	var top := _character.get_parent()
 	_item_card = ItemCard.new(ui_scale)
 	_item_card.equipment = inventory.equipment
-	_character.get_parent().add_child(_item_card)
+	top.add_child(_item_card)
 	for page: BagPage in [bag_page, heirloom_page]:
 		page.crafted.connect(_item_card.shine)
 		page.held_changed.connect(func(orb: String) -> void: _item_card.held = orb)
@@ -1120,620 +880,24 @@ func _build_pages(layer: CanvasLayer) -> void:
 		if _aiming.is_empty():
 			map.aim_radius = 0 if RuneTable.has(orb) else -1)
 	# Every `tooltip_text` there is, on the same cream card and the same layer.
-	_character.get_parent().add_child(TipCard.new(ui_scale))
+	top.add_child(TipCard.new(ui_scale))
+	rewards = BountyRewards.new(town_page, _item_card, ui_scale)
+	top.add_child(rewards)
+	town_page.bounty_paid.connect(rewards.show_paid)
+	town_page.choice_asked.connect(rewards.show_choice)
+	# The smith's word, over the options, the first time a board is cleared.
+	rewards.choice_shown.connect(_check_tips)
 
 
-## The weather for wherever the player now stands.
 func _update_weather() -> void:
 	var ground := map.ground_layer.get_cell_tile_data(view.player_cell)
 	_ambient.set_env(ground.get_custom_data("env") if ground != null else "")
-
-
-## A level gained: the screen flashes warm, the words pop up over the middle and float away. On the
-## character panel's layer, so it stands over a fight as well as the map.
-func _celebrate_level(level: int) -> void:
-	Juice.sound(LEVEL_UP_SOUND)
-	if Settings.animations == Settings.Anim.NONE:
-		return
-	var layer := _character.get_parent()
-	var flash := ColorRect.new()
-	flash.color = LEVEL_UP_FLASH
-	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	flash.set_anchors_preset(Control.PRESET_FULL_RECT)
-	layer.add_child(flash)
-	var label := Label.new()
-	label.theme = UITheme.theme()
-	label.theme_type_variation = "PanelLabel"
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.text = "Level %d!" % level
-	label.add_theme_font_size_override("font_size", LEVEL_UP_FONT)
-	label.add_theme_color_override("font_color", Palette.GOLD)
-	label.add_theme_constant_override("outline_size", 8)
-	label.add_theme_color_override("font_outline_color", Palette.INK)
-	layer.add_child(label)
-	var view_size := get_viewport_rect().size
-	var text := label.get_combined_minimum_size()
-	label.pivot_offset = text / 2.0
-	label.position = (view_size - text) / 2.0 - Vector2(0, view_size.y * 0.15)
-	label.scale = Vector2.ONE * 3.0
-	var tween := create_tween().set_parallel(true)
-	tween.tween_property(flash, "modulate:a", 0.0, 0.5)
-	tween.tween_property(label, "scale", Vector2.ONE * 2.0, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tween.tween_property(label, "position:y", label.position.y - 30.0, LEVEL_UP_TIME)
-	tween.tween_property(label, "modulate:a", 0.0, 0.4).set_delay(LEVEL_UP_TIME - 0.4)
-	tween.chain().tween_callback(flash.queue_free)
-	tween.tween_callback(label.queue_free)
 
 
 ## Whether this find fills a slot in the collection log: a unique never logged. Every find reaches the
 ## log as it lands, so a second copy in the same fight is already there.
 func _is_new_unique(item: Item) -> bool:
 	return not item.unique.is_empty() and not inventory.uniques_found.has(item.unique)
-
-
-## A unique the log has never held, announced under the fight's own column: the piece as a square and
-## the whole of what it does, on the cards' cream, on the character's layer so it stands over the fight.
-##
-## It writes the name, the rarity line and the piece's own rule, and **none of its numbers**: the
-## tables are what a bag is for, and a banner read mid-fight has to be read in a glance. The square is
-## an `ItemSlot`, so the gold frame and its glint come for nothing. What that costs is one line -- the
-## square has to leave `ItemSlot.GROUP` at once, or the one `ItemCard` finds it under the cursor and
-## stands its own card over this one.
-func _announce_unique(item: Item, title := "Unique found") -> void:
-	var slot := ItemSlot.make(item)
-	slot.remove_from_group(ItemSlot.GROUP)
-	# What the piece *is* and the rule it bends, and none of its numbers: a banner is read in a glance
-	# in the middle of a fight, and the stat and modifier tables are what made it a wall of text. They
-	# are two presses away in the bag, and the rule is the thing that cannot be guessed from the icon.
-	var lines: Array[Control] = [
-		ItemDetails.line(item.display_name(), item.text_color(), BANNER_WIDTH),
-		ItemDetails.line("%s · Level %d" % [item.rarity_label(), item.level],
-				Palette.TEXT_SOFT, BANNER_WIDTH, true),
-		ItemDetails.line(item.effect_text(), Palette.SLOT_TAN_DK, BANNER_WIDTH, true),
-	]
-	if not item.peak_text().is_empty():
-		lines.append(ItemDetails.line(item.peak_text(), Palette.SLOT_TAN_DK, BANNER_WIDTH, true))
-	# The unique's own name colour, which is the half of the ramp picked to be read on cream.
-	_raise_banner(title, item.text_color(), slot, lines)
-
-
-## A bounty filled: the monster's picture beside its name, the count and where to hand the work in, on
-## the same banner a unique gets. An elite's or a boss's picture wears its frame and its count is
-## written large behind the nameplate's mark -- for an elite the one kill that fills the posting is the
-## only kill, so the banner is the whole of what is said about it and carries the toast's weight.
-func _announce_bounty(enemy: String, tier: EnemyRoster.Tier, have: int, need: int) -> void:
-	var colour := _bounty_colour(tier)
-	var lines: Array[Control] = [ItemDetails.line(enemy, colour, BANNER_WIDTH)]
-	var count := "%d of %d" % [have, need]
-	if tier == EnemyRoster.Tier.COMMON:
-		lines.append(ItemDetails.line(count, Palette.TEXT_SOFT, BANNER_WIDTH, true))
-	else:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 4)
-		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(_tier_mark(tier))
-		row.add_child(UITheme.label(count, colour))
-		lines.append(row)
-	var spot := BountyBoard.active_spot(inventory.towns)
-	var town := bounty_page.town_name(TownState.spot(spot)) if not spot.is_empty() else "the town"
-	lines.append(ItemDetails.line("Claim it at %s." % town, Palette.LEAF, BANNER_WIDTH, true))
-	_raise_banner("Bounty filled", colour, _bounty_face(enemy, tier, true), lines)
-
-
-## A counted kill short of filling the bounty: "+1" beside the monster's picture, under the fight's
-## column, up for a moment and gone. An elite's or a boss's stands taller, framed, its count large.
-## The latest wins -- a run's bodies can fall faster than the toast fades -- and a level of NONE shows
-## none, as the level-up's words are: the journal carries the count.
-## `too_low` is the level a posting wants when this body fell on shallower land and did not count: the
-## toast says so in brick in place of the "+1".
-func _toast_bounty(enemy: String, tier: EnemyRoster.Tier, too_low := 0) -> void:
-	if Settings.animations == Settings.Anim.NONE:
-		return
-	if _toast != null:
-		_toast.queue_free()
-	var panel := PanelContainer.new()
-	panel.theme = UITheme.theme()
-	panel.theme_type_variation = "TextPanel"
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.scale = Vector2(ui_scale, ui_scale)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_child(row)
-	var big := tier != EnemyRoster.Tier.COMMON
-	row.add_child(_bounty_face(enemy, tier, big))
-	if too_low > 0:
-		var words := UITheme.vbox(0)
-		words.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		words.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		words.add_child(UITheme.label("Level too low", Palette.BRICK))
-		words.add_child(UITheme.label("Needs level %d or higher" % too_low, Palette.TEXT_SOFT, true))
-		row.add_child(words)
-	else:
-		if big:
-			row.add_child(_tier_mark(tier))
-		var count := UITheme.label("+1", _bounty_colour(tier))
-		if big:
-			count.add_theme_font_size_override("font_size", CombatScene.BOSS_FONT)
-		count.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		row.add_child(count)
-	_character.get_parent().add_child(panel)
-	_toast = panel
-	_place_toast()
-	_place_toast.call_deferred()
-	var tween := create_tween().set_parallel(true)
-	if Settings.animations == Settings.Anim.DEFAULT:
-		panel.scale = Vector2(ui_scale, ui_scale) * 1.4
-		tween.tween_property(panel, "scale", Vector2(ui_scale, ui_scale), 0.25).set_trans(
-				Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tween.tween_property(panel, "position:y", panel.position.y - TOAST_RISE, TOAST_TIME)
-	tween.tween_property(panel, "modulate:a", 0.0, 0.4).set_delay(TOAST_TIME - 0.4)
-	tween.chain().tween_callback(panel.queue_free)
-
-
-## Centred under the fight's column, or under the banner when one is up, so the two never overlap.
-## Run twice, as the banner is: the labels have not laid out on the first pass.
-func _place_toast() -> void:
-	if _toast == null:
-		return
-	var view_size := get_viewport_rect().size
-	# Off a fight, at the window's top -- or held upright, under the character panel it would cover.
-	var top: float = (_combat.hud_bottom() if _combat != null else _fight_top()) + BANNER_GAP
-	if _banner != null:
-		top = _banner.position.y + _banner.get_combined_minimum_size().y * ui_scale + BANNER_GAP
-	_toast.size = _toast.get_combined_minimum_size()
-	_toast.pivot_offset = _toast.size / 2.0
-	var corner := Vector2((view_size.x - _toast.size.x * ui_scale) / 2.0, top)
-	_toast.position = corner + _toast.pivot_offset * (ui_scale - 1.0)
-
-
-## The monster's picture for the toast and the banner: small for a common, the card's own size and
-## framed for an elite or a boss.
-func _bounty_face(enemy: String, tier: EnemyRoster.Tier, big: bool) -> Control:
-	var frame: Texture2D = null
-	if BOUNTY_TIER.has(tier):
-		# A boss wears the unique's frame at its fullest crest.
-		frame = ItemRarity.frame(BOUNTY_TIER[tier]["frame"], UniqueTable.PEAK)
-	return BountyList.portrait_box(enemy, TOAST_BIG_PORTRAIT if big else TOAST_PORTRAIT, frame)
-
-
-func _bounty_colour(tier: EnemyRoster.Tier) -> Color:
-	return BOUNTY_TIER[tier]["colour"] if BOUNTY_TIER.has(tier) else Palette.TEXT
-
-
-## The nameplate's mark for the tier: a bone skull, or a gilded crown at twice the size.
-func _tier_mark(tier: EnemyRoster.Tier) -> TextureRect:
-	var boss := tier == EnemyRoster.Tier.BOSS
-	var texture: Texture2D = CombatScene.TIER_MARK[tier]
-	var mark := BountyList.icon(texture, texture.get_width() * (2 if boss else 1))
-	mark.modulate = Palette.GOLD if boss else Color.WHITE
-	return mark
-
-
-## A banner under the fight's own column: `square` beside `lines` under a heading, on the cards'
-## cream, on the character's layer so it stands over the fight. Its X is up at once and it goes by
-## itself after `BANNER_HOLD` (`_process`, `_input`: see the const). Raised by a unique new to the log, a bounty filled and an achievement.
-##
-## While a question or an answer stands over the window (`_popup_up`) it waits instead: raised then,
-## it lay over the pop-up's title. The latest one waiting goes up once the window is clear (`_process`).
-func _raise_banner(title: String, colour: Color, square: Control, lines: Array[Control]) -> void:
-	if _popup_up():
-		if not _held_banner.is_empty():
-			(_held_banner[2] as Control).queue_free()
-			for line: Control in _held_banner[3]:
-				line.queue_free()
-		_held_banner = [title, colour, square, lines]
-		return
-	_close_banner()
-	# The banner says more than the toast before it did, and stands where it stood.
-	if _toast != null:
-		_toast.queue_free()
-	var layer := _character.get_parent()
-	if Settings.animations == Settings.Anim.DEFAULT:
-		# Added before the panel, so it washes the fight behind it and not the words.
-		var flash := ColorRect.new()
-		flash.color = LEVEL_UP_FLASH
-		flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		flash.set_anchors_preset(Control.PRESET_FULL_RECT)
-		layer.add_child(flash)
-		var wash := create_tween()
-		wash.tween_property(flash, "modulate:a", 0.0, 0.5)
-		wash.tween_callback(flash.queue_free)
-	var panel := PanelContainer.new()
-	panel.theme = UITheme.theme()
-	panel.theme_type_variation = "TextPanel"
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.scale = Vector2(ui_scale, ui_scale)
-	var body := UITheme.vbox(4)
-	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_child(body)
-	_banner_head = HBoxContainer.new()
-	_banner_head.add_theme_constant_override("separation", 6)
-	_banner_head.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	body.add_child(_banner_head)
-	var heading := UITheme.label(title, colour)
-	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_banner_head.add_child(heading)
-	var shut := UITheme.button("", "CloseButton", "Close")
-	shut.custom_minimum_size = Vector2(UITheme.icon_size("CloseButton"))
-	shut.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	shut.pressed.connect(_close_banner)
-	_banner_head.add_child(shut)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	body.add_child(row)
-	square.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	row.add_child(square)
-	var rows := UITheme.vbox(2, BANNER_WIDTH)
-	rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(rows)
-	for line: Control in lines:
-		rows.add_child(line)
-	layer.add_child(panel)
-	_banner = panel
-	# Placed now, again once the labels have laid out -- with the sparks thrown from where it actually
-	# landed -- and again whenever it settles at another size.
-	panel.resized.connect(_place_banner)
-	_place_banner()
-	_place_banner.call_deferred(Settings.animations == Settings.Anim.DEFAULT)
-	if Settings.animations != Settings.Anim.NONE:
-		panel.scale = Vector2(ui_scale, ui_scale) * 1.4
-		var spring := create_tween()
-		spring.tween_property(panel, "scale", Vector2(ui_scale, ui_scale), 0.25).set_trans(
-				Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_banner_left = BANNER_HOLD
-
-
-## Centred under the fight's top column, which is the one thing it must not cover. Run again whenever
-## the panel settles at another size (`resized`), so nothing here depends on the labels having laid
-## out. `spark` throws the puff of gold, and is only ever passed by the deferred first placement, so
-## it cannot be thrown twice.
-func _place_banner(spark := false) -> void:
-	if _banner == null:
-		return
-	var view_size := get_viewport_rect().size
-	# Off a fight, at the window's top -- or held upright, under the character panel it would cover.
-	var top: float = (_combat.hud_bottom() if _combat != null else _fight_top()) + BANNER_GAP
-	_banner.size = _banner.get_combined_minimum_size()
-	var side := _banner.size * ui_scale
-	# It springs in about its middle, so that is where the pivot goes -- and a Control is scaled about
-	# its pivot, which draws its corner `pivot * (scale - 1)` back from wherever `position` puts it.
-	# `corner` is where it actually lands; `position` is what has to be set to land it there.
-	_banner.pivot_offset = _banner.size / 2.0
-	var corner := Vector2((view_size.x - side.x) / 2.0, top)
-	_banner.position = corner + _banner.pivot_offset * (ui_scale - 1.0)
-	if spark:
-		Juice.burst(_banner.get_parent(), corner + side / 2.0,
-				Palette.GOLD, 28, 220.0, 3.0, 0.7)
-
-
-## What a bounty paid, laid out as a fight's verdict is and arriving the way it does: the pages' panel
-## with the word on its green bar, the monster, the sums counting up behind their marks, and the orbs
-## and the piece popping in on the bag's light panel. It is paid already -- Collect only puts the
-## panel away -- so nothing is lost by a game closed under it. A screen-wide catch keeps the town under
-## it from being pressed; the item card and the tooltips are lifted back over it.
-func _show_bounty_paid(enemy: String, gold: float, xp: int, orbs: Dictionary, piece: Item) -> void:
-	_close_bounty_paid()
-	_paid = _catch("Bounty claimed", Callable())
-	var panel := _paid.get_node("Panel") as VBoxContainer
-	var body := UITheme.body_of(panel)
-	body.add_theme_constant_override("separation", 8)
-	var whom := UITheme.label(enemy)
-	whom.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	body.add_child(whom)
-	var sums := HBoxContainer.new()
-	sums.add_theme_constant_override("separation", 10)
-	sums.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	body.add_child(sums)
-	var coin := _paid_mark(Coins.icon(), Vector2.ONE * Coins.SIZE)
-	sums.add_child(_paid_sum(coin, gold))
-	if xp > 0:
-		sums.add_child(_paid_sum(_paid_mark(CombatScene.XP_GEM,
-				CombatScene.XP_GEM.get_size() * CombatScene.XP_GEM_SCALE), float(xp)))
-	var drops := DropsView.new()
-	body.add_child(drops)
-	var found: Array[Item] = []
-	if piece != null:
-		found.append(piece)
-	drops.fill(found, orbs)
-	var collect := UITheme.button("Collect", "LightButton", "Put it all away")
-	collect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	collect.pressed.connect(_leave_bounty_paid)
-	body.add_child(collect)
-	var centre := func() -> void:
-		if is_instance_valid(panel):
-			Juice.centre(panel, get_viewport_rect().size)
-	panel.resized.connect(centre)
-	drops.resized_contents.connect(centre)
-	Juice.pop_in(panel, ui_scale)
-	Juice.reveal(drops.pieces())
-	await get_tree().process_frame
-	if not is_instance_valid(panel):
-		return
-	centre.call()
-	Juice.celebrate(_paid, panel, ui_scale, (panel.get_child(0) as Control).size.y)
-
-
-## A mark for one of the claim's sums, at `side`.
-func _paid_mark(mark: Texture2D, side: Vector2) -> TextureRect:
-	var picture := TextureRect.new()
-	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	picture.texture = mark
-	picture.custom_minimum_size = side
-	return picture
-
-
-## One of the claim's sums: a mark and a bare number, the verdict's way, counted up once it is shown.
-func _paid_sum(mark: TextureRect, amount: float) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	row.add_child(mark)
-	var figure := UITheme.label()
-	row.add_child(figure)
-	# The coin spins while it counts; the gem is not a coin.
-	figure.ready.connect(func() -> void:
-		Juice.count_up(figure, amount, mark if mark.texture == Coins.icon() else null))
-	return row
-
-
-## Collect and Escape: the panel shrinks away, then goes -- and a board the claim cleared puts up its
-## reward in its place.
-func _leave_bounty_paid() -> void:
-	if _paid != null:
-		Juice.pop_out(_paid.get_node("Panel"), func() -> void:
-			_close_bounty_paid()
-			_show_board_choice())
-
-
-func _close_bounty_paid() -> void:
-	if _paid != null:
-		_paid.queue_free()
-		_paid = null
-
-
-## A screen-wide catch on the character panel's layer, so the town under it cannot be pressed, with a
-## titled panel in it named "Panel" (`close` its X; none where it is empty) and the item card and the
-## tooltips lifted back over it.
-func _catch(title: String, close: Callable) -> Control:
-	var layer := _character.get_parent()
-	var catch := Control.new()
-	catch.theme = UITheme.theme()
-	catch.set_anchors_preset(Control.PRESET_FULL_RECT)
-	catch.mouse_filter = Control.MOUSE_FILTER_STOP
-	layer.add_child(catch)
-	var panel := UITheme.titled_panel(title, "", close)
-	# Named, because the win's wash goes in under it and it is no longer the first child.
-	panel.name = "Panel"
-	catch.add_child(panel)
-	# The cards are on this layer too, and a later child draws over an earlier one.
-	layer.move_child(_item_card, -1)
-	for card: Node in layer.get_children():
-		if card is TipCard:
-			layer.move_child(card, -1)
-	return catch
-
-
-## A cleared board's reward, Hearthstone's way: its options side by side, each its square (a piece opens
-## its card under the cursor, as anywhere), its name and Take. One is taken and the rest go. The X and
-## Escape put them away untaken, to come back from the board's Reward (`TownPage.choice_asked`).
-## The first time, the smith says why over it (`first_board_cleared`).
-func _show_board_choice() -> void:
-	_close_board_choice()
-	var offered := town_page.pending_choice() if town_page.visible else []
-	if offered.is_empty():
-		return
-	_choice = _catch("Board cleared", _leave_board_choice)
-	var panel := _choice.get_node("Panel") as VBoxContainer
-	var cards := HBoxContainer.new()
-	cards.add_theme_constant_override("separation", CHOICE_GAP)
-	UITheme.body_of(panel).add_child(cards)
-	var squares := []
-	for i in offered.size():
-		var option: Dictionary = offered[i]
-		var piece: Item = option.get(BountyBoard.CHOICE_ITEM)
-		var card := UITheme.vbox(6, CHOICE_WIDTH)
-		cards.add_child(card)
-		var square: Control
-		var called: Label
-		if piece != null:
-			square = ItemSlot.make(piece)
-			called = UITheme.label(piece.display_name(), piece.text_color(), true)
-		elif option.has(BountyBoard.CHOICE_GOLD):
-			square = _pile_square(Coins.icon())
-			called = UITheme.label("%s gold" % BigNumber.format(float(option[BountyBoard.CHOICE_GOLD])), Palette.TEXT, true)
-		elif option.has(BountyBoard.CHOICE_XP):
-			square = _pile_square(BountyList.XP_GEM)
-			called = UITheme.label("%s experience" % BigNumber.format(float(option[BountyBoard.CHOICE_XP])),
-					Palette.TEXT, true)
-		else:
-			var orb := str(option[BountyBoard.CHOICE_ORB])
-			square = OrbSlot.make(orb, int(option[BountyBoard.CHOICE_COUNT]), true, false, ItemSlot.SIDE)
-			# Read, not pressed: Take is what takes it.
-			Cursors.wear(square, Cursors.ARROW)
-			square.tooltip_text = OrbTable.describe(orb)
-			called = UITheme.label(orb, Palette.TEXT, true)
-		square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		card.add_child(square)
-		squares.append(square)
-		called.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		called.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		called.custom_minimum_size.x = CHOICE_WIDTH
-		# The names wrap to different heights, and the three Takes still stand on one line.
-		called.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		card.add_child(called)
-		var why := town_page.why_not_take(i)
-		var take := UITheme.button("Take", "SmallGoButton", why if not why.is_empty() else "Take this one")
-		take.disabled = not why.is_empty()
-		take.pressed.connect(_on_choice_taken.bind(i))
-		card.add_child(take)
-	var centre := func() -> void:
-		if is_instance_valid(panel):
-			Juice.centre(panel, get_viewport_rect().size)
-	panel.resized.connect(centre)
-	Juice.pop_in(panel, ui_scale)
-	Juice.reveal(squares)
-	# The smith's word, over the three, the first time a board is cleared.
-	_check_tips()
-	await get_tree().process_frame
-	if not is_instance_valid(panel):
-		return
-	centre.call()
-	Juice.celebrate(_choice, panel, ui_scale, (panel.get_child(0) as Control).size.y)
-
-
-## A pile of gold or experience as a square: its mark on a plain socket at the largest whole scale the
-## icon's room takes, so a pixel stays square (the coin at 2x, the gem at 5x).
-static func _pile_square(mark: Texture2D) -> ItemSlot:
-	var square := ItemSlot.teaser(mark, ItemRarity.Rarity.COMMON, 0, "")
-	var icon := square.get_child(0) as TextureRect
-	icon.size = mark.get_size() * floorf(ItemSlot.ICON / mark.get_size().x)
-	icon.position = (square.custom_minimum_size - icon.size) / 2.0
-	return square
-
-
-func _on_choice_taken(index: int) -> void:
-	if town_page.take_choice(index):
-		_leave_board_choice()
-
-
-## Take, the X and Escape: the three shrink away, then go. Untaken, they wait in the town's drawer.
-func _leave_board_choice() -> void:
-	if _choice != null:
-		Juice.pop_out(_choice.get_node("Panel"), _close_board_choice)
-
-
-func _close_board_choice() -> void:
-	if _choice != null:
-		_choice.queue_free()
-		_choice = null
-
-
-## Puts it down: from the timer, its X, a press off it once its time is up, another banner, or a camp
-## struck under it.
-func _close_banner() -> void:
-	if _banner == null:
-		return
-	var panel := _banner
-	_banner = null
-	_banner_head = null
-	if Settings.animations == Settings.Anim.NONE:
-		panel.queue_free()
-		return
-	var tween := create_tween()
-	tween.tween_property(panel, "modulate:a", 0.0, BANNER_FADE)
-	tween.tween_callback(panel.queue_free)
-
-
-## One row per environment on the tile: a swatch of that terrain and its name, and its share of the
-## tile only where it has to share it -- a lone "100%" says nothing.
-func _show_environments(weights: Dictionary) -> void:
-	UITheme.clear(_env_rows)
-	var envs := weights.keys()
-	envs.sort_custom(func(a: String, b: String) -> bool: return weights[a] > weights[b])
-	for env: String in envs:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
-		row.add_child(map.tileset.env_icon(env))
-		var terrain := UITheme.label(HexTileset.env_name(env), Palette.TEXT, true)
-		if envs.size() > 1:
-			terrain.text += " %d%%" % round(weights[env] * 100.0)
-		terrain.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		row.add_child(terrain)
-		_env_rows.add_child(row)
-
-
-## What the settlement on a tile trades in, one named row per counter, and nothing at all where there is no
-## settlement. Shown for any town tile the player can see rather than only the ones they have taken:
-## which town has a blacksmith is exactly the sort of thing that decides where to walk next.
-func _show_services(cell: Vector2i) -> void:
-	UITheme.clear(_service_rows)
-	# The cave's panel is its name and Enter cave, nothing under them.
-	if _is_cave(cell):
-		return
-	# Nothing about a tile still under the fog, which one taken blind is when it is clicked.
-	var tier := view.town_tier(cell) if view.seen(cell) else -1
-	if tier == -1:
-		return
-	# A small heading and not a fold: a fold over three rows cost as much as it hid.
-	_service_rows.add_child(UITheme.section("Services"))
-	# The marks the town page's tabs wear, so a counter looks the same from the road as from inside,
-	# each with its name beside it: the marks alone had to be pointed at one by one.
-	for service: String in TownServices.services_for(tier, view.origin + cell, towns.seed_value):
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
-		var icon := TextureRect.new()
-		icon.texture = TownPage.tab_mark(service, false)
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
-		row.add_child(icon)
-		var named := UITheme.label(TownServices.label(service), Palette.TEXT, true)
-		named.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		row.add_child(named)
-		_service_rows.add_child(row)
-
-
-## What the land on a tile does to the fight for it: each modifier's name, then what it does and what
-## it pays written out under it, never hidden in a tooltip -- they are what the tile is chosen on.
-## Only for a tile the player can see: what lies under the fog is for charting to find out.
-func _show_mods(cell: Vector2i) -> void:
-	UITheme.clear(_mod_rows)
-	var mods: Array = _mods_of(cell) if view.seen(cell) else []
-	if mods.is_empty():
-		return
-	# The same small heading as Services, and no fold: the column scrolls when it runs long.
-	_mod_rows.add_child(UITheme.section("Modifiers"))
-	var shown := {}
-	for id: String in mods:
-		if shown.has(id):
-			continue
-		shown[id] = true
-		var lines := TileMods.describe(id, mods.count(id), Curses.WILD_TILES in inventory.curses)
-		# Each modifier its own tight block, with the column's gap between one and the next.
-		var block := UITheme.vbox(2)
-		_mod_rows.add_child(block)
-		block.add_child(UITheme.label(lines[0], Palette.TEXT))
-		block.add_child(ItemDetails.line(lines[1], Palette.TEXT, MOD_WIDTH, true))
-		if not lines[2].is_empty():
-			block.add_child(ItemDetails.line(lines[2], Palette.LEAF, MOD_WIDTH, true))
-
-
-## The runes on a tile (`RuneTable`), once the third wall has opened them, on ground a farm run can be
-## fought on: what they are doing to it -- each modifier written as the land's own are, the Depths and
-## the Ascent -- with the kills each has left. Nothing on a tile with none. The runes held are the bag's,
-## picked up there and pressed on the map (`_rune_on`).
-func _show_runes(cell: Vector2i) -> void:
-	UITheme.clear(_rune_rows)
-	if not WallUnlocks.has(inventory.walls_ever(), WallUnlocks.RUNES) or not view.can_farm_ground(cell):
-		return
-	var spot := view.origin + cell
-	var work := inventory.rune_work(spot)
-	if not RuneTable.working(work):
-		return
-	_rune_rows.add_child(UITheme.section("Runes"))
-	for mod: Dictionary in work["mods"]:
-		var lines := TileMods.describe(mod["id"], int(mod["tier"]), Curses.WILD_TILES in inventory.curses)
-		_rune_rows.add_child(_rune_block(lines[0], lines[1], lines[2], int(mod["left"])))
-	var depths: Array = work["depth"]
-	if not depths.is_empty():
-		_rune_rows.add_child(_rune_block("Depth +%d" % depths.size(),
-				"Enemies are %d level%s higher." % [depths.size(), "" if depths.size() == 1 else "s"], "",
-				int(depths.min())))
-	if RuneTable.ascended(work):
-		_rune_rows.add_child(_rune_block("Ascended", "What enemies drop may be ascended.", "", int(work["ascent"])))
-
-
-## One thing a rune is doing to a tile, as `_show_mods` writes the land's own: its name, what it does,
-## what it pays in leaf, and the kills it has left.
-func _rune_block(title: String, does: String, pays: String, left: int) -> VBoxContainer:
-	var block := UITheme.vbox(2)
-	block.add_child(UITheme.label(title, Palette.TEXT))
-	block.add_child(ItemDetails.line(does, Palette.TEXT, MOD_WIDTH, true))
-	if not pays.is_empty():
-		block.add_child(ItemDetails.line(pays, Palette.LEAF, MOD_WIDTH, true))
-	block.add_child(ItemDetails.line("%d kill%s left" % [left, "" if left == 1 else "s"], Palette.TEXT_SOFT,
-			MOD_WIDTH, true))
-	return block
 
 
 ## The rune in the bag's hand pressed on a tile of the map, which is aimed at while one is held: spent
@@ -1744,49 +908,8 @@ func _rune_on(cell: Vector2i) -> void:
 			or not bag_page.rune_on(view.origin + cell, TileMods.farmable(_mods_of(cell))):
 		return
 	if map.selected_cell == cell:
-		_show_runes(cell)
-		_rune_rows.visible = _rune_rows.get_child_count() > 0
+		tile_panel.show_runes(cell)
 		_layout_ui()
-
-
-## What the ice wall on a tile opens for good once broken (`WallUnlocks.of_wall`), so the next wall is
-## something to look forward to: each its mark and its name, what it does in the tooltip, and one an
-## earlier world already opened greyed, as the orb tray greys an orb with nothing to do (`OrbSlot.DIM`). The wall standing is always the next to fall, so its
-## number is the one the land would reach past it, in whole wall steps as `Inventory.walls_ever` counts.
-func _show_unlocks(cell: Vector2i) -> void:
-	UITheme.clear(_unlock_rows)
-	if not view.is_wall(cell):
-		return
-	var wall := (view.land_radius + view.wall_step - MapBuilder.START_LAND_RADIUS) / MapBuilder.WALL_STEP
-	var unlocks := WallUnlocks.of_wall(wall)
-	if unlocks.is_empty():
-		return
-	_unlock_rows.add_child(UITheme.section("Unlocks"))
-	var opened := inventory.walls_ever() >= wall
-	for unlock: Dictionary in unlocks:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
-		row.tooltip_text = unlock["tip"]
-		var icon := TextureRect.new()
-		icon.texture = load(unlock["icon"])
-		# A 32 px picture (an orb, the root) halved, as the orb tray draws one; a 14 px mark as it is.
-		# The mode before the size, or the texture's own size wins (the root CLAUDE.md).
-		if icon.texture.get_width() > UNLOCK_ICON:
-			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		else:
-			icon.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
-		icon.custom_minimum_size = Vector2(UNLOCK_ICON, UNLOCK_ICON)
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(icon)
-		var named := UITheme.label(unlock["name"], Palette.TEXT, true)
-		named.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		named.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(named)
-		if opened:
-			row.modulate = OrbSlot.DIM
-		_unlock_rows.add_child(row)
 
 
 ## The tile panel is a full-height column against the right edge, its buttons at its foot. The
@@ -1807,13 +930,13 @@ func _layout_ui() -> void:
 		left = Rect2(room.position.x, room.position.y + top, room.size.x, room.size.y - top)
 	for page in _left_pages():
 		page.set("area", left)
-	_place_panel()
+	tile_panel.place()
 	for page in _left_pages():
 		page.call("layout")
 	town_page.layout()
 	_place_corner()
 	if _combat != null:
-		_combat.hud_top = _fight_top()
+		_combat.hud.hud_top = _fight_top()
 
 
 func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
@@ -1823,41 +946,17 @@ func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
 	# the bag put away would put the rune down, so the panel stands with it -- and in front of it, since
 	# held upright both are sheets along the foot and the pages are drawn after the panel.
 	if map.aim_radius >= 0:
-		_panel.move_to_front()
+		tile_panel.panel.move_to_front()
 	elif _town_cell == HexMap.NO_CELL and _left_page_up():
 		_on_left_page_closed()
-	_update_buttons()
+	tile_panel.update_buttons()
 	# The map is still clickable behind an open town page, which has this edge until the player leaves
 	# it -- and `_close_town` is what brings the panel back, already filled in for whatever was clicked.
-	_panel.visible = _town_cell == HexMap.NO_CELL
+	tile_panel.panel.visible = _town_cell == HexMap.NO_CELL
 	_layout_ui()
-	var spot := map_origin + cell
-	# The ice hides whatever land is under it, so it has no rows of its own.
-	# A tile under the fog that can be taken blind has nothing drawn, so no `info` and no rows either.
-	var weights: Dictionary = info.get("environments", {}) if view.is_land(cell) else {}
-	var parts := PackedStringArray()
-	for env: String in weights:
-		parts.append("%s %.1f%%" % [env, weights[env] * 100])
-	var line := "Clicked %s (world %s): %s | %s" % [cell, spot, info.get("name", "fog"), ", ".join(parts)]
-	if towns.has_town(spot):
-		line += " | town connected to %s" % [towns.connections(spot)]
-	print(line)
-	# Not named either: a tile is named as it comes out of the fog, and asking would name it now.
-	var tile_name := view.name_of(cell) if view.seen(cell) else "Unknown land"
-	_tile_title.text = tile_name if tile_name != "" else "Tile"
-	var tier := view.town_tier(cell) if view.seen(cell) else -1
-	var kind := SETTLEMENT_KINDS[tier] if tier != -1 else "Cave" if _is_cave(cell) else ""
-	_level_label.text = ("%s · " % kind if kind != "" else "") + "Level %d" % view.level_of(cell)
-	_show_environments(weights)
-	_show_services(cell)
-	_show_mods(cell)
-	_show_runes(cell)
-	_show_unlocks(cell)
-	# An empty section would still take its gap in the column.
-	for part: Control in [_env_rows, _service_rows, _mod_rows, _rune_rows, _unlock_rows]:
-		part.visible = part.get_child_count() > 0
-	# The rows are filled after _layout_ui ran, and the level line can be wider than the environment
-	# rows that pin the panel's width, so the panel is measured again now that it holds everything.
+	tile_panel.fill(cell, info)
+	# The rows are filled after `_layout_ui` ran, and the level line can be wider than the rows that
+	# pin the panel's width, so the panel is measured again now that it holds everything.
 	_layout_ui()
 	_keep_above_sheet(cell)
 
@@ -1872,7 +971,7 @@ func _on_map_dragged(relative: Vector2) -> void:
 func _zoom_at(screen_point: Vector2, step: float) -> void:
 	if town_page.visible:
 		return
-	var to :=clampf(camera.zoom.x + step, ZOOM_MIN, ZOOM_MOST * ui_scale)
+	var to := clampf(camera.zoom.x + step, ZOOM_MIN, ZOOM_MOST * ui_scale)
 	if to == camera.zoom.x:
 		return
 	var from_middle := screen_point - get_viewport().get_visible_rect().size / 2.0
@@ -1888,10 +987,8 @@ func _clamp_to_map(to: Vector2) -> Vector2:
 	return to.clamp(first, last)
 
 
-## A tile has to be taken before it can be charted: a lineup of whatever lives on it, against a
-## clock. How long a lineup and how long a clock is the tile's own -- a settlement is a set piece --
-## which is what the variant is passed in for, beside picking the backdrop.
-## Winning charts it as before; losing leaves the map exactly as it was, free to try again.
+## Chart: the selected tile's own fight, a lineup against a clock, walked onto first. Winning charts
+## the tile; losing leaves the map exactly as it was, free to try again.
 func _on_chart_pressed() -> void:
 	var cell := map.selected_cell
 	if not view.can_chart(cell) or inventory.encumbered():
@@ -1919,8 +1016,8 @@ func _on_chart_pressed() -> void:
 	_open_fight(Encounter.for_tile(cell, env, variant, chest, _mods_of(cell)), cell, false)
 
 
-## Farming the selected tile: the same arena and the same enemies, coming forever, with no clock
-## and nothing riding on it. It takes a tile already taken, so nothing about the map can change.
+## Farm: the selected tile's enemies coming forever, with no clock and nothing riding on it. It takes
+## a tile already taken, so nothing about the map can change.
 func _on_farm_pressed() -> void:
 	var cell := map.selected_cell
 	if not view.can_farm(cell) or inventory.encumbered():
@@ -1934,7 +1031,8 @@ func _on_farm_pressed() -> void:
 	# The runes working on the tile (`RuneTable`): their modifiers beside its own, a level a Depth, and
 	# the Ascent. A farm run alone carries them -- never the camp.
 	var work := inventory.rune_work(view.origin + cell)
-	var fight := Encounter.farm(cell, env, variant, _mods_of(cell) + RuneTable.mods_of(work), RuneTable.deeper(work))
+	var fight := Encounter.farm(cell, env, variant, _mods_of(cell) + RuneTable.mods_of(work),
+			RuneTable.deeper(work))
 	fight.ascended = RuneTable.ascended(work)
 	_open_fight(fight, cell, true)
 
@@ -1949,14 +1047,7 @@ func _walk_to_fight(cell: Vector2i, farming: bool) -> void:
 	_retreat_cell = view.player_cell if farming else view.chart_from(cell)
 	var route: Array[Vector2i] = view.move_to(cell) if farming else view.walk_onto(cell)
 	print("Walking onto %s to %s it, %d tile(s) away" % [cell, "farm" if farming else "chart", route.size()])
-	_update_buttons()
-
-
-const CHART_TIP := "Fight for this tile and what lies behind it"
-const FARM_TIP := "Fight here for as long as you like, for the loot"
-## What Chart and Farm say while the bag is over its cap and greys them, the cap (`Inventory.capacity`)
-## written in where it is said, since the Packmule's Harness at IV moves it.
-const ENCUMBERED_TIP := "Your bag is too heavy to fight with. Sell or discard gear until it holds %d or fewer"
+	tile_panel.update_buttons()
 
 
 ## Why the hero holds no camp in this world, or "" where they do. Two curses say so in their text.
@@ -1968,15 +1059,10 @@ func _cannot_camp() -> String:
 	return ""
 
 
-## How long the game has to have been shut for a camp to be worth a screen.
-const CAMP_LEAST := 60.0
-
-
-## The camp nobody sets up: the hours since the save was written at `left_at`, spent on the best
-## ground taken so far (`MapBuilder.best_farm`), paid now and shown over the hidden map the way a
-## fight stands there. Worked out from the gear the hero stands up in, which the shut hours cannot
-## have changed. A camp worth nothing -- a first run, a minute away, a world under No Rest -- is not
-## shown at all.
+## The camp nobody sets up: the hours since the save was written at `left_at`, spent on the best ground
+## taken so far (`MapBuilder.best_farm`), paid now and shown over the hidden map the way a fight stands
+## there. Worked out from the gear the hero stands up in, which the shut hours cannot have changed. A
+## camp worth nothing (a first run, a minute away, a world under No Rest) is not shown at all.
 func _camp_while_away(left_at: float) -> void:
 	var cell := view.best_farm()
 	var now := Time.get_unix_time_from_system()
@@ -2015,16 +1101,12 @@ func _break_camp() -> void:
 	Input.set_default_cursor_shape(Cursors.ARROW)
 	_uncover_map()
 	# Whatever the camp's pay announced goes with its screen.
-	_close_banner()
-	if _toast != null:
-		_toast.queue_free()
+	banner.drop()
 	_sync_character()
 	bag_page.refresh_gold()
 	if levels > 0:
-		_celebrate_level(inventory.level)
-	if map.selected_cell != HexMap.NO_CELL:
-		_panel.show()
-	_update_buttons()
+		banner.level_up(inventory.level)
+	_restore_panel()
 	# The start-up's sync waited for this (`Cloud.sync`): now, so a save from another device comes down
 	# before anything is played over it.
 	cloud.sync(true)
@@ -2044,7 +1126,7 @@ func _cover_map() -> void:
 	map.process_mode = Node.PROCESS_MODE_DISABLED
 	# Before the panel is hidden: leaving a town brings the tile panel back, which a fight then takes away.
 	_close_town()
-	_panel.hide()
+	tile_panel.panel.hide()
 	# The pages go and the corner buttons stay (`_show_corner`); the tile panel and the character
 	# button do not, since a Control takes the mouse before the fight sees it.
 	_close_left_pages()
@@ -2059,9 +1141,15 @@ func _uncover_map() -> void:
 	_show_corner(true)
 
 
-## Puts a fight on the screen, whichever kind it is. Both kinds are opened exactly alike -- armed
-## from what is worn, drawn on the tile's own backdrop, with the map and every Control out of the
-## way -- so the one that comes later cannot quietly differ from the one that came first.
+## The tile panel back for the tile still chosen, as a fight, a camp or a town gives the screen back.
+func _restore_panel() -> void:
+	if map.selected_cell != HexMap.NO_CELL:
+		tile_panel.panel.show()
+	tile_panel.update_buttons()
+
+
+## Puts a tile's fight or a farm run on the screen: armed from what is worn, handed what the save owes
+## the player, its gains wired to the ledger, then staged as every fight is (`_stage`).
 func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# What the player is wearing as the fight opens; a change in the bag mid-fight arms it again (`_rearm`).
 	_arm(fight)
@@ -2087,7 +1175,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	fight.kill_paid.connect(_on_kill_paid)
 	ledger.bounty_counted.connect(_on_bounty_counted)
 	ledger.bounty_too_low.connect(_on_bounty_too_low)
-	_combat = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
+	_combat = load(COMBAT_SCENE).instantiate()
 	_combat.finished.connect(_on_combat_finished.bind(cell))
 	_combat.retry.connect(_on_combat_retry.bind(cell))
 	# Not `Encounter.loot_dropped`: the fight applies the player's autodiscard rule, and everything
@@ -2096,28 +1184,14 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	_combat.autodiscard = inventory.leaves_behind
 	# The Nightwalkers and distant charting take a won tile's loot for the player, so a way runs by itself.
 	_combat.auto_collect = not farming and (view.distant or "nightwalker" in inventory.effects())
-	_combat.weapon_kind = _weapon_kind()
 	_combat.loot_kept.connect(_on_loot_dropped)
 	_combat.loot_discarded.connect(_on_loot_autodiscarded)
-	_combat.drop_discarded.connect(_on_drop_discarded)
+	_combat.hud.drop_discarded.connect(_on_drop_discarded)
 	_combat.gold_gained.connect(_on_gold_gained)
 	_combat.orb_gained.connect(_on_orb_gained)
 	_combat.xp_gained.connect(ledger.add_xp)
 	_combat.xp_absorbed.connect(_on_xp_absorbed)
-	_let_bag_over()
-	add_child(_combat)
-	# Told before the fight is built, so the warning is right on its first frame rather than a frame
-	# later: a run that opens with a full bag should say so as it opens.
-	_refresh_bag_room()
-	# What the tile has been called since the player first laid eyes on it. Read off the map rather
-	# than worked out here: the map is what named it and what remembers the name.
-	_combat.place = view.name_of(cell)
-	_combat.xp_target = _character.xp_point()
-	_combat.hud_top = _fight_top()
-	_combat.begin(fight, cell, ui_scale, view.area_variant(cell))
-	_play_music(BATTLE_MUSIC)
-	_cover_map()
-	_show_damage()
+	_stage(fight, cell, view.name_of(cell), view.area_variant(cell))
 	# The tips about the fight itself come as it opens rather than after it, when they are needed.
 	_check_tips()
 	# A tip already up -- raised as the last fight closed, under a Retry -- holds this fight still as one
@@ -2126,10 +1200,27 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 		_combat.process_mode = Node.PROCESS_MODE_DISABLED
 
 
+## The fight's scene put on the screen, every kind exactly alike, so one cannot quietly come to differ
+## from another: the bag free to open over it, the map and every Control out of its way.
+func _stage(fight: Encounter, cell: Vector2i, place: String, variant := "plain") -> void:
+	_combat.weapon_kind = _weapon_kind()
+	_let_bag_over()
+	add_child(_combat)
+	# Told before the fight is built, so a run that opens with a full bag says so on its first frame.
+	_refresh_bag_room()
+	_combat.place = place
+	_combat.xp_target = _character.xp_point()
+	_combat.hud.hud_top = _fight_top()
+	_combat.begin(fight, cell, ui_scale, variant)
+	sounds.play_music(Jukebox.BATTLE)
+	_cover_map()
+	_show_damage()
+
+
 ## The bag can be opened over every fight: the loot popup and the verdict put it away, since the pages
 ## stand on a layer above the fight's, and Escape is the bag's while it is up.
 func _let_bag_over() -> void:
-	_combat.panel_up.connect(_on_left_page_closed)
+	_combat.hud.panel_up.connect(_on_left_page_closed)
 	_combat.page_up = _left_page_up
 
 
@@ -2166,18 +1257,10 @@ func _on_dungeon_pressed() -> void:
 	fight.runes_drop = WallUnlocks.has(inventory.walls_ever(), WallUnlocks.RUNES)
 	_cave_runes = 0
 	print("Down the dungeon, depth %d" % fight.depth())
-	_combat = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
+	_combat = load(COMBAT_SCENE).instantiate()
 	_combat.finished.connect(_on_dungeon_finished)
 	_combat.rune_gained.connect(_on_rune_gained)
-	_let_bag_over()
-	add_child(_combat)
-	_combat.place = DUNGEON_NAME
-	_combat.hud_top = _fight_top()
-	_combat.weapon_kind = _weapon_kind()
-	_combat.begin(fight, Vector2i.ZERO, ui_scale)
-	_play_music(BATTLE_MUSIC)
-	_cover_map()
-	_show_damage()
+	_stage(fight, Vector2i.ZERO, DUNGEON_NAME)
 
 
 ## Back from the dungeon. The depths it won are the whole of what it earned.
@@ -2186,21 +1269,9 @@ func _on_dungeon_finished(_won: bool) -> void:
 	_combat.queue_free()
 	_combat = null
 	_show_damage()
-	_play_music(IDLE_MUSIC)
+	sounds.play_music(Jukebox.IDLE)
 	_uncover_map()
-	if map.selected_cell != HexMap.NO_CELL:
-		_panel.show()
-	_update_buttons()
-
-
-## A random track of `kind` from its start, unless one of that kind is already playing, so a retried
-## fight's music carries on through the close and the open.
-func _play_music(kind: String) -> void:
-	var tracks: Array = _tracks[kind]
-	if tracks.is_empty() or (_music.playing and _music.stream in tracks):
-		return
-	_music.stream = tracks.pick_random()
-	_music.play()
+	_restore_panel()
 
 
 ## A rune off a body in the cave: the player's at once, written as the descent is left (`_bank_depths`).
@@ -2210,15 +1281,16 @@ func _on_rune_gained(rune: String) -> void:
 	bag_page.refresh_orbs()
 
 
-## Writes down the depths the descent that is open has won, if it has won any, and the runes it found. On the way out of it
-## and on the way out of the game, so quitting under a dead Gollux cannot cost him.
+## Writes down the depths the open descent has won, if any, and the runes it found: on the way out of
+## it and on the way out of the game, so quitting under a dead Gollux cannot cost him.
 func _bank_depths() -> void:
 	var fight: Encounter = _combat.fight
 	var won := fight.first_floor / fight.enemies + fight.cleared()
 	var floors := fight.first_floor + fight.index
 	print("Left the dungeon at depth %d, %d won, %s on the board" % [fight.depth(), fight.cleared(),
 			Cloud.score_text(floors)])
-	if fight.cleared() > 0 or won > inventory.dungeon_depth or floors > inventory.dungeon_floors or _cave_runes > 0:
+	if fight.cleared() > 0 or won > inventory.dungeon_depth or floors > inventory.dungeon_floors \
+			or _cave_runes > 0:
 		inventory.dungeon_depth = maxi(inventory.dungeon_depth, won)
 		inventory.dungeon_floors = maxi(inventory.dungeon_floors, floors)
 		_save_inventory()
@@ -2228,7 +1300,8 @@ func _bank_depths() -> void:
 
 
 ## Back from the fight. The tile is charted only if it was won, and the player stays on it; a lost one
-## runs them back to the charted tile they stepped onto it from, unless `retrying` keeps them there for the next go.
+## runs them back to the charted tile they stepped onto it from, unless `retrying` keeps them there
+## for the next go.
 func _on_combat_finished(won: bool, cell: Vector2i, retrying := false) -> void:
 	var kills: int = _combat.fight.kills()
 	# Read before the fight is freed.
@@ -2239,7 +1312,7 @@ func _on_combat_finished(won: bool, cell: Vector2i, retrying := false) -> void:
 	_combat.queue_free()
 	_combat = null
 	if not retrying:
-		_play_music(IDLE_MUSIC)
+		sounds.play_music(Jukebox.IDLE)
 	# Gems still in the air when the fight closed never arrive, so the panel is put back on the ledger.
 	_sync_character()
 	_uncover_map()
@@ -2267,12 +1340,10 @@ func _on_combat_finished(won: bool, cell: Vector2i, retrying := false) -> void:
 	elif not retrying:
 		_dark_way.clear()
 	ledger.farming = false
+	# A run counts the runes on its tile down.
 	if map.selected_cell != HexMap.NO_CELL:
-		_panel.show()
-		# A run counts the runes on its tile down.
-		_show_runes(map.selected_cell)
-		_rune_rows.visible = _rune_rows.get_child_count() > 0
-	_update_buttons()
+		tile_panel.show_runes(map.selected_cell)
+	_restore_panel()
 	# After the fight, so a pop-up never covers one.
 	_check_tips()
 	# Walked onto like any tile beside the charted land, so its fight opens on arrival -- unless the bag
@@ -2297,9 +1368,10 @@ func _chart_won(cell: Vector2i) -> void:
 	_credit_walls()
 
 
-## Every wall down in this world that has not yet paid its super orb pays it, and the save says
-## so; the heirlooms climb to the land charted, the land's furthest reach and its deepest tile are written down, and the world's cave is put down if it is due. Asked wherever a wall can have fallen -- a tile charted -- and once at start-up, which is what
-## pays a save from before there were heirlooms for the walls it already has down.
+## Every wall down in this world that has not yet paid its super orb pays it; the heirlooms climb to
+## the land charted; the land's furthest reach and its deepest tile are written down; and the world's
+## cave is put down if it is due. Asked wherever a wall can have fallen (a tile charted) and once at
+## start-up, which pays a save from before there were heirlooms for the walls it already has down.
 func _credit_walls() -> void:
 	var paid := inventory.credit_walls(view.walls_fallen())
 	if paid:
@@ -2361,20 +1433,19 @@ func _on_combat_retry(cell: Vector2i) -> void:
 		_on_chart_pressed()
 	# A retry that did not open a fight (a full bag, No Second Chances) is back on the map.
 	if _combat == null:
-		_play_music(IDLE_MUSIC)
+		sounds.play_music(Jukebox.IDLE)
 		# And off land that is not theirs, as any loss leaves them, the rest of a way dropped with it.
 		# Not onto the black screen, where the world is already gone.
 		if _transcend_page == null:
 			_dark_way.clear()
 			view.move_to(_retreat_cell)
-			_update_buttons()
+			tile_panel.update_buttons()
 
 
-## The player walks to the tile; the tile panel's buttons stay hidden until they get there.
 func _on_move_pressed() -> void:
 	var cell := map.selected_cell
 	print("Walking to %s, %d tile(s) away" % [cell, view.move_to(cell).size()])
-	_update_buttons()
+	tile_panel.update_buttons()
 
 
 ## The floating Stop: the walk ends on the tile being stepped onto. Whatever waited at its end -- a fight,
@@ -2388,15 +1459,15 @@ func _on_stop_pressed() -> void:
 	map.player.stop_walk()
 
 
-## Where the map's own state has changed: charting a tile walks the player onto it (and a paid scour
-## is the one other change, `_on_cell_aimed`). So this is where it is written down, and a crash costs at most the step in
-## progress rather than the session.
+## Where the map's own state has changed: charting a tile walks the player onto it (a paid scour is
+## the one other change, `_on_cell_aimed`). So it is written down here, and a crash costs at most the
+## step in progress rather than the session.
 func _on_player_arrived(cell: Vector2i) -> void:
 	print("Arrived at %s" % cell)
 	_update_weather()
 	_sync_chest()
 	_save_map()
-	_update_buttons()
+	tile_panel.update_buttons()
 	if _fight_target != HexMap.NO_CELL:
 		var target := _fight_target
 		_fight_target = HexMap.NO_CELL
@@ -2417,47 +1488,17 @@ func _on_player_arrived(cell: Vector2i) -> void:
 	_check_tips()
 
 
-## A tile is either something to look at or somewhere to go, and neither while the player is walking.
-## A button that can't be pressed is not shown at all.
-func _update_buttons() -> void:
-	var cell := map.selected_cell
-	_chart_button.visible = view.can_chart(cell)
-	_move_button.visible = view.can_move_to(cell)
-	_farm_button.visible = view.can_farm(cell)
-	# An overfull bag greys the fights rather than hiding them, with the reason on each.
-	var heavy := inventory.encumbered()
-	var too_heavy := ENCUMBERED_TIP % inventory.capacity()
-	_chart_button.disabled = heavy
-	_chart_button.tooltip_text = too_heavy if heavy else CHART_TIP
-	_farm_button.disabled = heavy
-	_farm_button.tooltip_text = too_heavy if heavy else FARM_TIP
-	_was_encumbered = heavy
-	# Stood on, or a settlement Move here could reach: the press walks there first.
-	_town_button.visible = view.can_visit(cell) or (_move_button.visible and view.town_tier(cell) != -1)
-	_cave_button.visible = view.can_enter_cave(cell)
-	_cave_button.tooltip_text = "Go down to depth %d. Kill Gollux to go deeper: each depth won is a skull for your curses" % (inventory.dungeon_depth + 1)
-	_place_panel()
-
-
-## Stands the tile panel against the whole right edge, as `TownPage.layout` has its page, so Enter
-## town changes what the column holds and not where it is. Called whenever a row or a button comes
-## or goes, because the column's width is its contents'.
-func _place_panel() -> void:
-	_panel.reset_size()
-	UITheme.dock(_panel, _pages_room(), ui_scale, UITheme.Dock.RIGHT, _place_panel)
-
-
 ## Held upright the sheet covers the foot of the map: a tile chosen under it is brought up into the
 ## middle of what the sheet leaves, so the panel never hides the tile it describes.
 func _keep_above_sheet(cell: Vector2i) -> void:
-	if not _narrow() or not _panel.visible:
+	if not _narrow() or not tile_panel.panel.visible:
 		return
 	var at := map.ground_layer.map_to_local(cell)
 	var view_size := get_viewport().get_visible_rect().size
 	var foot := at.y + map.ground_layer.tile_set.tile_size.y / 2.0
-	if (foot - camera.position.y) * camera.zoom.y + view_size.y / 2.0 <= _panel.position.y:
+	if (foot - camera.position.y) * camera.zoom.y + view_size.y / 2.0 <= tile_panel.panel.position.y:
 		return
-	var lift := (_panel.position.y - view_size.y) / 2.0 / camera.zoom.y
+	var lift := (tile_panel.panel.position.y - view_size.y) / 2.0 / camera.zoom.y
 	_glide_camera(_clamp_to_map(Vector2(camera.position.x, at.y - lift)))
 
 
@@ -2465,11 +1506,11 @@ func _keep_above_sheet(cell: Vector2i) -> void:
 ## monitor and over its foot held upright.
 func _map_room() -> Rect2:
 	var room := _pages_room()
-	if _panel.visible:
+	if tile_panel.panel.visible:
 		if _narrow():
-			room.end.y = _panel.position.y
+			room.end.y = tile_panel.panel.position.y
 		else:
-			room.end.x = _panel.position.x
+			room.end.x = tile_panel.panel.position.x
 	return room
 
 
@@ -2509,7 +1550,7 @@ func _glide_camera(to: Vector2) -> void:
 func _fight_top() -> float:
 	if _narrow():
 		return _character.position.y + (_character.size.y + 4) * ui_scale
-	return UITheme.safe_rect(get_viewport()).position.y + CombatScene.HUD_MARGIN
+	return UITheme.safe_rect(get_viewport()).position.y + FightHud.HUD_MARGIN
 
 
 ## Whether the window is held upright, too narrow for the panels to stand side by side.
@@ -2521,7 +1562,8 @@ func _narrow() -> bool:
 ## foot while the window is narrow and any corner button is up.
 func _pages_room() -> Rect2:
 	var room := UITheme.safe_rect(get_viewport())
-	var shown := _bag_button != null and _corner_buttons().any(func(button: Button) -> bool: return button.visible)
+	var shown := _bag_button != null and _corner_buttons().any(
+			func(button: Button) -> bool: return button.visible)
 	if shown and _narrow():
 		room.size.y -= (_bag_button.get_combined_minimum_size().y + UITheme.EDGE) * ui_scale
 	return room
@@ -2537,7 +1579,7 @@ func _on_loot_dropped(_index: int, item: Item) -> void:
 	var first := _is_new_unique(item)
 	ledger.add_loot(item)
 	if first:
-		_announce_unique(item)
+		banner.unique(item)
 	bag_page.refresh()
 
 
@@ -2555,7 +1597,7 @@ func _on_orb_gained(orb: String) -> void:
 ## is earned, which is the ledger's business.
 func _on_xp_absorbed(amount: int) -> void:
 	if _character.absorb(amount) > 0:
-		_celebrate_level(_character.level)
+		banner.level_up(_character.level)
 
 
 func _on_loot_autodiscarded(_index: int, item: Item) -> void:
@@ -2588,8 +1630,8 @@ func _pay_salvage(item: Item) -> void:
 ## (`_process`): drops, the verdict and the bag open over the fight all change it.
 func _refresh_bag_room() -> void:
 	if _combat != null:
-		_combat.bag_size = inventory.capacity()
-		_combat.bag_room = inventory.room_left()
+		_combat.hud.bag_size = inventory.capacity()
+		_combat.hud.bag_room = inventory.room_left()
 
 
 ## A body has fallen. What it was goes to the ledger, which hands it to the boards.
@@ -2625,20 +1667,22 @@ func _on_kill_paid(_index: int) -> void:
 ## every one before it is the toast.
 func _on_bounty_counted(enemy: String, have: int, need: int) -> void:
 	var tier := EnemyRoster.tier_of(enemy)
-	if have >= need:
-		_announce_bounty(enemy, tier, have, need)
-	else:
-		_toast_bounty(enemy, tier)
+	if have < need:
+		banner.toast_bounty(enemy, tier)
+		return
+	var spot := BountyBoard.active_spot(inventory.towns)
+	banner.bounty(enemy, tier, have, need,
+			bounty_page.town_name(TownState.spot(spot)) if not spot.is_empty() else "the town")
 
 
 ## The bounty's monster killed on land too shallow for its posting: the toast says so, in brick.
 func _on_bounty_too_low(enemy: String, level: int) -> void:
-	_toast_bounty(enemy, EnemyRoster.tier_of(enemy), level)
+	banner.toast_bounty(enemy, EnemyRoster.tier_of(enemy), level)
 
 
-## The square buttons in a column, the ones there are closed up: what you carry (the bag, then the
-## heirlooms), what you are, what you have promised to do, then the settings and the log. Under the character panel on the map; beside whichever page is
-## up -- which has that panel's corner -- so one press goes from page to page without an X between.
+## The corner buttons in a column, the ones there are closed up: under the character panel on the map,
+## or beside whichever page is up, which has that panel's corner, so one press goes from page to page
+## without an X between.
 func _place_corner() -> void:
 	# The bag measures itself as it is built (`laid_out`), before the pages after it exist.
 	if not is_instance_valid(character_page) or not character_page.is_inside_tree():
@@ -2785,9 +1829,10 @@ func _tip_due(id: String) -> bool:
 			return town_page.visible and town_page.open_tab() == TownServices.SMITH
 		"first_board_cleared":
 			# Over the reward it is about, so he is handing it over as he says so.
-			return _choice != null
+			return rewards.choice != null
 		"first_cave":
-			return view != null and view.cave != HexMap.NO_CELL and view.seen(view.cave) and view.is_land(view.cave)
+			return (view != null and view.cave != HexMap.NO_CELL and view.seen(view.cave)
+					and view.is_land(view.cave))
 		"first_sense":
 			# As the wall in front of the cave falls, its fight over, and the light comes up at the edge.
 			return _cave_sense != null and _cave_sense.felt()
@@ -2813,111 +1858,17 @@ func _check_tips() -> void:
 		_show_next_tip()
 
 
-## Every version `CHANGELOG` names, newest first: `{version, date, sections}`, a section
-## `[heading, [item, ...]]` (heading "" for items before any `### `), an item a change's line or a table
-## row's cells (an Array; the first of a run is the header, the `|---|` row dropped). Empty with no file.
-static func changelog() -> Array:
-	var versions: Array = []
-	for raw in FileAccess.get_file_as_string(CHANGELOG).split("\n"):
-		var line := raw.strip_edges()
-		if line.begins_with("## "):
-			versions.append({"version": line.get_slice(" ", 1),
-					"date": line.get_slice("(", 1).get_slice(")", 0), "sections": []})
-			continue
-		if versions.is_empty():
-			continue
-		var sections: Array = versions[-1]["sections"]
-		if line.begins_with("### "):
-			sections.append([line.trim_prefix("### "), []])
-		elif line.begins_with("- ") or line.begins_with("|"):
-			if sections.is_empty():
-				sections.append(["", []])
-			if line.begins_with("- "):
-				sections[-1][1].append(line.trim_prefix("- "))
-			elif not line.replace("|", "").replace("-", "").replace(":", "").strip_edges().is_empty():
-				var cells: Array = Array(line.trim_prefix("|").trim_suffix("|").split("|")).map(
-						func(cell: String) -> String: return cell.strip_edges())
-				sections[-1][1].append(cells)
-	return versions
-
-
 ## Every version newer than the one last shown, as one tip, once: the web build's start-up asks, and
 ## the newest is written to the settings as it is queued, so nothing comes up again until a newer one.
 func _show_changelog() -> void:
-	var unseen: Array = []
-	for version: Dictionary in changelog():
-		if version["version"] == Settings.changelog_seen:
-			break
-		unseen.append(version)
+	var unseen := Changelog.since(Settings.changelog_seen)
 	if unseen.is_empty():
 		return
 	Settings.changelog_seen = unseen[0]["version"]
 	Settings.save()
-	_tip_queue.append([CHANGELOG, CHANGELOG_TITLE, unseen])
+	_tip_queue.append([Changelog.PATH, Changelog.TITLE, unseen])
 	if _tip_panel == null:
 		_show_next_tip()
-
-
-## The changelog's page, newest version first, each in four steps of type: the version in Pixellari
-## with its date small beside it, each section's heading as a counter's (`UITheme.section`), and its
-## changes in the body font, each behind a bullet with its wrapped lines hanging clear of it -- or its
-## table, the game's own (`UITheme.table_row`): the header soft over a rule, the rows striped, the
-## first column wrapping.
-static func _changelog_page(versions: Array, width: float) -> VBoxContainer:
-	var page := UITheme.vbox(CHANGELOG_VERSION_GAP, width)
-	for version: Dictionary in versions:
-		page.add_child(_changelog_version(version, width))
-	return page
-
-
-## One version of the changelog's page.
-static func _changelog_version(version: Dictionary, width: float) -> VBoxContainer:
-	var page := UITheme.vbox(CHANGELOG_SECTION_GAP, width)
-	var head := HBoxContainer.new()
-	head.add_child(UITheme.label(version["version"]))
-	var date := UITheme.label(version["date"], Palette.TEXT_SOFT, true)
-	date.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	date.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	date.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	head.add_child(date)
-	page.add_child(head)
-	# On the first line's middle, whatever the body font's height.
-	var line_height := UITheme.theme().get_font("font", "SmallLabel").get_height(UITheme.SMALL_FONT_SIZE)
-	var bullet_top := floorf((line_height - CHANGELOG_BULLET) / 2.0)
-	for section: Array in version["sections"]:
-		var block := UITheme.vbox(BagPage.SLOT_GAP)
-		page.add_child(block)
-		if not str(section[0]).is_empty():
-			block.add_child(UITheme.section(section[0]))
-		var table: VBoxContainer = null
-		for item: Variant in section[1]:
-			if item is Array:
-				var cells: Array = item
-				if table == null:
-					table = UITheme.vbox(0)
-					block.add_child(table)
-					table.add_child(UITheme.table_row(cells[0], cells[-1], false, width,
-							Palette.TEXT_SOFT, Palette.TEXT_SOFT, false))
-					table.add_child(UITheme.rule(width))
-				else:
-					table.add_child(UITheme.table_row(cells[0], cells[-1], table.get_child_count() % 2 == 0, width,
-							null, null, false))
-				continue
-			table = null
-			var line: String = item
-			var row := HBoxContainer.new()
-			row.add_theme_constant_override("separation", 0)
-			var hang := Control.new()
-			hang.custom_minimum_size.x = CHANGELOG_INDENT
-			var bullet := ColorRect.new()
-			bullet.color = Palette.SLOT_TAN_DK
-			bullet.position = Vector2(1, bullet_top)
-			bullet.size = Vector2(CHANGELOG_BULLET, CHANGELOG_BULLET)
-			hang.add_child(bullet)
-			row.add_child(hang)
-			row.add_child(BountyList.wrapped(line, width - CHANGELOG_INDENT))
-			block.add_child(row)
-	return page
 
 
 ## One tip at a time: someone speaking, in a `DialogueBox` along the window's foot, or the changelog --
@@ -2945,10 +1896,9 @@ func _show_next_tip() -> void:
 	_tip_panel = panel
 	# The character panel's layer, which stands over the fight's, so a tip can come up mid-run.
 	_character.get_parent().add_child(panel)
-	var width := minf(get_viewport().get_visible_rect().size.x / ui_scale - REFUSAL_MARGIN, REFUSAL_WIDTH)
 	# Scrolling past what the window leaves.
 	var scroll := UITheme.scroll()
-	var lines := _changelog_page(tip[2], width)
+	var lines := Changelog.page(tip[2], _notice_width())
 	scroll.add_child(lines)
 	UITheme.body_of(panel).add_child(scroll)
 	# Twice: a wrapped label only knows how tall it is once it has been laid out once.
@@ -3043,12 +1993,6 @@ func _skill_point_free() -> bool:
 	return inventory.why_not_skill("").is_empty()
 
 
-## Something new on the collection or achievements page hovered, or the page closed over it: kept.
-## Never on the black screen, where nothing may save, nor over a refused or reset save.
-func _on_log_seen() -> void:
-	_save_inventory()
-
-
 ## Every page that stands against the left edge. They share it, so opening one closes the rest and
 ## there is one place that knows which those are: what is wired, laid out and closed is this list.
 func _left_pages() -> Array[Control]:
@@ -3080,7 +2024,7 @@ func _open_left_page(page: Control) -> void:
 	page.show()
 	# The bag over a fight: the loot popup it would stand over goes.
 	if _combat != null:
-		_combat.close_loot()
+		_combat.hud.close_loot()
 	# Alt on a square compares against the doll of the page it is on.
 	_item_card.equipment = (inventory.stash().equipment if page == heirloom_page
 			else inventory.equipment)
@@ -3121,9 +2065,7 @@ func _close_town() -> void:
 	_town_cell = HexMap.NO_CELL
 	bag_page.shop(PackedStringArray())
 	heirloom_page.shop(PackedStringArray())
-	if map.selected_cell != HexMap.NO_CELL:
-		_panel.show()
-	_update_buttons()
+	_restore_panel()
 
 
 func _on_skills_pressed() -> void:
@@ -3158,15 +2100,11 @@ func _on_bounty_pressed() -> void:
 	_toggle_left_page(bounty_page)
 
 
-## The first press stills the book for good; a new find glints in the log itself until hovered or
-## the page is closed.
 func _on_collection_pressed() -> void:
 	_stop_flash("opened_collection")
 	_toggle_left_page(collection_page)
 
 
-## The first press stills the trophy for good; a new achievement glints on the page until hovered or
-## the page is closed.
 func _on_achievements_pressed() -> void:
 	_stop_flash("opened_achievements")
 	_toggle_left_page(achievements_page)
@@ -3185,36 +2123,7 @@ func _check_achievements() -> void:
 	UniqueTable.ranks = Achievements.ranks(inventory)
 	_save_inventory()
 	_show_corner(_combat == null)
-	_announce_achievements(earned)
-
-
-## The banner for achievements earned or climbed: the unique of the first in the square, and for each
-## what was done and what it did -- "Unlocks" the unique at rank I, and past it the rank reached and
-## the unique's rule at its new numbers. Its X is up at once when there is no fight to swing through it.
-func _announce_achievements(ids: Array[String]) -> void:
-	var piece := CollectionPage.specimen(ids[0])
-	var slot := ItemSlot.make(piece)
-	slot.remove_from_group(ItemSlot.GROUP)
-	var lines: Array[Control] = []
-	for id: String in ids:
-		var rank := Achievements.rank(inventory, id)
-		var named := str(Achievements.ACHIEVEMENTS[id]["name"])
-		var unique := str(UniqueTable.UNIQUES[id]["name"])
-		lines.append(ItemDetails.line(named if rank <= 1 else "%s %s" % [named, Achievements.RANK_NAMES[rank]],
-				Palette.TEXT, BANNER_WIDTH))
-		lines.append(ItemDetails.line(Achievements.text(id, rank), Palette.SLOT_TAN_DK, BANNER_WIDTH, true))
-		if rank <= 1:
-			lines.append(ItemDetails.line("Unlocks %s" % unique, Palette.TEXT_SOFT, BANNER_WIDTH, true))
-		else:
-			lines.append(ItemDetails.line("Strengthens %s" % unique, Palette.TEXT_SOFT, BANNER_WIDTH, true))
-			lines.append(ItemDetails.line(UniqueTable.effect_text(id, rank), Palette.SLOT_TAN_DK,
-					BANNER_WIDTH, true))
-			if rank >= UniqueTable.PEAK:
-				lines.append(ItemDetails.line(UniqueTable.peak_text(id), Palette.SLOT_TAN_DK, BANNER_WIDTH, true))
-	var title := "%d Achievements" % ids.size()
-	if ids.size() == 1:
-		title = "Achievement" if Achievements.rank(inventory, ids[0]) <= 1 else "Rank up"
-	_raise_banner(title, piece.text_color(), slot, lines)
+	banner.achievements(earned, inventory)
 
 
 func _on_character_pressed() -> void:
@@ -3262,7 +2171,7 @@ func _on_town_pressed() -> void:
 	# The page is what marks the town visited and fills its shelves, and it saves when it does: one
 	# place walks into a town, so there is one place the save has to be right.
 	town_page.open(view.name_of(cell), services, cell, spot, tier)
-	_panel.hide()
+	tile_panel.panel.hide()
 	town_page.show()
 	# The bag first and the counter second: which page is up is what `_stand_at_counter` asks.
 	_open_left_page(bag_page)
@@ -3397,9 +2306,7 @@ func _on_reset_pressed() -> void:
 		_save_inventory()
 		_save_map()
 		return
-	# A test stands this scene under the root rather than as the current one, and has nothing to reload.
-	if get_tree().current_scene == self:
-		get_tree().reload_current_scene()
+	_reload()
 
 
 ## The fortuneteller's way out, asked for and answered yes: everything on screen goes and the game
@@ -3448,9 +2355,7 @@ func _transcend() -> void:
 			SafeFile.write(inventory_path, before)
 		return
 	_resetting = true
-	# A test stands this scene under the root rather than as the current one, and has nothing to reload.
-	if get_tree().current_scene == self:
-		get_tree().reload_current_scene()
+	_reload()
 
 
 ## Every event, before the interface has it: the cursor's own (`Cursors`), a pinch, and a press off a
@@ -3459,10 +2364,8 @@ func _input(event: InputEvent) -> void:
 	Cursors.feel(event)
 	Cursors.twitch(get_tree(), event)
 	_pinch(event)
-	# Let through, so the press still swings or picks what it landed on.
-	if _banner_left <= 0.0 and event is InputEventMouseButton and event.pressed \
-			and not _over_banner(event.position):
-		_close_banner()
+	if banner != null:
+		banner.press(event)
 
 
 ## Two fingers spread or pinched over bare map zoom it a whole step at a time (`PINCH_STEP` of spread
@@ -3532,24 +2435,24 @@ func _unhandled_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 	if _tip_panel != null:
 		_on_tip_closed()
-	elif _paid != null:
-		_leave_bounty_paid()
-	elif _choice != null:
-		_leave_board_choice()
+	elif rewards.paid != null:
+		rewards.leave_paid()
+	elif rewards.choice != null:
+		rewards.leave_choice()
 	elif not _aiming.is_empty():
 		_end_aim()
 	# A fight answers for itself unless the bag stands over it (`CombatScene.page_up`).
 	elif _combat == null or _left_page_up():
 		if _left_page_up() or town_page.visible:
 			_on_left_page_closed()
-		if _panel.visible:
+		if tile_panel.panel.visible:
 			_on_close_pressed()
 
 
 ## The X closes the panel and drops the selection, so nothing stays outlined on the map.
 func _on_close_pressed() -> void:
-	_panel.hide()
+	tile_panel.panel.hide()
 	map.deselect()
-	_update_buttons()
+	tile_panel.update_buttons()
 	# The character panel has the edge back where a bag page was up beside it (`_character_right`).
 	_place_character()

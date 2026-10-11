@@ -111,7 +111,8 @@ static func _route(towns: TownWorld, from_town: Vector2i, to_town: Vector2i, are
 
 
 ## The edges each cell of the finished route adds, walking back from the last tile.
-static func _path_masks(came_from: Dictionary[Vector3i, Vector3i], last_state: Vector3i, last_out: int) -> Dictionary[Vector2i, int]:
+static func _path_masks(came_from: Dictionary[Vector3i, Vector3i], last_state: Vector3i,
+		last_out: int) -> Dictionary[Vector2i, int]:
 	var added: Dictionary[Vector2i, int] = {}
 	var state := last_state
 	var out := last_out

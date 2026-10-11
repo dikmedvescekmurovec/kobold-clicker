@@ -1,42 +1,24 @@
 class_name EnemyRoster
 extends RefCounted
-## Every enemy the game can spawn, the terrain it lives on and where its sprite sheets are.
-##
-## One entry per folder under Assets/Enemies. `environments` names the environments of
-## hex_tileset.json, so an enemy is only ever placed on terrain that was drawn for it, and `tier`
-## separates the wandering rabble from the things worth a fight. Health is not written per enemy:
-## `size` and `tier` multiply into it, so the whole curve is tuned from SIZE_HP and TIER_HP rather
-## than by editing thirty numbers. How often an enemy turns up is the other way round: `weight` is
-## written on each entry, because being numerous has little to do with being big -- goblins come in
-## packs, a mimic waits alone, a dragon is a set piece. The sheet names differ from pack to
-## pack (RUN vs WALK vs MOVE, "ATTACK 1" vs ATTACK1), so each entry spells its own out rather than
-## guessing from the folder; an animation a pack does not have is an empty string.
-##
-## Kobold Warrior stayed in Assets/Potential and is deliberately absent, as is the blue slime the six
-## environment slimes are recoloured from.
+## Every enemy the game can spawn (`ENEMIES`), one entry per folder under Assets/Enemies. Kobold Warrior
+## (Assets/Potential) and the blue slime the six are recoloured from are absent on purpose.
 
-enum Tier {
-	COMMON,  ## Wandering encounters, the bulk of a walk.
-	ELITE,   ## Rarer, tougher, usually a caster or a beast.
-	BOSS,    ## One-off fights; never rolled as filler.
-}
+## BOSS: one-off fights, never rolled as filler.
+enum Tier { COMMON, ELITE, BOSS }
 
-## How much room the creature takes on a tile, measured off the trimmed idle frame rather than judged:
-## TINY under 1000 px², SMALL under 2000, MEDIUM under 4000, LARGE under 6000, HUGE above it.
-## Flying Eye is the one entry that overrides its measurement -- the frame is nearly all wingspan.
+## The area of the trimmed idle frame, measured: TINY under 1000 px², SMALL under 2000, MEDIUM under
+## 4000, LARGE under 6000, HUGE above. Flying Eye overrides its own: the frame is nearly all wingspan.
 enum Size { TINY, SMALL, MEDIUM, LARGE, HUGE }
 
-## Which way a pack drew its creature. The packs do not agree -- most face left, nineteen face right --
-## so every entry says, read off its own idle frames, and CombatActor mirrors the ones that need it
-## rather than mirroring the lot. An enemy that comes in facing away from the player is the bug this
-## exists to stop.
+## Which way the pack drew its creature, read off its idle frames. `CombatActor` mirrors only RIGHT, so
+## nobody walks in facing away.
 enum Facing { LEFT, RIGHT }
 
-## Animations every entry names, in the order a fight uses them. IDLE and WALK always exist.
+## In the order a fight uses them. Idle and walk always exist.
 const ANIMATIONS := ["idle", "walk", "attack", "hurt", "death"]
 
-## What a body of each size is worth in health. A slime dies to a poke; a huge one soaks four times
-## what an ordinary humanoid does.
+## `hp_modifier` is SIZE_HP x TIER_HP, 0.5 (a slime) to 24 (a HUGE boss): health is tuned from these two
+## tables, never written per enemy.
 const SIZE_HP := {
 	Size.TINY: 0.5,
 	Size.SMALL: 0.8,
@@ -44,9 +26,6 @@ const SIZE_HP := {
 	Size.LARGE: 1.4,
 	Size.HUGE: 2.0,
 }
-
-## What the tier is worth on top of the body. Bosses are meant to be unreasonable: the largest of them
-## carries 48 times a slime's health, so one is never a fight the player wanders into by accident.
 const TIER_HP := {
 	Tier.COMMON: 1.0,
 	Tier.ELITE: 3.0,
@@ -55,24 +34,21 @@ const TIER_HP := {
 
 const ROOT := "res://Assets/Enemies/"
 
-## `frame` is how the pack's sheets are sliced and `bounds` the part of a frame the creature uses across
-## every one of its animations, so one shared crop keeps it still when the animation changes and centres it
-## on its spot -- the same trick PlayerToken.BOUNDS plays for the player. Both are measured, not guessed:
-## the frame width is the smallest divisor of every sheet width in the pack where each frame boundary falls
-## on a fully transparent column, which is what test_enemies.gd re-checks against the sprites.
-##
-## `weight` is how much of a tile's draw this enemy takes against the others living there -- see `pick`.
-## Whole numbers on one absolute scale, not one scale per tier: commons run 30 to 100, elites 8 to 20,
-## bosses 1 to 4. The bands never overlap, so a draw that asks for any tier at all still mostly turns up
-## rabble, and the ratios inside a band are what actually shows: a slime for every two goblins.
-##
-## folder -> tier, size, weight, facing, environments, the sprite directory under ROOT, and the sheet file per animation.
-## The six slimes are the packs shipped as separate frames, so their sheets are empty and `frames`
-## names the "<prefix><n>.png" series instead. They share one frame size and one crop because they are
-## one creature recoloured: AI-sprites-generator/slimes.py swaps the blue pack under
-## Assets/Enemies/Slime onto each environment's palette ramp, so each slime is the colour of the
-## ground it lives on and appears on that terrain alone. The blue original stays as the generator's
-## source and is deliberately absent here, the way Kobold Warrior is.
+## The six slimes' `frames`: their packs ship a file a frame, so `sheets` is empty and this names each
+## "<prefix><n>.png" series (`frame_paths`). One creature recoloured to its ground's palette ramp
+## (AI-sprites-generator/slimes.py), which is why they also share a frame and a crop.
+const SLIME_FRAMES := {"idle": "slime-idle-", "walk": "slime-move-", "attack": "slime-attack-",
+		"hurt": "slime-hurt-", "death": "slime-die-"}
+
+## name -> tier, size, weight, faces, environments, dir (under ROOT), frame, bounds, sheets.
+## `environments` are hex_tileset.json's; with none an enemy is never drawn for a lineup.
+## `weight` is its share of `pick`'s draw, whole numbers on one scale for every tier: commons 30 to 100,
+## elites 8 to 20, bosses 1 to 4, bands that never overlap.
+## `frame` is how the sheets are sliced and `bounds` the one crop every animation shares, so the creature
+## stays put as the animation changes. Both are measured, never guessed: the folder's CLAUDE.md says
+## how, and test_enemies.gd re-checks them against the sprites.
+## `sheets` is the file per animation, spelled out because the packs name theirs differently; one a
+## pack lacks is "" or left out.
 const ENEMIES := {
 	"Baby Dragon": {
 		"tier": Tier.ELITE,
@@ -116,7 +92,8 @@ const ENEMIES := {
 		"dir": "Cyclops/New Version/Sprites/outline",
 		"frame": Vector2i(245, 128),
 		"bounds": Rect2i(26, 25, 140, 91),
-		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK 1.png", "hurt": "HURT.png", "death": "DEATH.png"},
+		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK 1.png", "hurt": "HURT.png",
+				"death": "DEATH.png"},
 	},
 	"Demon Boss": {
 		"tier": Tier.BOSS,
@@ -127,7 +104,8 @@ const ENEMIES := {
 		"dir": "Demon Boss/Sprites/with_outline",
 		"frame": Vector2i(162, 148),
 		"bounds": Rect2i(2, 24, 160, 123),
-		"sheets": {"idle": "IDLE.png", "walk": "FLYING.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
+		"sheets": {"idle": "IDLE.png", "walk": "FLYING.png", "attack": "ATTACK.png", "hurt": "HURT.png",
+				"death": "DEATH.png"},
 	},
 	"Dragon": {
 		"tier": Tier.BOSS,
@@ -172,7 +150,8 @@ const ENEMIES := {
 		"dir": "Gargoyle/New Version/Sprites/outline",
 		"frame": Vector2i(144, 96),
 		"bounds": Rect2i(10, 4, 129, 92),
-		"sheets": {"idle": "IDLE.png", "walk": "MOVE.png", "attack": "ATTACK 1.png", "hurt": "HURT.png", "death": "DEATH.png"},
+		"sheets": {"idle": "IDLE.png", "walk": "MOVE.png", "attack": "ATTACK 1.png", "hurt": "HURT.png",
+				"death": "DEATH.png"},
 	},
 	"Goblin": {
 		"tier": Tier.COMMON,
@@ -194,7 +173,8 @@ const ENEMIES := {
 		"dir": "Gryphon/NEW VERSION/Sprites/with_outline",
 		"frame": Vector2i(112, 103),
 		"bounds": Rect2i(12, 20, 96, 80),
-		"sheets": {"idle": "IDLE.png", "walk": "MOVE.png", "attack": "ATTACK 1.png", "hurt": "HURT.png", "death": "DEATH.png"},
+		"sheets": {"idle": "IDLE.png", "walk": "MOVE.png", "attack": "ATTACK 1.png", "hurt": "HURT.png",
+				"death": "DEATH.png"},
 	},
 	"Harpy": {
 		"tier": Tier.COMMON,
@@ -206,7 +186,8 @@ const ENEMIES := {
 		"frame": Vector2i(100, 100),
 		"bounds": Rect2i(7, 8, 90, 79),
 		# One sheet covers hovering and flying, and the attack file is spelled ATTACk.
-		"sheets": {"idle": "IDLE_MOVE.png", "walk": "IDLE_MOVE.png", "attack": "ATTACk.png", "hurt": "HURT.png", "death": "DEATH.png"},
+		"sheets": {"idle": "IDLE_MOVE.png", "walk": "IDLE_MOVE.png", "attack": "ATTACk.png", "hurt": "HURT.png",
+				"death": "DEATH.png"},
 	},
 	"Headless Horseman": {
 		"tier": Tier.BOSS,
@@ -250,7 +231,8 @@ const ENEMIES := {
 		"dir": "Lizardman/New Version/Sprites/outline",
 		"frame": Vector2i(144, 96),
 		"bounds": Rect2i(35, 7, 87, 85),
-		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK 1.png", "hurt": "HURT.png", "death": "DEATH.png"},
+		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK 1.png", "hurt": "HURT.png",
+				"death": "DEATH.png"},
 	},
 	"Masked Orc": {
 		"tier": Tier.COMMON,
@@ -274,9 +256,8 @@ const ENEMIES := {
 		"bounds": Rect2i(11, 52, 112, 57),
 		"sheets": {"idle": "IDLE.png", "walk": "MOVE.png", "attack": "ATTACK1.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
-	# Lives in no environment: it is never drawn for a lineup, only put alone on a chest tile
-	# (`Encounter.for_tile`). A boss and sized HUGE on purpose rather than by measurement, so the
-	# one body carries a boss's health and drop odds.
+	# Only ever put alone on a chest tile (`Encounter.for_tile`). A boss and HUGE on purpose, not by
+	# measurement, so the one body carries a boss's health and drop odds.
 	"Mimic": {
 		"tier": Tier.BOSS,
 		"size": Size.HUGE,
@@ -288,8 +269,8 @@ const ENEMIES := {
 		"bounds": Rect2i(26, 13, 99, 83),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
 	},
-	# The ice wall round the land (`MapBuilder.is_wall`), fought alone like the mimic and living nowhere.
-	# One still picture, so it stands for idle and walk and the rest are left out.
+	# The ice wall round the land (`MapBuilder.is_wall`), fought alone like the mimic. One still picture
+	# stands for idle and walk.
 	"The Ice Wall": {
 		"tier": Tier.BOSS,
 		"size": Size.HUGE,
@@ -299,7 +280,8 @@ const ENEMIES := {
 		"dir": "The Wall",
 		"frame": Vector2i(96, 96),
 		"bounds": Rect2i(4, 3, 88, 90),
-		"sheets": {"idle": "pixellab-A-tall-wall-of-ice--Like-the-g-1789766464814.png", "walk": "pixellab-A-tall-wall-of-ice--Like-the-g-1789766464814.png", "attack": "", "hurt": "", "death": ""},
+		"sheets": {"idle": "pixellab-A-tall-wall-of-ice--Like-the-g-1789766464814.png",
+				"walk": "pixellab-A-tall-wall-of-ice--Like-the-g-1789766464814.png", "attack": "", "hurt": "", "death": ""},
 	},
 	"Minotaur": {
 		"tier": Tier.BOSS,
@@ -365,7 +347,8 @@ const ENEMIES := {
 		"dir": "Skeleton Warrior/Sprites/with_outline",
 		"frame": Vector2i(89, 78),
 		"bounds": Rect2i(5, 0, 84, 77),
-		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK 1.png", "hurt": "HURT.png", "death": "DEATH.png"},
+		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK 1.png", "hurt": "HURT.png",
+				"death": "DEATH.png"},
 	},
 	"Desert Slime": {
 		"tier": Tier.COMMON,
@@ -377,7 +360,7 @@ const ENEMIES := {
 		"frame": Vector2i(32, 25),
 		"bounds": Rect2i(0, 4, 31, 20),
 		"sheets": {},
-		"frames": {"idle": "slime-idle-", "walk": "slime-move-", "attack": "slime-attack-", "hurt": "slime-hurt-", "death": "slime-die-"},
+		"frames": SLIME_FRAMES,
 	},
 	"Dirt Slime": {
 		"tier": Tier.COMMON,
@@ -389,7 +372,7 @@ const ENEMIES := {
 		"frame": Vector2i(32, 25),
 		"bounds": Rect2i(0, 4, 31, 20),
 		"sheets": {},
-		"frames": {"idle": "slime-idle-", "walk": "slime-move-", "attack": "slime-attack-", "hurt": "slime-hurt-", "death": "slime-die-"},
+		"frames": SLIME_FRAMES,
 	},
 	"Forest Slime": {
 		"tier": Tier.COMMON,
@@ -401,7 +384,7 @@ const ENEMIES := {
 		"frame": Vector2i(32, 25),
 		"bounds": Rect2i(0, 4, 31, 20),
 		"sheets": {},
-		"frames": {"idle": "slime-idle-", "walk": "slime-move-", "attack": "slime-attack-", "hurt": "slime-hurt-", "death": "slime-die-"},
+		"frames": SLIME_FRAMES,
 	},
 	"Grass Slime": {
 		"tier": Tier.COMMON,
@@ -413,7 +396,7 @@ const ENEMIES := {
 		"frame": Vector2i(32, 25),
 		"bounds": Rect2i(0, 4, 31, 20),
 		"sheets": {},
-		"frames": {"idle": "slime-idle-", "walk": "slime-move-", "attack": "slime-attack-", "hurt": "slime-hurt-", "death": "slime-die-"},
+		"frames": SLIME_FRAMES,
 	},
 	"Ice Slime": {
 		"tier": Tier.COMMON,
@@ -425,7 +408,7 @@ const ENEMIES := {
 		"frame": Vector2i(32, 25),
 		"bounds": Rect2i(0, 4, 31, 20),
 		"sheets": {},
-		"frames": {"idle": "slime-idle-", "walk": "slime-move-", "attack": "slime-attack-", "hurt": "slime-hurt-", "death": "slime-die-"},
+		"frames": SLIME_FRAMES,
 	},
 	"Mountain Slime": {
 		"tier": Tier.COMMON,
@@ -437,7 +420,7 @@ const ENEMIES := {
 		"frame": Vector2i(32, 25),
 		"bounds": Rect2i(0, 4, 31, 20),
 		"sheets": {},
-		"frames": {"idle": "slime-idle-", "walk": "slime-move-", "attack": "slime-attack-", "hurt": "slime-hurt-", "death": "slime-die-"},
+		"frames": SLIME_FRAMES,
 	},
 	"Stone Golem": {
 		"tier": Tier.BOSS,
@@ -482,10 +465,11 @@ const ENEMIES := {
 		"frame": Vector2i(128, 78),
 		"bounds": Rect2i(26, 9, 102, 57),
 		# The pack splits its attack in two; the melee swing is the one a tile fight uses.
-		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "MELEE ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
+		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "MELEE ATTACK.png", "hurt": "HURT.png",
+				"death": "DEATH.png"},
 	},
-	# The dungeon's own, all Admurin's and all cut by `tools/cave_dungeon.py`, which prints each frame and
-	# crop. They live in the cave and nowhere on the map, so no tile ever fields one.
+	# The dungeon's own, cut by `tools/cave_dungeon.py`, which prints each frame and crop. "cave" is no
+	# land on the map, so no tile ever fields one.
 	"Rat": {
 		"tier": Tier.COMMON,
 		"size": Size.TINY,
@@ -590,12 +574,9 @@ const ENEMIES := {
 }
 
 
-## Every enemy name, in the order they are written above.
+## In the table's order.
 static func names() -> PackedStringArray:
-	var all := PackedStringArray()
-	for name: String in ENEMIES:
-		all.append(name)
-	return all
+	return PackedStringArray(ENEMIES.keys())
 
 
 static func tier_of(name: String) -> Tier:
@@ -606,47 +587,41 @@ static func size_of(name: String) -> Size:
 	return ENEMIES[name]["size"]
 
 
-## Which way the pack's art points, before anything mirrors it.
 static func facing_of(name: String) -> Facing:
 	return ENEMIES[name]["faces"]
 
 
-## What to multiply an encounter's base health by for this enemy: its body times its tier. Ranges from
-## 0.5 (the slime) to 24.0 (Huge Knight, Demon Boss): a boss is 48 slimes on the same tile.
+## What an encounter's base health is multiplied by for this enemy.
 static func hp_modifier(name: String) -> float:
 	return SIZE_HP[size_of(name)] * TIER_HP[tier_of(name)]
 
 
-## How much of a tile's draw this enemy takes up, against the others that live on the same terrain.
 static func weight_of(name: String) -> int:
 	return ENEMIES[name]["weight"]
 
 
-## The size of one frame on this enemy's sheets, and of each of its files for a frame-per-file pack.
+## One frame of a sheet, or one file of a frame-per-file pack.
 static func frame_size(name: String) -> Vector2i:
 	return ENEMIES[name]["frame"]
 
 
-## The part of a frame worth drawing, shared by all of the enemy's animations.
 static func bounds_of(name: String) -> Rect2i:
 	return ENEMIES[name]["bounds"]
 
 
-## How many frames an animation has: its sheet's width over the frame width, or the files on disk for a
-## frame-per-file pack. 0 when the pack has no such animation.
+## 0 when the pack has no such animation.
 static func frame_count(name: String, animation: String) -> int:
 	var path := sheet_path(name, animation)
 	if path.is_empty():
 		return frame_paths(name, animation).size()
-	# The texture knows its own width: reading the sheet back as an image to ask it was a slow way to
-	# count, five times a spawn.
+	# Asked of the texture: reading the sheet back as an image was slow, five times a spawn.
 	var sheet: Texture2D = load(path)
 	return 0 if sheet == null else sheet.get_width() / frame_size(name).x
 
 
-## A sheet is read as an image only to measure it (`portrait`); drawing uses AtlasTexture regions instead.
-## Textures have no readable image under --headless, so fall back to the file, as HexTileset does.
-static func _sheet_image(path: String) -> Image:
+## A sheet's pixels, only ever to measure it (`portrait`, `CombatActor._standing_rect`): drawing uses
+## AtlasTexture regions. A texture has no readable image under --headless, hence the file.
+static func sheet_image(path: String) -> Image:
 	var texture: Texture2D = load(path)
 	var image := texture.get_image() if texture else null
 	if image == null or image.is_empty():
@@ -660,7 +635,7 @@ static func environments_of(name: String) -> PackedStringArray:
 	return PackedStringArray(ENEMIES[name]["environments"])
 
 
-## The enemies that can appear on `env`, optionally narrowed to one tier. Pass no tier for all of them.
+## The enemies living on `env`, of one `tier` or (null) of every tier, in the table's order.
 static func in_environment(env: String, tier: Variant = null) -> PackedStringArray:
 	var found := PackedStringArray()
 	for name: String in ENEMIES:
@@ -672,27 +647,18 @@ static func in_environment(env: String, tier: Variant = null) -> PackedStringArr
 	return found
 
 
-## Picks one enemy for `env`, or "" when that terrain has none of that tier. `rng` decides, weighted by
-## `weight`, so a terrain's small fry crowd out its rarer company instead of every candidate being
-## equally likely. Laying the weights end to end and walking them keeps the draw a pure function of one
-## `randi_range`, so a seeded fight stays the same fight however the weights are retuned.
+## One enemy for `env`, drawn by `weight`, or "" when that terrain has none of that tier. The walk every
+## table draws by, so a draw is a pure function of one `randi_range` and a seeded fight stays the same
+## fight.
 static func pick(env: String, tier: Variant, rng: RandomNumberGenerator) -> String:
 	var candidates := in_environment(env, tier)
 	if candidates.is_empty():
 		return ""
-	var total := 0
-	for name in candidates:
-		total += weight_of(name)
-	var roll := rng.randi_range(0, total - 1)
-	for name in candidates:
-		roll -= weight_of(name)
-		if roll < 0:
-			return name
-	return candidates[candidates.size() - 1]
+	var weights := Array(candidates).map(func(name: String) -> int: return weight_of(name))
+	return candidates[LootTable.weighted_index(weights, rng)]
 
 
-## The sheet of one animation, e.g. sheet_path("Goblin", "walk"). "" when the pack lacks it, and for
-## the frame-per-file packs, which frame_paths covers instead.
+## "" when the pack lacks the animation, and for a frame-per-file pack (`frame_paths`).
 static func sheet_path(name: String, animation: String) -> String:
 	var entry: Dictionary = ENEMIES[name]
 	var sheet: String = entry["sheets"].get(animation, "")
@@ -700,8 +666,8 @@ static func sheet_path(name: String, animation: String) -> String:
 	return "" if sheet.is_empty() else ROOT + dir + "/" + sheet
 
 
-## The frames of one animation for a pack shipped as separate files, in order; empty for sheet packs.
-## Stops at the first number that has no file, so the pack's own frame count decides the length.
+## A frame-per-file pack's files for one animation, in order, up to the first number with no file;
+## empty for a sheet pack.
 static func frame_paths(name: String, animation: String) -> PackedStringArray:
 	var entry: Dictionary = ENEMIES[name]
 	var frames := PackedStringArray()
@@ -721,9 +687,8 @@ static func frame_paths(name: String, animation: String) -> PackedStringArray:
 	return frames
 
 
-## The enemy standing still, as one picture: the first idle frame cut down to the pixels it uses. Not
-## `bounds`, which is the union of every animation and leaves a creature with a long swing small in
-## the middle of its own portrait. Null when the pack has no idle.
+## The first idle frame cut to the pixels it uses, or null when the pack has no idle. Not `bounds`: the
+## union of every animation leaves a creature with a long swing small in its own portrait.
 static func portrait(name: String) -> AtlasTexture:
 	var path := sheet_path(name, "idle")
 	var cell := Rect2i(Vector2i.ZERO, frame_size(name))
@@ -732,7 +697,7 @@ static func portrait(name: String) -> AtlasTexture:
 		if files.is_empty():
 			return null
 		path = files[0]
-	var image := _sheet_image(path)
+	var image := sheet_image(path)
 	if image == null:
 		return null
 	var used := image.get_region(cell).get_used_rect()

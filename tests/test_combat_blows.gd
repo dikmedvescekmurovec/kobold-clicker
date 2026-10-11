@@ -329,7 +329,8 @@ func _test_defence_lines() -> bool:
 	softer.arm({"armor": 100.0, "tile_ward": 50.0})
 	var rows := TileMods.MODS
 	var pierced := float(rows["piercing"]["armor"])
-	_check(is_equal_approx(bitten.armor, 100.0 * pierced) and is_equal_approx(softer.armor, 100.0 * (1.0 + (pierced - 1.0) * 0.5)),
+	_check(is_equal_approx(bitten.armor, 100.0 * pierced)
+			and is_equal_approx(softer.armor, 100.0 * (1.0 + (pierced - 1.0) * 0.5)),
 			"a Piercing tile cuts the armour, and half as deep with half its bite gone (%s)" % softer.armor)
 	_check(is_equal_approx(softer.seconds, bitten.seconds - float(rows["short_day"]["seconds"]) * 0.5)
 			and is_equal_approx(softer.time_left, softer.seconds),
@@ -379,7 +380,8 @@ func _test_defence_lines() -> bool:
 	thin_deep.hit()
 	thin_deep.advance(Encounter.DEATH + Encounter.WALK_IN)
 	deep._append_enemy(deep.roster_rng)
-	_check(thin_deep.health[1] == maxf(1.0, roundf(deep.health[1] * 0.8)), "and a floor joined later (%s)" % thin_deep.health[1])
+	_check(thin_deep.health[1] == maxf(1.0, roundf(deep.health[1] * 0.8)),
+			"and a floor joined later (%s)" % thin_deep.health[1])
 
 	# More or fewer bodies on a tile: commons at the front, the elite still last, the same each time;
 	# never the last body, and never a run's, a wall's or the dungeon's count.
@@ -1033,7 +1035,7 @@ func _test_the_nameplate_wears_the_tier() -> bool:
 	var fight := Encounter.for_tile(cell, "grass")
 	combat.begin(fight, cell, 2.0)
 	await process_frame
-	var bar := combat._enemy_bar
+	var bar := combat.hud._enemy_bar
 	var full := HealthBar.TROUGH * HealthBar.PIXEL
 
 	# A tile fight opens on a common, and opens full.
@@ -1048,13 +1050,13 @@ func _test_the_nameplate_wears_the_tier() -> bool:
 	# very few of them: half of seven is three, and the bar is honest about that.
 	var max_hp := fight.enemy_max_hp()
 	fight.hp = floorf(max_hp / 2.0)
-	combat._refresh()
+	combat.hud.refresh()
 	var want := float(full) * fight.hp / max_hp
 	_check(absf(bar._fill.size.x - want) <= HealthBar.PIXEL,
 			"%d of %d hit points is %d px of the bar's %d, wanted about %d"
 					% [fight.hp, max_hp, bar._fill.size.x, full, want])
 	fight.hp = 1
-	combat._refresh()
+	combat.hud.refresh()
 	_check(bar._fill.size.x > 0.0 and bar._fill.size.x < full / 4.0,
 			"one hit point left still shows, and shows as nearly nothing")
 
@@ -1063,7 +1065,7 @@ func _test_the_nameplate_wears_the_tier() -> bool:
 	_check(Encounter.tier_in(fight, elite) == EnemyRoster.Tier.ELITE, "the tenth is the elite")
 	fight.index = elite
 	fight.hp = fight.enemy_max_hp()
-	combat._refresh()
+	combat.hud.refresh()
 	_check(bar._cap_l.texture == HealthBar.CAP_L[EnemyRoster.Tier.ELITE],
 			"the elite's own frame is worn when it walks in")
 	_check(bar._tracks[0].texture == HealthBar.TRACK[EnemyRoster.Tier.ELITE],
@@ -1074,15 +1076,15 @@ func _test_the_nameplate_wears_the_tier() -> bool:
 
 	# The pips beside it are drawn in that same tier, which is the whole reason the lookup was shared
 	# rather than written out twice. The elite is the last of the ten, so it is the last pip.
-	_check(combat._pips._pips[elite].texture == KillPips.texture(EnemyRoster.Tier.ELITE),
+	_check(combat.hud._pips._pips[elite].texture == KillPips.texture(EnemyRoster.Tier.ELITE),
 			"the pip standing for the elite is the elite's skull")
-	_check(combat._pips._pips[0].texture == KillPips.texture(EnemyRoster.Tier.COMMON, true),
+	_check(combat.hud._pips._pips[0].texture == KillPips.texture(EnemyRoster.Tier.COMMON, true),
 			"and those already down are spent")
 
 	# Nothing standing means no nameplate at all, rather than an empty frame.
 	fight.index = fight.lineup.size()
-	combat._refresh()
-	_check(not combat._enemy_panel.visible, "with the lineup spent the nameplate goes")
+	combat.hud.refresh()
+	_check(not combat.hud._enemy_panel.visible, "with the lineup spent the nameplate goes")
 	combat.queue_free()
 	await process_frame
 
@@ -1095,29 +1097,29 @@ func _test_the_nameplate_wears_the_tier() -> bool:
 	await process_frame
 	# Fifteen do not all show: nine from the one being fought and a caret for the rest, moving on a pip
 	# a kill until the last ten are in view.
-	_check(siege.enemies > KillPips.SHOWN and town._pips._pips.size() == KillPips.SHOWN,
-			"a village's bar shows %d of its %d pips, not %d" % [KillPips.SHOWN, siege.enemies, town._pips._pips.size()])
-	var pips: Array[TextureRect] = town._pips._pips
+	_check(siege.enemies > KillPips.SHOWN and town.hud._pips._pips.size() == KillPips.SHOWN,
+			"a village's bar shows %d of its %d pips, not %d" % [KillPips.SHOWN, siege.enemies, town.hud._pips._pips.size()])
+	var pips: Array[TextureRect] = town.hud._pips._pips
 	_check(pips[-1].texture == KillPips.MORE, "the last place is the caret while more are to come")
 	_check(pips[0].texture == KillPips.texture(Encounter.tier_in(siege, 0)), "and the first is the one being fought")
 	siege.index = 1
-	town._refresh()
+	town.hud.refresh()
 	_check(pips[0].texture == KillPips.texture(Encounter.tier_in(siege, 1)) and pips[-1].texture == KillPips.MORE,
 			"a kill drops it off the left and the rest move up a place")
 	var last_ten := siege.enemies - KillPips.SHOWN
 	siege.index = last_ten
-	town._refresh()
+	town.hud.refresh()
 	_check(pips[-1].texture == KillPips.texture(EnemyRoster.Tier.BOSS),
 			"with the last ten in view the caret goes and the boss's crowned skull ends the bar")
 	siege.index = last_ten + 2
-	town._refresh()
+	town.hud.refresh()
 	_check(pips[1].texture == KillPips.texture(Encounter.tier_in(siege, last_ten + 1), true)
 			and pips[2].texture == KillPips.texture(Encounter.tier_in(siege, last_ten + 2)),
 			"and from there the bar stays put and drains where it stands")
 	siege.index = 0
-	town._refresh()
-	_check(town._clock_fill.get_parent().size.x
-			== KillPips.width_for(siege.enemies) - 2 * CombatScene.BAR_BORDER,
+	town.hud.refresh()
+	_check(town.hud._clock_fill.get_parent().size.x
+			== KillPips.width_for(siege.enemies) - 2 * FightHud.BAR_BORDER,
 			"the clock is cut to the pip bar it stands under")
 	town.queue_free()
 	await process_frame
@@ -1169,7 +1171,7 @@ func _test_thrown_finds() -> bool:
 			var got: Color = back.material.get_shader_parameter("colour")
 			_check(got.is_equal_approx(want), "in the rarity's own colour")
 			_check(back.z_index < 0 and front.z_index >= 0, "one behind the piece and one in front of it")
-			_check(combat._hud.z_index > lit.z_index + front.z_index, "and the HUD drawn over the lot")
+			_check(combat.hud.z_index > lit.z_index + front.z_index, "and the HUD drawn over the lot")
 			_check(back.material.get_shader_parameter("cover").x >= 16.0,
 					"wide enough at the foot to cover the piece")
 			heights.append(back.material.get_shader_parameter("height"))
@@ -1312,7 +1314,7 @@ func _test_settings() -> bool:
 	_check(absorbed == [25], "with animations off the bar takes its experience at once")
 	_check(combat.get_child_count() == before and combat._ground_drops.get_child_count() == 0
 			and combat._finds_shown == 0, "and nothing is thrown")
-	_check(combat._drops.size() == 1, "though the find is still kept")
+	_check(combat.hud._drops.size() == 1, "though the find is still kept")
 	Settings.animations = Settings.Anim.LOW
 	combat._on_gold_dropped(0, 1000.0)
 	_check(combat._ground_drops.get_child_count() == 1, "on low a purse is one coin")
@@ -1335,21 +1337,21 @@ func _test_sounds() -> bool:
 	for kind: String in ["sword", "gold_ring", "boot", "plate", "torch"]:
 		var piece := _thrown_piece(ItemRarity.Rarity.RARE)
 		piece.type = first[kind]
-		_check(CombatScene.drop_sound_of(piece) == "gear", "a %s lands as gear" % kind)
-	_check(CombatScene.drop_sound_of(_thrown_piece(ItemRarity.Rarity.UNIQUE)) == "unique",
+		_check(FightSounds.drop_sound_of(piece) == "gear", "a %s lands as gear" % kind)
+	_check(FightSounds.drop_sound_of(_thrown_piece(ItemRarity.Rarity.UNIQUE)) == "unique",
 			"and a unique with its own, whatever it is")
 
-	var blows := [["", CombatScene.HIT_SOUND, CombatScene.BLUNT_CRIT, null],
-			["mace", CombatScene.BLUNT_HIT, CombatScene.BLUNT_CRIT, null],
-			["sword", CombatScene.HIT_SOUND, CombatScene.SLASH_CRIT, CombatScene.GENERAL_CRIT],
-			["dagger", CombatScene.HIT_SOUND, CombatScene.SLASH_CRIT, CombatScene.GENERAL_CRIT]]
+	var blows := [["", FightSounds.HIT_SOUND, FightSounds.BLUNT_CRIT, null],
+			["mace", FightSounds.BLUNT_HIT, FightSounds.BLUNT_CRIT, null],
+			["sword", FightSounds.HIT_SOUND, FightSounds.SLASH_CRIT, FightSounds.GENERAL_CRIT],
+			["dagger", FightSounds.HIT_SOUND, FightSounds.SLASH_CRIT, FightSounds.GENERAL_CRIT]]
 	for blow: Array in blows:
 		var combat: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 		combat.weapon_kind = blow[0]
 		root.add_child(combat)
 		combat.begin(Encounter.for_tile(Vector2i(4, 0), "grass"), Vector2i(4, 0), 2.0)
-		var layer: AudioStream = null if combat._crit_layer == null else combat._crit_layer.stream
-		_check(combat._hit_sound.stream == blow[1] and combat._crit_sound.stream == blow[2] and layer == blow[3],
+		var layer: AudioStream = null if combat._sounds.crit_layer == null else combat._sounds.crit_layer.stream
+		_check(combat._sounds.hit.stream == blow[1] and combat._sounds.crit.stream == blow[2] and layer == blow[3],
 				"a hit with %s lands and crits as it should" % ("bare hands" if blow[0] == "" else "a " + blow[0]))
 		combat.free()
 	return true

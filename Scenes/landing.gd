@@ -111,7 +111,8 @@ func _sign_up() -> void:
 	# A server that never answers must not leave Join greyed for ever.
 	http.timeout = Cloud.TIMEOUT
 	add_child(http)
-	http.request_completed.connect(func(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	http.request_completed.connect(func(result: int, code: int, _headers: PackedStringArray,
+			body: PackedByteArray) -> void:
 		http.queue_free()
 		var answer: Variant = JSON.parse_string(body.get_string_from_utf8())
 		var joined := result == HTTPRequest.RESULT_SUCCESS and code == 201

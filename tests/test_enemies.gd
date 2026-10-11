@@ -219,7 +219,8 @@ func _test_hp_rises_with_size_and_tier() -> bool:
 		_check(EnemyRoster.SIZE_HP[sizes[i]] < EnemyRoster.SIZE_HP[sizes[i + 1]], "bigger bodies hold more")
 	# Nothing is flimsier than a slime, whatever the two tables are tuned to.
 	for name in EnemyRoster.names():
-		_check(EnemyRoster.hp_modifier(name) >= EnemyRoster.hp_modifier("Grass Slime"), "the slime is the floor, under " + name)
+		_check(EnemyRoster.hp_modifier(name) >= EnemyRoster.hp_modifier("Grass Slime"),
+				"the slime is the floor, under " + name)
 	return true
 
 

@@ -491,10 +491,10 @@ func _test_the_web_ships_two_tracks() -> bool:
 	for section in presets.get_sections():
 		if str(presets.get_value(section, "name", "")) == "Web":
 			excluded = str(presets.get_value(section, "exclude_filter", "")).split(",")
-	var tracks := ResourceLoader.list_directory(MAIN.MUSIC_DIR)
+	var tracks := ResourceLoader.list_directory(Jukebox.MUSIC_DIR)
 	_check(tracks.size() > WEB_MUSIC.size(), "the music is read off its folder (%d)" % tracks.size())
 	for track in tracks:
-		var path: String = MAIN.MUSIC_DIR.trim_prefix("res://").path_join(track)
+		var path: String = Jukebox.MUSIC_DIR.trim_prefix("res://").path_join(track)
 		var left_out := false
 		for pattern in excluded:
 			left_out = left_out or path.matchn(pattern.strip_edges())

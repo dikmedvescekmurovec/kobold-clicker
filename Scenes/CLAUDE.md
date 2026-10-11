@@ -9,22 +9,22 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 ## What the main scene owns
 - **Exports:** `world_seed` / `map_seed`, `map_origin`, `zoom`, `ui_scale` (0 = from the save or the window), `inventory_path` / `map_path`.
 - **Start-up** (`_ready`): scratch paths if headless, the cloud, the inventory, the map, `MapBuilder`, the UI, one map save.
-- **The UI is built in code** from `UITheme`'s static builders, so the `.tscn` stays untouched while the editor has it open:
-  - **The tile panel** (`_panel`, right edge): name, kind and level, lands, services, modifiers, runes, a wall's unlocks, its buttons (`_update_buttons`).
+- **The UI is built in code** from `UITheme`'s static builders, so the `.tscn` stays untouched while the editor has it open. Four parts are classes of their own in `Scenes/UI/` that the scene owns one of and wires: `tile_panel` (`TilePanel`), `banner` (`Banner`), `rewards` (`BountyRewards`) and the static `Changelog`:
+  - **The tile panel** (`tile_panel`, a `TilePanel`, right edge): name, kind and level, lands, services, modifiers, runes, a wall's unlocks (`TilePanel.fill`), its buttons (`TilePanel.update_buttons`); `_restore_panel` brings it back as a fight, a camp or a town gives the screen back.
   - **The corner** (top-left): `CharacterPanel` on `CanvasLayer` 3 over the corner buttons (`_place_character`, `_show_damage`, `_place_corner`, `_show_corner`, `HOTKEYS`).
   - **The crown:** the corner button for `heirloom_page`, a second `BagPage`, there while an heirloom is held.
   - **Sliding panels** (`Juice.slides`, registered in `_build_pages`); the corner column glides after them (`Juice.glide`).
   - **Left-hand pages:** nine (`Scenes/UI/`), listed by `_left_pages()`.
   - **The town page** (`TownPage`, in the tile panel's place), the bag in shop mode beside it (`_stand_at_counter`).
-  - **Promised piece** (`town_page.item_claimed`): a bounty's is announced as a body's would be (`_is_new_unique`, `_announce_unique`), and nothing for any other piece.
-  - **Bounty verdict** (`_show_bounty_paid`, `_close_bounty_paid`): what a handed-in bounty paid; everything is already paid, so it only shows.
-  - **Board reward** (`_show_board_choice`, `_catch`): a cleared board's three options; put away untaken it waits in the town's drawer.
+  - **Promised piece** (`town_page.item_claimed`): a bounty's is announced as a body's would be (`_is_new_unique`, `Banner.unique`), and nothing for any other piece.
+  - **Bounty verdict** (`BountyRewards.show_paid`, `BountyRewards.close_paid`): what a handed-in bounty paid; everything is already paid, so it only shows.
+  - **Board reward** (`BountyRewards.show_choice`, `BountyRewards._catch`): a cleared board's three options; put away untaken it waits in the town's drawer.
   - **Chest pointer** (`_chest_pointer`, `_sync_chest`): a `MapPointer` up for as long as the fortuneteller's chest is, and at no chest for nothing.
   - **Hero pointer** (`_hero_pointer`, `_find_hero`): a button at the map's foot once the map is dragged or zoomed off the hero.
   - **Aimed spells** (`_on_spell_aimed`, `_on_cell_aimed`, `_end_aim`): the fortuneteller's scour and road home.
 - **Super orbs** (`_credit_walls`): pays the fallen walls and climbs the heirlooms to the charted level.
 - **Transcending** (`_open_transcend`, `_transcend`): the black `TranscendPage`, in memory only, then a Reset with the inventory written over.
-- **Tile modifiers** (`_mods_of`, `_show_mods`): what a tile's fight is built with and what the panel writes.
+- **Tile modifiers** (`_mods_of`, `TilePanel._mods`): what a tile's fight is built with and what the panel writes.
 - **Curses:** the Ring of Walls (`view.wall_step`), the homeland (`_settle_homeland`), No Second Chances, `_sight` and `_cannot_camp`.
 - **The dungeon** (`_on_cave_pressed`, `_on_dungeon_pressed`, `_on_dungeon_finished`, `_bank_depths`): the descent from the Gollux cave.
 - **The cloud** (`cloud`, `leaderboard_page`, `_cloud_question`): the account, the cloud save and the board; the server is `backend/leaderboard/README.md`.
@@ -33,13 +33,14 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Farm runes** (`_on_farm_pressed`, `_on_kill_paid`): a tile's rune work (`inventory.rune_work`), counted down a body at a time.
 - **Walking to a fight** (`_walk_to_fight`, `_on_player_arrived`, `_retreat_cell`).
 - **Stop** (`_stop_button`, `_on_stop_pressed`): cuts a walk short.
-- **Fights** (`_open_fight`, `_on_combat_finished`); all three kinds go through `_arm`, `_cover_map` and `_uncover_map`.
+- **Fights** (`_open_fight`, `_on_combat_finished`); all three kinds go through `_arm`, `_cover_map` and `_uncover_map`, and a tile's fight, a run and the dungeon are put on the screen by `_stage`.
 - **Bag over a fight** (`_let_bag_over`, `_rearm`, `_refresh_bag_room`).
-- **The banner** (`_raise_banner`, `_close_banner`, `_place_banner`): a new unique (`_announce_unique`) or a filled bounty (`_announce_bounty`).
-- **Bounty toast** (`_toast_bounty`, `_place_toast`): "+1" for a counted kill, or "Level too low".
+- **The banner** (`banner`, a `Banner`, fed frames and presses by `_process` and `_input`; `Banner.raise`, `Banner.close`): a new unique (`Banner.unique`), a filled bounty (`Banner.bounty`), an achievement, and the level-up fanfare (`Banner.level_up`).
+- **Bounty toast** (`Banner.toast_bounty`, `Banner._place_toast`): "+1" for a counted kill, or "Level too low".
 - **Tips** (`TIPS`, `_check_tips`, `_tip_due`), and the corner buttons' flash, pulse and red pip (`_flash`, `_pulse`, `_mark_new`).
-- **Changelog** (`_show_changelog`, `changelog()`): the web build's start-up panel of new `CHANGELOG.md` versions.
-- **Achievements** (`_check_achievements`, `_announce_achievements`, `_on_achievements_pressed`).
+- **Changelog** (`_show_changelog`, `Changelog`): the web build's start-up panel of new `CHANGELOG.md` versions.
+- **Sound** (`sounds`, a `Jukebox`, `Scenes/jukebox.gd`, made in `_enter_tree`): the music (`play_music`) and every button's, page's and coin's click.
+- **Achievements** (`_check_achievements`, `Banner.achievements`, `_on_achievements_pressed`).
 - **Window shape** (`_layout_ui`, `_pages_room`, `_narrow`): every page's room, wide or held upright.
 - **Under a finger** (`Cursors.touched`, fed by `_input` through `Cursors.feel`).
 - **Escape** (`ui_cancel`, `_unhandled_input`).
@@ -88,7 +89,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Chart a won tile from `_exit_tree` too** (`_chart_won`): only Collect would have charted it. (DESIGN.md: "Fights")
 - **Hand `_mods_of(cell)` to all three places a fight is built** (Chart, Farm, the camp). (DESIGN.md: "Tile modifiers")
 - **Turn the strikes on here** (`fight.strikes = true` in `_open_fight`): a hand-built fight, a farm run, a camp and the ice wall are never struck. Block is in tenths of a second (`LootTable.SECONDS_STATS`), and time on hit never wins back more than the blows took. (DESIGN.md: "Turn the strikes on here")
-- **Pay salvage in all four places** gear is thrown away (`Inventory.salvage`, `salvage_orb`: `_on_loot_autodiscarded`, `_on_drop_discarded`, `BagPage._on_discard_pressed`, `_on_clear_level_pressed`). (DESIGN.md: "Pay salvage in all four places")
+- **Pay salvage in all four places** gear is thrown away (`Inventory.salvage`, `salvage_orb`: `_on_loot_autodiscarded`, `_on_drop_discarded`, `BagPage._on_discard_pressed`, `_take_level`). (DESIGN.md: "Pay salvage in all four places")
 - **Add only drops to a full bag** (`Inventory.add`): a drop past `CAPACITY` is kept, never destroyed, and overencumbers the player (`Inventory.encumbered()`, Chart and Farm refused). A purchase is refused instead, and an Equip that would hand two pieces back into room for one (`Inventory.can_equip`). (DESIGN.md: "Add only drops to a full bag")
 
 ### A new player's first kills
@@ -104,7 +105,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 ### Stats, numbers and money
 - **Read only these stats** in a fight, all in `Encounter.arm()`: `damage`, `crit_chance`, `crit_damage`, `attack_speed`, `bleed`, `armor`, `dodge`, `block`, `time_on_hit`, `drop_rate`, `item_rarity`, `gold_find`, `orb_find`, `spawn_speed`, `fight_clock` (capped at `Encounter.CLOCK_MOST`, not on a run). (DESIGN.md: "Read only these stats")
 - **Read the attributes in `Inventory.stats()`,** in the fight only for the Brawler's Wraps. No fight reads `move_speed` (`PlayerToken.move_speed`) or `sight` (`_sight()`, only where a won tile is charted). (DESIGN.md: "Read only these stats")
-- **Keep drop rate the broad finder:** `_kill` adds it to `gold_find` and `orb_find`; `gold_of` and `OrbTable.chance_for` stay untouched, so town prices do not move. (DESIGN.md: "Read only these stats")
+- **Keep drop rate the broad finder:** `Encounter._drop_purse` and `_drop_orb` add it to `gold_find` and `orb_find`; `gold_of` and `OrbTable.chance_for` stay untouched, so town prices do not move. (DESIGN.md: "Read only these stats")
 - **Let monsters outgrow gear:** `HP_GROWTH` a hex step, `LAND_GROWTH` an ice wall behind the cell, `LEVEL_GROWTH` a level, every `WALL_STEP` wall on a band edge (`MapBuilder.LEVEL_TILES`). Tuned by hand, no test holding any of it. (DESIGN.md: "Let monsters outgrow gear")
 - **Format growing numbers** through `BigNumber.format`: gold, prices, rewards, monster health and damage are whole-valued `float`s. Levels, kills, counts, percents, experience and modifier values stay `int`, but modifier numbers and percent stats are written through it too. (DESIGN.md: "Format growing numbers")
 - **Make money only in TownPrices,** in bodies: nothing outside it writes a figure in gold, and its purse is `Encounter.gold_at_steps`, which `base_gold` is built on. (DESIGN.md: "Make money only in TownPrices")
@@ -113,7 +114,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Walk onto the tile before Chart or Farm** (`_walk_to_fight`; `_on_player_arrived` presses the button again). A lost tile runs the player back to `_retreat_cell`, the charted tile they stepped from, but not under Retry nor No Second Chances. (DESIGN.md: "Walking to a fight")
 - **Drop `_fight_target`, `_town_target` and `_dark_way` before a Stop** (the user's, 2026-10-10), or the arrival presses their button again. The last step is never stoppable (`PlayerToken.can_stop`), and the button never stands under a page. (DESIGN.md: "Stop", "Stopping a walk (2026-10-10)")
 - **Let a tile under the fog be clicked** (`HexMap.can_pick`): `_on_tile_clicked` calls it "Unknown land" without asking `name_of`, and `_on_chart_pressed` reads the terrain from `view.env_at`, never from what is drawn. (DESIGN.md: "Tile modifiers")
-- **Write a tile's modifiers on the panel, never in a tooltip, and only for a seen tile** (`_show_mods`). (DESIGN.md: "Tile modifiers")
+- **Write a tile's modifiers on the panel, never in a tooltip, and only for a seen tile** (`TilePanel._mods`). (DESIGN.md: "Tile modifiers")
 - **Run `_credit_walls` at start-up, before the interface is built, and after every `view.chart`:** it pays the walls, raises the heirlooms, puts the cave down and sets `view.distant`. (DESIGN.md: "Super orbs", "The dungeon")
 - **Put the cave down only once Gollux is unlocked** (`WallUnlocks.GOLLUX`, the user's, 2026-10-09), beside the wall tile just broken (`view.place_cave(view.breach)`, after `inventory.reach`); one a world, and a world that holds a cave keeps it. (DESIGN.md: "The dungeon")
 - **Enter the dungeon only by the tile panel's Enter cave** (`MapBuilder.can_enter_cave`), and pay only runes there: no ledger, nothing connected but `finished` and `rune_gained`, so no board hears of a body and no kill is banked. (DESIGN.md: "The dungeon")
@@ -140,7 +141,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Open `CharacterPage` through `_character_button`:** the panel takes no mouse. Over a fight the button stays, disabled and taking no mouse, only so the experience bar's tooltip still shows. (DESIGN.md: "The corner")
 - **Leave the crown standing in a town:** it swaps which bag page stands at the counter (`_counter_page`) and never closes the town. Both bag pages are wired to the town alike, and `ItemCard.equipment` follows the one that is up. (DESIGN.md: "The crown")
 - **Slide only the drawing** (`Juice.slides`): `visible` and `position` are the truth the moment a page is shown or hidden. (DESIGN.md: "Sliding panels")
-- **Stand buttons at the foot of every right-hand column,** the tile panel's shown only while they can be pressed (`_update_buttons`, which re-places the column through `_place_panel`). (DESIGN.md: "The tile panel")
+- **Stand buttons at the foot of every right-hand column,** the tile panel's shown only while they can be pressed (`TilePanel.update_buttons`, which re-places the column through `TilePanel.place`). (DESIGN.md: "The tile panel")
 - **Hand every page its room only in `_layout_ui`** (`area`, `UITheme.dock`); held upright (`UITheme.narrow`), `_show_corner` and a town's tab lay everything out again. (DESIGN.md: "Window shape")
 - **Keep the doll on a selection:** a selected bag item draws nothing of what it would replace, the worn piece is the hover card's second card under Alt (`ItemCard.worn_for`), and no block shows deltas. (DESIGN.md: "Keep the doll on a selection")
 - **Equip onto the emptiest socket the piece fits** (`BagPage._socket_pick`; a ring's Swap turns it to the other finger). Hide folds the doll for the session only (`_doll_hidden`, not saved). (DESIGN.md: "Keep the doll on a selection")
@@ -163,8 +164,8 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Pause a fight under a tip,** one over it or one already up as it opens. (DESIGN.md: "Tips")
 - **Flash a corner button until its first press and never again** (`_flash`; the user's rule, 2026-09-30); seen ids live in `inventory.tips`, and the star pulses on state (`_pulse`). (DESIGN.md: "Tips")
 - **Work the red pip out from state,** in `_show_corner` and after every save (`_mark_new`; the user's ask, 2026-10-07); the chest wears it only for a first of its kind (`BAG_FIRSTS`, the user's, 2026-10-10). (DESIGN.md: "Tips")
-- **Put a banner down only through `_close_banner`.** It wears its X from the start and goes after `BANNER_HOLD`, never while the mouse is on it or under a finger (the user's rules, 2026-09-29, 2026-10-03, 2026-10-09). (DESIGN.md: "The banner")
-- **Hold a banner while a pop-up is up** (`_popup_up`, `_held_banner`). A fight ending does not put one down, and a swing never touches it before its time has run out. (DESIGN.md: "The banner")
+- **Put a banner down only through `Banner.close`.** It wears its X from the start and goes after `Banner.HOLD`, never while the mouse is on it or under a finger (the user's rules, 2026-09-29, 2026-10-03, 2026-10-09). (DESIGN.md: "The banner")
+- **Hold a banner while a pop-up is up** (`_popup_up`, `Banner._held`). A fight ending does not put one down, and a swing never touches it before its time has run out. (DESIGN.md: "The banner")
 - **Raise a new unique's banner before `ledger.add_loot`** (`_on_loot_dropped`), the last moment `uniques_found` can still answer "is this new?". (DESIGN.md: "The banner")
 - **Notice achievements on every save** (`save_written`, deferred, to `_check_achievements`), never while the black screen is up, nor over a refused or reset save. (DESIGN.md: "Achievements")
 - **Record a fight before `ledger.bank_kills`** (`Achievements.record`, in `_on_combat_finished` and `_exit_tree`); a descent counts only the depth it wins, and `_pay_salvage` ticks `discarded`. (DESIGN.md: "Achievements")

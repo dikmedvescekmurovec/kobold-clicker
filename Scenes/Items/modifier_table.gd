@@ -1,33 +1,8 @@
 class_name ModifierTable
 extends RefCounted
-## What an item can carry on top of what it is.
-##
-## Three shapes of modifier, and each is let onto a piece by a different rule.
-##
-## A PERCENT one scales a stat the item already has, so it needs that *base* stat: a boot has no
-## damage to increase. A FLAT one adds a stat outright, so it needs only that the piece be allowed to
-## carry it -- LootTable's `affixes` -- which is how a ring with no crit of its own rolls "+2%
-## Crit Chance". A GLOBAL one is a percentage of what the *whole set* is worth rather than of anything the
-## piece has, so it needs neither: LootTable's `globals` says which pieces may carry one, which today
-## is the jewellery and nothing else.
-##
-## There was a fourth, PLAYER: a sentence about the player that fitted any piece and that nothing
-## applied. Two of its three said what a FLAT line already said (move speed, item rarity) and went; the
-## third is the fight clock, a FLAT stat any piece may carry (`LootTable.ANY_AFFIXES`). `RENAMED` is
-## what a saved one became.
-##
-## Where a modifier is *applied* follows from that. A PERCENT and a FLAT one are folded into the
-## piece by `Item.effective_stats`, because they are numbers the piece is worth. A GLOBAL one is
-## folded in once by `Equipment.totals`, after every worn piece has been added up -- a ring has no
-## damage of its own for "+14% increased Damage" to scale, and the sword's is exactly what it means.
-##
-## Which modifiers an item can roll is decided by building the list of candidates first and drawing
-## from that, never by rolling and checking: a modifier the item cannot carry is never a candidate,
-## so there is no check to forget and no reroll loop that can spin.
-##
-## Every value is a whole number on purpose. It means one randi_range per modifier, it means the save
-## file holds 14 rather than 14.0, and it means a test can compare a round-tripped item with == .
-## Nothing here wants half a percent.
+## The modifier pool and its three kinds, each line's tiers and bands, and how a line is rolled and
+## written. A pool is built of legal candidates only (`pool_for`), never rolled and then checked.
+## Every value is a whole number: one `randi_range` a line, `14` in a save, `==` on a round trip.
 
 enum Kind {
 	PERCENT,  ## scales a base stat the item has: "+14% increased Damage"
@@ -35,15 +10,21 @@ enum Kind {
 	GLOBAL,   ## scales what the whole set is worth, not the piece: a ring's "+14% increased Damage"
 }
 
-## id -> what it does, what it touches, the range it rolls in, and how often it is drawn against the
-## others in the same pool. Every line is built from the stat's label, so a stat renamed is renamed
-## everywhere -- but a line with a `text` of its own, which says what it does in a sentence of its own
-## (`_written`). Percent ranges are wider where the stat is itself a percentage -- a fifth of a 5% crit
-## chance is a rounding error -- and a flat roll is worth roughly two percent rolls on the same stat.
+## id -> its row. A saved line holds the id: a retired one loads through `RENAMED`, or is lost.
+##   kind, stat  what it does, to what. One stat a line; a line with no `text` is built from the
+##               stat's label (`_written`).
+##   range       the band it rolls in at level 1, both ends inclusive.
+##   weight      how often it is drawn against the rest of its pool (`weight_of`).
+##   level_flat  what a level adds to the band, in place of the stat's own `LootTable.LEVEL_FLAT`.
+##   text        the sentence it writes, `{n}` the number, in place of the stat's label; `text_one`
+##               for a number of one. Never opens on a name (the user's; CLAUDE.md).
+##   per_tier    [low, high] added to the band a tier past the first, in place of growing by level.
+##   signed      the band is `range` either side of nothing, never 0, and `wide` from tier `wide_from`.
+## Attack speed has no FLAT line: "+0.2 attacks a second" would be the one fraction in the file.
+## Bands and weights are the user's dials; what each was sized against is in DESIGN.md.
 const MODS := {
 	"increased_damage": {"kind": Kind.PERCENT, "stat": "damage", "range": [8, 20], "weight": 10},
-	# A point of damage is a lot now that a sword carries one: the whole curve starts at a click for 1
-	# and this is the modifier that can double it, so its band is the tightest in the table.
+	# A quarter of the weapon's step a level: four sockets roll it (DESIGN.md).
 	"added_damage": {"kind": Kind.FLAT, "stat": "damage", "range": [1, 2], "weight": 10,
 		"level_flat": 0.1},
 	"increased_crit": {"kind": Kind.PERCENT, "stat": "crit_chance", "range": [10, 30], "weight": 10},
@@ -60,54 +41,32 @@ const MODS := {
 	"added_dodge": {"kind": Kind.FLAT, "stat": "dodge", "range": [2, 6], "weight": 10},
 	"increased_crit_damage": {"kind": Kind.PERCENT, "stat": "crit_damage", "range": [8, 20], "weight": 10},
 	"added_crit_damage": {"kind": Kind.FLAT, "stat": "crit_damage", "range": [5, 15], "weight": 10},
-	# The mace's Bleed, which nothing rolled before: both shapes, as crit has, and only the mace can
-	# take either -- bleed is its kind's alone.
+	# The mace's alone: bleed is its kind's.
 	"increased_bleed": {"kind": Kind.PERCENT, "stat": "bleed", "range": [10, 25], "weight": 10},
 	"added_bleed": {"kind": Kind.FLAT, "stat": "bleed", "range": [3, 8], "weight": 10},
-	# The weapons' own lines: more of one kind of blow, summed in `Encounter.gear_more` and applied once.
-	# A click or a swing is half of what a weapon does, so those two roll a little over increased
-	# damage's band; an elite or a boss is one body in ten and a first blow one in many, so theirs are wider.
+	# The weapons' lines: more of one kind of blow, summed in `Encounter.gear_more` and applied once.
 	"added_click_damage": {"kind": Kind.FLAT, "stat": "click_damage", "range": [10, 25], "weight": 8},
 	"added_swing_damage": {"kind": Kind.FLAT, "stat": "swing_damage", "range": [10, 25], "weight": 8},
 	"added_elite_damage": {"kind": Kind.FLAT, "stat": "elite_damage", "range": [15, 35], "weight": 6},
 	"added_first_blow": {"kind": Kind.FLAT, "stat": "first_blow", "range": [20, 50], "weight": 6},
-	# A chance a blow lands twice: crit chance's shape, a point a level.
 	"added_double_strike": {"kind": Kind.FLAT, "stat": "double_strike", "range": [2, 5], "weight": 6},
-	# The attributes and what a hit wins back are flat-only: each is a quantity you add up across the
-	# set rather than a thing an item has more or less of. That they have no PERCENT form is also what
-	# lets them sit in `affixes` on pieces that show none of them.
 	"added_time_on_hit": {"kind": Kind.FLAT, "stat": "time_on_hit", "range": [1, 2], "weight": 8},
 	"added_strength": {"kind": Kind.FLAT, "stat": "strength", "range": [2, 8], "weight": 8},
 	"added_dexterity": {"kind": Kind.FLAT, "stat": "dexterity", "range": [2, 8], "weight": 8},
 	"added_intelligence": {"kind": Kind.FLAT, "stat": "intelligence", "range": [2, 8], "weight": 8},
-	# All three at once, the amulets' alone: half a line of each, drawn half as often -- the line for a
-	# Crown of Accord, or for meeting every requirement at once.
+	# All three attributes at once, the amulets' alone.
 	"added_all_attributes": {"kind": Kind.FLAT, "stat": "all_attributes", "range": [1, 4], "weight": 4},
-	# What a body leaves, which is a stat now rather than a player-wide sentence: the Gold Amulet shows
-	# it and anything allowed to carry it rolls this.
 	"added_drop_rate": {"kind": Kind.FLAT, "stat": "drop_rate", "range": [3, 10], "weight": 4},
-	# The jewellery's own finder, drawn as often as drop rate and worth two and a half times as much a
-	# roll. Drop rate is the broad one -- it lifts gear, uniques, orbs and gold alike -- and item
-	# rarity only lifts the weights a piece of gear rolls its rarity on, so the narrow one carries the
-	# bigger number.
 	"added_item_rarity": {"kind": Kind.FLAT, "stat": "item_rarity", "range": [10, 25], "weight": 4},
-	# The Gold Ring's own stat, and the rarest roll in the table. Its band is written flat
-	# (`level_flat` 0) rather than growing a point a level with the stat: it was sized for The Tithe,
-	# which is a unique and a percentage of a purse that is already exponential in the walk.
+	# `level_flat` 0: the band was sized for The Tithe, a share of a purse already exponential in the walk.
 	"added_gold_find": {"kind": Kind.FLAT, "stat": "gold_find", "range": [20, 40], "weight": 1,
 		"level_flat": 0.0},
-	# The Pearl Ring's own stat, which every other ring rolls: the middle of its band is the Pearl's 15,
-	# and it is drawn as often as item rarity, the other narrow finder.
 	"added_orb_find": {"kind": Kind.FLAT, "stat": "orb_find", "range": [10, 20], "weight": 4},
-	# The rings' two lines no other piece carries: more experience off every body, and commons that come
-	# on as elites -- harder fights that leave more (`Encounter.arm`). Elite chance is the same band at
-	# every level, spawn speed's way: what reaches the most is wearing it, not levelling it.
+	# The rings' two lines. Elite chance is one band at every level, as spawn speed is.
 	"added_experience": {"kind": Kind.FLAT, "stat": "xp_more", "range": [5, 15], "weight": 4},
 	"added_elite_chance": {"kind": Kind.FLAT, "stat": "elite_chance", "range": [3, 8], "weight": 4},
-	# The helmet's, the body's and the offhand's own lines (2026-10-07), each written as what it does
-	# (`text`, the number in `{n}`'s place) rather than as a stat's name. Shares take a point a level.
-	# The helmet: a later first blow, less off an elite's or a boss's, weaker tile modifiers, thinner
-	# bodies -- a "less" of damage taken or health, so a narrower band -- and one base's stones a rank up.
+	# The helmet's, the body's and the offhand's lines (2026-10-07), each saying what it does (`text`).
+	# The helmet's:
 	"added_blow_delay": {"kind": Kind.FLAT, "stat": "blow_delay", "range": [10, 25], "weight": 6,
 		"text": "Enemies' first blows come {n}% later"},
 	"added_elite_ward": {"kind": Kind.FLAT, "stat": "elite_ward", "range": [10, 25], "weight": 6,
@@ -116,23 +75,18 @@ const MODS := {
 		"text": "Tile modifiers are {n}% weaker"},
 	"added_less_health": {"kind": Kind.FLAT, "stat": "less_health", "range": [5, 12], "weight": 6,
 		"text": "Enemies have {n}% less health"},
-	# One rank, at every level: three lines, so one base is drawn a third as often as any other line.
 	"added_strength_stones": {"kind": Kind.FLAT, "stat": "strength_stones", "range": [1, 1], "weight": 2,
 		"text": "+{n} rank to every Strength Node holding a point"},
 	"added_intelligence_stones": {"kind": Kind.FLAT, "stat": "intelligence_stones", "range": [1, 1],
 		"weight": 2, "text": "+{n} rank to every Intelligence Node holding a point"},
 	"added_dexterity_stones": {"kind": Kind.FLAT, "stat": "dexterity_stones", "range": [1, 1], "weight": 2,
 		"text": "+{n} rank to every Dexterity Node holding a point"},
-	# A skill stone's (the user's, 2026-10-08): the points it takes past the one every stone takes, each
-	# one more of everything the stone carries (`Skills`). One of the stone's handful of lines, so a rank
-	# is bought with a line it could have rolled instead. Tiered like any line, but a tier's band is
-	# written outright (`per_tier`, the user's, 2026-10-09): tier 1 is 1-2 and each tier lifts the top by
-	# two, the bottom staying at 1. Drawn at the stone's tier's weight (`SkillTree.RANKS_WEIGHTS`), never
-	# at this one.
+	# A skill stone's (the user's, 2026-10-08): the points it takes past the one every stone takes
+	# (`Skills`). Its bands are written by the tier (`per_tier`, the user's, 2026-10-09): tier 1 is 1-2
+	# and each tier lifts the top by two. Drawn at `SkillTree.ranks_weight(tier)`, never at this weight.
 	"added_stone_ranks": {"kind": Kind.FLAT, "stat": "stone_ranks", "range": [1, 2], "weight": 4,
 		"per_tier": [0, 2], "text": "+{n} ranks", "text_one": "+{n} rank"},
-	# The body: a camp's pay, a count of bodies either side of nothing (`signed`: one more or fewer, and
-	# up to two from tier `wide_from`, never none), blows struck back and time recouped.
+	# The body's. `added_enemies` is one more or fewer, up to two from tier `wide_from`, never none.
 	"added_camp_earnings": {"kind": Kind.FLAT, "stat": "camp_earnings", "range": [10, 25], "weight": 4,
 		"text": "Camps earn {n}% more"},
 	"added_enemies": {"kind": Kind.FLAT, "stat": "extra_enemies", "range": [-1, 1], "weight": 4,
@@ -149,72 +103,48 @@ const MODS := {
 		"text": "Blows burn for {n}% of their damage over 3 seconds"},
 	"added_time_on_block": {"kind": Kind.FLAT, "stat": "time_on_block", "range": [2, 5], "weight": 6,
 		"text": "A blow your block stops entirely wins back {n}"},
-	# On anything (`LootTable.ANY_AFFIXES`), and flat at every level: eight sockets of top rolls is the
-	# cap, where the next enemy is there the moment the last one is dead.
+	# On any piece (`LootTable.ANY_AFFIXES`), and the same band at every level: the cap is a set's worth.
 	"added_spawn_speed": {"kind": Kind.FLAT, "stat": "spawn_speed", "range": [5, 15], "weight": 4,
 		"level_flat": 0.0},
-	# The globals, and the jewellery is the only place they land. A percentage of the whole set is
-	# worth more than a percentage of one piece, so increased damage rolls the smaller of the two
-	# bands here -- the frontier is beaten with what the set adds up to. Attack speed has no flat
-	# form (see below), so
-	# this is the whole of what a ring can do to it.
+	# The globals, which only the jewellery carries. Each rolls a little under its PERCENT band: a share
+	# of the whole set is worth more than a share of one piece.
 	"global_increased_damage": {"kind": Kind.GLOBAL, "stat": "damage", "range": [5, 12], "weight": 8},
 	"global_increased_attack_speed": {"kind": Kind.GLOBAL, "stat": "attack_speed", "range": [5, 12], "weight": 8},
-	# The rest of the set's offence for the rings, and its bleed and defence for the amulets -- the Iron
-	# Band's armour and the Jade Ring's dodge in place of their own percent (`pool_for`). Each a little
-	# under its PERCENT band, for increased damage's reason.
 	"global_increased_crit": {"kind": Kind.GLOBAL, "stat": "crit_chance", "range": [6, 15], "weight": 6},
 	"global_increased_crit_damage": {"kind": Kind.GLOBAL, "stat": "crit_damage", "range": [5, 12], "weight": 6},
 	"global_increased_bleed": {"kind": Kind.GLOBAL, "stat": "bleed", "range": [5, 12], "weight": 6},
 	"global_increased_armor": {"kind": Kind.GLOBAL, "stat": "armor", "range": [5, 12], "weight": 6},
 	"global_increased_dodge": {"kind": Kind.GLOBAL, "stat": "dodge", "range": [5, 12], "weight": 6},
 	"global_increased_time_on_hit": {"kind": Kind.GLOBAL, "stat": "time_on_hit", "range": [5, 12], "weight": 6},
-	# Seconds on the fight clock, in tenths (`LootTable.SECONDS_STATS`): 1.0-4.0s, on anything, and the
-	# same at every level -- a clock that grew with the level would delete the only way to lose.
-	# `Encounter.CLOCK_MOST` caps what a whole set adds.
+	# Tenths of a second (`LootTable.SECONDS_STATS`): 1.0-4.0s, on any piece and the same at every level,
+	# since a clock that grew with the level would delete the only way to lose. `Encounter.CLOCK_MOST`
+	# caps what a set adds.
 	"added_fight_clock": {"kind": Kind.FLAT, "stat": "fight_clock", "range": [10, 40], "weight": 4},
 }
 
-## Modifiers the table no longer holds -> [what a saved one became, what its number is multiplied by].
-## Read by `Item.from_dict` alone. One idea under two names is how the two come to disagree, so the
-## player-wide move speed and item rarity went into the FLAT lines that already said them, and the
-## clock counts tenths now.
+## A retired id -> [the line a saved one became, what its number is multiplied by]. Read by
+## `Item.from_dict` alone.
 const RENAMED := {
 	"walk_speed": ["added_move_speed", 1],
 	"item_rarity": ["added_item_rarity", 1],
 	"fight_clock": ["added_fight_clock", 10],
-	# A helmet's rank on one of the three skill trees, which became the three bases of stone (2026-10-08).
+	# A helmet's rank on one of the old skill trees became one on a base of stone (2026-10-08).
 	"added_power_skills": ["added_strength_stones", 1],
 	"added_fortune_skills": ["added_intelligence_stones", 1],
 	"added_guard_skills": ["added_dexterity_stones", 1],
 }
 
-## No modifier can be drawn without a stat to hang on, so attack speed has no flat form: "+0.2
-## attacks a second" would be the one fraction in the file.
-
-## The modifiers no item can roll today on purpose rather than by oversight. Written down because
-## "unreachable" is exactly what a test would otherwise fail on, and a silently unreachable modifier
-## and a deliberately dormant one have to be told apart by name.
-##
-## Empty today: the resistances were the dormant ones, and they went when enemies began to strike the
-## clock -- there is one thing to defend and no elements to defend it from. The list stays for the
-## next modifier that is written ahead of its piece.
+## Modifiers no item can roll on purpose: `test_inventory` tells one from an unreachable modifier by
+## this list. Empty today, and kept for the next line written ahead of its piece.
 const DORMANT: Array[String] = []
 
-## The modifiers no pool holds because only a unique's row may name them (`UniqueTable.UNIQUES`). Named
-## for the reason the dormant ones are: a test has to tell this from a modifier nothing can reach.
-##
-## Empty today. `added_gold_find` was the one, and it is in the Gold Ring's pool now that the ring
-## shows gold find as a base stat -- a FLAT modifier is let on by `can_roll`, which asks for a base
-## stat *or* an affix, and there is no third answer that would hold one back from a piece that has the
-## stat outright. The list stays for the next row that wants it.
+## Modifiers no pool holds because only a unique's row may name them; the same test reads it. Empty
+## today, and kept (CLAUDE.md).
 const UNIQUE_ONLY: Array[String] = []
 
 
-## Every modifier this piece could carry: the ones that name a stat it has or may carry. This list is the whole rule -- an impossible modifier is never
-## in it, so nothing downstream has to know it was impossible. A skill stone's is its base's own list,
-## as far as its `tier` unlocks (`SkillTree.lines_for`); every other piece passes no tier, or its
-## `stone_tier` of 0, and the tier is nothing to it.
+## Every modifier the piece could carry, and none it could not. A skill stone's is its base's list as
+## far as `tier` unlocks (`SkillTree.lines_for`); every other piece ignores the tier.
 static func pool_for(item_type: String, tier := SkillTree.MOST_TIER) -> PackedStringArray:
 	if SkillTree.LINES.has(item_type):
 		return SkillTree.lines_for(item_type, tier)
@@ -224,8 +154,7 @@ static func pool_for(item_type: String, tier := SkillTree.MOST_TIER) -> PackedSt
 		var fits := false
 		match mod["kind"]:
 			Kind.PERCENT:
-				# A piece that may scale a stat for the whole set does not scale its own as well: the
-				# two write the same sentence, and the set's is the one worth having.
+				# Not where the piece may scale the stat for the whole set: the two write the same sentence.
 				fits = LootTable.has_stat(item_type, mod["stat"]) \
 						and not LootTable.can_globalize(item_type, mod["stat"])
 			Kind.GLOBAL:
@@ -237,11 +166,8 @@ static func pool_for(item_type: String, tier := SkillTree.MOST_TIER) -> PackedSt
 	return pool
 
 
-## The modifiers on one item, as [{"id": ..., "value": ...}] in the order they were drawn. Drawn
-## without replacement, so a modifier never appears twice on one piece -- though "+2 Damage" and
-## "+14% increased Damage" are two different draws doing two different things, which is the point of
-## having both shapes. A pool too thin to fill the count gives everything it has, which cannot happen
-## with today's tables and is held to that by a test.
+## `count` modifiers for a fresh piece, in the order drawn and without replacement. A pool too thin to
+## fill the count gives all it has, which a test holds today's tables never to be.
 static func roll(item_type: String, count: int, rng: RandomNumberGenerator,
 		level := 1, tier := SkillTree.MOST_TIER) -> Array[Dictionary]:
 	var pool := pool_for(item_type, tier)
@@ -255,34 +181,30 @@ static func roll(item_type: String, count: int, rng: RandomNumberGenerator,
 	return rolled
 
 
-## How much likelier each tier is than the one under it, read the other way: at item level L, tier T
-## is drawn with weight TIER_FALLOFF^(L - T). The one dial of the tiers. Nearer 1 spreads the draw
-## down the tiers and lifts the top tier's band (it settles at (1 - r/g) / (1 - r) of the old band,
-## g being `LootTable.LEVEL_GROWTH`: 1.96 at 0.9); nearer 0 is the old single band back.
+## The tiers' one dial: at item level L, tier T is drawn with weight TIER_FALLOFF^(L - T). Nearer 1
+## spreads the draw down the tiers and lifts the top tier's band; nearer 0 is one band again. The
+## arithmetic is in DESIGN.md, "Modifier tiers".
 const TIER_FALLOFF := 0.9
 
 
-## Whether this modifier's band grows with the level at all. One that does not -- the fight clock,
-## and gold find with its `level_flat` of 0 -- is the same band at every tier, so it draws none and
-## writes none.
+## Whether the band grows with the level at all. One that does not (the fight clock, gold find) has
+## no tiers: it draws none and writes none.
 static func tiered(id: String) -> bool:
 	return _level_band(id, 1) != _level_band(id, 50)
 
 
-## How many tiers under the top a fresh modifier lands, at a piece whose bands are read at `level`:
-## 0 to level - 1, each step down TIER_FALLOFF times as likely as the one above. One `randf` through
-## the inverse of the truncated geometric sum, never a loop of coin tosses -- which would pile what
-## is left over onto tier 1.
+## How many tiers under the top a fresh line lands, where bands are read at `level`: 0 to level - 1,
+## each step down TIER_FALLOFF times as likely. One `randf` through the inverse of the truncated
+## geometric sum; a loop of coin tosses would pile what is left over onto tier 1.
 static func roll_under(level: int, rng: RandomNumberGenerator) -> int:
 	var tiers := maxi(level, 1)
 	var share := rng.randf() * (1.0 - pow(TIER_FALLOFF, tiers))
 	return clampi(floori(log(1.0 - share) / log(TIER_FALLOFF)), 0, tiers - 1)
 
 
-## A fresh modifier: its id, how far under the top tier it landed (`"under"`, written only above 0,
-## the way a lock is) and a number in that tier's band. The tier is kept as a distance from the top
-## rather than by its own number so that everything which moves a piece's level -- the smith, an Orb
-## of Ascension, the end of a world -- carries the tier along with no code of its own.
+## A fresh line, and the one way one is made: its id, a number in its tier's band, and `"under"`, how
+## far under the top tier it landed (written only above 0). A distance from the top, so whatever moves
+## a piece's level moves the tier with it.
 static func rolled_mod(id: String, rng: RandomNumberGenerator, level := 1) -> Dictionary:
 	var under := roll_under(level, rng) if tiered(id) else 0
 	var mod := {"id": id, "value": reroll_value(id, rng, level - under)}
@@ -291,8 +213,8 @@ static func rolled_mod(id: String, rng: RandomNumberGenerator, level := 1) -> Di
 	return mod
 
 
-## The `"under"` a modifier saved before there were tiers is given: the highest tier whose band
-## reaches down to the number it has, so the piece is worth what it was and sits inside a band.
+## The `"under"` given to a line saved before there were tiers: the highest tier whose band reaches
+## down to its number.
 static func fit_under(id: String, value: int, level: int) -> int:
 	if not tiered(id):
 		return 0
@@ -302,20 +224,13 @@ static func fit_under(id: String, value: int, level: int) -> int:
 	return maxi(level, 1) - 1
 
 
-## What one modifier rolls between at this tier. Its own function because three callers need the
-## same answer and any two of them disagreeing would be invisible: `rolled_mod` draws a new modifier
-## here, `reroll_value` draws a fresh number for one already on a piece, and a test reads the band to
-## check that a divined value stayed inside it.
-##
-## A tier's band is fixed, whatever piece it lands on, and built so that the tiers a piece of level
-## L can draw (`roll_under`'s weights) average out to exactly `_level_band(id, L)` -- what a modifier
-## was worth before there were tiers. With m the old band's end, r the falloff and S(n) the sum of
-## r^0..r^(n-1), that is m(T) + r * S(T-1) * (m(T) - m(T-1)): tier 1 is the old level-1 band, and
-## every tier above is the old band at its level plus a share of how fast that band was growing.
+## What a modifier rolls between at `tier`. A tier's band is fixed whatever piece it lands on, and
+## built so that the tiers a level-L piece can draw average to `_level_band(id, L)`: with m the old
+## band's end, r the falloff and S(n) the sum of r^0..r^(n-1), an end is
+## m(T) + r * S(T-1) * (m(T) - m(T-1)).
 static func band_for(id: String, tier: int) -> Array:
 	tier = maxi(tier, 1)
-	# A signed band is its two numbers as written, either side of nothing: no carry, no floor at 1. A
-	# band written by the tier (`per_tier`) is that tier's as written too.
+	# A signed band and one written by the tier (`per_tier`) are as written: no carry, no floor at 1.
 	if MODS[id].get("signed", false) or MODS[id].has("per_tier"):
 		var ends := _level_band(id, tier)
 		return [int(ends[0]), int(ends[1])]
@@ -338,18 +253,14 @@ static func _level_band(id: String, level: int) -> Array[float]:
 	var high := float(band[1])
 	if entry.get("signed", false):
 		return [low, high]
-	# Stepped by the tier rather than grown by the level: `per_tier` more on each end a tier past the first.
+	var steps := maxi(level - 1, 0)
 	if entry.has("per_tier"):
 		var step: Array = entry["per_tier"]
-		return [low + float(step[0]) * maxi(level - 1, 0), high + float(step[1]) * maxi(level - 1, 0)]
+		return [low + float(step[0]) * steps, high + float(step[1]) * steps]
 	match entry["kind"]:
 		Kind.FLAT:
-			# An amount of a stat, so it grows the way that stat's own numbers do -- unless the entry
-			# says otherwise. `level_flat` is there for the one stat whose per-level step was sized for
-			# the piece that has it as a base stat: the weapon's step is right for the sword, which
-			# is where a click's damage comes from, and four times too much once the
-			# jewellery can add a modifier's worth of damage on every finger. Only the absolute step is
-			# the entry's; the multiplier is the stat's either way.
+			# Grows as the stat's own numbers do, but for a step the entry names (`level_flat`); the
+			# multiplier is the stat's either way.
 			# ponytail: a band stays whole ints, which pass int64 near item level 370 -- far past
 			# where a monster's health would have; retype the pair to float then.
 			var step: float = float(entry.get("level_flat",
@@ -357,17 +268,14 @@ static func _level_band(id: String, level: int) -> Array[float]:
 			low = LootTable.scale(entry["stat"], low, level, step)
 			high = LootTable.scale(entry["stat"], high, level, step)
 		Kind.PERCENT, Kind.GLOBAL:
-			# A percentage of a stat that has already grown -- the piece's own or the whole set's,
-			# which is the same arithmetic. It takes the multiplier and not the flat step, which
-			# is sized for the stat itself rather than for a percentage of it.
-			low *= pow(LootTable.LEVEL_GROWTH, maxi(level - 1, 0))
-			high *= pow(LootTable.LEVEL_GROWTH, maxi(level - 1, 0))
+			# A percentage of a stat that has already grown: the multiplier, and no step.
+			var growth := pow(LootTable.LEVEL_GROWTH, steps)
+			low *= growth
+			high *= growth
 	return [low, high]
 
 
-## A fresh number for one modifier, in its tier's band. What an Orb of Divinity spends itself on: the
-## id and the tier stay and only the roll moves, which is why it is drawn here rather than by
-## rolling the modifier again from scratch.
+## A fresh number in the tier's band, the id and the tier staying: what an Orb of Divinity rerolls.
 static func reroll_value(id: String, rng: RandomNumberGenerator, tier := 1) -> int:
 	var band := band_for(id, tier)
 	# A signed band is drawn one short and stepped over nothing, which no line may be.
@@ -377,15 +285,13 @@ static func reroll_value(id: String, rng: RandomNumberGenerator, tier := 1) -> i
 	return rng.randi_range(int(band[0]), int(band[1]))
 
 
-## A rolled value carried to another level: as far up `to_level`'s band as it stood in `from_level`'s.
-## What an heirloom's modifiers go through when the world ends (`Item.transcend`). A value outside
-## its band -- a line held fast while the level moved sits under it -- is held to the band's
-## ends, and a band of one number counts as its top.
-static func rescaled(id: String, value: int, from_level: int, to_level: int) -> int:
-	var from := band_for(id, from_level)
-	var to := band_for(id, to_level)
-	# A signed value keeps its side and is held to the new band's ends: a share of its band would land on
-	# nothing.
+## A rolled value carried to another tier: as far up `to_tier`'s band as it stood in `from_tier`'s
+## (`Item._set_tier`, `Item.ascend`). A value outside its band is held to the band's ends, and a band
+## of one number counts as its top.
+static func rescaled(id: String, value: int, from_tier: int, to_tier: int) -> int:
+	var from := band_for(id, from_tier)
+	var to := band_for(id, to_tier)
+	# A signed value keeps its side, held to the new band's ends: a share of its band could land on 0.
 	if MODS[id].get("signed", false):
 		return clampi(value, int(to[0]), int(to[1]))
 	var span := float(int(from[1]) - int(from[0]))
@@ -393,12 +299,8 @@ static func rescaled(id: String, value: int, from_level: int, to_level: int) -> 
 	return roundi(lerpf(float(to[0]), float(to[1]), place))
 
 
-## One more modifier for a piece that already carries some: drawn from what it could take, less what
-## it has. Empty when there is nothing left to give it, which today's tables cannot produce and a
-## test holds them to.
-##
-## Augmentation is this -- which pieces it is offered on is `OrbTable.can_apply`'s business and not this
-## function's.
+## One more modifier for a piece carrying `existing`: drawn from what it could take, less what it has.
+## {} when nothing is left, which a test holds today's tables never to give.
 static func add_one(item_type: String, existing: Array[Dictionary], rng: RandomNumberGenerator,
 		level := 1, tier := SkillTree.MOST_TIER) -> Dictionary:
 	var held := {}
@@ -427,7 +329,7 @@ static func _weighted(pool: PackedStringArray, rng: RandomNumberGenerator,
 	return pool[LootTable.weighted_index(Array(pool).map(func(id: String) -> int: return weight_of(id, tier)), rng)]
 
 
-## A rolled modifier written for a person.
+## A rolled modifier as its card writes it; "" for an id the table has not got.
 static func line(mod: Dictionary) -> String:
 	var id: String = mod.get("id", "")
 	if not MODS.has(id):
@@ -436,9 +338,8 @@ static func line(mod: Dictionary) -> String:
 	return _written(id, amount(id, value), absi(value) == 1)
 
 
-## A modifier written with the band it rolls in at `level` in the number's place: "+8-20% increased
-## Damage". What the fortuneteller reads off a piece; the same sentence `line` writes, so the two
-## cannot come to spell a modifier differently.
+## The line with everything it could roll at `level` in the number's place, "+8-20% increased Damage":
+## the fortuneteller's appraisal. Written through the same `_written` as `line`.
 static func band_line(id: String, level: int) -> String:
 	if not MODS.has(id):
 		return ""
@@ -452,14 +353,12 @@ static func band_line(id: String, level: int) -> String:
 	return _written(id, low if low == high else "%s-%s" % [low, high])
 
 
-## A modifier's number as it is written. Flat and percent alike grow with the level, so it is
-## written the way every other growing quantity is (`BigNumber`) rather than spelled out to twenty digits.
+## A modifier's number as it is written (`BigNumber`), its unit and its sign with it.
 static func amount(id: String, value: int) -> String:
 	var entry: Dictionary = MODS[id]
 	# Tenths of a second, written as seconds with the unit on: the "s" is the number's, not the line's.
 	if entry["kind"] == Kind.FLAT and entry["stat"] in LootTable.SECONDS_STATS:
 		return LootTable.seconds_text(value)
-	# Either side of nothing, so the side is the number's own.
 	if entry.get("signed", false):
 		return BigNumber.format(value, true)
 	return BigNumber.format(value)
@@ -469,19 +368,14 @@ static func amount(id: String, value: int) -> String:
 ## line that counts something writes in the singular (`text_one`).
 static func _written(id: String, amount: String, one := false) -> String:
 	var entry: Dictionary = MODS[id]
-	# A line that says what it does rather than naming a stat.
 	if entry.has("text"):
 		return str(entry["text_one"] if one and entry.has("text_one") else entry["text"]).replace("{n}", amount)
 	match entry["kind"]:
 		Kind.PERCENT, Kind.GLOBAL:
-			# The same sentence for both, and honestly so: with one weapon between them, a sword's
-			# increased damage and a ring's are the same claim about the same number.
 			return "+%s%% increased %s" % [amount, LootTable.STAT_LABELS[entry["stat"]]]
 		_:
-			# A flat roll on a stat that is itself a percentage adds percentage points, and has to
-			# say so -- "+10% to Drop Rate", never "+10 Drop Rate" -- and "to" is what tells it from an
-			# increase of the same stat, "+10% increased Drop Rate", which "+10% Drop Rate" did not.
-			# Seconds carry their own "s" (`amount`).
+			# A flat roll on a stat that is a percentage adds points and says "to": "+10% to Drop Rate",
+			# against an increase's "+10% increased Drop Rate". Seconds carry their own "s" (`amount`).
 			var stat: String = entry["stat"]
 			if stat in LootTable.PERCENT_STATS:
 				return "+%s%% to %s" % [amount, LootTable.STAT_LABELS[stat]]

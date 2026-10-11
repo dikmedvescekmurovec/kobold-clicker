@@ -1,10 +1,11 @@
 class_name BigNumber
 ## The one way a growing quantity is written down. Gold, monster HP, damage and prices all climb
-## exponentially, so a late figure is twenty digits in a page three squares wide. Under `PLAIN_BELOW` the
-## whole number is spelled out, its thousands parted by commas; above it, three significant digits and the short scale's name --
-## `123K`, `1.23M`, `45.6B`, `789T` -- for as far as `SUFFIXES` has names, and `1.23e36` past the last one
-## (the user, 2026-09-25: "use big number until you can"). There is no mantissa class underneath -- the quantities are plain doubles and plain
-## arithmetic, and this is the only place they are turned into text.
+## exponentially, so a late figure is twenty digits in a page three squares wide. Under `PLAIN_BELOW`
+## the whole number is spelled out, its thousands parted by commas; above it, three significant digits
+## and the short scale's name -- `123K`, `1.23M`, `45.6B`, `789T` -- for as far as `SUFFIXES` has names,
+## and `1.23e36` past the last one (the user, 2026-09-25: "use big number until you can"). There is no
+## mantissa class underneath: the quantities are plain doubles, and this is the only place they are
+## turned into text.
 
 ## Where the whole number gives up the page. Six digits was already too wide for an item card's
 ## detailed line, "+607047(415583-997400)%", which broke its name into a letter a row (2026-09-26).
@@ -16,10 +17,9 @@ const SUFFIXES: Array[String] = ["K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc
 
 ## `value` as text; `signed` writes the leading `+` a stat delta needs.
 ##
-## GDScript has no `%e`, so the mantissa and the decade are worked out by hand -- and then corrected
-## rather than trusted, because `log()` in doubles is off by one either way. `log(1000) / log(10)`
-## comes back as 2.999999999999999 (the `Coins.count_for` gotcha) and its floor is a decade short,
-## which would print a million as `10.00e5`.
+## GDScript has no `%e`, so the mantissa and the decade are worked out by hand -- and then corrected,
+## because `log()` in doubles is off by one either way: `log(1000) / log(10)` comes back as
+## 2.999999999999999 (the `Coins.count_for` gotcha), and its floor is a decade short.
 static func format(value: float, signed := false) -> String:
 	if is_nan(value):
 		return "nan"

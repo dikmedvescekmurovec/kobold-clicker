@@ -2,11 +2,8 @@ class_name TileMods
 extends RefCounted
 ## What the land past the second ice wall does to the fight on it, and what it pays for that. Rules
 ## only, no nodes: `for_cell` says which modifiers a tile carries and `Encounter` reads their numbers
-## off `MODS`.
-##
-## **Nothing is saved.** A tile's modifiers are a pure function of the map's seed and the cell, the
-## way its chest and its variant are, so a world always fields the same ones and the next world
-## others.
+## off `MODS`. **Nothing is saved:** a tile's modifiers are a pure function of the map's seed and the
+## cell, as its chest and its variant are.
 ##
 ## A row's numbers are the dials, and `Encounter` knows each key by name:
 ## `enemies` / `seconds` (added to the profile's), `elite_every` (put in its place, `value`) and
@@ -89,19 +86,13 @@ static func for_cell(map_seed: int, cell: Vector2i, ring: int, wild := false) ->
 	var count := band + 1 + (1 if wild else 0)
 	var pool: Array = MODS.keys()
 	while out.size() < count and not pool.is_empty():
-		var total := 0
-		for id: String in pool:
-			total += int(MODS[id]["weight"])
-		var pick := rng.randi_range(0, total - 1)
-		for id: String in pool:
-			pick -= int(MODS[id]["weight"])
-			if pick < 0:
-				out.append(id)
-				if MODS[id].get("once", false):
-					pool.erase(id)
-				for other: String in MODS[id].get("not_with", []):
-					pool.erase(other)
-				break
+		var weights := pool.map(func(mod: String) -> int: return int(MODS[mod]["weight"]))
+		var id: String = pool[LootTable.weighted_index(weights, rng)]
+		out.append(id)
+		if MODS[id].get("once", false):
+			pool.erase(id)
+		for other: String in MODS[id].get("not_with", []):
+			pool.erase(other)
 	return out
 
 

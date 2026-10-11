@@ -1,11 +1,8 @@
 class_name PlayerToken
 extends AnimatedSprite2D
-## The player's character: idles on a map cell, and walks from tile to tile when told to.
-##
-## The sheet frames are wide, so the character can swing beyond its own body in the attack animation. Only the
-## part the character uses is cut out (BOUNDS), otherwise it would sit off to the left of the tile. The same
-## crop serves every animation, so the character doesn't jump when it changes, and the frames keep their own
-## size, so the art is never resampled.
+## The player's character: idles on a map cell, and walks from tile to tile when told to. The sheets'
+## frames are wide (room for the attack swing), so one crop, BOUNDS, cuts every frame of every animation
+## down to the character: sharing it keeps the character still when the animation changes.
 
 const IDLE_SHEET := preload("res://Assets/Player/idle.png")
 const RUN_SHEET := preload("res://Assets/Player/run.png")
@@ -13,7 +10,7 @@ const IDLE_FRAMES := 6
 const RUN_FRAMES := 8
 ## Every frame of every sheet, laid out in one row.
 const FRAME_SIZE := Vector2i(148, 96)
-## The part of a frame the character occupies across both sheets, so the idle bobbing and the run are kept whole.
+## The part of a frame the character occupies across both sheets.
 const BOUNDS := Rect2i(17, 29, 66, 62)
 const FPS := 8.0
 ## Drawn at half size, so the character takes up about half a tile and the terrain stays readable underneath.
@@ -96,8 +93,8 @@ func _process(delta: float) -> void:
 		_tread(delta)
 
 
-## Dust at the feet, on a timer rather than per frame of the run cycle, and put under the character.
-## In `_process` rather than `advance`, so a test walking the token by hand makes no particles.
+## Dust at the feet, put under the character. Driven from `_process` rather than `advance`, so a test
+## walking the token by hand makes no particles.
 func _kick_dust(delta: float) -> void:
 	_dust_left -= delta
 	if _dust_left > 0.0:
@@ -146,8 +143,9 @@ func set_cell(value: Vector2i) -> void:
 		position = _map.ground_layer.map_to_local(cell)
 
 
-## Walks the cells of `path` in order, at SECONDS_PER_TILE each over one plus `move_speed`. The path starts at a neighbor of the cell the
-## token stands on and ends on the destination; an empty path does nothing.
+## Walks the cells of `path` in order, at SECONDS_PER_TILE each over one plus `move_speed`. The path
+## starts at a neighbor of the cell the token stands on and ends on the destination; an empty path does
+## nothing.
 func walk(path: Array[Vector2i]) -> void:
 	if path.is_empty():
 		return

@@ -1,25 +1,12 @@
 class_name ItemRarity
 extends RefCounted
-## How good a dropped item is, and how often each step comes up.
-##
-## The five steps and their tables live in a file of their own rather than on Item, for two reasons.
-## The plain one is that an instance and its tuning are different things, the way EnemyRoster's
-## tables are separate from the enemy that is out. The technical one is that a const in one class
-## that names another class's enum is where Godot's cycle checker bites: Item reads these tables, so
-## these tables must never mention Item.
-##
-## Rarity decides how many modifiers an item carries and nothing else. Base stats belong to the gear
-## type, so a common sword and an elite sword hit the same -- the elite one simply carries more on
-## top. That is also why nothing here has to know what an item is.
-##
-## UNIQUE is hand-crafted and ignores all of this. It has its name, its colours and its level floor,
-## and no place in TIER_WEIGHTS: `roll` never gives one, because `UniqueTable.roll` is what does,
-## beside the gear and on odds of its own.
+## The five rarity steps and their tables. Rarity decides how many modifiers a piece carries and
+## nothing else: base stats are the gear type's. Apart from `Item` and never naming it: `Item` reads
+## these tables, and a const naming another class's enum is where Godot's cycle checker bites.
 
 enum Rarity { COMMON, UNCOMMON, RARE, ELITE, UNIQUE }
 
-## Saved and shown by name rather than by number. An enum value is only a position: inserting a step
-## between two others would silently reinterpret every save on disk, and a name cannot.
+## What a save holds: names, never enum positions.
 const NAMES := {
 	Rarity.COMMON: "common",
 	Rarity.UNCOMMON: "uncommon",
@@ -27,7 +14,8 @@ const NAMES := {
 	Rarity.ELITE: "elite",
 	Rarity.UNIQUE: "unique",
 }
-## What each step is called on the screen (`label_of`).
+## What the screen says (`label_of`). The elite step is "Epic" since 2026-09-30: "elite" is the
+## enemies' word, and "an elite sword" read as one an elite had dropped.
 const LABELS := {
 	Rarity.COMMON: "Common",
 	Rarity.UNCOMMON: "Uncommon",
@@ -36,13 +24,9 @@ const LABELS := {
 	Rarity.UNIQUE: "Unique",
 }
 
-## What a dead enemy's tier is worth, as integer weights out of a thousand -- so a weight is its own
-## percentage with the point moved, and nobody has to divide to read the table. Rabble carries plain
-## gear three times in four, a rare piece one drop in thirty and an elite one in two hundred; a boss
-## is the one body more likely than not to carry something with a modifier on it. The weight moves
-## *up* the ramp as the tier rises. The one thing the curve is held to is that shape:
-## `test_inventory._test_rarity_tables` fails if the plain step ever stops falling, if either top
-## step stops climbing, or if the average step stops rising.
+## Enemy tier -> each step's weight out of a thousand. UNIQUE has none and must have none: `roll` never
+## gives one (`UniqueTable.roll` does, beside the gear). `test_inventory._test_rarity_tables` holds the
+## curve's shape as the tier rises: the plain step falling, both top steps and the average step climbing.
 const TIER_WEIGHTS := {
 	EnemyRoster.Tier.COMMON: {
 		Rarity.COMMON: 750, Rarity.UNCOMMON: 210, Rarity.RARE: 35, Rarity.ELITE: 5,
@@ -55,12 +39,7 @@ const TIER_WEIGHTS := {
 	},
 }
 
-## How far up a tile's range a rarity starts, as a share of the ceiling.
-##
-## A drop's level is rolled evenly up to what the tile allows, so a common piece can come out
-## anywhere in the range. A better one cannot come out at the bottom: a rare piece worth nothing is
-## the one find that manages to be a disappointment, so rarity lifts the floor and a good roll is
-## good on both counts at once.
+## How far up a tile's range a rarity's level starts, as a share of the ceiling (`roll_level`).
 const LEVEL_FLOOR := {
 	Rarity.COMMON: 0.0,
 	Rarity.UNCOMMON: 0.2,
@@ -86,8 +65,7 @@ const STONE_MOD_COUNT := {
 	Rarity.UNIQUE: [0, 0],
 }
 
-## The border around an item's square, which sits on a dark socket. Cold to hot -- grey, blue, lilac,
-## brick, gold -- so every step is a hue of its own and the order needs no convention to be read.
+## Each step's colour on the socket, a hue apiece.
 const BORDER_COLORS := {
 	Rarity.COMMON: Palette.STONE_LT,
 	Rarity.UNCOMMON: Palette.ICE,
@@ -95,7 +73,7 @@ const BORDER_COLORS := {
 	Rarity.ELITE: Palette.BRICK,
 	Rarity.UNIQUE: Palette.GOLD,
 }
-## The same step written as text on the bone panel, where the lighter half of the ramp disappears.
+## The same steps as text on the bone panel, where the lighter half of that ramp disappears.
 const TEXT_COLORS := {
 	Rarity.COMMON: Palette.SLATE,
 	Rarity.UNCOMMON: Palette.ICE_DK,
@@ -104,39 +82,30 @@ const TEXT_COLORS := {
 	Rarity.UNIQUE: Palette.GOLD_TEXT,
 }
 
-## The socket every item square is drawn on.
-##
-## The pack draws an inventory slot as one flat tan square on the cream panel, with nothing but a
-## gutter between it and the next, which is why these are opaque colours rather than a dark film over
-## whatever is behind. The square being looked at sinks to the pack's wood face rather than lighting
-## up: the panel behind it is cream, so anything lighter than the socket would disappear into it.
+## The socket every item square is drawn on, opaque, and the one being looked at: darker, since on the
+## cream panel anything lighter than the socket would disappear.
 const SOCKET := Palette.SLOT_TAN
 const SELECTED_SOCKET := Palette.SLOT_TAN_DK
-## The frame round a square, one a step above common, drawn by `tools/item_frames.py` (the user's design,
-## 2026-10-04): a thin ring in the rarity's colour with a cap on each top corner, longer a step up, and on
-## a unique the elite's cap in gold and a crest on the top edge that grows with its rank (`UNIQUE_FRAMES`,
-## 0 a starter's). The square's width and `FRAME_HEAD` taller: the caps and the crest stand up into the
-## gutter over the square, never past its sides, where a scroll as wide as the grid would clip them.
+## The frame round a square above common, drawn by `tools/item_frames.py` (the user's design,
+## 2026-10-04); a unique's is its rank's (`UNIQUE_FRAMES`, 0 a starter's). A frame is the square's
+## width and `FRAME_HEAD` taller: its caps and crest stand up into the gutter over the square, never
+## past its sides, where a scroll as wide as the grid would clip them.
 const FRAMES := "res://Assets/UI/item_frame_%s.png"
 const UNIQUE_FRAMES := "res://Assets/UI/item_frame_unique_%d.png"
 const FRAME_HEAD := 4
-## How far a framed socket's corners are cut back, as a straight chamfer (`corner_detail` 1), so the tan
-## never shows outside the ring where it rounds the corner: the ring leaves three pixels a corner clear,
-## and a chamfer of 3 clears exactly those and nothing the ring does not cover.
+## A framed socket's chamfer (`corner_detail` 1), so no tan shows outside the ring: exactly the three
+## pixels a corner the ring leaves clear.
 const FRAME_CORNER := 3
-## How solid a socket on the equipment doll is. Enough to read as a square to drop something into,
-## little enough that the figure underneath still reads as a figure.
+## How solid a socket on the equipment doll is: the figure under it must still read as a figure.
 const SOCKET_ALPHA := 0.55
 
-## Style boxes are built once and kept, the way LootTable keeps its icons: the panel rebuilds every
-## square whenever something drops, and five boxes an item forever is waste for nothing.
+## [rarity, selected, translucent] -> its style box, built once.
 static var _styles := {}
 
 
-## How strongly increased item rarity lifts each step: a step's weight is multiplied by
-## 1 + rarity% x this. Common is never lifted, so the odds move up the ramp rather than every step
-## growing alike, and the rarer a step the harder it is pushed. Unique has no weight to lift, so its
-## step multiplies `UniqueTable.chance_for` instead, off the ramp: 1, the drop rate's own strength.
+## How strongly increased item rarity lifts each step: its weight is multiplied by 1 + rarity% x this.
+## UNIQUE has no weight to lift, so its step multiplies `UniqueTable.chance_for` instead: 1, the drop
+## rate's own strength (the user's, 2026-09-28).
 const RARITY_STEP := {
 	Rarity.COMMON: 0,
 	Rarity.UNCOMMON: 1,
@@ -144,14 +113,13 @@ const RARITY_STEP := {
 	Rarity.ELITE: 3,
 	Rarity.UNIQUE: 1,
 }
-## What the weights are blown up by once a rarity bonus is in play, so the lift survives being kept in
-## whole numbers: a 15 weight lifted 3% is 15.45, which would round straight back to 15.
+## What the weights are blown up by once a rarity bonus is in play, so the lift survives whole
+## numbers: a 15 weight lifted 3% is 15.45.
 const RARITY_PRECISION := 100
 
 
-## The rarity of something a `tier` enemy was carrying. `rng` belongs to the caller. `rarity` is the
-## player's increased item rarity in percent; at nothing the table is drawn exactly as written, draw
-## for draw, so a player who has learned nothing sees the same drops a seed always gave.
+## The rarity of something a `tier` enemy was carrying. `rarity` is the player's increased item rarity
+## in percent; at none the table is drawn exactly as written, draw for draw.
 static func roll(tier: EnemyRoster.Tier, rng: RandomNumberGenerator, rarity := 0.0) -> Rarity:
 	var weights := weights_for(tier, rarity)
 	return weights.keys()[LootTable.weighted_index(weights.values(), rng)]
@@ -169,19 +137,15 @@ static func weights_for(tier: EnemyRoster.Tier, rarity := 0.0) -> Dictionary:
 	return lifted
 
 
-## The level one dropped piece comes out at: somewhere from its rarity's floor up to `ceiling`,
-## evenly. The ceiling is what the tile allows and not what it pays -- farming a tile is how the top
-## of its range is eventually rolled, which is the whole reason to fight the same ground twice.
-##
-## Always at least 1 and never above the ceiling, however low the tile is: on a level-1 tile every
-## rarity's floor clamps back down to 1, so the middle of the map cannot produce an impossible roll.
+## The level one drop comes out at: evenly from its rarity's floor up to `ceiling`, and always from 1
+## to `ceiling`, however low the tile.
 static func roll_level(rarity: Rarity, ceiling: int, rng: RandomNumberGenerator) -> int:
 	var top := maxi(1, ceiling)
 	return rng.randi_range(clampi(ceili(top * float(LEVEL_FLOOR[rarity])), 1, top), top)
 
 
-## How many modifiers this step carries this time. The draw happens even where the band is a single
-## number, so how much of the stream a drop eats does not depend on which rarity it rolled.
+## How many modifiers this step carries this time. Drawn even where the band is one number, so how
+## much of the stream a drop eats does not depend on its rarity.
 static func mod_count(rarity: Rarity, rng: RandomNumberGenerator, item_type := "") -> int:
 	var count := band(rarity, item_type)
 	return rng.randi_range(int(count[0]), int(count[1]))
@@ -194,13 +158,10 @@ static func band(rarity: Rarity, item_type := "") -> Array:
 	return (STONE_MOD_COUNT if stone else MOD_COUNT)[rarity]
 
 
-## "rare", for the save file. What the player reads is `label_of`.
 static func name_of(rarity: Rarity) -> String:
 	return NAMES[rarity]
 
 
-## "Rare", as the player reads it. Apart from the save's `NAMES` since the elite step is shown as epic
-## (2026-09-30): "elite" is the enemies' word, and "an elite sword" read as one an elite had dropped.
 static func label_of(rarity: Rarity) -> String:
 	return LABELS[rarity]
 
@@ -213,9 +174,8 @@ static func from_name(text: String) -> int:
 	return -1
 
 
-## The frame an item square wears, or null for a common one -- which is what makes a frame mean
-## something. `rank` is a unique's (0 for a starter, which has none, up to `UniqueTable.PEAK`); a square
-## with no piece behind it (a bounty's promise) wears rank I's.
+## The frame an item square wears; null for a common one. `rank` is a unique's (0 a starter's, up to
+## `UniqueTable.PEAK`); a square with no piece behind it (a bounty's promise) wears rank I's.
 static func frame(rarity: Rarity, rank := 1) -> Texture2D:
 	if rarity == Rarity.COMMON:
 		return null
@@ -224,9 +184,8 @@ static func frame(rarity: Rarity, rank := 1) -> Texture2D:
 	return load(FRAMES % NAMES[rarity])
 
 
-## The face of an item square: the socket alone. What rings an uncommon or better piece is drawn art
-## laid over it (`frame`), so the box is the same for every rarity but its corners: a framed one's are
-## cut back to the ring's (`FRAME_CORNER`).
+## The face of an item square: the socket alone, since the frame is art laid over it (`frame`). A
+## framed one's corners are cut back to the ring's (`FRAME_CORNER`); a translucent one is the doll's.
 static func slot_style(rarity: Rarity, selected := false, translucent := false) -> StyleBoxFlat:
 	var key := [rarity, selected, translucent]
 	if _styles.has(key):
@@ -234,14 +193,10 @@ static func slot_style(rarity: Rarity, selected := false, translucent := false) 
 	var box := StyleBoxFlat.new()
 	box.bg_color = SELECTED_SOCKET if selected else SOCKET
 	if translucent:
-		# An equipment socket is laid over the doll, and an opaque square would hide the very part of
-		# the body it names. The pack's own equipment screen does the same: its sockets are washes
-		# over the figure, not holes cut out of it.
 		box.bg_color.a = SOCKET_ALPHA
-	# A framed socket is cut back where its ring rounds the corner; a common's stays square.
 	box.set_corner_radius_all(0 if rarity == Rarity.COMMON else FRAME_CORNER)
 	box.corner_detail = 1
-	# The default soft edge fringes into a smear once the panel is scaled up.
+	# The default soft edge smears once the panel is scaled up.
 	box.anti_aliasing = false
 	_styles[key] = box
 	return box

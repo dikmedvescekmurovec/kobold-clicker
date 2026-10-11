@@ -1,106 +1,43 @@
 class_name Inventory
 extends RefCounted
-## Everything the player has picked up, and the file it is kept in.
-##
-## A plain data object with no nodes: it holds items and reads and writes its own JSON, and that is
-## all. It never saves itself -- the main scene owns it and decides when to write, which keeps the
-## rules tests off the disk and the save policy a one-line change.
-##
-## Items do not stack. Each one rolled its own rarity and its own modifiers, so two Wooden Swords are
-## two different swords and this is a list, not a tally.
-##
-## The save is the first file this game keeps. It has to survive being missing, half-written, edited
-## by hand or written by a build that no longer exists, because a bad save must never be the reason
-## the game won't start.
-##
-## The bag has a bottom to it: CAPACITY loose items. Nothing is ever destroyed to keep to it -- a drop
-## into a full bag goes in anyway and leaves the player overencumbered (`encumbered`): slow on the
-## map and unable to start a fight until the bag is cleared back down.
+## Everything the player holds, the stats a fight is armed with, and the save, whose file's shape is
+## `InventorySave`'s. Plain data with no nodes, and it never saves itself: the main scene owns it and
+## says when, and the path is always a parameter.
 
 const SAVE_PATH := "user://inventory.json"
-## 1 was the tally of names this kept before items had rarities. 2 is the list of items. 3 adds what
-## the player is wearing, which is a second list rather than a flag on an item: a piece is either in
-## the bag or in a socket, never both, so there is nothing to keep in step. 4 gives every item its
-## level and the stats it rolled at that level, which is what makes a piece the same piece on every
-## load: before this its numbers were looked up from the tables and moved whenever they were tuned.
-## A version 3 save still reads -- its pieces come back at level 1 carrying the tables unscaled,
-## which is exactly what they were worth when it was written. 5 adds the autodiscard rules, which a
-## version 4 save simply has none of -- an absent key and an empty list read the same, the way
-## version 3's `equipped` did. 6 adds the purse, which a version 5 save simply has none of and comes
-## back from empty-handed -- which is exactly what every bag had until gold was a thing at all. 7
-## adds the orbs, which are counts and not items, and which a version 6 save has none of for the same
-## reason it has no gold: they did not exist when it was written. 8 adds the player's level and the
-## experience held towards the next one; a version 7 save comes back at level 1 with none. 9 adds the
-## skills, which a version 8 save has none of -- it comes back with every level's point unspent. 10
-## adds the towns the player has walked into, which a version 9 save simply has none of: an absent key
-## and no town visited read the same, the way version 4's `autodiscard` did. 11 adds the uniques the
-## player has ever found, the collection log's list; a version 10 save has found none. 12 adds what
-## the fortuneteller has sold the player (`fortunes`); a version 11 save has bought nothing. 13 adds
-## `first_sword_taken`; a version 12 save is already under way, so it reads as taken. The same version
-## drops `first_elite_taken`, which the sword's flag now does the work of; an older save's is ignored.
-## 14 adds the heirlooms -- a second stash and a second doll under `heirlooms` -- with
-## `heirloom_picks` and `walls_credited`; a version 13 save has none, and the main scene's first
-## `credit_walls` pays it a pick for every wall it had already brought down. 15 makes the picks
-## `super_orbs` -- a wall pays an orb now, and an heirloom is made at transcension, one a world -- and
-## a version 14 save's unspent picks are read as that many orbs. 16 adds `play_seconds`, the time
-## the game has been open on this save; a version 15 save has none counted and starts from nothing.
-## 17 adds `camp`, the tile the hero is resting on and what that rest earns an hour; a version 16
-## save is simply not camped anywhere. 18 adds `curses`, what the player took on at the last
-## transcension; a version 17 save is a world under none. 19 adds `skill_sunk` and `skill_transcends`,
-## what transcending the skill trees took and how often it has been done; a version 18 save has done
-## neither.
-## 20 adds what two of the curses have to remember: `homeland`, the two lands that still leave gear,
-## and `uniques_doubled`, the finds a Forgotten world made count twice; a version 19 save has neither.
-## 21 adds `skull_budget`, read by nothing since 2026-10-03: only Gollux pays skulls (`skull_allowance`).
-## 22 adds `dungeon_depth`; a version 21 save has won no depth of the dungeon.
-## 23 drops `camp` for `saved_at`, the hour the save was written, which a camp is paid from now; a
-## version 22 save camped somewhere counts from that camp's hour, and one camped nowhere is owed none.
-## 24 drops `skill_sunk` and `skill_transcends`: the trees are no longer transcended, a skill goes past
-## its most instead (`SkillTree.OVERRANK_WEIGHT`), and a version 23 save's sunk points are free again.
-## 25 adds `farthest_land` and `seeing_stone`; a version 24 save has been no further than the land it
-## stands in now (the main scene reads it off the map at start-up) and holds no stone.
-## 26 adds `dungeon_floors`, the leaderboard's score; a version 25 save has beaten the floors of the
-## depths it won and none past them.
-## 27 adds `first_orb_taken`; a version 26 save is already under way, so it reads as taken.
-## 28 adds `achievements`, `achievements_new` and `tally`; a version 27 save has earned none and counted
-## nothing, so only the starter uniques drop for it until it earns them -- a unique it found stays in
-## the log but must be earned again to fall (the user's ruling).
-## 29 makes `achievements` a rank each (id -> 1..4); a version 28 save's list is rank I of each, and
-## the walls it has broken this world start the lifetime count Thaw now asks for (`tally.walls`).
-## 30 adds `skill_bursts`, how often every tree has been filled and burst this world, and drops the
-## ranks past a skill's most: a version 29 save's are cut to the most and their points are free again.
-## 31 adds `name`, what the player calls their character; a version 30 save's is unnamed (`DEFAULT_NAME`).
-## 32 adds `deepest_level`, a leaderboard's score; a version 31 save has charted none deeper than its
-## own world (the main scene reads that off the map at start-up).
-## 33 replaces the three skill trees with the player's own tree of skill stones (`skill_tree`, path ->
-## stone, and `skill_ranks`): a version 32 save's `skills` and `skill_bursts` are not read, and it
-## starts with the root alone and every point its level earned free.
-## 34 adds `runes` (name -> count) and `runed` (a tile's rune work by world spot, `RuneTable`); a version
-## 33 save holds none of either.
+## The save's shape. `InventorySave` lists what each step changed and reads every older one.
 const VERSION := 34
 
-## How many loose items the bag holds. Worn gear is *not* in this: a piece is in the bag or in a
-## socket and never both, so putting a piece on frees a square, which is the whole reason the cap is
-## a pressure to choose rather than a pressure to hoard nothing.
+## Loose items the bag holds (`capacity()` is what it holds now). Worn gear is outside it, so putting a
+## piece on frees a square.
 const CAPACITY := 40
-
-## How fast an overencumbered player walks the map, as a share of their usual pace.
+## An overencumbered player's pace on the map, as a share of the usual.
 const ENCUMBERED_SPEED := 0.5
 
-## The starter uniques' numbers: the Squire's Blade's damage, the Courier's Boots' spawn speed, and the
-## Novice's Cap's experience and the level it stops at.
+## What an unnamed character is called, and the most letters a name keeps.
+const DEFAULT_NAME := "Adventurer"
+const NAME_MOST := 24
+
+## Ids kept in `tips`, each once for the player: the first rune found (the bag's rune row stays once
+## seen), the first skill point spent (until then the skills page's root breathes: the user's,
+## 2026-10-10), and the promised Orb of Augmentation and skill node dropped (`promised`, `FightLedger`).
+const FIRST_RUNE := "first_rune"
+const FIRST_POINT := "first_skill_point"
+const FIRST_AUGMENT := "had_augment"
+const FIRST_NODE := "had_node"
+
+## The starter uniques' numbers; the Novice's Cap stops paying at level `NOVICE_UNTIL`.
 const SQUIRE_DAMAGE := 3.0
 const COURIER_SPAWN := 30.0
 const NOVICE_XP := 100.0
 const NOVICE_UNTIL := 20
 
-## What a point of each attribute is worth, in percent of the stat it names. Minor on purpose: a roll
-## of strength is a slot that could have held damage outright, and a piece carrying none of them is the
-## better piece. Intelligence adds to `xp_more`, a percentage already; the other two multiply.
+## What a point of each attribute is worth, in percent of the stat it names. Intelligence adds to
+## `xp_more`, a percentage already; the other two multiply.
 const ATTRIBUTE_PERCENT := 0.2
 const ATTRIBUTE_GIVES := {"strength": "damage", "dexterity": "attack_speed", "intelligence": "xp_more"}
-## An amulet's line of all three (`ModifierTable`'s `added_all_attributes`): added to each where the
-## attributes are summed (`_attribute_sums`), counted as an attribute line, and read nowhere else.
+## An amulet's line of all three (`ModifierTable`'s `added_all_attributes`): read only in `_points`,
+## counted as an attribute line, and erased from `stats()`.
 const ALL_ATTRIBUTES := "all_attributes"
 ## What an attribute is followed by in the stat a helmet's line rolls for it: `strength_stones`, ranks
 ## more on every strength stone holding a point (`_tree`).
@@ -120,40 +57,35 @@ const PACKMULE_ROOM := 20         ## pieces more the bag holds, Packmule's Harne
 const SALVAGE_ORB := 0.05         ## of the pieces thrown away that leave an orb, Rag and Bone Sack
 const PURIST_MODS := 1.25         ## what a pure piece's modifiers count for, Purist's Seal
 
-## What is held, in the order it was picked up. The panel does not show it in this order -- `order()`
-## does that -- and nothing outside here should: an index into this array is how a piece is named,
-## and it stays the same piece however the bag is sorted. What is *worn* is not in here at all --
-## `equipment` has it.
-var items: Array[Item] = []
+## Pacifist Hands: swings a second the hands make on their own, before everything is doubled.
+const PACIFIST_SWINGS := 1.5
+const PACIFIST_FASTER := 2.0
 
-## What the player has on. Owned here so that one load and one save carry the whole of what the
-## player has, and the main scene never has to remember there are two files' worth of state.
+## Gold changed hands: something was bought (any drop in the purse) or sold (`sell_for`).
+signal traded
+## Said at the end of every `save`, written or not: its listeners (the achievements' check, a fight
+## armed again, the corner redrawn) follow the player as they are, which a refused write has not changed.
+signal save_written
+
+## The bag, in the order picked up. An index into it is how a piece is named, whatever the bag is
+## sorted by (`order()`); what is worn is in `equipment`, never here.
+var items: Array[Item] = []
 var equipment := Equipment.new()
 
-## Whether the Broken Sword, the player's first piece of gear, has dropped. Until it has it is promised
-## (`promised`). It lives in the save, so it is once for the player.
+## Whether the Broken Sword, the player's first piece, and the first orb (`OrbTable.FIRST_ORB`) have
+## dropped. Until then each is promised (`promised`).
 var first_sword_taken := false
-
-## Whether the promised first orb (`OrbTable.FIRST_ORB`) has dropped. Once for the player, like the sword.
 var first_orb_taken := false
 
-## The first-time pop-ups already shown, and the buttons already pressed once, by id. The main scene
-## decides what they mean; this only keeps them, so each is once for the player rather than per launch.
+## The first-time pop-ups already shown and the buttons already pressed once, by id. The main scene
+## decides what they mean.
 var tips: Array[String] = []
 
-## What the player has called their character, through the character panel's pencil; empty is
-## `DEFAULT_NAME`. `hero()` is what is shown. The player's, so it is carried through a transcension.
+## The player's name for their character; empty is `DEFAULT_NAME` (`hero()` is what is shown).
 var hero_name := ""
-## What an unnamed character is called, and the most letters a name keeps (the panel's band cuts a
-## long one short with an ellipsis well before this).
-const DEFAULT_NAME := "Adventurer"
-const NAME_MOST := 24
 
-## What the player has earned. Not in the bag and not against its cap: a purse is a number rather
-## than a thing, so it never weighs the bag down. It lives
-## here rather than beside the map because it is carried, not explored. A whole number in a double,
-## for the reason every growing quantity is one (`BigNumber`): a purse climbs exponentially with the
-## walk and would pass int64 out past the two hundredth hex. Every drop in it is a purchase, and says so.
+## A whole number in a double, as every growing quantity is (`BigNumber`). Every drop in it is a
+## purchase, and says so.
 var gold := 0.0:
 	set(value):
 		var paid := value < gold
@@ -161,153 +93,100 @@ var gold := 0.0:
 		if paid:
 			traded.emit()
 
-## Gold changed hands: something was bought (any drop in the purse) or sold (`sell_for`). The main
-## scene's coins.
-signal traded
-
-## Every enemy the player has ever killed. It is what holds orbs back until `OrbTable.FIRST_ORB_KILLS`,
-## and uniques until `UniqueTable.FIRST_UNIQUE_KILLS`, and what a new player's promised finds are
-## counted in (`promised`).
+## Every enemy ever killed: what holds orbs and uniques back (`OrbTable.FIRST_ORB_KILLS`,
+## `UniqueTable.FIRST_UNIQUE_KILLS`) and what a promised find is counted in (`promised`).
 var kills := 0
 
-## How long the game has been open on this save, in seconds. The main scene adds each frame's delta;
-## it is written whenever anything else is, so a quit loses the seconds since the last save. Carried
-## through a transcension, like the kills: it is the player's time, not the world's.
+## Seconds the game has been open on this save; the main scene adds each frame's delta.
 var play_seconds := 0.0
 
-## How many depths of the dungeon the player has won -- the Golluxes killed, one a depth
-## (`Encounter.cleared`) -- which is where the next descent begins. It only ever rises, and it is the
-## player's and not the world's, like the kills and the clock: every transcension carries it over.
+## The next four are the player's, not the world's: each only ever rises, and `transcended()` carries it.
+## Depths of the dungeon won, one a Gollux killed (`Encounter.cleared`): where the next descent begins.
 var dungeon_depth := 0
 ## Every floor of the dungeon ever beaten in one go, counted from the top: the leaderboard's score
-## (`Cloud.depth_and_floor` reads 44 as depth 3, floor 14). Only rises, and is carried like `dungeon_depth`.
+## (`Cloud.depth_and_floor` reads 44 as depth 3, floor 14).
 var dungeon_floors := 0
-## How far the land has ever reached, in steps from the middle, in any world: the land radius the last
-## wall ever broken opened, and so how many walls have ever fallen (`walls_ever`). It only rises
-## (`reach`), and every transcension carries it over.
+## How far the land has ever reached, in steps from the middle, in any world (`reach`, `walls_ever`).
 var farthest_land := MapBuilder.START_LAND_RADIUS
-## The level of the deepest tile ever charted, in any world: the deepest leaderboard's score. Only
-## rises (`chart`), and every transcension carries it over.
+## The level of the deepest tile ever charted, in any world: a leaderboard's score (`chart`).
 var deepest_level := 1
 
-## What currency the player is holding: orb name -> how many. Counts rather than objects, because an
-## orb has nothing to tell apart -- two Orbs of Chaos are the same orb, which is exactly what gear
-## stopped being when it started rolling modifiers.
-##
-## Like the purse and unlike the bag: outside CAPACITY, never filtered by an autodiscard rule and
-## never sorted into a level section. A count weighs nothing, so it never overencumbers anybody.
+## Orbs and runes held, name -> how many (`OrbTable`, `RuneTable`). Counts, not items: outside
+## `CAPACITY`, never autodiscarded or sorted.
 var orbs := {}
-## The runes held, name -> count, the way the orbs are (`RuneTable`): found only in Gollux's cave.
 var runes := {}
-## Written into `tips` with the first rune found, so the bag's rune row stays once seen, as the orbs' does.
-const FIRST_RUNE := "first_rune"
-## Written into `tips` with the first skill point ever spent: until then the light behind the
-## skills page's root breathes, a new player's cue for where a point goes (`SkillsPage`, the user's, 2026-10-10).
-const FIRST_POINT := "first_skill_point"
-## Written into `tips` as a fight leaves the promised Orb of Augmentation and the promised skill node
-## (`FightLedger`): once for the player, as `first_sword_taken` and `first_orb_taken` are.
-const FIRST_AUGMENT := "had_augment"
-const FIRST_NODE := "had_node"
-## What runes have done to the tiles of this world, by world spot as "x,y" (the towns' key): each a
-## `RuneTable` state. A transcension leaves it with the world, as it does the orbs and the runes.
+## What runes have done to this world's tiles, by world spot as "x,y" (the towns' key): each a
+## `RuneTable` state.
 var runed := {}
 
-## The player's level and the experience held towards the next one -- `PlayerLevel` says what a level
-## costs. Kept here beside the purse for the purse's reason: it is carried, not explored. Every level
-## past the first is a skill point (`Skills.earned`).
+## `PlayerLevel` says what a level costs; every level past the first is a skill point (`Skills.earned`).
 var level := 1
 var xp := 0
-
-## The player's skill tree, and the points their level earned in it. Saved here beside the level for
-## the level's reason, and because the points are counted off it.
 var skills := Skills.new()
 
-## What the settlements the player has walked into hold. Here rather than beside the map because a
-## town's shelf and the purse that empties it move together, and one save is one write.
+## What the settlements the player has walked into hold.
 var towns := TownState.new()
 
-## Every unique the player has ever found, by `UniqueTable` id, in the order they were found. What the
-## collection log lights up -- and found is found: selling one takes nothing off this list.
+## Every unique ever found, by `UniqueTable` id, in the order found: the collection log. Selling one
+## takes nothing off it.
 var uniques_found: Array[String] = []
-## The found ones the player has not hovered in the log yet: what makes its button and their squares shine.
+## The found ones not yet hovered in the log: what makes its button and their squares shine.
 var uniques_new: Array[String] = []
-## The achievements earned, `Achievements` id -> the rank reached (1..`UniqueTable.PEAK`): each unlocks
-## its unique into the drops, and its rank is what that unique's numbers are read at. Like the log,
-## they only grow and go with the player through a transcension.
+## The achievements earned, `Achievements` id -> the rank reached (1..`UniqueTable.PEAK`).
 var achievements := {}
 ## The earned ones the achievements page has not been opened on since: what makes its button shine.
 var achievements_new: Array[String] = []
 ## What the achievements count, key -> number (`Achievements` names the keys): lifetime sums, and the
-## longest of each streak. Carried through a transcension with the achievements.
+## longest of each streak.
 var tally := {}
 
-## Said at the end of every `save`, written or not, which is what everything that changes the player
-## ends in: the main scene checks the achievements on it (`Achievements.earn`), arms a fight again and
-## redraws what the corner says. All of that follows the player as they are, which a disk that refused
-## the write has not changed.
-signal save_written
-
-## What the fortuneteller has sold that belongs to the player rather than to a town: the chest the
-## star points at, the uniques she has shown, whether the scour is spent. A plain Dictionary whose
-## keys are `FortuneTeller`'s, read through its accessors -- this file never names that class.
+## What the fortuneteller has sold that is the player's rather than a town's. A plain Dictionary whose
+## keys are that class's, read through its statics: this file never names it (a test holds that).
 var fortunes := {}
 
-## The unix hour this inventory was last written, stamped by a `save` that got there and read back by
-## `load_from`. What the main scene pays a camp from at start-up; 0 is never saved, and owed nothing.
+## The unix time of the last `save` that got there: what the main scene pays a camp from at start-up.
+## 0 is owed nothing.
 var saved_at := 0.0
-## What the last `load_from` could not keep, by name: a piece, a modifier, a stat, an orb, a rune, a
-## curse, a unique or an achievement the save holds and this build has not got, or a piece with nowhere
-## left to go. Said in the log, since the next save writes it away. Never saved.
+## What the last `load_from` could not keep, by name; said in the log, since the next save writes it
+## away. Never saved.
 var lost: Array[String] = []
 
-## The levels the player has told the game to stop bringing. Levels rather than items, because a
-## level is what a section of the bag is, and rarity is not consulted: a marked level is done with,
-## elite included. A rule only ever filters what *arrives* -- what is already held is cleared by
-## `discard_level`, which is a separate button for a separate act.
+## The levels the player has told the game to stop bringing, elite included. A rule only filters what
+## arrives (`leaves_behind`); what is already held is `discard_level`'s.
 var autodiscard: Array[int] = []
 
-## The heirlooms: a second inventory of which only `items` and `equipment` are ever used -- its own
-## stash and its own doll, worn as well as the ordinary one -- and the one thing that goes with the
-## player when the world is left behind (`transcended`). Read through `stash()`, which makes it: an
-## Inventory that made one of these as it was made would never finish being made.
+## The heirlooms: a second inventory of which only `items` and `equipment` are used, worn as well as
+## the ordinary doll. Read through `stash()`, which makes it: an Inventory that made one as it was made
+## would never finish being made.
 ## ponytail: it shares CAPACITY, 40 heirlooms; one is made a transcension, and nobody transcends forty times.
 var heirlooms: Inventory
-## Super orbs the player may still spend at a transcension (`SuperOrbTable`): one for every wall
-## broken, in any world, less those spent. One count for all six, spent on whichever is pressed.
+## Super orbs still to spend at a transcension (`SuperOrbTable`), one count for all six.
 var super_orbs := 0
 ## How many of this world's fallen walls have paid their orb (`credit_walls`).
 var walls_credited := 0
-## The curses this world is played under, by `Curses` id: what the player chose on the way in, and
-## theirs until the next transcension. The fight hears of them through `effects()`, the numbers they
-## pay are added by `stats()`.
+## The curses this world is played under, by `Curses` id, until the next transcension.
 var curses: Array[String] = []
-## The ones chosen on the black screen for the world to come. **In memory only**, like everything
-## `TranscendPage` does: `transcended()` is what makes them the next world's.
+## The ones chosen on the black screen for the world to come. **In memory only:** `transcended()` is
+## what makes them the next world's.
 var pending_curses: Array[String] = []
-## The Homeland curse's two lands, by environment: the one the world starts on and one other. The
-## main scene chooses them once the new world's map exists (`_settle_homeland`), which is the first
-## moment anybody knows what the start stands on; until then there are none and no land leaves gear.
+## The Homeland curse's two lands, by environment. Empty, and no land leaves gear, until the main scene
+## chooses them once the new world's map exists (`_settle_homeland`).
 var homeland: Array[String] = []
 ## Every unique first found in a Forgotten world, which counts twice in the log from then on
-## (`collection_bonus`). It only grows, and it goes with the player like the log itself.
+## (`collection_bonus`).
 var uniques_doubled: Array[String] = []
-## The most pieces this doll may wear, or -1 for no limit. Never saved and never the player's own:
-## `stash()` sets it on the heirlooms each time they are asked for, which is how the Lone Heir
-## reaches a second `Inventory` that knows nothing of curses.
+## On the heirlooms only, set by `stash()` each time they are asked for and never saved: the most
+## pieces their doll may wear (-1 for no limit; the Lone Heir's reach into an `Inventory` that knows no
+## curses), and the player's own `Inventory`, so their Equip can count the attributes of both dolls. A
+## `WeakRef`, or the two would keep each other alive.
 var most_worn := -1
-## The player's own `Inventory`, on the heirlooms: set by `stash()` like `most_worn`, so this doll's
-## Equip can count the attributes of both. A `WeakRef`, or the two would keep each other alive.
 var keeper: WeakRef = null
 
-## Pacifist Hands: swings a second the hands make on their own, before everything is doubled.
-const PACIFIST_SWINGS := 1.5
-const PACIFIST_FASTER := 2.0
 
-
-## The finds of `Encounter.PROMISED` this player is still owed, for the next fight: never had, and their
-## kills not yet run out -- so a save from before a promise, already past its kills, gets nothing from it.
-## The unique is owed while the collection log is empty, so one a chest or a bounty paid spends it. None
-## after a transcension: a second world hands out none of the first one's helping hands.
+## The finds of `Encounter.PROMISED` still owed, for the next fight: never had, and their kills not yet
+## run out -- so a save from before a promise, already past its kills, gets nothing from it. The unique
+## is owed while the collection log is empty, so one a chest or a bounty paid spends it. None after a
+## transcension.
 func promised() -> Array:
 	if int(tally.get("transcended", 0)) > 0:
 		return []
@@ -322,40 +201,34 @@ func promised() -> Array:
 		return not had[id] and kills < int(Encounter.PROMISED[id][1]))
 
 
-## Puts `item` in the bag, full or not. Past CAPACITY the player is overencumbered (`encumbered`)
-## rather than anything being destroyed, which is what the warning in a fight with a full bag says.
+## Into the bag, full or not: past `capacity()` the player is `encumbered`, and nothing is destroyed.
 func add(item: Item) -> void:
 	items.append(item)
 
 
 ## How many of that piece are held, whatever their rarities.
 func count(type: String) -> int:
-	var held := 0
-	for item in items:
-		if item.type == type:
-			held += 1
-	return held
+	return items.filter(func(item: Item) -> bool: return item.type == type).size()
 
 
 func total() -> int:
 	return items.size()
 
 
-## How many loose items the bag holds: `CAPACITY`, and `PACKMULE_ROOM` more while a Packmule's Harness
-## at rank IV is worn on either doll. The heirlooms' stash keeps to `CAPACITY`.
+## `CAPACITY`, and `PACKMULE_ROOM` more while a rank IV Packmule's Harness is worn on either doll. The
+## heirlooms' stash keeps to `CAPACITY`.
 func capacity() -> int:
 	if keeper == null and "packmule" in effects() and _peak("packmule"):
 		return CAPACITY + PACKMULE_ROOM
 	return CAPACITY
 
 
-## How many steps from the charted land a tile can be charted (`MapBuilder.dark_reach`): 1, the tile
-## beside it, or the Nightwalkers' reach at the player's rank while they are worn on either doll.
+## How many steps from the charted land a tile can be charted (`MapBuilder.dark_reach`): 1, or the
+## Nightwalkers' rank's while they are worn on either doll.
 func dark_reach() -> int:
 	return int(_dial("nightwalkers", "tiles")) if "nightwalker" in effects() else 1
 
 
-## What the character is called: the player's name for them, or `DEFAULT_NAME`.
 func hero() -> String:
 	return hero_name if not hero_name.is_empty() else DEFAULT_NAME
 
@@ -370,7 +243,6 @@ func rename(text: String) -> bool:
 	return true
 
 
-## How many more loose items fit. Never negative, even for a bag over the cap.
 func room_left() -> int:
 	return maxi(0, capacity() - items.size())
 
@@ -384,13 +256,12 @@ func encumbered() -> bool:
 	return items.size() > capacity()
 
 
-## The order the bag is read in: by level, highest first, and inside a level by rarity, best first,
-## and inside a rarity newest first -- because the thing just picked up is the thing being looked
-## for. Given as indices into `items`, so whoever is holding one (the open stat block) goes on
-## holding the same piece across a refresh. `held` (Item -> rarity) sorts a piece by the rarity it had
-## then, so a piece an orb has just lifted stays where it was until the bag sorts afresh (`BagPage`).
+## The order the bag is read in, as indices into `items`: level, highest first, then rarity, best
+## first, then newest first. `held` (Item -> rarity) sorts a piece by the rarity it had then, so one an
+## orb has just lifted stays where it was until the bag sorts afresh (`BagPage`).
 func order(held := {}) -> Array[int]:
-	var by := _indices()
+	var by: Array[int] = []
+	by.assign(range(items.size()))
 	by.sort_custom(func(a: int, b: int) -> bool:
 		if items[a].level != items[b].level:
 			return items[a].level > items[b].level
@@ -402,22 +273,14 @@ func order(held := {}) -> Array[int]:
 	return by
 
 
-func _indices() -> Array[int]:
-	var by: Array[int] = []
-	for i in items.size():
-		by.append(i)
-	return by
-
-
-## Whether finds at this level are thrown away as they land.
 func autodiscards(level: int) -> bool:
 	return autodiscard.has(level)
 
 
-## Whether a find is left behind as it drops (`CombatScene._on_loot_dropped`): its level's rule
-## (`autodiscards`), or once the sixth wall has opened it (`WallUnlocks.FILTER`) the loot filter's
-## (`Settings.filter_*`) -- never a unique nor a capstone, which the rarity says alike. A skill stone
-## answers to the rarity alone: it has no material, and its level is not what it is worth.
+## Whether a find is left behind as it drops (`CombatScene._on_loot_dropped`): its level's rule, or
+## once the sixth wall has opened it (`WallUnlocks.FILTER`) the loot filter's (`Settings.filter_*`).
+## Never a unique nor a capstone, which the rarity says alike. A skill stone answers to the rarity
+## alone: it has no material, and its level is not what it is worth.
 func leaves_behind(item: Item) -> bool:
 	if item.rarity == ItemRarity.Rarity.UNIQUE:
 		return false
@@ -435,8 +298,6 @@ func leaves_behind(item: Item) -> bool:
 	return materials.size() > 1 and int(LootTable.ITEMS[item.type]["material"]) < Settings.filter_material
 
 
-## Turns the rule for a level on or off. It touches nothing already held -- a rule is about what
-## arrives, and `discard_level` is the button beside it for what is there.
 func set_autodiscard(level: int, on: bool) -> void:
 	if on and not autodiscard.has(level):
 		autodiscard.append(level)
@@ -446,23 +307,23 @@ func set_autodiscard(level: int, on: bool) -> void:
 
 ## Throws away everything held at one level but what the player has locked, and hands back what went,
 ## oldest first. With `uniques` false a unique stays: the bag page asks about those on their own. Given
-## a `slot` (`LootTable.slot_of`) only that slot's pieces go: the bag's filter is on, and a bin takes
-## only what it stands over.
+## a `slot` (`LootTable.slot_of`) only that slot's pieces go: a bin takes only what the bag's filter shows.
 func discard_level(level: int, uniques := true, slot := "") -> Array[Item]:
 	var gone: Array[Item] = []
 	for i in range(items.size() - 1, -1, -1):
+		var item := items[i]
 		# A capstone is spared with the uniques: the rarity says it, where `unique` would not.
-		if items[i].level == level and not items[i].locked \
-				and (uniques or items[i].rarity != ItemRarity.Rarity.UNIQUE) and (slot.is_empty() or LootTable.slot_of(items[i].type) == slot):
-			gone.append(items[i])
+		if item.level == level and not item.locked \
+				and (uniques or item.rarity != ItemRarity.Rarity.UNIQUE) \
+				and (slot.is_empty() or LootTable.slot_of(item.type) == slot):
+			gone.append(item)
 			items.remove_at(i)
 	gone.reverse()
 	return gone
 
 
-## Every level the bag has a section for, highest first: one that holds something, or one that
-## carries a rule and holds nothing. The second is not an edge case to tidy away -- a rule with no
-## heading would be a rule with nowhere left to turn it off.
+## Every level the bag has a section for, highest first: one that holds something, or one that only
+## carries a rule -- a rule with no heading would have nowhere left to be turned off.
 func levels() -> Array[int]:
 	var found: Array[int] = []
 	for item in items:
@@ -476,16 +337,11 @@ func levels() -> Array[int]:
 	return found
 
 
-## How many are held at one level.
 func count_at(level: int) -> int:
-	var held := 0
-	for item in items:
-		if item.level == level:
-			held += 1
-	return held
+	return items.filter(func(item: Item) -> bool: return item.level == level).size()
 
 
-## Takes one piece out of the bag -- a discard or a sale. False when it was not in the bag.
+## Takes one piece out of the bag. False when it was not in it.
 func remove(item: Item) -> bool:
 	var at := items.find(item)
 	if at < 0:
@@ -494,22 +350,20 @@ func remove(item: Item) -> bool:
 	return true
 
 
-## Whether `item` would go into `socket` at all: it has to fit, and the bag has to hold everything
-## that comes off. One piece leaving the bag makes room for one coming back, which is why a swap
-## never needed a guard -- but a greatsword takes the offhand's piece off as well, and two coming
-## back into a full bag would push it over the cap. A bag already over it may still swap one for one.
 func can_equip(item: Item, socket: Equipment.Socket) -> bool:
 	return why_not_equip(item, socket).is_empty()
 
 
 ## Why `item` cannot go on at `socket`, or "" where it can: it does not fit, the bag has no room for
-## what comes off, or this doll is at `most_worn` and the press would add a piece rather than swap one,
-## or the player is short of the attribute it asks for (`LootTable.requirement`).
+## what comes off, this doll is at `most_worn` and the press would add a piece rather than swap one, or
+## the player is short of the attribute it asks for (`LootTable.requirement`).
 func why_not_equip(item: Item, socket: Equipment.Socket) -> String:
 	if not Equipment.fits(socket, item):
 		return "It does not go there"
 	var displaced := equipment.displaced_by(socket, item)
 	var off := displaced.size()
+	# One leaves the bag for each coming back, but a two-hander takes the offhand's piece off as well.
+	# A bag already over the cap may still swap one for one.
 	if items.size() - 1 + off > maxi(capacity(), items.size()):
 		return "The bag is full"
 	if most_worn >= 0 and equipment.worn.size() - off + 1 > most_worn:
@@ -537,9 +391,8 @@ func _needs_waived(off: Array[Item]) -> bool:
 
 ## `attributes()` as they would be with `off` taken off whichever doll wears them: what a piece's
 ## requirement is met by, since what the swap takes off cannot hold it up (the user's ruling,
-## 2026-09-28). The piece itself is in the bag, so it never counts toward its own. Both dolls' sockets
-## are swapped for trimmed copies, `attributes()` read -- so the Crown, the Brand and the Echo count as
-## they would -- and put back before anything else can run.
+## 2026-09-28). Both dolls' sockets are swapped for trimmed copies, `attributes()` read -- so the Crown,
+## the Brand and the Echo count as they would -- and put back before anything else can run.
 func points_without(off: Array[Item]) -> Dictionary:
 	var dolls: Array[Equipment] = [equipment, stash().equipment]
 	var kept := dolls.map(func(doll: Equipment) -> Dictionary: return doll.worn)
@@ -553,12 +406,8 @@ func points_without(off: Array[Item]) -> Dictionary:
 	return points
 
 
-## Takes `item` out of the bag and puts it on, and drops whatever it displaced back into the bag.
-##
-## The two halves move together here rather than at the call site, because the one thing that must
-## never happen is a piece being in both places or in neither -- and every caller getting that right
-## separately is the same bug waiting in as many places as there are callers. Refused, nothing moves
-## at all: the piece is still in the bag and the sockets are as they were.
+## Takes `item` out of the bag and puts it on, and drops whatever it displaced back into the bag: one
+## step, so a piece is never in both places or in neither. Refused, nothing moves at all.
 func equip(item: Item, socket: Equipment.Socket) -> bool:
 	if not can_equip(item, socket) or not remove(item):
 		return false
@@ -567,13 +416,8 @@ func equip(item: Item, socket: Equipment.Socket) -> bool:
 	return true
 
 
-## Takes the socket's piece off and puts it back in the bag. False if the socket was empty, and
-## false if the bag is full.
-##
-## Taking a piece off grows the bag, so it has to refuse: going over the cap here would stop the
-## player fighting for the sake of a piece they only wanted a closer look at, which is a trap. `equip` refuses for the
-## same reason and by the same arithmetic (`can_equip`): one going on usually pays for the one coming
-## off, but a two-hander takes two off for one.
+## Takes the socket's piece off and puts it back in the bag. False if the socket was empty, or the bag
+## is full: taking a piece off grows it, and a bag over the cap stops the player fighting.
 func unequip(socket: Equipment.Socket) -> bool:
 	if is_full():
 		return false
@@ -584,15 +428,11 @@ func unequip(socket: Equipment.Socket) -> bool:
 	return true
 
 
-## One orb found. Nothing can refuse it -- there is no cap to hit and no rule that filters it -- so
-## unlike `add` this returns nothing: there is never anything destroyed to report.
 func add_orb(orb: String, count := 1) -> void:
-	if not OrbTable.ORBS.has(orb) or count <= 0:
-		return
-	orbs[orb] = orb_count(orb) + count
+	if OrbTable.ORBS.has(orb) and count > 0:
+		orbs[orb] = orb_count(orb) + count
 
 
-## One rune found, the way `add_orb` takes an orb.
 func add_rune(rune: String, count := 1) -> void:
 	if RuneTable.has(rune) and count > 0:
 		runes[rune] = rune_count(rune) + count
@@ -618,7 +458,6 @@ func rune_work(spot: Vector2i) -> Dictionary:
 	return runed.get(_spot_key(spot), RuneTable.fresh())
 
 
-## Whether runes have been spent on the tile at world `spot` in this world.
 func has_runes(spot: Vector2i) -> bool:
 	return runed.has(_spot_key(spot))
 
@@ -627,42 +466,37 @@ static func _spot_key(spot: Vector2i) -> String:
 	return "%d,%d" % [spot.x, spot.y]
 
 
-## Spends one `rune` on the tile at world `spot`, which carries `own` modifiers of its own. Whether it did
-## anything; nothing is spent when it would not.
+## Spends one `rune` on the tile at world `spot`, which carries `own` modifiers of its own. Whether it
+## did anything; nothing is spent when it would not.
 func use_rune(rune: String, spot: Vector2i, own: Array, rng := RandomNumberGenerator.new()) -> bool:
 	# Asked of the work as read first, so a rune refused leaves no empty record on the tile.
-	if rune_count(rune) <= 0 or not RuneTable.can_apply(rune, own, rune_work(spot)) \
-			or not RuneTable.apply(rune, own, rune_state(spot), rng):
-		return false
-	runes[rune] = rune_count(rune) - 1
-	if rune_count(rune) <= 0:
-		runes.erase(rune)
-	return true
+	return rune_count(rune) > 0 and RuneTable.can_apply(rune, own, rune_work(spot)) \
+			and RuneTable.apply(rune, own, rune_state(spot), rng) and _spend(runes, rune)
 
 
-## How many of one orb are held. Zero for an orb never found, which is the tray's third state and
-## has to be an ordinary answer rather than a missing key every caller checks for.
 func orb_count(orb: String) -> int:
 	return int(orbs.get(orb, 0))
 
 
-## One orb spent. False when there was none to spend, in which case nothing moved -- so a caller can
-## apply first and spend second without a piece ever being crafted for free.
+## One orb spent. False, and nothing moved, when there was none to spend.
 func spend_orb(orb: String) -> bool:
-	var held := orb_count(orb)
+	return _spend(orbs, orb)
+
+
+## One of `which` out of a name -> count Dictionary. Erased rather than left at zero, so the save holds
+## what is carried and not everything ever found and used up.
+static func _spend(counts: Dictionary, which: String) -> bool:
+	var held := int(counts.get(which, 0))
 	if held <= 0:
 		return false
 	if held == 1:
-		# Erased rather than left at zero, so the save holds what is carried and not a list of every
-		# orb ever found and used up.
-		orbs.erase(orb)
+		counts.erase(which)
 	else:
-		orbs[orb] = held - 1
+		counts[which] = held - 1
 	return true
 
 
-## Banks `amount` experience, levelling up as many times as it pays for. Returns how many levels that
-## was, which is almost always none.
+## Banks `amount` experience and returns how many levels that paid for.
 func add_xp(amount: int) -> int:
 	var after := PlayerLevel.add(level, xp, amount)
 	level = after["level"]
@@ -670,24 +504,14 @@ func add_xp(amount: int) -> int:
 	return after["gained"]
 
 
-## What the player is worth in a fight: what they wear, with what they have learned folded in. The one
-## question the fight asks, so the rule for how the two combine lives in one place.
+## What the player is worth in a fight: both dolls' gear (`Equipment.totals`' `also`) with the skills
+## folded in, and what the uniques and the curses ask on top.
 ##
-## Three things a unique asks of it ride along. The Spiked Helm turns a hundredth of the set's armour
-## into flat damage, which has to go in with the skills' flat so the percents scale it like any other
-## point -- so the set is added up once to read its armour and once more with that in. And two counts
-## the fight has no way to see: the sockets with nothing in them and the pieces in the bag.
-##
-## The heirlooms' doll is worn as well (`Equipment.totals`' `also`). **A stat is the player's, so
-## whatever reads one reads all sixteen pieces** -- the helm's armour is. **A count is its own
-## side's:** the Ascetic's Cord counts the bare places on the doll it hangs from, and the Packmule's
-## Harness the loose pieces beside the doll it is strapped to, so one on each doll counts both and
-## one on the heirlooms' says nothing of the ordinary bag.
-##
-## **The attributes are the exception to a count being its side's** (the user's ruling, 2026-09-27):
-## they are added over both dolls (`attributes`), and so are the attribute lines the Patchwork Coat
-## counts and the pieces without one the Purist's Seal does. The attributes written into the result
-## are the counted ones, Crown, Brand and Echo done, so the fight and the character page read those.
+## **A stat is the player's, so whatever reads one reads all sixteen pieces. A count is its own
+## side's** (`_side_count`) -- **but the attributes** (the user's ruling, 2026-09-27), which are added
+## over both dolls (`attributes`), and with them the attribute lines the Patchwork Coat counts and the
+## pieces without one the Purist's Seal does. The attributes written into the result are the counted
+## ones, Crown, Brand and Echo done, so the fight and the character page read those.
 func stats() -> Dictionary:
 	var worn := effects()
 	var dolls := _counted_dolls(worn)
@@ -696,11 +520,12 @@ func stats() -> Dictionary:
 	var worth := skill_worth(worn, points)
 	var flat := _skills_worth(skills.flat(tree[0], tree[1]), worth)
 	var percent := _skills_worth(skills.percent(tree[0], tree[1]), worth)
+	# What a unique turns into a flat goes in with the skills', so the percents scale it like any other
+	# point. The Spiked Helm's is a share of the set's armour, which takes adding the set up once to read.
 	if "spikes" in worn:
 		var armour := float(dolls[0].totals(flat, percent, dolls[1]).get("armor", 0.0))
-		flat["damage"] = float(flat.get("damage", 0.0)) + armour * _dial("spiked_helm", "share") / 100.0
-	# The attribute uniques that turn points into another stat's flat, in with the skills' so the
-	# percents scale them like any other point. One on each doll counts twice.
+		_add(flat, "damage", armour * _dial("spiked_helm", "share") / 100.0)
+	# The attribute uniques' flats. One on each doll counts twice.
 	var turned := {
 		"damage": points["strength"] * _dial("ogres_knuckle", "share") / 100.0 * worn.count("ogre")
 				+ SQUIRE_DAMAGE * worn.count("squire"),
@@ -717,7 +542,7 @@ func stats() -> Dictionary:
 		turned["crit_damage"] = points["intelligence"] / SCHOLAR_CRIT * worn.count("scholar")
 	for stat: String in turned:
 		if turned[stat] > 0.0:
-			flat[stat] = float(flat.get(stat, 0.0)) + turned[stat]
+			_add(flat, stat, turned[stat])
 	var out := dolls[0].totals(flat, percent, dolls[1])
 	# Already in each of the three (`points`), which are written in below.
 	out.erase(ALL_ATTRIBUTES)
@@ -731,30 +556,27 @@ func stats() -> Dictionary:
 		var lines := _attribute_lines(piece)
 		out["attribute_lines"] += lines
 		out["pure_pieces"] += int(lines == 0)
-	# The collection log's share, on its own the way the skills' percent is: it multiplies what gear
-	# and skills made rather than adding to either.
-	if out.has("damage"):
-		out["damage"] = float(out["damage"]) * (1.0 + collection_bonus() / 100.0)
+	# The collection log's share is a multiplier of its own, over what gear and skills made.
+	_scale(out, "damage", collection_bonus())
 	for attribute: String in ATTRIBUTE_GIVES:
 		if points[attribute] <= 0.0:
 			out.erase(attribute)
 			continue
 		out[attribute] = points[attribute]
 		var gift := attribute_gift(attribute, points[attribute], worn)
-		var stat: String = gift[0]
-		if stat == "xp_more":
-			out[stat] = float(out.get(stat, 0.0)) + gift[1]
-		elif out.has(stat):
-			out[stat] = float(out[stat]) * (1.0 + gift[1] / 100.0)
+		if gift[0] == "xp_more":
+			_add(out, "xp_more", gift[1])
+		else:
+			_scale(out, gift[0], gift[1])
 	# The Quickdraw Boots at IV: Spawn Speed past 100%, which the walk-in has no more use for, is a
 	# percent of attack speed a point.
-	if "quickdraw" in worn and _peak("quickdraw_boots") and out.has("attack_speed"):
+	if "quickdraw" in worn and _peak("quickdraw_boots"):
 		var past := float(out.get("spawn_speed", 0.0)) - 100.0
 		if past > 0.0:
-			out["attack_speed"] = float(out["attack_speed"]) * (1.0 + past / 100.0)
+			_scale(out, "attack_speed", past)
 	# The Novice's Cap: experience, until the player has outgrown it.
 	if level < NOVICE_UNTIL and "novice" in worn:
-		out["xp_more"] = float(out.get("xp_more", 0.0)) + NOVICE_XP * worn.count("novice")
+		_add(out, "xp_more", NOVICE_XP * worn.count("novice"))
 	# Pacifist Hands: the hands swing for themselves, and then everything that swings swings faster.
 	if Curses.PACIFIST_HANDS in curses:
 		out["attack_speed"] = (float(out.get("attack_speed", 0.0)) + PACIFIST_SWINGS) * PACIFIST_FASTER
@@ -762,8 +584,18 @@ func stats() -> Dictionary:
 	for curse: String in curses:
 		var pays: Dictionary = Curses.CURSES[curse].get("stats", {})
 		for stat: String in pays:
-			out[stat] = float(out.get(stat, 0.0)) + float(pays[stat])
+			_add(out, stat, float(pays[stat]))
 	return out
+
+
+static func _add(sums: Dictionary, stat: String, amount: float) -> void:
+	sums[stat] = float(sums.get(stat, 0.0)) + amount
+
+
+## `percent` more of a `stat` the sums hold; a percent of one they do not hold is nothing.
+static func _scale(sums: Dictionary, stat: String, percent: float) -> void:
+	if sums.has(stat):
+		sums[stat] = float(sums[stat]) * (1.0 + percent / 100.0)
 
 
 ## The percent `points` of an attribute add to what it gives (`ATTRIBUTE_GIVES`).
@@ -784,8 +616,7 @@ func attribute_gift(attribute: String, points: float, worn := effects()) -> Arra
 
 
 ## How far the player sees from a tile they have just taken: `BASE_SIGHT` rings, none under the Thick
-## Fog, and whatever a torch adds. The map asks it as a won tile is charted, the character page to
-## show it, so the two cannot disagree.
+## Fog, and whatever a torch adds. The map's and the character page's one answer.
 func sight() -> int:
 	return (0 if Curses.THICK_FOG in curses else BASE_SIGHT) + int(stats().get("sight", 0))
 
@@ -810,14 +641,13 @@ static func _points(totals: Dictionary, attribute: String) -> float:
 	return float(totals.get(attribute, 0.0)) + float(totals.get(ALL_ATTRIBUTES, 0.0))
 
 
-## The three attributes as everything that reads one counts them. **Added up over both dolls**, like
-## any stat (the user's ruling), then the heirlooms' doll's again for every Heirloom's Echo worn, to its
-## rank's times over; the Crown of Accord's test is of those sums, and the Zealot's Brand comes last,
-## so it can take what the Crown gave. The skill tree's go in with the gear's, before any of them: the
-## root's and every stone's holding a point (`Skills.attributes`), never at `skill_worth`, which the
-## Abacus reads them to work out. The dolls are the counted ones (`_counted_dolls`), so an heirloom the
-## Echo at IV lifts a plus lifts its attribute lines with it. `stats` hands over what it has already
-## worked out; anyone else asks with nothing.
+## The three attributes as everything that reads one counts them, **in this order**: added up over both
+## dolls like any stat (the user's ruling) with the skill tree's (`Skills.attributes`: here, never at
+## `skill_worth`, which the Abacus reads them to work out); then the heirlooms' doll's again for every
+## Heirloom's Echo, to its rank's times over; then the Crown of Accord's test of those sums; and the
+## Zealot's Brand last, so it can take what the Crown gave. The dolls are the counted ones
+## (`_counted_dolls`), so an heirloom the Echo at IV lifts a plus lifts its attribute lines with it.
+## `stats` hands over what it has already worked out; anyone else asks with nothing.
 func attributes(worn := effects(), dolls := _counted_dolls(worn), tree := _tree(worn, dolls)) -> Dictionary:
 	var out := _attribute_sums(dolls[0], dolls[1])
 	var grown := skills.attributes(tree[0], tree[1])
@@ -859,8 +689,7 @@ func skill_worth(worn := effects(), points := {}) -> float:
 
 
 ## Why a point cannot go into the stone at `path`, or "" where it can: the tree's own rules, and before
-## them the Specialist's -- only one of the root's branches may hold points, the root on none of
-## them. The skills page asks here, never `skills`.
+## them the Specialist's -- only one of the root's branches may hold points, the root on none of them.
 func why_not_skill(path: String) -> String:
 	if Curses.SPECIALIST in curses and not path.is_empty():
 		for held: String in skills.ranks:
@@ -911,7 +740,7 @@ func _skills_worth(sums: Dictionary, worth := skill_worth()) -> Dictionary:
 
 ## What a unique that counts something is told: `count` of every side -- this inventory, the
 ## heirlooms -- whose own doll wears `effect`, added up. With it on neither doll this is the ordinary
-## side's count, which is what the figure has always been and nothing reads.
+## side's count, which nothing reads.
 func _side_count(effect: String, count: Callable) -> int:
 	var total := 0
 	var asked := false
@@ -961,7 +790,7 @@ static func _attribute_lines(piece: Item) -> int:
 ## The two dolls as their totals are read: themselves -- or, while a rank IV Heirloom's Echo or
 ## Purist's Seal is worn, copies of them with every heirloom one plus higher (`Item.ascend`) and every
 ## pure piece's modifiers `PURIST_MODS` over. Copies, so nothing the player holds is changed by being
-## counted; `stats` and `attributes` both total these.
+## counted.
 func _counted_dolls(worn := effects()) -> Array[Equipment]:
 	var echo := "echo" in worn and _peak("heirlooms_echo")
 	var purist := "purist" in worn and _peak("purists_seal")
@@ -993,15 +822,14 @@ func collection_bonus() -> int:
 	return (uniques_found.size() + uniques_doubled.size()) * UniqueTable.COLLECTION_DAMAGE
 
 
-## What changes how a fight plays rather than a number: the capstones learned and the uniques worn,
-## as one list of effect ids for `Encounter.effects`, each doll answering for itself.
+## What changes how a fight plays rather than a number: the capstones learned, the uniques worn on each
+## doll, the curses and the Homeland's lands, as one list of effect ids for `Encounter.effects`.
 func effects() -> Array:
 	return skills.effects() + equipment.effects() + stash().equipment.effects() \
 			+ curses.map(Curses.effect) \
 			+ homeland.map(func(env: String) -> String: return Curses.HOME_PREFIX + env)
 
 
-## The heirlooms, made the first time they are asked for.
 func stash() -> Inventory:
 	if heirlooms == null:
 		heirlooms = Inventory.new()
@@ -1036,15 +864,6 @@ func reach(radius: int) -> bool:
 	return true
 
 
-## The tiles runes are still working on, as the save holds them.
-func _runed_to_save() -> Dictionary:
-	var kept := {}
-	for key: String in runed:
-		if RuneTable.working(runed[key]):
-			kept[key] = runed[key]
-	return kept
-
-
 ## The deepest ice wall ever broken, in any world: how far the land has ever reached, in whole wall
 ## steps from where it starts (so a Ring of Walls' half walls count by the land they opened). What every
 ## wall's unlock reads (`WallUnlocks`), and Into the Dark's figure.
@@ -1052,7 +871,8 @@ func walls_ever() -> int:
 	return maxi(0, (farthest_land - MapBuilder.START_LAND_RADIUS) / MapBuilder.WALL_STEP)
 
 
-## A tile of land level `level` is charted: remembered if it is the deepest in any world. Whether that was news.
+## A tile of land level `level` is charted: remembered if it is the deepest in any world. Whether that
+## was news.
 func chart(level: int) -> bool:
 	if level <= deepest_level:
 		return false
@@ -1060,11 +880,9 @@ func chart(level: int) -> bool:
 	return true
 
 
-## Every heirloom under the level of the deepest land charted climbs to it by itself, a smith's level
-## at a time (`Item.level_up`, so its lines climb back towards their peak tiers too), and never past
-## the level it had before its world ended (`Item.safe_level`). The smith no longer walks it there
-## (`Blacksmith.can_upgrade`), so it is never ahead of the land. A broken one stays where it broke.
-## True when one moved.
+## Every whole heirloom under the level of the deepest land charted climbs to it, a smith's level at a
+## time (`Item.level_up`, so its lines climb back towards their peak tiers too), and never past the
+## level it had before its world ended (`Item.safe_level`). True when one moved.
 func raise_heirlooms(land_level: int) -> bool:
 	var moved := false
 	for piece: Item in stash().items + stash().equipment.items():
@@ -1074,29 +892,18 @@ func raise_heirlooms(land_level: int) -> bool:
 	return moved
 
 
-## The skulls the black screen may spend on the next world (`Curses.fits`), and **only Gollux pays
-## them** (the user's, 2026-10-03: walls broken pay none): each depth won is exactly one skull. Won
-## once, not once a descent, and kept with the depth through every transcension, a world lost to No
-## Second Chances included.
+## The skulls the black screen may spend on the next world (`Curses.fits`). **Only Gollux pays them**
+## (the user's, 2026-10-03: walls broken pay none): one a depth won, kept through every transcension.
 func skull_allowance() -> int:
 	return dungeon_depth
 
 
-## Where `item` is worn on the ordinary doll, or -1.
-func _socket_of(item: Item) -> int:
-	for socket: Equipment.Socket in equipment.worn:
-		if equipment.worn[socket] == item:
-			return socket
-	return -1
-
-
-## Whether `item` can be made an heirloom: a piece the player holds or wears, and not a broken one.
-## **How many may be made is not this file's business:** one a transcension, which is
-## `TranscendPage`'s to count, because that is the only place one is made.
+## Whether `item` can be made an heirloom: a piece the player holds or wears, not a broken one, and
+## never a skill stone (the heirlooms' doll has no socket for one). **How many may be made is
+## `TranscendPage`'s to count.**
 func can_make_heirloom(item: Item) -> bool:
-	# Never a skill stone: the heirlooms' doll has no socket for one.
 	return item != null and not item.broken and not item.is_stone() \
-			and (items.has(item) or _socket_of(item) >= 0)
+			and (items.has(item) or equipment.items().has(item))
 
 
 ## The piece leaves the bag, or comes straight off the doll without passing through the bag -- so a
@@ -1106,7 +913,7 @@ func make_heirloom(item: Item) -> bool:
 	if not can_make_heirloom(item):
 		return false
 	if not remove(item):
-		equipment.unequip(_socket_of(item))
+		equipment.unequip(equipment.worn.find_key(item))
 	# The Lone Heir's pay: the heirloom made at the end of a world played under it is made +1.
 	if Curses.LONE_HEIR in curses:
 		item.ascend()
@@ -1114,12 +921,11 @@ func make_heirloom(item: Item) -> bool:
 	return true
 
 
-## What is left of the player when the world is left behind: the heirlooms, each gone through
-## `Item.transcend`, the super orbs not yet spent, and what the player *knows* -- the collection log, the
-## tips already read, and the kills, which with `first_sword_taken` is what keeps a second world from
-## handing out the first one's helping hands again -- and what the dungeon asks to be kept: the depth
-## won (the skulls, `skull_allowance`), how far the land
-## has ever reached. Everything else is a fresh start.
+## What is left of the player when the world is left behind: what the player knows and has done (the
+## log, the achievements, the tips, the name, the kills and the clock, and what the dungeon and the land
+## reached), the super orbs not yet spent, the skill tree, and the heirlooms, each gone through
+## `Item.transcend`. The kills, with both first finds read as taken, keep a second world from handing
+## out the first one's promises again. Everything else is a fresh start.
 func transcended() -> Inventory:
 	var next := Inventory.new()
 	next.tips = tips.duplicate()
@@ -1179,7 +985,7 @@ func sell_for(price: float) -> void:
 	traded.emit()
 
 
-## What resetting `tree` would cost now.
+## What giving back every point in the tree would cost now.
 func respec_cost() -> float:
 	return SkillTree.respec_cost(level, skills.spent())
 
@@ -1195,7 +1001,7 @@ func respec() -> bool:
 	return true
 
 
-## One more of `key` in the achievements' `tally` (`n` more).
+## `n` more of `key` in the achievements' `tally`.
 func tick(key: String, n := 1) -> void:
 	tally[key] = int(tally.get(key, 0)) + n
 
@@ -1210,7 +1016,6 @@ func keep_best(key: String, value: float) -> void:
 		tally[key] = best
 
 
-## Every orb held, counted together.
 func total_orbs() -> int:
 	var total := 0
 	for orb: String in orbs:
@@ -1218,55 +1023,11 @@ func total_orbs() -> int:
 	return total
 
 
-## Writes the inventory to `path`, whole or not at all (`SafeFile`). Returns whether it got there; a
-## failed write is worth a warning but never worth stopping play for.
+## Writes the inventory to `path`, whole or not at all (`InventorySave.write`), and returns whether it
+## got there. `saved_at` is stamped only where it did; `save_written` is said either way.
 func save(path := SAVE_PATH) -> bool:
-	var saved := []
-	for item in items:
-		saved.append(item.to_dict())
-	var kept := []
-	for item in stash().items:
-		kept.append(item.to_dict())
 	var stamp := Time.get_unix_time_from_system()
-	# Indented, so the save can be read and edited by a person.
-	var written := SafeFile.write(path, JSON.stringify({
-		"version": VERSION,
-		"first_sword_taken": first_sword_taken,
-		"first_orb_taken": first_orb_taken,
-		"tips": tips,
-		"name": hero_name,
-		"gold": gold,
-		"kills": kills,
-		"play_seconds": play_seconds,
-		"dungeon_depth": dungeon_depth,
-		"dungeon_floors": dungeon_floors,
-		"farthest_land": farthest_land,
-		"deepest_level": deepest_level,
-		"level": level,
-		"xp": xp,
-		"skill_tree": skills.tree_dict(),
-		"skill_ranks": skills.ranks.duplicate(),
-		"towns": towns.to_dict(),
-		"orbs": orbs,
-		"runes": runes,
-		"runed": _runed_to_save(),
-		"items": saved,
-		"equipped": equipment.to_dict(),
-		"autodiscard": autodiscard,
-		"uniques_found": uniques_found,
-		"uniques_new": uniques_new,
-		"fortunes": fortunes,
-		"saved_at": stamp,
-		"heirlooms": {"items": kept, "equipped": stash().equipment.to_dict()},
-		"super_orbs": super_orbs,
-		"walls_credited": walls_credited,
-		"curses": curses,
-		"homeland": homeland,
-		"uniques_doubled": uniques_doubled,
-		"achievements": achievements,
-		"achievements_new": achievements_new,
-		"tally": tally,
-	},"\t"))
+	var written := InventorySave.write(self, path, stamp)
 	if written:
 		saved_at = stamp
 	save_written.emit()
@@ -1274,274 +1035,15 @@ func save(path := SAVE_PATH) -> bool:
 
 
 ## The inventory in `path`, or an empty one when there isn't a usable file there. A missing file is a
-## first run and leaves `problem` empty. A file that is there and cannot be honoured -- unreadable,
-## unparseable, the wrong shape, from a newer build -- also comes back empty, with the reason appended
-## to `problem`: the caller must then **never save**, because the first write would replace everything
-## the player owns with nothing. The same rule as `MapSave.load_from`, and an Array for its reason.
-## A field a hand-edited file wrote as the wrong kind of thing reads as if it were absent; what the
-## save holds and this build cannot keep is left out, named in `lost` and said in the log.
+## first run and leaves `problem` empty. A file that is there and cannot be honoured also comes back
+## empty, with the reason appended to `problem`: the caller must then **never save**, because the first
+## write would replace everything the player owns with nothing (`MapSave.load_from`'s rule too).
 static func load_from(path := SAVE_PATH, problem: Array = []) -> Inventory:
-	var inventory := Inventory.new()
-	# The skill tree's root has the slots the player's walls opened (`SkillTree.root_slots`): none past
-	# its own until the save says how far the land has reached, so a missing file -- a Reset -- starts
-	# from the root's one.
-	SkillTree.root_slots = WallUnlocks.root_branches(0)
-	SafeFile.recover(path)
-	if not FileAccess.file_exists(path):
-		return inventory
-	var text := FileAccess.get_file_as_string(path)
-	if text.is_empty():
-		problem.append("it cannot be read")
-		return inventory
-	# A JSON instance rather than JSON.parse_string, which pushes an engine error of its own.
-	var reader := JSON.new()
-	if reader.parse(text) != OK or typeof(reader.data) != TYPE_DICTIONARY:
-		problem.append("it is not a save file")
-		return inventory
-	var data: Dictionary = reader.data
-	inventory.first_sword_taken = _flag(data.get("first_sword_taken"), true)
-	inventory.first_orb_taken = _flag(data.get("first_orb_taken"), true)
-	var seen: Variant = data.get("tips", [])
-	if typeof(seen) == TYPE_ARRAY:
-		for tip: Variant in seen:
-			inventory.tips.append(str(tip))
-	# No version at all is the first shape there was. One that is not a number is a file nobody can say
-	# the shape of, and reading it as that first shape would hand back an empty bag to be saved over it.
-	# And one with neither a version nor that first shape's `counts` is some other file altogether.
-	if not data.has("version") and not data.has("counts"):
-		problem.append("it is not a save file")
-		return Inventory.new()
-	var stamp: Variant = data.get("version", 1)
-	if typeof(stamp) not in [TYPE_INT, TYPE_FLOAT]:
-		problem.append("it does not say which version of the game wrote it")
-		return Inventory.new()
-	var version := int(stamp)
-	if version > VERSION:
-		# A save from a newer build. Guessing at a shape never seen is how a save gets eaten; leaving
-		# it alone means the build that wrote it can still read it.
-		problem.append("it was written by a newer version of the game (%d)" % version)
-		return Inventory.new()
-	if version < 2:
-		inventory._read_v1(data)
-		inventory._say_lost(path)
-		return inventory
-	var saved: Variant = data.get("items", [])
-	if typeof(saved) != TYPE_ARRAY:
-		problem.append("it has no list of items")
-		return Inventory.new()
-	for entry: Variant in saved:
-		var item := Item.from_dict(entry, inventory.lost)
-		if item != null:
-			inventory.items.append(item)
-	# Version 2 knew nothing about wearing anything, so its whole save is bag and the player starts
-	# with bare hands. There is nothing to convert: `equipped` is simply absent, and an absent key
-	# and an empty set read the same.
-	inventory.equipment = Equipment.from_dict(data.get("equipped", {}), inventory.lost)
-	# Version 4 knew nothing about a rule, and an absent key reads as no rules -- which is what every
-	# bag had until now. Anything that is not a number is stepped over rather than guessed at.
-	var rules: Variant = data.get("autodiscard", [])
-	if typeof(rules) == TYPE_ARRAY:
-		for level: Variant in rules:
-			if typeof(level) in [TYPE_INT, TYPE_FLOAT]:
-				inventory.set_autodiscard(int(level), true)
-	# Version 5 knew nothing about gold, and an absent key reads as none -- the way `autodiscard`
-	# did. Anything that is not a number is stepped over rather than guessed at, and a negative purse
-	# in a hand-edited file comes back as nothing rather than as a debt.
-	var purse: Variant = data.get("gold", 0)
-	if typeof(purse) in [TYPE_INT, TYPE_FLOAT]:
-		inventory.gold = maxf(0.0, float(purse))
-	var killed: Variant = data.get("kills", 0)
-	if typeof(killed) in [TYPE_INT, TYPE_FLOAT]:
-		inventory.kills = maxi(0, int(killed))
-	# Version 15 knew nothing about the clock: an absent key is a save that has played no time yet.
-	var played: Variant = data.get("play_seconds", 0.0)
-	if typeof(played) in [TYPE_INT, TYPE_FLOAT]:
-		inventory.play_seconds = maxf(0.0, float(played))
-	# Version 21 knew nothing about the dungeon: an absent key is a player who has never been down it.
-	var deepest: Variant = data.get("dungeon_depth", 0)
-	if typeof(deepest) in [TYPE_INT, TYPE_FLOAT]:
-		inventory.dungeon_depth = maxi(0, int(deepest))
-	# Version 25 counted only depths: its floors are theirs, the Golluxes included.
-	var floors: Variant = data.get("dungeon_floors", 0)
-	inventory.dungeon_floors = maxi(inventory.dungeon_depth * Encounter.DUNGEON.enemies,
-			int(floors) if typeof(floors) in [TYPE_INT, TYPE_FLOAT] else 0)
-	# Version 24 knew nothing of it: no further than the start's land. (Its `seeing_stone` went with the
-	# stone on 2026-10-03, and a save that still holds it is read past it.)
-	var farthest: Variant = data.get("farthest_land", MapBuilder.START_LAND_RADIUS)
-	if typeof(farthest) in [TYPE_INT, TYPE_FLOAT]:
-		inventory.farthest_land = maxi(MapBuilder.START_LAND_RADIUS, int(farthest))
-	# Before the tree, which keeps a stone only in a slot the root has.
-	SkillTree.root_slots = WallUnlocks.root_branches(inventory.walls_ever())
-	var charted: Variant = data.get("deepest_level", 1)
-	if typeof(charted) in [TYPE_INT, TYPE_FLOAT]:
-		inventory.deepest_level = maxi(1, int(charted))
-	# Version 30 knew no name: an unnamed character, as a name that is not a string is.
-	var called: Variant = data.get("name", "")
-	if typeof(called) == TYPE_STRING:
-		inventory.rename(called)
-	# Version 7 knew nothing about levels: an absent key reads as a fresh level 1. A level below 1 or
-	# experience below nothing in a hand-edited file is clamped rather than guessed at, and experience
-	# already worth a level is paid out, so the file comes back obeying the curve.
-	var saved_level: Variant = data.get("level", 1)
-	var saved_xp: Variant = data.get("xp", 0)
-	inventory.level = maxi(1, int(saved_level)) if typeof(saved_level) in [TYPE_INT, TYPE_FLOAT] else 1
-	inventory.add_xp(maxi(0, int(saved_xp)) if typeof(saved_xp) in [TYPE_INT, TYPE_FLOAT] else 0)
-	# Version 33 made the skill tree the player's own: an absent tree is the root alone, with every point
-	# free. Read after the level, because what a save may have spent is counted off it.
-	inventory.skills = Skills.from_dict(data.get("skill_tree", null), data.get("skill_ranks", {}),
-			inventory.level, inventory.lost)
-	# Version 9 knew nothing about towns, and an absent key reads as no settlement walked into yet --
-	# which is what every save had before there was anything in one to do.
-	inventory.towns = TownState.from_dict(data.get("towns", {}))
-	# Version 6 knew nothing about orbs, and an absent key reads as none. An orb this build no longer
-	# has is dropped rather than kept as a name nothing can draw -- the same pruning by name that
-	# Item.from_dict does to a retired piece, and the reason orbs are saved by name at all. A renamed
-	# one (`OrbTable.RENAMED`: Alteration, whose job Transmutation took over, and the two adjectives)
-	# is counted under its name now.
-	var currency: Variant = data.get("orbs", {})
-	if typeof(currency) == TYPE_DICTIONARY:
-		for orb: Variant in currency:
-			var named := OrbTable.current(str(orb))
-			if not OrbTable.ORBS.has(named):
-				inventory.lost.append(str(orb))
-				continue
-			var held: Variant = currency[orb]
-			if typeof(held) in [TYPE_INT, TYPE_FLOAT]:
-				inventory.add_orb(named, maxi(0, int(held)))
-	# Version 33 knew nothing of runes: none held, none at work.
-	var found_runes: Variant = data.get("runes", {})
-	if typeof(found_runes) == TYPE_DICTIONARY:
-		for rune: Variant in found_runes:
-			if not RuneTable.has(str(rune)):
-				inventory.lost.append(str(rune))
-			var count: Variant = found_runes[rune]
-			if typeof(count) in [TYPE_INT, TYPE_FLOAT]:
-				inventory.add_rune(str(rune), maxi(0, int(count)))
-	var worked: Variant = data.get("runed", {})
-	if typeof(worked) == TYPE_DICTIONARY:
-		for key: Variant in worked:
-			var state := RuneTable.from_dict(worked[key], inventory.lost)
-			if RuneTable.working(state):
-				inventory.runed[str(key)] = state
-	# Version 10 knew nothing about uniques: an absent key is none found. An id this build no longer
-	# has is dropped by name, the way a retired orb is.
-	var found: Variant = data.get("uniques_found", [])
-	if typeof(found) == TYPE_ARRAY:
-		for id: Variant in found:
-			if not UniqueTable.UNIQUES.has(str(id)):
-				inventory.lost.append(str(id))
-			inventory.note_unique(str(id))
-	# Absent in an older save: nothing is new. Only what is also found counts.
-	inventory.uniques_new.clear()
-	var unseen: Variant = data.get("uniques_new", [])
-	if typeof(unseen) == TYPE_ARRAY:
-		for id: Variant in unseen:
-			if inventory.uniques_found.has(str(id)):
-				inventory.uniques_new.append(str(id))
-	# Version 11 knew nothing about the fortuneteller: an absent key is nothing bought.
-	var told: Variant = data.get("fortunes", {})
-	if typeof(told) == TYPE_DICTIONARY:
-		inventory.fortunes = told
-	# Version 22 had no `saved_at`: a hero camped by hand counts from that camp, anyone else from never.
-	var resting: Variant = data.get("camp", {})
-	var since: Variant = resting.get("since", 0.0) if typeof(resting) == TYPE_DICTIONARY else 0.0
-	var stamped: Variant = data.get("saved_at", since)
-	if typeof(stamped) in [TYPE_FLOAT, TYPE_INT]:
-		inventory.saved_at = float(stamped)
-	# Version 13 knew nothing about heirlooms: absent keys are none kept, no pick owed and no wall
-	# paid for -- which is what lets `credit_walls` pay an old save for the walls it has down.
-	var heir: Variant = data.get("heirlooms", {})
-	if typeof(heir) == TYPE_DICTIONARY:
-		var kept: Variant = heir.get("items", [])
-		if typeof(kept) == TYPE_ARRAY:
-			for entry: Variant in kept:
-				var item := Item.from_dict(entry, inventory.lost)
-				if item != null:
-					inventory.stash().items.append(item)
-		inventory.stash().equipment = Equipment.from_dict(heir.get("equipped", {}), inventory.lost)
-	# Version 14 called them picks and spent them on making heirlooms; what is left of them are orbs.
-	inventory.super_orbs = maxi(0, _whole(data.get("super_orbs", data.get("heirloom_picks"))))
-	inventory.walls_credited = maxi(0, _whole(data.get("walls_credited")))
-	# Version 17 knew nothing about curses: an absent key is a world under none. One this build no
-	# longer has is dropped by name, the way a retired orb is.
-	var cursed: Variant = data.get("curses", [])
-	if typeof(cursed) == TYPE_ARRAY:
-		inventory.curses = Curses.known(cursed)
-		for curse: Variant in cursed:
-			if not Curses.CURSES.has(curse):
-				inventory.lost.append(str(curse))
-	# Version 19 knew nothing of either: no land chosen, no find counted twice. A name that is not a
-	# unique's is dropped, and one that is not a land's simply never matches a fight's.
-	for entry: Variant in _strings(data.get("homeland", [])):
-		inventory.homeland.append(entry)
-	for entry: Variant in _strings(data.get("uniques_doubled", [])):
-		if UniqueTable.UNIQUES.has(entry) and not inventory.uniques_doubled.has(entry):
-			inventory.uniques_doubled.append(entry)
-	# Version 27 earned nothing and counted nothing; version 28 kept a list, every one of it rank I. A
-	# retired achievement is dropped, a rank is held to I..IV, and a count is whole.
-	var earned: Variant = data.get("achievements", {})
-	if typeof(earned) == TYPE_ARRAY:
-		for entry: String in _strings(earned):
-			if Achievements.ACHIEVEMENTS.has(entry):
-				inventory.achievements[entry] = 1
-			else:
-				inventory.lost.append(entry)
-	elif typeof(earned) == TYPE_DICTIONARY:
-		for entry: Variant in earned:
-			if not Achievements.ACHIEVEMENTS.has(str(entry)):
-				inventory.lost.append(str(entry))
-			elif _whole(earned[entry]) >= 1:
-				inventory.achievements[str(entry)] = mini(_whole(earned[entry]), UniqueTable.PEAK)
-	for entry: String in _strings(data.get("achievements_new", [])):
-		if inventory.achievements.has(entry) and not inventory.achievements_new.has(entry):
-			inventory.achievements_new.append(entry)
-	var counted: Variant = data.get("tally", {})
-	if typeof(counted) == TYPE_DICTIONARY:
-		for key: Variant in counted:
-			if typeof(counted[key]) in [TYPE_INT, TYPE_FLOAT]:
-				inventory.keep_best(str(key), float(counted[key]))
-	# Version 28 counted no wall ever broken: this world's are where the lifetime count starts.
-	if version < 29 and inventory.walls_credited > int(inventory.tally.get("walls", 0)):
-		inventory.tally["walls"] = inventory.walls_credited
-	inventory._say_lost(path)
-	return inventory
+	return InventorySave.read(path, problem)
 
 
-## Says in the log what `load_from` could not keep (`lost`), which the next save writes away for good.
-func _say_lost(path: String) -> void:
-	if not lost.is_empty():
-		print("Inventory: %s holds %d thing(s) this build cannot keep, gone at the next save: %s"
-				% [path, lost.size(), ", ".join(PackedStringArray(lost))])
-
-
-## The strings in a saved list, and nothing else that a hand-edited file put there.
-static func _strings(saved: Variant) -> Array[String]:
-	var out: Array[String] = []
-	if typeof(saved) == TYPE_ARRAY:
-		for entry: Variant in saved:
-			if typeof(entry) == TYPE_STRING:
-				out.append(entry)
-	return out
-
-
-## The old shape: item name -> how many were held. Each becomes that many plain common items with no
-## modifiers, which is the honest reading of a save that never knew an item could be anything more.
-## Handing them rarities would be handing the player power for having played earlier. The next save
-## writes the new shape, so this runs at most once per file. Read the way any saved piece is
-## (`Item.from_dict`), so a name since changed is the piece it is now (`LootTable.RENAMED`) and each
-## carries the table's numbers, as a piece saved before pieces kept their own does.
-func _read_v1(data: Dictionary) -> void:
-	var counts: Variant = data.get("counts", {})
-	if typeof(counts) != TYPE_DICTIONARY:
-		return
-	for type: Variant in counts:
-		for i in _whole(counts[type]):
-			var item := Item.from_dict({"type": type, "rarity": ItemRarity.NAMES[ItemRarity.Rarity.COMMON]}, lost)
-			if item != null:
-				items.append(item)
-
-
-## A saved count read back as a whole number, or 0 where a hand-edited file holds anything else.
+## A saved count read back as a whole number, or 0 where a hand-edited file holds anything else. This
+## and `_flag` are `Item.from_dict`'s and `InventorySave`'s too.
 static func _whole(value: Variant) -> int:
 	return int(value) if typeof(value) in [TYPE_INT, TYPE_FLOAT] else 0
 

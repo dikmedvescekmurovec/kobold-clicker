@@ -70,7 +70,8 @@ func _test_unique_items() -> bool:
 		bag.items.append(piece)
 		_check(bag.equip(piece, bag.equipment.sockets_for(piece)[0]), "%s goes on" % id)
 	var effects := bag.effects()
-	_check(effects.count("knucklebone") == 2 and "home:grass" in effects, "what is worn reaches the fight (%s)" % [effects])
+	_check(effects.count("knucklebone") == 2 and "home:grass" in effects,
+			"what is worn reaches the fight (%s)" % [effects])
 	_check(Inventory.new().effects().is_empty(), "and bare hands change nothing")
 
 	# Found is found, and the log is saved with everything else.
@@ -190,7 +191,8 @@ func _test_attribute_uniques() -> bool:
 	_check(fencer.stats()["time_on_hit"] == 5.0, "fifty dexterity is half a second of time on hit")
 	var butcher: Inventory = armed.call([{"added_strength": 100}])
 	wear.call(butcher, unique.call("butchers_cleaver"))
-	_check(butcher.stats()["bleed"] == 5.0, "a hundred strength is 5%% bleed on the Cleaver (%s)" % butcher.stats().get("bleed"))
+	_check(butcher.stats()["bleed"] == 5.0,
+			"a hundred strength is 5%% bleed on the Cleaver (%s)" % butcher.stats().get("bleed"))
 	var quick: Inventory = armed.call([{"added_dexterity": 50}])
 	wear.call(quick, unique.call("quickdraw_boots"))
 	_check(quick.stats()["spawn_speed"] == 50.0, "and fifty dexterity is 50%% spawn speed on the boots")
@@ -216,8 +218,10 @@ func _test_attribute_uniques() -> bool:
 	_check(bag.attributes() == {"strength": 50.0 + 20.0 * again, "dexterity": 40.0 + 40.0 * again, "intelligence": 10.0},
 			"the Echo at III (%s)" % bag.attributes())
 	UniqueTable.ranks = {"ogres_knuckle": UniqueTable.PEAK}
-	_check(Item.rolled_unique("ogres_knuckle", rng, 1).effect_text() == UniqueTable.effect_text("ogres_knuckle", UniqueTable.PEAK)
-			and UniqueTable.effect_text("ogres_knuckle", UniqueTable.PEAK).contains("%d%%" % int(at.call("ogres_knuckle", "share"))),
+	_check(Item.rolled_unique("ogres_knuckle", rng, 1).effect_text() == UniqueTable.effect_text("ogres_knuckle",
+			UniqueTable.PEAK)
+			and UniqueTable.effect_text("ogres_knuckle",
+					UniqueTable.PEAK).contains("%d%%" % int(at.call("ogres_knuckle", "share"))),
 			"and its card writes the rank's number")
 	_check(UniqueTable._written(3.0) == "3" and UniqueTable._written(2.5) == "2.5",
 			"a whole number is written without a point, and a half with one")
@@ -334,7 +338,8 @@ func _test_rank_four_uniques() -> bool:
 	var sharp := float(fencer.stats().get("crit_damage", 0.0))
 	at.call(fencer, "fencers_signet", iv)
 	at.call(fencer, "scholars_circlet", iv)
-	_check(fencer.stats()["dodge"] - dodged == 50.0 and fencer.stats()["crit_damage"] - sharp == 50.0 / Inventory.SCHOLAR_CRIT,
+	_check(fencer.stats()["dodge"] - dodged == 50.0
+			and fencer.stats()["crit_damage"] - sharp == 50.0 / Inventory.SCHOLAR_CRIT,
 			"both at IV and neither at III (%s, %s)" % [fencer.stats().get("dodge"), fencer.stats().get("crit_damage")])
 
 	# The Quickdraw Boots: Spawn Speed past 100% is attack speed.
@@ -436,7 +441,7 @@ func _test_unique_stats() -> bool:
 	page._on_discard_pressed(junk)
 	_check(bag.gold == paid * 2.0 and not bag.items.has(junk), "the bag's Discard pays too")
 	var level_one := bag.count_at(1)
-	page._on_clear_level_pressed(1)
+	page._drop_level(1, false)
 	_check(level_one == 2 and bag.gold > paid * 2.0 and bag.count_at(1) == 0, "and so does a level's bin")
 	page.queue_free()
 
@@ -521,7 +526,8 @@ func _test_achievements() -> bool:
 	var boots := Item.rolled_unique("nightwalkers", rng, 1)
 	player.stash().items.append(boots)
 	player.stash().equip(boots, Equipment.Socket.BOOTS)
-	_check(player.dark_reach() == int(UniqueTable.dial("nightwalkers", "tiles", 1)), "rank I's reach on the heirlooms' doll")
+	_check(player.dark_reach() == int(UniqueTable.dial("nightwalkers", "tiles", 1)),
+			"rank I's reach on the heirlooms' doll")
 	player.achievements["nightwalkers"] = 3
 	_check(player.dark_reach() == int(UniqueTable.dial("nightwalkers", "tiles", 3)), "and rank III's at rank III")
 	player.stash().unequip(Equipment.Socket.BOOTS)
@@ -678,24 +684,24 @@ func _test_achievements() -> bool:
 	await process_frame
 	await process_frame
 	_check(main.inventory.achievements == {"duelists_buckler": 1}, "a save that reaches one earns it")
-	_check(main._banner != null and _said_by(main._banner).contains("Sharp Eye")
-			and _said_by(main._banner).contains("Unlocks Duelist's Buckler"),
+	_check(main.banner.panel != null and _said_by(main.banner.panel).contains("Sharp Eye")
+			and _said_by(main.banner.panel).contains("Unlocks Duelist's Buckler"),
 			"on a banner naming it and its unique")
 	_check(Inventory.load_from(TEST_PATH).achievements == {"duelists_buckler": 1}, "and it is saved")
 	_check(UniqueTable.ranks == {"duelists_buckler": 1}, "and the cards write its unique at that rank")
 	_check(main._achievements_button.visible and main._flashes.has("opened_achievements"), "its button comes on, pulsing")
-	main._close_banner()
+	main.banner.close()
 	# The next rank is a banner of its own: the rank reached, and the unique's rule at its new numbers.
 	main.inventory.tick("crits", int(Achievements.need_at("duelists_buckler", 2)) - asked)
 	main.inventory.save(TEST_PATH)
 	await process_frame
 	await process_frame
-	var risen := _said_by(main._banner) if main._banner != null else ""
+	var risen := _said_by(main.banner.panel) if main.banner.panel != null else ""
 	_check(Achievements.rank(main.inventory, "duelists_buckler") == 2 and risen.contains("Rank up")
 			and risen.contains("Sharp Eye II") and risen.contains(UniqueTable.effect_text("duelists_buckler", 2)),
 			"a rank climbed raises its own banner (%s)" % risen)
 	_check(UniqueTable.ranks == {"duelists_buckler": 2}, "and the cards follow it")
-	main._close_banner()
+	main.banner.close()
 	main._on_achievements_pressed()
 	await process_frame
 	_check(main.achievements_page.visible and main.inventory.achievements_new == ["duelists_buckler"]
@@ -711,7 +717,8 @@ func _test_achievements() -> bool:
 	var buckler: ItemSlot = tiles.filter(func(s: ItemSlot) -> bool: return s.item.unique == "duelists_buckler")[0]
 	var unique_card := VBoxContainer.new()
 	(buckler.get_meta(ItemCard.ALT_CARD) as Callable).call(unique_card, 150.0)
-	_check(_said_by(unique_card).contains("Duelist's Buckler") and buckler.get_meta(ItemCard.KEYS) == {"alt": "Duelist's Buckler"},
+	_check(_said_by(unique_card).contains("Duelist's Buckler")
+			and buckler.get_meta(ItemCard.KEYS) == {"alt": "Duelist's Buckler"},
 			"under Alt a square shows the unique it unlocks, and its key names it (%s)" % _said_by(unique_card))
 	unique_card.free()
 	# A locked one's says what it is about and nothing it does: its name, its hint, "Locked".
@@ -816,7 +823,8 @@ func _test_collection() -> bool:
 	_check(main.collection_page.visible and main._collection_button.visible, "the page opens, its button beside it")
 	_check(not main._flashes.has("opened_collection"), "opening the log stills the button for good")
 	var squares: Array = main.collection_page.find_children("*", "ItemSlot", true, false)
-	var logged: Array = squares.map(func(slot: ItemSlot) -> String: return str(UniqueTable.UNIQUES[slot.item.unique]["name"]))
+	var logged: Array = squares.map(
+			func(slot: ItemSlot) -> String: return str(UniqueTable.UNIQUES[slot.item.unique]["name"]))
 	var starting := Achievements.STARTERS.size()
 	_check(squares.slice(0, starting).all(func(slot: ItemSlot) -> bool: return slot.item.unique in Achievements.STARTERS)
 			and _by_name(logged.slice(0, starting)) and _by_name(logged.slice(starting)),
@@ -853,7 +861,8 @@ func _test_collection() -> bool:
 	# The foot, under the scroll: what the log adds and how full it is, in the body font.
 	var bonus: Label = main.collection_page.find_child(CollectionPage.BONUS_NAME, true, false)
 	var tally: Label = main.collection_page.find_child(CollectionPage.COUNT_NAME, true, false)
-	_check(bonus.text == "+%d%% Damage" % main.inventory.collection_bonus(), "the damage it adds is always written (%s)" % bonus.text)
+	_check(bonus.text == "+%d%% Damage" % main.inventory.collection_bonus(),
+			"the damage it adds is always written (%s)" % bonus.text)
 	_check(tally.text == "Found 1 of %d" % UniqueTable.UNIQUES.size(), "beside how much of it is found (%s)" % tally.text)
 	var scrolls: Array = main.collection_page.find_children("*", "ScrollContainer", true, false)
 	_check(not scrolls[0].is_ancestor_of(bonus) and bonus.theme_type_variation == "SmallLabel"
@@ -922,8 +931,9 @@ func _test_collection() -> bool:
 	main.collection_page.open()
 	await process_frame
 	squares = main.collection_page.find_children("*", "ItemSlot", true, false)
-	_check(squares.size() == UniqueTable.UNIQUES.size() and squares.all(
-			func(square: ItemSlot) -> bool: return square.modulate == Color.WHITE and square.get_node_or_null(ItemSlot.FRAME_NAME) != null),
+	var found := func(square: ItemSlot) -> bool:
+		return square.modulate == Color.WHITE and square.get_node_or_null(ItemSlot.FRAME_NAME) != null
+	_check(squares.size() == UniqueTable.UNIQUES.size() and squares.all(found),
 			"the dev setting shows every unique as found (%d)" % squares.size())
 	Settings.all_uniques = false
 	main.inventory.uniques_new.append("metronome")
@@ -936,19 +946,19 @@ func _test_collection() -> bool:
 	drop_rng.seed = 7
 	main._on_loot_dropped(0, Item.rolled_unique("stonebreaker", drop_rng, 5))
 	await process_frame
-	_check(main._banner != null, "a unique new to the log raises its banner")
-	_check(main._banner_head.get_child_count() == 2, "its X up at once")
+	_check(main.banner.panel != null, "a unique new to the log raises its banner")
+	_check(main.banner.head.get_child_count() == 2, "its X up at once")
 	# A swing lands on the fight, never on the banner.
 	var swing := InputEventMouseButton.new()
 	swing.button_index = MOUSE_BUTTON_LEFT
 	swing.pressed = true
 	main._input(swing)
-	_check(main._banner != null, "a swing leaves it up")
+	_check(main.banner.panel != null, "a swing leaves it up")
 	# The mouse on it holds it past its seconds (a headless run has no mouse to move, so it is asked).
-	_check(main._over_banner(main._banner.get_global_rect().get_center()) and not main._over_banner(Vector2.ZERO),
+	_check(main.banner.over(main.banner.panel.get_global_rect().get_center()) and not main.banner.over(Vector2.ZERO),
 			"the mouse is on it over its middle and off it in the corner")
-	await create_timer(main.BANNER_HOLD + 0.1).timeout
-	_check(main._banner == null, "and it goes by itself after its seconds with the mouse off it")
+	await create_timer(Banner.HOLD + 0.1).timeout
+	_check(main.banner.panel == null, "and it goes by itself after its seconds with the mouse off it")
 	# Under a finger it never goes by itself: only a tap off it, once its seconds are up.
 	var tap := InputEventMouseButton.new()
 	tap.button_index = MOUSE_BUTTON_LEFT
@@ -958,25 +968,25 @@ func _test_collection() -> bool:
 	main._on_loot_dropped(0, Item.rolled_unique("brawlers_wraps", drop_rng, 5))
 	await process_frame
 	main._input(tap)
-	_check(main._banner != null, "under a finger a tap off it before its seconds leaves it up")
-	await create_timer(main.BANNER_HOLD + 0.1).timeout
-	_check(main._banner != null, "and it never goes by itself")
-	tap.position = main._banner.get_global_rect().get_center()
+	_check(main.banner.panel != null, "under a finger a tap off it before its seconds leaves it up")
+	await create_timer(Banner.HOLD + 0.1).timeout
+	_check(main.banner.panel != null, "and it never goes by itself")
+	tap.position = main.banner.panel.get_global_rect().get_center()
 	main._input(tap)
-	_check(main._banner != null, "a tap on it leaves it up")
+	_check(main.banner.panel != null, "a tap on it leaves it up")
 	tap.position = Vector2.ZERO
 	main._input(tap)
-	_check(main._banner == null, "a tap off it after its seconds puts it down")
+	_check(main.banner.panel == null, "a tap off it after its seconds puts it down")
 	main._input(swing)
 	_check(not Cursors.touched, "a mouse press puts the finger's rule away")
 	main._on_loot_dropped(0, Item.rolled_unique("stonebreaker", drop_rng, 5))
-	_check(main._banner == null, "a second copy of one already logged raises nothing")
+	_check(main.banner.panel == null, "a second copy of one already logged raises nothing")
 	main._on_loot_dropped(0, LootTable.roll("Baby Dragon", drop_rng, true, 5))
-	_check(main._banner == null, "and an ordinary find raises nothing")
+	_check(main.banner.panel == null, "and an ordinary find raises nothing")
 	main._on_loot_dropped(0, Item.rolled_unique("headsman", drop_rng, 5))
 	await process_frame
-	(main._banner_head.get_child(1) as BaseButton).pressed.emit()
-	_check(main._banner == null, "and its X puts it down early")
+	(main.banner.head.get_child(1) as BaseButton).pressed.emit()
+	_check(main.banner.panel == null, "and its X puts it down early")
 	main.queue_free()
 	_clear_save()
 	return true
@@ -994,7 +1004,8 @@ func _test_item_generator() -> bool:
 	root.add_child(page)
 	await process_frame
 	page.pick("helm", 3, 12)
-	_check(page.item.type == "Golden Helm" and page.item.level == 12, "the generator makes the tier and level it was asked for")
+	_check(page.item.type == "Golden Helm" and page.item.level == 12,
+			"the generator makes the tier and level it was asked for")
 	_check(page.item.rarity == ItemRarity.Rarity.COMMON and page.item.mods.is_empty(), "a fresh piece is a bare common")
 	_check(not page.spend("Orb of Augmentation"), "an orb with nothing to do to the piece is refused")
 	_check(page.spend("Orb of Transmutation") and page.item.rarity == ItemRarity.Rarity.UNCOMMON,
@@ -1026,7 +1037,8 @@ func _test_character_sheet() -> bool:
 	var page := CharacterPage.new(Inventory.new(), 1.0)
 	root.add_child(page)
 	_check(_sheet_value(page, "damage") == "1", "a bare hand does 1 (%s)" % _sheet_value(page, "damage"))
-	_check(_sheet_value(page, "fight_clock") == "30.0s", "the clock is the fight's (%s)" % _sheet_value(page, "fight_clock"))
+	_check(_sheet_value(page, "fight_clock") == "30.0s",
+			"the clock is the fight's (%s)" % _sheet_value(page, "fight_clock"))
 	_check(_sheet_value(page, "sight") == str(Inventory.BASE_SIGHT), "and the sight the base")
 	_check(page.find_child("armor", true, false) == null, "armour at nothing is no row")
 	var click: Label = page.find_child(CharacterPage.PER_CLICK, true, false)

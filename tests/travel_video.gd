@@ -26,9 +26,9 @@ func _run() -> void:
 	await _open_main("travel")
 	# Nothing of the map's over the fights: they are built here, not opened by the main scene.
 	main.map.hide()
-	main._panel.hide()
+	main.tile_panel.panel.hide()
 	main._show_corner(false)
-	main._play_music(main.BATTLE_MUSIC)
+	main.sounds.play_music(Jukebox.BATTLE)
 	# The whole window: a boss stands out past the right edge of anything narrower. The title in the sky.
 	_show(Rect2(Vector2.ZERO, root.size))
 	_caption_middle = 200.0
@@ -45,7 +45,7 @@ func _run() -> void:
 		var next: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 		main.add_child(next)
 		next.place = TileNames.generate(CELL, shot[0], main.map_seed)
-		next.hud_top = main._fight_top()
+		next.hud.hud_top = main._fight_top()
 		next.xp_target = main._character.xp_point()
 		next.begin(fight, CELL, main.ui_scale, shot[1], 1 + i % CombatScene.AREA_LAYOUTS, shot[2])
 		# A hard cut: the last fight gone the frame this one comes.

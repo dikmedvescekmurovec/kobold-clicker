@@ -1,20 +1,12 @@
 class_name SuperOrbTable
 extends RefCounted
-## The six super orbs: what each does to an heirloom, at a transcension and nowhere else.
+## The six super orbs: what each does to an heirloom, on `TranscendPage` and nowhere else. They never
+## drop, stand on a shelf or sell, and there is **one count for all six** (`Inventory.super_orbs`),
+## spent on whichever is pressed. `why_not` is the one rule, as `OrbTable`'s is.
 ##
-## `OrbTable`'s shape -- a const table and `can_apply` / `why_not` / `apply` as three faces of one
-## rule -- and a table of its own rather than six more rows in that one, because nothing `OrbTable`
-## does with a row is wanted here: these never drop, never stand on a vendor's shelf, are never sold,
-## and are not counted one by one. **There is one count for all six** (`Inventory.super_orbs`, a wall
-## broken is one), spent on whichever is pressed.
-##
-## Three of them are **aimed**: they work on one modifier, which the player chooses, so `apply` takes
-## its index and `can_aim` says which lines may be chosen.
-##
-## What they leave on a piece is the piece's own (`Item.plus`, `Item.extra_slot`, a modifier's
-## `"perfect"` and `"bound"`), saved with it, and honoured by the ordinary orbs and the smith ever
-## after: that is `OrbTable`'s and `Blacksmith`'s business, through `Item.held_fast`,
-## `Item.refresh_perfect` and `Item.mod_level`.
+## What they leave on a piece (`Item.plus`, `Item.extra_slot`, a modifier's `"perfect"` and `"bound"`)
+## is saved with it, and the ordinary orbs and the smith honour it ever after through
+## `Item.held_fast`, `Item.refresh_perfect` and `Item.mod_level`.
 
 const REPLACEMENT := "Orb of Replacement"
 const ASCENSION := "Orb of Ascension"
@@ -23,9 +15,9 @@ const EXPANSION := "Orb of Expansion"
 const MENDING := "Orb of Mending"
 const BINDING := "Orb of Binding"
 
-## In the tray's order. `does` is the whole explanation of one, as `OrbTable`'s is; `aimed` is whether
-## a modifier has to be chosen for it; `glow` is its colour, as `OrbTable`'s is. The icons are
-## `tools/ui_kit.py`'s, the crystals of the sheet the ordinary orbs are the stones of.
+## In the tray's order. `aimed`: it works on one modifier, which the player chooses (`can_aim`,
+## `apply`'s `index`). `glow` and `does` are as `OrbTable.ORBS`'. The icons are `OrbTable.ROOT`'s
+## "<name>.png", cut by `tools/ui_kit.py`.
 const ORBS := {
 	REPLACEMENT: {
 		"glow": Color("93388f"),
@@ -35,12 +27,14 @@ const ORBS := {
 	ASCENSION: {
 		"glow": Color("ffc825"),
 		"aimed": false,
-		"does": "Takes the item toward its next +1: +1 takes one, +2 two more, +3 three more, and so on. Each + rolls every modifier on it as if the item were %d levels higher, for good.",
+		"does": "Takes the item toward its next +1: +1 takes one, +2 two more, +3 three more, and so on. "
+				+ "Each + rolls every modifier on it as if the item were %d levels higher, for good.",
 	},
 	PERFECTION: {
 		"glow": Color("c7cfdd"),
 		"aimed": true,
-		"does": "Puts the modifier you choose at the top of its range, and it stays there whatever is done to the item afterwards.",
+		"does": "Puts the modifier you choose at the top of its range, and it stays there whatever is done "
+				+ "to the item afterwards.",
 	},
 	EXPANSION: {
 		"glow": Color("5ac54f"),
@@ -55,7 +49,8 @@ const ORBS := {
 	BINDING: {
 		"glow": Color("0098dc"),
 		"aimed": true,
-		"does": "Locks the modifier you choose so that no orb can move it, beside whatever a smith has locked. Once per item.",
+		"does": "Locks the modifier you choose so that no orb can move it, beside whatever a smith has "
+				+ "locked. Once per item.",
 	},
 }
 
@@ -85,7 +80,7 @@ static func aimed(orb: String) -> bool:
 	return bool(ORBS[orb]["aimed"])
 
 
-## Whether this orb has anything to do to this piece -- for an aimed one, to any line of it.
+## `why_not`, empty: for an aimed orb, whether any line of the piece will take it.
 static func can_apply(orb: String, item: Item) -> bool:
 	return why_not(orb, item).is_empty()
 
@@ -103,7 +98,7 @@ static func can_aim(orb: String, item: Item, index: int) -> bool:
 	return false
 
 
-## Why this orb is greyed out, "" when it is not. The one rule: `can_apply` is this, empty.
+## Why this orb is greyed out, "" when it is not. The one rule.
 static func why_not(orb: String, item: Item) -> String:
 	if item == null or not ORBS.has(orb):
 		return "Nothing to use it on"
@@ -113,22 +108,16 @@ static func why_not(orb: String, item: Item) -> String:
 		return "A broken item cannot be changed"
 	if item.mods.is_empty() and orb != EXPANSION:
 		return "This item has no modifiers"
-	var unique := item.rarity == ItemRarity.Rarity.UNIQUE
+	# A unique's modifiers never change, so all even a Binding could do is refuse the player's own Divine.
+	if item.rarity == ItemRarity.Rarity.UNIQUE and orb in [REPLACEMENT, EXPANSION, BINDING]:
+		return "A unique's modifiers are its own"
 	match orb:
-		REPLACEMENT:
-			if unique:
-				return "A unique's modifiers are its own"
 		EXPANSION:
-			if unique:
-				return "A unique's modifiers are its own"
 			if item.rarity == ItemRarity.Rarity.COMMON:
 				return "A common item cannot carry a modifier"
 			if item.extra_slot:
 				return "This item has already been expanded"
 		BINDING:
-			# Its modifiers never change, so all a lock could do is refuse the player's own Divine.
-			if unique:
-				return "A unique's modifiers are its own"
 			for mod in item.mods:
 				if bool(mod.get("bound", false)):
 					return "This item already has a modifier bound"
@@ -141,9 +130,9 @@ static func why_not(orb: String, item: Item) -> String:
 	return ""
 
 
-## Spends the orb's work on the piece, in place. False when there was nothing for it to do, in which
-## case the piece is untouched and the caller must not spend a count. `index` is the modifier an
-## aimed orb is pointed at.
+## Spends the orb's work on the piece, in place; `index` is the modifier an aimed orb is pointed at.
+## False where there was nothing for it to do: the piece is untouched, and the caller must not spend a
+## count.
 static func apply(orb: String, item: Item, rng: RandomNumberGenerator, index := -1) -> bool:
 	if not can_apply(orb, item) or (aimed(orb) and not can_aim(orb, item, index)):
 		return false
@@ -151,7 +140,7 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator, index := 
 		REPLACEMENT:
 			# Drawn from what the piece does not carry, the one being replaced included, so it is
 			# never itself again. A fresh dictionary: what was perfect about the old line goes with it.
-			var fresh := ModifierTable.add_one(item.type, item.mods, rng, item.mod_level(), item.stone_tier)
+			var fresh := item.extra_mod(item.mods, rng)
 			if fresh.is_empty():
 				return false
 			item.mods[index] = fresh
@@ -165,7 +154,7 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator, index := 
 			item.mods[index]["perfect"] = true
 			item.refresh_perfect()
 		EXPANSION:
-			var extra := ModifierTable.add_one(item.type, item.mods, rng, item.mod_level(), item.stone_tier)
+			var extra := item.extra_mod(item.mods, rng)
 			if extra.is_empty():
 				return false
 			item.extra_slot = true

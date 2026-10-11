@@ -476,7 +476,7 @@ func _label(text: String, colour: Color) -> Label:
 ## `align` of its width left of `at.x` (0 left, 0.5 centred, 1 right).
 func _text(stage: Node2D, text: String, colour: Color, scale: float, at: Vector2, align: float) -> Label:
 	var label := _label(text, colour)
-	label.add_theme_constant_override("outline_size", CombatScene.LABEL_OUTLINE)
+	label.add_theme_constant_override("outline_size", FightHud.LABEL_OUTLINE)
 	label.add_theme_color_override("font_outline_color", Palette.INK)
 	label.scale = Vector2(scale, scale)
 	label.z_index = 110

@@ -1,19 +1,16 @@
 class_name Curses
 extends RefCounted
 ## The curses a player may take into a new world: any whose skulls add up to no more than the player's
-## `Inventory.skull_allowance` (Gollux's depths won), chosen on the black screen of a transcension (`TranscendPage`), each a
-## handicap on the whole world for a bonus on the whole world.
+## `Inventory.skull_allowance` (Gollux's depths won), chosen on the black screen of a transcension
+## (`TranscendPage`), each a handicap on the whole world for a bonus on the whole world.
 ## A table and nothing else -- `Inventory.curses` holds the ids, `Inventory.effects()` hands each to
 ## the fight as `"curse:<id>"` (`effect`), where it is one `if` like a worn unique's, and
-## `Inventory.stats()` adds a row's `stats`, so what a curse pays in numbers is on the character page
-## with everything else.
+## `Inventory.stats()` adds a row's `stats`.
 ##
 ## **A row's two sentences are written to be understood, not to fit:** the table that shows them
-## (`TranscendPage`) wraps and scrolls, and there will be more rows. Say the whole rule, with the number
-## and what it is against ("two super orbs, not one").
-##
-## A curse takes from one side of the game and pays on another, so none of them nets to nothing.
-## `skulls` is how hard it is, and what it costs of the budget (`fits`).
+## (`TranscendPage`) wraps and scrolls. Say the whole rule, with the number and what it is against
+## ("two super orbs, not one"). A curse takes from one side of the game and pays on another, so none
+## nets to nothing. `skulls` is how hard it is, and what it costs of the budget (`fits`).
 
 const IRON_FOES := "iron_foes"
 const SHORT_DAYS := "short_days"
@@ -71,11 +68,13 @@ const CURSES := {
 		"text": "Tile modifiers start past the first wall, not the second, and every tile has one more.",
 		"reward": "Every tile modifier pays %.0f%% more." % ((TileMods.WILD_REWARD - 1.0) * 100.0)},
 	THICK_FOG: {"name": "Thick Fog", "skulls": 2,
-		"text": "-2 Sight. You begin with a Broken Torch, which gives one back while held.", "reward": "Unique items drop twice as often."},
+		"text": "-2 Sight. You begin with a Broken Torch, which gives one back while held.",
+		"reward": "Unique items drop twice as often."},
 	# A "less" on the finished experience, after every "more" has been added (`Encounter.LESSONS_XP`);
 	# the doubling is `Inventory.skill_worth`, read by `stats()`.
 	HARD_LESSONS: {"name": "Hard Lessons", "skulls": 2,
-		"text": "Enemies give %.0f%% less experience." % ((1.0 - Encounter.LESSONS_XP) * 100.0), "reward": "Every skill point is worth double."},
+		"text": "Enemies give %.0f%% less experience." % ((1.0 - Encounter.LESSONS_XP) * 100.0),
+		"reward": "Every skill point is worth double."},
 	# Three uniques' rules made a whole world's. **Each adds to its unique where both are had** (the
 	# user's ruling): the curse and the piece are two entries in the same sum.
 	PACIFIST_HANDS: {"name": "Pacifist Hands", "skulls": 2, "not_with": [BERSERKERS_WORLD],
@@ -121,8 +120,7 @@ const CURSES := {
 
 
 ## Whether `id` may be taken beside what is already `taken`: a row's `not_with` names the ones it
-## cannot stand with -- clicks that do nothing and a weapon that never swings is a world nobody can
-## play.
+## cannot stand with (clicks that do nothing and a weapon that never swings is a world nobody can play).
 static func allowed(id: String, taken: Array) -> bool:
 	for other: String in CURSES[id].get("not_with", []):
 		if other in taken:
@@ -130,7 +128,6 @@ static func allowed(id: String, taken: Array) -> bool:
 	return true
 
 
-## How many skulls `taken` costs, together.
 static func skulls_of(taken: Array) -> int:
 	var sum := 0
 	for id: String in taken:

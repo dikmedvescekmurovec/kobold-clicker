@@ -1,24 +1,12 @@
 class_name Equipment
 extends RefCounted
-## What the player is wearing, and what it adds up to.
-##
-## Eight sockets over seven places on the body, because two of them do not map one-to-one: a ring
-## goes in either hand, and the offhand takes a shield or a torch but not both. That is why a socket
-## and an item's `slot` are different things -- `TAKES` is the join between them, and it is the only
-## place that knows a ring fits twice.
-##
-## An equipped piece belongs here and not to the Inventory: equipping moves it out of the bag and
-## unequipping moves it back, so one item is in exactly one place and nothing has to be kept in step.
-##
-## `totals()` is the whole point of the class. Everything else in the game that wants to know what
-## the player is worth asks it, so there is one answer rather than one per caller.
+## What is worn, and what it adds up to: `totals` is the one answer to what a set is worth. A worn
+## piece is here and not in the bag; `Inventory.equip` / `unequip` move it between the two.
 
-## Where a piece can go. The order is the order the panel draws them down the two columns beside the
-## doll: helmet and amulet at the head, the hands, the body, and the feet.
+## In the order the panel draws them down the two columns beside the doll.
 enum Socket { HELMET, AMULET, WEAPON, OFFHAND, BODY, RING_LEFT, RING_RIGHT, BOOTS }
 
-## Saved and shown by name, for the reason ItemRarity.NAMES gives: an enum value is only a position,
-## and slipping a socket in between two others would quietly reinterpret every save on disk.
+## What a save holds: names, never enum positions.
 const NAMES := {
 	Socket.HELMET: "helmet",
 	Socket.AMULET: "amulet",
@@ -30,9 +18,7 @@ const NAMES := {
 	Socket.BOOTS: "boots",
 }
 
-## What the socket is called to a person. Both rings are simply "Ring": which hand a ring is on has
-## never mattered in any game that has two of them, and numbering them would invite the player to
-## wonder whether it does.
+## What the screen says. Both rings are "Ring": which hand one is on never matters.
 const LABELS := {
 	Socket.HELMET: "Helmet",
 	Socket.AMULET: "Amulet",
@@ -44,9 +30,8 @@ const LABELS := {
 	Socket.BOOTS: "Boots",
 }
 
-## The join: which `LootTable.slot_of` value each socket accepts. Two sockets naming "ring" is how a
-## ring comes to fit twice, and two item types naming "offhand" is how a shield and a torch come to
-## compete for one socket.
+## Socket -> the `LootTable.slot_of` it accepts: the one place that knows a ring fits either hand and
+## that a shield and a torch compete for the one offhand.
 const TAKES := {
 	Socket.HELMET: "helmet",
 	Socket.AMULET: "amulet",
@@ -58,12 +43,10 @@ const TAKES := {
 	Socket.BOOTS: "boots",
 }
 
-## Socket -> Item, holding only the sockets that have something in them. An empty socket is a missing
-## key rather than a null, so `worn.size()` is how many pieces are on.
+## Socket -> Item, holding only the sockets with something in them: `worn.size()` is the pieces on.
 var worn := {}
 
 
-## Every socket, in the order the enum declares them.
 static func sockets() -> Array:
 	var all := []
 	for socket: Socket in NAMES:
@@ -71,13 +54,11 @@ static func sockets() -> Array:
 	return all
 
 
-## Whether this piece can go in this socket at all.
 static func fits(socket: Socket, item: Item) -> bool:
 	return item != null and TAKES[socket] == LootTable.slot_of(item.type)
 
 
-## The sockets this piece could go in, emptiest first, so the caller that wants "somewhere sensible"
-## takes the front of the list and fills a bare ring finger before swapping a ring already on.
+## The sockets this piece could go in, the empty ones first: a bare ring finger before a swap.
 func sockets_for(item: Item) -> Array:
 	var open := []
 	var taken := []
@@ -95,17 +76,15 @@ func item_at(socket: Socket) -> Item:
 	return worn.get(socket)
 
 
-## Whether what is in the weapon hand takes both of them, which is what closes the offhand.
+## Whether the weapon worn takes both hands, which closes the offhand.
 func two_handed_worn() -> bool:
 	var weapon: Item = worn.get(Socket.WEAPON)
 	return weapon != null and LootTable.two_handed(weapon.type)
 
 
-## Everything that would come off if `item` went into `socket`, in the order the sockets are declared
-## in. Usually the socket's own piece and nothing else -- but a greatsword needs the hand the offhand
-## is in, and an offhand needs the hand a greatsword has both of, so one piece going on can take two
-## off. Worked out here rather than at `equip`, so the bag can ask what a swap would cost *before*
-## making it, and the button that greys and the call that refuses cannot disagree.
+## Everything that would come off if `item` went into `socket`, in socket order: the socket's own
+## piece, and the offhand under a two-hander or the two-hander over an offhand. The one answer for the
+## tooltip, the comparison and `equip`, so the button that greys and the call that refuses agree.
 func displaced_by(socket: Socket, item: Item) -> Array[Item]:
 	var out: Array[Item] = []
 	if not fits(socket, item):
@@ -119,9 +98,8 @@ func displaced_by(socket: Socket, item: Item) -> Array[Item]:
 	return out
 
 
-## Puts `item` on and hands back everything that came off, which the caller owes back to the bag --
-## `displaced_by`'s list, so what was promised is exactly what happens. Refuses a piece the socket
-## does not take rather than putting a boot on the player's head, and then nothing comes off.
+## Puts `item` on and hands back everything that came off (`displaced_by`'s list), which the caller
+## owes the bag. A piece the socket does not take changes nothing.
 func equip(socket: Socket, item: Item) -> Array[Item]:
 	var removed := displaced_by(socket, item)
 	if not fits(socket, item):
@@ -132,14 +110,13 @@ func equip(socket: Socket, item: Item) -> Array[Item]:
 	return removed
 
 
-## Takes the socket's piece off and hands it back, or null if there was nothing in it.
 func unequip(socket: Socket) -> Item:
 	var removed: Item = worn.get(socket)
 	worn.erase(socket)
 	return removed
 
 
-## Everything worn, in socket order -- for the caller that wants the pieces and not the places.
+## Everything worn, in socket order.
 func items() -> Array[Item]:
 	var all: Array[Item] = []
 	for socket: Socket in NAMES:
@@ -148,30 +125,15 @@ func items() -> Array[Item]:
 	return all
 
 
-## What the whole set is worth: every worn piece's `effective_stats`, added up stat by stat, and then
-## whatever the set's GLOBAL modifiers ask of the total.
-##
-## Adding is the rule for the first pass. Two rings of +3 Armour make 6, two pieces of armour add,
-## and a second source of crit damage adds to the first -- which is exactly why the tables put armour
-## and dodge on nearly every piece. A piece's own percent modifiers were folded into it before it
-## got here, so nothing there scales anything across pieces.
-##
-## The second pass is the one thing that does, and it is why GLOBAL exists as its own kind: a ring's
-## "+14% increased Damage" is a percentage of what the player deals, which is the sword's number and
-## not the ring's. So the globals are gathered while the stats are added, summed across the set, and
-## applied once at the end -- after everything that contributes to the stat is in, which is the only
-## point at which the answer does not depend on what order the sockets were read in. A global on a
-## stat nothing carries scales zero, which is correct: increased damage is worth nothing bare-handed.
-##
-## The player's skills come in around that. `skill_flat` is added to the pieces' sum before either
-## multiplier, so a skill's point of damage is scaled by a ring's global exactly as the sword's is.
-## `skill_percent` is applied last and **on its own**: it multiplies the gear's globals rather than
-## adding to them, so a skill and a ring each doing 10% make 21%, not 20%. With neither given this is
-## the set alone, which is every caller that is asking about gear and not about the player.
-##
-## `also` is a second doll worn at the same time -- the heirlooms'. **Flats add and percents
-## multiply:** its pieces go into the same sum, and its globals are a multiplier of their own over
-## that sum rather than more of this doll's, so +20% on each doll is x1.44 and not x1.4.
+## What the set is worth, stat -> number, built in this order:
+##   1. every worn piece's `effective_stats`, added -- `also`'s too, a second doll worn as well (the
+##      heirlooms');
+##   2. `skill_flat`, added, so the percents below scale a skill's point as they do the gear's;
+##   3. each doll's GLOBAL percents, summed over the doll and applied once: +20% on each of two dolls
+##      is x1.44, not x1.4;
+##   4. `skill_percent`, a multiplier of its own: a skill's 10% and a ring's make 21%, not 20%.
+## The globals go on after every piece is in, so the answer never depends on the order the sockets
+## were read in, and one on a stat nothing carries scales zero. With no arguments it is the gear alone.
 func totals(skill_flat := {}, skill_percent := {}, also: Equipment = null) -> Dictionary:
 	var out := {}
 	var globals: Array[Dictionary] = []
@@ -195,8 +157,8 @@ func totals(skill_flat := {}, skill_percent := {}, also: Equipment = null) -> Di
 	return out
 
 
-## What the worn uniques change about a fight, as `UniqueTable.effect_of` ids for `Encounter.effects`.
-## One entry a piece, so two of one ring are two entries and the fight can count them.
+## What the worn uniques change about a fight: one `UniqueTable.effect_of` a piece, so two of one ring
+## are two entries and the fight can count them.
 func effects() -> Array:
 	var out := []
 	for item in items():
@@ -205,8 +167,7 @@ func effects() -> Array:
 	return out
 
 
-## The save's shape: socket name -> the piece in it. Sockets with nothing in them are left out
-## entirely, so an empty set writes `{}` rather than eight nulls.
+## The save's shape: socket name -> the piece in it, empty sockets left out.
 func to_dict() -> Dictionary:
 	var out := {}
 	for socket: Socket in NAMES:
@@ -215,10 +176,8 @@ func to_dict() -> Dictionary:
 	return out
 
 
-## Read back, skipping anything this build no longer understands -- a socket that has been retired,
-## a piece whose type is gone, or a piece that no longer fits where it was saved. The same forgiving
-## pruning `Inventory` has always done: a save that has drifted loses a piece, never the whole file.
-## Each piece it loses is named in `lost` (`Item.from_dict`).
+## Read back. A socket this build has not got, a piece `Item.from_dict` cannot read and a piece that no
+## longer fits where it was saved are dropped, never the whole file; each is named in `lost`.
 static func from_dict(data: Variant, lost: Array = []) -> Equipment:
 	var gear := Equipment.new()
 	if typeof(data) != TYPE_DICTIONARY:
@@ -232,9 +191,7 @@ static func from_dict(data: Variant, lost: Array = []) -> Equipment:
 			gear.worn[socket] = item
 		elif item != null:
 			lost.append(item.type)
-	# A file holding an offhand beside a two-hander is a save that has drifted -- from a build before
-	# greatswords, or edited by hand. The weapon is what the player chose, so the offhand is the piece
-	# that goes, by the same pruning rule as a socket that no longer fits.
+	# An offhand saved beside a two-hander goes: the weapon is what the player chose.
 	if gear.two_handed_worn() and gear.worn.has(Socket.OFFHAND):
 		lost.append(gear.worn[Socket.OFFHAND].type)
 		gear.worn.erase(Socket.OFFHAND)

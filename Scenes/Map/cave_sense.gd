@@ -3,9 +3,8 @@ extends ColorRect
 ## The Gollux cave as the hero feels it (the user's, 2026-10-03, in place of the Seeing Stone): a band of
 ## red light breathing along the edge of the map, thickest where the line from the hero toward this
 ## world's cave leaves it, reaching further in and along and burning brighter the nearer the cave is
-## (`FortuneTeller.warmth`'s bands). Up
-## from the moment the wall in front of the cave falls until the cave is seen (`felt`). It says which way and
-## roughly how far, never which tile. The light itself is `cave_sense.gdshader`.
+## (`FortuneTeller.warmth`'s bands). Up from the moment the wall in front of the cave falls until the cave
+## is seen (`felt`). It says which way and roughly how far, never which tile.
 
 const SHADER := preload("res://Scenes/Map/cave_sense.gdshader")
 ## By `FortuneTeller.WARMTH` band, coldest first: how far in from the edge the band reaches at its heart
@@ -62,9 +61,9 @@ func shown() -> bool:
 	return felt() and _map.visible
 
 
-## Whether the hero feels the cave (the user's, 2026-10-03): put down in this world, the wall in front of
-## it broken -- its cell is land now -- and not yet seen. Since 2026-10-09 a cave goes down only beside a
-## wall just broken, so on land; the land check is for a world from before, whose cave could stand walls out.
+## Whether the hero feels the cave: put down in this world, the wall in front of it broken -- its cell
+## is land now -- and not yet seen. The land check is for a world from before 2026-10-09, whose cave
+## could stand walls out; since then one goes down only beside a wall just broken.
 func felt() -> bool:
 	return _view.cave != HexMap.NO_CELL and _view.is_land(_view.cave) and not _view.seen(_view.cave)
 

@@ -1,17 +1,13 @@
 class_name Camp
 extends RefCounted
-## Resting while the game is shut: the hero camps on the best ground taken so far and holds it until
-## the player is back. A camp pays gold and experience and nothing else -- no gear, no orbs, no
-## bodies for a bounty board. Those are what going in with a sword in your hand is for.
-##
-## Nobody sets one up: `main_scene` makes the camp at start-up, from the hour the save was last
-## written, on `MapBuilder.best_farm()`, and pays it there and then.
+## The camp held while the game is shut, all rules and no nodes. It pays gold and experience and nothing
+## else. Nobody sets one up: `main_scene` makes it at start-up, from the hour the save was last written,
+## on `MapBuilder.best_farm()`, and pays it there and then.
 ##
 ## **A camp is not a second economy.** What it pays is the tile's own farm run played actively --
-## `Encounter.farm` armed from what the player wears, clicked at `CLICK_RATE` -- sampled here
-## (`rates`) and cut to `IDLE_SHARE` of it. So every dial that moves what a tile is worth moves a
-## camp with it, and the one figure here is the share: a full camp (`MAX_SECONDS`, 8 h) pays what
-## half an hour of that play pays.
+## `Encounter.farm` armed from what the player wears, clicked at `CLICK_RATE` -- sampled here (`rates`)
+## and cut to `IDLE_SHARE` of it. So every dial that moves what a tile is worth moves a camp with it,
+## and the one figure here is the share.
 ##
 ## `ponytail:` sampling rather than playing out the whole night. A night is thousands of kills and
 ## the run's lineup grows one entry per body; the sample keeps the cost flat at a few thousand
@@ -23,24 +19,25 @@ extends RefCounted
 const SAMPLE_SECONDS := 120.0
 const SAMPLE_KILLS := 5
 const SAMPLE_MOST := 1800.0
-## The step the sample is played at. A kill drops whatever is left of the step it died in -- the
-## same crumb a drawn fight loses every frame -- so it is small enough that the crumbs stay crumbs.
+## The step the sample is played at. A kill drops whatever is left of the step it died in, so it is
+## small enough that the crumbs stay crumbs.
 const SAMPLE_STEP := 1.0 / 30.0
 
-## How long a hero can hold a camp before rest is needed: a night pays a night, and a fortnight away
-## pays a night as well.
+## How long a hero can hold a camp: a night pays a night, and a fortnight away pays a night as well.
 const MAX_SECONDS := 8.0 * 3600.0
-## The clicks a second the sample plays at: an attentive player, the middle of the balance tables'.
+## The clicks a second the sample plays at: an attentive player.
 const CLICK_RATE := 5.0
 ## What a camp pays of that active play: a full camp is worth half an hour of it (an hour until the
 ## user halved it, 2026-09-29: a night took a level-30 hero to 70).
 const IDLE_SHARE := 1800.0 / MAX_SECONDS
 
-## The keys of the drawer `make` builds.
 ## The Restless curse: a camp that fills in `RESTLESS_SECONDS` and pays `RESTLESS_PAY` times over.
-## Both are written into the drawer as the camp is made (`MOST`), so a camp is still arithmetic.
+## Both are written into the camp as it is made (`MOST`), so a camp is still arithmetic.
 const RESTLESS_SECONDS := 2.0 * 3600.0
 const RESTLESS_PAY := 2.0
+
+## The keys of the camp `make` builds. `GOLD`, `XP` and `KILLS` are a second's worth there, and what
+## the camp came to in `earned`'s answer.
 const MOST := "most"
 const SINCE := "since"
 const CELL := "cell"
@@ -85,10 +82,8 @@ static func make(cell: Vector2i, place: String, fight: Encounter, at: float) -> 
 
 
 ## What a camp has earned by `at`: the seconds it has stood (capped), and the rates times those, in
-## whole coins, experience and bodies -- gold is a whole number wherever it is held (`BigNumber`), and
-## a purse with a fraction in it reads as a coin it cannot pay.
-## `full` is whether the cap is what stopped it, which is the one thing the screen must say -- a
-## player back after a week is owed an explanation, not a number that looks short.
+## whole coins, experience and bodies -- a purse with a fraction in it reads as a coin it cannot pay.
+## `full` is whether the cap is what stopped it, which the screen must say.
 static func earned(camp: Dictionary, at: float) -> Dictionary:
 	# A camp saved before there was a `MOST` fills when camps always did.
 	var most := float(camp.get(MOST, MAX_SECONDS))
@@ -110,7 +105,7 @@ static func cell_of(camp: Dictionary) -> Vector2i:
 	return Vector2i(int(at[0]), int(at[1]))
 
 
-## A stretch of time in the words a person uses for one: "3h 12m", "12m 30s", "45s".
+## "3h 12m", "12m 30s", "45s".
 static func spell_time(seconds: float) -> String:
 	var whole := int(seconds)
 	if whole >= 3600:

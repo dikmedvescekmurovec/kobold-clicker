@@ -1,21 +1,14 @@
 class_name PlayerLevel
 extends RefCounted
-## The player's level, and the one place that knows how much experience a level costs.
-##
-## The curve is paced by tiles: charting one should be worth about a quarter of a level. A tile fight
-## pays about ten ordinary bodies times the tile's level, and tile levels come in bands that widen
-## as the map spreads out, so what a tile pays climbs very slowly. The cost only has to climb a
-## little faster: BASE_KILLS ordinary level-1 bodies, times LEVEL_XP_GROWTH per level. Charting
-## outward ring by ring, that holds at about four tiles a level past level 90.
+## What a level costs in experience, and banking it. The curve is paced by tiles: charting one is
+## worth about a quarter of a level (DESIGN.md).
 
-## Ordinary bodies at a level-1 tile the first level takes: about four first-ring tiles.
+## Ordinary level-1 bodies the first level takes.
 const BASE_KILLS := 85
-## What each level multiplies that cost by. Higher thins the levels out as the map grows.
+## What each level multiplies that cost by, up to `LATE_LEVEL`.
 const LEVEL_XP_GROWTH := 1.03
-## Past `LATE_LEVEL` each level multiplies the cost by `LATE_XP_GROWTH` instead. The early game is
-## untouched, and the late levels stay within reach of farming: a kill's worth grows only with the land,
-## so a 3% level would put twice the late levels some 100,000 kills away behind the third wall, and 2%
-## about 40,000 (the user's, 2026-09-29, when 70 was where the old fixed skill trees were first full).
+## And what each level past `LATE_LEVEL` does (the user's, 2026-09-29): a kill's worth grows only with
+## the land, so the late levels have to stay within reach of farming.
 const LATE_LEVEL := 70
 const LATE_XP_GROWTH := 1.02
 
@@ -28,9 +21,8 @@ static func xp_to_next(level: int) -> int:
 	return maxi(1, roundi(BASE_KILLS * Encounter.XP_PER_LEVEL * growth))
 
 
-## `amount` experience added to a player at `level` holding `xp` towards the next. Overflow carries,
-## so one big purse of experience can pay for more than one level. Returns `level`, `xp` (what is held
-## towards the level after the new one) and `gained`, how many levels that was.
+## Banks `amount` for a player at `level` holding `xp` towards the next; overflow carries over as many
+## levels as it pays for. Returns `level`, `xp` (held towards the level after) and `gained` (levels).
 static func add(level: int, xp: int, amount: int) -> Dictionary:
 	level = maxi(level, 1)
 	xp = maxi(xp, 0) + maxi(amount, 0)

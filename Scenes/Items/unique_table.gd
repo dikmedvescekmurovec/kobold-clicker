@@ -1,34 +1,22 @@
 class_name UniqueTable
 extends RefCounted
-## The unique items: what each one is, the rule it changes, and where it is found.
-##
-## The same shape as OrbTable and LootTable -- a const table and static accessors, no nodes and no
-## state. A unique is hand-written where every other piece is rolled: its base piece, its modifiers and
-## its effect are all in its row, so every Metronome carries the same lines. Only the *values* of those
-## modifiers roll, inside the band any modifier rolls in at the piece's level, which is what leaves an
-## Orb of Divinity something to do and makes a well-rolled one a second thing to hunt.
-##
-## A unique is worn in an ordinary socket and is meant to lose to a crafted elite on raw numbers: two
-## or three modifiers against five or six. What it is worn for is its `effect`, which changes how a
-## fight plays rather than a number -- `Encounter` reads it, exactly as it reads a capstone skill's.
-##
-## They never come out of `ItemRarity.roll`: UNIQUE stays weighted zero in every row there. They are
-## rolled here, beside the gear and on a generator of their own, the way orbs are, so the rate can be
-## tuned without moving anything else.
+## The unique items: each one's row, its ranked dials and card text, and the uniques' own drop roll,
+## made beside the gear's and never out of `ItemRarity.roll`. A unique is hand-written: every copy
+## carries its row's modifiers, and only their values roll. It is meant to lose to a crafted epic on
+## numbers and be worn for its `effect`, which `Encounter` and `Inventory` read.
 
 const ROOT := "res://Assets/Gear/Unique/"
-## What a replaced icon looked like before (`tools/ui_kit.py`'s `UNIQUE_OLD`), for `Settings.old_icons`.
+## The icons `tools/ui_kit.py` replaced (`UNIQUE_OLD`), shown under `Settings.show_old_icons()`.
 const OLD_ROOT := ROOT + "Old/"
 
 ## Lifetime kills before any unique can fall. After that it is chance alone, but for the first.
 const FIRST_UNIQUE_KILLS := 100
 ## The first, which a player whose collection log is still empty is promised in the kills after those
-## (`Encounter.PROMISED`'s `UNIQUE`; the user's, 2026-10-10): the starters' sword.
+## (`Encounter.PROMISED`'s `UNIQUE`; the user's, 2026-10-10).
 const FIRST_UNIQUE := "squires_blade"
 
-## How often a body is carrying one, by what it was, before its size and the player's drop rate: any
-## monster can, and the rabble almost never does. One common in two thousand, one elite in a hundred,
-## one boss in ten.
+## How often a body carries one, by its tier, before its size, the drop rate and item rarity
+## (`chance_for`).
 const TIER_CHANCE := {
 	EnemyRoster.Tier.COMMON: 0.0005,
 	EnemyRoster.Tier.ELITE: 0.01,
@@ -42,28 +30,30 @@ const COLLECTION_DAMAGE := 1
 ## The most modifiers a row may carry, which a test holds: a unique is not an elite with a rule on top.
 const MOST_MODS := 3
 
-## id -> its name, the `LootTable.ITEMS` piece it is (slot, base stats, level scaling), the modifiers
-## it always carries, and its effect and the sentence that says so. `effect` is what `Encounter` reads;
-## a home piece's also names the ground its damage counts on, and reaches the fight as "home:<env>".
-## Every unique is carried anywhere, once unlocked (`Achievements.unlocked`).
-##
-## A unique an achievement unlocks has **ranks** (`Achievements`): `ranks` is its numbers, a dial ->
-## [I, II, III, IV], and `effect_text` writes them through `{dial}` -- or is four sentences, one a
-## rank, where rank I reads differently ("a second" against "2 seconds"). `dial` is how the fight and
-## the inventory read a number, so a card and the rule it describes are one figure. The starters have
-## no ranks: their rules are fixed. It also has a `hint`: what its card says while it is locked, in
-## place of everything else -- what it does in words, never a number (the user's, 2026-10-07).
+## id -> its row, in the order the collection log draws them. A save holds the id.
+##   name         what it is called.
+##   base         the `LootTable.ITEMS` piece it is: its slot, base stats and level scaling.
+##   mods         the `ModifierTable.MODS` ids it always carries, in this order, `MOST_MODS` at most. A
+##                PERCENT only where the base has the stat; never a PERCENT and a GLOBAL on one stat.
+##   effect       what `Encounter` and `Inventory` read, "" for none. "home" comes with `home`, the
+##                ground its damage counts on, and reaches the fight as "home:<env>" (`effect_of`).
+##   effect_text  the card's sentence, a `ranks` dial written as `{dial}`; or four sentences, one a
+##                rank, where rank I reads differently ("a second" against "2 seconds").
+##   ranks        dial -> [I, II, III, IV], read through `dial` so a card and its rule are one
+##                figure. Only a unique an achievement unlocks has them: a starter's rule is fixed.
+##   peak         the line it gains at rank IV (`PEAK`).
+##   hint         its card's one line while it is locked: what it does in words, never a number (the
+##                user's, 2026-10-07).
 const UNIQUES := {
-	# --- The starters (`Achievements.STARTERS`): in the pool from the first unique on, one a socket with
-	# Snowball and the Magpie's Band. Each is plainly good early and runs out -- a flat number, a floor, a
-	# level, one save a fight -- so none of them is still worn at the frontier.
+	# --- The starters (`Achievements.STARTERS`, with Snowball and the Magpie's Band below): in the pool
+	# from the first unique on, one a socket, and unranked.
 	"squires_blade": {
 		"name": "Squire's Blade", "base": "Wooden Sword",
 		"mods": ["increased_damage", "increased_attack_speed"],
 		"effect": "squire",
 		"effect_text": "Every blow deals 3 more damage.",
 	},
-	# A stat stick with no rule of its own: three attributes on one piece is the whole of it.
+	# The one unique with no rule (the user's stat stick).
 	"wayfarers_torch": {
 		"name": "Wayfarer's Torch", "base": "Wooden Torch",
 		"mods": ["added_strength", "added_dexterity", "added_intelligence"],
@@ -266,8 +256,7 @@ const UNIQUES := {
 		"ranks": {"times": [2, 3, 4, 6]},
 		"peak": "One crit in ten strikes twice.",
 	},
-	# The crit that never stays away: a miss builds the chance, a crit spends it. One on each doll
-	# builds twice as fast (the user's ruling, 2026-09-24).
+	# One on each doll builds twice as fast (the user's ruling, 2026-09-24).
 	"serpents_eye": {
 		"name": "Serpent's Eye", "base": "Emerald Amulet",
 		"hint": "Each blow that does not crit raises your crit chance until one does.",
@@ -277,14 +266,14 @@ const UNIQUES := {
 		"ranks": {"step": [5, 7, 10, 15]},
 		"peak": "A crit keeps half the chance built up instead of losing it all.",
 	},
-	# What a one-blow kill had left over goes on into the next body, and a body it fells passes its own
-	# leftover on in turn (the user's, 2026-09-29) -- never into an elite or a boss.
+	# The overkill carried on, not a share of the next body's health (the user's, 2026-09-29).
 	"dominoes": {
 		"name": "Dominoes", "base": "Leather Boots",
 		"hint": "Damage left over from a one-blow kill carries into the next enemy.",
 		"mods": ["added_damage", "increased_move_speed"],
 		"effect": "domino",
-		"effect_text": "An enemy felled in one blow carries {share}% of the damage left over into the next, and on through any it fells. Never into an elite or a boss.",
+		"effect_text": "An enemy felled in one blow carries {share}% of the damage left over into the next, "
+				+ "and on through any it fells. Never into an elite or a boss.",
 		"ranks": {"share": [20, 30, 40, 50]},
 		"peak": "The carry-over reaches elites and bosses too, at half.",
 	},
@@ -403,8 +392,7 @@ const UNIQUES := {
 		"ranks": {"times": [5, 6, 8, 10]},
 		"peak": "Your attributes may differ by a fifth instead of a tenth.",
 	},
-	# The lower two brought up to the highest, and past it with rank (the user's, 2026-09-29): it was the
-	# highest four times over and the other two nothing.
+	# The lower two brought up to the highest, and past it with rank (the user's, 2026-09-29).
 	"zealots_brand": {
 		"name": "Zealot's Brand", "base": "Ruby Amulet",
 		"hint": "Your two lower attributes count as much as your highest.",
@@ -440,7 +428,8 @@ const UNIQUES := {
 		"hint": "Strength adds to your clicks, and dexterity to your weapon's swings.",
 		"mods": ["added_strength", "added_dexterity"],
 		"effect": "brawler",
-		"effect_text": "{more}% more damage for every point of strength on your clicks, and of dexterity on your weapon's swings.",
+		"effect_text": "{more}% more damage for every point of strength on your clicks, "
+				+ "and of dexterity on your weapon's swings.",
 		"ranks": {"more": [1, 1.5, 2, 3]},
 		"peak": "Strength and dexterity each count on both clicks and swings.",
 	},
@@ -478,7 +467,8 @@ const UNIQUES := {
 		"hint": "Chart tiles deep into the dark, fighting for each one on the way.",
 		"mods": ["increased_move_speed", "added_dodge"],
 		"effect": "nightwalker",
-		"effect_text": "You can chart a tile up to {tiles} steps into the dark, fighting for every tile on the way, one after another.",
+		"effect_text": "You can chart a tile up to {tiles} steps into the dark, "
+				+ "fighting for every tile on the way, one after another.",
 		"ranks": {"tiles": [5, 10, 20, 40]},
 	},
 	"dreadmask": {
@@ -494,16 +484,14 @@ const UNIQUES := {
 ## The rank at which a unique is all it will be.
 const PEAK := 4
 
-## What the cards write each unique's numbers at: the player's rank of it, id -> 1..PEAK (the main
-## scene's, set as the save loads and whenever an achievement climbs). Read where a card is written,
-## never passed round, the way `Settings` is. Empty -- every test and screenshot unless it sets it --
-## writes rank I; a test that sets it puts it back.
+## id -> the player's rank of it (1..PEAK), which the cards write their numbers at. The main scene
+## sets it as the save loads and whenever an achievement climbs. Empty writes rank I: every test and
+## screenshot that does not set it, and one that does puts it back.
 static var ranks := {}
 
 static var _icons := {}
 
 
-## Every unique's id, in the order written above, which is the order the collection log draws them in.
 static func ids() -> Array:
 	return UNIQUES.keys()
 
@@ -545,8 +533,8 @@ static func hint(id: String) -> String:
 	return str(UNIQUES[id].get("hint", ""))
 
 
-## The line a unique gains at rank IV (`PEAK`), whatever rank it is asked at: a card writes it only
-## once the player has reached it (the user's ruling, 2026-09-29). "" for an unranked unique.
+## The line it gains at rank IV, whatever rank it is asked at; "" for an unranked one. Hiding it until
+## it is reached is the card's (`Item.peak_text`).
 static func peak_text(id: String) -> String:
 	return str(UNIQUES[id].get("peak", ""))
 
@@ -570,9 +558,8 @@ static func _written(value: float) -> String:
 	return str(roundi(value)) if is_equal_approx(value, roundf(value)) else String.num(value)
 
 
-## Its own picture, or its base piece's until one has been cut for it (`tools/ui_kit.py`'s
-## `UNIQUE_GEAR`), so a row can be written before its art is. Under `Settings.show_old_icons()` the
-## picture it had before, where it had another.
+## Its own picture (`tools/ui_kit.py`'s `UNIQUE_GEAR`), or its base piece's until one has been cut, so
+## a row can be written before its art; under `Settings.show_old_icons()` the one it had before.
 static func icon(id: String) -> Texture2D:
 	var path := ROOT + id + ".png"
 	if Settings.show_old_icons() and ResourceLoader.exists(OLD_ROOT + id + ".png"):
@@ -583,7 +570,7 @@ static func icon(id: String) -> Texture2D:
 
 
 ## The uniques a body can be carrying: every one of `unlocked` (`Achievements.unlocked`) this build
-## has, on any ground -- a home piece included, since the Pilgrim's set went (the user's, 2026-09-29).
+## has, on any ground.
 static func pool_for(unlocked: Array) -> Array:
 	return unlocked.filter(func(id: String) -> bool: return UNIQUES.has(id))
 
@@ -598,10 +585,9 @@ static func chance_for(enemy_name: String, drop_rate := 0.0, item_rarity := 0.0)
 	return minf(tier * size * (1.0 + maxf(drop_rate, 0.0) / 100.0) * rarity, 1.0)
 
 
-## One kill's worth: null almost always, or a unique off the pool of `unlocked`. The chance is drawn first and
-## alone, as `LootTable.roll` draws its own, and the level is rolled under the same ceiling any drop's
-## is -- with UNIQUE's high floor, so one is never found worthless. `guaranteed` skips the chance: the
-## chest's half that holds a unique (`Encounter.MIMIC_UNIQUE`) and nothing else.
+## One kill's unique, or null. The chance is drawn first and alone, then one of the pool evenly, at a
+## level rolled under the ceiling any drop's is (`LootTable.drop_level`). `guaranteed` skips the
+## chance: the chest's half that holds a unique (`Encounter.MIMIC_UNIQUE`) and nothing else.
 static func roll(enemy_name: String, unlocked: Array, rng: RandomNumberGenerator, tile_level := 1,
 		drop_rate := 0.0, guaranteed := false, item_rarity := 0.0) -> Item:
 	if not guaranteed and rng.randf() >= chance_for(enemy_name, drop_rate, item_rarity):

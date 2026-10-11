@@ -1,15 +1,9 @@
 class_name LeaderboardPage
 extends Control
-## The leaderboards as a page against the left edge, opened from the corner and the cave's tile panel:
-## a tab a board (`BOARDS`), and under it the player's own place -- or Sign in, or a name to choose,
-## until they have one -- over the top of that board, which anyone may read. A score is the best any of
-## the player's cloud saves has reached, taken at its word.
-##
-## Built like the other left-hand pages (`SettingsPage`): `open()` redraws it, syncs and reads the board
-## again, `layout()` fits it to the window, `closed` is its X. Everything it shows is the `Cloud`'s, and
-## it redraws whenever that says something changed.
+## The leaderboards on the left edge: a tab a board (`BOARDS`), and under it the player's own place --
+## or Sign in, or a name to choose, until they have one -- over the top of that board, which anyone may
+## read. Everything it shows is the `Cloud`'s, and it redraws whenever that says something changed.
 
-## The page's X was pressed.
 signal closed
 
 const WIDTH := 180.0
@@ -31,9 +25,8 @@ const BOARDS := {
 ## A tab's width: three and their gaps stand in `WIDTH` with room to spare.
 const TAB_WIDTH := 50
 
+var area := Rect2()
 var _board: Cloud
-## The best the save holds, in floors: shown at once, before the server has answered.
-var _best: Callable
 var _ui_scale: float
 var _panel: VBoxContainer
 var _rows: VBoxContainer
@@ -48,9 +41,9 @@ var _join: Button
 var _open: String = Cloud.BOARDS[0]
 
 
-func _init(board: Cloud, best: Callable, ui_scale: float) -> void:
+## `_best` is no longer read: the page draws only what the `Cloud` holds.
+func _init(board: Cloud, _best: Callable, ui_scale: float) -> void:
 	_board = board
-	_best = best
 	_ui_scale = ui_scale
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	theme = UITheme.theme()
@@ -107,8 +100,8 @@ func _draw() -> void:
 		cancel.pressed.connect(_board.cancel_sign_in)
 		_rows.add_child(cancel)
 	elif not _board.signed_in():
-		var sign_in := UITheme.button("Sign in", UITheme.GO_BUTTON,
-				"Put your descents on the board: your save goes to the cloud. You sign in with Google or Discord, in your browser")
+		var sign_in := UITheme.button("Sign in", UITheme.GO_BUTTON, "Put your descents on the board: your save"
+				+ " goes to the cloud. You sign in with Google or Discord, in your browser")
 		sign_in.disabled = _board.busy()
 		sign_in.pressed.connect(func() -> void: _board.sign_in())
 		_rows.add_child(sign_in)
@@ -149,8 +142,7 @@ func _send_name() -> void:
 		open()
 
 
-## The boards' folder tabs, the bag's filter tabs in words: the open one is the page, the rest stand
-## behind it. Opening one reads that board again.
+## The boards' folder tabs, the bag's filter tabs in words. Opening one reads that board again.
 func _tabs() -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 0)
@@ -180,7 +172,6 @@ func _read() -> Dictionary:
 	return _board.boards.get(_open, {})
 
 
-## The player's own line on the open board.
 func _draw_me() -> void:
 	var mine: Dictionary = _read().get("me", {})
 	var rank: Variant = mine.get("rank")
@@ -188,7 +179,6 @@ func _draw_me() -> void:
 			int(mine.get("score", 0)), false, true))
 
 
-## The top of the open board, a framed table.
 func _draw_board() -> void:
 	_rows.add_child(UITheme.section("Top"))
 	var top: Array = _read().get("top", [])
@@ -207,13 +197,10 @@ func _draw_board() -> void:
 		table.add_child(line)
 
 
-## A framed block with no gap, as the character page's stats: the page's row gap would part the stripes.
+## A framed table added to the page; returns the column its lines go in.
 func _table() -> VBoxContainer:
-	var frame := PanelContainer.new()
-	frame.add_theme_stylebox_override("panel", BountyList.flat(Color.TRANSPARENT, 1))
-	var body := UITheme.vbox(0)
-	frame.add_child(body)
-	_rows.add_child(frame)
+	var body := BountyList.framed()
+	_rows.add_child(body.get_parent())
 	return body
 
 
@@ -278,10 +265,5 @@ static func check_letters(check: String) -> Label:
 	return letters
 
 
-## Where the main scene stands the page, in window pixels: empty for the whole window.
-var area := Rect2()
-
-
-## Full window height against the left edge, where the other pages stand.
 func layout() -> void:
 	UITheme.dock(_panel, area, _ui_scale, UITheme.Dock.LEFT, layout)

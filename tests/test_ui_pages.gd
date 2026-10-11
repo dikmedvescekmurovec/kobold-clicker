@@ -847,7 +847,8 @@ func _test_worn_card() -> bool:
 	ItemDetails.fill(block, worn, 150.0)
 	var once := block.get_child_count()
 	ItemDetails.fill(block, worn, 150.0)
-	_check(block.get_child_count() == once, "and so does any block filled twice (%d, %d)" % [block.get_child_count(), once])
+	_check(block.get_child_count() == once,
+			"and so does any block filled twice (%d, %d)" % [block.get_child_count(), once])
 	block.free()
 	slot.free()
 	card.queue_free()
@@ -1055,7 +1056,8 @@ func _test_pages_in_the_scene() -> bool:
 		main.map_path = MAP
 		root.add_child(main)
 		await _frames(3)
-		_check(main.ui_scale == shape[1], "a %dx%d window is drawn at %s (%s)" % [window.x, window.y, shape[1], main.ui_scale])
+		_check(main.ui_scale == shape[1],
+				"a %dx%d window is drawn at %s (%s)" % [window.x, window.y, shape[1], main.ui_scale])
 		var rng := RandomNumberGenerator.new()
 		rng.seed = WORLD_SEED
 		for at in 12:

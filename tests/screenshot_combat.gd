@@ -12,7 +12,8 @@ extends "res://tests/harness.gd"
 ## `combat_bounty_elite.png`). Also
 ## saves a contact sheet of every enemy's idle frame at the size the fight draws it, which is what
 ## catches a frame or crop measured wrong in EnemyRoster, and one shot per environment on its own
-## backdrop, each under a different sky (combat_area_<env>_<variant>_<layout>_<sky>.png), and the dungeon: a floor of it, its boss and the
+## backdrop, each under a different sky (combat_area_<env>_<variant>_<layout>_<sky>.png), and the
+## dungeon: a floor of it, its boss and the
 ## verdict a descent ends on (combat_dungeon.png, combat_dungeon_boss.png, combat_dungeon_end.png).
 
 const MAP_SEED := 1
@@ -97,7 +98,7 @@ func _shoot_backdrops() -> void:
 		var combat: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 		main.add_child(combat)
 		combat.place = TileNames.generate(CELL, env, MAP_SEED)
-		combat.hud_top = main._fight_top()
+		combat.hud.hud_top = main._fight_top()
 		combat.begin(fight, CELL, main.ui_scale, variant, layout, sky)
 		while fight.phase != Encounter.Phase.WAITING:
 			fight.advance(0.05)
@@ -112,7 +113,7 @@ func _shoot_backdrops() -> void:
 		var combat: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 		main.add_child(combat)
 		combat.place = TileNames.generate(CELL, LAYOUT_ENV, MAP_SEED, "small")
-		combat.hud_top = main._fight_top()
+		combat.hud.hud_top = main._fight_top()
 		combat.begin(fight, CELL, main.ui_scale, LAYOUT_VARIANT, layout, "morning")
 		while fight.phase != Encounter.Phase.WAITING:
 			fight.advance(0.05)
@@ -153,7 +154,7 @@ func _shoot_fight() -> void:
 	combat.place = TileNames.generate(CELL, ENVIRONMENT, MAP_SEED)
 	# Built here rather than through the main scene, so the gems are told where the panel is by hand.
 	combat.xp_target = main._character.xp_point()
-	combat.hud_top = main._fight_top()
+	combat.hud.hud_top = main._fight_top()
 	combat.begin(fight, CELL, main.ui_scale)
 	main.map.hide()
 	# Let the first enemy finish running in, so the shot shows the fight rather than an empty field.
@@ -173,7 +174,7 @@ func _shoot_fight() -> void:
 	main._on_loot_dropped(0, Item.rolled_unique("stonebreaker", prize_rng, 8))
 	await create_timer(0.7).timeout
 	await _save(combat, "combat_unique.png")
-	main._close_banner()
+	main.banner.close()
 	# Let it finish fading, or it hangs over the next shot.
 	await create_timer(0.5).timeout
 
@@ -196,14 +197,14 @@ func _shoot_fight() -> void:
 	main._on_bounty_counted(fight.lineup[0], 5, 5)
 	await create_timer(0.7).timeout
 	await _save(combat, "combat_bounty_filled.png")
-	main._close_banner()
+	main.banner.close()
 	await create_timer(0.5).timeout
 	posting[BountyBoard.ENEMY] = fight.lineup[fight.enemies - 1]
 	posting[BountyBoard.NEED] = 1
 	main._on_bounty_counted(fight.lineup[fight.enemies - 1], 1, 1)
 	await create_timer(0.7).timeout
 	await _save(combat, "combat_bounty_elite.png")
-	main._close_banner()
+	main.banner.close()
 	BountyBoard.abandon(posting)
 	main._combat = null
 	await create_timer(0.5).timeout
@@ -247,7 +248,7 @@ func _shoot_fight() -> void:
 	# The elite on its last hit point. The nameplate's bar snaps to whole sprite pixels, so this is
 	# where a bar that rounded the wrong way would show as an already-dead enemy still standing.
 	fight.hp = 1
-	combat._refresh()
+	combat.hud.refresh()
 	await _save(combat, "combat_nearly_dead.png")
 	fight.hp = fight.enemy_max_hp()
 
@@ -267,14 +268,14 @@ func _shoot_fight() -> void:
 		var boss: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 		main.add_child(boss)
 		boss.place = TileNames.generate(CELL, ENVIRONMENT, MAP_SEED, "small")
-		boss.hud_top = main._fight_top()
+		boss.hud.hud_top = main._fight_top()
 		boss.begin(boss_fight, CELL, main.ui_scale, SETTLEMENT_VARIANT)
 		combat.hide()
 		while boss_fight.phase != Encounter.Phase.WAITING:
 			boss_fight.advance(0.05)
 		boss_fight.hp = int(boss_fight.enemy_max_hp() * 0.7)
 		# A boss's nameplate pops in white; the shot is of where it settles.
-		await create_timer(CombatScene.BOSS_POP_TIME + 0.1).timeout
+		await create_timer(FightHud.BOSS_POP_TIME + 0.1).timeout
 		# The same shot says both things a settlement changed: the gold nameplate, and the longer bar
 		# over it -- fifteen pips with a gold one at the far end, on a minute's clock cut to match.
 		await _save(boss, "combat_boss_bar.png")
@@ -288,16 +289,16 @@ func _shoot_fight() -> void:
 	await _save(combat, "combat_won.png")
 
 	# One of those drops, opened: what clicking a square on the verdict panel gives.
-	if not combat._drops.is_empty():
-		combat._result_drops.inspect(0)
+	if not combat.hud._drops.is_empty():
+		combat.hud._result_drops.inspect(0)
 		await _save(combat, "combat_drop.png")
-		combat._result_drops.inspect(-1)
+		combat.hud._result_drops.inspect(-1)
 
 	var lost: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 	main.add_child(lost)
 	var doomed := Encounter.for_tile(CELL, ENVIRONMENT)
 	lost.place = TileNames.generate(CELL, ENVIRONMENT, MAP_SEED)
-	lost.hud_top = main._fight_top()
+	lost.hud.hud_top = main._fight_top()
 	lost.begin(doomed, CELL, main.ui_scale)
 	combat.hide()
 	doomed.advance(Encounter.SECONDS + 1.0)
@@ -338,16 +339,16 @@ func _shoot_farm() -> void:
 	# A run with nowhere to put what it finds, so the counter's face is at the red end of its ramp and
 	# the popup it opens carries the full-bag line. Said before `begin`, so both are right on the
 	# first frame.
-	combat.bag_room = 0
+	combat.hud.bag_room = 0
 	combat.place = TileNames.generate(CELL, ENVIRONMENT, MAP_SEED)
-	combat.hud_top = main._fight_top()
+	combat.hud.hud_top = main._fight_top()
 	combat.begin(fight, CELL, main.ui_scale)
 	main.map.hide()
 
 	# Far enough in that the counter has something on it and the tally reads properly.
 	var guard := 0
 	# Enough that the popup and the verdict both have to scroll.
-	while combat._drops.size() < 20 and guard < 4000:
+	while combat.hud._drops.size() < 20 and guard < 4000:
 		guard += 1
 		if not fight.hit():
 			fight.advance(0.05)
@@ -380,21 +381,21 @@ func _shoot_farm() -> void:
 
 	# The popup the counter opens, which for a run is the only way to see what it has turned up --
 	# and, the bag being full, where the warning about that is now said.
-	combat._on_loot_pressed()
+	combat.hud.open_loot()
 	await create_timer(Juice.POP_TIME + 0.1).timeout
 	await _save(combat, "combat_farm_loot.png")
 	# One of them opened, which is where a find can be thrown away by hand -- the way out of a run
 	# that has turned up more than the bag will hold.
-	combat._loot_drops.inspect(0)
+	combat.hud._loot_drops.inspect(0)
 	await _save(combat, "combat_farm_drop.png")
-	combat._loot_drops.inspect(-1)
-	combat.close_loot()
+	combat.hud._loot_drops.inspect(-1)
+	combat.hud.close_loot()
 
 	# The bag opened over the run, where its finds are. Told it is the main scene's fight, so the bag
 	# stands as it does in play; seen tips, so the button is there and opening it writes nothing.
 	main._combat = combat
 	main.inventory.tips.append_array(["first_item", "opened_bag"])
-	var carried: Array[Item] = combat._drops.slice(0, 9)
+	var carried: Array[Item] = combat.hud._drops.slice(0, 9)
 	main.inventory.items.append_array(carried)
 	main._on_bag_pressed()
 	await create_timer(Juice.POP_TIME + 0.1).timeout
@@ -405,7 +406,7 @@ func _shoot_farm() -> void:
 	main._combat = null
 
 	# And what the run says for itself once the player has had enough.
-	combat._on_terminate_pressed()
+	combat.hud.terminate()
 	await _save(combat, "combat_farm_ended.png")
 
 
@@ -477,9 +478,9 @@ const SETTLED := Juice.REVEAL_DELAY + Juice.REVEAL_MOST + Juice.REVEAL_TIME + 0.
 
 
 func _save(_scene: Node, name: String) -> void:
-	if _scene is CombatScene and (_scene as CombatScene)._result.visible \
-			and not (_scene as CombatScene)._result.has_meta("settled"):
-		(_scene as CombatScene)._result.set_meta("settled", true)
+	if _scene is CombatScene and (_scene as CombatScene).hud._result.visible \
+			and not (_scene as CombatScene).hud._result.has_meta("settled"):
+		(_scene as CombatScene).hud._result.set_meta("settled", true)
 		await create_timer(SETTLED).timeout
 	await process_frame
 	await RenderingServer.frame_post_draw

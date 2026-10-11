@@ -1,15 +1,13 @@
 class_name EnvironmentGenerator
 extends RefCounted
-## Procedurally assigns an environment to every cell of a map.
-##
-## Growth starts at one random cell and repeatedly fills a random cell touching the generated area.
-## A new cell prefers the environments around it, favours neighboring regions that are still small,
-## and never breaks the adjacency table. Regions still smaller than MIN_REGION_SIZE are merged into a neighbor at the end.
-## Every pick and every merge leans towards the environments the new land has least of, so each covers about a sixth.
+## Procedurally assigns an environment to every cell of a map: growth starts at one random cell and
+## repeatedly fills a random cell touching the generated area. A new cell prefers the environments around
+## it, favours neighboring regions that are still small, and never breaks the adjacency table; regions
+## still under MIN_REGION_SIZE are merged into a neighbor at the end. Every pick and every merge leans
+## towards the environments the new land has least of, so each covers about a sixth.
 
-## Which environments may border each other, read from the spritesheet's own JSON meta env_adjacency
-## (see AI-sprites-generator/README.md) so the generator can only produce borders the sprites can draw.
-## Symmetric; an environment may always border itself, which can_border handles rather than the table.
+## The sheet's `env_adjacency`. Symmetric; an environment may always border itself, which `can_border`
+## handles rather than the table.
 static var _allowed: Dictionary[String, PackedStringArray]
 
 
@@ -27,15 +25,12 @@ const MIN_REGION_SIZE := 15
 ## Extra weight multiplier for a 1-tile region, shrinking linearly to none at MIN_REGION_SIZE.
 const SMALL_BOOST := 3.0
 ## Regions larger than this grow at LARGE_DAMPING weight, so one environment doesn't swallow the map.
-## Tuned on the 20x11 maps from before the ice wall: about 3.7 environments and 4.5 regions per map, largest region about 43%.
-## Since every border but desert-ice is allowed and SHARE_PULL evens the shares: 5.7 environments and 6.6 regions.
 const MAX_REGION_SIZE := 50
 const LARGE_DAMPING := 0.25
-## Every weight is scaled by exp(SHARE_PULL * (even share - the environment's cells) / even share), counting the
-## cells this call has filled, and then the neighbors' environments and the new ones are each brought back to the
-## weight they had: the pull picks which environment a cell takes, never how often a new region starts, which
-## would make regions smaller. Even with every border allowed but desert-ice, those two came out at 13% and 15%
-## of the land without it; at 10 each environment covers 16-17% (Scenes/Map/DESIGN.md).
+## Every weight is scaled by exp(SHARE_PULL * (even share - the environment's cells) / even share),
+## counting the cells this call has filled, and then the neighbors' environments and the new ones are each
+## brought back to the weight they had: the pull picks which environment a cell takes, never how often a
+## new region starts, which would make regions smaller (DESIGN.md: "Even environments").
 const SHARE_PULL := 10.0
 ## Cells added to every environment's count before comparing, so the first regions don't swing it.
 const SHARE_PRIOR := 10.0
@@ -48,10 +43,9 @@ static func generate(cells: Rect2i, seed_value: int) -> Dictionary[Vector2i, Str
 	return envs
 
 
-## Fills the cells of `cells` that `envs` doesn't have yet, growing out of the ones it does, so a map can be
-## enlarged when an ice wall falls. Cells already in `envs` are never changed, and the new ones border them
-## legally; what is already there also decides what the new land is likely to be. `envs` may hold cells
-## outside `cells`, which count as neighbors but are not filled in.
+## Fills the cells of `cells` that `envs` doesn't have yet, growing out of the ones it does. Cells already
+## in `envs` are never changed, and the new ones border them legally. `envs` may hold cells outside
+## `cells`, which count as neighbors but are not filled in.
 static func extend(envs: Dictionary[Vector2i, String], cells: Rect2i, seed_value: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
@@ -70,7 +64,8 @@ static func extend(envs: Dictionary[Vector2i, String], cells: Rect2i, seed_value
 				queued[next] = true
 				frontier.append(next)
 	if frontier.is_empty() and envs.is_empty():
-		var start := cells.position + Vector2i(rng.randi_range(0, cells.size.x - 1), rng.randi_range(0, cells.size.y - 1))
+		var start := cells.position + Vector2i(rng.randi_range(0, cells.size.x - 1),
+				rng.randi_range(0, cells.size.y - 1))
 		queued[start] = true
 		frontier.append(start)
 
@@ -99,8 +94,8 @@ static func can_border(a: String, b: String) -> bool:
 	return a == b or b in allowed()[a]
 
 
-## Weight of every environment the cell may take, given the cells generated so far. `counts` is how many cells
-## of the new land each environment has taken, which pulls them all towards an even share.
+## Weight of every environment the cell may take, given the cells generated so far. `counts` is how many
+## cells of the new land each environment has taken, which pulls them all towards an even share.
 static func choice_weights(cell: Vector2i, envs: Dictionary[Vector2i, String], regions: Regions,
 		counts: Dictionary[String, int] = {}) -> Dictionary[String, float]:
 	var weights: Dictionary[String, float] = {}
@@ -108,7 +103,8 @@ static func choice_weights(cell: Vector2i, envs: Dictionary[Vector2i, String], r
 	for next in HexGrid.neighbors(cell):
 		if envs.has(next):
 			neighbor_envs.append(envs[next])
-			weights[envs[next]] = weights.get(envs[next], 0.0) + SAME_WEIGHT * _size_factor(regions.size_of(next))
+			weights[envs[next]] = (weights.get(envs[next], 0.0)
+					+ SAME_WEIGHT * _size_factor(regions.size_of(next)))
 	for env: String in allowed():
 		if not weights.has(env):
 			weights[env] = NEW_REGION_WEIGHT
@@ -175,11 +171,12 @@ static func _pick(weights: Dictionary[String, float], rng: RandomNumberGenerator
 	return weights.keys().back()
 
 
-## Merges regions under MIN_REGION_SIZE into a neighboring region, smallest first, until none can be merged.
-## Regions holding any cell of `frozen` are left alone: land the player may already have seen never changes.
-## The regions are found once and joined as they merge (`_join`): finding them all again after every merge
-## made a wall's fall quadratic in the whole map, 17 s of the third wall's and 80 s of the sixth's.
-static func _merge_small_regions(envs: Dictionary[Vector2i, String], frozen: Dictionary[Vector2i, bool] = {}) -> void:
+## Merges regions under MIN_REGION_SIZE into a neighboring region, smallest first, until none can be
+## merged. Regions holding any cell of `frozen` are left alone: land the player may already have seen never
+## changes. The regions are found once and joined as they merge (`_join`): finding them all again after
+## every merge was quadratic in the whole map.
+static func _merge_small_regions(envs: Dictionary[Vector2i, String],
+		frozen: Dictionary[Vector2i, bool] = {}) -> void:
 	var regions := find_regions(envs)
 	var region_of: Dictionary[Vector2i, int] = {}
 	var counts: Dictionary[String, int] = {}
@@ -240,10 +237,11 @@ static func _join(regions: Array[Array], index: int, region_of: Dictionary[Vecto
 		regions[part] = []
 
 
-## Recolors a region to the environment of a neighboring region that is allowed next to all of the region's
-## other neighbors: the one with the fewest new cells in `counts`, then the largest. Returns false if none is.
-static func _absorb(regions: Array[Array], index: int, region_of: Dictionary[Vector2i, int], envs: Dictionary[Vector2i, String],
-		counts: Dictionary[String, int]) -> bool:
+## Recolors a region to the environment of a neighboring region that is allowed next to all of the
+## region's other neighbors: the one with the fewest new cells in `counts`, then the largest. Returns
+## false if none is.
+static func _absorb(regions: Array[Array], index: int, region_of: Dictionary[Vector2i, int],
+		envs: Dictionary[Vector2i, String], counts: Dictionary[String, int]) -> bool:
 	var bordering: Dictionary[int, bool] = {}
 	for cell: Vector2i in regions[index]:
 		for next in HexGrid.neighbors(cell):
@@ -256,7 +254,8 @@ static func _absorb(regions: Array[Array], index: int, region_of: Dictionary[Vec
 		return count_a < count_b if count_a != count_b else regions[a].size() > regions[b].size())
 	for candidate: int in candidates:
 		var new_env := envs[regions[candidate][0]]
-		if bordering.keys().all(func(other: int) -> bool: return can_border(new_env, envs[regions[other][0]])):
+		if bordering.keys().all(
+				func(other: int) -> bool: return can_border(new_env, envs[regions[other][0]])):
 			for cell: Vector2i in regions[index]:
 				envs[cell] = new_env
 			return true
@@ -268,7 +267,8 @@ class Regions:
 	var _parent: Dictionary[Vector2i, Vector2i] = {}
 	var _size: Dictionary[Vector2i, int] = {}
 
-	## Adds a cell whose environment is already in `envs`, joining neighboring regions of the same environment.
+	## Adds a cell whose environment is already in `envs`, joining neighboring regions of the same
+	## environment.
 	func add(cell: Vector2i, envs: Dictionary[Vector2i, String]) -> void:
 		_parent[cell] = cell
 		_size[cell] = 1

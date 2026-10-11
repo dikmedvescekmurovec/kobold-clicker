@@ -1,11 +1,9 @@
 class_name TextPrompt
 extends Control
-## A line of text asked for over the whole window (the character's name), built as the cloud's question
-## is (`CloudQuestion`): a holder under a titled panel with no X, which `Juice.popup` pops in and stands
-## over the whole window, however that is resized. The field (`UITheme.text_field`) opens holding
-## `text`, all of it selected, ready to type over. The verb -- greyed while the field is blank -- and
-## Enter hand back what was typed (`entered`); Cancel and Escape hand back nothing. Either way it
-## shrinks away and frees itself.
+## A line of text asked for over the whole window (the character's name), built as `CloudQuestion` is: a
+## holder under a titled panel with no X, which `Juice.popup` stands over the whole window. The field
+## opens holding `text`, all of it selected. The verb (greyed while the field is blank) and Enter emit
+## `entered`; Cancel and Escape emit nothing. Either way it shrinks away and frees itself.
 
 ## What was typed, untrimmed: the caller decides what it will take.
 signal entered(text: String)

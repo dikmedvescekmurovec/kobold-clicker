@@ -1,28 +1,23 @@
 class_name CharacterPanel
 extends Control
-## The player in the top-left corner: the pack's character frame with the kobold in its circle, the
-## level on a badge at the circle's foot, and in the dark band beside it what the hero does -- a click,
-## and a second of the weapon swinging -- over the experience bar.
-##
-## The pack's frame has health and mana troughs; the player has neither, so `tools/ui_kit.py` paints
-## them into the one band the damage line stands in, in the small font. The name is not here: it is
-## the character page's and the leaderboard's (`Scenes/UI/DESIGN.md`, 2026-10-03). The frame widens to
-## a line longer than its band by repeating one plain column of the band, and the bar under it by
-## repeating one of its own; the badge widens to its number by repeating its middle column.
+## The player in the top corner: the pack's character frame with the kobold in its circle, the level on
+## a badge at the circle's foot, and in the dark band beside it what the hero does -- a click, and a
+## second of the weapon swinging -- over the experience bar. No name: it is the character page's.
 ##
 ## Parts are cut loose by `tools/ui_kit.py` and drawn at PIXEL, two panel pixels a sprite pixel -- but
-## the line's two marks, which stand beside the small font at its own pixel. The bar empties by being
-## **clipped**, never stretched, and the clip is snapped to whole sprite pixels -- the frame's empty
-## trough shows through what is left. Everything ignores the mouse: this stands over the map and over a
-## fight, and a Control that took a press would eat a tile click or a swing.
+## the line's two marks, which stand beside the small font at its own pixel. The frame, the bar and the
+## badge each widen by repeating one plain column (`_patch`). The bar empties by being **clipped**,
+## never stretched, and the clip is snapped to whole sprite pixels -- the frame's empty trough shows
+## through what is left. Everything ignores the mouse: this stands over the map and over a fight, and a
+## Control that took a press would eat a tile click or a swing.
 
 const PIXEL := 2
 const FRAME := preload("res://Assets/UI/ui_char_frame.png")
 const PORTRAIT := preload("res://Assets/UI/ui_char_portrait.png")
 const XP_BAR := preload("res://Assets/UI/ui_char_bar_xp.png")
 const BADGE := preload("res://Assets/UI/ui_char_badge.png")
-## The damage line's marks, cream like the corner buttons': a hand for a click, a sword with a clock
-## in its corner for a second of the weapon's own swing.
+## The damage line's marks: a hand for a click, a sword with a clock in its corner for a second of the
+## weapon's own swing.
 const CLICK_MARK := preload("res://Assets/UI/ui_char_click.png")
 const SWING_MARK := preload("res://Assets/UI/ui_char_swing.png")
 ## Where the portrait's top-left sits in the frame, in sprite pixels. Printed by ui_kit.py.
@@ -50,7 +45,7 @@ const PAIR_GAP := 8
 ## how long that takes to fade.
 const FLASH := Color(1.8, 1.8, 1.8)
 const FLASH_TIME := 0.25
-## The "+n" that rises off the bar's filled end as gems land in it: how far, in panel pixels, and how long.
+## A "+n" floating off the bar or a figure: how far, in panel pixels, and how long.
 const GAIN_RISE := 8.0
 const GAIN_TIME := 0.9
 ## The meta a damage figure keeps its colour's flash under, so the next change can cut it short.
@@ -105,7 +100,7 @@ func _init() -> void:
 	_fill.add_child(_bar)
 	add_child(_fill)
 
-	# Two pairs, a mark and its figure, in bone as the name was: the band is dark, so no outline.
+	# Two pairs, a mark and its figure, in bone with no outline: the band is dark.
 	_line = HBoxContainer.new()
 	_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_line.position = TEXT_AT
@@ -114,7 +109,6 @@ func _init() -> void:
 	_click_label = _pair(CLICK_MARK)
 	_second_label = _pair(SWING_MARK)
 
-	# The level in gold, as "Lvl" was, on a badge over the foot of the circle.
 	_badge = _patch(BADGE, BADGE_EDGE)
 	add_child(_badge)
 	_level_label = UITheme.label("", Palette.GOLD, true)
@@ -134,7 +128,6 @@ func _notification(what: int) -> void:
 		xp_hover.free()
 
 
-## Shows the player at `level` holding `new_xp` towards the next one.
 func set_state(new_level: int, new_xp: int) -> void:
 	level = maxi(new_level, 1)
 	xp = maxi(new_xp, 0)
@@ -160,8 +153,8 @@ func set_damage(per_click: float, per_second: float, announce := false) -> void:
 
 
 ## A number that moved from `was` to `now`: it flashes green for more or red for less and fades back
-## to bone, and "+n" floats up off it in green or "-n" down off it in red, as experience floats off the
-## bar -- the float not at `Anim.NONE`. Only where the figure written moved: "1.23M" to "1.23M" says nothing.
+## to bone, and "+n" floats up off it in green or "-n" down off it in red -- the float not at
+## `Anim.NONE`. Only where the figure written moved: "1.23M" to "1.23M" says nothing.
 func _announce(number: Label, was: float, now: float) -> void:
 	if BigNumber.format(was) == BigNumber.format(now) or not is_inside_tree():
 		return
@@ -180,20 +173,24 @@ func _announce(number: Label, was: float, now: float) -> void:
 		_float_change.call_deferred(number, BigNumber.format(by, true), colour, by > 0.0)
 
 
-## "+n" over a number rising, or "-n" under it sinking, fading as it goes.
 func _float_change(number: Label, text: String, colour: Color, up: bool) -> void:
 	if not is_instance_valid(number):
 		return
+	# Where the number stands in the panel's own pixels, through the line's turn when mirrored.
+	var at := get_global_transform().affine_inverse() * number.get_global_transform() \
+			* Rect2(Vector2.ZERO, number.size)
+	_float(text, colour, at.get_center().x, at.position.y if up else at.end.y, up)
+
+
+## `text` floating up off `edge` or down off it, centred on `middle` (both the panel's own pixels,
+## unmirrored), fading as it goes.
+func _float(text: String, colour: Color, middle: float, edge: float, up: bool) -> void:
 	var label := UITheme.label(text, colour, true)
 	label.add_theme_color_override("font_outline_color", Palette.INK)
 	label.add_theme_constant_override("outline_size", 4)
 	add_child(label)
 	var shown := label.get_minimum_size()
-	# Where the number stands in the panel's own pixels, through the line's turn when mirrored.
-	var at := get_global_transform().affine_inverse() * number.get_global_transform() \
-			* Rect2(Vector2.ZERO, number.size)
-	_reads(label, Vector2(at.get_center().x - shown.x / 2.0, at.position.y - shown.y if up else at.end.y).round(),
-			shown.x)
+	_reads(label, Vector2(middle - shown.x / 2.0, edge - shown.y if up else edge).round(), shown.x)
 	var tween := label.create_tween().set_parallel(true)
 	tween.tween_property(label, "position:y", label.position.y + (-GAIN_RISE if up else GAIN_RISE), GAIN_TIME) \
 			.set_ease(Tween.EASE_OUT)
@@ -216,11 +213,13 @@ func absorb(amount: int) -> int:
 		if _badge_flash != null:
 			_badge_flash.kill()
 		_badge_flash = _brighten([_badge, _level_label])
-	_float_gain(amount)
+	# "+n" off the bar's filled end. None at `Anim.NONE`, as a fight's damage numbers.
+	if Settings.animations != Settings.Anim.NONE:
+		_float("+" + BigNumber.format(float(amount)), Palette.LEAF_LT, _fill.position.x + _fill.size.x,
+				_fill.position.y, true)
 	return after["gained"]
 
 
-## Lights `nodes` at FLASH and lets them fade back.
 func _brighten(nodes: Array) -> Tween:
 	var tween := create_tween().set_parallel(true)
 	for node: CanvasItem in nodes:
@@ -229,30 +228,12 @@ func _brighten(nodes: Array) -> Tween:
 	return tween
 
 
-## "+n" in green, centred on the bar's filled end, rising and fading. None at `Anim.NONE`, as a fight's
-## damage numbers.
-func _float_gain(amount: int) -> void:
-	if Settings.animations == Settings.Anim.NONE:
-		return
-	var label := UITheme.label("+" + BigNumber.format(float(amount)), Palette.LEAF_LT, true)
-	label.add_theme_color_override("font_outline_color", Palette.INK)
-	label.add_theme_constant_override("outline_size", 4)
-	add_child(label)
-	var shown := label.get_minimum_size()
-	_reads(label, (_fill.position + Vector2(_fill.size.x - shown.x / 2.0, -shown.y)).round(), shown.x)
-	var tween := label.create_tween().set_parallel(true)
-	tween.tween_property(label, "position:y", label.position.y - GAIN_RISE, GAIN_TIME).set_ease(Tween.EASE_OUT)
-	tween.tween_property(label, "modulate:a", 0.0, GAIN_TIME).set_ease(Tween.EASE_IN)
-	tween.chain().tween_callback(label.queue_free)
-
-
 ## Where on the screen the experience bar's filled end is, which is where a gem flies to.
 func xp_point() -> Vector2:
 	return get_global_transform() * (_fill.position + Vector2(_fill.size.x, _fill.size.y / 2.0))
 
 
-## How many sprite pixels of the experience bar are showing. Snapped to whole pixels, and never nothing
-## while there is anything at all, so the first point of experience is a pixel the player can see.
+## How many sprite pixels of the experience bar are showing.
 func shown_pixels() -> int:
 	return roundi(_fill.size.x / PIXEL)
 
@@ -263,7 +244,7 @@ func _lay_out() -> void:
 	# The kobold faces the same way in either corner, as the words read.
 	_reads(_portrait, Vector2(PORTRAIT_AT * PIXEL), _portrait.size.x)
 	var line := _line.get_combined_minimum_size()
-	# Centred where the name's capitals were, whichever of a mark and a figure is the taller.
+	# Centred about where a figure alone would stand, whichever of a mark and a figure is the taller.
 	_reads(_line, Vector2(TEXT_AT.x, roundf(TEXT_AT.y + (_click_label.get_combined_minimum_size().y - line.y) / 2.0)),
 			line.x)
 	var stretch := maxi(0, ceili((line.x - TEXT_ROOM) / PIXEL))
@@ -277,6 +258,8 @@ func _lay_out() -> void:
 	_badge.size = Vector2(maxi(BADGE.get_width(), ceili(number.x / PIXEL) + 2 * BADGE_EDGE + 2), BADGE.get_height())
 	_badge.position = Vector2(roundi(CIRCLE_MIDDLE - _badge.size.x / 2.0), FRAME.get_height() - BADGE.get_height()) * PIXEL
 	_reads(_level_label, (_badge.position + (_badge.size * PIXEL - number) / 2.0).round(), number.x)
+	# Whole sprite pixels, and never nothing while there is anything at all: the first point of
+	# experience is a pixel the player can see.
 	var pixels := roundi(clampf(float(xp) / PlayerLevel.xp_to_next(level), 0.0, 1.0) * _bar.size.x)
 	if xp > 0:
 		pixels = maxi(pixels, 1)

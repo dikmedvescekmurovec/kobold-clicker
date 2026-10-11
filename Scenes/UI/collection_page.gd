@@ -1,27 +1,13 @@
 class_name CollectionPage
 extends Control
-## The collection log, as a page against the left edge: every unique the game has, one square each, in
-## two sections -- the starters (`Achievements.STARTERS`), then the ones achievements unlock -- each by
-## name (the user's, 2026-10-02). One the player has found is drawn as the piece it is; one unlocked and not
-## yet found (`Achievements.is_unlocked`) is the same piece darkened; one still locked is its outline in
-## black -- either with no socket or ring, the sprite alone -- and its card says only "Locked".
+## The collection log on the left edge: every unique the game has, one square each, the starters
+## (`Achievements.STARTERS`) then the ones achievements unlock, each by name (the user's, 2026-10-02).
 ##
-## **A found square carries its card as well as an unlocked one** (`write_hint`): a found piece that is
-## locked says so, with its name and a vague line in place of what it does, since an old save's finds
-## must be earned again to drop (the user's ruling), and the achievements page says how. The cost is that `ItemCard` skips its Alt comparison on any square that
-## carries a `hint` -- which is right, because the square is a `specimen`, never the piece in the bag.
-## Every unique is carried on every ground, so the card names none (the user's, 2026-09-29).
-##
-## Built like the other left-hand pages (`BountyList`): `open()` redraws it, `layout()` fits it to the
-## window, `closed` is its X, and it carries `UITheme.theme()` because it hangs off a `CanvasLayer`.
-## It changes one thing and saves nothing: a find new to the log (`Inventory.uniques_new`) is the only
-## square that glints, until the cursor has been over it or the page is closed, and then `seen` asks
-## the main scene to save.
-##
-## Every square is an `ItemSlot`, so the one `ItemCard` the main scene built describes these too --
-## every one of them through the `hint` it carries, a locked one's saying only that.
+## Every square carries its card as a `hint` (`write_hint`), a found one too, so `ItemCard` skips its
+## Alt comparison on all of them -- which is right, because a square is a `specimen`, never the piece in
+## the bag. It saves nothing: a find new to the log (`Inventory.uniques_new`) glints until hovered or the
+## page is closed, and then `seen` asks the main scene to save.
 
-## The page's X was pressed.
 signal closed
 ## A new find was hovered, or the page closed over one, and it left `Inventory.uniques_new`.
 signal seen
@@ -32,6 +18,7 @@ const BONUS_NAME := "Bonus"
 const COUNT_NAME := "Count"
 
 var inventory: Inventory
+var area := Rect2()
 var _ui_scale: float
 var _panel: VBoxContainer
 var _rows: VBoxContainer
@@ -49,13 +36,11 @@ func _ready() -> void:
 	_panel = UITheme.titled_panel("Collection", "Close the collection", closed.emit)
 	_panel.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_panel)
-	# Scrolled, like the journal: the uniques run to more rows than a 648 px window holds.
 	var scroll := UITheme.scroll()
 	UITheme.body_of(_panel).add_child(scroll)
 	_rows = UITheme.vbox(BountyList.ROW_GAP, BagPage.WIDTH)
 	scroll.add_child(_rows)
-	# Under the scroll and not in it: what the log is worth and how full it is are true of the whole
-	# page, and stay in sight wherever the grid has been dragged to.
+	# Under the scroll and not in it: what the log is worth and how full it is are true of the whole page.
 	UITheme.body_of(_panel).add_child(UITheme.rule(BagPage.WIDTH))
 	_foot = HBoxContainer.new()
 	_foot.add_theme_constant_override("separation", 4)
@@ -64,8 +49,6 @@ func _ready() -> void:
 	open()
 
 
-## Redraws the page: the grid, and the foot under it -- what the log adds on the left, how much of
-## it is found on the right and the info mark after it, both figures in the body font.
 func open() -> void:
 	UITheme.clear(_rows)
 	UITheme.clear(_foot)
@@ -91,28 +74,39 @@ func open() -> void:
 	var known := Achievements.state(inventory)
 	for starters: bool in [true, false]:
 		_rows.add_child(UITheme.section("Starters" if starters else "Trophies"))
-		var grid := GridContainer.new()
-		grid.columns = BagPage.GRID_COLS
-		grid.add_theme_constant_override("h_separation", BagPage.SLOT_GAP)
-		grid.add_theme_constant_override("v_separation", BagPage.SLOT_GAP)
-		_rows.add_child(grid)
+		var squares := grid()
+		_rows.add_child(squares)
 		var ids := UniqueTable.ids().filter(func(id: String) -> bool: return (id in Achievements.STARTERS) == starters)
-		ids.sort_custom(func(a: String, b: String) -> bool:
-			return str(UniqueTable.UNIQUES[a]["name"]).naturalnocasecmp_to(str(UniqueTable.UNIQUES[b]["name"])) < 0)
-		for id: String in ids:
-			_add_square(grid, id, known)
+		for id: String in by_name(ids, UniqueTable.UNIQUES):
+			_add_square(squares, id, known)
 
 
-## One unique's square in `grid`, glinting while it is a find new to the log, with the achievement
+## A grid of squares at the bag's columns and gaps.
+static func grid() -> GridContainer:
+	var made := GridContainer.new()
+	made.columns = BagPage.GRID_COLS
+	made.add_theme_constant_override("h_separation", BagPage.SLOT_GAP)
+	made.add_theme_constant_override("v_separation", BagPage.SLOT_GAP)
+	return made
+
+
+## `ids` put in the order of their names in `table` (id -> a row with a "name"), and returned.
+static func by_name(ids: Array, table: Dictionary) -> Array:
+	ids.sort_custom(func(a: String, b: String) -> bool:
+		return str(table[a]["name"]).naturalnocasecmp_to(str(table[b]["name"])) < 0)
+	return ids
+
+
+## One unique's square in `into`, glinting while it is a find new to the log, with the achievement
 ## that unlocks it under Alt (none for a starter).
-func _add_square(grid: GridContainer, id: String, known: Dictionary) -> void:
+func _add_square(into: GridContainer, id: String, known: Dictionary) -> void:
 	# Dev (`Settings.show_all_uniques`): every square as found. The count and the bonus stay the save's.
 	var found := Settings.show_all_uniques() or inventory.uniques_found.has(id)
 	var slot := CollectionPage.square(id, found, Achievements.is_unlocked(inventory, id))
 	if Achievements.ACHIEVEMENTS.has(id):
 		slot.set_meta(ItemCard.ALT_CARD, AchievementsPage.write_card.bind(inventory, id, known))
 		slot.set_meta(ItemCard.KEYS, {"alt": "achievement"})
-	grid.add_child(slot)
+	into.add_child(slot)
 	if found and id in inventory.uniques_new:
 		slot.shine_until_hovered(_on_seen.bind(id))
 
@@ -135,8 +129,7 @@ func _on_visibility_changed() -> void:
 static func square(id: String, found: bool, unlocked := false) -> ItemSlot:
 	var piece := CollectionPage.specimen(id)
 	if found:
-		# The piece as it is, and the card still says whether it is locked. Still: only a find new to the
-		# log glints.
+		# Still: only a find new to the log glints.
 		var slot := ItemSlot.make(piece)
 		slot.still()
 		slot.hint = CollectionPage.write_hint.bind(piece, unlocked)
@@ -155,38 +148,30 @@ static func specimen(id: String) -> Item:
 	return piece
 
 
-## What the card says beside a unique in the log. With no `specimen` -- one still locked -- only the
-## word "Locked". With a locked one (a find the player must earn again, or an achievement's square under
-## Alt): its name and its `UniqueTable.hint`, never what it would do. With an unlocked one: the piece
-## itself (the log's own), and "Not found yet" if it is not `found`: a grey square beside a full card
-## was read as a piece in hand.
+## What the card says beside a unique in the log:
+## - no `specimen` (one still locked): only "Locked" -- what unlocks it is the achievements page's to
+##   say (the user's call, 2026-09-28);
+## - not `unlocked` (a find the player must earn again, or an achievement's square under Alt): its name
+##   and its `UniqueTable.hint`, never its stats, modifiers or rule (the user's, 2026-10-07);
+## - unlocked: the piece itself (the log's own), and "Not found yet" if it is not `found` -- a grey
+##   square beside a full card was read as a piece in hand.
 static func write_hint(rows: VBoxContainer, width: float, specimen: Item = null, unlocked := true,
 		found := true) -> void:
-	# A locked one says so and nothing else: what unlocks it is the achievements page's to say (the
-	# user's call, 2026-09-28).
 	if specimen == null:
 		rows.add_child(ItemDetails.line("Locked", Palette.TEXT_SOFT, width))
 		return
-	# Locked with the piece in hand: what it is about and not what it does -- no stats, no modifiers, no
-	# rule (the user's, 2026-10-07).
 	if not unlocked:
 		rows.add_child(ItemDetails.line(specimen.display_name(), specimen.text_color(), width))
 		rows.add_child(ItemDetails.line(UniqueTable.hint(specimen.unique), Palette.TEXT, width, true))
 		rows.add_child(UITheme.rule())
 		rows.add_child(ItemDetails.line("Locked", Palette.TEXT_SOFT, width, true))
 		return
-	# `fill` empties the rows it is given, so the piece goes in first. The square itself says whether
-	# it is found, so the card does not.
+	# `fill` empties the rows it is given, so the piece goes in first.
 	ItemDetails.fill(rows, specimen, width, [], Settings.item_details)
 	if not found:
 		rows.add_child(UITheme.rule())
 		rows.add_child(ItemDetails.line("Not found yet", Palette.TEXT_SOFT, width, true))
 
 
-## Where the main scene stands the page, in window pixels: empty for the whole window.
-var area := Rect2()
-
-
-## Full window height against the left edge, where the other pages stand.
 func layout() -> void:
 	UITheme.dock(_panel, area, _ui_scale, UITheme.Dock.LEFT, layout)

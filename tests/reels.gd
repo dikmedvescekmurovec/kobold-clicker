@@ -207,7 +207,7 @@ func _reel_explore() -> void:
 		map.select_cell(next)
 		_main._on_tile_clicked(next, map.get_tile_info(next))
 		await _until(step[0] + 0.8)
-		await _point_at(_main._chart_button, 0.45)
+		await _point_at(_main.tile_panel.chart_button, 0.45)
 		_tap_look()
 		await _until(step[0] + 1.45)
 		_main._on_close_pressed()
@@ -323,7 +323,7 @@ func _reel_wall() -> void:
 	map.select_cell(wall)
 	_main._on_tile_clicked(wall, map.get_tile_info(wall))
 	await _until(1.0)
-	await _point_at(_main._chart_button, 0.45)
+	await _point_at(_main.tile_panel.chart_button, 0.45)
 	await _click()
 	while _main._combat == null:
 		await process_frame
@@ -349,7 +349,7 @@ func _reel_wall() -> void:
 	var camera: Camera2D = _main.camera
 	camera.position = map.ground_layer.map_to_local(wall)
 	_combat.visible = false
-	_main._panel.hide()
+	_main.tile_panel.panel.hide()
 	map.show()
 	await _until(FALLS + 1.7)
 	_main._resetting = true
@@ -411,7 +411,7 @@ func _reel_descent() -> void:
 	_main._on_tile_clicked(cave, map.get_tile_info(cave))
 	_cursor.position = Vector2(root.get_visible_rect().size) * Vector2(0.7, 0.6)
 	_cursor.show()
-	await _point_at(_main._cave_button, 0.4)
+	await _point_at(_main.tile_panel.cave_button, 0.4)
 	# A press the reel answers itself: the real one would open a descent of its own under this one.
 	_tap_look()
 	for i in 4:
@@ -420,7 +420,7 @@ func _reel_descent() -> void:
 	_open(fight, Vector2i.ZERO, "plain", 1, Encounter.DUNGEON_ENV, "The Descent", 0.5)
 	_main._combat = _combat
 	map.hide()
-	_main._panel.hide()
+	_main.tile_panel.panel.hide()
 	_main._show_corner(false)
 	_main._character.show()
 	fight.health[fight.index] = roundf(_blow(fight) * 0.5)
@@ -644,7 +644,7 @@ func _fight_here(fight: Encounter, env: String, variant: String, layout := 1, hi
 	_open(fight, CELL, variant, layout, env, place, hits)
 	_main._combat = _combat
 	_main.map.hide()
-	_main._panel.hide()
+	_main.tile_panel.panel.hide()
 	_main._show_corner(false)
 	_main._character.show()
 

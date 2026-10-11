@@ -1,8 +1,8 @@
 class_name Settings
 extends RefCounted
-## What the player has chosen about the game rather than done in it: how loud, whether full screen,
-## how much a fight throws about and shakes, and how much an item says. Static, because everything that reads it (`Juice`, `CombatScene`,
-## `ItemDetails`) is asked from somewhere different and none of them owns it.
+## What the player has chosen about the game rather than done in it. Static, because everything that
+## reads it (`Juice`, `CombatScene`, `ItemDetails`) is asked from somewhere different and none of them
+## owns it.
 ##
 ## Its own file rather than a corner of the inventory's, so Reset -- which deletes the saves -- leaves
 ## it alone. Not a save either: a file that cannot be read means the defaults, and nothing is refused.
@@ -45,27 +45,27 @@ static var filter_rarity := 0
 static var filter_material := 0
 static var filter_level := 1
 static var filter_ascended := false
-## Dev: the collection log draws every unique as found, and its trophy is there from the start. Read
-## through `show_all_uniques()`, which a release build answers no to whatever the file says.
+## The dev switches, down to `wall_hp`. Each is read through its function below (`show_all_uniques()`
+## and the rest), which a release build answers no to whatever the file says.
+## The collection log draws every unique as found, and its trophy is there from the start.
 static var all_uniques := false
-## Dev: every chest on the map is drawn, fog or not. Read through `show_all_chests()`, like the uniques.
+## Every chest on the map is drawn, fog or not.
 static var all_chests := false
-## Dev: a unique or a base whose icon was replaced wears the one it had before (`UniqueTable.OLD_ROOT`,
-## `LootTable.OLD_ROOT`), to compare the two in the bag. Read through `show_old_icons()`, like the uniques.
+## A unique or a base whose icon was replaced wears the one it had before (`UniqueTable.OLD_ROOT`,
+## `LootTable.OLD_ROOT`), to compare the two in the bag.
 static var old_icons := false
-## Dev: every settlement offers every counter (`TownServices.show_all`). On by default, so read through
-## `show_all_services()`, which also answers no off the player's own settings file: the tests and the
+## Every settlement offers every counter (`TownServices.show_all`). On by default, so
+## `show_all_services()` also answers no off the player's own settings file: the tests and the
 ## screenshot scripts still see what a town of each tier really has.
 static var all_services := true
-## Dev: a body drops one find a time in three, every rarity from common to unique as likely
-## (`Encounter.even_loot`). Read through `even_loot_on()`, like the uniques.
+## A body drops one find a time in three, every rarity from common to unique as likely
+## (`Encounter.even_loot`).
 static var even_loot := false
-## Dev: the fortuneteller offers the banishing however few uniques are unlocked
-## (`FortuneTeller.BANISH_FROM`). Read through `banish_unlocked()`, like the uniques.
+## The fortuneteller offers the banishing however few uniques are unlocked (`FortuneTeller.BANISH_FROM`).
 static var banish_now := false
-## Dev: the health an ordinary body has on the first ring of each circle of land, by how many walls
-## stand inside it (`Encounter.walls_inside`): inside the first wall, between the first and second,
-## between the second and third. 0 is the formula's own; every body in the circle scales with it
+## The health an ordinary body has on the first ring of each circle of land, by how many walls stand
+## inside it (`Encounter.walls_inside`): inside the first wall, between the first and second, between
+## the second and third. 0 is the formula's own; every body in the circle scales with it
 ## (`Encounter.hp_tuning`), and land further out never does. Read through `hp_base()`.
 static var wall_hp: Array = [0.0, 0.0, 0.0]
 ## The newest `CHANGELOG.md` version already shown (`main_scene._show_changelog`). Here rather than in

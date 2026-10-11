@@ -38,7 +38,8 @@ func _test_weighted_picks() -> bool:
 	var slots := func(rng: RandomNumberGenerator) -> Variant: return SkillTree._connectors(rng)
 	var slots_walked := func(rng: RandomNumberGenerator) -> Variant: return _walk(SkillTree.CONNECTOR_WEIGHTS, rng)
 	picks.append(["a node's connectors", slots, slots_walked])
-	for pool: Array in [["Wooden Sword", 0], ["Gold Ring", 0], ["Strength Node", 1], ["Dexterity Node", SkillTree.MOST_TIER]]:
+	for pool: Array in [["Wooden Sword", 0], ["Gold Ring", 0], ["Strength Node", 1],
+			["Dexterity Node", SkillTree.MOST_TIER]]:
 		var tier: int = pool[1]
 		var lines := ModifierTable.pool_for(pool[0], tier)
 		var line := func(rng: RandomNumberGenerator) -> Variant: return ModifierTable._weighted(lines, rng, tier)
@@ -220,12 +221,14 @@ func _test_lost_on_load() -> bool:
 			"retired_keystone", "retired_line on Wooden Sword", "retired_stat on Wooden Sword", "Wooden Sword",
 			"Strength Node at 5", "Orb of Sorcery", "Rune of Nothing", "retired_ground", "retired_curse", "retired_feat"]
 	want.sort()
-	_check(problem.is_empty() and lost == want, "what the save names and the build has not is said, each once (%s)" % [lost])
+	_check(problem.is_empty() and lost == want,
+			"what the save names and the build has not is said, each once (%s)" % [lost])
 	_check(loaded.total() == 2 and loaded.items[1].mods.size() == sword["mods"].size()
 			and not loaded.items[1].stats.has("retired_stat"), "and the bag holds what it always would have")
 	_check(loaded.equipment.worn.is_empty() and loaded.stash().items.is_empty() and loaded.skills.stones.is_empty()
 			and loaded.orbs.keys() == ["Orb of Chaos"] and loaded.runes.keys() == [RuneTable.DEPTH]
-			and RuneTable.mods_of(loaded.rune_work(Vector2i(1, 1))).is_empty() and RuneTable.deeper(loaded.rune_work(Vector2i(1, 1))) == 1
+			and RuneTable.mods_of(loaded.rune_work(Vector2i(1, 1))).is_empty() and RuneTable.deeper(loaded.rune_work(Vector2i(1,
+					1))) == 1
 			and loaded.curses == [Curses.THICK_FOG] and loaded.uniques_found == ["squires_blade"]
 			and loaded.achievements == {"duelists_buckler": 1}, "and so does everything else")
 
@@ -259,7 +262,8 @@ func _test_failed_write() -> bool:
 	_check(player.save(TEST_PATH) and player.saved_at > 0.0 and heard.size() == 2, "a write that lands stamps its own")
 	var stamped := player.saved_at
 	player.saved_at = stamped - 100.0
-	_check(not player.save(nowhere) and player.saved_at == stamped - 100.0, "and a later failure leaves that hour as it was")
+	_check(not player.save(nowhere) and player.saved_at == stamped - 100.0,
+			"and a later failure leaves that hour as it was")
 	_clear_save()
 	return true
 
@@ -288,12 +292,13 @@ func _test_renames() -> bool:
 
 ## Every achievement's `key` is a number something keeps: a figure `state` reads off the player, a
 ## count or a streak a fight tallies (`COUNTS`, `STREAKS`, which the fight has to count under that very
-## name), the kills on a ground there is, a feat of a broken wall, or a `tick` or a `_best` somewhere
-## in the game. A key nothing writes is an achievement nobody can earn, and nothing else would say so.
+## name), the kills on a ground there is, a feat of a broken wall, or a `tick`, a `keep_best` or a
+## fight's `_best` somewhere in the game. A key nothing writes is an achievement nobody can earn, and
+## nothing else would say so.
 func _test_achievement_keys() -> bool:
 	var scripts := _scripts()
 	var kept := {}
-	var writes := RegEx.create_from_string("\\b(?:tick|_count|_best)\\((?:\\w+, )?\"([\\w:]+)\"")
+	var writes := RegEx.create_from_string("\\b(?:tick|_count|_best|keep_best)\\((?:\\w+, )?\"([\\w:]+)\"")
 	for path: String in scripts:
 		for found: RegExMatch in writes.search_all(scripts[path]):
 			kept[found.get_string(1)] = true
@@ -371,12 +376,14 @@ func _test_rule_numbers() -> bool:
 		"squires_blade": [UniqueTable.effect_text("squires_blade"), "%d more damage" % Inventory.SQUIRE_DAMAGE],
 		"couriers_boots": [UniqueTable.effect_text("couriers_boots"), "+%d%% Spawn Speed" % Inventory.COURIER_SPAWN],
 		"novices_cap": [UniqueTable.effect_text("novices_cap"), "under level %d" % Inventory.NOVICE_UNTIL],
-		"crown_of_accord": [UniqueTable.effect_text("crown_of_accord"), "within %s of" % one_in.call(1.0 - Inventory.ACCORD_WITHIN)],
+		"crown_of_accord": [UniqueTable.effect_text("crown_of_accord"),
+				"within %s of" % one_in.call(1.0 - Inventory.ACCORD_WITHIN)],
 		"crown_of_accord at IV": [UniqueTable.peak_text("crown_of_accord"), "%s instead of %s" % [
 				one_in.call(1.0 - Inventory.ACCORD_WITHIN_PEAK), one_in.call(1.0 - Inventory.ACCORD_WITHIN)]],
 		"zealots_brand at IV": [UniqueTable.peak_text("zealots_brand"), "%s more" % one_in.call(Inventory.ZEALOT_GIFT - 1.0)],
 		"purists_seal at IV": [UniqueTable.peak_text("purists_seal"), "%s higher" % one_in.call(Inventory.PURIST_MODS - 1.0)],
-		"rag_and_bone_sack at IV": [UniqueTable.peak_text("rag_and_bone_sack"), "One item %s" % one_in.call(Inventory.SALVAGE_ORB)],
+		"rag_and_bone_sack at IV": [UniqueTable.peak_text("rag_and_bone_sack"),
+				"One item %s" % one_in.call(Inventory.SALVAGE_ORB)],
 		"scholars_circlet at IV": [UniqueTable.peak_text("scholars_circlet"),
 				"Every %s intelligence" % counts.get(roundi(Inventory.SCHOLAR_CRIT), "?")],
 		"packmule at IV": [UniqueTable.peak_text("packmule"), "%d more items" % Inventory.PACKMULE_ROOM],

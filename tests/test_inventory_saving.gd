@@ -327,11 +327,11 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	# would catch going wrong: a socket with no spot would pile up at the origin, and two that
 	# overlap would leave one of them unclickable wherever they cross.
 	for socket: Equipment.Socket in Equipment.sockets():
-		_check(main.bag_page.DOLL_SOCKETS.has(socket),
+		_check(Doll.SOCKETS.has(socket),
 				"the %s socket has nowhere to sit on the doll" % Equipment.LABELS[socket])
 	var placed := {}
-	for socket: Equipment.Socket in main.bag_page.DOLL_SOCKETS:
-		var spot: Vector2 = main.bag_page._socket_spot(socket)
+	for socket: Equipment.Socket in Doll.SOCKETS:
+		var spot: Vector2 = Doll.spot(socket)
 		_check(spot.x >= 0.0 and spot.y >= 0.0,
 				"the %s socket hangs off the page at %s" % [Equipment.LABELS[socket], spot])
 		var box := Rect2(spot, Vector2(ItemSlot.SIDE, ItemSlot.SIDE))
@@ -381,7 +381,7 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	_check(main.bag_page.visible, "the bag is up as the tile is chosen")
 	var target := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
 	main.map.select_cell(target)
-	_check(not main._left_page_up() and main._panel.visible,
+	_check(not main._left_page_up() and main.tile_panel.panel.visible,
 			"choosing a tile closes the page and brings the tile's panel up")
 	main.inventory.tips.append("level_up")
 	main._on_chart_pressed()
@@ -406,14 +406,14 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	_check(Inventory.load_from(TEST_PATH).gold == fight.gold, "so does the file on disk")
 	# The verdict's sums count up from nothing; they are read once they have.
 	await create_timer(Juice.COUNT_DELAY + Juice.COUNT_TIME + 0.1).timeout
-	_check(combat._gold_row.visible and combat._gold_label.text == "%d" % fight.gold,
-			"and the verdict says so: %s" % combat._gold_label.text)
-	_check(combat._kills_label.text == str(fight.kills()),
-			"beside the bodies: %s" % combat._kills_label.text)
-	_check(combat._result_drops.count() == combat._drops.size(),
+	_check(combat.hud._gold_row.visible and combat.hud._gold_label.text == "%d" % fight.gold,
+			"and the verdict says so: %s" % combat.hud._gold_label.text)
+	_check(combat.hud._kills_label.text == str(fight.kills()),
+			"beside the bodies: %s" % combat.hud._kills_label.text)
+	_check(combat.hud._result_drops.count() == combat.hud._drops.size(),
 			"the fight's panel shows everything that fell: %d of %d" % [
-					combat._result_drops.count(), combat._drops.size()])
-	_check(combat._loot_button.text == str(combat._drops.size()),
+					combat.hud._result_drops.count(), combat.hud._drops.size()])
+	_check(combat.hud._loot_button.text == str(combat.hud._drops.size()),
 			"and so does the counter in the corner")
 
 	# The hover card has to stand over the fight, or a find under the verdict has none to show.
@@ -424,25 +424,25 @@ func _test_the_map_keeps_what_dropped() -> bool:
 	_check(cards.size() == 1 and (cards[0].get_parent() as CanvasLayer).layer > combat.layer,
 			"the item card is drawn over the fight")
 	_check(cards.size() == 1 and (cards[0] as ItemCard).slot_at(
-			combat._result_drops._grid.get_child(0).get_child(0).get_global_rect().get_center()) != null,
+			combat.hud._result_drops._grid.get_child(0).get_child(0).get_global_rect().get_center()) != null,
 			"and finds the first drop under the cursor")
 
 	# A drop on that panel opens what it actually is, and goes back again.
-	var dropped: Item = combat._drops[0]
-	combat._result_drops.inspect(0)
+	var dropped: Item = combat.hud._drops[0]
+	combat.hud._result_drops.inspect(0)
 	await process_frame
-	_check(combat._result_drops.inspecting(), "clicking a drop opens it in the grid's place")
+	_check(combat.hud._result_drops.inspecting(), "clicking a drop opens it in the grid's place")
 	var lines := PackedStringArray()
-	for line: Node in _labels_under(combat._result_drops):
+	for line: Node in _labels_under(combat.hud._result_drops):
 		lines.append((line as Label).text)
 	_check(dropped.display_name() in lines, "which names the item")
 	_check("%s · Level %d" % [dropped.rarity_label(), dropped.level] in lines,
 			"and its rarity and level")
 	for text in dropped.mod_lines():
 		_check(text in lines, "and every modifier it carries: " + text)
-	combat._result_drops.inspect(-1)
+	combat.hud._result_drops.inspect(-1)
 	await process_frame
-	_check(not combat._result_drops.inspecting(), "and Back returns to the verdict")
+	_check(not combat.hud._result_drops.inspecting(), "and Back returns to the verdict")
 	main._combat._on_back_pressed()
 	await process_frame
 
@@ -708,7 +708,7 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 	var fight: Encounter = main._combat.fight
 	var combat: CombatScene = main._combat
 	_check(fight.endless, "and it is endless")
-	_check(combat._terminate != null, "with a way out of it on the screen")
+	_check(combat.hud._terminate != null, "with a way out of it on the screen")
 	_check(main._bag_button.visible and main._settings_button.visible and not main._skills_button.visible,
 			"and the corner buttons it has earned left standing")
 	fight.loot_rng.seed = WORLD_SEED
@@ -729,20 +729,21 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 	_check(fight.gold > 0 and main.inventory.gold == fight.gold,
 			"and the gold in the purse: %s of %s" % [main.inventory.gold, fight.gold])
 	_check(not FileAccess.file_exists(TEST_PATH), "but nothing written to disk while the run goes on")
-	_check(combat._loot_button.text == str(main.ledger.drops.size()),
+	_check(combat.hud._loot_button.text == str(main.ledger.drops.size()),
 			"the counter has been keeping score all along")
 
 	# The counter opens a summary of the same finds, and nothing in it throws one away.
-	combat._on_loot_pressed()
+	combat.hud.open_loot()
 	await process_frame
-	_check(combat._loot_panel.visible, "the counter opens the popup")
-	_check(combat._loot_drops.count() == main.ledger.drops.size(), "holding every find")
-	_check(not combat._loot_drops.discardable, "as a summary: the bag is where a find is thrown away")
-	combat.close_loot()
+	_check(combat.hud._loot_panel.visible, "the counter opens the popup")
+	_check(combat.hud._loot_drops.count() == main.ledger.drops.size(), "holding every find")
+	_check(not combat.hud._loot_drops.discardable, "as a summary: the bag is where a find is thrown away")
+	combat.hud.close_loot()
 	await process_frame
-	_check(not combat._loot_panel.visible, "and Close puts it away")
+	_check(not combat.hud._loot_panel.visible, "and Close puts it away")
 
-	# The bag opens over the run, on a layer above the fight's, and of the rest of the corner only the settings come with it.
+	# The bag opens over the run, on a layer above the fight's, and of the rest of the corner only the
+	# settings come with it.
 	main._on_bag_pressed()
 	await process_frame
 	_check(main.bag_page.visible and main._combat == combat, "the bag opens over the run")
@@ -767,17 +768,17 @@ func _test_a_farm_run_holds_its_loot() -> bool:
 	_check(not main.bag_page.visible and not fight.finished, "Escape puts the bag away and not the run")
 	# The bag and the loot popup never stand together: each puts the other away.
 	main._on_bag_pressed()
-	combat._on_loot_pressed()
+	combat.hud.open_loot()
 	await process_frame
-	_check(combat._loot_panel.visible and not main.bag_page.visible, "the popup puts the bag away")
+	_check(combat.hud._loot_panel.visible and not main.bag_page.visible, "the popup puts the bag away")
 	main._on_bag_pressed()
 	await process_frame
-	_check(main.bag_page.visible and not combat._loot_panel.visible, "and the bag the popup")
+	_check(main.bag_page.visible and not combat.hud._loot_panel.visible, "and the bag the popup")
 
 	# Terminating is the end of the run, and the moment it is written down.
 	var found: Array[Item] = main.ledger.drops.duplicate()
 	var earned: float = main.inventory.gold
-	combat._on_terminate_pressed()
+	combat.hud.terminate()
 	await process_frame
 	_check(fight.finished and fight.victory, "terminating ends the run, and not as a loss")
 	_check(not main.bag_page.visible and not main._bag_button.visible and not main._settings_button.visible,
@@ -824,15 +825,16 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 	# One over the cap and no fight can start: the buttons grey and the handlers refuse.
 	var extra := _piece(ItemRarity.Rarity.COMMON, 1)
 	main.inventory.items.append(extra)
-	main._update_buttons()
-	_check(main._farm_button.disabled and main._chart_button.disabled,
+	main.tile_panel.update_buttons()
+	_check(main.tile_panel.farm_button.disabled and main.tile_panel.chart_button.disabled,
 			"an overencumbered player cannot fight")
-	_check(main._farm_button.tooltip_text == main.ENCUMBERED_TIP % main.inventory.capacity(), "and the button says why")
+	_check(main.tile_panel.farm_button.tooltip_text == TilePanel.ENCUMBERED_TIP % main.inventory.capacity(),
+			"and the button says why")
 	main._on_farm_pressed()
 	_check(main._combat == null, "and pressing Farm anyway opens nothing")
 	main.inventory.remove(extra)
 	main._process(0.0)
-	_check(not main._farm_button.disabled, "back at the cap the button comes back by itself")
+	_check(not main.tile_panel.farm_button.disabled, "back at the cap the button comes back by itself")
 	main._on_farm_pressed()
 	_check(main._combat != null, "a run starts")
 	if main._combat == null:
@@ -848,10 +850,10 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 	fight.orb_dropped.connect(func(_index: int, _orb: String) -> void: orbs.append(true))
 	# As above: every body carries something, so the rule has something to throw away at once.
 	fight.always_drop = true
-	_check(combat.bag_room == 0, "a full bag leaves the fight no room")
+	_check(combat.hud.bag_room == 0, "a full bag leaves the fight no room")
 	# Which is said by the counter's own face and nowhere else.
-	combat._refresh()
-	_check(combat._loot_filled == 1.0, "the counter's face is at the red end of its ramp")
+	combat.hud.refresh()
+	_check(combat.hud._loot_filled == 1.0, "the counter's face is at the red end of its ramp")
 
 	var guard := 0
 	while combat._auto_discarded < 3 and guard < 2000:
@@ -861,10 +863,10 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 	_check(combat._auto_discarded >= 3, "the rule threw several away: %d" % combat._auto_discarded)
 	# None of them touched anything the player can see.
 	_check(main.ledger.drops.is_empty(), "none of them reached the ledger")
-	_check(combat._drops.is_empty(), "or the fight's own list")
-	_check(combat._loot_button.text == "0" and not combat._loot_button.disabled,
+	_check(combat.hud._drops.is_empty(), "or the fight's own list")
+	_check(combat.hud._loot_button.text == "0" and not combat.hud._loot_button.disabled,
 			"the counter never moved, and still opens")
-	_check(combat._loot_drops.count() == 0 and combat._result_drops.count() == 0,
+	_check(combat.hud._loot_drops.count() == 0 and combat.hud._result_drops.count() == 0,
 			"and neither list has a square in it")
 	_check(combat._finds_shown == orbs.size(),
 			"nothing but the orbs was thrown into the arena (%d against %d)"
@@ -876,12 +878,12 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 
 	# Said once, at the end, as a number.
 	var thrown := combat._auto_discarded
-	combat._on_terminate_pressed()
+	combat.hud.terminate()
 	await process_frame
 	await process_frame
-	_check(combat._auto_label.visible, "the verdict says what the rule threw away")
-	_check(combat._auto_label.text == "%d items discarded automatically" % thrown,
-			"as a count and nothing more: %s" % combat._auto_label.text)
+	_check(combat.hud._auto_label.visible, "the verdict says what the rule threw away")
+	_check(combat.hud._auto_label.text == "%d items discarded automatically" % thrown,
+			"as a count and nothing more: %s" % combat.hud._auto_label.text)
 	main._combat._on_back_pressed()
 	await process_frame
 	_check(main.inventory.total() == Inventory.CAPACITY, "the run banked nothing, because it kept nothing")

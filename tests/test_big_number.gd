@@ -18,7 +18,8 @@ func _test_whole_numbers() -> bool:
 	_check(BigNumber.format(0.0) == "0", "nothing is nothing: %s" % BigNumber.format(0.0))
 	_check(BigNumber.format(7.0) == "7", "seven is seven: %s" % BigNumber.format(7.0))
 	_check(BigNumber.format(999.0) == "999", "under a thousand needs no comma: %s" % BigNumber.format(999.0))
-	_check(BigNumber.format(1000.0) == "1,000", "a thousand is spelled out, its thousands parted: %s" % BigNumber.format(1000.0))
+	_check(BigNumber.format(1000.0) == "1,000",
+			"a thousand is spelled out, its thousands parted: %s" % BigNumber.format(1000.0))
 	_check(BigNumber.format(99999.0) == "99,999", "and so is the last five-digit purse: %s" % BigNumber.format(99999.0))
 	_check(BigNumber.format(-1234.0) == "-1,234" and BigNumber.format(1234.0, true) == "+1,234",
 			"with its sign in front of the comma: %s" % BigNumber.format(-1234.0))
@@ -33,7 +34,8 @@ func _test_whole_numbers() -> bool:
 func _test_exponent() -> bool:
 	_check(BigNumber.format(1e6) == "1.00M", "a million turns over: %s" % BigNumber.format(1e6))
 	_check(BigNumber.format(1234567.0) == "1.23M", "three digits and no more: %s" % BigNumber.format(1234567.0))
-	_check(BigNumber.format(999999.6) == "1.00M", "what rounds to a million is written as one: %s" % BigNumber.format(999999.6))
+	_check(BigNumber.format(999999.6) == "1.00M",
+			"what rounds to a million is written as one: %s" % BigNumber.format(999999.6))
 	# The mantissa carry: "%.2f" of 9.999 is "10.00", which is two digits in a one-digit slot.
 	_check(BigNumber.format(9.999e8) == "1.00B", "a mantissa never reaches a thousand: %s" % BigNumber.format(9.999e8))
 	_check(BigNumber.format(12345678.0) == "12.3M", "tens keep three digits: %s" % BigNumber.format(12345678.0))

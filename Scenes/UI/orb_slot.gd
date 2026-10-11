@@ -1,42 +1,26 @@
 class_name OrbSlot
 extends Panel
-## One orb, drawn as a square in the bag's tray: its icon on the same tan socket an item sits on.
+## One orb, super orb or rune as a square in its tray, on the tan socket an item sits on. Its own class
+## and not a mode of `ItemSlot`, which takes no mouse so a drag begun on it still scrolls the bag: an orb
+## square is the click target and the hover target both, in a footer with no drag to protect.
 ##
-## Its own class rather than a mode on ItemSlot, because the two differ in exactly the thing that
-## matters most about a square. ItemSlot takes no mouse input at all, so that the drag which scrolls
-## the bag survives a press beginning on a square; an orb square is the opposite -- it is the click
-## target and the hover target both, and it stands in the footer where there is no drag to protect.
-## One class doing both would be a flag deciding whether it is clickable, which is two classes
-## wearing one name.
-##
-## Three states, because there are three things true of an orb and the player has to tell them apart
-## at a glance in a row of six:
-##
-##   never found  -- the icon at ItemSlot.EMPTY_MARK_ALPHA, the faintness the empty ring and amulet
-##                   sockets already use, so "nothing there" reads one way across the interface
-##   held, no use -- drawn grey: it is yours, but it has nothing to do to the piece that is open
-##   held, usable -- full colour, and the socket darkens under the cursor
-##
-## The card that says *why* an orb is grey is the panel's business, not this one's; this emits
-## `hovered` and lets whoever owns it put the words somewhere with room for them.
+## Three looks, told apart at a glance in a row of six: never found (the icon at
+## `ItemSlot.EMPTY_MARK_ALPHA`, as an empty socket's mark), held with nothing to do (`DIM`), held and
+## usable (full colour, the socket darkening under the cursor). Why an orb is grey is its owner's to
+## say, from `hovered`.
 
-## The square, and the icon in it. Six of these with `BagPage.ORB_GAP` between them come to
-## BagPage.WIDTH less under a gap, which is what settles both numbers.
+## Six of these and five `BagPage.ORB_GAP` fit `BagPage.WIDTH` (`test_ui_theme`).
 const SIDE := 24
-## Half the 32 px the icon is cut at. A 2:1 step, so a source pixel stays a square pair of pixels on
-## screen; every other scale in this game is a whole number for the same reason `zoom` is.
+## Half the 32 px the icon is cut at: a whole 2:1 step, so a source pixel stays square on screen.
 const ICON := 16
 ## How far the count hangs off the square's bottom-right corner, so the numeral stands on the gutter
-## rather than on the gem it is counting.
+## and not on the gem it counts.
 const COUNT_OVERHANG := 3
-## What a held orb with nothing to do is dimmed to. Grey rather than faint: "not for this piece" is a
-## different statement from "not found", and two alphas of the same icon would say the same thing
-## twice.
+## A held orb with nothing to do. Grey, not faint: faint already says "not found".
 const DIM := Color(0.42, 0.42, 0.44)
 
-## The player pressed this orb, and it was lit when they did.
+## Only a lit square emits it.
 signal pressed(orb: String)
-## The cursor is over it. The name rather than the node, because what the card needs is the orb.
 signal hovered(orb: String)
 signal unhovered()
 
@@ -56,31 +40,24 @@ var _held := -1.0
 
 
 ## Draws this orb held `count` times. `usable` is whether it can do anything to whatever the bag has
-## open -- with nothing open every held orb is usable, which is the tray at rest.
-## `armed` is the orb the bag is holding over the grid: its socket stays as dark as an open square's.
-## `side` is the square's: `SIDE` in the tray, `ItemSlot.SIDE` on a vendor's shelf, where the orb stands
-## among pieces -- the icon keeps the tray's margin, so at 40 it is drawn at its own 32.
+## open (with nothing open, every held orb). `armed` is the orb the bag holds over the grid: its socket
+## stays as dark as an open square's. `side` is `SIDE` in the tray and `ItemSlot.SIDE` on a vendor's
+## shelf, where the icon keeps the tray's margin and so is drawn at its own 32.
 func setup(which: String, count: int, usable: bool, armed := false, side := SIDE) -> void:
 	orb = which
 	_live = count > 0 and usable
 	Cursors.wear(self, Cursors.HAND if _live else Cursors.ARROW)
 	custom_minimum_size = Vector2(side, side)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	# The socket an item square uses, so the tray reads as part of the same bag rather than as a
-	# second interface pinned under it. No rarity ring: an orb has no rarity, and borrowing common's
-	# borderless style is exactly right rather than a shortcut.
+	# Common's socket: an orb has no rarity, so no ring.
 	var rest := ItemRarity.slot_style(ItemRarity.Rarity.COMMON, armed)
 	add_theme_stylebox_override("panel", rest)
 
 	_icon = TextureRect.new()
-	# The source is 32 and this draws 16, so the texture is stepped down here rather than cut small:
-	# nearest keeps the halving square, and the full-size icon stays on disk for whatever wants it --
-	# the orb thrown out of a body in a fight draws the same file at its own size.
-	#
-	# The order of these matters and is the whole reason this is not two lines. A Control's `size` is
-	# clamped to its minimum as it is set, and a TextureRect's minimum is the texture's own size until
-	# `expand_mode` says otherwise -- so asking for 16 while the mode is still the default gets 32,
-	# and lowering the minimum afterwards does not shrink what was already set.
+	# Stepped down from the 32 px file, which a fight's drop draws whole. The modes go before the texture
+	# and the size: a Control's `size` is clamped to its minimum as it is set, and a TextureRect's
+	# minimum is its texture's size until `expand_mode` says otherwise -- so 16 asked for under the
+	# default mode comes back 32, and lowering the minimum afterwards does not shrink what was set.
 	_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -97,9 +74,7 @@ func setup(which: String, count: int, usable: bool, armed := false, side := SIDE
 		_icon.modulate = DIM
 	add_child(_icon)
 
-	# Only past one: a single orb needs no "1" on it, and seven squares wearing a 1 is seven numbers
-	# saying nothing. The body font at its own 10, with an ink outline, which is what makes a light
-	# numeral readable over a gem of any colour. Pixellari's 16 covered half the gem.
+	# Only past one: a "1" on every square is a row of numbers saying nothing.
 	if count > 1:
 		add_child(count_label(str(count)))
 
@@ -132,8 +107,8 @@ func _process(delta: float) -> void:
 		hovered.emit(orb)
 
 
-## A press on a lit square. A grey one still hovers -- the card is where the player finds out why it
-## is grey -- and simply does nothing when clicked.
+## A press on a lit square. A grey one still hovers (its card says why it is grey) and does nothing
+## when clicked.
 func _gui_input(event: InputEvent) -> void:
 	if picks_up and Cursors.touched:
 		_finger(event)
@@ -170,15 +145,11 @@ func _finger(event: InputEvent) -> void:
 
 
 ## The numeral hung off a square's bottom-right corner: an orb's count, and an item's `+n` (`ItemSlot`).
-## Laid over the whole square and aligned into its corner, rather than positioned by a measurement of
-## the glyphs: how wide "12" is at this font is the font's business. The box is then grown past the
-## corner it is aligned to, which is what lifts the numeral off the icon, and grown further to the left
-## so a two-digit count has somewhere to go.
+## In the body font with an ink outline, which is what reads over a gem of any colour. Laid over the
+## whole square and aligned into its corner, never placed by measuring the glyphs; the box is grown past
+## that corner, which lifts the numeral off the icon, and further to the left, for a second digit.
 static func count_label(text: String) -> Label:
-	var tally := Label.new()
-	tally.theme_type_variation = "SmallLabel"
-	tally.text = text
-	tally.add_theme_color_override("font_color", Palette.BONE)
+	var tally := UITheme.label(text, Palette.BONE, true)
 	tally.add_theme_color_override("font_outline_color", Palette.INK)
 	tally.add_theme_constant_override("outline_size", 4)
 	tally.mouse_filter = Control.MOUSE_FILTER_IGNORE

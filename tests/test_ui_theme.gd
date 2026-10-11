@@ -53,7 +53,8 @@ func _test_palette() -> bool:
 		var ratio := _contrast(constants[name], Palette.PANEL_CREAM)
 		_check(ratio >= 4.5, "Palette.%s reads on the cream as a body line (%.2f:1)" % [name, ratio])
 	for colour: Color in ItemRarity.TEXT_COLORS.values():
-		_check(_contrast(colour, Palette.PANEL_CREAM) >= 3.0, "a rarity's name reads on the cream (%s)" % colour.to_html(false))
+		_check(_contrast(colour, Palette.PANEL_CREAM) >= 3.0,
+				"a rarity's name reads on the cream (%s)" % colour.to_html(false))
 	return true
 
 
@@ -877,7 +878,8 @@ func _test_tip_card() -> bool:
 		row.add_child(child)
 	root.add_child(row)
 	_check(TipCard.text_of(named, Vector2.ZERO) == "the button", "a Control's own tooltip is what is written")
-	_check(TipCard.text_of(plain, Vector2.ZERO) == "the row", "one with none, that lets the mouse through, speaks for its parent")
+	_check(TipCard.text_of(plain, Vector2.ZERO) == "the row",
+			"one with none, that lets the mouse through, speaks for its parent")
 	_check(TipCard.text_of(silent, Vector2.ZERO) == "", "and one that stops the mouse says nothing")
 	_check(TipCard.text_of(null, Vector2.ZERO) == "", "as does bare map")
 	_check(float(ProjectSettings.get_setting("gui/timers/tooltip_delay_sec")) > 1000.0,
@@ -978,7 +980,8 @@ func _test_settings_page() -> bool:
 			and page._rows.find_child("sfx_volume", true, false) is HSlider, "the music and the effects are volumes")
 	for dev: String in ["Show all uniques", "Even loot", "Unlock Banish", "Gold x10", "Balancing", "Item generator"]:
 		_check(not top.contains(dev), "and nothing of a developer's: %s" % dev)
-	_check(top.contains(SettingsPage.DEV_TITLE + "|") == OS.is_debug_build(), "whose screen is a button in a debug build only")
+	_check(top.contains(SettingsPage.DEV_TITLE + "|") == OS.is_debug_build(),
+			"whose screen is a button in a debug build only")
 
 	page._open_dev()
 	var dev: String = said.call()
@@ -1073,7 +1076,8 @@ func _test_responsive() -> bool:
 	await process_frame
 	bag.layout()
 	var worn: Control = bag._worn_panel
-	_check(worn.visible and is_equal_approx(worn.position.y + (worn.size.y + BagPage.WORN_GAP) * 4.0, bag._panel.position.y)
+	_check(worn.visible
+			and is_equal_approx(worn.position.y + (worn.size.y + BagPage.WORN_GAP) * 4.0, bag._panel.position.y)
 			and is_equal_approx(worn.position.x + worn.size.x * 2.0, whole.x / 2.0),
 			"held upright the doll stands straight over the bag, centred")
 	bag._ui_scale = 2.0
@@ -1095,8 +1099,10 @@ func _test_responsive() -> bool:
 	await process_frame
 	var upright := skills.get_viewport_rect().size
 	var pixels := skills._view._canvas.scale.x * 4.0
-	_check(skills._panel.size.y * 4.0 <= upright.y / 2.0 + 1.0, "held upright the skills page is a sheet of half the window")
-	_check(is_equal_approx(pixels, roundf(pixels)) and pixels >= 1.0, "its tree a whole window pixel a pixel (%s)" % pixels)
+	_check(skills._panel.size.y * 4.0 <= upright.y / 2.0 + 1.0,
+			"held upright the skills page is a sheet of half the window")
+	_check(is_equal_approx(pixels, roundf(pixels)) and pixels >= 1.0,
+			"its tree a whole window pixel a pixel (%s)" % pixels)
 	_check(skills._panel.size.x * 4.0 <= upright.x, "and no wider than the window (%s)" % skills._panel.size.x)
 	skills._ui_scale = 2.0
 	skills.layout()
@@ -1145,7 +1151,8 @@ func _test_fingers() -> bool:
 	# What a finger taps is selected first, and applied by the next tap on the same thing.
 	_check(not Cursors.applies("a"), "a finger's first tap on a thing only selects it")
 	Cursors.taps += 1
-	_check(Cursors.applies("a") and Cursors.applies("a"), "the next tap on it applies, and a hold of that tap goes on applying")
+	_check(Cursors.applies("a") and Cursors.applies("a"),
+			"the next tap on it applies, and a hold of that tap goes on applying")
 	Cursors.taps += 2
 	_check(not Cursors.applies("a"), "a tap anywhere else between starts it over")
 	_check(not Cursors.applies("a"), "and a hold on what a tap has only just selected applies nothing")

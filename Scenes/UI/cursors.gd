@@ -1,7 +1,7 @@
 class_name Cursors
 extends RefCounted
 ## The mouse cursors, cut from Kenney's Cursor Pixel Pack (`Assets/Cursor/`, CC0) and blown up by a
-## whole number so a sprite pixel stays square.
+## whole number, the orb held as one, and what a finger's tap means (`touched`, `applies`).
 ##
 ## Godot has no cursor of its own to add, only the system's shapes to redraw, so a sword or a hammer
 ## takes the place of a shape the game never asks for. Ask for one by the names here, never by the
@@ -40,10 +40,10 @@ const TILT := 15.0
 ## Shape: [as drawn, its hotspot, tilted, the tilted one's hotspot] (`_pair`). Empty until `install`,
 ## so a test that never installs gets the system's arrow back from `hold` instead.
 static var _drawn := {}
-## Whether the last press came from a finger rather than a mouse -- a touchscreen, or the mouse Godot
-## makes up from one. A finger has no hover, so what hover says with a mouse is said on a tap instead.
+## Whether the last press came from a finger (a touchscreen, or the mouse Godot makes up from one). A
+## finger has no hover, so what hover says with a mouse is said on a tap instead.
 static var touched := false
-## How far a finger may wobble, in panel pixels, and its press still be a tap rather than a drag.
+## How far a finger may wobble, in panel pixels, and its press still be a tap and not a drag.
 const TOUCH_SLOP := 8.0
 ## How many times a finger has come down (`feel`), which is how `applies` tells the next tap from a
 ## later one. A test that calls a handler twice for two taps adds one between them.
@@ -71,8 +71,8 @@ static func install(tree: SceneTree, scale: int) -> void:
 		tree.node_added.connect(_on_node_added)
 
 
-## Hands the system its own cursors back. The drawn ones are textures `Input` would otherwise still be
-## holding when the renderer goes, which it reports as leaks.
+## Hands the system its own cursors back: `Input` would otherwise still hold the drawn textures when
+## the renderer goes, which it reports as leaks.
 static func put_away() -> void:
 	_drawn.clear()
 	_held.clear()
@@ -89,7 +89,7 @@ static func wear(control: Control, shape: Input.CursorShape) -> void:
 
 ## For a Control that takes the presses meant for the squares inside it, which take no mouse of their
 ## own: call it with everything that Control hears, and it wears the hand while the cursor is over a
-## filled square. Not while `held` -- an orb in the hand is the cursor there.
+## filled square. Not while `held`: an orb in the hand is the cursor there.
 static func over_squares(control: Control, event: InputEvent, held := false) -> void:
 	if not (event is InputEventMouseMotion):
 		return
@@ -103,19 +103,18 @@ static func over_squares(control: Control, event: InputEvent, held := false) -> 
 	wear(control, HAND if on else ARROW)
 
 
-## `mark` in the arrow's place, centred on the point -- an orb in the hand -- or the arrow back for null.
+## `mark` in the arrow's place, centred on the point (an orb in the hand), or the arrow back for null.
 ## `scale` blows up a mark made smaller than the 32 px an orb is cut at (a rune's).
 static func hold(mark: Texture2D, scale := 1) -> void:
 	_held = [] if mark == null else _pair(mark.get_image(), mark.get_size() / 2.0, scale)
 	_show(ARROW, false)
 
 
-## Whether something is in the arrow's place: an orb is in the hand.
 static func holding() -> bool:
 	return not _held.is_empty()
 
 
-## Whether `event` came from a finger or a mouse (`touched`). Fed every event by the main scene's `_input`.
+## Sets `touched` and counts `taps`. Fed every event by the main scene's `_input`.
 static func feel(event: InputEvent) -> void:
 	if event is InputEventScreenTouch or event is InputEventMouse:
 		touched = event is InputEventScreenTouch or event.device == InputEvent.DEVICE_ID_EMULATION
@@ -124,11 +123,11 @@ static func feel(event: InputEvent) -> void:
 		taps += 1
 
 
-## Whether a press on `what` does its work (the user's rule, 2026-10-10). A mouse's always does. A finger
-## has no hover to read by, so its first tap on a thing only selects it -- whoever asks puts up what it
-## is -- and the next tap on the same thing applies, as does every one after it until a tap lands
-## anywhere else. Asked again within one press (`SkillTreeView`'s hold) it answers as it did: a hold on
-## what was selected goes on applying, and one on something new only selects it.
+## Whether a press on `what` does its work (the user's rule, 2026-10-10). A mouse's always does. A
+## finger's first tap on a thing only selects it (whoever asks puts up what it is), and the next tap on
+## the same thing applies, as does every one after it until a tap lands anywhere else. Asked again
+## within one press (`SkillTreeView`'s hold) it answers as it did: a hold on what was selected goes on
+## applying, and one on something new only selects it.
 static func applies(what: Variant) -> bool:
 	if not touched:
 		return true
@@ -142,9 +141,8 @@ static func applies(what: Variant) -> bool:
 	return _applying
 
 
-## Every event the main scene hears (`_input`, since a Control would eat a press before anything
-## later saw it): a left press tilts the cursor under it to the left for `TWITCH`, about the tile's
-## bottom right corner. The click lands where it would have. Nothing at `Settings.Anim.NONE`.
+## Fed every event the main scene hears (`_input`, since a Control would eat a press before anything
+## later saw it): a left press tilts the cursor to the left for `TWITCH`. Nothing at `Settings.Anim.NONE`.
 static func twitch(tree: SceneTree, event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed) \
 			or Settings.animations == Settings.Anim.NONE or _drawn.is_empty():
@@ -164,18 +162,18 @@ static func twitch(tree: SceneTree, event: InputEvent) -> void:
 
 
 ## `image` as a cursor pointing with `point`, and again turned `TILT` to the left about the tile's
-## bottom right corner -- the wrist, so the tip is what dips -- on a canvas padded so no corner swings
-## off it. The hotspot keeps its place on that canvas: the click lands where it would have. Blown up by `scale` first and turned in screen pixels:
-## turned at 16 px the outlines broke up, and a sprite pixel cannot stay square through a turn anyway.
-## Godot has no turn for an Image short of a quarter, so each pixel of the turned one is looked up
-## where it came from.
+## bottom right corner (the wrist, so the tip is what dips) on a canvas padded so no corner swings off
+## it. The hotspot keeps its place on that canvas, so the click lands where it would have. Blown up by
+## `scale` first and turned in screen pixels: turned at 16 px the outlines broke up. Godot turns an
+## Image only by quarters, so each pixel of the turned one is looked up where it came from.
 static func _pair(image: Image, point: Vector2, scale: int) -> Array:
 	image.resize(image.get_width() * scale, image.get_height() * scale, Image.INTERPOLATE_NEAREST)
 	point *= scale
 	var turn := deg_to_rad(TILT)
 	var pivot := Vector2(image.get_size())
 	var pad := ceili(maxi(image.get_width(), image.get_height()) * sin(turn)) + 1
-	var tilted := Image.create_empty(image.get_width() + pad * 2, image.get_height() + pad * 2, false, image.get_format())
+	var tilted := Image.create_empty(image.get_width() + pad * 2, image.get_height() + pad * 2, false,
+			image.get_format())
 	for y in tilted.get_height():
 		for x in tilted.get_width():
 			# From the pixel's centre, back through the turn (y runs down, so left is this way round).

@@ -258,7 +258,8 @@ func _test_buying() -> bool:
 	_check(price > TownPrices.sell_price(offered),
 			"a vendor asks more than it pays (%d over %d)" % [price, TownPrices.sell_price(offered)])
 	var buy := _deep_button(page._rows, "Buy")
-	_check(buy != null and buy.text == "Buy" and UITheme.price_of(buy) == BigNumber.format(price), "the button carries the price (%s)"
+	_check(buy != null and buy.text == "Buy" and UITheme.price_of(buy) == BigNumber.format(price),
+			"the button carries the price (%s)"
 			% [buy.text if buy != null else "no button"])
 
 	# The lines scroll and the buttons under them do not, the way the bag's stat block works: an elite
@@ -406,7 +407,8 @@ func _test_smithing() -> bool:
 	var lock := _button(page._rows, "Lock")
 	_check(upgrade != null and upgrade.text == "Upgrade" and UITheme.price_of(upgrade) == BigNumber.format(price),
 			"the hammer carries its price (%s)" % [upgrade.text if upgrade != null else "no button"])
-	_check(lock != null and lock.text == "Lock" and UITheme.price_of(lock) == BigNumber.format(TownPrices.lock_price(piece)),
+	_check(lock != null and lock.text == "Lock"
+			and UITheme.price_of(lock) == BigNumber.format(TownPrices.lock_price(piece)),
 			"and so does the lock (%s)" % [lock.text if lock != null else "no button"])
 	_check(upgrade != null and upgrade.disabled and lock != null and lock.disabled,
 			"an empty purse kills both")
@@ -414,7 +416,7 @@ func _test_smithing() -> bool:
 	page._on_lock_pressed()
 	_check(piece.level == 1 and piece.locked_mod().is_empty() and inventory.gold == 0,
 			"and nothing was done on the way past the button")
-	_check(page._swing_clock < 0.0, "and the smith did not strike for it")
+	_check(page._swing.clock < 0.0, "and the smith did not strike for it")
 
 	# With the gold, the hammer lands: the piece moves, the purse pays and the save is written.
 	inventory.gold = price * 3
@@ -424,7 +426,7 @@ func _test_smithing() -> bool:
 	_check(upgrade != null and not upgrade.disabled, "with the gold the hammer is live")
 	page._on_upgrade_pressed()
 	_check(piece.level == 2, "the piece came back a level higher (%d)" % piece.level)
-	_check(page._swing_clock == 0.0 and page._swings_owed == 0, "and the smith strikes")
+	_check(page._swing.clock == 0.0 and page._swing.owed == 0, "and the smith strikes")
 	_check(inventory.gold == price * 2, "the purse paid (%d, want %d)" % [inventory.gold, price * 2])
 	_check(Inventory.load_from(TEST_PATH).items[0].level == 2, "and the upgrade was saved")
 
@@ -437,11 +439,11 @@ func _test_smithing() -> bool:
 	page._smith_rng = _stream_that(true)
 	page._on_upgrade_pressed()
 	_check(piece.broken and piece.level == 2, "the hammer broke it and left the level alone")
-	# Pressed mid-strike: owed, and begun SWING_OVERLAP frames before the first would have ended.
-	_check(page._swings_owed == 1, "a press mid-strike waits its turn")
-	page._process((page._swing_frames() - TownPage.SWING_OVERLAP) * DialogueBox.FRAME_TIME + 0.001)
-	_check(page._swings_owed == 0 and page._swing_clock == 0.0,
-			"and starts %d frames before the first ends" % TownPage.SWING_OVERLAP)
+	# Pressed mid-strike: owed, and begun SmithSwing.OVERLAP frames before the first would have ended.
+	_check(page._swing.owed == 1, "a press mid-strike waits its turn")
+	page._process((page._swing.frames() - SmithSwing.OVERLAP) * DialogueBox.FRAME_TIME + 0.001)
+	_check(page._swing.owed == 0 and page._swing.clock == 0.0,
+			"and starts %d frames before the first ends" % SmithSwing.OVERLAP)
 	_check(inventory.gold == before_break - broke_price,
 			"and the gold went anyway (%d, want %d)" % [inventory.gold, before_break - broke_price])
 	_check(not page._smith_note.is_empty(), "the page says what happened (%s)" % page._smith_note)
@@ -556,7 +558,8 @@ func _test_board() -> bool:
 			"and the experience (%d)" % xp_reward)
 	_check(inventory.items.size() == 1 and inventory.items[0].rarity == ItemRarity.Rarity.ELITE
 			and inventory.items[0].plus == 1 and str(LootTable.ITEMS[inventory.items[0].type]["kind"]) == "sword",
-			"and so did the elite sword +1 (%s)" % [inventory.items[0].display_name() if inventory.items.size() == 1 else inventory.items.size()])
+			"and so did the elite sword +1 (%s)"
+			% [inventory.items[0].display_name() if inventory.items.size() == 1 else inventory.items.size()])
 	_check(Inventory.load_from(TEST_PATH).items.size() == 1, "which was saved with the hand-in")
 	_check(Inventory.load_from(TEST_PATH).gold == reward, "the hand-in was saved")
 	_check(_deep_button(page._rows, "Claim") == null, "the posting is off the board")
@@ -589,22 +592,22 @@ func _test_entering() -> bool:
 	tick.toggle_mode = true
 	main.add_child(tick)
 	tick.pressed.emit()
-	_check(main._toggle_sound.playing and not main._button_sound.playing, "a toggle clicks as a toggle")
+	_check(main.sounds.toggle.playing and not main.sounds.button.playing, "a toggle clicks as a toggle")
 	var tab := Button.new()
 	tab.toggle_mode = true
 	tab.button_group = ButtonGroup.new()
 	main.add_child(tab)
 	tab.pressed.emit()
-	_check(main._button_sound.playing, "a tab clicks as a button")
+	_check(main.sounds.button.playing, "a tab clicks as a button")
 	tick.queue_free()
 	tab.queue_free()
 	main.inventory.gold += 10.0
-	_check(not main._coins_sound.playing, "gold coming in is no purchase")
+	_check(not main.sounds.coins.playing, "gold coming in is no purchase")
 	main.inventory.gold -= 10.0
-	_check(main._coins_sound.playing, "gold going out is one")
-	main._coins_sound.stop()
+	_check(main.sounds.coins.playing, "gold going out is one")
+	main.sounds.coins.stop()
 	main.inventory.sell_for(10.0)
-	_check(main._coins_sound.playing, "and so is a sale")
+	_check(main.sounds.coins.playing, "and so is a sale")
 
 	var town: Vector2i = main.view.start_town - main.view.origin
 	_check(main.view.town_tier(town) == TownWorld.Tier.SMALL, "the start town is a village")
@@ -617,23 +620,23 @@ func _test_entering() -> bool:
 	main.view.reveal_all()
 	main.map.select_cell(town)
 	_check(not main.view.can_visit(town), "a town the player is not standing on cannot be entered")
-	_check(main._town_button.visible, "but its button is there, to walk in by")
+	_check(main.tile_panel.town_button.visible, "but its button is there, to walk in by")
 
 	# Stood on, which with charted is the whole of what a visit takes.
 	main.view.player_cell = town
 	main.map.set_player_cell(town)
 	main.map.select_cell(town)
-	main._update_buttons()
+	main.tile_panel.update_buttons()
 	_check(main.view.can_visit(town), "standing on a charted town, it can be entered")
-	_check(main._town_button.visible, "and the button is there")
+	_check(main.tile_panel.town_button.visible, "and the button is there")
 	# A heading, then a row per counter: its mark and its name.
-	var rows: Array[Node] = main._service_rows.get_children().slice(1)
+	var rows: Array[Node] = main.tile_panel.service_rows.get_children().slice(1)
 	_check(rows.size() > 0, "the tile panel shows a row for what is traded here")
 	for row: Node in rows:
 		_check(row.get_child(0) is TextureRect and (row.get_child(1) as Label).text != "",
 				"and each row names its counter beside its mark")
-	_check(main._level_label.text.begins_with(main.SETTLEMENT_KINDS[main.view.town_tier(town)] + " · "),
-			"and the line under the name says what kind of place it is (%s)" % main._level_label.text)
+	_check(main.tile_panel.level_label.text.begins_with(TilePanel.SETTLEMENT_KINDS[main.view.town_tier(town)] + " · "),
+			"and the line under the name says what kind of place it is (%s)" % main.tile_panel.level_label.text)
 
 	# Standing on a charted settlement is what the first tip about towns waits for, and reading its
 	# board is what the second one waits for.
@@ -649,7 +652,7 @@ func _test_entering() -> bool:
 		main._on_tip_closed()
 	await process_frame
 	_check(main.town_page.visible, "the town page is up")
-	_check(not main._panel.visible, "in the tile panel's place")
+	_check(not main.tile_panel.panel.visible, "in the tile panel's place")
 	_check(main.bag_page.visible, "with the bag beside it")
 	_check(main.inventory.towns.visited(main.view.origin + town), "and the town is in the save")
 	var services := TownServices.services_for(TownWorld.Tier.SMALL, main.view.origin + town,
@@ -668,7 +671,7 @@ func _test_entering() -> bool:
 	_check(main.bag_page._worn_panel.visible, "and the doll stands beside it")
 	# The map is still clickable behind the page, and the tile panel shares that edge with it.
 	main.map.select_cell(MapBuilder.CENTER)
-	_check(not main._panel.visible, "clicking the map does not put the tile panel over the town")
+	_check(not main.tile_panel.panel.visible, "clicking the map does not put the tile panel over the town")
 	_check(main.town_page.visible, "which is still up")
 	main.map.select_cell(town)
 
@@ -683,13 +686,13 @@ func _test_entering() -> bool:
 
 	# And back in, then out by the X, which puts the tile panel back.
 	main.map.select_cell(town)
-	main._update_buttons()
+	main.tile_panel.update_buttons()
 	main._on_town_pressed()
 	await process_frame
 	main.town_page.closed.emit()
 	await process_frame
 	_check(not main.town_page.visible and not main.bag_page.visible, "the X closes both")
-	_check(main._panel.visible, "and the tile panel has its edge back")
+	_check(main.tile_panel.panel.visible, "and the tile panel has its edge back")
 	_check(not main.bag_page._buys(TownServices.GEAR) and not main.bag_page._buys(TownServices.ORBS),
 			"the bag is not a shop any more")
 
@@ -706,7 +709,7 @@ func _test_entering() -> bool:
 	main.town_page.closed.emit()
 	await process_frame
 	main.map.select_cell(town)
-	main._update_buttons()
+	main.tile_panel.update_buttons()
 
 	# The journal: a corner button of its own once a board has been read, listing the same postings
 	# away from the town, with the lands the monster lives on.
@@ -779,7 +782,7 @@ func _test_entering() -> bool:
 	if claim_at != null:
 		claim_at.pressed.emit()
 	await process_frame
-	_check(main.map.selected_cell == town and main._panel.visible and not main.bounty_page.visible,
+	_check(main.map.selected_cell == town and main.tile_panel.panel.visible and not main.bounty_page.visible,
 			"which puts the page away and the town's tile panel up")
 	out[BountyBoard.HAVE] = 0
 	main._on_left_page_closed()
@@ -859,7 +862,8 @@ func _test_fortune() -> bool:
 	halves.sort()
 	var every := FortuneTeller.READINGS.duplicate()
 	every.sort()
-	_check(halves == every, "every spell is a reading, a great spell, the way out or the banishing, and never two (%s)" % [halves])
+	_check(halves == every,
+			"every spell is a reading, a great spell, the way out or the banishing, and never two (%s)" % [halves])
 
 	# How near the cave feels: a band warmer at each of `WARMTH_STEPS`, coldest past the first of them.
 	var reaches: Array = FortuneTeller.WARMTH_STEPS
@@ -901,7 +905,8 @@ func _test_fortune() -> bool:
 	_check(FortuneTeller.dropping(hunted, told) == hunted and FortuneTeller.banishes(told) == 0,
 			"nothing is banished until she is paid")
 	FortuneTeller.banish(told, hunted[0])
-	_check(FortuneTeller.dropping(hunted, told) == hunted.slice(1), "a banished unique is out of the drops and the rest are not")
+	_check(FortuneTeller.dropping(hunted, told) == hunted.slice(1),
+			"a banished unique is out of the drops and the rest are not")
 	_check(not FortuneTeller.why_not_banish(hunted[0], hunted, told).is_empty(), "and is not banished twice")
 	FortuneTeller.banish(told, hunted[1])
 	_check(not FortuneTeller.why_not_banish(hunted[2], hunted, told).is_empty(),
@@ -1197,7 +1202,8 @@ func _test_fortune_page() -> bool:
 	await process_frame
 	_check(_deep_button(page._rows, "Banish").disabled
 			and _deep_button(page._rows, "Banish").tooltip_text == "You need at least %d uniques in the drop pool"
-			% FortuneTeller.BANISH_LEAVES, "at her floor the button says why (%s)" % _deep_button(page._rows, "Banish").tooltip_text)
+			% FortuneTeller.BANISH_LEAVES,
+			"at her floor the button says why (%s)" % _deep_button(page._rows, "Banish").tooltip_text)
 	main.inventory.fortunes.erase(FortuneTeller.BANISHED)
 	page._on_banish_picked(unlocked[0])
 	main.inventory.gold = 1.0
@@ -1210,7 +1216,8 @@ func _test_fortune_page() -> bool:
 	_check(arrow.tooltip_text.is_empty(), "the arrow back wears no tooltip")
 	arrow.pressed.emit()
 	await process_frame
-	_check(not page._banishing and _spell(main, FortuneTeller.ROADS) != null, "and the arrow is the way back to her spells")
+	_check(not page._banishing and _spell(main, FortuneTeller.ROADS) != null,
+			"and the arrow is the way back to her spells")
 
 	# The way out: on her list once a wall is down, a question first, then the black screen where one
 	# piece is kept and the wall's orb is spent, and then everything but the heirlooms and what the
@@ -1332,7 +1339,8 @@ func _test_fortune_page() -> bool:
 	_check(after.kills == 321 and after.first_sword_taken and "first_town" in after.tips,
 			"and so does what the player knows, so no helping hand is dealt twice")
 	_check(after.walls_credited == 0, "the new world's walls have paid nothing yet")
-	_check(after.curses == [Curses.NO_REST, Curses.THICK_FOG, Curses.LONG_WINTER], "the new world is under what was chosen (%s)" % [after.curses])
+	_check(after.curses == [Curses.NO_REST, Curses.THICK_FOG, Curses.LONG_WINTER],
+			"the new world is under what was chosen (%s)" % [after.curses])
 	_check(after.total() == 1 and after.items[0].type == LootTable.BROKEN_TORCH, "and the fog's torch is in its bag")
 	# The scene would have been loaded again; here it is only told it may not write the old world back.
 	main.queue_free()

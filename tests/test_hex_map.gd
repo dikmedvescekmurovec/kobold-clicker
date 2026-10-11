@@ -46,7 +46,8 @@ func _test_cell_scatter(map: HexMap) -> bool:
 					IceOverlay._roll(cell, 2) % IceOverlay.BAND_VERSIONS])
 	map.clear_map()
 	var digest := ";".join(drawn).sha256_text()
-	_check(digest == "7124c7d4aa6f02ea619aaf311dd2833f7c150e62aedd876e22ffab649760dbcf", "the rubble, the band and the snow's accents lie where they lay (%s)" % digest)
+	_check(digest == "7124c7d4aa6f02ea619aaf311dd2833f7c150e62aedd876e22ffab649760dbcf",
+			"the rubble, the band and the snow's accents lie where they lay (%s)" % digest)
 	return true
 
 
@@ -58,7 +59,8 @@ func _test_vocabularies(tileset: HexTileset) -> bool:
 	var adjacent := SheetMeta.env_adjacency().keys()
 	envs.sort()
 	adjacent.sort()
-	_check(envs == adjacent, "the sheet's tiles and its adjacency table name the same environments (%s, %s)" % [envs, adjacent])
+	_check(envs == adjacent,
+			"the sheet's tiles and its adjacency table name the same environments (%s, %s)" % [envs, adjacent])
 	for tier: String in TownWorld.TIER_NAMES:
 		_check(TileNames.TOWN_FEATURES.has(tier), "a %s settlement has words to name it with" % tier)
 	for env: String in envs:
@@ -162,12 +164,14 @@ func _test_geometry(map: HexMap) -> bool:
 			var neighbor := HexGrid.neighbor(cell, edge)
 			_check(layer.map_to_local(neighbor) - center == EDGE_OFFSETS[edge],
 					"edge %d of %s points at the right neighbor" % [edge, cell])
-			_check(layer.get_neighbor_cell(cell, _godot_neighbor(edge)) == neighbor, "HexGrid matches Godot for edge %d of %s" % [edge, cell])
+			_check(layer.get_neighbor_cell(cell, _godot_neighbor(edge)) == neighbor,
+					"HexGrid matches Godot for edge %d of %s" % [edge, cell])
 		# Just inside and just outside the NE slanted edge: midpoint (14, -24), outward normal along (16, -28).
 		var edge_mid := center + Vector2(14, -24)
 		var normal := Vector2(16, -28).normalized() * 2
 		_check(map.cell_at(edge_mid - normal) == cell, "point inside NE edge of %s" % [cell])
-		_check(map.cell_at(edge_mid + normal) == HexGrid.neighbor(cell, HexGrid.Edge.NE), "point outside NE edge of %s" % [cell])
+		_check(map.cell_at(edge_mid + normal) == HexGrid.neighbor(cell, HexGrid.Edge.NE),
+				"point outside NE edge of %s" % [cell])
 	return true
 
 
@@ -193,10 +197,12 @@ func _test_roads(tileset: HexTileset) -> bool:
 func _test_blend_lookups(tileset: HexTileset) -> bool:
 	_check(tileset._blend_names.size() == 315, "all 315 blend tiles indexed")
 	_check(tileset.blend_name("forest", [HexGrid.Edge.E, HexGrid.Edge.SE]) == "blend_forest_E_SE", "blend name from edges")
-	_check(tileset.blend_name("forest", [HexGrid.Edge.SE, HexGrid.Edge.E]) == "blend_forest_E_SE", "blend edge order ignored")
+	_check(tileset.blend_name("forest", [HexGrid.Edge.SE, HexGrid.Edge.E]) == "blend_forest_E_SE",
+			"blend edge order ignored")
 	_check(tileset.blend_name("dirt", [HexGrid.Edge.E]) == "", "dirt has no overlays")
 	_check(tileset.env_rank("dirt") == 0 and tileset.env_rank("mountains") == 5, "blend priority ranks")
-	_check(not tileset.can_border("ice", "desert") and tileset.can_border("ice", "mountains") and tileset.can_border("desert", "desert"),
+	_check(not tileset.can_border("ice", "desert") and tileset.can_border("ice", "mountains")
+			and tileset.can_border("desert", "desert"),
 			"adjacency from the JSON")
 
 	var hex_pixels := _count(tileset.opaque_mask("env_grass_v1"))
@@ -214,7 +220,8 @@ func _test_map_api(map: HexMap) -> bool:
 	map.set_ground(cell, "town_ice_fortress")
 	map.set_road(cell, "road_snow_x6")
 	var info := map.get_tile_info(cell)
-	_check(info["name"] == "town_ice_fortress" and info["group"] == "towns" and info["env"] == "ice" and info["kind"] == "fortress",
+	_check(info["name"] == "town_ice_fortress" and info["group"] == "towns" and info["env"] == "ice"
+			and info["kind"] == "fortress",
 			"ground info")
 	_check(info["road"] == "road_snow_x6", "road info")
 	_check(info["blends"].is_empty() and info["environments"] == {"ice": 1.0}, "lone town: no blends, all ice")
@@ -239,8 +246,10 @@ func _test_blends_on_map(map: HexMap) -> bool:
 	map.set_ground(center, "env_dirt_v1")
 	map.set_ground(east, "env_grass_v1")
 	map.set_ground(west, "env_forest_v1")
-	_check(_names(map.blends_at(center)) == "blend_grass_E,blend_forest_W", "dirt gets grass then forest overlays (got %s)" % _names(map.blends_at(center)))
-	_check(map.blends_at(east).is_empty() and map.blends_at(west).is_empty(), "higher-priority neighbors get nothing from dirt")
+	_check(_names(map.blends_at(center)) == "blend_grass_E,blend_forest_W",
+			"dirt gets grass then forest overlays (got %s)" % _names(map.blends_at(center)))
+	_check(map.blends_at(east).is_empty() and map.blends_at(west).is_empty(),
+			"higher-priority neighbors get nothing from dirt")
 	_check(map.env_weights(east) == {"grass": 1.0}, "a tile without overlays is all its own environment")
 
 	var weights := map.env_weights(center)
@@ -254,7 +263,8 @@ func _test_blends_on_map(map: HexMap) -> bool:
 	_check(_names(map.blends_at(center)) == "blend_grass_E", "replacing the forest removes its overlay")
 	var hex_pixels := _count(tileset.opaque_mask("env_dirt_v1"))
 	var expected_grass := float(_count(tileset.opaque_mask("blend_grass_E"))) / hex_pixels
-	_check(absf(map.env_weights(center).get("grass", 0.0) - expected_grass) < 0.000001, "single overlay weight is its mask share")
+	_check(absf(map.env_weights(center).get("grass", 0.0) - expected_grass) < 0.000001,
+			"single overlay weight is its mask share")
 
 	# A town never receives overlays, but its environment still spreads.
 	map.set_ground(east, "town_forest_medium")
@@ -263,8 +273,10 @@ func _test_blends_on_map(map: HexMap) -> bool:
 	_check(_names(map.blends_at(center)) == "blend_forest_E", "town's environment spreads onto its dirt neighbor")
 
 	map.clear_map()
-	_check(map.blend_layers.values().all(func(layer: TileMapLayer) -> bool: return layer.get_used_cells().is_empty()), "clear_map empties blend layers")
-	_check(map.blend_layers.keys() == Array(tileset.blend_priority.slice(1)), "one blend layer per spreading environment, in priority order")
+	_check(map.blend_layers.values().all(
+			func(layer: TileMapLayer) -> bool: return layer.get_used_cells().is_empty()), "clear_map empties blend layers")
+	_check(map.blend_layers.keys() == Array(tileset.blend_priority.slice(1)),
+			"one blend layer per spreading environment, in priority order")
 	return true
 
 

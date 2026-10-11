@@ -1,63 +1,38 @@
 class_name SkillTreeView
 extends Control
-## The player's skill tree, drawn round its root the way the user sketched it (2026-10-08): the root in
-## the middle, its branch going straight down (three, down, up-left and up-right, until the root had one
-## slot), and every stone's connectors fanning out across the wedge of the circle its branch is given. A ring a tier, each wider than the
-## last and pushed out further wherever its squares would touch.
-##
-## A stone is its base's small disc, no numeral, and a capstone its badge (`SkillTree.node_icon`, the
-## user's, 2026-10-09), round the user's grey stone as the root; the slots a stone's connectors leave
-## open are that grey stone small. A stone is still an item square (`ItemSlot.bare`), so the card under
-## the cursor is the bag's. The squares take no mouse, for the bag's reason; this Control hears the
-## presses and says which slot (`slot_pressed`). Two looks: the skills page's (`ranked`), a light behind
-## whatever a point can go into, the points on the corner of a stone that holds more than one, ink lines
-## into the stones learned and the stones with none faded; and the black screen's, where an empty slot
-## wears the tier its depth asks and a stone in the hand rings the slots it may go in and fades the rest.
-## Faded, never darkened, so a stone keeps its base's colour (the review of 2026-10-09). The skills
-## page's light is the user's (2026-10-10, in place of the gold ring it had): grey behind the root, its
-## base's colour behind a stone (`_light`, `glow_of`), the root's breathing until the player's first
-## point ever is spent (`teaching`, the tree's tutorial) -- and a point going in flashes its node's card
-## in the same colour (`SkillsPage.learned`), so the root has a card of its own too (`_write_root`), not
-## a tooltip.
-##
-## Everything stands on `_canvas`, which `fit` scales down by whole window pixels when the tree is
-## bigger than the room it has, so the squares stay as sharp as the rest of the game -- but for the words
-## on the corners, which stand over it in `_marks` at the page's own size whatever the tree is drawn at. The player zooms it
-## the same whole steps (the user's, 2026-10-09): the wheel and a trackpad's pinch about the point under
-## the cursor, as the map does, and `zoom_buttons` about the middle; a tree bigger than its box is
-## dragged about, so a press on a square counts when it lets go without having moved.
+## The skill tree round its root, in two looks: the skills page's (`ranked`: lights, points, ink lines)
+## and the black screen's (rings and tiers for the stone in the hand). The squares take no mouse, for the
+## bag's reason; this Control hears the presses (`slot_pressed`). Everything stands on `_canvas`, scaled
+## in whole window pixels (`fit`, `zoom_by`), but the corner words, which stand in `_marks`.
 
-## A press on a stone or an empty slot, by path (`SkillTree`); never the root.
+## A press on a slot, by path (`SkillTree`); the root's "" only on the skills page.
 signal slot_pressed(path: String)
 ## The player zoomed: the page gives the tree its new room (`fit` keeps `zoom`).
 signal zoomed
 ## A press held on the skills page has let go after pressing at least once (`repeating`).
 signal hold_ended
 
-## The most of the circle a branch off the root is given: the third each had when the root had three
-## slots, so a lone branch hangs below the root and none of its lines cross it.
+## The most of the circle a branch off the root is given, so no branch's lines cross the root.
 const BRANCH_WEDGE := TAU / 3.0
 ## The air left between any two slots, in the tree's pixels.
 const GAP := 10
-## The line between a stone and what hangs off it.
+## How thick the line between a stone and what hangs off it is.
 const LINE := 2
-## How far a square's light, its ring and its count reach past it, kept clear round the edge (`TEACH_REACH`:
-## the scroll the tree stands in would cut the outermost lights off).
+## Kept clear round the tree for what reaches past a square (light, ring, count). `TEACH_REACH` at the
+## least: the scroll the tree stands in would cut the outermost lights off.
 const MARGIN := 8
 ## A slot standing back: an empty one, and on the black screen whatever the stone in the hand cannot go
-## in, the root too. The lines stop at a slot's edge, so none shows through.
+## in, the root too.
 const FAINT := Color(1, 1, 1, 0.45)
-## A stone on the skills page holding no point yet: back, but less than an empty slot, so its base's
-## colour still tells it from one at the smallest the tree is drawn.
+## A stone on the skills page holding no point: back, but less than an empty slot, so its base's colour
+## still tells it from one at the smallest the tree is drawn.
 const UNLEARNED := Color(1, 1, 1, 0.7)
-## The ring round a slot the stone in the hand can go into on the black screen, empty or taking the place
-## of the stone there, drawn a pixel clear of it. The skills page wore it round whatever a point could go
-## into until 2026-10-10, when the user took it off for the light alone.
+## The black screen's ring round a slot the stone in the hand can go into, `RING_GAP` clear of it. Not
+## the skills page's: the user took it off there for the light alone (2026-10-10).
 const RING := Palette.GOLD
 const RING_GAP := 1.5
-## The tier a depth asks of the stone put there, on each empty slot the stone in the hand is too shallow
-## for: the numerals the bag's carved stones wear, so a "II" in the hand reads against the "III" it cannot
-## take. Never on a placed stone, where it would only crowd the tree.
+## The tier a depth asks, on each empty slot too deep for the stone in the hand: the bag's carved
+## stones' numerals. Never on a placed stone, where it would only crowd the tree.
 const NUMERALS := ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"]
 ## The closest zoom, in window pixels a tree pixel for every step of `ui_scale`: 2 is twice the page's own.
 const ZOOM_MOST := 2
@@ -68,19 +43,17 @@ const PINCH_STEP := 1.3
 const HOLD_DELAY := 0.4
 const HOLD_SPEEDUP := 0.85
 const HOLD_FASTEST := 0.03
-## The light behind a slot a point can go into on the skills page, and behind its card as one goes in
-## (`glow_of`): a stone's base's colour, and grey for the root -- white was not seen on the cream (the
-## user's, 2026-10-10). ENDESGA 64's middle grey: the paler `STONE_LT` was as hard to see as the white,
-## and `SLATE` read as a shadow.
+## The light behind a slot a point can go into, and behind its card as one goes in (`glow_of`): a
+## stone's base's colour, grey for the root. ENDESGA 64's middle grey: white and the paler `STONE_LT`
+## were not seen on the cream, and `SLATE` read as a shadow (the user's, 2026-10-10).
 const GLOWS := {"strength": Palette.BRICK_LT, "dexterity": Palette.LEAF_LT, "intelligence": Palette.ICE}
 const ROOT_GLOW := Color("858585")
 const NODE_GLOW := preload("res://Scenes/UI/node_glow.gdshader")
-## How solid a slot's light is against its edge, and how far past the slot it falls away, in tree pixels:
-## a small mark, only to tell what a point can go into from what it cannot (the user's, 2026-10-10).
+## How solid a slot's light is against its edge, and how far past the slot it falls away, in tree
+## pixels: a small mark (the user's, 2026-10-10).
 const GLOW_ALPHA := 0.7
 const GLOW_REACH := 5.0
-## The root's light while it shows a new player where their first point goes (`teaching`): how solid, how
-## far, and how much of it breathes away and back.
+## The root's light while `teaching`: how solid, how far, and how much of it breathes away and back.
 const TEACH_ALPHA := 0.9
 const TEACH_REACH := 8.0
 const TEACH_PULSE := 0.7
@@ -90,8 +63,8 @@ var zoom := 0
 
 ## The slots drawn, path -> Control: an `ItemSlot` for a stone and the root, the bare mark for an empty slot.
 var squares := {}
-## Whether the root's light is the tutorial's, strong and breathing: the skills page's, until the
-## player's first point ever is spent (`Inventory.FIRST_POINT`). Set before `fill`.
+## Whether the root's light is the tutorial's: the skills page's, until the player's first point ever
+## is spent (`Inventory.FIRST_POINT`). Set before `fill`.
 var teaching := false
 ## The skills page's lights, path -> Polygon2D, one behind the root and each stone, shown by `fill`.
 var _lights := {}
@@ -100,7 +73,7 @@ var _canvas: Control
 var _marks: Control
 var _skills: Skills
 var _ranked := true
-## The skill points to spend, which decide where the skills page's lights go.
+## The skill points to spend.
 var _points := 0
 ## The paths something can go into: lit on the skills page (`_lights`), ringed on the black screen (`RING`).
 var _rings: Array[String] = []
@@ -111,8 +84,8 @@ var _shape := []
 ## Where the origin stands on the canvas.
 var _origin := Vector2.ZERO
 var _ui_scale := 1.0
-## A press: where it went down, and how far it has moved since (a drag past `BagPage.DRAG_THRESHOLD`
-## pans, and lets go as no press at all).
+## A press: where it went down, and how far it has moved since (past `_slop` it drags the scroll, and
+## lets go as no press at all).
 var _press_at := Vector2.INF
 var _dragged := 0.0
 ## A trackpad's pinch gathered since its last step.
@@ -147,8 +120,8 @@ func fill(skills: Skills, ranked := true, held: Item = null, points := 0) -> voi
 	_points = points
 	UITheme.clear(_marks)
 	_rings = []
-	# A point spent moves neither the root's slots nor what stands in them, so it only re-dresses the
-	# squares: building hundreds again on every point of a held press is what made a grown tree crawl.
+	# Built only when the root's slots or the stones change; a point spent only re-dresses the squares.
+	# Building hundreds again on every point of a held press made a grown tree crawl.
 	var shape := [SkillTree.root_slots, skills.stones.duplicate()]
 	if shape != _shape:
 		_shape = shape
@@ -157,14 +130,12 @@ func fill(skills: Skills, ranked := true, held: Item = null, points := 0) -> voi
 		var square: Control = squares[path]
 		square.modulate = Color.WHITE
 		_dress(square, path, skills.stones.get(path), held)
-	# The skills page's lights, up behind whatever a point can go into. The root's is the tree's tutorial:
-	# strong and breathing until a new player's first point is spent (still where nothing is to move), and
-	# the same small mark as any other after.
 	for path: String in _lights:
 		(_lights[path] as Polygon2D).hide()
 	for path: String in _rings:
 		if _lights.has(path):
 			(_lights[path] as Polygon2D).show()
+	# The root's light is the tutorial's while `teaching`: stronger, and breathing but at `Anim.NONE`.
 	if _lights.has(""):
 		var glow := (_lights[""] as Polygon2D).material as ShaderMaterial
 		glow.set_shader_parameter("colour", Color(ROOT_GLOW, TEACH_ALPHA if teaching else GLOW_ALPHA))
@@ -215,11 +186,10 @@ func _square(path: String) -> Control:
 	return square
 
 
-## A slot's look. The black screen's: with a stone in the hand, a ring where it may go and everything
-## else faint, the empty slots too deep for it wearing the tier they ask; with none, the empty slots faint. The skills page's: a light
-## where a point may go, the root included (`_rings`, lit by `fill`), an empty slot faint and a stone holding no point less so,
-## and on a corner the points in it -- a stone's only where it can hold more than one, the root's once
-## it holds any.
+## A slot's look, and into `_rings` where something can go. The black screen's: with a stone in the
+## hand everything it cannot go in faint, the empty slots too deep for it wearing their tier; with none,
+## the empty slots faint. The skills page's: a count on a corner only where a stone can hold more than
+## one point (the fade says a 1/1), the root's once it holds any.
 func _dress(square: Control, path: String, stone: Item, held: Item) -> void:
 	var empty := stone == null and not path.is_empty()
 	if not _ranked:
@@ -249,17 +219,17 @@ func _dress(square: Control, path: String, stone: Item, held: Item) -> void:
 		_mark_corner(path, "%d/%d" % [rank, most])
 
 
-## The light behind the slot at `path`, hidden until `fill` says a point can go in: `node_glow.gdshader`
-## in the slot's colour, hugging a disc's art (a pixel inside its square) or a capstone's badge, and
-## drawn behind the lines and the squares.
+## The light behind the slot at `path`, hidden until `fill` says a point can go in: hugging a disc's art
+## (a pixel inside its square) or a capstone's badge, and drawn behind the lines and the squares.
 func _light(path: String, square: Control) -> Polygon2D:
-	var inset := 0.0 if _is_badge(path) else 1.0
+	var badge := _is_badge(path, _skills.stones)
+	var inset := 0.0 if badge else 1.0
 	var card := square.custom_minimum_size - Vector2.ONE * inset * 2.0
 	var glow := ShaderMaterial.new()
 	glow.shader = NODE_GLOW
 	glow.set_shader_parameter("colour", Color(glow_of(_skills.stones.get(path)), GLOW_ALPHA))
 	glow.set_shader_parameter("box", card)
-	glow.set_shader_parameter("corner", 0.0 if _is_badge(path) else card.x / 2.0)
+	glow.set_shader_parameter("corner", 0.0 if badge else card.x / 2.0)
 	glow.set_shader_parameter("reach", GLOW_REACH)
 	var light := Polygon2D.new()
 	# As far as the strongest light gets, the root's while it teaches.
@@ -273,8 +243,7 @@ func _light(path: String, square: Control) -> Polygon2D:
 	return light
 
 
-## The colour a slot is lit in, and its card as a point goes into it: grey for the root, which is no
-## stone, and a stone's base's.
+## The colour a slot is lit in, and its card as a point goes into it; null is the root, which is no stone.
 static func glow_of(stone: Item) -> Color:
 	return ROOT_GLOW if stone == null else GLOWS[SkillTree.base_of(stone)]
 
@@ -300,8 +269,7 @@ func _place_marks() -> void:
 		holder.size = square.get_combined_minimum_size() * _canvas.scale
 
 
-## What stands at `path`: the root's grey stone, a placed stone's node (`SkillTree.node_icon`), or the
-## grey stone small where nothing is placed yet.
+## The art of the slot at `path`: the root's, a placed stone's node, or an empty slot's.
 static func _mark(path: String, stones: Dictionary) -> Texture2D:
 	if path.is_empty():
 		return SkillTree.icon("root")
@@ -313,13 +281,12 @@ static func _side(path: String, stones: Dictionary) -> float:
 	return _mark(path, stones).get_width()
 
 
-## Every slot to draw -- the root's, and under each stone its connectors -- placed round the root:
-## path -> its centre. A slot's children split its wedge by the slots at the ends of what hangs off each
-## (`leaves`), so a long arm takes the room it needs and a deep tree grows as wide as its ends, not
-## three times wider a ring; the root's have a share of the circle each, `BRANCH_WEDGE` at the most, the
-## first straight down. Each ring stands a gap past the last, and further where two slots side by side on
-## it would come within a gap, each as far round as it is drawn (`_room`). Worked out, never searched
-## for: a tree of hundreds of stones took seconds pushed out two pixels at a time (2026-10-09).
+## Every slot to draw, path -> its centre, the root's at the origin. A slot's children split its wedge
+## by the slots at the ends of what hangs off each (`leaves`), so a long arm takes the room it needs; the
+## root's have `BRANCH_WEDGE` each at the most, the first straight down. Each ring stands a gap past the
+## last, and further where two slots side by side on it would come within a gap (`_room`). Worked out,
+## never searched for: a tree of hundreds of stones took seconds pushed out two pixels at a time
+## (2026-10-09).
 static func _layout(stones: Dictionary) -> Dictionary:
 	# Every slot, shallowest first, which is round each ring in turn.
 	var order := [""]
@@ -380,13 +347,13 @@ static func _layout(stones: Dictionary) -> Dictionary:
 ## its corners, so no two squares' boxes meet however they line up.
 static func _room(path: String, stones: Dictionary) -> float:
 	var half := _side(path, stones) / 2.0
-	return half * sqrt(2.0) if stones.has(path) and not (stones[path] as Item).capstone.is_empty() else half
+	return half * sqrt(2.0) if _is_badge(path, stones) else half
 
 
-## Under the squares: the lines, each stopping at the edges of the two slots it joins so a faint slot
-## shows none through it -- on the skills page ink into a stone holding a point (gold could not be seen on
-## the cream, the user's, 2026-10-09) and tan into any other,
-## on the black screen ink, and faint into an empty slot on either -- then the black screen's rings.
+## Under the squares: the lines, each stopping at the edges of the two slots it joins (`_reach`) so a
+## faint slot shows none through it -- on the skills page ink into a stone holding a point (gold could
+## not be seen on the cream, the user's, 2026-10-09) and tan into any other, on the black screen ink,
+## and faint into an empty slot on either -- then the black screen's rings.
 func _draw_tree() -> void:
 	for path: String in _centres:
 		if path.is_empty():
@@ -405,7 +372,7 @@ func _draw_tree() -> void:
 		return
 	for path: String in _rings:
 		var half := _side(path, _skills.stones) / 2.0 + RING_GAP
-		if _is_badge(path):
+		if _is_badge(path, _skills.stones):
 			_canvas.draw_rect(Rect2(_at(path) - Vector2.ONE * half, Vector2.ONE * half * 2.0), RING, false, 1.0)
 		else:
 			_canvas.draw_arc(_at(path), half, 0.0, TAU, 48, RING, 1.0)
@@ -421,11 +388,12 @@ func _at(path: String) -> Vector2:
 ## leaves clear, or a capstone's badge, which is square.
 func _reach(path: String, along: Vector2) -> float:
 	var half := _side(path, _skills.stones) / 2.0
-	return half / maxf(absf(along.x), absf(along.y)) if _is_badge(path) else half - 1.0
+	return half / maxf(absf(along.x), absf(along.y)) if _is_badge(path, _skills.stones) else half - 1.0
 
 
-func _is_badge(path: String) -> bool:
-	return _skills.stones.has(path) and not (_skills.stones[path] as Item).capstone.is_empty()
+## Whether a capstone's square badge stands at `path`, not a disc.
+static func _is_badge(path: String, stones: Dictionary) -> bool:
+	return stones.has(path) and not (stones[path] as Item).capstone.is_empty()
 
 
 ## Scales the tree into `room` (the tree's parent's pixels, which are `ui_scale` window pixels each):
@@ -492,7 +460,6 @@ func _scaled(by: float) -> void:
 	_centre()
 
 
-## In the middle of whatever box it is given, across and down, with the corners' words over it.
 func _centre() -> void:
 	_canvas.position = ((size - custom_minimum_size).max(Vector2.ZERO) / 2.0).floor()
 	_place_marks()
@@ -506,7 +473,8 @@ func _gui_input(event: InputEvent) -> void:
 			zoom_by(int(signf(_magnified - 1.0)), event.position)
 			_magnified = 1.0
 		accept_event()
-	elif event is InputEventMouseButton and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+	elif event is InputEventMouseButton \
+			and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
 		if event.pressed:
 			zoom_by(1 if event.button_index == MOUSE_BUTTON_WHEEL_UP else -1, event.position)
 		accept_event()

@@ -5,20 +5,22 @@ extends RefCounted
 
 ## Hex edges, in the order used by the sprite generator's JSON.
 enum Edge { E, SE, SW, W, NW, NE }
-## How many edges a hex has, so loops over them don't spell out the 6.
 const EDGES := 6
 
 ## Offset to the neighbor across each Edge, for even and odd rows.
-const _EVEN_ROW_OFFSETS := [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 1), Vector2i(-1, 0), Vector2i(-1, -1), Vector2i(0, -1)]
-const _ODD_ROW_OFFSETS := [Vector2i(1, 0), Vector2i(1, 1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1), Vector2i(1, -1)]
+const _EVEN_ROW_OFFSETS := [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 1), Vector2i(-1, 0), Vector2i(-1, -1),
+		Vector2i(0, -1)]
+const _ODD_ROW_OFFSETS := [Vector2i(1, 0), Vector2i(1, 1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1),
+		Vector2i(1, -1)]
 
 
 ## Corners of a pointy-top tile around its middle, clockwise from the top. The slanted edges span the top and
 ## bottom quarter of the tile.
 static func corners(tile_size: Vector2) -> PackedVector2Array:
 	return PackedVector2Array([
-		Vector2(0, -tile_size.y / 2), Vector2(tile_size.x / 2, -tile_size.y / 4), Vector2(tile_size.x / 2, tile_size.y / 4),
-		Vector2(0, tile_size.y / 2), Vector2(-tile_size.x / 2, tile_size.y / 4), Vector2(-tile_size.x / 2, -tile_size.y / 4),
+		Vector2(0, -tile_size.y / 2), Vector2(tile_size.x / 2, -tile_size.y / 4),
+		Vector2(tile_size.x / 2, tile_size.y / 4), Vector2(0, tile_size.y / 2),
+		Vector2(-tile_size.x / 2, tile_size.y / 4), Vector2(-tile_size.x / 2, -tile_size.y / 4),
 	])
 
 

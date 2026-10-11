@@ -1,43 +1,32 @@
 class_name DropsView
 extends VBoxContainer
-## What a fight has turned up, as a grid of squares you can open.
-##
-## Two places want exactly this: the panel at the end of a fight, and the loot popup the counter in
-## the HUD opens mid-run. They are the same thing -- squares in the order they fell, one of which
-## can be clicked to read what it actually is -- so they are one node built twice rather than one
-## layout written twice, which is the reason ItemSlot and ItemDetails exist at all.
-##
-## It draws with the same squares the bag does (ItemSlot) and the same stat block (ItemDetails), so
-## a rare piece looks and reads the same in every place the game shows it.
-##
-## The grid and the details swap rather than stack, the way `BagPage`'s `_scroll` and `_detail` swap on
-## the bag: a piece carrying six modifiers is taller than the verdict it would push down.
+## What a fight has turned up, as the bag's own squares (`ItemSlot`) in the order they fell, one of
+## which opens into the bag's own stat block (`ItemDetails`). The verdict panel and the loot popup are
+## each one of these. The grid and the details swap, never stack: a piece carrying six modifiers is
+## taller than the verdict it would push down.
 
-## How many drops stand in a row. How big a square is belongs to ItemSlot, not here.
 const PER_ROW := 4
 ## How wide a line of an item's details may run before it wraps, in panel pixels.
 const INSPECT_WIDTH := 150.0
-## The gap between squares. The same seven-to-one proportion the bag's grid keeps.
+## The same seven-to-one proportion the bag's grid keeps.
 const GAP := ItemSlot.SIDE / 7
-## How many rows of squares show before the rest scroll by the wheel. A half row, so the cut-off
-## squares say there is more; sized so the verdict still fits a 648 px window at `ui_scale` 2.
+## How many rows show before the rest scroll by the wheel. A half row, so the cut-off squares say there
+## is more; sized so the verdict still fits a 648 px window at `ui_scale` 2.
 const MAX_ROWS := 3.5
 ## The fewest rows a short window cuts the box to (`fit_rows`).
 const FEWEST_ROWS := 1.5
 
-## How many rows of squares show before the rest scroll: `MAX_ROWS`, or fewer in a short window.
+## `MAX_ROWS`, or fewer in a short window.
 var most_rows := MAX_ROWS
 
-## Fired whenever the view changes height -- a drop opened or closed, or the list refilled -- so an
-## owner that centres this panel knows to measure it again.
+## The view changed height -- a drop opened or closed, or the list refilled -- so an owner that centres
+## this panel measures it again.
 signal resized_contents
-## The open drop is to be thrown away. The view does not touch its own list: whoever filled it owns
-## what the run is carrying, and two places editing that is how the counter and the pouch come to
-## disagree. The owner removes it and fills again.
+## The open drop is to be thrown away. The view never edits its own list: whoever filled it owns what
+## the run is carrying, removes the piece and fills again.
 signal discarded(item: Item)
 
-## Whether an open drop may be thrown away from here. Off by default, so a view that is only a
-## record of what happened stays one.
+## Whether an open drop may be thrown away from here. Off, a view is only a record of what happened.
 var discardable := false
 
 var _items: Array[Item] = []
@@ -55,14 +44,14 @@ var _discard: Button
 func _init() -> void:
 	add_theme_constant_override("separation", 8)
 
-	# A fight that turned up nothing says so in a plain line, with no ground under it: in the framed
-	# ground, the words at half strength read as a dead button.
+	# No ground under "Nothing dropped": in the framed ground the words at half strength read as a dead
+	# button.
 	_none = UITheme.label("Nothing dropped", Palette.TEXT_SOFT, true)
 	_none.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_none.hide()
 	add_child(_none)
 
-	# The squares, on the bag's own light panel, so a find stands on the ground it will stand on once it is kept.
+	# The squares, on the bag's own light panel.
 	_ground = PanelContainer.new()
 	_ground.theme_type_variation = "TextPanel"
 	add_child(_ground)
@@ -82,26 +71,25 @@ func _init() -> void:
 	headroom.add_theme_constant_override("margin_top", ItemRarity.FRAME_HEAD)
 	_scroll.add_child(headroom)
 	headroom.add_child(_grid)
-	# As wide as the box, so a row of one stands in the middle of it rather than against its left edge:
-	# a scroll child that does not ask to expand is only as wide as it has to be.
+	# A scroll child that does not ask to expand is only as wide as it has to be, and a row of one
+	# would stand against the box's left edge.
 	headroom.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	# The orbs the fight turned up, under the squares as the tray is under the bag. A record only:
-	# nothing here an orb can be pressed to do, so it wears the arrow, and its hover is what it does.
+	# The orbs, under the squares as the tray is under the bag. A record only: there is nothing here an
+	# orb can be pressed to do, so it wears the arrow and its hover card is all it does.
 	_orbs = HBoxContainer.new()
 	_orbs.add_theme_constant_override("separation", GAP)
 	_orbs.alignment = BoxContainer.ALIGNMENT_CENTER
 	found.add_child(_orbs)
 	# The bag's orb card, for the orb under the cursor. Top level, so no container lays it out and it
-	# stands over the panel and over everything the fight throws, at the scale the view is drawn at.
+	# stands over the panel and everything the fight throws; `_place_orb_card` scales it by hand.
 	_orb_card = OrbCard.new()
 	_orb_card.top_level = true
 	_orb_card.z_index = RenderingServer.CANVAS_ITEM_Z_MAX
 	_orb_card.hide()
 	add_child(_orb_card)
 
-	# One drop, looked at properly. On the white panel, because that is the ground the rarity
-	# colours were picked to be read against.
+	# One drop's details, on the white panel: the ground the rarity colours were picked to be read against.
 	_inspect = PanelContainer.new()
 	_inspect.theme_type_variation = "TextPanel"
 	_inspect.hide()
@@ -113,7 +101,7 @@ func _init() -> void:
 	_inspect_rows.add_theme_constant_override("separation", 2)
 	rows.add_child(_inspect_rows)
 	# One row, the arrow first and Discard taking the rest, as under a piece open in the bag
-	# (`BagPage._action_row`) -- and so this arrow never stacks over the verdict's own.
+	# (`BagPage._action_row`), so this arrow never stacks over the verdict's own.
 	var actions := HBoxContainer.new()
 	rows.add_child(actions)
 	var done := UITheme.back_button("Back to what was found")
@@ -128,10 +116,8 @@ func _init() -> void:
 	actions.add_child(_discard)
 
 
-## Draws `items` as squares, in the order they fell, and closes whatever was open. Nothing is
-## counted together: every drop rolled its own rarity and its own modifiers, so no two are one thing.
-## `orbs` is kind -> count, drawn as a row under the squares; the verdict hands them over and the
-## mid-run popup does not.
+## Draws `items` as squares, in the order they fell, and closes whatever was open. `orbs` is kind ->
+## count, a row under the squares; the verdict hands them over and the mid-run popup does not.
 func fill(items: Array[Item], orbs := {}) -> void:
 	_items = items.duplicate()
 	_none.visible = _items.is_empty() and orbs.is_empty()
@@ -164,11 +150,15 @@ func fill(items: Array[Item], orbs := {}) -> void:
 	_fit_scroll()
 
 
+func _rows() -> int:
+	return ceili(_items.size() / float(PER_ROW))
+
+
 ## Up to `most_rows` the box does not scroll and so is as tall as the grid; past it, it is cut to
 ## `most_rows` and scrolls. Counted rather than measured: the grid has not been laid out yet.
 func _fit_scroll() -> void:
 	_scroll.scroll_vertical = 0
-	var long := ceili(_items.size() / float(PER_ROW)) > most_rows
+	var long := _rows() > most_rows
 	_scroll.vertical_scroll_mode = (ScrollContainer.SCROLL_MODE_SHOW_NEVER if long
 			else ScrollContainer.SCROLL_MODE_DISABLED)
 	_scroll.custom_minimum_size.y = (ItemRarity.FRAME_HEAD + most_rows * ItemSlot.SIDE + floorf(most_rows) * GAP
@@ -178,7 +168,7 @@ func _fit_scroll() -> void:
 ## The box `over` panel pixels too tall for the window its owner stands in: rows are given up until it
 ## fits, down to `FEWEST_ROWS`, still ending on a half row so the cut-off squares say there is more.
 func fit_rows(over: float) -> void:
-	var shown := minf(most_rows, ceili(_items.size() / float(PER_ROW)))
+	var shown := minf(most_rows, _rows())
 	var rows := floorf((shown - over / (ItemSlot.SIDE + GAP)) * 2.0) / 2.0
 	if rows == floorf(rows):
 		rows -= 0.5
@@ -186,18 +176,17 @@ func fit_rows(over: float) -> void:
 	_fit_scroll()
 
 
-## Whether one drop's details are open rather than the grid.
+## Whether one drop's details are open in the grid's place.
 func inspecting() -> bool:
 	return _inspect.visible
 
 
-## How many drops are being shown.
 func count() -> int:
 	return _items.size()
 
 
-## A square is a Panel that takes no mouse input at all -- the same rule the bag's grid keeps, and
-## for the same reason -- so which one was hit is worked out from where the click landed.
+## A square takes no mouse input at all, as on the bag's grid, so which one was hit is worked out from
+## where the click landed.
 func _on_grid_input(event: InputEvent) -> void:
 	Cursors.over_squares(_grid, event)
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed):
@@ -240,7 +229,7 @@ func pieces() -> Array:
 	return shown
 
 
-## Opens what one drop actually is, in the grid's place, or goes back to the grid with -1.
+## Opens one drop's details in the grid's place, or goes back to the grid with -1.
 func inspect(index: int) -> void:
 	if index < 0 or index >= _items.size():
 		_inspect.hide()
@@ -254,8 +243,7 @@ func inspect(index: int) -> void:
 	resized_contents.emit()
 
 
-## Says which drop is to go and shuts the block. What is actually carried is the owner's to change,
-## and it will fill this view again -- so this closes rather than waiting to be told to.
+## Says which drop is to go and shuts the block; the owner will fill this view again.
 func _on_discard_pressed() -> void:
 	var index: int = _discard.get_meta("drop_index", -1)
 	if index < 0 or index >= _items.size():

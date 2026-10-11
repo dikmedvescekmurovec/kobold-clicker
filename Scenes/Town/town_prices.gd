@@ -1,63 +1,37 @@
 class_name TownPrices
 extends RefCounted
-## What everything in a town costs, in bodies' worth of gold.
-##
-## One file, because a price the player pays and a price the player is paid have to be read against
-## each other or a town turns into a loop that prints money. Everything here is built on
-## `gold_at_level`, which is what a body on the first tile of that level band carries
-## (`Encounter.gold_at_steps` at `MapBuilder.first_step`). So every number below is "this many bodies", and the dials are the
-## multipliers rather than the gold, which means retuning the purse retunes the shops with it.
-##
-## Static and node-free like `OrbTable`, so the tests need no interface to read a price off.
+## What everything in a town costs. One file, so a price paid and a price fetched are read against each
+## other and no counter is a loop. Every price is a number of bodies times a dial below, a body being
+## `gold_at_level`: nothing here writes a figure in gold, so retuning the purse retunes the shops.
+## Why each dial stands where it does is DESIGN.md's ("Everything is priced in bodies").
 
-## What a common piece at its own level fetches, in bodies. A bag of forty pieces at the level the
-## player is fighting is worth a couple of minutes' farming, which is meant to be worth the walk and
-## never worth farming *for*: the gear is the prize and the gold is what is left of the gear you
-## already have.
+## What a common piece at its own level fetches, in bodies.
 const SELL_BODIES := 3.0
 
-## What a vendor pays against what it asks, so buying back what you sold costs five times what it
-## paid and there is no loop at one counter. It is the one dial that moves the two directions against
-## each other: down, a shelf is dearer and a bag of finds fetches less, which is both halves of
-## "selling is a side income and a shelf is an errand".
+## What a vendor pays against what it asks: the one dial that moves the two directions against each
+## other. Buying back what was sold costs five times what it paid.
 const SELL_SHARE := 0.20
 
-## What one level off the smith's hammer costs, in bodies at the piece's **own** level -- so walking
-## a piece up the map gets dearer with every step, the way the ground it is walking towards does.
-## Twenty bodies is a little more than buying a plain piece off a shelf (fifteen) and a fraction of
-## buying a good one, which is the shape it should have: an upgrade is worth doing to a piece you
-## already want, and never worth doing to one you would otherwise sell.
+## One level off the smith's hammer, and a lock, in bodies at the piece's **own** level. The lock was
+## cut tenfold from 2500 by the user (2026-09-28).
 const UPGRADE_BODIES := 20.0
-
-## And what a lock costs. Still far dearer than an upgrade: a locked modifier is the only thing in the
-## game that cannot be rolled away, so if it were cheap every piece would carry one and the orbs would
-## stop meaning anything. Cut tenfold from 2500 by the user (2026-09-28): 250 bodies is about 25
-## ordinary tile fights at any depth.
 const LOCK_BODIES := 250.0
 
-## What the commonest orb is worth, in bodies, at the town it is sold in. The rarer orbs climb off it
-## by `orb_value`, so the whole table is this one number and `OrbTable`'s own weights.
+## What the commonest orb is worth, in bodies at the town it is sold in; the rarer climb off it by
+## `orb_value`.
 const ORB_BODIES := 4.0
 
-## What clearing a town's shelves for fresh stock costs the first time, in bodies at the town's level,
-## and what every reroll this town has ever sold multiplies that by (the count is never reset). Thirty bodies is two plain
-## pieces off the shelf being thrown away; doubling is what stops a purse being stood at a counter and
-## turned into the one piece it wants -- the sixth reroll costs what thirty-two firsts do.
+## A shelf's first reroll, in bodies at the town's level, and what every reroll that shelf has ever sold
+## multiplies it by (the count is never reset).
 const REROLL_BODIES := 30.0
 const REROLL_GROWTH := 2.0
 
-## What the fortuneteller asks for a spell, in bodies at the town's level, the same every time it is
-## asked (`FortuneTeller`'s own names; a test holds the two lists together). A fight is about ten
-## bodies: the roads thirty fights, a chest six, an appraisal one and a half; the scour a hundred and
-## the road home twenty, both bought once a settlement.
-##
-## **Transcending is the one that is not at the town's level:** it is bodies on the ground just
-## behind the first wall (`transcend_steps`), the same in every town and every world -- dear to whoever has
-## only just brought that wall down, and a purse the second ring's monsters fill for anyone who stays
-## to farm them. Two hundred fights' worth there; see `DESIGN.md` for the table it was set against.
-##
-## **Banishing a unique is priced on that same ground** (the user's, 2026-10-10), and is the one that
-## climbs: `FORTUNE_GROWTH` times the last for every one paid for in this world.
+## What the fortuneteller asks for a spell, in bodies at the town's level, the same every time. The keys
+## are `FortuneTeller`'s reading names as literals: a `const` naming another class's const is where
+## Godot's cycle checker bites (`test_town` holds the two lists together).
+## **Transcending and banishing are not at the town's level** but on the ground just behind the first
+## wall (`transcend_steps`), the same in every town and world; banishing (the user's, 2026-10-10) is the
+## one that climbs, `FORTUNE_GROWTH` times the last for every one paid for in this world.
 const FORTUNE_BODIES := {
 	"roads": 300.0,
 	"treasure": 60.0,
@@ -70,17 +44,11 @@ const FORTUNE_BODIES := {
 const FORTUNE_GROWTH := 2.0
 
 ## What each rarity step multiplies a piece's price by, indexed by `ItemRarity.Rarity`'s own order:
-## common, uncommon, rare, elite, unique. A list rather than a Dictionary keyed by the enum, because a
-## `const` naming another class's enum is where Godot's cycle checker bites (see `Scenes/Items/CLAUDE.md`).
-##
-## It climbs far faster than the modifier count does, roughly two and a half times a step, because
-## what a player is paid for a rare has to feel like the find it was and because this is also what a
-## shelf charges: a common is a crafting base worth a fight, an elite off a shelf is a fortnight's
-## errand. A common is meant to be worth selling in bulk rather than one at a time.
+## common, uncommon, rare, elite, unique. A list, not a Dictionary keyed by the enum, for the cycle
+## checker's sake again (see `Scenes/Items/CLAUDE.md`).
 const RARITY_MULT := [1.0, 2.0, 5.0, 14.0, 24.0]
 
-## The largest weight in `OrbTable.ORBS`, which is the orb every other orb's price is read against.
-## Worked out once: the tray is redrawn on every kill.
+## `commonest()`, worked out once: the tray is redrawn on every kill.
 static var _commonest := 0.0
 
 
@@ -89,74 +57,69 @@ static func gold_at_level(level: int) -> float:
 	return Encounter.gold_at_steps(MapBuilder.first_step(level))
 
 
-## What a merchant pays for a piece: its own level's body worth, times its rarity, times the dial.
-## The piece's level and not the town's -- what is being bought is the piece, and carrying a deep find
-## back to the village you started at should not be worth less than selling it where you found it.
-## A broken piece fetches half: it is still worth wearing and still worth selling, and the merchant
-## knows as well as the player does that nothing can be done with it again.
+## The same at the town on `town_cell`: what an orb, a reroll and a reading are pegged to, having no
+## level of their own.
+static func gold_at_town(town_cell: Vector2i) -> float:
+	return gold_at_level(MapBuilder.level_of(town_cell))
+
+
+## A price in whole coins, never less than one.
+static func _coins(gold: float) -> float:
+	return maxf(1.0, roundf(gold))
+
+
+## What a merchant pays for a piece: its **own** level's body worth, not the town's, times its rarity,
+## times the dial. A broken piece fetches half.
 static func sell_price(item: Item) -> float:
 	if item == null:
 		return 0.0
 	var step := float(RARITY_MULT[item.rarity]) if item.rarity < RARITY_MULT.size() else 1.0
 	if item.broken:
 		step *= 0.5
-	return maxf(1.0, roundf(gold_at_level(item.level) * step * SELL_BODIES))
+	return _coins(gold_at_level(item.level) * step * SELL_BODIES)
 
 
 ## What the Rag and Bone Sack pays for a piece thrown away: `share` of what a trader would give (its
-## rank's, short of the whole, so a counter is still worth the walk). Here because every figure in gold
-## is made here.
+## rank's). Here because every figure in gold is made here.
 static func salvage_price(item: Item, share: float) -> float:
-	return maxf(1.0, roundf(sell_price(item) * share))
+	return _coins(sell_price(item) * share)
 
 
-## What a merchant asks for a piece off its own shelf: what it would pay for one, the other way up.
-##
-## `SELL_SHARE` is the whole of why there is no loop to stand in at
-## one counter -- buying back what was just sold costs five times what it fetched. Read off
-## `sell_price` rather than written out again, so the two can never be tuned apart.
+## What a merchant asks for a piece off its own shelf: `sell_price` the other way up, never a second
+## figure, so the two can never be tuned apart.
 static func buy_price(item: Item) -> float:
 	var paid := sell_price(item)
-	return 0.0 if paid <= 0.0 else maxf(1.0, roundf(paid / SELL_SHARE))
+	return 0.0 if paid <= 0.0 else _coins(paid / SELL_SHARE)
 
 
-## What the smith asks to take a piece one level up: the piece's own level in bodies, times the dial.
-## The level it is at rather than the one it is going to, so the quote on the button is read against
-## the piece the player is looking at.
+## What the smith asks to take a piece one level up, off the level it is at, not the one it is going to.
 static func upgrade_price(item: Item) -> float:
-	return 0.0 if item == null else maxf(1.0, roundf(gold_at_level(item.level) * UPGRADE_BODIES))
+	return 0.0 if item == null else _coins(gold_at_level(item.level) * UPGRADE_BODIES)
 
 
-## And what he asks to pin a modifier to it, off the same level and the same curve -- so a lock is
-## always the same number of upgrades, wherever in the map it is bought.
 static func lock_price(item: Item) -> float:
-	return 0.0 if item == null else maxf(1.0, roundf(gold_at_level(item.level) * LOCK_BODIES))
+	return 0.0 if item == null else _coins(gold_at_level(item.level) * LOCK_BODIES)
 
 
-## What the town on `town_cell` asks to clear its shelves and fill them again, having done so `rerolls`
-## times already. Pegged to the town, as an orb is: what is being bought
-## is that town's stock.
+## What the town on `town_cell` asks to clear a shelf and fill it again, having done so `rerolls` times
+## already.
 static func reroll_price(town_cell: Vector2i, rerolls: int) -> float:
-	return maxf(1.0, roundf(gold_at_level(MapBuilder.level_of(town_cell)) * REROLL_BODIES
-			* pow(REROLL_GROWTH, maxi(rerolls, 0))))
+	return _coins(gold_at_town(town_cell) * REROLL_BODIES * pow(REROLL_GROWTH, maxi(rerolls, 0)))
 
 
-## What the fortuneteller in the town on `town_cell` asks for `reading`. Pegged to the town, as an orb
-## is: knowledge has no level of its own. 0 for a reading this build does not have. `cast` is how many
-## times it has been paid for already, which only the banishing counts.
+## What the fortuneteller in the town on `town_cell` asks for `reading`; 0 for one this build does not
+## have. `cast` is how many times it has been paid for already, which only the banishing counts.
 static func fortune_price(reading: String, town_cell: Vector2i, cast := 0) -> float:
 	if not FORTUNE_BODIES.has(reading):
 		return 0.0
-	# The way out and the banishing are the same everywhere: bodies on the ground behind the first wall.
+	var bodies := float(FORTUNE_BODIES[reading])
 	if reading == "transcend" or reading == "banish":
-		return maxf(1.0, roundf(Encounter.gold_at_steps(transcend_steps()) * float(FORTUNE_BODIES[reading])
-				* pow(FORTUNE_GROWTH, maxi(cast, 0))))
-	return maxf(1.0, roundf(gold_at_level(MapBuilder.level_of(town_cell)) * float(FORTUNE_BODIES[reading])))
+		return _coins(Encounter.gold_at_steps(transcend_steps()) * bodies * pow(FORTUNE_GROWTH, maxi(cast, 0)))
+	return _coins(gold_at_town(town_cell) * bodies)
 
 
 ## How far from the middle of the map the ground is that transcending is priced on: one step past
-## the ring the first wall stood on. A function, because a `const` naming another class's const is
-## where the cycle checker bites.
+## the ring the first wall stood on. A function, for the cycle checker's sake.
 static func transcend_steps() -> int:
 	return MapBuilder.START_LAND_RADIUS + 2
 
@@ -169,22 +132,18 @@ static func sell_total(items: Array) -> float:
 	return total
 
 
-## What an orb is worth at the town standing on `town_cell`: inverse to how often one falls, so the
-## Exalted orb nobody sees is worth eight Transmutation orbs and the table needs no second set of
-## numbers to keep in step with the drop rates.
-##
-## Pegged to the town rather than to the orb, because an orb has no level of its own -- what makes one
-## worth more out at the frontier is that everything out there is.
+## What a vendor asks for an orb at the town on `town_cell`: inverse to how often one falls, so the drop
+## rates are the only table of orb values there is.
 static func orb_value(orb: String, town_cell: Vector2i) -> float:
 	if not OrbTable.ORBS.has(orb):
 		return 0.0
 	var weight := float(OrbTable.ORBS[orb]["weight"])
 	if weight <= 0.0:
 		return 0.0
-	return maxf(1.0, roundf(gold_at_level(MapBuilder.level_of(town_cell)) * ORB_BODIES * commonest() / weight))
+	return _coins(gold_at_town(town_cell) * ORB_BODIES * commonest() / weight)
 
 
-## The weight of the orb that falls most often, which every other orb's price is a multiple of.
+## The largest weight in `OrbTable.ORBS`, which every other orb's price is read against.
 static func commonest() -> float:
 	if _commonest <= 0.0:
 		for orb: String in OrbTable.ORBS:

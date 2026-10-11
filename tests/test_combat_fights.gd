@@ -24,7 +24,8 @@ func _run() -> void:
 	_check(_test_a_farm_run_never_ends() == true, "farm run tests ran to the end")
 	_check(_test_a_settlement_is_a_set_piece() == true, "settlement fight tests ran to the end")
 	_check(_test_a_chest_is_a_mimic() == true, "chest fight tests ran to the end")
-	_check(await _test_the_map_hands_over_and_takes_back() == true, "the map hands over and takes back tests ran to the end")
+	_check(await _test_the_map_hands_over_and_takes_back() == true,
+			"the map hands over and takes back tests ran to the end")
 	_check(await _test_the_nightwalkers_fight_their_way() == true, "the nightwalkers fight their way tests ran to the end")
 	_report("combat: fights")
 
@@ -231,7 +232,8 @@ func _test_enemy_strikes() -> bool:
 	var past := inside + Vector2i(2, 0)
 	_check(Encounter.walls_inside(inside) == 0 and Encounter.walls_inside(past) == 1, "one wall between them")
 	_check(is_equal_approx(Encounter.hit_of(common, past) / Encounter.hit_of(common, inside),
-			Encounter.HIT_GROWTH * Encounter.HIT_GROWTH * Encounter.HIT_WALL_GROWTH), "a blow grows with the walk and its wall's step")
+			Encounter.HIT_GROWTH * Encounter.HIT_GROWTH * Encounter.HIT_WALL_GROWTH),
+			"a blow grows with the walk and its wall's step")
 
 	# Dodge: over a long run of blows, about the share the formula says, and a dodge costs nothing.
 	var dodger := _struck_standing(EnemyRoster.Tier.COMMON, {"dodge": 0.5 * Encounter.DODGE_K})
@@ -375,11 +377,11 @@ func _test_the_map_hands_over_and_takes_back() -> bool:
 	_check(main._combat != null, "and the fight starts there")
 	_check(not main.map.visible and main.map.process_mode == Node.PROCESS_MODE_DISABLED,
 			"the map stops while the fight is on")
-	main._combat._on_terminate_pressed()
+	main._combat.hud.terminate()
 	_check(main._combat.fight.finished and not main._combat.fight.victory,
 			"Terminate gives a tile fight up as a loss")
-	_check(main._combat._result_detail.text == "Given up", "and the verdict says it was given up")
-	_check(main._combat._lost_row.visible and not main._combat._collect.visible,
+	_check(main._combat.hud._result_detail.text == "Given up", "and the verdict says it was given up")
+	_check(main._combat.hud._lost_row.visible and not main._combat.hud._collect.visible,
 			"a lost fight offers the arrow and Retry, and nothing to collect")
 	# Retry is a loss left and the same tile's fight opened again, in one press.
 	var first: CombatScene = main._combat
@@ -409,7 +411,7 @@ func _test_the_map_hands_over_and_takes_back() -> bool:
 	var fight: Encounter = main._combat.fight
 	_play(fight, 10000)
 	_check(fight.victory, "the rematch is won")
-	_check(main._combat._collect.visible and not main._combat._lost_row.visible and not main._combat.auto_collect,
+	_check(main._combat.hud._collect.visible and not main._combat.hud._lost_row.visible and not main._combat.auto_collect,
 			"and a won tile leaves by Collect, pressed: nothing collects by itself without the Nightwalkers")
 	main._combat._on_back_pressed()
 	await process_frame
@@ -436,7 +438,7 @@ func _test_the_map_hands_over_and_takes_back() -> bool:
 	# The verdict shrinks away before it goes.
 	await create_timer(Juice.LEAVE_TIME + 0.1).timeout
 	_check(main._combat == null, "again leaves its verdict")
-	_check(main._panel.visible, "with the tile panel still up")
+	_check(main.tile_panel.panel.visible, "with the tile panel still up")
 	# A tip that came due with the run is what Escape closes first, one press each.
 	for i in main.TIPS.size():
 		if main._tip_panel == null:
@@ -444,11 +446,11 @@ func _test_the_map_hands_over_and_takes_back() -> bool:
 		Input.parse_input_event(escape)
 		await process_frame
 		await process_frame
-	_check(main._tip_panel == null and main._panel.visible, "a tip takes the press before the panel does")
+	_check(main._tip_panel == null and main.tile_panel.panel.visible, "a tip takes the press before the panel does")
 	Input.parse_input_event(escape)
 	await process_frame
 	await process_frame
-	_check(not main._panel.visible and main.map.selected_cell == HexMap.NO_CELL,
+	_check(not main.tile_panel.panel.visible and main.map.selected_cell == HexMap.NO_CELL,
 			"and once more closes the tile panel")
 	main.map.select_cell(target)
 
@@ -456,16 +458,18 @@ func _test_the_map_hands_over_and_takes_back() -> bool:
 	# opens there.
 	var far_side := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.W)
 	main.map.select_cell(far_side)
-	_check(main._chart_button.visible and not main._chart_button.disabled and not main._move_button.visible and not main._farm_button.visible, "only the buttons that can be pressed show")
+	_check(main.tile_panel.chart_button.visible and not main.tile_panel.chart_button.disabled
+			and not main.tile_panel.move_button.visible and not main.tile_panel.farm_button.visible,
+			"only the buttons that can be pressed show")
 	main._on_chart_pressed()
 	_check(main._combat == null and main.view.walking, "charting a tile out of reach walks there first")
-	_check(not main._chart_button.visible, "and hides the buttons on the way")
+	_check(not main.tile_panel.chart_button.visible, "and hides the buttons on the way")
 	# Stop ends the walk on the tile being stepped onto, and the fight it was for never opens.
 	await process_frame
 	_check(main._stop_button.visible, "Stop floats over the map while tiles are still ahead")
 	main._on_stop_pressed()
 	main.map.player.finish_walk()
-	_check(main.view.player_cell == MapBuilder.CENTER and main._combat == null and main._chart_button.visible,
+	_check(main.view.player_cell == MapBuilder.CENTER and main._combat == null and main.tile_panel.chart_button.visible,
 			"a stopped walk ends a tile on, with no fight and Chart back")
 	await process_frame
 	_check(not main._stop_button.visible, "and Stop goes with the walk")
@@ -520,13 +524,14 @@ func _test_the_nightwalkers_fight_their_way() -> bool:
 	for i in 3:
 		line.append(HexGrid.neighbor(line[-1], HexGrid.Edge.E))
 	main.map.select_cell(line[3])
-	_check(main.view.can_chart(line[3]) and main._chart_button.visible, "three steps into the dark can be charted")
+	_check(main.view.can_chart(line[3]) and main.tile_panel.chart_button.visible,
+			"three steps into the dark can be charted")
 	main._on_chart_pressed()
 	main.map.player.finish_walk()
 	_check(main.view.player_cell == line[1] and main._combat != null and main._combat.cell == line[1],
 			"the first fight is for the first tile of the way")
 	_play(main._combat.fight, 10000)
-	_check(main._combat.auto_collect and main._combat._collect.visible, "won, the verdict is up")
+	_check(main._combat.auto_collect and main._combat.hud._collect.visible, "won, the verdict is up")
 	await create_timer(CombatScene.AUTO_COLLECT_SECONDS + Juice.LEAVE_TIME + 0.3).timeout
 	_check(main.view.charted(line[1]) and main.view.walking and main._combat == null,
 			"and with nobody pressing Collect the loot is taken, the tile charted and the hero walks on")
@@ -597,7 +602,8 @@ func _test_runes_in_the_fight() -> bool:
 	_check(juiced._raw_health_of(body) < thick and is_zero_approx(juiced._hp_more) and juiced.mods == ["elite_ground"],
 			"a modifier worn off takes its health with it")
 	juiced.forget_mod("elite_ground")
-	_check(pace < juiced.elite_every and juiced.elite_every == plain.elite_every, "and its elites, back to the tile's own pace")
+	_check(pace < juiced.elite_every and juiced.elite_every == plain.elite_every,
+			"and its elites, back to the tile's own pace")
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 31
@@ -706,7 +712,8 @@ func _test_the_dungeon() -> bool:
 	_check(strong.cleared() > weak.cleared(),
 			"a depth's worth more damage wins more depths (%d against %d)" % [strong.cleared(), weak.cleared()])
 	print("The dungeon: %s damage at 2 swings/s wins %d depth(s) from the top, %s damage %d"
-			% [BigNumber.format(damage), weak.cleared(), BigNumber.format(damage * pow(Encounter.DUNGEON_GROWTH, block)), strong.cleared()])
+			% [BigNumber.format(damage), weak.cleared(),
+			BigNumber.format(damage * pow(Encounter.DUNGEON_GROWTH, block)), strong.cleared()])
 	return true
 
 
@@ -726,7 +733,8 @@ func _test_the_ice_wall() -> bool:
 	_check(Encounter.walls_inside(cell) == 0 and Encounter.walls_inside(second.cell) == 1,
 			"a wall's own ring counts none of itself")
 	for wall: Encounter in [fight, second]:
-		_check(is_equal_approx(wall.hp, roundf(Encounter.hp_of(Encounter.WALL_NAME, wall.cell, Encounter.WALL_GROWTH) * Encounter.WALL_HP)),
+		_check(is_equal_approx(wall.hp,
+				roundf(Encounter.hp_of(Encounter.WALL_NAME, wall.cell, Encounter.WALL_GROWTH) * Encounter.WALL_HP)),
 				"the wall on ring %d is WALL_HP over its own body" % HexGrid.distance(MapBuilder.CENTER, wall.cell))
 	var by_ring := pow(Encounter.HP_GROWTH, MapBuilder.WALL_STEP)
 	_check(absf(second.hp / fight.hp / by_ring / Encounter.WALL_GROWTH - 1.0) < 0.01,
@@ -734,12 +742,15 @@ func _test_the_ice_wall() -> bool:
 			% [Encounter.WALL_GROWTH, BigNumber.format(second.hp)])
 	# From the fourth wall on, a wall is LATE_WALL_BODIES ordinary bodies of the ring just inside it.
 	var third := Encounter.for_wall(Vector2i(cell.x + 2 * MapBuilder.WALL_STEP, 0))
-	_check(is_equal_approx(third.hp, roundf(Encounter.hp_of(Encounter.WALL_NAME, third.cell, Encounter.WALL_GROWTH) * Encounter.WALL_HP)),
+	_check(is_equal_approx(third.hp,
+			roundf(Encounter.hp_of(Encounter.WALL_NAME, third.cell, Encounter.WALL_GROWTH) * Encounter.WALL_HP)),
 			"the third wall is still WALL_HP over its own body")
 	var fourth := Encounter.for_wall(Vector2i(cell.x + 3 * MapBuilder.WALL_STEP, 0))
 	var inside := Vector2i(fourth.cell.x - 1, 0)
-	_check(is_equal_approx(fourth.hp, roundf(Encounter.base_hp(inside) * Encounter.hp_tuning(3) * Encounter.LATE_WALL_BODIES)),
-			"the fourth wall is %.0f bodies of the ring inside it (%s health)" % [Encounter.LATE_WALL_BODIES, BigNumber.format(fourth.hp)])
+	_check(is_equal_approx(fourth.hp,
+			roundf(Encounter.base_hp(inside) * Encounter.hp_tuning(3) * Encounter.LATE_WALL_BODIES)),
+			"the fourth wall is %.0f bodies of the ring inside it (%s health)"
+			% [Encounter.LATE_WALL_BODIES, BigNumber.format(fourth.hp)])
 	return true
 
 
@@ -1460,7 +1471,8 @@ func _test_unique_ranks() -> bool:
 	var wall: Encounter = told.call(["riposte"], {"bulwark": 4}, {"damage": 9.0, "block": 50.0})
 	listen.call(wall)
 	wall._struck_by(4.0)
-	_check(blows == [roundf(10.0 * four.call("bulwark", "share") / 100.0)], "a Bulwark at IV answers harder (%s)" % [blows])
+	_check(blows == [roundf(10.0 * four.call("bulwark", "share") / 100.0)],
+			"a Bulwark at IV answers harder (%s)" % [blows])
 	blows.clear()
 
 	# The Gambler's Die reaches its rank's top, and never past it.
@@ -1626,7 +1638,8 @@ func _test_rank_four() -> bool:
 	var wall := _told(["riposte"], {"bulwark": iv}, {"damage": 9.0, "block": 50.0, "crit_damage": 100.0})
 	listen.call(wall)
 	wall._struck_by(4.0)
-	_check(blows == [roundf(20.0 * UniqueTable.dial("bulwark", "share", iv) / 100.0)], "the Bulwark at IV answers with a crit (%s)" % [blows])
+	_check(blows == [roundf(20.0 * UniqueTable.dial("bulwark", "share", iv) / 100.0)],
+			"the Bulwark at IV answers with a crit (%s)" % [blows])
 	blows.clear()
 
 	# Brawler's Wraps: strength and dexterity both, on clicks and on swings.
@@ -1646,7 +1659,8 @@ func _test_rank_four() -> bool:
 	# Ascetic's Cord: a little dodge a bare place, never past the most.
 	for case: Array in [[4, 4 * Encounter.ASCETIC_DODGE], [100, Encounter.DODGE_MOST]]:
 		var cord := _told(["ascetic"], {"ascetics_cord": iv}, {"bare_sockets": case[0]})
-		_check(is_equal_approx(cord.dodge_chance(), case[1]), "%d bare places at IV dodge %s" % [case[0], cord.dodge_chance()])
+		_check(is_equal_approx(cord.dodge_chance(), case[1]),
+				"%d bare places at IV dodge %s" % [case[0], cord.dodge_chance()])
 
 	# Dominoes: into an elite, half of the carry.
 	var elite := _told(["domino"], {"dominoes": iv}, {"damage": 999.0}, 100.0)
@@ -1697,7 +1711,8 @@ func _test_rank_four() -> bool:
 
 	# Hourglass Amulet: a boss kill puts its seconds back.
 	for rank in [3, iv]:
-		var boss := _on_last(_told(["hourglass"], {"hourglass_amulet": rank}, {"damage": 1.0e9}, 1.0e9, "grass", "village"), 1.0)
+		var boss := _on_last(
+				_told(["hourglass"], {"hourglass_amulet": rank}, {"damage": 1.0e9}, 1.0e9, "grass", "village"), 1.0)
 		boss.time_left = 10.0
 		boss.hit()
 		_check(boss.time_left == (10.0 + Encounter.HOURGLASS_BOSS if rank == iv else 10.0), "a boss kill at rank %d" % rank)

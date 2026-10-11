@@ -2,9 +2,7 @@ class_name CloudQuestion
 extends Control
 ## The cloud's question over the whole window (`Cloud.question`): two saves that both moved on, side by
 ## side, to keep one of. No X and no Escape: one of its two buttons is the answer, and nothing under it
-## can be pressed meanwhile, by the mouse or by a key. Built as the bag's question is (`BagPage._ask`):
-## a holder under a titled panel, which `Juice.popup` pops in and stands over the whole window however
-## it is resized or turned.
+## can be pressed meanwhile, by the mouse or by a key. Its own holder for `Juice.popup`.
 
 ## `keep_cloud`: the cloud's save comes down over this device's; otherwise this device's goes up.
 signal answered(keep_cloud: bool)
@@ -70,7 +68,6 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-## One save as the question shows it: a heading and four rows.
 func _side(title: String, summary: Variant) -> VBoxContainer:
 	var column := UITheme.vbox(0, COLUMN)
 	# Spread over whatever width the buttons under them left the panel.
@@ -91,6 +88,8 @@ func _side(title: String, summary: Variant) -> VBoxContainer:
 	return column
 
 
+## `seconds` played as words, the character page's too: hours once there are any, and seconds until
+## then, so a fresh game's line moves while it is watched.
 static func played(seconds: int) -> String:
 	return "%dh %dm" % [seconds / 3600, seconds % 3600 / 60] if seconds >= 3600 \
 			else "%dm %ds" % [seconds / 60, seconds % 60]

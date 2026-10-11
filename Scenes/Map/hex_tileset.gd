@@ -12,10 +12,9 @@ const RUBBLE_ID := 1
 const RUBBLE := preload("res://Assets/Ice/ice_rubble.png")
 const RUBBLE_VERSIONS := 3
 const CUSTOM_DATA := ["name", "group", "env", "kind"]
-## The terrain swatch the interface shows for an environment: a pointy-top hexagon a quarter of the
-## map tile's 56x64, each row's width from the point down -- the slants step two pixels a row, as the
-## tile's own edge does -- ringed one pixel in the slot brown every card is framed in (the user's pick
-## of four, 2026-10-01: the light lands kept apart from the cream they stand on).
+## The terrain swatch the interface shows for an environment: a pointy-top hexagon a quarter of the map
+## tile's 56x64, each row's width from the point down, ringed one pixel in the slot brown every card is
+## framed in (the user's pick of four, 2026-10-01: the light lands kept apart from the cream they stand on).
 const ENV_HEX_ROWS := [2, 6, 10, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 10, 6, 2]
 const ENV_HEX_EDGE := Palette.SLOT_TAN_DK
 ## A terrain's name where its key capitalised is not a word for land.
@@ -59,10 +58,9 @@ func atlas_coords(tile_name: String) -> Vector2i:
 	return _coords[tile_name]
 
 
-## A swatch of one environment: the middle of that environment's own tile on the sheet, cut to a
-## hexagon (`ENV_HEX_ROWS`), so the icon always shows the terrain the player sees on the map and there
-## is no second set of art to keep in step. It lives here rather than in a panel because the sheet and
-## its grid do: the tile panel and the bounty cards both ask for one, and two cuts would drift.
+## A swatch of one environment: the middle of its own tile on the sheet, cut to a hexagon
+## (`ENV_HEX_ROWS`), so there is no second set of art to keep in step. Cut here, once an environment: the
+## tile panel and the bounty cards both ask for one, and two cuts would drift.
 func env_icon(env: String) -> TextureRect:
 	if not _env_icons.has(env):
 		_env_icons[env] = _env_hex(env)
@@ -79,8 +77,7 @@ static func env_name(env: String) -> String:
 
 ## The hexagon itself, its edge one pixel outside it all round.
 func _env_hex(env: String) -> Texture2D:
-	if _sheet_image == null:
-		_sheet_image = _load_sheet_image()
+	var sheet := _sheet()
 	var hex := Vector2i(ENV_HEX_ROWS.max(), ENV_HEX_ROWS.size())
 	@warning_ignore("integer_division")  # 56 less 14 and 64 less 16 are both even, so the cut is centred
 	var origin := atlas_coords("env_%s_v1" % env) * tile_size + (tile_size - hex) / 2
@@ -88,7 +85,7 @@ func _env_hex(env: String) -> Texture2D:
 	for y in swatch.get_height():
 		for x in swatch.get_width():
 			if _in_hex(x - 1, y - 1):
-				swatch.set_pixel(x, y, _sheet_image.get_pixelv(origin + Vector2i(x - 1, y - 1)))
+				swatch.set_pixel(x, y, sheet.get_pixelv(origin + Vector2i(x - 1, y - 1)))
 			elif _in_hex(x, y - 1) or _in_hex(x - 2, y - 1) or _in_hex(x - 1, y) or _in_hex(x - 1, y - 2):
 				swatch.set_pixel(x, y, ENV_HEX_EDGE)
 	return ImageTexture.create_from_image(swatch)
@@ -138,9 +135,7 @@ func can_border(a: String, b: String) -> bool:
 func opaque_mask(tile_name: String) -> PackedByteArray:
 	if _masks.has(tile_name):
 		return _masks[tile_name]
-	if _sheet_image == null:
-		_sheet_image = _load_sheet_image()
-	var region := _sheet_image.get_region(Rect2i(atlas_coords(tile_name) * tile_size, tile_size))
+	var region := _sheet().get_region(Rect2i(atlas_coords(tile_name) * tile_size, tile_size))
 	region.convert(Image.FORMAT_RGBA8)
 	var rgba := region.get_data()
 	var mask := PackedByteArray()
@@ -151,15 +146,17 @@ func opaque_mask(tile_name: String) -> PackedByteArray:
 	return mask
 
 
-func _load_sheet_image() -> Image:
-	var texture: Texture2D = tile_set.get_source(SOURCE_ID).texture
-	var image := texture.get_image()
-	if image == null or image.is_empty():
-		# The texture can have no readable image (e.g. under --headless), so read the source PNG instead.
-		image = Image.load_from_file(_sheet_path)
-	if image.is_compressed():
-		image.decompress()
-	return image
+## The sheet's pixels, read once.
+func _sheet() -> Image:
+	if _sheet_image == null:
+		var texture: Texture2D = tile_set.get_source(SOURCE_ID).texture
+		_sheet_image = texture.get_image()
+		if _sheet_image == null or _sheet_image.is_empty():
+			# The texture can have no readable image (e.g. under --headless), so read the source PNG instead.
+			_sheet_image = Image.load_from_file(_sheet_path)
+		if _sheet_image.is_compressed():
+			_sheet_image.decompress()
+	return _sheet_image
 
 
 func _build_tile_set(texture: Texture2D, tiles: Array) -> void:

@@ -154,7 +154,7 @@ func _enemy_spot() -> Vector2:
 	return (enemy.global_position - Vector2(0, enemy.drawn_size().y * 0.5)).round()
 
 
-## The gear one body leaves, rolled as `Encounter._kill` rolls it for a run with no curse or unique worn:
+## The gear one body leaves, rolled as `Encounter._drop_gear` rolls it for a run with no curse or unique worn:
 ## a chance, and again for as long as it comes up, to `MOST_DROPS`.
 func _gear(index: int, rng: RandomNumberGenerator) -> Array[Item]:
 	var finds: Array[Item] = []

@@ -1,8 +1,6 @@
 class_name ItemGenerator
 extends VBoxContainer
-## Dev only: a piece made to order. Pick a kind and one of its materials, set its level, spend as
-## many orbs on it as it takes, and put it in the bag. `SettingsPage` stands it in its own rows' place
-## in a debug build; nothing a player can reach builds one.
+## Dev only: a piece made to order, stood by `SettingsPage` in its own rows' place in a debug build.
 ##
 ## The orbs go through `OrbTable.can_apply` / `apply` like the bag's, so what comes out is a piece the
 ## game could have dropped -- except its level, which is not held to `LootTable.TIER_MIN_LEVEL`.
@@ -90,15 +88,10 @@ func _redraw() -> void:
 	kind_row.move_child(kind_name, 1)
 	add_child(kind_row)
 
-	# The squares take no mouse of their own (`ItemSlot`), so the row answers for them, as the bag's
-	# grid does; being in `ItemSlot.GROUP` is what gives each one its card under the cursor.
+	# The squares take no mouse of their own (`ItemSlot`), so the grid answers for them, as the bag's
+	# does. The bag's columns: a kind's five materials wrap onto a second row rather than widen the page.
 	var tiers: Array = LootTable.KINDS[_kind_name()]["tiers"]
-	# The bag's own four columns, so a kind's five materials wrap onto a second row rather than widen
-	# the page.
-	var tier_row := GridContainer.new()
-	tier_row.columns = BagPage.GRID_COLS
-	tier_row.add_theme_constant_override("h_separation", BagPage.SLOT_GAP)
-	tier_row.add_theme_constant_override("v_separation", BagPage.SLOT_GAP)
+	var tier_row := CollectionPage.grid()
 	tier_row.mouse_filter = Control.MOUSE_FILTER_STOP
 	for type: String in tiers:
 		var shown := item if type == item.type else Item.rolled(type, ItemRarity.Rarity.COMMON, _rng, item.level)
@@ -115,19 +108,10 @@ func _redraw() -> void:
 			pick(_kind_name(), at, item.level))
 	add_child(tier_row)
 
-	var level_row := HBoxContainer.new()
-	level_row.add_theme_constant_override("separation", 2)
-	for step: int in LEVEL_STEPS:
-		var nudge := UITheme.button("%+d" % step, "LightButton", "")
-		nudge.disabled = clampi(item.level + step, 1, MAX_LEVEL) == item.level
-		nudge.pressed.connect(func() -> void: pick(_kind_name(), _tier(), item.level + step))
-		level_row.add_child(nudge)
-	var level_name := UITheme.label("Level %d" % item.level)
-	level_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	level_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	level_row.add_child(level_name)
-	level_row.move_child(level_name, 2)
-	add_child(level_row)
+	var nudges := LEVEL_STEPS.map(func(step: int) -> Array:
+			return ["%+d" % step, "", clampi(item.level + step, 1, MAX_LEVEL)])
+	add_child(SettingsPage.stepper(nudges, item.level, UITheme.label("Level %d" % item.level),
+			func(level: int) -> void: pick(_kind_name(), _tier(), level), "LightButton"))
 
 	add_child(UITheme.rule(WIDTH))
 	var tray := HBoxContainer.new()
@@ -142,8 +126,8 @@ func _redraw() -> void:
 	add_child(tray)
 	add_child(UITheme.rule(WIDTH))
 
-	# In a scroll, and the scroll takes the slack: an elite's six modifiers are taller than a 648 px
-	# window leaves, and Add to bag belongs at the page's foot either way.
+	# In a scroll that takes the slack: an elite's six modifiers are taller than a 648 px window leaves,
+	# and Add to bag belongs at the page's foot either way.
 	var details := UITheme.vbox(0, WIDTH)
 	details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ItemDetails.fill(details, item, WIDTH)

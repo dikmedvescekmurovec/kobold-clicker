@@ -1,27 +1,14 @@
 class_name Item
 extends RefCounted
-## One dropped thing: what it is, how good it is, and what it happens to carry.
+## One dropped piece: its type, rarity, level, rolled stats and modifiers, what the smith, the orbs and
+## a transcension leave on it, its lines and its save. Nothing stacks: every drop is its own object,
+## and the inventory and a fight's summary both hold that one object.
 ##
-## Items stopped stacking when they started rolling modifiers -- two Wooden Swords are no longer the
-## same sword, so every drop is its own object and the inventory is a list of them.
-##
-## A piece is frozen the moment it is rolled. Its level, its rolled modifiers and its scaled base
-## stats are all worked out once and stored on it, so it is worth exactly the same on every load
-## for as long as it is held, whatever happens to the tables afterwards. LootTable is where a new
-## piece is rolled from and still owns the slot, the icon, the affix list and the labels; it is not
-## where a piece already in the bag gets its numbers. The one hand that moves a level afterwards is
-## the fortress smith (`Blacksmith`), and it moves the base stats with it, to exactly what
-## `scaled_stats` would have rolled there, and leaves every modifier's tier and number where they were
-## (`level_up`).
-##
-## A drop is one object with two references -- the main scene's inventory and the fight's summary
-## both point at it. The verbs that change a piece -- the orbs and the smith -- work on one the bag page
-## has open, or with an orb in hand on one still on a vendor's shelf (`BagPage.craft_held`).
+## A piece is frozen as it is rolled: its level and `stats` are stored and saved, never read off the
+## tables again. Only `level_up` and `transcend` move them; an orb changes rarity and modifiers alone.
 
 var type: String   ## a key of LootTable.ITEMS
 var rarity: ItemRarity.Rarity = ItemRarity.Rarity.COMMON
-## How deep the tile was that gave this up. Scales everything the piece is worth, and is rolled
-## under what that tile allowed rather than handed out at it.
 var level := 1
 ## One Dictionary a modifier, in the order they were drawn. Every key past the first two is written only
 ## where it says something, so a rolled line and a saved one are the same dictionary:
@@ -34,39 +21,33 @@ var level := 1
 ##   "perfect"  true: an Orb of Perfection's, kept at the top of its band (`refresh_perfect`).
 ##   "peak"     int: the best tier an heirloom's line has had (`transcend`), which it climbs back to.
 var mods: Array[Dictionary] = []
-## The piece's own numbers, scaled by its level when it was rolled. Stored rather than worked out
-## on demand: that is what keeps a held piece the piece it was.
+## Its base stats, scaled by its level as it was rolled (`scaled_stats`) and stored: what keeps a held
+## piece the piece it was.
 var stats: Dictionary = {}
-## A smith's upgrade that went wrong. A broken piece is worn and sold as it always was -- for half --
-## and nothing may change it again: no orb, no upgrade, no lock.
+## A smith's upgrade that went wrong: worn and sold as ever (for half), and nothing changes it again.
 var broken := false
-## Which unique this is -- a key of `UniqueTable.UNIQUES` -- or "" for every ordinary piece. `type` is
-## still its base piece, so its slot, its base stats and what a smith's upgrade does to them need no
-## second answer.
+## A key of `UniqueTable.UNIQUES`, or "" for an ordinary piece. `type` is still its base piece: its
+## slot, its base stats, what a smith's upgrade does to them.
 var unique := ""
-## The level an heirloom had when the world was last left behind, 0 for every piece that never was one.
-## It climbs back up to here by itself as the land is charted (`Inventory.raise_heirlooms`), and the
-## smith will not take it there sooner (`Blacksmith.can_upgrade`).
+## The level an heirloom had when its world was last left, 0 for a piece that never was one. It climbs
+## back there by itself as the land is charted (`Inventory.raise_heirlooms`), and the smith will not
+## take it there sooner (`Blacksmith.can_upgrade`).
 var safe_level := 0
-## How many Orbs of Ascension have gone into it (`SuperOrbTable`), written after its name as "+2".
-## Its modifiers roll, reroll and rescale as if the piece were `PLUS_LEVELS` levels higher for each
-## (`mod_level`); its base stats do not move.
+## The pluses Orbs of Ascension have made (`SuperOrbTable`), written "+2" after its name: its modifiers
+## are read `PLUS_LEVELS` levels higher for each (`mod_level`); its base stats do not move.
 var plus := 0
-## Orbs of Ascension fed toward the next plus, which takes `ascension_cost()` of them (the user's,
-## 2026-10-03: +1 one, +2 two, +3 three). Saved only above 0.
+## Orbs of Ascension fed toward the next plus, which takes `ascension_cost()` of them.
 var ascension := 0
 ## An Orb of Expansion has gone into it: one modifier more than its rarity allows, once per piece.
 var extra_slot := false
 ## The player's padlock: a level's Sell all and bin pass it by (`Inventory.discard_level`). Not the
 ## smith's Lock, which holds one modifier (`locked_mod`).
 var locked := false
-## What the player called it as it was made an heirloom (`TranscendPage`), written in its name's place;
-## "" for every other piece. Saved only where set.
+## What the player called it as it was made an heirloom (`TranscendPage`), written in its name's place.
 var nickname := ""
-## A skill stone's tier: the deepest it may sit in the skill tree (`SkillTree.can_place`) and which of
-## its base's lines it may roll (`SkillTree.lines_for`); its lines' bands are its level's, as gear's are
-## (the user's, 2026-10-09). At least 1 on every stone and 0 on everything else, so it is also the one
-## answer to "is this a stone" (`is_stone`).
+## A skill stone's tier, at least 1 on a stone and 0 on everything else (`is_stone`): the deepest it
+## may sit in the skill tree (`SkillTree.can_place`) and which of its base's lines it may roll
+## (`SkillTree.lines_for`). Its lines' bands are its level's, as gear's are (the user's, 2026-10-09).
 var stone_tier := 0
 ## A skill stone's child slots, 0 to 3: a stone with none is a leaf.
 var connectors := 0
@@ -74,14 +55,12 @@ var connectors := 0
 ## its row's, and no orb touches it.
 var capstone := ""
 
-## What one `plus` is worth to a piece's modifiers, in item levels. A percent band grows 12% a level,
-## so three levels is about +40% a plus. A dial, unplayed.
+## What one `plus` is worth to a piece's modifiers, in item levels. A dial, unplayed.
 const PLUS_LEVELS := 3
 
 
-## A fresh drop: the piece, its rarity, its level, and however many modifiers that rarity carries.
-## Everything it is worth is settled here and never again. A skill stone takes its `tier` (1 at the
-## least) and its `connectors` first, since the tier says which lines it may roll.
+## A fresh drop with its rarity's handful of modifiers. A skill stone's `tier` (1 at the least) and
+## `child_slots` are set before the draw, since the tier says which lines it may roll.
 static func rolled(item_type: String, item_rarity: ItemRarity.Rarity, rng: RandomNumberGenerator,
 		item_level := 1, tier := 1, child_slots := 0) -> Item:
 	var item := Item.new()
@@ -97,12 +76,26 @@ static func rolled(item_type: String, item_rarity: ItemRarity.Rarity, rng: Rando
 	return item
 
 
-## A unique, fresh off a body: its base piece's numbers at `item_level`, and the modifiers its row
-## names -- always those, in that order -- each at a value rolled in the band any modifier rolls in.
+## A fresh unique: its base piece's stats at `item_level` and the modifiers its row names, always
+## those and in that order, only their values rolled.
 static func rolled_unique(id: String, rng: RandomNumberGenerator, item_level := 1) -> Item:
-	var row: Dictionary = UniqueTable.UNIQUES[id]
-	var item := Item.new()
+	var item := _rolled_row(UniqueTable.UNIQUES[id], rng, item_level)
 	item.unique = id
+	return item
+
+
+## A fresh capstone: a leaf of its base at `tier`, its lines its row's, as a unique's are.
+static func rolled_capstone(id: String, tier: int, rng: RandomNumberGenerator, item_level := 1) -> Item:
+	var item := _rolled_row(SkillTree.CAPSTONES[id], rng, item_level)
+	item.capstone = id
+	item.stone_tier = maxi(1, tier)
+	return item
+
+
+## A piece of UNIQUE rarity off a hand-written row: its `base` at `item_level`, and each of its `mods`
+## rolled in that level's band.
+static func _rolled_row(row: Dictionary, rng: RandomNumberGenerator, item_level: int) -> Item:
+	var item := Item.new()
 	item.type = row["base"]
 	item.rarity = ItemRarity.Rarity.UNIQUE
 	item.level = maxi(1, item_level)
@@ -112,33 +105,9 @@ static func rolled_unique(id: String, rng: RandomNumberGenerator, item_level := 
 	return item
 
 
-## A capstone, fresh off a body: a leaf of its base at `tier`, and the lines its row names -- always
-## those, a unique's way -- each rolled in its level's band, as any line is.
-static func rolled_capstone(id: String, tier: int, rng: RandomNumberGenerator, item_level := 1) -> Item:
-	var row: Dictionary = SkillTree.CAPSTONES[id]
-	var item := Item.new()
-	item.capstone = id
-	item.type = row["base"]
-	item.rarity = ItemRarity.Rarity.UNIQUE
-	item.level = maxi(1, item_level)
-	item.stone_tier = maxi(1, tier)
-	item.stats = scaled_stats(item.type, item.level)
-	for mod_id: String in row["mods"]:
-		item.mods.append(ModifierTable.rolled_mod(mod_id, rng, item.mod_level()))
-	return item
-
-
-## The piece's own numbers, scaled by its level and then by what its kind and its material are worth
-## (`LootTable.power_of`). Worked out once, when it is rolled.
-##
-## The level first and the power after, which is the one place that order is decided: a level adds a
-## flat step as well as multiplying, so a dagger written weaker in the table would have caught a
-## sword up by level 10. This way it is 60% of one at every level.
-##
-## Stored as the number it displays: a rate keeps one decimal because it is read as one, and
-## everything else is whole. So a sword gains a clean point of damage a level, the stat block and
-## the fight can never disagree, and what goes into the save comes back out of it exactly rather
-## than as a float that has been through a text round trip.
+## A piece's base stats at `item_level`: the level first and its kind's and material's power after
+## (`LootTable.power_of`), the one place that order is decided. Stored as the number it displays, a
+## rate to one decimal and everything else whole, so the save round-trips exactly.
 static func scaled_stats(item_type: String, item_level: int) -> Dictionary:
 	var out := {}
 	var table := LootTable.stats_of(item_type)
@@ -151,13 +120,10 @@ static func scaled_stats(item_type: String, item_level: int) -> Dictionary:
 	return out
 
 
-## An heirloom carried out of a world that has ended: level 1 again, with the base stats a fresh roll
-## there would carry and every modifier put where it stood in its band, at level 1's band. What it
-## was is remembered as `safe_level`, and the best it has ever been rather than the last, so a short
-## run never costs a piece what a long one earned. Rarity, locks, `broken` and `unique` do not move.
-## The one hand that moves a held-fast line: from its own band to the new level's, and held there.
-## Each line remembers the best tier it has had (`"peak"`) and drops only as far as level 1 makes it;
-## it climbs back up as the land is charted (`Inventory.raise_heirlooms`, a `level_up` a level).
+## What the end of a world does to an heirloom: level 1 and the base stats of a fresh roll there, with
+## `safe_level` the best it has ever been. Each tiered line's best tier is kept as `"peak"` and the
+## line drops only as far as level 1 makes it, its number keeping its place in the band. The one hand
+## that moves a held-fast line (its `"at"` with it). Rarity, locks, `broken` and `unique` do not move.
 func transcend() -> void:
 	safe_level = maxi(safe_level, level)
 	var was := mods.map(tier_of)
@@ -173,10 +139,10 @@ func transcend() -> void:
 	stats = scaled_stats(type, 1)
 
 
-## The smith's upgrade, and an heirloom's climb with the land: one level, the base stats a fresh roll there would carry, and every modifier
-## kept at its tier and number (the user's ruling) -- but an heirloom's line climbs a tier a level
-## back towards the one it had before its world ended (`"peak"`), never past what the level allows,
-## its number keeping its place in the band. Held-fast lines read their band at `"at"` and do not move.
+## The smith's upgrade, and an heirloom's climb with the land: one level, the base stats of a fresh
+## roll there, and every modifier kept at its tier and number (the user's ruling) -- but an heirloom's
+## line climbs a tier a level back towards its `"peak"`, never past what the level allows, its number
+## keeping its place in the band. Held-fast lines read their band at `"at"` and do not move.
 func level_up() -> void:
 	var was := mods.map(tier_of)
 	level += 1
@@ -190,6 +156,7 @@ func level_up() -> void:
 
 
 ## Puts a line at `tier` (1 to its band level), its number as far up that band as it stood in `from`'s.
+## The one place a line is put at a tier by hand.
 func _set_tier(mod: Dictionary, from: int, tier: int) -> void:
 	tier = clampi(tier, 1, band_level(mod))
 	mod.erase("under")
@@ -198,26 +165,25 @@ func _set_tier(mod: Dictionary, from: int, tier: int) -> void:
 	mod["value"] = ModifierTable.rescaled(str(mod["id"]), int(mod["value"]), from, tier)
 
 
-## The level its modifiers' bands are read at: its own, and `PLUS_LEVELS` more for every plus. A skill
-## stone's tier lifts nothing (the user's, 2026-10-09: its lines follow its level exactly). Everything that
-## rolls, rerolls or writes a band for a piece already made asks this, never `level`.
+## The level its modifiers' bands are read at. Everything that rolls, rerolls or writes a band for a
+## piece already made asks this, never `level`. A skill stone's tier lifts nothing (the user's,
+## 2026-10-09).
 func mod_level() -> int:
 	return level + plus * PLUS_LEVELS
 
 
-## Whether this is a skill stone: carried and crafted like gear, never worn, placed in the skill tree.
 func is_stone() -> bool:
 	return stone_tier > 0
 
 
-## How many Orbs of Ascension the next plus takes: one more for every plus already on the piece.
+## How many Orbs of Ascension the next plus takes (the user's, 2026-10-03).
 func ascension_cost() -> int:
 	return plus + 1
 
 
 ## One plus more: every modifier keeps its place in its band as the band moves up `PLUS_LEVELS`
-## levels. What an Orb of Ascension does, and what Lean Pickings does to a find as it falls. A
-## held-fast line stays where it was locked, number and band alike.
+## levels, and a held-fast line stays where it was held. An Orb of Ascension's act, and what Lean
+## Pickings does to a find as it falls.
 func ascend() -> void:
 	var was := mods.map(tier_of)
 	plus += 1
@@ -229,9 +195,8 @@ func ascend() -> void:
 	refresh_perfect()
 
 
-## Puts every perfected modifier (`"perfect": true`, an Orb of Perfection's) at the top of the top
-## tier as it now stands -- perfect is the best the piece could carry, so its `"under"` goes. Called by whatever moves `mod_level`: the smith's upgrade, an Orb of
-## Ascension, the end of a world. A Divine steps over one instead, so it never leaves the top.
+## Puts every perfected modifier at the top of the top tier as it now stands. Called by whatever moves
+## `mod_level`: the smith's upgrade, an Orb of Ascension, the end of a world.
 func refresh_perfect() -> void:
 	for mod in mods:
 		if bool(mod.get("perfect", false)):
@@ -257,15 +222,20 @@ func band_level(mod: Dictionary) -> int:
 	return int(mod.get("at", mod_level()))
 
 
-## The tier this modifier's band is read at (`ModifierTable.band_for`): as far under its band level
-## as it was rolled (`"under"`), so whatever moves the level moves the tier with it. Anything that
-## reads or rerolls a band for a line on a made piece asks this.
+## The tier this modifier's band is read at (`ModifierTable.band_for`): `"under"` below its band
+## level. Anything that reads or rerolls the band of a line on a made piece asks this.
 func tier_of(mod: Dictionary) -> int:
 	return maxi(1, band_level(mod) - int(mod.get("under", 0)))
 
 
-## What the panel calls it. A method rather than reading `type`, because a unique has a name of its
-## own and this is where that seam belongs. An heirloom the player named goes by that name instead.
+## One more modifier it could take beside `held` (its own lines, or those kept of them), or {} when
+## there is none left: rolled at `mod_level` and drawn at its `stone_tier`, as every new line on a made
+## piece is.
+func extra_mod(held: Array[Dictionary], rng: RandomNumberGenerator) -> Dictionary:
+	return ModifierTable.add_one(type, held, rng, mod_level(), stone_tier)
+
+
+## What the panel calls it: the player's name for it or `base_name`, and its plus.
 func display_name() -> String:
 	var named := base_name() if nickname.is_empty() else nickname
 	return named if plus <= 0 else "%s +%d" % [named, plus]
@@ -278,42 +248,31 @@ func base_name() -> String:
 	return type if unique.is_empty() else str(UniqueTable.UNIQUES[unique]["name"])
 
 
-## The sentence saying what a unique changes about a fight, with its numbers at the player's rank of
-## it (`UniqueTable.shown_rank`), or "" for a piece that changes nothing.
+## What a unique or a capstone changes about a fight, a unique's numbers at the player's rank of it
+## (`UniqueTable.shown_rank`); "" for any other piece.
 func effect_text() -> String:
 	if not capstone.is_empty():
 		return str(SkillTree.CAPSTONES[capstone]["effect_text"])
 	return "" if unique.is_empty() else UniqueTable.effect_text(unique, UniqueTable.shown_rank(unique))
 
 
-## The line a unique gains at rank IV, once the player has reached it there; "" before, and for
-## every other piece.
+## The line a unique gains at rank IV, once the player has reached it (the user's call); "" before.
 func peak_text() -> String:
 	if unique.is_empty() or UniqueTable.shown_rank(unique) < UniqueTable.PEAK:
 		return ""
 	return UniqueTable.peak_text(unique)
 
 
-## What the piece is worth before anything it rolled -- as it was rolled, not as the table reads
-## today. Duplicated on the way out so no caller can edit another item's numbers through it.
+## A copy of `stats`, so no caller edits the piece through it.
 func base_stats() -> Dictionary:
 	return stats.duplicate()
 
 
-## What this piece is actually worth with its own modifiers folded in: stat -> number.
-##
-## Flat first, then percent, which is the order Path of Exile adds in and the only one that makes
-## "+2 Damage" and "+20% increased Damage" on one sword worth (1 + 2) * 1.2 rather than 1 * 1.2 + 2.
-## A flat modifier can name a stat the piece has none of -- that is what an affix is -- so a stat
-## can appear here that `base_stats` never had. A percent one never can: the pool only offers it
-## where there is a base stat to scale.
-##
-## A GLOBAL modifier is not folded in here at all, and falls through both passes for that reason: it
-## is a percentage of what the whole set is worth rather than of anything this piece is, so the one
-## place it can mean anything is `Equipment.totals`. Folded in here, a ring's "+14% increased Damage"
-## would scale the damage a ring has, which is none.
+## What the piece is worth with its own modifiers folded in. FLAT first, then PERCENT scaling the sum:
+## "+2 Damage" and "+20% increased Damage" on 1 make (1 + 2) * 1.2. A FLAT line may name a stat the
+## piece has none of, so a stat can appear that `base_stats` never had. A GLOBAL line is not folded in:
+## it is a share of the set, and `Equipment.totals` applies it.
 func effective_stats() -> Dictionary:
-	# Taken once: it is a copy now, not a lookup, so asking twice a stat would be real work.
 	var out := {}
 	var base := base_stats()
 	for stat: String in base:
@@ -329,9 +288,8 @@ func effective_stats() -> Dictionary:
 	return out
 
 
-## What this piece asks of the *set*: stat -> the percent its GLOBAL modifiers come to. Summed
-## rather than compounded, for the reason `Equipment.totals` adds rather than multiplies -- two rings
-## of +10% are +20%, which is the arithmetic a player does in their head.
+## What the piece asks of the set: stat -> the percent its GLOBAL modifiers sum to (two of +10% are
+## +20%, never compounded).
 func global_percents() -> Dictionary:
 	var out := {}
 	for mod in mods:
@@ -341,8 +299,7 @@ func global_percents() -> Dictionary:
 	return out
 
 
-## The one modifier a smith has pinned to this piece, or {} when none is. The dictionary itself, not
-## a copy: whoever holds it holds the modifier, which is how the orbs put it back where they found it.
+## The modifier the smith has pinned, or {}. The dictionary itself, not a copy.
 func locked_mod() -> Dictionary:
 	for mod in mods:
 		if bool(mod.get("locked", false)):
@@ -354,7 +311,6 @@ func rarity_name() -> String:
 	return ItemRarity.name_of(rarity)
 
 
-## The rarity as the player reads it: "Epic" (`ItemRarity.label_of`).
 func rarity_label() -> String:
 	return ItemRarity.label_of(rarity)
 
@@ -367,14 +323,12 @@ func border_color() -> Color:
 	return ItemRarity.BORDER_COLORS[rarity]
 
 
-## The frame its square wears: its rarity's, and a unique's crest at the player's rank of it (a starter's
-## has none). Null for a common piece.
+## The frame its square wears (`ItemRarity.frame`); null for a common piece.
 func frame() -> Texture2D:
 	return ItemRarity.frame(rarity, frame_rank())
 
 
-## The rank a unique's frame shows: the player's (`UniqueTable.shown_rank`), 0 for a starter. Read as the
-## square is drawn, so every copy held grows with the achievement.
+## The rank a unique's frame shows: the player's, read as the square is drawn, and 0 for a starter.
 func frame_rank() -> int:
 	return UniqueTable.shown_rank(unique) if UniqueTable.is_ranked(unique) else 0
 
@@ -385,7 +339,7 @@ func icon() -> Texture2D:
 	return LootTable.icon(type, stone_tier) if unique.is_empty() else UniqueTable.icon(unique)
 
 
-## "5 Damage", "5% Crit Chance" -- what the item is worth before anything on top.
+## Its base stats, written: "5 Damage", "5% Crit Chance".
 func stat_lines() -> PackedStringArray:
 	var lines := PackedStringArray()
 	var stats := base_stats()
@@ -394,13 +348,9 @@ func stat_lines() -> PackedStringArray:
 	return lines
 
 
-## "+14% increased Damage", "+6% item find" -- in the order they rolled. The smith's lock is not a
-## word on the line: `locked_line` says which one it is, and whoever draws them writes that one in
-## the ink a base stat wears, as fixed as they are.
-##
-## `detailed` puts the band the value rolled in at this piece's level beside it, "+14(8-20)% increased Damage":
-## what a Divine could make of it. A line held fast while the level moved can sit under its band,
-## which is the truth about it.
+## Its modifiers, written, in the order they rolled. `detailed` puts each line's band beside its
+## number and its tier at the end, "+14(8-20)% increased Damage T7"; a line held fast while the level
+## moved can sit under its band. No word marks the smith's lock (`locked_line`).
 func mod_lines(detailed := false) -> PackedStringArray:
 	var lines := PackedStringArray()
 	for mod in mods:
@@ -410,27 +360,27 @@ func mod_lines(detailed := false) -> PackedStringArray:
 	return lines
 
 
-## The one of `mod_lines` the smith has pinned, spelled as it is there; "" with no lock. No piece
-## carries two modifiers that write the same sentence, so the text is enough to find it by.
+## The one of `mod_lines` the smith has pinned; "" with no lock. No piece carries two modifiers that
+## write the same sentence, so the text is enough to find it by.
 func locked_line(detailed := false) -> String:
 	return _mod_line(locked_mod(), detailed)
 
 
-## Every one of `mod_lines` that no orb can move -- the smith's lock and an Orb of Binding's -- for
-## whoever writes them in a base stat's ink.
+## Every one of `mod_lines` no orb can move (locked or bound), for whoever writes them in a base
+## stat's ink.
 func fast_lines(detailed := false) -> PackedStringArray:
-	var lines := PackedStringArray()
-	for mod in mods:
-		if held_fast(mod):
-			lines.append(_mod_line(mod, detailed))
-	return lines
+	return _lines_where(held_fast, detailed)
 
 
 ## And the perfected ones, which are written in a colour of their own.
 func perfect_lines(detailed := false) -> PackedStringArray:
+	return _lines_where(func(mod: Dictionary) -> bool: return bool(mod.get("perfect", false)), detailed)
+
+
+func _lines_where(wanted: Callable, detailed: bool) -> PackedStringArray:
 	var lines := PackedStringArray()
 	for mod in mods:
-		if bool(mod.get("perfect", false)):
+		if wanted.call(mod):
 			lines.append(_mod_line(mod, detailed))
 	return lines
 
@@ -438,11 +388,10 @@ func perfect_lines(detailed := false) -> PackedStringArray:
 func _mod_line(mod: Dictionary, detailed: bool) -> String:
 	var line := ModifierTable.line(mod)
 	if detailed and not line.is_empty():
-		# The band goes hard against the line's number and ahead of its unit: "+4(1-4)s",
-		# "+0.3(0.1-0.3)s", "come 30(20-40)% later" -- the first number, wherever the sentence puts it. The
-		# number may be `BigNumber`'s "1.23M" or "1.23e36". The band is written the way the number is
-		# (`ModifierTable.amount`), less the unit that follows; a signed one as its reach ("±2"), and a
-		# band of one number not at all.
+		# The band goes hard against the line's first number and ahead of its unit: "+4(1-4)s",
+		# "come 30(20-40)% later". The number may be `BigNumber`'s "1.23M" or "1.23e36". The band is written
+		# the way the number is (`ModifierTable.amount`) less the unit; a signed one as its reach ("±2"),
+		# and a band of one number not at all.
 		var number := RegEx.create_from_string("[+-]?[0-9][0-9.]*(e[0-9]+|[A-Z][a-z]?)?").search(line)
 		var id := str(mod["id"])
 		var band := ModifierTable.band_for(id, tier_of(mod))
@@ -456,11 +405,17 @@ func _mod_line(mod: Dictionary, detailed: bool) -> String:
 	return line
 
 
-## The save's shape. The rarity goes in by name: an enum value is only a position, and slipping a new
-## step in between two others would quietly reinterpret every save on disk.
+## The save's shape. The rarity goes in by name, and every optional field only where it is set.
 func to_dict() -> Dictionary:
-	var out := _to_dict()
-	# Written only where it is true, the way a lock is, so an ordinary piece's save does not change.
+	var out := {
+		"type": type,
+		"rarity": rarity_name(),
+		"level": level,
+		"stats": stats.duplicate(),
+		# Deep: each line is a dictionary of its own.
+		"mods": mods.duplicate(true),
+		"broken": broken,
+	}
 	if not unique.is_empty():
 		out["unique"] = unique
 	if safe_level > 0:
@@ -484,24 +439,10 @@ func to_dict() -> Dictionary:
 	return out
 
 
-func _to_dict() -> Dictionary:
-	return {
-		"type": type,
-		"rarity": rarity_name(),
-		"level": level,
-		"stats": stats.duplicate(),
-		# Deep, so a modifier's lock goes into the save on the line it belongs to.
-		"mods": mods.duplicate(true),
-		"broken": broken,
-	}
-
-
-## An item read back, or null when the save names a piece or a rarity this build no longer has -- the
-## same pruning the inventory has always done by name. A modifier that no longer exists is gentler:
-## the item keeps its place and simply loses that line, because a retired item is a ghost with no art
-## while a retired modifier is just one line fewer. Whatever is not kept -- the piece, a line, a stat --
-## is named in `lost`, for whoever loads a save to say (`Inventory.load_from`). A number or a flag a
-## hand-edited file wrote as anything else reads as none.
+## An item read back, or null where the save names a piece, a rarity, a unique or a capstone this
+## build has not got. A modifier or a stat it has not got is dropped and the piece kept. Whatever is
+## not kept is named in `lost` (`Inventory.load_from`); a number or a flag a hand-edited file wrote as
+## anything else reads as none.
 static func from_dict(data: Variant, lost: Array = []) -> Item:
 	var item := _read(data, lost)
 	if item == null:
@@ -518,8 +459,7 @@ static func _read(data: Variant, lost: Array) -> Item:
 	var step := ItemRarity.from_name(str(saved.get("rarity", "")))
 	if step < 0:
 		return null
-	# A unique this build no longer has goes the way a retired piece does: by name, and whole. One whose
-	# base has been moved, or retired, is the piece its row names now.
+	# A unique's piece is the one its row names now, whatever base the save wrote.
 	var unique_id := str(saved.get("unique", ""))
 	if not unique_id.is_empty():
 		if not UniqueTable.UNIQUES.has(unique_id):
@@ -539,14 +479,13 @@ static func _read(data: Variant, lost: Array) -> Item:
 	var item := Item.new()
 	item.unique = unique_id
 	item.capstone = capstone_id
-	# Before the modifiers, which read their bands at `mod_level` and so at the tier.
 	if LootTable.slot_of(item_type) == SkillTree.SLOT:
 		item.stone_tier = maxi(1, Inventory._whole(saved.get("stone_tier")))
 		item.connectors = clampi(Inventory._whole(saved.get("connectors")), 0, SkillTree.MOST_CONNECTORS)
 	item.type = item_type
 	item.rarity = step
 	item.level = maxi(1, Inventory._whole(saved.get("level")))
-	# Absent is whole, which is what every save written before there was a smith to break one means.
+	# Absent is whole: every save from before there was a smith.
 	item.broken = Inventory._flag(saved.get("broken"))
 	item.safe_level = maxi(0, Inventory._whole(saved.get("safe_level")))
 	item.plus = maxi(0, Inventory._whole(saved.get("plus")))
@@ -555,8 +494,8 @@ static func _read(data: Variant, lost: Array) -> Item:
 	item.locked = Inventory._flag(saved.get("locked"))
 	if saved.get("nickname") is String:
 		item.nickname = saved["nickname"]
-	# A save written before pieces carried their own numbers has none to read, and what such a
-	# piece was worth when it was written is exactly the table unscaled -- so that is what it keeps.
+	# A save from before pieces carried their own numbers has none: such a piece was worth the table's,
+	# unscaled.
 	var saved_stats: Variant = saved.get("stats", null)
 	if typeof(saved_stats) == TYPE_DICTIONARY:
 		for stat: Variant in saved_stats:
@@ -568,17 +507,14 @@ static func _read(data: Variant, lost: Array) -> Item:
 		item.stats = LootTable.stats_of(item_type).duplicate()
 	var saved_mods: Variant = saved.get("mods", [])
 	if typeof(saved_mods) == TYPE_ARRAY:
-		# JSON hands back untyped arrays of untyped dictionaries, so the typed one is built entry by
-		# entry, and every number crosses through int() the way the counts always did.
+		# The level and the plus are read by here: a line saved before tiers is fitted at `band_level`.
 		for entry: Variant in saved_mods:
 			if typeof(entry) != TYPE_DICTIONARY:
 				continue
 			var id := str(entry.get("id", ""))
 			var value := Inventory._whole(entry.get("value"))
-			# A line saved under an id the table has since folded into another. A piece that already
-			# holds that other keeps its own, since a modifier never appears twice on one piece, and
-			# the folded one was never read by anything. Its number is not the new band's top, so it
-			# is not carried over as perfect.
+			# A retired id is the line it was folded into (`ModifierTable.RENAMED`), dropped where the piece
+			# already holds that line. It is never carried over as perfect: its number is not the new band's top.
 			var renamed: Array = ModifierTable.RENAMED.get(id, [])
 			if not renamed.is_empty():
 				id = renamed[0]
@@ -589,17 +525,15 @@ static func _read(data: Variant, lost: Array) -> Item:
 				lost.append("%s on %s" % [id, item_type])
 				continue
 			var mod := {"id": id, "value": value}
-			# Written only where it is true, so a rolled modifier and a saved one are the same
-			# dictionary and nothing has to strip a false out of the comparison.
+			# Flags are written only where true, so a rolled line and a loaded one compare with ==.
 			for flag: String in ["locked", "bound"] + ([] if not renamed.is_empty() else ["perfect"]):
 				if Inventory._flag(entry.get(flag)):
 					mod[flag] = true
 			for key: String in ["at", "peak"]:
 				if typeof(entry.get(key)) in [TYPE_INT, TYPE_FLOAT]:
 					mod[key] = int(entry[key])
-			# Written only above 0. A line saved before there were tiers has none either, and is given
-			# the highest tier that holds its number -- which for a top-tier line is the top again, so
-			# asking every time is safe. A perfect line is the top by definition.
+			# A line saved before there were tiers is given the highest tier that holds its number; asked on
+			# every load, which is safe, since a top-tier line fits the top again. A perfect line is the top.
 			var under := Inventory._whole(entry.get("under"))
 			if not entry.has("under") and not mod.has("perfect"):
 				under = ModifierTable.fit_under(id, int(mod["value"]), item.band_level(mod))

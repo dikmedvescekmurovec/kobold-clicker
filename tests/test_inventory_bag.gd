@@ -76,7 +76,8 @@ func _test_heirlooms() -> bool:
 	sword.level = 4
 	sword.transcend()
 	_check(sword.safe_level == 12, "a short run takes nothing off what it remembers")
-	_check(Item.from_dict(sword.to_dict()).safe_level == 12 and not _piece(ItemRarity.Rarity.COMMON, 1).to_dict().has("safe_level"),
+	_check(Item.from_dict(sword.to_dict()).safe_level == 12
+			and not _piece(ItemRarity.Rarity.COMMON, 1).to_dict().has("safe_level"),
 			"it is saved with the piece, and only where there is one")
 
 	# Super orbs: a wall pays once.
@@ -395,7 +396,8 @@ func _test_super_orbs() -> bool:
 	# Ascension: +1, every modifier kept at its place in a band three levels up, again and again.
 	var before := sword.mods.duplicate(true)
 	_check(SuperOrbTable.apply(SuperOrbTable.ASCENSION, sword, rng) and sword.plus == 1
-			and sword.mod_level() == 10 + Item.PLUS_LEVELS and sword.level == 10, "+1 lifts the modifiers' level, not the piece's")
+			and sword.mod_level() == 10 + Item.PLUS_LEVELS and sword.level == 10,
+			"+1 lifts the modifiers' level, not the piece's")
 	for i in sword.mods.size():
 		var id: String = sword.mods[i]["id"]
 		_check(sword.mods[i]["value"] == ModifierTable.rescaled(id, before[i]["value"],
@@ -705,7 +707,8 @@ func _test_loot_filter() -> bool:
 			"a Blazing Torch and Steel Greaves are steel's, a Wooden Torch and Iron Greaves short of it")
 	Settings.filter_material = LootTable.TIER_MIN_LEVEL.size() - 1
 	_check(player.leaves_behind(made.call("Blazing Torch")) and not player.leaves_behind(made.call("Masterwork Torch"))
-			and not player.leaves_behind(made.call("Masterwork Greaves")) and not player.leaves_behind(made.call("Masterwork Sword")),
+			and not player.leaves_behind(made.call("Masterwork Greaves"))
+			and not player.leaves_behind(made.call("Masterwork Sword")),
 			"and masterwork only keeps the Masterwork Torch with every other masterwork")
 	Settings.filter_material = 0
 
@@ -814,7 +817,8 @@ func _test_stones() -> bool:
 	for i in 20:
 		OrbTable._reroll_at(held, ItemRarity.Rarity.ELITE, rng)
 		roomy.mods.pop_back()
-		_check(SuperOrbTable.apply(SuperOrbTable.REPLACEMENT, roomy, rng, 0) and OrbTable.apply("Orb of Augmentation", roomy, rng),
+		_check(SuperOrbTable.apply(SuperOrbTable.REPLACEMENT, roomy, rng, 0)
+				and OrbTable.apply("Orb of Augmentation", roomy, rng),
 				"a tier I stone takes a Replacement and an Augmentation")
 		for made: Item in [held, roomy, Item.rolled("Strength Node", ItemRarity.Rarity.ELITE, rng, 4, 1, 0)]:
 			for mod in made.mods:
@@ -910,7 +914,7 @@ func _test_bag_filter() -> bool:
 	_check(shown.call() == ["Gold Ring", "Gold Ring"], "Rings shows the rings alone (%s)" % [shown.call()])
 	# Levels 7 and 3 hold one; 5 holds only a helmet and goes; 9 holds nothing but a rule and stays.
 	_check(headings.call() == 3, "and the levels holding one, and a rule's empty level")
-	page._on_clear_level_pressed(3)
+	page._drop_level(3, false)
 	_check(bag.count_at(3) == 1 and bag.items.any(func(i: Item) -> bool: return i.type == "Iron Sword"),
 			"a level's bin under the filter leaves what it hides")
 
@@ -1407,7 +1411,8 @@ func _test_curses() -> bool:
 	var leaving := Inventory.new()
 	leaving.curses = [Curses.IRON_FOES]
 	leaving.pending_curses = [Curses.THICK_FOG, Curses.BLOODTHIRST, "one this build never had"]
-	_check(Curses.effect(Curses.IRON_FOES) in leaving.effects() and not Curses.effect(Curses.THICK_FOG) in leaving.effects(),
+	_check(Curses.effect(Curses.IRON_FOES) in leaving.effects()
+			and not Curses.effect(Curses.THICK_FOG) in leaving.effects(),
 			"the fight hears of the world's curses, and not of the ones only chosen")
 	_check(float(leaving.stats().get("gold_find", 0.0)) == float(Curses.CURSES[Curses.IRON_FOES]["stats"]["gold_find"]),
 			"and Iron Foes pays its gold find in the stats")
@@ -1554,7 +1559,8 @@ func _test_more_curses() -> bool:
 	lone.stash().items.append(same_socket)
 	_check(lone.stash().can_equip(same_socket, lone.stash().equipment.sockets_for(same_socket)[0]),
 			"but the one worn can be swapped for another")
-	_check(lone.most_worn == -1 and heir.stash().most_worn == -1, "the ordinary doll, and an uncursed world's heirlooms, wear what they like")
+	_check(lone.most_worn == -1 and heir.stash().most_worn == -1,
+			"the ordinary doll, and an uncursed world's heirlooms, wear what they like")
 	var kept := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 8)
 	lone.items.append(kept)
 	_check(lone.make_heirloom(kept) and kept.plus == 1, "the heirloom made at the end of that world is +1")
@@ -1604,7 +1610,8 @@ func _test_more_curses() -> bool:
 	old_save["version"] = 19
 	SafeFile.write(TEST_PATH, JSON.stringify(old_save))
 	var older := Inventory.load_from(TEST_PATH)
-	_check(older.homeland.is_empty() and older.uniques_doubled == [ids[0]], "a version 19 save has no homeland, and junk is dropped")
+	_check(older.homeland.is_empty() and older.uniques_doubled == [ids[0]],
+			"a version 19 save has no homeland, and junk is dropped")
 	_check(settler.transcended().homeland.is_empty(), "the next world chooses its own")
 	_clear_save()
 	return true

@@ -1,30 +1,17 @@
 class_name CharacterPage
 extends Control
-## What the player adds up to, as a page against the left edge headed "Character": a card of who they
-## are (the portrait beside the name with its pencil, the level and its experience, and the three
-## attributes as chips under them), the damage they do a second and a click, this world's curses, what
-## changes how a fight plays (the uniques worn and the capstones learned), and every other stat that is
-## something, in tables -- the kills and the depth won last, under Misc.
-##
-## **The numbers are the fight's** (`_numbers`): a fight armed off `Inventory.stats()` the way the main
-## scene arms one, so the bare hand, the caps and the base clock and sight are in them -- the page says
-## what a blow does, not what the gear adds up to. Where a number comes from is its row's tooltip, and
-## a number that has moved since the page was last put away carries the difference beside it.
-##
-## Built like the other left-hand pages (`CollectionPage`): `open()` redraws it, `layout()` fits it to
-## the window, `closed` is its X. It changes nothing and so saves nothing: the pencil beside the name
-## only asks the main scene to rename the character (`rename_pressed`).
+## The character sheet on the left edge. **The numbers are the fight's** (`_numbers`): a fight armed off
+## `Inventory.stats()` the way the main scene arms one, so the bare hand, the caps and the base clock and
+## sight are in them -- the page says what a blow does, not what the gear adds up to. It changes nothing
+## and so saves nothing: the pencil only asks the main scene to rename the character (`rename_pressed`).
 
-## The page's X was pressed.
 signal closed
 ## The pencil beside the name was pressed: the main scene asks for a new one (`TextPrompt`).
 signal rename_pressed
 
 ## What the page's bar says; the character's own name heads its card.
 const TITLE := "Character"
-## The pencil's mark, in the pack's brown.
 const PENCIL_ICON := preload("res://Assets/UI/ui_icon_pencil_brown.png")
-## The air between the name and its pencil.
 const NAME_GAP := 4
 
 ## The three attributes, in the order they stand, and the colour of each one's chip.
@@ -49,8 +36,8 @@ const GROUPS := {
 }
 ## What a row is called where `LootTable.STAT_LABELS` does not say.
 const LABELS := {"kills": "Kills", "depth": "Depth won", "time": "Time played"}
-## The rows written even at nothing, because every hero has some: a blow, a clock, a sight, a count of
-## kills, the time played. So a fresh hero's page is never an empty frame.
+## The rows written even at nothing, because every hero has some, so a fresh hero's page is never an
+## empty frame.
 const ALWAYS := ["damage", "fight_clock", "sight", "kills", "time"]
 ## What is a bonus on what the hero already has, written with its sign: what a crit adds, a finder's
 ## lift, a faster walk. A chance or a share of something is written bare.
@@ -58,7 +45,7 @@ const SIGNED := ["crit_damage", "move_speed", "drop_rate", "item_rarity", "gold_
 	"click_damage", "swing_damage", "elite_damage", "first_blow", "camp_earnings", "extra_enemies",
 	"strength_stones", "intelligence_stones", "dexterity_stones", "parry"]
 ## The rows the fight holds to a most (`Encounter.WARD_MOST`, certainty for the recoup), read off the
-## fight (its fields of the same names) rather than the gear, so the page says what the hero has.
+## fight (its fields of the same names) rather than the gear.
 const HELD := ["elite_ward", "tile_ward", "less_health", "recoup"]
 ## The two headline numbers' keys in `_now`, and the names of their values' Labels.
 const PER_SECOND := "per_second"
@@ -70,7 +57,8 @@ const CHANGE_NAME := "Change"
 const SECTION_ID := "character:%s"
 const CURSES := "Curses"
 const EFFECTS := "Effects"
-## A chip: the air round its number, the least it is across (so a 0 is not a sliver), its corners.
+## A chip (`UITheme.chip`'s too): the air round its number, the least it is across (so a 0 is not a
+## sliver), its corners.
 const CHIP_PAD := Vector2i(4, 1)
 const CHIP_LEAST := 12
 const CHIP_CORNER := 4
@@ -86,6 +74,7 @@ const CARD_GAP := 8
 static var _curses_shown := false
 
 var inventory: Inventory
+var area := Rect2()
 var _ui_scale: float
 var _panel: VBoxContainer
 ## The character's name at the head of the card, which every `open()` writes.
@@ -112,7 +101,6 @@ func _ready() -> void:
 	_panel = UITheme.titled_panel(TITLE, "Close", closed.emit)
 	_panel.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_panel)
-	# Scrolled, like the log: a late set carries more stats than a 648 px window holds.
 	var scroll := UITheme.scroll()
 	UITheme.body_of(_panel).add_child(scroll)
 	_rows = UITheme.vbox(BountyList.ROW_GAP, BagPage.WIDTH)
@@ -122,7 +110,6 @@ func _ready() -> void:
 	visibility_changed.connect(_on_visibility_changed)
 
 
-## Redraws the page: who, the headline, the curses, the effects, then the tables.
 func open() -> void:
 	UITheme.clear(_rows)
 	var totals := inventory.stats()
@@ -166,9 +153,8 @@ static func armed(owner: Inventory, totals: Dictionary) -> Encounter:
 	return fight
 
 
-## Every number the page writes, by stat: the fight's where the fight reads one, so the page says what
-## the hero has rather than what the gear adds up to. Block, time on hit and the clock are in tenths, as
-## the gear keeps them (`LootTable.SECONDS_STATS`).
+## Every number the page writes, by stat: the fight's where the fight reads one. Block, time on hit and
+## the clock are in tenths, as the gear keeps them (`LootTable.SECONDS_STATS`).
 func _numbers(totals: Dictionary, fight: Encounter) -> Dictionary:
 	var out := {}
 	for heading: String in GROUPS:
@@ -201,9 +187,6 @@ func _section(title: String) -> VBoxContainer:
 	return section.body
 
 
-## The card at the head of the page: the portrait on a socket, and beside it the character's name with
-## its pencil, the level and the experience towards the next as a bar with its count under it; under
-## them the three attributes as chips.
 func _who(totals: Dictionary) -> PanelContainer:
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", BountyList.flat(Color.TRANSPARENT, CARD_PAD))
@@ -246,8 +229,8 @@ func _who(totals: Dictionary) -> PanelContainer:
 	return card
 
 
-## The character's name, the one heading in the card, with the pencil straight after it. A name past
-## the `room` the pencil leaves is cut with an ellipsis.
+## The character's name with the pencil straight after it. A name past the `room` the pencil leaves is
+## cut with an ellipsis.
 func _name_row(room: float) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", NAME_GAP)
@@ -307,9 +290,8 @@ func _chip(stat: String, value: float) -> VBoxContainer:
 	return column
 
 
-## The two numbers the rest add up to, on their own under the card, each an average off every stat the
-## fight reads (`Encounter.average_blow`) and saying so: what a second of the weapon swinging does,
-## hands off, and what a click does.
+## The two numbers the rest add up to, each an average off every stat the fight reads
+## (`Encounter.average_blow`): what a second of the weapon swinging does, hands off, and what a click does.
 func _headline() -> PanelContainer:
 	var box := PanelContainer.new()
 	box.add_theme_stylebox_override("panel", BountyList.flat(UITheme.TABLE_STRIPE, CARD_PAD))
@@ -320,8 +302,7 @@ func _headline() -> PanelContainer:
 	return box
 
 
-## One headline: its name small, the change since the last look, and the number in Pixellari. The name
-## wraps where a long figure and its change leave it no room, as a table row's does.
+## One headline. The name wraps where a long figure and its change leave it no room, as a table row's does.
 func _headline_row(key: String) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", UITheme.TABLE_GAP)
@@ -360,9 +341,8 @@ func _curses() -> void:
 
 
 ## What changes how a fight plays rather than a number: every unique worn on either doll, then every
-## capstone in the skill tree holding a point, each as its square (its card under the cursor, held
-## against nothing -- an heirloom's doll is not the one Alt compares with, and a stone has none). Left
-## out while there is none.
+## capstone in the skill tree holding a point, each as its square held against nothing (`NO_COMPARE`) --
+## an heirloom's doll is not the one Alt compares with, and a stone has none. Left out while there is none.
 func _effects() -> void:
 	var pieces := (inventory.equipment.items() + inventory.stash().equipment.items()).filter(
 			func(piece: Item) -> bool: return not piece.unique.is_empty())
@@ -383,20 +363,15 @@ func _effects() -> void:
 
 
 ## One heading's stats as a table, each that is something -- or that every hero has (`ALWAYS`) -- a row
-## named for its stat: the name, the change since the last look, the number, and where it comes from as
-## its tooltip. A heading with none of its stats is left out. Something is anything but nothing: the
-## body armour's count of enemies can be fewer.
+## named for its stat, where it comes from as its tooltip. A heading with none of its stats is left out.
+## Something is anything but nothing: the body armour's count of enemies can be fewer.
 func _table(heading: String, totals: Dictionary, fight: Encounter) -> void:
 	var shown: Array = GROUPS[heading].filter(func(stat: String) -> bool:
 			return stat in ALWAYS or float(_now[stat]) != 0.0)
 	if shown.is_empty():
 		return
-	# A framed block of its own: the page's row gap is for cards, and would pull a table apart.
-	var table := PanelContainer.new()
-	table.add_theme_stylebox_override("panel", BountyList.flat(Color.TRANSPARENT, 1))
-	var body := UITheme.vbox(0)
-	table.add_child(body)
-	_section(heading).add_child(table)
+	var body := BountyList.framed()
+	_section(heading).add_child(body.get_parent())
 	for stat: String in shown:
 		var row := UITheme.table_row(str(LABELS.get(stat, LootTable.STAT_LABELS.get(stat, stat))),
 				_text(stat, _now[stat]), body.get_child_count() % 2 == 1, 0.0, Palette.SLOT_TAN_DK, Palette.TEXT)
@@ -418,7 +393,7 @@ static func _text(stat: String, value: float) -> String:
 	if stat in HEADLINES:
 		return BigNumber.format(value)
 	if stat == "time":
-		return _spent(value)
+		return CloudQuestion.played(int(value))
 	var text := LootTable.stat_value(stat, value)
 	return "+" + text if stat in SIGNED and value > 0.0 else text
 
@@ -443,15 +418,6 @@ func _change(stat: String) -> Label:
 	var label := UITheme.label(text, Palette.LEAF if moved > 0.0 else Palette.BRICK, true)
 	label.name = CHANGE_NAME
 	return label
-
-
-## `seconds` played as words: hours once there are any, and seconds until then, so a fresh game's line
-## moves while it is watched.
-static func _spent(seconds: float) -> String:
-	var whole := int(seconds)
-	if whole >= 3600:
-		return "%dh %dm" % [whole / 3600, whole % 3600 / 60]
-	return "%dm %ds" % [whole / 60, whole % 60]
 
 
 ## Where a row's number comes from, for its tooltip: what a rating buys, what sits on top of the gear
@@ -499,10 +465,5 @@ func _sources(stat: String, totals: Dictionary, fight: Encounter) -> String:
 	return "\n".join(lines)
 
 
-## Where the main scene stands the page, in window pixels: empty for the whole window.
-var area := Rect2()
-
-
-## Full window height against the left edge, where the other pages stand.
 func layout() -> void:
 	UITheme.dock(_panel, area, _ui_scale, UITheme.Dock.LEFT, layout)

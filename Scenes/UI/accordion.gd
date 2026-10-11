@@ -1,19 +1,17 @@
 class_name Accordion
 extends VBoxContainer
-## A section that folds: its heading in slate with a caret at the far end, and `body` under it, which
-## a press anywhere on the heading shows or hides. The caret points right while shut and down while
-## open. Fill `body`, never the accordion itself.
+## A section that folds: a heading with a caret at its far end (right while shut, down while open) over
+## `body`, which a press anywhere on the heading shows or hides. Fill `body`, never the accordion.
 ##
-## Which sections are shut is kept by `id` for the session (`_shut`, not saved), so a page that is
-## built again at every redraw -- the character page -- keeps what was folded.
+## What is shut is kept by `id` for the session (`_shut`, never saved), so a page built again at every
+## redraw keeps what was folded.
 
-## The caret: a solid triangle in the brown buttons' face, drawn here pixel by pixel -- `CARET_LONG`
-## down its long side and half that (rounded up) out to its point.
+## The caret is a solid triangle drawn here: this long down its long side, half that (rounded up) to its point.
 const CARET_LONG := 9
 const CARET_COLOR := Palette.BUTTON_BROWN
 
-## Pointing right while shut and down while open, made once. Two images and not one turned: a
-## container sets its children's `rotation` back to 0 whenever it lays them out.
+## Two images and not one turned: a container sets its children's `rotation` back to 0 whenever it lays
+## them out.
 static var _caret_shut: ImageTexture
 static var _caret_open: ImageTexture
 
@@ -48,12 +46,11 @@ func is_open() -> bool:
 	return body.visible
 
 
-## Folds it or opens it, as a press on the heading does.
 func toggle() -> void:
 	_show(not body.visible)
 
 
-## Has the section `id` start folded the next time it is built, as a press on its heading would leave it.
+## Has the section `id` start folded the next time it is built.
 static func fold(id: String) -> void:
 	_shut[id] = true
 

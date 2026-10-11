@@ -129,7 +129,8 @@ func _spell_map(view: MapBuilder) -> String:
 func _test_engine_primitives() -> bool:
 	_check(hash([1, "chest", Vector2i(3, 4)]) == 3453935355, "hash() of a number, a word and a cell is what it was (%d)"
 			% hash([1, "chest", Vector2i(3, 4)]))
-	_check(hash([1, Rect2i(0, 0, 2, 2)]) == 2537321002, "and of a number and a window (%d)" % hash([1, Rect2i(0, 0, 2, 2)]))
+	_check(hash([1, Rect2i(0, 0, 2, 2)]) == 2537321002,
+			"and of a number and a window (%d)" % hash([1, Rect2i(0, 0, 2, 2)]))
 	_check("%s%s" % [Vector2i(1, -2), Vector2i(30, 4)] == "(1, -2)(30, 4)",
 			"two spots are spelt as a routed link's key spells them (%s)" % ("%s%s" % [Vector2i(1, -2), Vector2i(30, 4)]))
 	var rng := RandomNumberGenerator.new()
@@ -246,7 +247,8 @@ func _test_environments() -> bool:
 					elif not EnvironmentGenerator.can_border(envs[cell], envs[next]):
 						forbidden += 1
 		var regions := EnvironmentGenerator.find_regions(envs)
-		small_regions += regions.filter(func(region: Array) -> bool: return region.size() < EnvironmentGenerator.MIN_REGION_SIZE).size()
+		small_regions += regions.filter(
+				func(region: Array) -> bool: return region.size() < EnvironmentGenerator.MIN_REGION_SIZE).size()
 		total_regions += regions.size()
 		var distinct := {}
 		for env in envs.values():
@@ -254,7 +256,8 @@ func _test_environments() -> bool:
 			shares[env] = shares.get(env, 0) + 1
 		total_envs += distinct.size()
 
-	print("Environments over %d maps: %.1f ms/map, %.2f environments and %.2f regions per map, %.1f%% same-env neighbors, %d small regions" % [
+	print(("Environments over %d maps: %.1f ms/map, %.2f environments and %.2f regions per map, "
+			+ "%.1f%% same-env neighbors, %d small regions") % [
 		ENV_SEEDS, float(Time.get_ticks_msec() - start) / ENV_SEEDS, float(total_envs) / ENV_SEEDS,
 		float(total_regions) / ENV_SEEDS, 100.0 * same_pairs / pairs, small_regions])
 	_check(forbidden == 0, "no forbidden neighbors (found %d)" % forbidden)
@@ -268,11 +271,14 @@ func _test_environments() -> bool:
 				% [env, 100.0 * share, 100.0 * even])
 	# Cleanup can't merge a small region wedged between environments that may not touch each other (e.g. grass
 	# between desert and ice), so allow it on at most 1% of maps.
-	_check(small_regions <= ENV_SEEDS / 100, "at most 1%% of maps keep a region under MIN_REGION_SIZE (found %d)" % small_regions)
+	_check(small_regions <= ENV_SEEDS / 100,
+			"at most 1%% of maps keep a region under MIN_REGION_SIZE (found %d)" % small_regions)
 	# About 82% under the old adjacency table; allowing every border but desert-ice made regions smaller (77%).
 	_check(float(same_pairs) / pairs > 0.75, "neighbors mostly share an environment")
-	_check(EnvironmentGenerator.generate(cells, 7) == EnvironmentGenerator.generate(cells, 7), "same seed gives the same map")
-	_check(EnvironmentGenerator.generate(cells, 7) != EnvironmentGenerator.generate(cells, 8), "different seeds give different maps")
+	_check(EnvironmentGenerator.generate(cells, 7) == EnvironmentGenerator.generate(cells, 7),
+			"same seed gives the same map")
+	_check(EnvironmentGenerator.generate(cells, 7) != EnvironmentGenerator.generate(cells, 8),
+			"different seeds give different maps")
 	return true
 
 
@@ -310,7 +316,8 @@ func _test_environment_growth() -> bool:
 						illegal += 1
 		# The same growth, from the same map, has to come out the same.
 		var again := before.duplicate()
-		EnvironmentGenerator.extend(again, GEN_RECT.grow_individual(0, 0, 10, 0), hash([env_seed, GEN_RECT.grow_individual(0, 0, 10, 0)]))
+		EnvironmentGenerator.extend(again, GEN_RECT.grow_individual(0, 0, 10, 0),
+				hash([env_seed, GEN_RECT.grow_individual(0, 0, 10, 0)]))
 		var repeats := true
 		for cell: Vector2i in again:
 			if envs[cell] != again[cell]:
@@ -319,7 +326,8 @@ func _test_environment_growth() -> bool:
 
 	print("Environment growth over %d maps: 220 -> %d cells, %d ms total" % [
 			seeds, (GEN_RECT.grow_individual(0, 5, 20, 0)).get_area(), elapsed])
-	_check(kept == 220 * seeds, "growing the map never changes the land already there (%d of %d kept)" % [kept, 220 * seeds])
+	_check(kept == 220 * seeds,
+			"growing the map never changes the land already there (%d of %d kept)" % [kept, 220 * seeds])
 	_check(missing == 0, "every cell of the grown map has an environment (%d missing)" % missing)
 	_check(illegal == 0, "every neighbor pair is one the sprites allow (%d bad)" % illegal)
 	return true
@@ -340,7 +348,8 @@ func _test_region_weights() -> bool:
 	_check(not weights.has("ice"), "ice, which can't border desert, is excluded")
 
 	# Touching desert and ice leaves only environments allowed next to both.
-	var mixed: Dictionary[Vector2i, String] = {HexGrid.neighbor(cell, HexGrid.Edge.W): "desert", HexGrid.neighbor(cell, HexGrid.Edge.E): "ice"}
+	var mixed: Dictionary[Vector2i, String] = {HexGrid.neighbor(cell, HexGrid.Edge.W): "desert",
+			HexGrid.neighbor(cell, HexGrid.Edge.E): "ice"}
 	var mixed_options := _weights_for(cell, mixed).keys()
 	mixed_options.sort()
 	_check(mixed_options == ["dirt", "forest", "grass", "mountains"],
@@ -354,7 +363,8 @@ func _test_region_weights() -> bool:
 	counts["grass"] = 300
 	var nothing: Dictionary[Vector2i, String] = {}
 	var open := EnvironmentGenerator.choice_weights(cell, nothing, EnvironmentGenerator.Regions.new(), counts)
-	_check(open["dirt"] > open["forest"] and open["forest"] > open["grass"], "an even share is what the weights pull towards (got %s)" % [open])
+	_check(open["dirt"] > open["forest"] and open["forest"] > open["grass"],
+			"an even share is what the weights pull towards (got %s)" % [open])
 	return true
 
 
@@ -384,14 +394,16 @@ func _test_towns() -> bool:
 		average_links[tier] = float(links[tier]) / maxi(counts[tier], 1)
 		var rate := float(counts[tier]) / spots
 		var chance: float = TownWorld.TIER_CHANCES[tier]
-		_check(rate > chance * 0.7 and rate < chance * 1.1, "%s town rate %.4f is close to %.4f" % [TownWorld.TIER_NAMES[tier], rate, chance])
+		_check(rate > chance * 0.7 and rate < chance * 1.1,
+				"%s town rate %.4f is close to %.4f" % [TownWorld.TIER_NAMES[tier], rate, chance])
 	print("Towns in %d spots: %d small, %d medium, %d fortress in %d ms; average links %.2f / %.2f / %.2f" % [
 		spots, counts[0], counts[1], counts[2], elapsed, average_links[0], average_links[1], average_links[2]])
 	_check(touching == 0, "no towns on neighboring spots (found %d)" % touching)
 	_check(asymmetric == 0, "connections go both ways")
 	_check(too_far == 0, "no connection longer than MAX_LINK_DISTANCE")
 	_check(average_links[TownWorld.Tier.FORTRESS] > average_links[TownWorld.Tier.MEDIUM]
-			and average_links[TownWorld.Tier.MEDIUM] > average_links[TownWorld.Tier.SMALL], "fortresses have the most links, small towns the fewest")
+			and average_links[TownWorld.Tier.MEDIUM] > average_links[TownWorld.Tier.SMALL],
+			"fortresses have the most links, small towns the fewest")
 	_check(TownWorld.generate(WORLD_SEED).towns() == world.towns(), "same seed gives the same towns")
 
 	# Laid out ring by ring round the origin. TownWorld may not name MapBuilder, so its twins are held here.
@@ -438,7 +450,8 @@ func _test_towns() -> bool:
 		candidates.append(Vector2i(40, 40) + cell)
 	var before := world.towns().size()
 	var chosen := world.ensure_small_town(candidates)
-	_check(chosen in candidates and world.tier_at(chosen) == TownWorld.Tier.SMALL, "ensure_small_town leaves a small town on a candidate spot")
+	_check(chosen in candidates and world.tier_at(chosen) == TownWorld.Tier.SMALL,
+			"ensure_small_town leaves a small town on a candidate spot")
 	_check(world.towns().size() <= before + 1, "ensure_small_town adds at most one town")
 	_check(HexGrid.neighbors(chosen).filter(world.has_town).is_empty(), "the guaranteed town doesn't touch another town")
 	_check(not world.connections(chosen).is_empty(), "the guaranteed town is connected")
@@ -641,7 +654,8 @@ func _test_charting(map: HexMap, view: MapBuilder) -> bool:
 	# Tiles have to be charted before the player can go there, and only next to a tile already charted.
 	var arrivals: Array[Vector2i] = []
 	view.arrived.connect(func(at: Vector2i) -> void: arrivals.append(at))
-	_check(view.player_cell == MapBuilder.CENTER and map.player.cell == MapBuilder.CENTER, "the player starts on the center")
+	_check(view.player_cell == MapBuilder.CENTER and map.player.cell == MapBuilder.CENTER,
+			"the player starts on the center")
 	_check(not view.can_move_to(MapBuilder.CENTER) and view.route_to(MapBuilder.CENTER).is_empty(),
 			"there is nowhere to walk on the tile they stand on")
 	_check(not view.can_chart(MapBuilder.CENTER) and view.chart(MapBuilder.CENTER) == -1,
@@ -657,7 +671,8 @@ func _test_charting(map: HexMap, view: MapBuilder) -> bool:
 	_check(view.can_chart(rim) and expected_new > 0, "the tile next to the player can be charted")
 	_check(view.chart(rim) == expected_new, "charting it lifts the fog off the tiles behind it")
 	_check(view.state(rim) == MapBuilder.State.CHARTED and not map.fog.has_cell(rim), "the tile is charted and clear")
-	_check(map.ground_layer.get_used_cells().size() == start_tiles.size() + expected_new, "the newly shown tiles are drawn")
+	_check(map.ground_layer.get_used_cells().size() == start_tiles.size() + expected_new,
+			"the newly shown tiles are drawn")
 	for next in HexGrid.neighbors(rim):
 		_check(view.state(next) != MapBuilder.State.HIDDEN, "%s is out of the fog" % next)
 		_check(view.charted(next) or map.fog.has_cell(next), "%s is charted or greyed" % next)
@@ -671,7 +686,8 @@ func _test_charting(map: HexMap, view: MapBuilder) -> bool:
 	map.player.finish_walk()
 	_check(view.player_cell == rim and map.player.cell == rim, "arriving puts the player on the tile")
 	_check(arrivals == ([rim] as Array[Vector2i]), "arriving is reported")
-	_check(map.ground_layer.get_used_cells().size() == start_tiles.size() + expected_new, "arriving charts nothing by itself")
+	_check(map.ground_layer.get_used_cells().size() == start_tiles.size() + expected_new,
+			"arriving charts nothing by itself")
 
 	# A tile beside any charted tile can be charted; the player starts from the nearest one.
 	var far_side := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.W)
@@ -783,7 +799,8 @@ func _test_blind_charting() -> bool:
 	var rim := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
 	var blind := HexGrid.neighbor(rim, HexGrid.Edge.E)
 	var further := HexGrid.neighbor(blind, HexGrid.Edge.E)
-	_check(not view.seen(blind) and not view.can_chart(blind), "a tile under the fog with nothing charted beside it is out of reach")
+	_check(not view.seen(blind) and not view.can_chart(blind),
+			"a tile under the fog with nothing charted beside it is out of reach")
 	_check(view.chart(rim, 0) == 0, "a chart with no sight shows nothing round the tile taken")
 	map.player.finish_walk()
 	_check(view.charted(rim) and not view.seen(blind), "the tile is taken and the fog behind it stands")
@@ -798,7 +815,8 @@ func _test_blind_charting() -> bool:
 			"it is drawn and named as it is taken, and the fog past it stands")
 	var lit := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.W)
 	var ring := _unseen_within(view, lit, 1)
-	_check(not ring.is_empty() and view.chart(lit, 1) == ring.size(), "and a ring of sight still shows its ring (%d)" % ring.size())
+	_check(not ring.is_empty() and view.chart(lit, 1) == ring.size(),
+			"and a ring of sight still shows its ring (%d)" % ring.size())
 	map.player.finish_walk()
 
 	# What the land does to its own fight: nothing inside the second wall, and nothing on a set piece.
@@ -855,10 +873,12 @@ func _test_dark_reach() -> bool:
 	reach[0] = 4
 	_check(view.can_chart(far) and not view.can_chart(line[5]), "four reaches it, the hover asking again, and no further")
 	var way := view.dark_path(far)
-	_check(way.size() == 5 and way[0] == MapBuilder.CENTER and way[-1] == far and view.chart_from(far) == MapBuilder.CENTER,
+	_check(way.size() == 5 and way[0] == MapBuilder.CENTER and way[-1] == far
+			and view.chart_from(far) == MapBuilder.CENTER,
 			"its way starts on the charted land and ends on it (%s)" % [way])
 	for i in range(1, way.size()):
-		_check(HexGrid.distance(way[i - 1], way[i]) == 1 and not view.charted(way[i]), "%s is the next step, uncharted" % way[i])
+		_check(HexGrid.distance(way[i - 1], way[i]) == 1 and not view.charted(way[i]),
+				"%s is the next step, uncharted" % way[i])
 	_check(view.walk_onto(far).is_empty() and not view.walking, "nobody walks onto it in one go")
 	_check(view.walk_onto(way[1]) == ([way[1]] as Array[Vector2i]), "only onto the first tile of its way")
 	map.player.finish_walk()
@@ -1040,7 +1060,8 @@ func _test_drawn_window(map: HexMap, view: MapBuilder, world: TownWorld, origin:
 			bad_weights += 1
 	var info_ms := Time.get_ticks_msec() - start
 
-	print("Map build %d ms (%d blended cells), tile info with weights for all %d cells %d ms" % [build_ms, blended_cells, envs.size(), info_ms])
+	print("Map build %d ms (%d blended cells), tile info with weights for all %d cells %d ms" % [build_ms, blended_cells,
+			envs.size(), info_ms])
 	_check(map.ground_layer.get_used_cells().size() == drawn, "the land and the wall are drawn, and nothing past it")
 	_check(thawed == 0, "no real tile shows past the wall (%d)" % thawed)
 	_check(wrong_ground == 0, "every cell shows its environment, or its environment's town (%d wrong)" % wrong_ground)
@@ -1069,9 +1090,11 @@ func _test_start_town(map: HexMap, world: TownWorld, origin: Vector2i, start_tow
 
 	# Every map has a small town exactly START_TOWN_DISTANCE steps from cell (0, 0).
 	var start_cells := MapBuilder.start_town_cells()
-	_check(start_cells.all(func(cell: Vector2i) -> bool: return HexGrid.distance(Vector2i.ZERO, cell) == MapBuilder.START_TOWN_DISTANCE),
+	_check(start_cells.all(
+			func(cell: Vector2i) -> bool: return HexGrid.distance(Vector2i.ZERO, cell) == MapBuilder.START_TOWN_DISTANCE),
 			"candidate cells are all %d steps out" % MapBuilder.START_TOWN_DISTANCE)
-	var start_towns := start_cells.filter(func(cell: Vector2i) -> bool: return world.tier_at(origin + cell) == TownWorld.Tier.SMALL)
+	var start_towns := start_cells.filter(
+			func(cell: Vector2i) -> bool: return world.tier_at(origin + cell) == TownWorld.Tier.SMALL)
 	_check(not start_towns.is_empty(), "a small town sits %d steps from cell (0, 0)" % MapBuilder.START_TOWN_DISTANCE)
 	if not start_towns.is_empty():
 		var drawn: String = map.get_tile_info(start_towns[0]).get("name", "")
@@ -1094,8 +1117,10 @@ func _test_ring_towns() -> bool:
 		if view.is_land(spot - view.origin):
 			ring.append(spot - view.origin)
 	var hidden := ring.filter(func(cell: Vector2i) -> bool: return not view.seen(cell))
-	_check(not hidden.is_empty(), "some of the ring's settlements start in the dark (%d of %d)" % [hidden.size(), ring.size()])
-	_check(not hidden.any(func(cell: Vector2i) -> bool: return map.has_town(cell)), "a hidden settlement has no buildings drawn")
+	_check(not hidden.is_empty(),
+			"some of the ring's settlements start in the dark (%d of %d)" % [hidden.size(), ring.size()])
+	_check(not hidden.any(
+			func(cell: Vector2i) -> bool: return map.has_town(cell)), "a hidden settlement has no buildings drawn")
 	_check(view.reveal_ring_towns(MapBuilder.CENTER) > hidden.size(), "the roads show every one still hidden, and more")
 	_check(hidden.all(func(cell: Vector2i) -> bool: return view.state(cell) == MapBuilder.State.UNCHARTED),
 			"each comes out uncharted")
@@ -1369,7 +1394,8 @@ func _test_the_cave() -> bool:
 	var breach := _broken_wall(view)
 	_check(view.place_cave(breach), "one goes down once a wall is broken")
 	var cave := view.cave
-	_check(_beside_breach(view, breach), "a few steps past the wall tile broken, off the walls and the settlements (%s, %d steps)"
+	_check(_beside_breach(view, breach),
+			"a few steps past the wall tile broken, off the walls and the settlements (%s, %d steps)"
 			% [cave, HexGrid.distance(breach, cave)])
 	_check(not view.place_cave(-breach) and view.cave == cave, "and only one a world")
 

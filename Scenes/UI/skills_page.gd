@@ -1,17 +1,13 @@
 class_name SkillsPage
 extends Control
-## The skills page against the left edge: the free points over the player's skill tree, drawn round its
-## root (`SkillTreeView`), and a Reset that buys every point back for gold. A press on a stone puts a
-## point in it; the card under the cursor is the bag's, since a stone is an item. The tree itself is
-## built on the black screen of a transcension, never here. Showing or hiding this node opens or closes
-## the whole page. The tree zooms by the wheel, a pinch or the − and + beside the points, and the page is
-## never narrower than the bag, the width every left-hand page shares.
+## The skills page on the left edge: the free points and the zoom over the player's skill tree
+## (`SkillTreeView`), and a Reset that buys every point back for gold. A press on a stone puts a point in
+## it; the tree itself is built on the black screen of a transcension, never here.
 
-## The bar's name, the black screen's card's and its tree panel's too: the tree is "Skill tree" wherever
-## it stands, and what is placed in it a node (the review of 2026-10-09).
+## The black screen's card's and its tree panel's too: the tree is "Skill tree" wherever it stands, and
+## what is placed in it a node (the review of 2026-10-09).
 const TITLE := "Skill tree"
 
-## The page's X was pressed.
 signal closed
 ## Redrawn, and the points to spend may have moved with it.
 signal changed
@@ -28,8 +24,6 @@ var _points: Label
 var _scroll: ScrollContainer
 var _view: SkillTreeView
 var _reset: Button
-
-## Where the main scene stands the page, in window pixels: empty for the whole window.
 var area := Rect2()
 
 
@@ -45,10 +39,9 @@ func _ready() -> void:
 	_panel = UITheme.titled_panel(TITLE, "Close the skill tree", closed.emit)
 	_panel.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_panel)
-	var rows := UITheme.body_of(_panel)
-	_body = rows
+	_body = UITheme.body_of(_panel)
 	var top := HBoxContainer.new()
-	rows.add_child(top)
+	_body.add_child(top)
 	_points = UITheme.label()
 	_points.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(_points)
@@ -57,7 +50,7 @@ func _ready() -> void:
 	_scroll = UITheme.scroll()
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	rows.add_child(_scroll)
+	_body.add_child(_scroll)
 	_view = SkillTreeView.new()
 	_view.slot_pressed.connect(_on_stone_pressed)
 	_view.zoomed.connect(layout)
@@ -67,7 +60,7 @@ func _ready() -> void:
 	_reset = UITheme.priced_button("Reset", 0.0, "SmallButton", "Take back every point, for gold")
 	_reset.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_reset.pressed.connect(_on_respec_pressed)
-	rows.add_child(_reset)
+	_body.add_child(_reset)
 	open()
 
 
@@ -88,9 +81,8 @@ func open() -> void:
 		layout()
 
 
-## Full window height against the left edge, or a sheet along the foot held upright (as tall as the tree
-## at its zoom, half the window at most), and the bag's width at the least; the tree scaled into what
-## that leaves it, a whole window pixel at a time, and at the player's zoom scrolled in that box.
+## Docked like every left page, the bag's width at the least; the tree scaled into what that leaves it,
+## a whole window pixel at a time, and at the player's zoom scrolled in that box.
 func layout() -> void:
 	var room := area if area.has_area() else get_viewport_rect()
 	var window := get_viewport_rect().size
@@ -108,12 +100,11 @@ func layout() -> void:
 	UITheme.dock(_panel, area, _ui_scale, UITheme.Dock.LEFT, layout)
 
 
-## One point into a stone. A refused press does nothing: the card says what the stone is, and the count
-## on its corner whether it has room. A press held down puts one in again and again, saved once it lets
-## go (`SkillTreeView.hold_ended`), so the save and the corner's damage float come once, not each point.
+## One point into a stone; a refused press does nothing. A press held down puts one in again and again,
+## saved once it lets go (`SkillTreeView.hold_ended`), so the save and the corner's damage float come
+## once, not each point.
 func _on_stone_pressed(path: String) -> void:
-	# A finger has no hover: its first tap on a stone is what puts the card up, and the next learns it --
-	# or a finger held on it then, point after point.
+	# A finger's first tap on a stone puts its card up, and the next learns it.
 	if not Cursors.applies("node:" + path):
 		return
 	if not inventory.rank_up_skill(path):

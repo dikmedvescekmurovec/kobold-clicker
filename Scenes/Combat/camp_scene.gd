@@ -1,29 +1,21 @@
 class_name CampScene
 extends CanvasLayer
-## Draws a camp: the tile's own arena at night with nobody on it, and a panel saying what the hero
-## drove off there while the game was shut. Shown at start-up, already paid.
-##
-## It is deliberately the fight's screen without the fight. Camping is the same ground and the same
-## monsters as farming it -- the player is *there* -- so the way in is the way into a fight, the
-## backdrop is the tile's own, and the map is put away behind it. What is missing is the whole
-## point: no hero on the left, no enemies walking in from the right, nothing to click. A player who
-## sees this screen knows at a glance both where they are and that nothing needs them.
-##
-## It owns no rules: `Camp` says what the hours were worth and this shows it.
-## A CanvasLayer for `CombatScene`'s reason -- the map stays loaded behind it.
+## Draws a camp, shown at start-up and already paid: deliberately the fight's screen without the fight
+## -- the tile's own backdrop at night with nobody on it, nothing to click -- and a panel saying what
+## the hours came to. It owns no rules: `Camp` says what the hours were worth. A CanvasLayer for
+## `CombatScene`'s reason: the map stays loaded behind it.
 
-## Break camp: go back to the map. The one way out.
+## Break camp: back to the map. The one way out.
 signal broke_camp
 
-## The layer a fight is drawn on, so a camp stands exactly where a fight would.
+## The layer a fight is drawn on.
 const LAYER := 2
-## The tile's own place under the night sky, whatever the clock says: a camp is what the hours away
-## look like.
+## Night, whatever the clock says.
 const SKY := "night"
-## A little over the viewport, the way a fight's backdrop is, so no edge can show.
+## A little over the viewport, as a fight's backdrop is, so no edge can show.
 const BACKDROP_BLEED := 1.02
-## How wide the panel is, in panel pixels. Fixed, because its one long sentence has no width of its
-## own and a panel that sizes itself round a changing number breathes in and out every second.
+## The panel's width, in panel pixels. Fixed: its one long sentence has no width of its own, and a
+## panel sized round a changing number breathes in and out.
 const WIDTH := 190.0
 
 var _camp := {}
@@ -34,14 +26,14 @@ var _panel: VBoxContainer
 var _backdrop: Node2D
 
 
-## Puts the camp on the screen. `camp` is what `Camp.make` built and `earned` what `Camp.earned` said
-## it came to; `env` and `variant` are the tile's, for the backdrop it would have fought on.
+## `camp` is what `Camp.make` built and `earned` what `Camp.earned` said it came to; `env` and `variant`
+## are the tile's, for the backdrop it would have fought on.
 func begin(camp: Dictionary, earned: Dictionary, env: String, variant: String, ui_scale: float) -> void:
 	_camp = camp
 	_earned = earned
 	_ui_scale = ui_scale
 	layer = LAYER
-	# Nothing here is clicked for damage, so the cursor is the one every other panel wears.
+	# Nothing here is clicked for damage.
 	Input.set_default_cursor_shape(Cursors.ARROW)
 	_build(env, variant)
 	get_viewport().size_changed.connect(_layout)
@@ -86,8 +78,7 @@ func _build(env: String, variant: String) -> void:
 				0.0, null, Palette.GOLD_TEXT if named[0] == "Gold" else null))
 		striped = not striped
 
-	# Only where the cap is what stopped it, so a player back after a week is told why rather than
-	# left to wonder what went missing.
+	# Only where the cap is what stopped it: a player back after a week is told why the sum looks short.
 	if bool(_earned["full"]):
 		var capped := UITheme.label("A hero can hold a camp for %d hours before rest is needed."
 				% int(float(_camp.get(Camp.MOST, Camp.MAX_SECONDS)) / 3600.0), Palette.TEXT_SOFT, true)

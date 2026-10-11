@@ -1,21 +1,19 @@
 class_name Skills
 extends RefCounted
-## The player's skill tree: the stones placed in it, path -> `Item` (`SkillTree` says what a path is),
-## and the points in them, path -> ranks. `SkillTree` is the rules; this is only what stands where, and
-## what it adds up to.
+## The player's skill tree: what stands where and what it adds up to. The rules, and what a path is,
+## are `SkillTree`'s.
 ##
-## The stones are kept from world to world and are changed only on the black screen of a transcension
-## (`place`). The ranks are a world's: a level is a point, and a transcension starts the level over.
-## The points to spend are not stored. A level is worth one, so the free points are the level less what
-## is spent -- which means a save can never disagree with itself about how many there are.
+## The stones are kept from world to world and changed only on the black screen of a transcension
+## (`place`); the ranks are a world's. The points to spend are not stored: they are the level's
+## (`earned`) less what is spent, so a save can never disagree with itself about how many there are.
 
 ## The placed stones, path -> Item. The root is no stone and is not here. A new hero has none: the root
 ## alone, its one slot empty (the user's, 2026-10-10; a dexterity stone stood in it until then, and a save
 ## that holds one keeps it).
 var stones := {}
-## Only stones with points in them, the way `Inventory.orbs` holds only what is carried, and the root's
-## under "" once it holds any.
+## path -> points, only for stones holding any, and the root's under "" once it holds any.
 var ranks := {}
+
 
 ## Points a player at `level` has earned: one a level past the first.
 static func earned(level: int) -> int:
@@ -26,7 +24,6 @@ func rank_of(path: String) -> int:
 	return int(ranks.get(path, 0))
 
 
-## Points spent: what a Reset gives back.
 func spent() -> int:
 	var total := 0
 	for path: String in ranks:
@@ -43,8 +40,6 @@ func why_not(path: String, level: int) -> String:
 	return SkillTree.why_not(path, stones, ranks, points(level))
 
 
-## One rank into the stone at `path`. Refused, and nothing changes, when `SkillTree.why_not` has
-## anything to say.
 func rank_up(path: String, level: int) -> bool:
 	if not why_not(path, level).is_empty():
 		return false
@@ -52,7 +47,7 @@ func rank_up(path: String, level: int) -> bool:
 	return true
 
 
-## Takes every point back. Whatever that costs is the inventory's business, because the purse is.
+## Takes every point back. What that costs is the inventory's business.
 func reset() -> void:
 	ranks = {}
 
@@ -60,8 +55,8 @@ func reset() -> void:
 ## Every stat the stones holding points add before anything multiplies -- their base stats and FLAT
 ## lines, each once a rank -- less the attributes, which `attributes` counts, and a stone's own ranks;
 ## and the root's damage, a point each (`SkillTree.ROOT_DAMAGE`).
-## `extra` is ranks more on every stone holding a point (the Sage's Abacus at IV), and `bases` attribute
-## -> ranks more on the stones of that base (a helmet's line).
+## In all three sums `extra` is ranks more on every stone holding a point (the Sage's Abacus at IV) and
+## `bases` attribute -> ranks more on the stones of that base (a helmet's line): `_times`.
 func flat(extra := 0, bases := {}) -> Dictionary:
 	var out := _root_line(SkillTree.ROOT_DAMAGE)
 	for path: String in _stones_held():
@@ -73,8 +68,7 @@ func flat(extra := 0, bases := {}) -> Dictionary:
 
 
 ## Every stat they increase, in percent: their GLOBAL lines, a rank each, and the root's increased damage
-## (`SkillTree.ROOT_PERCENT`). Summed, not compounded: two of 10% increased damage are 20%, which is what
-## a player adds up in their head.
+## (`SkillTree.ROOT_PERCENT`). Summed, not compounded: two of 10% increased damage are 20%.
 func percent(extra := 0, bases := {}) -> Dictionary:
 	var out := _root_line(SkillTree.ROOT_PERCENT)
 	for path: String in _stones_held():
@@ -109,7 +103,8 @@ func effects() -> Array:
 	return out
 
 
-## The paths of the stones holding a point: `ranks` less the root's.
+## The paths of the stones holding a point: `ranks` less the root's, which is in no `stones` and never
+## multiplied by `extra` or `bases`.
 func _stones_held() -> Array:
 	return ranks.keys().filter(func(path: String) -> bool: return not path.is_empty())
 
@@ -119,8 +114,7 @@ func _root_line(per: float) -> Dictionary:
 	return {"damage": per * rank_of("")} if rank_of("") > 0 else {}
 
 
-## How many times a stone's lines count: its ranks, and the ranks more the Abacus and a helmet hand
-## every stone that has one.
+## How many times a stone's lines count: its ranks, and the ranks more `extra` and `bases` hand it.
 func _times(path: String, extra: int, bases: Dictionary) -> int:
 	return rank_of(path) + extra + int(bases.get(SkillTree.base_of(stones[path]), 0))
 
@@ -147,7 +141,7 @@ func place(stone: Item, path: String) -> Array[Item]:
 	return out
 
 
-## The tree for the save: path -> the stone's own save.
+## For the save: path -> the stone's own save.
 func tree_dict() -> Dictionary:
 	var out := {}
 	for path: String in stones:

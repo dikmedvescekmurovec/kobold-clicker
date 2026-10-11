@@ -1,19 +1,10 @@
 class_name FortuneTeller
 extends RefCounted
-## The fortuneteller: what she can be asked, and what she answers.
-##
-## Every settlement has her, and she is the one counter that sells nothing to carry: what she sells is
-## knowledge the game used to give away or never gave at all. Three **readings** -- where the nearest
-## settlements lie, where a chest is, and what a piece could still roll -- each asked as often as the
-## player will pay for it; and two **great spells**, one a settlement:
-## a patch of the map lifted out of the dark, and the road home walked in no time at all.
-##
-## Static and node-free like `Blacksmith`, so the tests need no interface. What a spell costs is
-## `TownPrices.fortune_price`'s business. What was bought is written where it belongs: what a town has
-## sold in that town's drawer (`ASKED`), and what belongs to the
-## player rather than to a town -- the chest, the uniques banished -- in `inventory.fortunes`, a plain Dictionary this file
-## holds the keys of, because
-## `Inventory` must not name a class that names `Item`'s tables back at it.
+## What the fortuneteller can be asked, static and node-free. What a spell costs is
+## `TownPrices.fortune_price`'s. What a town has sold is written in that town's drawer (`ASKED`); what is
+## the player's own -- the chest, the uniques banished -- in `inventory.fortunes`, a plain Dictionary
+## this file holds the keys of, because `Inventory` must not name a class that names `Item`'s tables
+## back at it.
 
 ## The readings, which are also the keys of `TownPrices.FORTUNE_BODIES`.
 const ROADS := "roads"
@@ -21,25 +12,19 @@ const TREASURE := "treasure"
 const APPRAISE := "appraise"
 const SCOUR := "scour"
 const HOMECOMING := "homecoming"
-## Not a reading at all but the way out of the world: everything is left behind but the heirlooms
-## (`Inventory.transcended`). She offers it only once a wall has fallen, and it is priced against the
-## ground behind the first wall rather than the town's (`TownPrices.fortune_price`).
+## Not a reading but the way out of the world (`Inventory.transcended`), offered only once a wall has
+## fallen.
 const TRANSCEND := "transcend"
-## Neither a reading nor a great spell: a unique the player picks is kept out of the drops for as long
-## as this world lasts (`dropping`), each one paid for costing twice the last (`TownPrices.fortune_price`).
-## She offers it only once `BANISH_FROM` uniques are unlocked, and never lets fewer than `BANISH_LEAVES` drop.
+## Neither a reading nor a great spell: a unique the player picks is kept out of this world's drops
+## (`dropping`), offered only once `BANISH_FROM` uniques are unlocked.
 const BANISH := "banish"
-## The order her buttons stand in: the readings first, then the great spells, the way out and the banishing.
+## The order her buttons stand in.
 const READINGS := [ROADS, TREASURE, APPRAISE, SCOUR, HOMECOMING, TRANSCEND, BANISH]
 
-## Her list is in two halves, and which half a spell is in is the whole of its rule.
-##
-## A **reading** is asked as often as the player likes, anywhere, at the town's own price every time.
-## A **great spell** is one a settlement, the way every reading
-## used to be: it is written in that town's drawer under `ASKED` and refused there from then on.
-##
-## Written out rather than derived from `READINGS`, which is the grid's order; `test_town` holds the
-## three lists together.
+## Which half a spell is in is the whole of its rule. A reading (`COMMON`) is asked as often as the
+## player pays for it, at the town's own price every time; a great spell (`GREAT`) is one a settlement,
+## written in that town's drawer under `ASKED` and refused there from then on. Written out, not derived
+## from `READINGS`, which is the grid's order; `test_town` holds the three lists together.
 const COMMON := [ROADS, TREASURE, APPRAISE]
 const GREAT := [SCOUR, HOMECOMING]
 
@@ -56,8 +41,8 @@ const LABELS := {
 	BANISH: "Banish",
 }
 
-## The town drawer's key, before a spell's name: a `GREAT` spell is sold once a settlement and refused
-## there from then on. The roads write it too: bought once a town, the same way.
+## The town drawer's key, before a spell's name, for a `GREAT` spell cast there. The roads write it too:
+## bought once a town.
 const ASKED := "fortune_"
 ## `inventory.fortunes`' keys: the chest the star is over, the uniques banished from this world's drops,
 ## and how many banishings have been paid for here -- the price's exponent, which bringing one back never
@@ -72,8 +57,8 @@ const BANISH_FROM := 24
 const BANISH_LEAVES := 10
 
 ## How near the hero feels the Gollux cave (`CaveSense`), coldest first, and the most steps from it each
-## warmer band holds: Burning at two or fewer, Hot at five, Warm at ten, Cool at sixteen, Cold past that.
-## Bands rather than the distance, so the light at the map's edge says roughly how far and never which tile.
+## warmer band holds. Bands and not the distance, so the light at the map's edge says roughly how far
+## and never which tile.
 const WARMTH := ["Cold", "Cool", "Warm", "Hot", "Burning"]
 const WARMTH_STEPS := [16, 10, 5, 2]
 
@@ -102,10 +87,9 @@ static func why_not_appraise(item: Item) -> String:
 	return WRITTEN if not item.unique.is_empty() else ""
 
 
-## Every modifier this piece's kind can roll, commonest first: `{id, line, weight, share}`, where
-## `line` is the modifier written with the band it rolls in at the piece's level and `share` is its
-## weight as a percentage of the whole pool. The whole pool rather than what the piece lacks: a
-## reroll draws from all of it, and an Exalted's smaller pool is this one less what is on the card.
+## Every modifier this piece's kind can roll, commonest first: `{id, line, weight, share}`, `line` the
+## modifier written with the band it rolls in at the piece's level and `share` its weight as a
+## percentage of the whole pool. The whole pool, not what the piece lacks: a reroll draws from all of it.
 static func odds(item: Item) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
 	if not why_not_appraise(item).is_empty():
@@ -122,7 +106,6 @@ static func odds(item: Item) -> Array[Dictionary]:
 	return rows
 
 
-## The tiles a scour on `center` reaches.
 static func scour_cells(center: Vector2i, radius := SCOUR_RADIUS) -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
 	for y in range(center.y - radius, center.y + radius + 1):
@@ -155,7 +138,7 @@ static func banishes(fortunes: Dictionary) -> int:
 
 
 ## `unlocked` less what is banished: the uniques a body, a chest or a bounty may hand over. Every source
-## of one is handed this rather than `Achievements.unlocked`.
+## of one is handed this in `Achievements.unlocked`'s place.
 static func dropping(unlocked: Array, fortunes: Dictionary) -> Array:
 	var gone := banished(fortunes)
 	return unlocked.filter(func(id: String) -> bool: return not gone.has(id))

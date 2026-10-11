@@ -357,7 +357,8 @@ func _test_page() -> bool:
 	view.slot_pressed.emit("0")
 	_check(inventory.skills.rank_of("0") == 1, "a press is a point")
 	_check(page._points.text == "1 skill point", page._points.text)
-	_check(flashes.back() == SkillTreeView.GLOWS["dexterity"], "which lights its card in the stone's colour (%s)" % [flashes])
+	_check(flashes.back() == SkillTreeView.GLOWS["dexterity"],
+			"which lights its card in the stone's colour (%s)" % [flashes])
 	_check(not view._lights["0"].visible and view._lights[""].visible,
 			"a stone at its most goes dark, the root stays lit while a point is left")
 	page.open()
@@ -437,7 +438,8 @@ func _test_page() -> bool:
 	_check(inventory.skills.rank_of("") == before, "nothing before the hold's first wait")
 	for i in 3:
 		view._process(SkillTreeView.HOLD_DELAY)
-	_check(inventory.skills.rank_of("") == before + 3, "then a point each time it runs out (%d)" % inventory.skills.rank_of(""))
+	_check(inventory.skills.rank_of("") == before + 3,
+			"then a point each time it runs out (%d)" % inventory.skills.rank_of(""))
 	var up: InputEventMouseButton = left.call(false)
 	up.position = centre
 	view._gui_input(up)
@@ -495,7 +497,8 @@ func _test_layout() -> bool:
 			"and a stone is still a square the card can write")
 	var whole := view.custom_minimum_size
 	var fitted := view.fit(whole / 2.0, 4.0)
-	_check(fitted.x <= whole.x / 2.0 + 1.0 and is_equal_approx(view._canvas.scale.x * 4.0, roundf(view._canvas.scale.x * 4.0)),
+	_check(fitted.x <= whole.x / 2.0 + 1.0
+			and is_equal_approx(view._canvas.scale.x * 4.0, roundf(view._canvas.scale.x * 4.0)),
 			"too big, it shrinks a whole window pixel at a time (%s)" % view._canvas.scale)
 	view.free()
 	return true
@@ -657,7 +660,8 @@ func _test_wide_root() -> bool:
 	player.level = 5
 	player.skills = back
 	player.curses = [Curses.SPECIALIST]
-	_check(player.why_not_skill("1").begins_with("Specialist") and not player.why_not_skill("10").begins_with("Specialist"),
+	_check(player.why_not_skill("1").begins_with("Specialist")
+			and not player.why_not_skill("10").begins_with("Specialist"),
 			"and the Specialist tells branch 1 from branch 10")
 	SkillTree.root_slots = SkillTree.ROOT_CONNECTORS
 	return true

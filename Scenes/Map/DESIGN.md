@@ -111,7 +111,8 @@ Weather particles (`set_env`, from `WEATHER`) and a `CanvasModulate` day cycle. 
 A badge pinned to the window's edge toward the cell `target` -- a picture (`cut` of a sheet) clipped to an ink disc ringed with gold, a gold arrow beating towards the cell, drawn at `ui_scale` --; hidden only when the cell is inside `room` (the part of the window the map is seen through;
 empty is the whole window) and seen, or the map itself is hidden, at `z_index` -1 so every panel on the interface layer draws over it.
 A `pressed` Callable makes the disc a flat `Button`, which stands still at the foot of `room` and only turns its arrow (pinned to the edge it went under the panels, out of a press's reach).
-The main scene has two: the chest a fortuneteller was paid to find, and the hero
+The main scene has two: the chest a fortuneteller was paid to find, and the hero.
+It was a pale four-point glimmer while it was free, and that was too quiet for something bought: cream on sand or ice disappears, and a sparkle does not say "chest" or "that way". The disc is what makes it read on any ground, the picture says what it is, and the arrow says where
 
 #### cave_sense.gd (CaveSense) / cave_sense.gdshader
 The Gollux cave as the hero feels it: a `ColorRect` over `room` (the main scene's `_map_room()`) on the interface layer at `z_index` -1, its shader a dithered red band hugging the room's edge, thickest where the line from the hero toward `view.cave` leaves the room (`leaving`) and thinning away along the edge either side, reaching further in and along and brighter by `FortuneTeller.warmth` band (`REACH`, `SPAN`,
@@ -128,7 +129,8 @@ every drawn land tile beside the ice gets the snow spill for `spill_mask`.
 Hover and selection outlines
 
 #### environment_generator.gd (EnvironmentGenerator)
-Random-frontier growth under `allowed()` (the sheet's `env_adjacency`), region size boosts and damping, small-region merge, and `SHARE_PULL` towards whichever environments the new land has least of, so each covers about a sixth. `extend()` grows into new cells and freezes the old. Tunables at the top
+Random-frontier growth under `allowed()` (the sheet's `env_adjacency`), region size boosts and damping, small-region merge, and `SHARE_PULL` towards whichever environments the new land has least of, so each covers about a sixth. `extend()` grows into new cells and freezes the old. Tunables at the top.
+`MAX_REGION_SIZE` and `LARGE_DAMPING` were tuned on the 20x11 maps from before the ice wall: about 3.7 environments and 4.5 regions per map, largest region about 43%. Since every border but desert-ice is allowed and `SHARE_PULL` evens the shares: 5.7 environments and 6.6 regions
 
 #### town_world.gd (TownWorld)
 256x256 world of towns laid out **ring by ring round the map's origin** (`generate(seed, origin)`): each ring of land gets `round(spots * TIER_CHANCES)` of each tier (small 1%, medium 0.5%, fortress 0.1%), **the fortress floored at one**, none within `KEEP_OUT` of the origin, never adjacent; each linked to its 1/2/4 nearest within 20 steps.
@@ -144,7 +146,7 @@ The land is the hexagon within `land_radius` (`START_LAND_RADIUS` 11, so the fir
 `rect` covers `WASTE_DEPTH` rings past the wall (`_cover`).
 Charting a wall tile (`_break_wall`) moves `land_radius` out by `WALL_STEP` and thaws seen wasteland inside it.
 `migrated_radius(states)` places the wall for a pre-wall save.
-`_draw_cell` is the one list of what stands on a cell's ground (road, rubble, chest, settlement, cave), asked wherever a cell is drawn or changes (`_draw_saved`, `_show`, `_break_wall`, `place_cave`); `_draw_rubble` lays a fallen wall's rubble on every land tile of a ring a wall stood on (`on_wall_ring`) but a settlement's; `_ring_edges` is any cell's two neighbours on its own ring.
+`_draw_cell` is the one list of what stands on a cell's ground (road, rubble, chest, settlement, cave), asked wherever a cell is drawn or changes (`_draw_saved`, `_show`, `_break_wall`, `place_cave`) -- kept three times over, a fallen wall's ring went without its chests and the cave's tile kept one; `_draw_band` puts the wall's band of ice over a wall cell at the same three drawings; `_draw_rubble` lays a fallen wall's rubble on every land tile of a ring a wall stood on (`on_wall_ring`) but a settlement's; `_ring_edges` is any cell's two neighbours on its own ring.
 `walls_fallen()` is how many have come down in this world (heirloom picks, and the fortuneteller's way out); `charted_level()` the level of the deepest charted tile (what the heirlooms climb to).
 Cell `State`: `HIDDEN`, `UNCHARTED`, `CHARTED`.
 `create` / `restore` / `to_save`; `chart(cell, sight := 1)` (the fog comes off every hidden tile within `sight` steps of the charted one, through the shared `_reveal_around`, which `scour` also uses), `can_chart`, `chart_from`, `walk_onto` (to `chart_from`, then the step onto the uncharted tile, where `player_cell` stands until the fight is decided;
@@ -152,7 +154,12 @@ Cell `State`: `HIDDEN`, `UNCHARTED`, `CHARTED`.
 so an arrival's every consequence follows), `walking`, signal `arrived`;
 `name_of`, `level_of`, `circle_of` (1 inside the first wall, +1 a `WALL_STEP` of distance, the wall ring counting with the land it opens; what a drop may be made of), `circle_level` (the level of a circle's outer ring;
 the smith's cap), `area_variant`, `seen`, `has_chest`, `nearest_chest`, `scour(center)` (the fortuneteller's: hidden tiles round `center` come out UNCHARTED, seen ones are left alone, returns how many), `envs_within(cell, steps)` (what a bounty board may post from), `reveal_all`.
-`origin` is the world spot at cell (0, 0); `_spot(cell)` crosses from cells to world spots
+`origin` is the world spot at cell (0, 0); `_spot(cell)` crosses from cells to world spots.
+`create` and `restore` both hand the map over through `_take_map`: cleared, the ice and the edge fog made after `clear_map` (which frees what stands under `chests`), `hidden_env` and `can_pick` set before a cell is drawn, the token's `arrived` heard by this builder and no earlier one.
+Every fact derived per cell is rolled off `_seeded([env_seed, tag, cell])` (`has_chest` under "chest", `_tile_name` under "variant_kind", `_accent_roll` under "variant"; the cave's pick off `[env_seed, "cave"]`), so none is saved.
+`_rings_out(steps, step)` is the one count of rings of land: in `wall_step`s for `ring_of`, in plain `WALL_STEP`s for `circle_of` and `migrated_radius`.
+`_is_open` is generated land with neither a settlement nor the cave on it, where `has_chest` and `mods_of` both start.
+`to_save` touches none of `map`'s children, `walking` included: the main scene calls it from `_exit_tree`, where they may already be gone, and a game closed mid-walk resumes on the tile the walk set off from, which costs the walk and nothing else
 
 #### tile_names.gd (TileNames)
 `generate`: a made-up word plus a feature word from the environment or the settlement tier. A pure function of map seed and cell; names neither `MapBuilder` nor `TownWorld`
@@ -257,6 +264,7 @@ the third wall ever -- takes a cell within `CAVE_NEAR` steps of it and further o
 So the first world's goes down past its third wall, every later world's past its first; none while `breach` is `NO_CELL`.
 It is a set piece: `road_at`, `has_chest`, `mods_of`, `can_farm` / `can_farm_ground` (and so `best_farm`) all refuse it, and `name_of` names it from `TileNames.CAVE_FEATURES` (`place_cave` drops the land's name a tile already seen had been given).
 Drawn by `HexMap.set_cave` (`CAVE_ART`, one `CAVE_NODE` on the settlements' layer and anchor) once seen and on land; a missing picture draws nothing.
+`can_enter_cave` is `can_visit`'s rule (charted, stood on, no walk under way): going down is being there.
 
 #### Read a torch once, as a tile is charted
 **A torch is read at the moment a tile is charted and never again.**

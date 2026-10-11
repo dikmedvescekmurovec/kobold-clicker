@@ -1,23 +1,13 @@
 class_name TranscendPage
 extends Control
-## The black screen between two worlds. The fortuneteller's way out fades the game to it, and on it
-## the player is paid for the world they are leaving: **one piece of it made an heirloom, and a super
-## orb (`SuperOrbTable`) for every wall they broke**, spent on the heirlooms they hold.
-##
-## Five faces, one up at a time: the choice (Create an heirloom / Upgrade an heirloom / Take on a
-## curse / Skill tree, and the way on under them), the curses (`Curses`: as many skulls as the
-## dungeon's depths won, `Inventory.skull_allowance`, for the world to come, kept in
-## `Inventory.pending_curses` and nowhere else until `transcended()` reads them), and behind the first
-## two cards and the fourth a `BagPage` built for it (`transcending` true) -- over the bag and the
-## ordinary doll to choose the piece to keep, over the heirlooms with the super orbs for its tray, and
-## over the bag's skill nodes with the tree in the doll's place. Each goes back to the choice by the
+## The black screen between two worlds, where the player is paid for the world they are leaving. Its
+## faces, one up at a time: the choice (four cards and the way on), the curses' table, and behind three
+## of the cards a `BagPage` built for it (`transcending` true). Each goes back to the choice by the
 ## arrow beside it, its X, or Escape.
 ##
 ## **Nothing here is written to a file.** Everything it changes it changes in the inventory it was
 ## given, and `finished` is the main scene's cue to write `Inventory.transcended()` over the save in
-## the one write a transcension has always been. A game closed on this screen is a game in which the
-## fortuneteller was never asked -- which is also what keeps closing it from being a way to make an
-## heirloom and stay.
+## the one write a transcension has always been: a game closed on this screen has not transcended.
 
 ## The player has pressed on into the new world.
 signal finished
@@ -31,7 +21,8 @@ const CURSE_NAME_WIDTH := 116.0
 const CURSE_SKULLS_WIDTH := 28.0
 const CURSE_COST_WIDTH := 190.0
 const CURSE_PAYS_WIDTH := 140.0
-const SKULL_SIDE := 8.0
+## A skull in the table: the pack's 16 px mark at half size, the orb tray's 2:1.
+const SKULL_SIDE := 8
 ## Panel pixels of black left above and below the curses' panel when the table is taller than the window.
 const CURSE_MARGIN := 6.0
 ## Seconds the world takes to go dark, where animations are on at all.
@@ -122,9 +113,20 @@ func _ready() -> void:
 	fade.tween_callback(_show_choice)
 
 
-## The three pages a card opens.
 func _pages() -> Array[BagPage]:
 	return [_create_page, _upgrade_page, _stones_page]
+
+
+## How many heirlooms are held, in the stash and on its doll.
+func _heirlooms_held() -> int:
+	return _inventory.stash().total() + _inventory.stash().equipment.worn.size()
+
+
+## Takes a face out of the tree at once: a queued one would still be found, and pressed, this frame.
+func _drop(face: Control) -> void:
+	if face != null:
+		remove_child(face)
+		face.queue_free()
 
 
 ## The cards and the way on, built again each time: what they say moves with what was done.
@@ -134,14 +136,9 @@ func _show_choice() -> void:
 	_back.hide()
 	_swapping = false
 	_swap.hide()
-	# Out of the tree at once, each of them: a queued one would still be found, and pressed, this frame.
-	if _curse_face != null:
-		remove_child(_curse_face)
-		_curse_face.queue_free()
-		_curse_face = null
-	if _choice != null:
-		remove_child(_choice)
-		_choice.queue_free()
+	_drop(_curse_face)
+	_curse_face = null
+	_drop(_choice)
 	_choice = UITheme.vbox(CARD_GAP)
 	_choice.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_choice)
@@ -152,7 +149,7 @@ func _show_choice() -> void:
 	cards.add_theme_constant_override("v_separation", CARD_GAP)
 	_choice.add_child(cards)
 
-	var held := _inventory.stash().total() + _inventory.stash().equipment.worn.size()
+	var held := _heirlooms_held()
 	var orbs := _inventory.super_orbs
 	cards.add_child(_card("Create an heirloom", load(CROWN_ICON), not _made and not lost,
 			"Lost to No Second Chances" if lost else "Done" if _made else "",
@@ -183,8 +180,8 @@ func _show_choice() -> void:
 	_layout.call_deferred()
 
 
-## The heirloom just made, back on the choice, and asked for a name over it as a caught Pokemon is: what
-## is typed goes in its name's place from then on (`Item.nickname`); Cancel, or its own name, leaves it be.
+## The heirloom just made, back on the choice, and asked for a name over it: what is typed goes in its
+## name's place from then on (`Item.nickname`); Cancel, or its own name, leaves it be.
 func _name_heirloom(item: Item) -> void:
 	_made = true
 	_show_choice()
@@ -195,8 +192,8 @@ func _name_heirloom(item: Item) -> void:
 	add_child(prompt)
 
 
-## One card: its button, and under it where it stands (done, what is left to spend), in bone on the
-## black -- a status, never what the card is for: the user wants no explaining on a page.
+## One card: its button, and under it in bone where it stands (done, what is left to spend) -- a status,
+## never what the card is for: the user wants no explaining on a page.
 func _card(title: String, mark: Texture2D, live: bool, text: String, pressed: Callable) -> Control:
 	var card := UITheme.vbox(4, CARD_WIDTH)
 	var button := UITheme.button(title, "LightButton", "")
@@ -228,9 +225,8 @@ static func _padded(mark: Texture2D) -> Texture2D:
 
 
 ## The curses for the world to come, as the character page's stats are written: a cream panel, and in
-## it a framed table of striped rows -- a tick box and the name, the skulls, what it costs in rust and
-## what it pays in leaf. The rows the skulls left cannot pay for stand back and take no press. Built again at every
-## tick, so what is ticked and what is faded is never stale.
+## it a framed table of striped rows. The rows the skulls left cannot pay for stand back and take no
+## press. Built again at every tick, so what is ticked and what is faded is never stale.
 func _show_curses() -> void:
 	_warned = false
 	_choice.hide()
@@ -238,8 +234,7 @@ func _show_curses() -> void:
 	var scrolled := 0
 	if _curse_face != null:
 		scrolled = _curse_scroll.scroll_vertical
-		remove_child(_curse_face)
-		_curse_face.queue_free()
+	_drop(_curse_face)
 	var pending := _inventory.pending_curses
 	_curse_lines.clear()
 	_curse_face = UITheme.titled_panel("Skulls: %d of %d" % [Curses.skulls_of(pending), _budget],
@@ -254,18 +249,14 @@ func _show_curses() -> void:
 	headings.add_child(_curse_row(_curse_cells(UITheme.label("Name", Palette.TEXT_SOFT, true), null,
 			UITheme.label("Curse", Palette.TEXT_SOFT, true), UITheme.label("Boon", Palette.TEXT_SOFT, true)), false))
 	body.add_child(headings)
-	# A framed block of its own, as the stats are: the panel's row gap would pull a table apart. In a
-	# scroll, because the sentences are written to be understood and not to fit, and the list will grow.
+	# In a scroll, because the sentences are written to be understood and not to fit, and the list will grow.
 	_curse_scroll = ScrollContainer.new()
 	_curse_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_curse_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	body.add_child(_curse_scroll)
-	var table := PanelContainer.new()
-	table.add_theme_stylebox_override("panel", BountyList.flat(Color.TRANSPARENT, 1))
-	var rows := UITheme.vbox(0)
-	table.add_child(rows)
-	_curse_scroll.add_child(table)
-	_curse_table = table
+	var rows := BountyList.framed()
+	_curse_table = rows.get_parent() as Control
+	_curse_scroll.add_child(_curse_table)
 	for id: String in Curses.CURSES:
 		var curse: Dictionary = Curses.CURSES[id]
 		# Dead where the skulls left cannot pay for it, or it cannot stand with one taken (`Curses.fits`).
@@ -280,16 +271,10 @@ func _show_curses() -> void:
 		if full:
 			# The name is the box's second handle, and a dead box must have none.
 			(tick.get_child(1) as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
-		# How hard it is, in skulls: the pack's 16 px mark at half size, the orb tray's 2:1.
 		var skulls := HBoxContainer.new()
 		skulls.add_theme_constant_override("separation", 1)
 		for i in int(curse["skulls"]):
-			var skull := TextureRect.new()
-			skull.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			skull.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			skull.texture = load(SKULL_ICON)
-			skull.custom_minimum_size = Vector2(SKULL_SIDE, SKULL_SIDE)
-			skull.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			var skull := BountyList.icon(load(SKULL_ICON), SKULL_SIDE)
 			# The mark is cut pale for a brown face and would wash out on cream: the names' own brown
 			# keeps its sockets, where ink made a blot of it.
 			skull.modulate = Palette.SLOT_TAN_DK
@@ -306,15 +291,9 @@ func _show_curses() -> void:
 	_curse_scroll.set_deferred("scroll_vertical", scrolled)
 
 
-## A line of the table on its stripe, padded as `UITheme.table_row` pads its own.
+## A line of the table on its stripe, in `UITheme.table_row`'s own box.
 func _curse_row(cells: Control, striped: bool) -> PanelContainer:
-	var row := PanelContainer.new()
-	var stripe := StyleBoxFlat.new()
-	stripe.bg_color = UITheme.TABLE_STRIPE if striped else Color.TRANSPARENT
-	stripe.set_content_margin_all(UITheme.TABLE_PAD.y)
-	stripe.content_margin_left = UITheme.TABLE_PAD.x
-	stripe.content_margin_right = UITheme.TABLE_PAD.x
-	row.add_theme_stylebox_override("panel", stripe)
+	var row := UITheme.row_panel(striped)
 	row.add_child(cells)
 	return row
 
@@ -364,7 +343,7 @@ func _open(page: BagPage, swap := false) -> void:
 	_choice.hide()
 	for each: BagPage in _pages():
 		each.hide()
-	_swapping = swap and _inventory.stash().total() + _inventory.stash().equipment.worn.size() > 0
+	_swapping = swap and _heirlooms_held() > 0
 	_swap.icon = load(CROWN_ICON if page == _create_page else CHEST_ICON)
 	_swap.tooltip_text = "Your heirlooms" if page == _create_page else "Items"
 	_swap.visible = _swapping
@@ -374,13 +353,16 @@ func _open(page: BagPage, swap := false) -> void:
 	_back.show()
 
 
-## The arrow stands against the open page's top-left corner, outside it.
+## The arrow against `corner`, a page's or a face's top-left, outside it. One as wide as the window
+## leaves it nowhere to stand, and it hides: the X is the same way back.
+func _stand_back(corner: Vector2) -> void:
+	_back.position = corner - Vector2((_back.get_combined_minimum_size().x + BagPage.WORN_GAP) * _ui_scale, 0.0)
+	_back.visible = _back.position.x >= 0.0
+
+
 func _place_back(page: BagPage) -> void:
 	if page.visible:
-		_back.position = page.panel_corner() - Vector2(
-				(_back.get_combined_minimum_size().x + BagPage.WORN_GAP) * _ui_scale, 0.0)
-		# A page as wide as the window leaves it nowhere to stand; the page's X is the same way back.
-		_back.visible = _back.position.x >= 0.0
+		_stand_back(page.panel_corner())
 		_swap.position = _back.position + Vector2(0.0,
 				(_back.get_combined_minimum_size().y + BagPage.WORN_GAP) * _ui_scale)
 		# ponytail: where the arrow has no room (a phone held upright) the crown goes with it; give it a
@@ -388,10 +370,15 @@ func _place_back(page: BagPage) -> void:
 		_swap.visible = _swapping and _back.visible
 
 
+## Stands a face in the middle of the window at its own size.
+func _centre(face: Control) -> void:
+	face.size = face.get_combined_minimum_size()
+	face.position = ((get_viewport_rect().size - face.size * _ui_scale) / 2.0).floor()
+
+
 func _layout() -> void:
 	if _choice != null and is_instance_valid(_choice):
-		_choice.size = _choice.get_combined_minimum_size()
-		_choice.position = ((get_viewport_rect().size - _choice.size * _ui_scale) / 2.0).floor()
+		_centre(_choice)
 	if _curse_face != null and is_instance_valid(_curse_face):
 		# The scroll is as tall as its table, or as what the window has left once the panel's bar,
 		# headings and margins have had theirs: measured with the scroll at nothing, so it is all of them.
@@ -399,13 +386,8 @@ func _layout() -> void:
 		var chrome := _curse_face.get_combined_minimum_size().y
 		var room := floorf(get_viewport_rect().size.y / _ui_scale) - chrome - CURSE_MARGIN * 2.0
 		_curse_scroll.custom_minimum_size.y = minf(_curse_table.get_combined_minimum_size().y, maxf(room, 0.0))
-		_curse_face.size = _curse_face.get_combined_minimum_size()
-		_curse_face.position = ((get_viewport_rect().size - _curse_face.size * _ui_scale) / 2.0).floor()
-		# The arrow against the face's top-left corner, outside it, as it stands against a page's.
-		_back.position = _curse_face.position - Vector2(
-				(_back.get_combined_minimum_size().x + BagPage.WORN_GAP) * _ui_scale, 0.0)
-		# A face as wide as the window leaves the arrow nowhere to stand; its X is the same way back.
-		_back.visible = _back.position.x >= 0.0
+		_centre(_curse_face)
+		_stand_back(_curse_face.position)
 	for page: BagPage in _pages():
 		if page.visible:
 			page.layout()

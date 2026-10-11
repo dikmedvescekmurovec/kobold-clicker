@@ -50,7 +50,7 @@ func _shoot_main_scene() -> void:
 	print("Saved ", ProjectSettings.globalize_path("user://ui_in_scene.png"))
 
 	# A 3x crop of the panel itself, to inspect the borders pixel by pixel.
-	var panel: Control = main._panel
+	var panel: Control = main.tile_panel.panel
 	var rect := Rect2i(Rect2(panel.position, panel.get_combined_minimum_size() * panel.scale))
 	rect = rect.grow(8).intersection(Rect2i(Vector2i.ZERO, image.get_size()))
 	var crop := image.get_region(rect)
@@ -302,7 +302,7 @@ func _shoot_inventory() -> void:
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_orb_card.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_orb_card.png"))
-	main.bag_page._hide_orb_card()
+	main.bag_page._orb_card.hide()
 	root.warp_mouse(Vector2.ZERO)
 	main.bag_page._on_orb_pressed("Orb of Chaos")
 	# A greatsword on, with the block shut so the doll is back: the weapon hand holds the piece and
@@ -444,7 +444,7 @@ func _shoot_town() -> void:
 	main.view.player_cell = town
 	main.map.set_player_cell(town)
 	main.map.select_cell(town)
-	main._update_buttons()
+	main.tile_panel.update_buttons()
 	main.camera.position = main.map.ground_layer.map_to_local(town)
 	for i in 2:
 		await process_frame
@@ -501,14 +501,14 @@ func _shoot_town() -> void:
 			orbs[orb] = int(orbs.get(orb, 0)) + 1
 		var paid_rng := RandomNumberGenerator.new()
 		paid_rng.seed = WORLD_SEED
-		main._show_bounty_paid(str(paid[BountyBoard.ENEMY]), float(paid[BountyBoard.GOLD]),
+		main.rewards.show_paid(str(paid[BountyBoard.ENEMY]), float(paid[BountyBoard.GOLD]),
 				int(paid.get(BountyBoard.XP, 0)), orbs, BountyBoard.reward_item(paid, town, paid_rng))
 		# Once it has popped in, counted up and shown its finds.
 		await create_timer(Juice.REVEAL_DELAY + Juice.REVEAL_MOST + Juice.REVEAL_TIME + 0.2).timeout
 		await RenderingServer.frame_post_draw
 		root.get_texture().get_image().save_png("user://ui_town_claimed.png")
 		print("Saved ", ProjectSettings.globalize_path("user://ui_town_claimed.png"))
-		main._close_bounty_paid()
+		main.rewards.close_paid()
 
 	# What clearing a board offers, at tier III: three side by side, one to take. Written into the drawer
 	# straight, and taken out again after, so the board's shots below have no Reward on them.
@@ -525,7 +525,7 @@ func _shoot_town() -> void:
 		board[0][BountyBoard.DONE] = true
 		main.town_page._fill()
 		main.town_page.layout()
-	main._show_board_choice()
+	main.rewards.show_choice()
 	await create_timer(Juice.REVEAL_DELAY + Juice.REVEAL_MOST + Juice.REVEAL_TIME + 0.2).timeout
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_board_choice.png")
@@ -538,7 +538,7 @@ func _shoot_town() -> void:
 	root.get_texture().get_image().save_png("user://ui_board_dialogue.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_board_dialogue.png"))
 	main._on_tip_closed()
-	main._close_board_choice()
+	main.rewards.close_choice()
 	here_drawer.erase(BountyBoard.CHOICE)
 	if board.size() > 1:
 		board[0][BountyBoard.DONE] = false
@@ -673,7 +673,7 @@ func _shoot_town() -> void:
 	#
 	# The level-3 piece rather than one of the level-6 ones, because five tiles out the ground only
 	# allows level 5 and the deeper pieces photograph the cap's refusal instead of a live hammer.
-	main.bag_page._hide_orb_card()
+	main.bag_page._orb_card.hide()
 	main.town_page._on_tab_pressed(TownServices.SMITH)
 	# First with nothing held up to him: himself at the anvil, the empty square, and his two services.
 	for i in 2:
@@ -763,7 +763,7 @@ func _shoot_town() -> void:
 		root.get_texture().get_image().save_png("user://%s.png" % shot[1])
 		print("Saved ", ProjectSettings.globalize_path("user://%s.png" % shot[1]))
 		main.town_page._close_told()
-		main._close_banner()
+		main.banner.close()
 
 	# A wall down: the way out joins her list, and asked for it is a question before it is a deed.
 	main.view.land_radius += MapBuilder.WALL_STEP
@@ -796,7 +796,7 @@ func _shoot_town() -> void:
 	for i in 2:
 		await process_frame
 	# The wall's achievement, which waited behind her question.
-	main._close_banner()
+	main.banner.close()
 	await process_frame
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_town_banish_spell.png")
@@ -931,7 +931,7 @@ func _shoot_town() -> void:
 	# The wall broken above earned Thaw on the next save; its banner is not what this shot is of.
 	for i in 2:
 		await process_frame
-	main._close_banner()
+	main.banner.close()
 	main._on_collection_pressed()
 	for i in 2:
 		await process_frame
@@ -981,7 +981,7 @@ func _shoot_town() -> void:
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_achievement_banner.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_achievement_banner.png"))
-	main._close_banner()
+	main.banner.close()
 	main.inventory.tick("blows_taken", 320)
 	main._on_achievements_pressed()
 	for i in 2:
@@ -1046,14 +1046,16 @@ func _shoot_town() -> void:
 	root.get_texture().get_image().save_png("user://ui_character_curses.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_character_curses.png"))
 	# The curses folded away, and the page drawn again to show it stays folded.
-	main.character_page.find_children("*", "VBoxContainer", true, false).filter(func(n: Node) -> bool: return n is Accordion)[0].toggle()
+	main.character_page.find_children("*", "VBoxContainer", true, false).filter(
+			func(n: Node) -> bool: return n is Accordion)[0].toggle()
 	main.character_page.open()
 	for i in 2:
 		await process_frame
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("user://ui_character_folded.png")
 	print("Saved ", ProjectSettings.globalize_path("user://ui_character_folded.png"))
-	main.character_page.find_children("*", "VBoxContainer", true, false).filter(func(n: Node) -> bool: return n is Accordion)[0].toggle()
+	main.character_page.find_children("*", "VBoxContainer", true, false).filter(
+			func(n: Node) -> bool: return n is Accordion)[0].toggle()
 	# The pencil's text box over the page.
 	main._on_rename_pressed()
 	for i in 2:
@@ -1081,7 +1083,7 @@ func _shoot_town() -> void:
 	main.inventory.curses.clear()
 	main.inventory.homeland.clear()
 	main.map.deselect()
-	main._panel.hide()
+	main.tile_panel.panel.hide()
 
 	# The settings, behind the corner's cog, and then the question its Reset asks.
 	main._on_left_page_closed()

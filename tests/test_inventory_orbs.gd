@@ -91,7 +91,8 @@ func _test_wall_unlocks() -> bool:
 	var named := func(wall: int) -> Array:
 		return WallUnlocks.of_wall(wall).map(func(unlock: Dictionary) -> String: return unlock["name"])
 	_check(named.call(0).is_empty() and named.call(1) == ["Orb of Alchemy", "Orb of Divinity"]
-			and named.call(2) == ["Orb of Chaos", "Orb of Exaltation"] and named.call(3) == ["Gollux", "Runes", "+1 skill branch"]
+			and named.call(2) == ["Orb of Chaos", "Orb of Exaltation"] and named.call(3) == ["Gollux", "Runes",
+					"+1 skill branch"]
 			and named.call(4) == ["Distant charting"] and named.call(5) == ["+1 skill branch"]
 			and named.call(6) == ["Item filter"] and named.call(7) == ["Abilities"]
 			and named.call(9) == ["+1 skill branch"],
@@ -188,7 +189,8 @@ func _test_runes() -> bool:
 	work["ascent"] = 1
 	work["depth"][0] = 5
 	gone = RuneTable.count_kill(work)
-	_check(gone["ascent"] and not RuneTable.ascended(work) and work["depth"] == [4], "the Ascent runs out on its own count")
+	_check(gone["ascent"] and not RuneTable.ascended(work) and work["depth"] == [4],
+			"the Ascent runs out on its own count")
 
 	# The inventory: held like orbs, spent only where one does something, and both kept by the save.
 	var player := Inventory.new()
@@ -196,7 +198,8 @@ func _test_runes() -> bool:
 	player.add_rune(RuneTable.UNREST, 2)
 	player.add_rune(RuneTable.STILLNESS)
 	player.add_rune("Rune of Nothing")
-	_check(player.rune_count(RuneTable.UNREST) == 2 and not player.runes.has("Rune of Nothing"), "runes are counted by name")
+	_check(player.rune_count(RuneTable.UNREST) == 2 and not player.runes.has("Rune of Nothing"),
+			"runes are counted by name")
 	_check(not player.use_rune(RuneTable.STILLNESS, spot, [], rng) and player.rune_count(RuneTable.STILLNESS) == 1
 			and not player.has_runes(spot), "one that would do nothing is not spent")
 	_check(player.use_rune(RuneTable.UNREST, spot, [], rng) and player.rune_count(RuneTable.UNREST) == 1
@@ -208,7 +211,8 @@ func _test_runes() -> bool:
 	player.save(TEST_PATH)
 	var back := Inventory.load_from(TEST_PATH)
 	_check(back.runes.is_empty() and back.rune_work(spot)["mods"] == player.rune_work(spot)["mods"]
-			and not back.has_runes(Vector2i(1, 1)), "the save keeps the work still going, and no tile with none (%s)" % [back.runed])
+			and not back.has_runes(Vector2i(1,
+					1)), "the save keeps the work still going, and no tile with none (%s)" % [back.runed])
 	_check(player.transcended().runed.is_empty() and player.transcended().runes.is_empty(),
 			"a transcension leaves both with the world")
 	return true
@@ -662,7 +666,8 @@ func _test_crafting_from_the_bag() -> bool:
 	# Placed once by the hover and again deferred, so it is measured after the labels have laid out.
 	for i in 2:
 		await process_frame
-	var card_right: float = main.bag_page._orb_card.get_global_position().x + main.bag_page._orb_card.size.x * main.ui_scale
+	var card_right: float = (main.bag_page._orb_card.get_global_position().x
+			+ main.bag_page._orb_card.size.x * main.ui_scale)
 	# Two checks that only mean anything together: the card really does reach across into the sheet's
 	# column, and it is the later child of the layer, which is the whole of what decides which of the
 	# two the player sees where they meet. Compared across rather than as whole rectangles, because
@@ -673,7 +678,7 @@ func _test_crafting_from_the_bag() -> bool:
 			"and into the character sheet's column")
 	_check(main.bag_page._orb_card.get_index() > main.bag_page._worn_panel.get_index(),
 			"so it is drawn after the sheet, which cannot then cover it")
-	main.bag_page._hide_orb_card()
+	main.bag_page._orb_card.hide()
 	_check(not main.bag_page._orb_card.visible, "and leaving takes it down")
 
 	# Everything crafted goes through the save unchanged, which is the whole point of a piece being
@@ -793,10 +798,10 @@ func _test_a_finger_selects_first() -> bool:
 	bag._on_orb_pressed(RuneTable.UNREST)
 	Cursors.taps += 1
 	main._on_cell_aimed(ground)
-	_check(main._panel.visible and bag.visible and main.map.selected_cell == ground
+	_check(main.tile_panel.panel.visible and bag.visible and main.map.selected_cell == ground
 			and bag._armed == RuneTable.UNREST and main.inventory.rune_count(RuneTable.UNREST) == 1,
 			"a finger's first tap on a tile puts its panel up over the bag, the rune still in hand")
-	_check(main._panel.get_index() > bag.get_index(), "in front of the bag, which is drawn after it otherwise")
+	_check(main.tile_panel.panel.get_index() > bag.get_index(), "in front of the bag, which is drawn after it otherwise")
 	Cursors.taps += 1
 	main._on_cell_aimed(ground)
 	_check(main.inventory.rune_count(RuneTable.UNREST) == 0 and main.inventory.has_runes(main.view.origin + ground),
@@ -895,7 +900,7 @@ func _test_tips() -> bool:
 
 	# The web build's changelog: every version, newest first, packed into the export, and every one the
 	# player has not seen shown once, together.
-	var versions: Array = main.changelog()
+	var versions: Array = Changelog.versions()
 	_check(versions.size() >= 3, "CHANGELOG.md names its versions (%d)" % versions.size())
 	var rows: Array = []
 	for version: Dictionary in versions:
@@ -981,7 +986,8 @@ func _test_unique_table() -> bool:
 		_check(not row.has("envs"), "%s is not tied to any other ground" % id)
 		if row.has("home"):
 			_check(UniqueTable.home_piece(row["home"]) == id, "%s is the one piece at home on %s" % [id, row["home"]])
-	_check(UniqueTable.pool_for(Achievements.STARTERS) == Achievements.STARTERS, "the starters are there to hunt from the first")
+	_check(UniqueTable.pool_for(Achievements.STARTERS) == Achievements.STARTERS,
+			"the starters are there to hunt from the first")
 	for mod_id: String in ModifierTable.UNIQUE_ONLY:
 		var used := false
 		for id: String in UniqueTable.UNIQUES:
@@ -1016,11 +1022,13 @@ func _test_rarity_frames() -> bool:
 	_check(ranked.frame() == ItemRarity.frame(ItemRarity.Rarity.UNIQUE, 1), "and with no rank earned, rank I's")
 	var starter := Item.rolled_unique(Achievements.STARTERS[0], rng, 1)
 	_check(starter.frame() == ItemRarity.frame(ItemRarity.Rarity.UNIQUE, 0) and not starter.frame() in
-			range(1, UniqueTable.PEAK + 1).map(func(rank: int) -> Texture2D: return ItemRarity.frame(ItemRarity.Rarity.UNIQUE, rank)),
+			range(1, UniqueTable.PEAK + 1).map(
+					func(rank: int) -> Texture2D: return ItemRarity.frame(ItemRarity.Rarity.UNIQUE, rank)),
 			"a starter, which has no rank, wears none of theirs")
 	var square := ItemSlot.make(ranked)
 	var ring := square.get_node(ItemSlot.FRAME_NAME) as TextureRect
-	_check(ring.position == Vector2(0, -ItemRarity.FRAME_HEAD), "the square's frame stands up over it, flush with its sides")
+	_check(ring.position == Vector2(0, -ItemRarity.FRAME_HEAD),
+			"the square's frame stands up over it, flush with its sides")
 	_check((square.get_theme_stylebox("panel") as StyleBoxFlat).corner_radius_top_left == ItemRarity.FRAME_CORNER,
 			"on a socket cut back at the corners")
 	var plain := ItemSlot.make(_piece(ItemRarity.Rarity.COMMON, 3))

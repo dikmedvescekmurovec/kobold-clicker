@@ -1,22 +1,19 @@
 class_name RuneTable
 extends RefCounted
-## The six runes, the third wall's unlock with Gollux (`WallUnlocks.RUNES`, the user's design 2026-10-09):
-## dropped only in his cave, and spent on a charted tile to juice its farm runs. What each does, how often
-## a body down there carries one, and the rules over the work they leave on a tile.
+## The six runes, the third wall's unlock (`WallUnlocks.RUNES`; the user's design, 2026-10-09): dropped
+## only in Gollux's cave and spent on a charted tile, to change its farm runs. Like an orb, a count by
+## name in the inventory and never an `Item`. `why_not` is the one rule, as `OrbTable`'s is.
 ##
-## A tile's rune work is one Dictionary (`Inventory.runed`, by world spot): `mods`, the modifiers runes
-## gave it -- {id, tier, left} each, a `TileMods` row --, `depth`, one count of kills left a Depth rune,
-## and `ascent`, the Ascent rune's kills left (0: none). **Runes never touch the tile's own modifiers**
-## (the user's): Shifting, Upheaval and Stillness work on what runes gave it alone. **Everything a rune
-## does lasts `KILLS` kills on the tile, each modifier, each Depth and the Ascent on its own count** (the
-## user's), counted in a farm run (`count_kill`) -- never a camp, which carries none of it.
-##
-## Like the orbs, a count by name in the inventory and never an `Item`; unlike them, a tile and not a
-## piece is what one is spent on. `can_apply` / `apply` / `why_not` are three faces of one rule, as
-## `OrbTable`'s are.
+## A tile's rune work is one Dictionary (`fresh`), kept in `Inventory.runed` by world spot:
+##   mods    [{id, tier, left}]: the `TileMods` rows runes gave it, and each one's kills left.
+##   depth   [left]: one entry a Depth rune still working.
+##   ascent  the Ascent's kills left, 0 for none.
+## The user's rules: a rune never touches the tile's own modifiers, and every modifier, every Depth and
+## the Ascent lasts `KILLS` kills on a count of its own, counted in a farm run (`count_kill`) and never
+## in a camp.
 
-## What each does, how often one is drawn against the others, and its colour: the crystal it wears
-## (`icon`, a stand-in until the runes have art of their own) and the beam it falls in.
+## `weight`: how often it is drawn against the others. `glow`: its colour, for its stand-in icon and
+## the beam it falls in. `does`: its card's sentence.
 const RUNES := {
 	"Rune of Shifting": {"weight": 6, "glow": Color("0098dc"),
 		"does": "Rerolls the tiers of the modifiers runes gave a tile."},
@@ -37,17 +34,17 @@ const UNREST := "Rune of Unrest"
 const STILLNESS := "Rune of Stillness"
 const DEPTH := "Rune of Depth"
 const ASCENT := "Rune of Ascent"
-## How many kills on the tile each thing a rune did lasts (the user's, 2026-10-09: 100, then 1000 the same day).
+## How many kills on the tile each thing a rune did lasts (the user's, 2026-10-09).
 const KILLS := 1000
 ## The highest tier Shifting deals a modifier; a `once` row stays at I.
 const MOST_TIER := 3
-## How often a body in the cave carries a rune, by what it was: Gollux always.
+## How often a body in the cave carries a rune, by its tier: Gollux always.
 const CHANCE := {
 	EnemyRoster.Tier.COMMON: 0.04,
 	EnemyRoster.Tier.ELITE: 0.2,
 	EnemyRoster.Tier.BOSS: 1.0,
 }
-## The crystal every rune wears for now, tinted its colour and set in a 16 px square (`icon`).
+## The stand-in every rune wears until it has art of its own (`icon`).
 const CRYSTAL := "res://Assets/UI/ui_icon_crystal.png"
 const ICON_SIDE := 16
 
@@ -62,8 +59,8 @@ static func has(rune: String) -> bool:
 	return RUNES.has(rune)
 
 
-## The rune's picture: the crystal mark multiplied by its colour, its dark edge kept, in a 16 px square
-## so the orb tray's 16 px icon draws it pixel for pixel. Made once.
+## The crystal mark multiplied by the rune's colour, its dark edge kept, in a 16 px square so the orb
+## tray's 16 px icon draws it pixel for pixel. Made once.
 static func icon(rune: String) -> Texture2D:
 	if not _icons.has(rune):
 		var mark := (load(CRYSTAL) as Texture2D).get_image()
@@ -76,16 +73,18 @@ static func icon(rune: String) -> Texture2D:
 		for y in mark.get_height():
 			for x in mark.get_width():
 				var pixel := mark.get_pixel(x, y)
-				square.set_pixel(at.x + x, at.y + y, Color(pixel.r * tint.r, pixel.g * tint.g, pixel.b * tint.b, pixel.a))
+				square.set_pixel(at.x + x, at.y + y,
+						Color(pixel.r * tint.r, pixel.g * tint.g, pixel.b * tint.b, pixel.a))
 		_icons[rune] = ImageTexture.create_from_image(square)
 	return _icons[rune]
 
 
-## A body in the cave: the rune it carries, or "". Drawn by the runes' weights.
+## A body in the cave: the rune it carries, or "".
 static func roll(enemy: String, rng: RandomNumberGenerator) -> String:
 	if rng.randf() >= float(CHANCE[EnemyRoster.tier_of(enemy)]):
 		return ""
-	return names()[LootTable.weighted_index(RUNES.values().map(func(row: Dictionary) -> int: return int(row["weight"])), rng)]
+	var weights := RUNES.values().map(func(row: Dictionary) -> int: return int(row["weight"]))
+	return names()[LootTable.weighted_index(weights, rng)]
 
 
 ## A tile with no rune work on it.
@@ -93,8 +92,8 @@ static func fresh() -> Dictionary:
 	return {"mods": [], "depth": [], "ascent": 0}
 
 
-## The rune work on a tile as the fight reads it: each modifier listed once a tier, as `TileMods` lists
-## a tile's own.
+## The rune work's modifiers as the fight reads them: each listed once a tier, as `TileMods` lists a
+## tile's own.
 static func mods_of(state: Dictionary) -> Array[String]:
 	var out: Array[String] = []
 	for mod: Dictionary in state.get("mods", []):
@@ -112,14 +111,13 @@ static func ascended(state: Dictionary) -> bool:
 	return int(state.get("ascent", 0)) > 0
 
 
-## Whether any rune is still working on the tile.
 static func working(state: Dictionary) -> bool:
 	return not mods_of(state).is_empty() or deeper(state) > 0 or ascended(state)
 
 
 ## The modifiers a rune could give a tile carrying `own` (its own, as the fight is told them) and the
-## rune work in `state`: only the ones a farm run feels (`TileMods` `farm`), since a farm run is the only
-## fight a charted tile has, none already on it, and none a modifier on it will not stand beside.
+## rune work in `state`: only rows a farm run feels (`TileMods` `farm`), a farm run being the only
+## fight a charted tile has; none already on it; none a modifier on it will not stand beside.
 static func pool(own: Array, state: Dictionary) -> Array[String]:
 	var on: Array = own + mods_of(state)
 	var out: Array[String] = []
@@ -136,7 +134,7 @@ static func pool(own: Array, state: Dictionary) -> Array[String]:
 	return out
 
 
-## Why `rune` would do nothing to a tile carrying `own` and `state`, or "" when it would do something.
+## Why `rune` would do nothing to a tile carrying `own` and `state`; "" when it would do something.
 static func why_not(rune: String, own: Array, state: Dictionary) -> String:
 	var given: Array = state.get("mods", [])
 	match rune:
@@ -166,8 +164,8 @@ static func apply(rune: String, own: Array, state: Dictionary, rng: RandomNumber
 			for mod: Dictionary in given:
 				mod["tier"] = 1 if _once(mod["id"]) else rng.randi_range(1, MOST_TIER)
 		UPHEAVAL:
-			# Each into one it is not, kept to its tier where its new row allows one, on its own count --
-			# or itself again where nothing else may stand beside the rest.
+			# Each into one it is not, keeping its count and, where its new row allows one, its tier; itself
+			# again where nothing else may stand beside the rest.
 			var kept: Array = []
 			for mod: Dictionary in given:
 				var choices := pool(own, {"mods": kept}).filter(func(id: String) -> bool: return id != mod["id"])
@@ -187,9 +185,9 @@ static func apply(rune: String, own: Array, state: Dictionary, rng: RandomNumber
 	return true
 
 
-## One kill on the tile: every count goes down one, and what runs out comes off. What came off, for the
-## fight that is running to forget: {"mods": the rows gone, "depth": how many Depths, "ascent": whether
-## the Ascent did}.
+## One kill on the tile: every count goes down one, and what runs out comes off. Returns what did,
+## for the running fight to forget: {"mods": the rows gone, "depth": how many Depths, "ascent":
+## whether the Ascent did}.
 static func count_kill(state: Dictionary) -> Dictionary:
 	var gone := {"mods": [], "depth": 0, "ascent": false}
 	var kept: Array = []
@@ -218,8 +216,8 @@ static func any_gone(gone: Dictionary) -> bool:
 	return not (gone["mods"] as Array).is_empty() or int(gone["depth"]) > 0 or bool(gone["ascent"])
 
 
-## A tile's rune work read back off a save: only rows that still exist and counts that make sense, a
-## count that is no number read as absent. A modifier this build has not got is named in `lost`.
+## A tile's rune work read back off a save: only rows this build has (the rest named in `lost`) and
+## counts that make sense, a count that is no number read as absent.
 static func from_dict(data: Variant, lost: Array = []) -> Dictionary:
 	var state := fresh()
 	if typeof(data) != TYPE_DICTIONARY:

@@ -1,19 +1,13 @@
 class_name AchievementsPage
 extends Control
-## The achievements, as a page against the left edge -- simple, after the user's reference (2026-09-28):
-## a bar across the top saying how much of the list is earned, rank by rank, and under it one grid of
-## squares by the achievement's name (the user's, 2026-10-02). A square is the unique it unlocks:
-## lit once earned, with the rank reached on its corner, the same square dimmed until then. Its card,
-## the item card's own (`ItemSlot.hint`), says the achievement's name and rank, what the next rank
-## asks and how far the player is; its Alt key names the unique.
+## The achievements on the left edge -- simple, after the user's reference (2026-09-28): a bar of how
+## much of the list is earned, rank by rank, over one grid of squares by the achievement's name (the
+## user's, 2026-10-02). A square is the unique its achievement unlocks, its card the item card's own
+## (`ItemSlot.hint`).
 ##
-## Built like the collection log beside it: `open()` redraws it, `layout()` fits it to the window,
-## `closed` is its X, and it carries `UITheme.theme()` because it hangs off a `CanvasLayer`. It saves
-## nothing: an achievement new since the last look (`Inventory.achievements_new`) is the only square
-## that glints, until the cursor has been over it or the page is closed, and then `seen` asks the main
-## scene to save.
+## It saves nothing: an achievement new since the last look (`Inventory.achievements_new`) is the only
+## square that glints, until hovered or the page is closed, and then `seen` asks the main scene to save.
 
-## The page's X was pressed.
 signal closed
 ## A new achievement was hovered, or the page closed over one, and it left `Inventory.achievements_new`.
 signal seen
@@ -30,6 +24,7 @@ const PROGRESS_HEIGHT := 2
 const PROGRESS_INSET := 3
 
 var inventory: Inventory
+var area := Rect2()
 var _ui_scale: float
 var _panel: VBoxContainer
 var _head: VBoxContainer
@@ -58,7 +53,6 @@ func _ready() -> void:
 	open()
 
 
-## Redraws the page: the bar, then the grid.
 func open() -> void:
 	UITheme.clear(_head)
 	UITheme.clear(_rows)
@@ -67,15 +61,9 @@ func open() -> void:
 		ranks += Achievements.rank(inventory, id)
 	_head.add_child(share_bar(ranks, Achievements.ACHIEVEMENTS.size() * UniqueTable.PEAK))
 	var known := Achievements.state(inventory)
-	var grid := GridContainer.new()
-	grid.columns = BagPage.GRID_COLS
-	grid.add_theme_constant_override("h_separation", BagPage.SLOT_GAP)
-	grid.add_theme_constant_override("v_separation", BagPage.SLOT_GAP)
+	var grid := CollectionPage.grid()
 	_rows.add_child(grid)
-	var ids := Achievements.ACHIEVEMENTS.keys()
-	ids.sort_custom(func(a: String, b: String) -> bool:
-		return str(Achievements.ACHIEVEMENTS[a]["name"]).naturalnocasecmp_to(str(Achievements.ACHIEVEMENTS[b]["name"])) < 0)
-	for id: String in ids:
+	for id: String in CollectionPage.by_name(Achievements.ACHIEVEMENTS.keys(), Achievements.ACHIEVEMENTS):
 		var slot := tile(inventory, id, known)
 		grid.add_child(slot)
 		if id in inventory.achievements_new:
@@ -156,9 +144,8 @@ static func tile(player: Inventory, id: String, known: Dictionary) -> ItemSlot:
 	return slot
 
 
-## How far a square's achievement is toward its next rank, along the square's foot: an ink trough
-## filling with leaf, and full and gold at rank IV. It is what sets this page apart from the collection
-## log's grid of the same pieces: here a square is a thing being worked at.
+## How far a square's achievement is toward its next rank, along the square's foot: full and gold at
+## rank IV. What sets this page apart from the collection log's grid of the same pieces.
 static func progress_bar(player: Inventory, id: String, rank: int, known: Dictionary) -> ColorRect:
 	var share := 1.0
 	if rank < UniqueTable.PEAK:
@@ -180,9 +167,8 @@ static func progress_bar(player: Inventory, id: String, rank: int, known: Dictio
 
 ## What the card beside a square says, after the user's pick (2026-10-07, `tools/qa/achievement_card_m2.png`):
 ## the achievement's name with the rank reached at its right end ("I / IV"), what the next rank asks,
-## and how far along the player is as the page's own bar -- full and gold at IV, the count running on
-## past the need ("1241 / 500"). The unique it unlocks is the square's Alt key's word (`tile`), never a
-## line here.
+## and how far along as the page's own bar -- full and gold at IV, the count running on past the need
+## ("1241 / 500"). The unique it unlocks is the square's Alt key's word (`tile`), never a line here.
 static func write_card(rows: VBoxContainer, width: float, player: Inventory, id: String,
 		known: Dictionary) -> void:
 	UITheme.clear(rows)
@@ -201,7 +187,6 @@ static func write_card(rows: VBoxContainer, width: float, player: Inventory, id:
 	var key := str(row["key"])
 	if rank >= UniqueTable.PEAK:
 		rows.add_child(ItemDetails.line(Achievements.text(id, rank), Palette.TEXT, width, true))
-		# The count goes on climbing past IV, and the bar says how far.
 		var peak := Achievements.need_at(id, rank)
 		var said := "Achieved"
 		if _counts(key, peak):
@@ -222,10 +207,5 @@ static func _counts(key: String, need: float) -> bool:
 	return need > 1.0 and not key.begins_with("wall_") and key != "domino_wall"
 
 
-## Where the main scene stands the page, in window pixels: empty for the whole window.
-var area := Rect2()
-
-
-## Full window height against the left edge, where the other pages stand.
 func layout() -> void:
 	UITheme.dock(_panel, area, _ui_scale, UITheme.Dock.LEFT, layout)

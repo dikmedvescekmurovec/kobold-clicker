@@ -52,7 +52,8 @@ func _process(delta: float) -> void:
 	var reach := _outer[0].length()
 	for cell in _lifting.keys():
 		var lift := _lifting[cell]
-		if (_clock - lift.z) * LIFT_SPEED >= _map.ground_layer.map_to_local(cell).distance_to(Vector2(lift.x, lift.y)) + reach:
+		var far := _map.ground_layer.map_to_local(cell).distance_to(Vector2(lift.x, lift.y)) + reach
+		if (_clock - lift.z) * LIFT_SPEED >= far:
 			_lifting.erase(cell)
 	queue_redraw()
 

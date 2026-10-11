@@ -1,46 +1,42 @@
 class_name ItemCard
 extends PanelContainer
-## What a piece of gear is, shown while the cursor is over its square: its `ItemDetails` block, in the
-## pack's cream text panel, beside the square it describes.
+## The floating card for the piece under the cursor: its `ItemDetails` block on cream beside its square,
+## the worn piece's past it under Alt, the keys a press answers at its foot, and a light behind it.
 ##
-## One card for every square in the game rather than one per page. An `ItemSlot` takes no mouse input
-## -- the bag's scroll has to see every press -- so no square can say it is hovered; instead every
-## square joins `ItemSlot.GROUP` and the card asks, every frame, which of them the cursor is over. The
-## bag's grid, the worn sockets and a vendor's shelf all get it for nothing, and so will whatever
-## draws a square next.
-##
-## Not Godot's tooltip, for `OrbCard`'s reason: a tooltip is its own window and cannot inherit
-## `ui_scale`. On `TextPanel`, as every card is, because the darker half of the rarity ramp that
-## `ItemDetails` writes in is picked to be read on cream.
+## One card for every square in the game, not one a page. An `ItemSlot` takes no mouse, so no square can
+## say it is hovered: every square with a card joins `ItemSlot.GROUP`, and the card asks each frame which
+## of them the cursor is over (`slot_at`). Whatever draws a square next gets its card for nothing.
 
-## `OrbCard.WIDTH`: what the game already uses for a block of text that floats.
+## `OrbCard.WIDTH`: the width of every floating block of text.
 const WIDTH := 150.0
 ## The air between the card and the square it describes, in panel pixels.
 const GAP := 4
 ## What the second card says under Alt when nothing is worn where the hovered piece would go, the
 ## socket named by `Equipment.LABELS`.
 const BARE := "Nothing is equipped in the %s slot"
-## The meta a square may carry naming a Control standing beside it (the bag's buttons): the card is
-## placed past the two of them together, so it never covers what the square has to press.
+
+# The metas a square may carry to steer its card.
+## A Control standing beside the square (the bag's buttons): the card is placed past the two of them
+## together, so it never covers what the square has to press.
 const BESIDE := "beside"
-## The meta a square may carry naming the keys a click on it answers to, key -> the word the card
-## writes beside that key's picture: `{"shift": "equip", "ctrl": "sell"}`. The page that draws the
-## square sets it, since only it knows what its buttons do; Alt is the card's own.
+## The keys a click on the square answers to, key -> the word the card writes beside that key's
+## picture: `{"shift": "equip", "ctrl": "sell"}`. Set by the page that draws the square; Alt is the
+## card's own.
 const KEYS := "keys"
-## The meta a square may carry holding a second card of its own for Alt, a `func(rows, width)` like its
-## `hint`: an achievement's square writes the unique it unlocks there, and a unique's square in the log
-## its achievement (the user's, 2026-10-02). The word Alt is offered under goes in its `KEYS`.
+## A second card of the square's own for Alt, a `func(rows, width)` like its `hint`: an achievement's
+## square writes the unique it unlocks, a unique's square in the log its achievement (the user's,
+## 2026-10-02). The word Alt is offered under goes in its `KEYS`.
 const ALT_CARD := "alt_card"
-## The meta a square may carry that holds its piece up against nothing: a piece shown as worn on a page
-## that is not its doll's (the character page's uniques), which the card would otherwise hold against
-## the ordinary doll -- the wrong one for an heirloom.
+## Holds the piece up against nothing: one shown as worn on a page that is not its doll's (the
+## character page's uniques), where the ordinary doll is the wrong one for an heirloom.
 const NO_COMPARE := "no_compare"
-## The meta a square may carry whose own press is read on its card -- a skill point going into a node:
-## the card stays up through a press that stays on it, as it does under a held orb.
+## The square's own press is read on its card (a skill point going into a node): the card stays up
+## through a press that stays on it, as it does under a held orb.
 const STAYS := "stays"
-## The meta a square may carry that keeps its card up while the cursor is on no square at all: the
-## unique picked on the fortuneteller's banishing screen, read while the button under it is found.
+## Keeps the card up while the cursor is on no square at all: the unique picked on the fortuneteller's
+## banishing screen, read while the button under it is found.
 const PINNED := "pinned"
+
 ## How strong a skill point's light is, of an orb's 0 to 1 (`flash`): under the least that has rays.
 const POINT_POWER := 0.25
 const ORB_SHINE := preload("res://Scenes/UI/orb_shine.gdshader")
@@ -49,10 +45,10 @@ const ORB_SHINE := preload("res://Scenes/UI/orb_shine.gdshader")
 const SHINE_RISE := 0.1
 const SHINE_TIME := Vector2(0.4, 1.0)
 const SHINE_REACH := 40.0
-## The child `shine` adds.
+## The child `flash` adds.
 const SHINE_NAME := "Shine"
 ## How bright the light behind the card stands while the orb in hand could go into the piece under
-## it (`lights`): `shine`'s light held low and still, with no rays.
+## it (`lights`): `flash`'s light held low and still, with no rays.
 const HOVER_LIFE := 1
 ## The keys' pictures, cut from the keyboard pack by `tools/ui_kit.py`.
 const KEY_ICONS := {
@@ -67,13 +63,13 @@ var _ui_scale: float
 var _rows: VBoxContainer
 var _shown: ItemSlot
 ## The second card, up while Alt is held: the piece the player is wearing where the hovered one would
-## go. A sibling rather than a child, because a PanelContainer would lay a child out inside itself.
+## go. A sibling and not a child, because a PanelContainer would lay a child out inside itself.
 var _worn := PanelContainer.new()
 var _worn_rows: VBoxContainer
 var _alt := false
 ## The square last pressed and where, which `hovered` keeps quiet about until the cursor leaves it.
-## The square's place rather than its piece: a redraw makes new squares, and a vendor's shelf makes
-## new `Item`s too (`VendorStock.items`), so nothing pressed is still there to be compared with.
+## The square's place and not its piece: a redraw makes new squares, and a vendor's shelf makes new
+## `Item`s too (`VendorStock.items`), so nothing pressed is still there to be compared with.
 var _muted := Rect2()
 var _pressed_at := Vector2.INF
 ## Whether an orb was in the hand as the press under way began. The press that spends the last orb
@@ -81,44 +77,55 @@ var _pressed_at := Vector2.INF
 var _orb_press := false
 ## The orb in a bag page's hand, or "" (`BagPage.held_changed`, wired in the main scene).
 var held := ""
-## The light `lights` stands behind the card, a `Node2D` for `shine`'s reasons, and drawn under it.
-var _hover := Node2D.new()
-var _hover_glow := ShaderMaterial.new()
+## The light `lights` stands behind the card (`_light`), and its material.
+var _hover: Node2D
+var _hover_glow: ShaderMaterial
 ## Whether what the card reads moved under it (`flash`), so it is written again where it stands.
 var _stale := false
 
 
 func _init(ui_scale: float) -> void:
 	_ui_scale = ui_scale
-	theme = UITheme.theme()
-	theme_type_variation = "TextPanel"
-	UITheme.notched(self)
-	scale = Vector2(ui_scale, ui_scale)
-	# It stands beside the cursor and must never take a press meant for what is under it.
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_rows = UITheme.vbox(2, WIDTH)
-	_rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_rows)
-	_worn.theme = theme
-	_worn.theme_type_variation = "TextPanel"
-	UITheme.notched(_worn)
-	_worn.scale = scale
-	_worn.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_worn_rows = UITheme.vbox(2, WIDTH)
-	_worn_rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_worn.add_child(_worn_rows)
+	_rows = _dress(self)
+	_worn_rows = _dress(_worn)
 	_worn.hide()
-	_hover_glow.shader = ORB_SHINE
-	_hover_glow.set_shader_parameter("reach", SHINE_REACH)
-	_hover.material = _hover_glow
-	_hover.show_behind_parent = true
+	_hover = _light()
+	_hover_glow = _hover.material
 	_hover.hide()
-	_hover.draw.connect(func() -> void:
-		_hover_glow.set_shader_parameter("card", size)
-		_hover.draw_rect(Rect2(-Vector2.ONE * SHINE_REACH, size + Vector2.ONE * SHINE_REACH * 2.0), Color.WHITE))
+	_hover.draw.connect(func() -> void: _hover_glow.set_shader_parameter("card", size))
 	resized.connect(_hover.queue_redraw)
 	add_child(_hover)
 	hide()
+
+
+## `panel` as a card: cream, notched, at the interface's scale, and deaf to the mouse -- it stands
+## beside the cursor and must never take a press meant for what is under it. Returns the rows it is
+## written in.
+func _dress(panel: PanelContainer) -> VBoxContainer:
+	panel.theme = UITheme.theme()
+	panel.theme_type_variation = "TextPanel"
+	UITheme.notched(panel)
+	panel.scale = Vector2(_ui_scale, _ui_scale)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var rows := UITheme.vbox(2, WIDTH)
+	rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(rows)
+	return rows
+
+
+## A light for behind the card (`orb_shine.gdshader`), not yet a child. A `Node2D` drawn behind the
+## card's panel, so the card (a container) leaves it be and it can reach `SHINE_REACH` past the edges;
+## it moves, scales and hides with the card, and outlives a redraw, which only refills `_rows`.
+func _light() -> Node2D:
+	var light := Node2D.new()
+	light.show_behind_parent = true
+	var glow := ShaderMaterial.new()
+	glow.shader = ORB_SHINE
+	glow.set_shader_parameter("reach", SHINE_REACH)
+	light.material = glow
+	light.draw.connect(func() -> void:
+		light.draw_rect(Rect2(-Vector2.ONE * SHINE_REACH, size + Vector2.ONE * SHINE_REACH * 2.0), Color.WHITE))
+	return light
 
 
 func _ready() -> void:
@@ -134,18 +141,17 @@ func _process(_delta: float) -> void:
 			Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
 	if slot == null:
 		slot = pinned()
-	# A square freed by a redraw compares equal to null, which would read as "still nothing" and leave
-	# the card of a square that is gone standing: a vendor's shelf does exactly that on a press.
 	# A finger has no Alt to hold: under one the worn piece is always the second card.
 	var alt := Input.is_key_pressed(KEY_ALT) or Cursors.touched
 	var lit := lights(slot)
 	if lit != _hover.visible:
 		_hover.visible = lit
 		if lit:
-			_hover_glow.set_shader_parameter("colour",
-					(SuperOrbTable.ORBS if SuperOrbTable.has(held) else OrbTable.ORBS)[held].glow)
+			_hover_glow.set_shader_parameter("colour", _glow_of(held))
 			_hover.create_tween().tween_method(func(life: float) -> void:
 				_hover_glow.set_shader_parameter("life", life), 0.0, HOVER_LIFE, SHINE_RISE)
+	# `is_instance_valid`: a square freed by a redraw compares equal to null, which would read as "still
+	# nothing" and leave the card of a square that is gone standing (a vendor's shelf on a press).
 	if not _stale and alt == _alt \
 			and (is_instance_valid(_shown) and slot == _shown or (slot == null and not visible)):
 		return
@@ -161,7 +167,7 @@ func _process(_delta: float) -> void:
 		slot.hint.call(_rows, WIDTH)
 	else:
 		ItemDetails.fill(_rows, slot.item, WIDTH)
-	# And no keys to press, so none are offered.
+	# A finger has no keys to press, so none are offered.
 	var hints := {} if Cursors.touched else hints_for(slot, alt)
 	if not hints.is_empty():
 		_rows.add_child(UITheme.rule())
@@ -177,27 +183,27 @@ func _process(_delta: float) -> void:
 	_place.call_deferred(anchor)
 
 
-## The square the card should be describing, or null. Nothing while the button is down: that is a
-## drag scrolling the bag or a press opening the piece, and a card flickering from square to square
-## under either is in the way. And a press puts the card away for good: the piece pressed says
-## nothing more until the cursor has been somewhere else, whether the press opened it, shut it or
-## did nothing at all, and neither does whatever a sale slid under a cursor that has not moved. But
-## not with an orb in the hand: that press crafts the piece where it lies, and the new lines are the
-## whole point of it -- even when it spent the last orb, and the hand is empty before the release.
+## The square the card should be describing, or null.
+## Nothing while the button is down (a drag scrolling the bag, or a press opening the piece), and a
+## press puts the card away for good: the place pressed says nothing more until the cursor has been
+## somewhere else, whatever the press did or a sale slid under a cursor that has not moved. But not
+## with an orb in the hand: that press crafts the piece where it lies, and the card is where the result
+## is read -- even when it spent the last orb and the hand is empty before the release (`_orb_press`).
+## A finger has no hover: its tap is how a piece is asked about, so the card comes up as it lifts and
+## stays until the next tap lands somewhere else.
 func hovered(at: Vector2, pressed: bool) -> ItemSlot:
 	var slot := slot_at(at)
-	# A finger has no hover: its tap is how a piece is asked about, so the card comes up as it lifts
-	# and stays until the next tap lands somewhere else -- and through a press on a node it is already
-	# on (`STAYS`), where a finger held down is spending points the card counts.
+	# A press that stays on a `STAYS` square the card was already on keeps it (a finger held down there
+	# is spending points the card counts); a tree dragged about under the press says nothing.
+	var stays := slot != null and slot == _shown and slot.has_meta(STAYS)
 	if pressed and Cursors.touched:
-		return slot if slot != null and slot == _shown and slot.has_meta(STAYS) else null
+		return slot if stays else null
 	if not pressed:
 		_orb_press = Cursors.holding()
 	if _orb_press or Cursors.holding():
 		return slot
 	if pressed:
-		# Only the square the card was already on: a tree dragged about under the press says nothing.
-		if slot != null and slot == _shown and slot.has_meta(STAYS):
+		if stays:
 			return slot
 		_muted = slot.get_global_rect() if slot != null else Rect2()
 		_pressed_at = at
@@ -227,21 +233,21 @@ func lights(slot: ItemSlot) -> bool:
 	return OrbTable.can_apply(held, slot.item)
 
 
-## `flash` in `orb`'s colour (`glow`): the orb has just gone into the piece. The better the orb, the
-## more light -- its place in the tray, a super orb past them all -- and the longer.
+static func _glow_of(orb: String) -> Color:
+	return (SuperOrbTable.ORBS if SuperOrbTable.has(orb) else OrbTable.ORBS)[orb].glow
+
+
+## `flash` in `orb`'s colour: the orb has just gone into the piece. The better the orb, the more light
+## and the longer -- its place in the tray, a super orb past them all.
 func shine(orb: String) -> void:
-	var super_orb := SuperOrbTable.has(orb)
-	flash((SuperOrbTable.ORBS if super_orb else OrbTable.ORBS)[orb].glow,
-			1.0 if super_orb else (OrbTable.orbs().find(orb) + 1.0) / (OrbTable.orbs().size() + 1.0))
+	flash(_glow_of(orb), 1.0 if SuperOrbTable.has(orb)
+			else (OrbTable.orbs().find(orb) + 1.0) / (OrbTable.orbs().size() + 1.0))
 
 
-## Light from behind the card in `colour` (`orb_shine.gdshader`), swelling in and dying away, more and
-## longer the more `power` (0 to 1): what the card reads has just changed under it -- an orb into its
-## piece, a skill point into its node (`SkillsPage.learned`) -- so it is written again as well. A second
-## one puts the last one's light out and swells on from where that had got to, so a press held down
-## holds the light up. A `Node2D` drawn behind the card's panel, so the card (a container) leaves it be
-## and it can reach past the edges; it moves, scales and hides with the card, and outlives a redraw,
-## which only refills `_rows`.
+## Light from behind the card in `colour`, swelling in and dying away, more and longer the more `power`
+## (0 to 1): what the card reads has just changed under it -- an orb into its piece, a skill point into
+## its node (`SkillsPage.learned`) -- so it is written again as well. A second one puts the last one's
+## light out and swells on from where that had got to, so a press held down holds the light up.
 func flash(colour: Color, power := POINT_POWER) -> void:
 	_stale = true
 	if Settings.animations == Settings.Anim.NONE:
@@ -252,19 +258,13 @@ func flash(colour: Color, power := POINT_POWER) -> void:
 		from = float((old.material as ShaderMaterial).get_shader_parameter("life"))
 		remove_child(old)
 		old.queue_free()
-	var light := Node2D.new()
+	var light := _light()
 	light.name = SHINE_NAME
-	light.show_behind_parent = true
-	var glow := ShaderMaterial.new()
-	glow.shader = ORB_SHINE
+	var glow := light.material as ShaderMaterial
 	glow.set_shader_parameter("colour", colour)
 	glow.set_shader_parameter("power", power)
-	glow.set_shader_parameter("reach", SHINE_REACH)
 	# Set before the tween's first step: the next light may come in the same frame and reads it.
 	glow.set_shader_parameter("life", from)
-	light.material = glow
-	light.draw.connect(func() -> void:
-		light.draw_rect(Rect2(-Vector2.ONE * SHINE_REACH, size + Vector2.ONE * SHINE_REACH * 2.0), Color.WHITE))
 	add_child(light)
 	# The card is measured again with every piece it writes, so the light follows its size as it goes.
 	var lit := func(life: float) -> void:
@@ -278,13 +278,14 @@ func flash(colour: Color, power := POINT_POWER) -> void:
 	fade.tween_callback(light.queue_free)
 
 
-## The square under `at` (in viewport pixels), or null. A square scrolled out of its box is still
-## where it was as far as its own rect knows, so every clipping ancestor has to hold the point too.
+## The square under `at` (in viewport pixels), or null.
 func slot_at(at: Vector2) -> ItemSlot:
 	return square_at(get_tree(), at)
 
 
-## `slot_at` for whoever has no card to ask: the bag, putting a held orb down off any square.
+## `slot_at` for whoever has no card to ask: the bag, putting a held orb down off any square. A square
+## scrolled out of its box is still where it was as far as its own rect knows, so every clipping
+## ancestor has to hold the point too.
 static func square_at(tree: SceneTree, at: Vector2) -> ItemSlot:
 	for slot: ItemSlot in tree.get_nodes_in_group(ItemSlot.GROUP):
 		# A square with no piece still has a card where it carries its own words (the skill tree's root).
@@ -330,8 +331,8 @@ func bare_text(item: Item) -> String:
 
 
 ## The second card for `slot`, written into its rows: the square's own (`ALT_CARD`), or else -- for a
-## piece rather than a square with a `hint` -- the piece worn where it would go, or that the socket is
-## bare. False when there is nothing to say, and the card stays down.
+## piece, not a square with a `hint` -- the piece worn where it would go, or that the socket is bare.
+## False when there is nothing to say, and the card stays down.
 func write_second(slot: ItemSlot) -> bool:
 	UITheme.clear(_worn_rows)
 	if slot.has_meta(ALT_CARD):
@@ -342,8 +343,8 @@ func write_second(slot: ItemSlot) -> bool:
 	var worn := worn_for(slot.item)
 	if worn != null:
 		ItemDetails.fill(_worn_rows, worn, WIDTH)
-		# Said on the rarity line rather than over the name: a heading would push every row a line
-		# below its fellow on the first card. Found by name: a plussed piece's bar stands over its name.
+		# Said on the rarity line, not over the name: a heading would push every row a line below its
+		# fellow on the first card. Found by name: a plussed piece's bar stands over its name.
 		(_worn_rows.get_node(ItemDetails.RARITY_LINE) as Label).text += " · worn"
 		return true
 	if bare_for(slot.item):
@@ -369,8 +370,8 @@ func hints_for(slot: ItemSlot, alt: bool) -> Dictionary:
 
 
 ## One row of `[key] word` pairs, the picture at its own size beside the word in the body font. A
-## flow rather than a box, so three pairs wrap inside the card's width instead of widening it, and
-## each pair a box of its own, so a key never ends one line with its word starting the next.
+## flow, so three pairs wrap inside the card's width instead of widening it, and each pair a box of its
+## own, so a key never ends one line with its word starting the next.
 static func key_row(hints: Dictionary) -> HFlowContainer:
 	var row := HFlowContainer.new()
 	row.custom_minimum_size = Vector2(WIDTH, 0)

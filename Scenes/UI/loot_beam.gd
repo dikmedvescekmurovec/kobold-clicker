@@ -1,26 +1,23 @@
 class_name LootBeam
-## The beam that stands over a find lying in the arena: a pillar of light in the rarity's own colour over
-## a ring on the ground, the find standing inside it, drawn by `loot_beam.gdshader` on rectangles rather
-## than cut from a sheet, so that one piece of code can stand a modest beam over a rare and a towering
-## one wound with ribbons over a unique.
-##
-## Rare and better only, and a good orb (`OrbTable` names the rarity its beam borrows): a beam means
-## "this one is worth stopping for", and one over every uncommon ring would mean nothing.
+## The beam over a find lying in the arena, drawn by `loot_beam.gdshader`: a pillar of light in the
+## rarity's colour over a ring on the ground, the find standing inside it. Rare and better only, and a
+## good orb (`OrbTable` names the rarity whose look its beam borrows).
 
 const SHADER := preload("res://Scenes/UI/loot_beam.gdshader")
 
 ## What each rarity stands, in the find's own pixels (the find is scaled by `ui_scale`, and the beam
-## with it, less the find's own `CombatScene.FIND_SIZE`): how tall and how wide the pillar is, how many
-## rings lie round the foot (a second pulses out), how many ribbons wind up it, and whether sparks rise.
-## Each step up adds something rather than only growing, so a unique is told from an elite at a glance.
+## with it, less the find's own `CombatScene.FIND_SIZE`): the pillar's height and width, how many rings
+## lie round the foot (a second pulses out), how many ribbons wind up it, and whether sparks rise. Each
+## key is a uniform of the shader. Each step up adds something rather than only growing, so a unique is
+## told from an elite at a glance.
 const LOOKS := {
 	ItemRarity.Rarity.RARE: {"height": 80.0, "width": 2.0, "rings": 1, "ribbons": 0, "sparks": false},
 	ItemRarity.Rarity.ELITE: {"height": 140.0, "width": 2.5, "rings": 1, "ribbons": 1, "sparks": true},
 	ItemRarity.Rarity.UNIQUE: {"height": 300.0, "width": 3.5, "rings": 2, "ribbons": 2, "sparks": true},
 }
 ## The step above each beam's colour on its own ENDESGA 64 ramp, which its bright edges are drawn in:
-## the rarities' ring colours and the good orbs' glows. Picked by hand, because the palette colour
-## nearest a lightened lilac is a grey. A colour not here is lightened, off the palette.
+## the rarities' ring colours and the good orbs' glows (`test_combat` holds each to having one). Picked
+## by hand, because the palette colour nearest a lightened lilac is a grey.
 const HOT := {
 	Palette.LILAC: Color("ca52c9"),
 	Palette.BRICK: Color("f5555d"),
@@ -28,12 +25,10 @@ const HOT := {
 	Palette.STONE_LT: Color("c7cfdd"),
 	Color("ff5000"): Color("ffa214"),
 }
-## Seconds the beam takes to shoot up to its height once the find has landed.
+## Seconds the beam takes to shoot up once the find has landed, and to sink back as it is picked up.
 const RISE := 0.3
-## Seconds it takes to sink back into the ground once the find is picked up (`collapse`).
 const FALL := 0.15
-## The hum every beam stands with, for as long as it stands: a loop (`tools/sound_levels.py` cuts it
-## from whole pulses, and its `.import` loops it).
+## A loop: `tools/sound_levels.py` cuts it from whole pulses, and its `.import` loops it.
 const HUM := preload("res://Sounds/Sfx/loot_beam.ogg")
 
 
@@ -43,9 +38,9 @@ static func has(rarity: int) -> bool:
 
 
 ## A beam of `rarity`'s look in `colour`, its foot at its origin, its rings round a find of `cover`
-## (half-width, height) standing on it, shooting up once `landed` seconds have passed, drawn in
-## pixels `pixel` of its own wide (the backdrop's). Two layers: `Back` drawn under the find it is a
-## child of and `Front` over it, so the find stands inside the light.
+## (half-width, height) standing on it, shooting up once `landed` seconds have passed, drawn in pixels
+## `pixel` of its own wide (the backdrop's). Two layers: `Back` under the find it is a child of and
+## `Front` over it, so the find stands inside the light.
 static func make(rarity: int, colour: Color, landed: float, cover: Vector2, pixel := 1.0) -> Node2D:
 	var beam := Node2D.new()
 	var look: Dictionary = LOOKS[rarity]
@@ -59,6 +54,7 @@ static func make(rarity: int, colour: Color, landed: float, cover: Vector2, pixe
 		var material := ShaderMaterial.new()
 		material.shader = SHADER
 		material.set_shader_parameter("colour", colour)
+		# A colour not in `HOT` is lightened, off the palette.
 		material.set_shader_parameter("hot_colour", HOT.get(colour, colour.lerp(Color.WHITE, 0.4)))
 		material.set_shader_parameter("pixel", pixel)
 		material.set_shader_parameter("cover", cover)
@@ -78,9 +74,8 @@ static func make(rarity: int, colour: Color, landed: float, cover: Vector2, pixe
 		layer.tree_entered.connect(func() -> void:
 			layer.create_tween().tween_property(material, "shader_parameter/grow", 1.0, RISE) \
 					.set_delay(landed).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT), CONNECT_ONE_SHOT)
-	# Its hum swells as it shoots up and fades as it sinks (`collapse`), every beam its own -- each
-	# from somewhere else in the loop, so beams standing together do not pulse in step. A fade is not
-	# a volume: it ends at the file's own level, which `sound_levels.py` sets.
+	# Each beam's hum starts somewhere else in the loop, so beams standing together do not pulse in
+	# step. It is faded, never turned down: it ends at the file's own level, which `sound_levels.py` sets.
 	var hum := AudioStreamPlayer.new()
 	hum.name = "Hum"
 	hum.stream = HUM

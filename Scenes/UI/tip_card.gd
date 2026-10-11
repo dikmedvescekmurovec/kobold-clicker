@@ -1,21 +1,18 @@
 class_name TipCard
 extends PanelContainer
-## Every `tooltip_text` in the game, written on the cards' own cream panel instead of in Godot's
-## tooltip -- which is its own window, cannot inherit `ui_scale`, and so never matched the cards beside
-## it (`OrbCard` has the long version). Godot's own is put out of reach by `gui/timers/tooltip_delay_sec`
-## in `project.godot`; the text stays on the Control, where the tests find buttons by it.
-##
-## One card for the whole game, as `ItemCard` is, built by the main scene on the character's layer.
-## Unlike the item card it waits: a button's name is wanted by a cursor that has stopped on it, not by
-## one passing over a row of them.
+## Every `tooltip_text` in the game, written on the cards' cream panel beside its Control instead of in
+## Godot's tooltip, which `gui/timers/tooltip_delay_sec` in `project.godot` puts out of reach. The text
+## stays on the Control, where the tests find buttons by it. One card for the whole game, built by the
+## main scene; unlike the item card it waits (`DELAY`), a button's name being wanted by a cursor that
+## has stopped on it, not by one passing over a row of them.
 
-## How long the cursor has to stay over one Control before its card comes up, in seconds.
+## Seconds the cursor stays over one Control before its card comes up.
 const DELAY := 0.5
-## A meta on a Control whose tooltip is the whole of what it is for -- an info mark -- and so does
-## not wait: `set_meta(TipCard.NOW, true)`.
+## A meta on a Control whose tooltip is all it is for (an info mark), which does not wait:
+## `set_meta(TipCard.NOW, true)`.
 const NOW := "tip_now"
-## A meta naming the key that presses this Control -- a corner button's hotkey, `set_meta(TipCard.KEY,
-## "k")` -- whose picture, cut from the keyboard pack by `tools/ui_kit.py`, the card shows after its words.
+## A meta naming the key that presses this Control (a corner button's hotkey, `set_meta(TipCard.KEY,
+## "k")`), whose picture, cut from the keyboard pack by `tools/ui_kit.py`, the card shows after its words.
 const KEY := "tip_key"
 const KEY_PICTURE := "res://Assets/UI/ui_key_%s.png"
 
@@ -90,9 +87,9 @@ func _process(delta: float) -> void:
 	_place.call_deferred()
 
 
-## Whether the card should be up over `over`. With a mouse, while no press is down: a press is the
-## answer to whatever the card would have said, and what it changes is not what was read. A finger has
-## no hover, so it asks by being held on the control -- or at once, over an info mark (`NOW`).
+## Whether the card should be up over `over`. With a mouse, while no press is down: a press answers
+## whatever the card would have said. A finger has no hover, so it asks by being held on the control, or
+## at once over an info mark (`NOW`).
 func _asking(over: Control) -> bool:
 	var down := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 	if Cursors.touched:

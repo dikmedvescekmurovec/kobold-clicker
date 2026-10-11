@@ -1,8 +1,7 @@
 class_name Juice
 extends RefCounted
-## The small one-shot effects that make a blow or a step feel like something: a puff of pixels, a
-## freeze on a heavy hit, a shake. Static and node-free, the way `Coins` and `LootBeam` are, because
-## the fight and the map both use them and neither owns them.
+## Static, node-free effects the fight, the map and the pages share and none of them owns: sounds, a
+## puff of pixels, a freeze on a heavy hit, a shake, how popups come and go, how side pages slide.
 
 
 ## A one-shot puff of square pixels at `at`, in `parent`'s space, that fades as it goes and frees
@@ -40,11 +39,11 @@ static func fade_ramp() -> Gradient:
 	return ramp
 
 
-## Freezes the game for `seconds` of real time -- or slows it to `slow` -- then lets it go, easing
-## back to full speed over `recover` real seconds. Everything driven by the frame's delta stops with
-## it, the fight's clock included, so a freeze never costs the player time. The one that ends last
-## wins: a call that would end sooner than the one running is dropped, so a kill's short freeze
-## cannot cut short the slow-motion a rare find has just asked for.
+## Freezes the game for `seconds` of real time (or slows it to `slow`), then eases it back to full
+## speed over `recover` real seconds. Everything driven by the frame's delta stops with it, the fight's
+## clock included, so a freeze never costs the player time. The one that ends last wins: a call that
+## would end sooner than the one running is dropped, so a kill's short freeze cannot cut short the
+## slow-motion a rare find has just asked for.
 static func hit_stop(tree: SceneTree, seconds: float, slow := 0.0, recover := 0.0) -> void:
 	# The one guard for every caller: a freeze and a shake are the first things a lower level gives up.
 	if Settings.animations != Settings.Anim.DEFAULT:
@@ -90,10 +89,9 @@ static func shake(node: Node2D, strength: float, time := 0.2) -> void:
 	tween.tween_property(node, "position", home, time / (STEPS + 1))
 
 
-## A sound played once and freed when it ends, for a moment rather than a run of them (a level, a
-## verdict, the smith's hammer). On the tree's root rather than under whoever asked, so the page or the
-## fight that asked can close under it without cutting it off; added deferred, so it can be asked for
-## while the tree is busy laying out a scene.
+## A sound played once and freed when it ends (a level, a verdict, the smith's hammer). On the tree's
+## root, not under whoever asked, so the page or the fight that asked can close without cutting it off;
+## added deferred, so it can be asked for while the tree is busy laying out a scene.
 static func sound(stream: AudioStream, pitch := 1.0) -> void:
 	var player := AudioStreamPlayer.new()
 	player.stream = stream
@@ -104,9 +102,9 @@ static func sound(stream: AudioStream, pitch := 1.0) -> void:
 	(Engine.get_main_loop() as SceneTree).root.add_child.call_deferred(player)
 
 
-## Several takes of one sound as one stream, a different take each play -- `AudioStreamRandomizer`
-## never plays the same one twice running -- so a sound heard every kill does not wear a groove.
-## `pitch` is the most a play is pitched up or down by (1.0: never).
+## Several takes of one sound as one stream, a different take each play (`AudioStreamRandomizer` never
+## plays the same one twice running), so a sound heard every kill does not wear a groove. `pitch` is
+## the most a play is pitched up or down by (1.0: never).
 static func takes(streams: Array, pitch := 1.0) -> AudioStreamRandomizer:
 	var pool := AudioStreamRandomizer.new()
 	pool.random_pitch = pitch
@@ -116,10 +114,9 @@ static func takes(streams: Array, pitch := 1.0) -> AudioStreamRandomizer:
 
 
 ## How a reward panel (a fight's verdict, a bounty's pay) comes and goes: it swells in from
-## `POP_FROM` of its size past its own and settles, then shrinks away as it leaves. Its sums count up
-## from nothing, its finds pop in one after another, and a win washes the screen warm and throws
-## sparks off the ends of its bar. Only a flash and sparks are too much for `LOW`; `NONE` has none of it. The tweens run
-## whatever their panel's process mode: a tip pauses a fight, and it comes up over the verdict.
+## `POP_FROM` of its size past its own and settles, then shrinks away as it leaves. `LOW` gives up
+## only a win's wash and sparks; `NONE` has none of it. The tweens run whatever their panel's process
+## mode: a tip pauses a fight, and it comes up over the verdict.
 const POP_FROM := 0.8
 const POP_TIME := 0.28
 const LEAVE_TIME := 0.16
@@ -180,13 +177,12 @@ static func pop_out(panel: Control, then: Callable) -> void:
 	tween.chain().tween_callback(then)
 
 
-## Every popup comes up the way the rewards do (a bounty's pay, a fight's verdict): `panel` -- a titled
-## panel with no X, its one way out a button at its foot -- swells in about its middle and is kept in
-## the middle of the window as its contents settle, and with `win`, for something gained, the warm wash
-## and the sparks go under it once it stands still. `holder` is the Control it stands in, which eats
-## the clicks under it: given one, it is stood over the whole window here, and over it again however the
-## window is resized or turned, so no strip of what is under a question is left to press (a tip passes
-## none). It leaves by `pop_out`, and a press on one of its buttons while it does is no answer (`leaving`).
+## Every popup comes up the way the rewards do: `panel` (a titled panel with no X, its one way out a
+## button at its foot) swells in about its middle and is kept in the middle of the window as its
+## contents settle, and with `win`, for something gained, the wash and the sparks go under it once it
+## stands still. `holder` is the Control it stands in, which eats the clicks under it: given one, it
+## is stood over the whole window here, and again however the window is resized or turned, so no strip
+## of what is under a question is left to press (a tip passes none).
 static func popup(holder: Control, panel: Control, final: float, win := false) -> void:
 	var settle := func() -> void:
 		if is_instance_valid(panel) and panel.is_inside_tree():
@@ -278,10 +274,10 @@ static func reveal(pieces: Array) -> void:
 ## How the side panels come and go: a page slides in from its edge and back out to it, and the corner
 ## buttons glide to wherever they are placed next. **The node itself never moves and never lingers:**
 ## a page opened is where it will be to every check, click and test, only its drawing sliding in (the
-## canvas item's transform, on the RenderingServer); a page closed is hidden at once, and what slides
-## out is a picture of it taken off the last frame -- Godot draws nothing of a hidden Control, however
-## its canvas item is told. Driven by `visibility_changed`, so no `show()` or `hide()` anywhere has to
-## know. `NONE` snaps, as it always did, and so does a window with nothing to take a picture of.
+## canvas item's transform); a page closed is hidden at once, and what slides out is a picture of it
+## taken off the last frame -- Godot draws nothing of a hidden Control, however its canvas item is
+## told. Driven by `visibility_changed`, so no `show()` or `hide()` anywhere has to know. `NONE` snaps,
+## and so does a window with nothing to take a picture of.
 const SLIDE_IN_TIME := 0.22
 const SLIDE_OUT_TIME := 0.16
 const GLIDE_TIME := 0.2
@@ -308,20 +304,23 @@ static func _slide(node: Control, from_left: bool) -> void:
 		return
 	var away := Vector2(-reach if from_left else reach, 0.0)
 	if node.visible:
-		_slide_in(node, away)
+		_draw_home(node, func() -> Vector2: return away, SLIDE_IN_TIME)
 	else:
 		_slide_out(node, rects, away)
 
 
-static func _slide_in(node: Control, away: Vector2) -> void:
+## Draws `node` `offset.call()` away from where it stands (asked every step, for a node placed again on
+## the way) and brings the drawing home over `time`. Only the canvas item moves, never the node.
+static func _draw_home(node: Control, offset: Callable, time: float) -> void:
 	var rid := node.get_canvas_item()
 	var step := func(at: float) -> void:
+		var away: Vector2 = offset.call()
 		RenderingServer.canvas_item_set_transform(rid, node.get_transform().translated(away * at))
 	# The first frame is set now, so a page never shows at its place before it slides into it.
 	step.call(1.0)
 	var tween := node.create_tween().set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
 	node.set_meta("moving", tween)
-	tween.tween_method(step, 1.0, 0.0, SLIDE_IN_TIME).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_method(step, 1.0, 0.0, time).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	tween.tween_callback(_settle.bind(node))
 
 
@@ -366,15 +365,7 @@ static func glide(node: Control, from: Vector2) -> void:
 	_stop_moving(node)
 	if Settings.animations == Settings.Anim.NONE or not node.is_inside_tree():
 		return
-	var rid := node.get_canvas_item()
-	var step := func(at: float) -> void:
-		RenderingServer.canvas_item_set_transform(rid,
-				node.get_transform().translated((from - node.position) * at))
-	step.call(1.0)
-	var tween := node.create_tween().set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
-	node.set_meta("moving", tween)
-	tween.tween_method(step, 1.0, 0.0, GLIDE_TIME).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.tween_callback(_settle.bind(node))
+	_draw_home(node, func() -> Vector2: return from - node.position, GLIDE_TIME)
 
 
 static func _stop_moving(node: Control) -> void:

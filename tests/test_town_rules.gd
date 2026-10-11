@@ -753,12 +753,14 @@ func _test_board_tiers() -> bool:
 		var piece: Item = after[i].get(BountyBoard.CHOICE_ITEM)
 		_check((piece.display_name() if piece else str(after[i])) == (before[i][BountyBoard.CHOICE_ITEM].display_name()
 				if before[i].has(BountyBoard.CHOICE_ITEM) else str(before[i])), "option %d as it was" % i)
-	_check(BountyBoard.take_choice(back, BountyBoard.CHOICES).is_empty() and BountyBoard.choice(back).size() == after.size(),
+	_check(BountyBoard.take_choice(back, BountyBoard.CHOICES).is_empty()
+			and BountyBoard.choice(back).size() == after.size(),
 			"an option that is not there is not taken, and nothing goes")
 	var taken := BountyBoard.take_choice(back, 1)
 	_check(not taken.is_empty() and BountyBoard.choice(back).is_empty(), "one taken, and the others are gone")
 	_check(BountyBoard.take_choice(back, 0).is_empty(), "so nothing more can be taken")
-	_check(BountyBoard.choice({BountyBoard.CHOICE: [{BountyBoard.CHOICE_ORB: "Orb of Nothing", BountyBoard.CHOICE_COUNT: 3},
+	_check(BountyBoard.choice({BountyBoard.CHOICE: [{BountyBoard.CHOICE_ORB: "Orb of Nothing",
+			BountyBoard.CHOICE_COUNT: 3},
 			{BountyBoard.CHOICE_ITEM: "not a piece"}, "nor this"]}).is_empty(), "an offer this build cannot read is none")
 	return true
 

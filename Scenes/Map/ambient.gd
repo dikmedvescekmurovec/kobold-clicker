@@ -1,13 +1,10 @@
 class_name Ambient
 extends Node2D
-## What makes the map feel lived in without being drawn: a little weather in the air around the
-## player -- snow on ice, dust on desert, fireflies in forest, seeds on grass, flurries on the peaks --
-## and a slow day that dims to blue and comes back.
-##
-## One particle node, retuned when the player's environment changes, following the camera and
-## emitting in world space so the air stays put while the view pans through it. Sparse on purpose: it
-## is a hint of air, not a storm over the tiles. The day is a CanvasModulate, which tints the map's
-## canvas and nothing on a CanvasLayer -- the interface and the fight keep their own colours.
+## A little weather in the air around the player and a slow day that dims to blue and comes back.
+## One particle node, retuned when the player's environment changes, following the camera and emitting
+## in world space so the air stays put while the view pans through it. Sparse on purpose: a hint of air,
+## not a storm over the tiles. The day is a CanvasModulate, which tints the map's canvas and nothing on a
+## CanvasLayer -- the interface and the fight keep their own colours.
 
 ## A whole day and night, in seconds, and the tint at the darkest point of the night.
 const DAY_LENGTH := 480.0

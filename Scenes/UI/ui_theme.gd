@@ -1,23 +1,15 @@
 class_name UITheme
 extends RefCounted
-## Builds the pixel-art UI Theme at runtime from Assets/UI/ui_sheet.json, the way HexTileset builds
-## the TileSet from hex_tileset.json. Every sprite becomes an AtlasTexture on the shared sheet
-## wrapped in a StyleBoxTexture with that sprite's own nine-slice margin, so panels and buttons
-## stretch to any size.
-##
-## The margin is per sprite rather than one number for the sheet: the art is cut from a bought pack
-## (tools/ui_kit.py says which rectangle of which sheet is which sprite), and a panel's frame and a
-## button's bevel are not the same thickness. tools/ui_kit.py measures each margin against the
-## pixels and refuses to export a sprite whose tiled rows and columns are not one flat colour.
-##
-## Use it through the type variations: a plain Button with theme_type_variation "WoodButton" gets
-## all four states for free, and Godot drives hover, press and disable itself.
+## Builds the shared pixel-art Theme at runtime from Assets/UI/ui_sheet.json: every sprite an
+## AtlasTexture on the one sheet in a StyleBoxTexture with that sprite's own nine-slice margin, which
+## tools/ui_kit.py measures (it refuses a sprite whose tiled rows and columns are not one flat colour).
+## Used through its type variations, the keys of the tables below. Also here: the static builders the
+## scenes make their Controls with, and the window's shape (`pick_scale`, `narrow`, `dock`).
 
 const SHEET_JSON := "res://Assets/UI/ui_sheet.json"
 const FONT := "res://Assets/Pixellari.ttf"
-const FONT_SIZE := 16   # Pixellari is a pixel font: 16 is its native size, below ~14 the glyphs break up
-## Body text -- stat lines, modifiers, card bodies -- is set in a second, smaller pixel font, because
-## Pixellari cannot shrink and a stat block in it is half a window tall. Native size only, as above.
+const FONT_SIZE := 16   # Pixellari's native size: below ~14 its glyphs break up
+## The body font (stat lines, modifiers, card bodies), at its native size only.
 const SMALL_FONT := "res://Assets/ArkPixel10.ttf"
 const SMALL_FONT_SIZE := 10
 ## The face pads its 7 px capitals out to a 14 px line; this much comes off the top and the bottom of
@@ -30,23 +22,21 @@ const TABLE_GAP := 6
 const TABLE_STRIPE := Color(Palette.SLOT_TAN, 0.4)
 const TABLE_VALUE := "Value"
 
-## Panel variations, based on PanelContainer so they can hold and pad their contents. "HeaderBar" is
-## the green title bar: it is a panel like the others rather than part of the panel below it, so it
-## can grow to hold a 16 px title -- see the note in tools/ui_kit.py.
+## Panel variations -> sprite, based on PanelContainer so they can hold and pad their contents.
 const PANELS := {
 	"WoodPanel": "ui_panel_wood",
 	"TextPanel": "ui_panel_white",
+	# The green title bar: a panel of its own and not part of the panel below it, so it can grow to
+	# hold a 16 px title (see the note in tools/ui_kit.py).
 	"HeaderBar": "ui_bar_green",
-	# The same bar in the red face's colours, for a fight lost (`danger_bar`), and the body under it
-	# with its drop line in the same red.
+	# The bar in red, for a fight lost (`danger_bar`), and the body under it with a red drop line.
 	"HeaderBarDanger": "ui_bar_red",
 	"HeadedPanelDanger": "ui_panel_headed_red",
-	# The cream body as it stands under the bar: no top frame, a drop line and a tan row instead, so
-	# the bar sits on the cream the way the pack draws it rather than over a second dark edge.
+	# The cream body under a bar: no top frame, a drop line and a tan row instead, so the bar sits on
+	# the cream the way the pack draws it and not over a second dark edge.
 	"HeadedPanel": "ui_panel_headed",
 }
-## The bar is trim rather than a container, so it pads its title far less than a panel pads its
-## contents -- enough to keep the text off the bevel and no more.
+## The bar is trim, not a container: it pads its title only enough to keep the text off the bevel.
 const BAR_MARGIN := Vector2i(6, 2)   # x: left and right, y: top and bottom
 ## Button variations -> the sprite's surface and variant. "wood" buttons stand on the wooden panel,
 ## "light" buttons on the white one; "danger" is the destructive flavour.
@@ -64,9 +54,9 @@ const BUTTONS := {
 const GO_BUTTON := "LightGoButton"
 const GOLD_BUTTON := "WoodGoldButton"
 const GO_FONT_COLOR := Palette.INK
-## The same faces lettered in the body font, for a row of buttons inside a card (a bounty's Accept
-## and Claim) where Pixellari's 16 px made the buttons outweigh what they act on. Each is the face it
-## names, its padding cut to `SMALL_BUTTON_MARGIN`; a priced one carries a half-size coin.
+## The face each names, lettered in the body font and padded by `SMALL_BUTTON_MARGIN`, for a row of
+## buttons inside a card (a bounty's Accept and Claim), where Pixellari's 16 px made the buttons
+## outweigh what they act on. A priced one carries a coin `SMALL_COIN` across.
 const SMALL_BUTTONS := {
 	"SmallButton": "LightButton",
 	"SmallGoButton": "LightGoButton",
@@ -75,29 +65,28 @@ const SMALL_BUTTONS := {
 const SMALL_BUTTON_MARGIN := Vector2i(6, 3)   # x: left and right, y: top and bottom
 const SMALL_COIN := 8
 const STATES := ["normal", "hover", "pressed", "disabled"]
+## The colours a live button letters its states in.
+const FONT_STATES := ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]
 
 ## Buttons that frame an icon instead of a label -> the sprite family they are built from. A face
-## like the ones above, stretched to whatever it holds, but padded equally on all four sides, so one
-## wearing a square mark comes out square. "brown" is a key of its own rather than a surface: these
-## stand on the map rather than on a panel, which is also what they are brown for -- a green face in
-## the corner reads as an action to take, and the corner buttons are places to go.
+## like the ones above, but padded equally on all four sides, so one wearing a square mark comes out
+## square. Brown and not green: on the map a green face reads as an action to take, and the corner
+## buttons are places to go.
 const ICON_FACES := {"BrownIconButton": "ui_btn_brown"}
 ## What such a face pads its mark by; tools/ui_kit.py draws its preview at the same number.
 const ICON_FACE_MARGIN := 4
 
-## Buttons that are a drawn icon rather than a stretched face -> the sprite name they are built from.
-## The pack draws its close button once, at one size, for every panel it has, so this one is drawn
-## whole at `ICON_BUTTON_SCALE` times that size (the user's, 2026-10-09: the pack's 9 px X was too
-## small to hit) and never tiled -- which is also why it carries no content margin and no pressed
-## sink: the sprite already holds the pixel the face drops by.
+## Buttons that are a drawn icon, not a stretched face -> the sprite name they are built from. Drawn
+## whole at `ICON_BUTTON_SCALE` times the pack's size (the user's, 2026-10-09: its 9 px X was too small
+## to hit) and never tiled, so it has no content margin, and no pressed sink: the sprite already holds
+## the pixel the face drops by.
 const ICON_BUTTONS := {"CloseButton": "ui_close"}
 const ICON_BUTTON_SCALE := 2
 
-## A mark with no face at all, the way the pack lays its marks on the cream body: the button is
-## empty styleboxes round the icon, hover lifts the mark by the step the pack lifts its arrows,
-## pressed sinks it the pixel every face sinks, and dead fades it. The marks it wears are the
-## `_brown` cut of the pack's own ramp (tools/ui_kit.py `BARE`), never the cream ones, which wash
-## out on cream -- and `_green` is the pack's open tab.
+## A mark with no face at all, as the pack lays its marks on the cream body: empty styleboxes round
+## the icon; hover lifts the mark, pressed sinks it the pixel every face sinks, and dead fades it. It
+## wears the `_brown` cut of the pack's ramp (tools/ui_kit.py `BARE`), never the cream one, which
+## washes out on cream; `_green` is the pack's open tab.
 const BARE_BUTTON := "BareIconButton"
 const BARE_MARGIN := 2
 const BARE_HOVER := Color(1.25, 1.25, 1.25)
@@ -105,21 +94,19 @@ const BARE_DISABLED := Color(1, 1, 1, 0.4)
 ## How thick a scroll's bar is, in panel pixels, where one is shown at all.
 const SCROLL_BAR := 2.0
 
-## One label colour for every button: the faces are the pack's green replayed in the icon buttons'
-## brown (or red for danger), and the words are the same cream as the icon buttons' marks.
+## One label colour for every button: the cream of the icon buttons' marks.
 const FONT_COLOR := Palette.PANEL_CREAM
-## A dead button keeps its label but stops shouting: the wood's brown on the pale tan face
-## (`tools/ui_kit.py` `DISABLED`) is legible and plainly switched off, where cream on brown reads as live.
+## A dead button keeps its label: the wood's brown on the pale tan face (`tools/ui_kit.py` `DISABLED`)
+## is legible and plainly switched off, where cream on brown reads as live.
 const DISABLED_FONT_COLOR := Palette.SLOT_TAN_DK
 const PANEL_MARGIN := 10
 ## How far a page's panel stands off the window's edge, in panel pixels: the pack floats its panels,
-## and one flush against the edge read as part of the window rather than as a thing in it.
+## and one flush against the edge read as part of the window and not as a thing in it.
 const EDGE := 4
 const BUTTON_MARGIN := Vector2i(8, 4)   # x: left and right, y: top and bottom
 
 ## The window every layout is budgeted for, in panel pixels: the default 1152x648 at `ui_scale` 2. A
-## window is drawn at the largest whole `ui_scale` that still leaves it this much (`pick_scale`), and
-## one left narrower than `MIN_LONG` -- by that rule only ever one held upright -- is laid out narrow.
+## window left narrower than `MIN_LONG` by `pick_scale` -- only ever one held upright -- is `narrow`.
 const MIN_SHORT := 324.0
 const MIN_LONG := 576.0
 ## Which edge of its room a page's panel stands against (`dock`). A narrow window centres it.
@@ -128,12 +115,11 @@ enum Dock { LEFT, RIGHT }
 const SETTLING := "settling"
 
 static var _theme: Theme
-## How big each icon button's sprite is. A Button with no text and no content margin has no minimum
-## size of its own, so whoever places one asks here rather than repeating the number.
 static var _icon_sizes := {}
 
 
-## The size to give a `variation` icon button, in sprite pixels.
+## The size to give a `variation` icon button, in panel pixels: a Button with no text and no content
+## margin has no minimum size of its own.
 static func icon_size(variation: String) -> Vector2i:
 	if _icon_sizes.is_empty():
 		theme()
@@ -141,8 +127,7 @@ static func icon_size(variation: String) -> Vector2i:
 
 
 ## The whole-number `ui_scale` for a window of `window` pixels: the largest that still leaves
-## `MIN_SHORT` panel pixels on its short side and `MIN_LONG` on its long one, never under 1. Whole, so a
-## sprite pixel stays square; picked by the window rather than fixed, so a phone's is as big as a monitor's.
+## `MIN_SHORT` panel pixels on its short side and `MIN_LONG` on its long one, never under 1.
 static func pick_scale(window: Vector2) -> float:
 	var short := minf(window.x, window.y)
 	var long := maxf(window.x, window.y)
@@ -176,15 +161,14 @@ static func dock(panel: Control, room: Rect2, ui_scale: float, side := Dock.LEFT
 	if not room.has_area():
 		room = panel.get_viewport_rect()
 	var window := panel.get_viewport_rect().size
+	var width := panel.get_combined_minimum_size().x
 	if narrow(window, ui_scale):
 		var most := minf(room.size.y, window.y / 2.0) / ui_scale - 2 * EDGE
-		var across := panel.get_combined_minimum_size().x
-		panel.size = Vector2(across, minf(natural_height(panel), most))
-		panel.position = Vector2(floorf(room.position.x + (room.size.x - across * ui_scale) / 2.0),
+		panel.size = Vector2(width, minf(natural_height(panel), most))
+		panel.position = Vector2(floorf(room.position.x + (room.size.x - width * ui_scale) / 2.0),
 				room.end.y - (panel.size.y + EDGE) * ui_scale)
 		_settle(panel, again)
 		return
-	var width := panel.get_combined_minimum_size().x
 	panel.size = Vector2(width, room.size.y / ui_scale - 2 * EDGE)
 	var x := room.position.x + EDGE * ui_scale
 	if side == Dock.RIGHT:
@@ -258,8 +242,7 @@ static func build() -> Theme:
 	built.default_font = font
 	built.default_font_size = FONT_SIZE
 
-	# Labels default to white, which is invisible on the cream panel. INK also carries the title on
-	# the green bar, which is the colour the pack letters its own bars in.
+	# Labels default to white, which is invisible on the cream panel.
 	built.set_type_variation("PanelLabel", "Label")
 	built.set_color("font_color", "PanelLabel", Palette.TEXT)
 	built.set_font_size("font_size", "PanelLabel", FONT_SIZE)
@@ -277,10 +260,7 @@ static func build() -> Theme:
 		built.set_type_variation(variation, "PanelContainer")
 		var box := _style(sheet, regions[PANELS[variation]], margins[PANELS[variation]])
 		if variation in ["HeaderBar", DANGER_BAR]:
-			box.content_margin_left = BAR_MARGIN.x
-			box.content_margin_right = BAR_MARGIN.x
-			box.content_margin_top = BAR_MARGIN.y
-			box.content_margin_bottom = BAR_MARGIN.y
+			_pad(box, BAR_MARGIN)
 		else:
 			box.set_content_margin_all(PANEL_MARGIN)
 		built.set_stylebox("panel", variation, box)
@@ -292,15 +272,9 @@ static func build() -> Theme:
 		for state: String in STATES:
 			var sprite_name := "ui_btn_%s_%s_%s" % [surface, variant, state]
 			var box := _style(sheet, regions[sprite_name], margins[sprite_name])
-			# The pack draws the pressed face a pixel lower with its drop shadow gone, so the label
-			# has to sink with it or it floats off the face it is written on.
-			var sink := 1 if state == "pressed" else 0
-			box.content_margin_left = BUTTON_MARGIN.x
-			box.content_margin_right = BUTTON_MARGIN.x
-			box.content_margin_top = BUTTON_MARGIN.y + sink
-			box.content_margin_bottom = BUTTON_MARGIN.y - sink
+			_pad(box, BUTTON_MARGIN, state)
 			built.set_stylebox(state, variation, box)
-		for item: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		for item: String in FONT_STATES:
 			built.set_color(item, variation, GO_FONT_COLOR if variation in [GO_BUTTON, GOLD_BUTTON] else FONT_COLOR)
 		built.set_color("font_disabled_color", variation, DISABLED_FONT_COLOR)
 		built.set_font("font", variation, font)
@@ -311,14 +285,9 @@ static func build() -> Theme:
 		built.set_type_variation(variation, "Button")
 		for state: String in STATES:
 			var box: StyleBoxTexture = built.get_stylebox(state, big).duplicate()
-			var sink := 1 if state == "pressed" else 0
-			box.content_margin_left = SMALL_BUTTON_MARGIN.x
-			box.content_margin_right = SMALL_BUTTON_MARGIN.x
-			box.content_margin_top = SMALL_BUTTON_MARGIN.y + sink
-			box.content_margin_bottom = SMALL_BUTTON_MARGIN.y - sink
+			_pad(box, SMALL_BUTTON_MARGIN, state)
 			built.set_stylebox(state, variation, box)
-		for item: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color",
-				"font_disabled_color"]:
+		for item: String in FONT_STATES + ["font_disabled_color"]:
 			built.set_color(item, variation, built.get_color(item, big))
 		built.set_font("font", variation, small)
 		built.set_font_size("font_size", variation, SMALL_FONT_SIZE)
@@ -328,13 +297,7 @@ static func build() -> Theme:
 		for state: String in STATES:
 			var sprite_name: String = "%s_%s" % [ICON_FACES[variation], state]
 			var box := _style(sheet, regions[sprite_name], margins[sprite_name])
-			# The same sink the lettered buttons take: the pack draws the pressed face a pixel lower,
-			# so the mark on it has to drop with the face it is sitting on.
-			var sink := 1 if state == "pressed" else 0
-			box.content_margin_left = ICON_FACE_MARGIN
-			box.content_margin_right = ICON_FACE_MARGIN
-			box.content_margin_top = ICON_FACE_MARGIN + sink
-			box.content_margin_bottom = ICON_FACE_MARGIN - sink
+			_pad(box, Vector2i.ONE * ICON_FACE_MARGIN, state)
 			built.set_stylebox(state, variation, box)
 
 	for variation: String in ICON_BUTTONS:
@@ -351,11 +314,7 @@ static func build() -> Theme:
 	built.set_type_variation(BARE_BUTTON, "Button")
 	for state: String in STATES + ["focus"]:
 		var box := StyleBoxEmpty.new()
-		var sink := 1 if state == "pressed" else 0
-		box.content_margin_left = BARE_MARGIN
-		box.content_margin_right = BARE_MARGIN
-		box.content_margin_top = BARE_MARGIN + sink
-		box.content_margin_bottom = BARE_MARGIN - sink
+		_pad(box, Vector2i.ONE * BARE_MARGIN, state)
 		built.set_stylebox(state, BARE_BUTTON, box)
 	built.set_color("icon_hover_color", BARE_BUTTON, BARE_HOVER)
 	built.set_color("icon_disabled_color", BARE_BUTTON, BARE_DISABLED)
@@ -384,11 +343,22 @@ static func _style(sheet: Texture2D, region: Rect2, margin: Dictionary) -> Style
 	box.texture_margin_top = margin["top"]
 	box.texture_margin_right = margin["right"]
 	box.texture_margin_bottom = margin["bottom"]
-	# Tile rather than stretch: every row and column outside the margin is one flat colour, so tiling
+	# Tiled, never stretched: every row and column outside the margin is one flat colour, so tiling
 	# is seamless at any size while stretching would land the bevel on a half pixel.
 	box.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
 	box.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
 	return box
+
+
+## Pads what `box` holds by `pad` (x: left and right, y: top and bottom). In a button's "pressed"
+## `state` it sinks a pixel: the pack draws the pressed face a pixel lower with its drop shadow gone,
+## so the label or the mark on it has to drop with it or it floats off the face.
+static func _pad(box: StyleBox, pad: Vector2i, state := "") -> void:
+	var sink := 1 if state == "pressed" else 0
+	box.content_margin_left = pad.x
+	box.content_margin_right = pad.x
+	box.content_margin_top = pad.y + sink
+	box.content_margin_bottom = pad.y - sink
 
 
 # Builders for the Controls the scenes make in code, so each is put together one way.
@@ -543,10 +513,7 @@ static func chip(text: String) -> PanelContainer:
 	box.bg_color = Palette.SLOT_TAN_DK
 	box.set_corner_radius_all(CharacterPage.CHIP_CORNER)
 	box.anti_aliasing = false
-	box.content_margin_left = CharacterPage.CHIP_PAD.x
-	box.content_margin_right = CharacterPage.CHIP_PAD.x
-	box.content_margin_top = CharacterPage.CHIP_PAD.y
-	box.content_margin_bottom = CharacterPage.CHIP_PAD.y
+	_pad(box, CharacterPage.CHIP_PAD)
 	chip.add_theme_stylebox_override("panel", box)
 	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	chip.add_child(label(text, Palette.BONE, true))
@@ -578,9 +545,8 @@ static func scroll() -> ScrollContainer:
 	return made
 
 
-## A small heading: a word in the body font and a rule run out to the edge (a counter's Trade up, her
-## Readings and Great spells, the tile panel's Services). Small, because something above it is already
-## the heading; these only say where one part ends and the next begins.
+## A small heading under a bigger one: a word in the body font and a rule run out to the edge (a
+## counter's Trade up, her Readings and Great spells, the tile panel's Services).
 static func section(text: String) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
@@ -590,6 +556,16 @@ static func section(text: String) -> HBoxContainer:
 	line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(line)
 	return row
+
+
+## A pixel mark drawn in code. `rows` as an image: a character that is a key of `inks` in that colour, any other clear.
+static func stamp(rows: Array[String], inks: Dictionary) -> Image:
+	var image := Image.create(rows[0].length(), rows.size(), false, Image.FORMAT_RGBA8)
+	for y in rows.size():
+		for x in rows[y].length():
+			if inks.has(rows[y][x]):
+				image.set_pixel(x, y, inks[rows[y][x]])
+	return image
 
 
 static func rule(width := 0.0) -> ColorRect:
@@ -607,20 +583,19 @@ static func vbox(separation: int, width := 0.0) -> VBoxContainer:
 
 
 ## One row of a table, and the one way the game draws one: the name against the left edge, the value
-## against the right, and every other row (`striped`) washed with `TABLE_STRIPE` so the eye can follow
-## a name across to its number. Stack them in a `vbox(0)`, or the stripes come apart.
+## against the right (its Label named `TABLE_VALUE`, for a caller with a tooltip to hang on it), and
+## every other row (`striped`) washed with `TABLE_STRIPE`. Stack them in a `vbox(0)`, or the stripes
+## come apart.
 ##
 ## `width` is for a table standing in something that sizes itself round its contents (a floating
 ## card): the name then wraps in what the value leaves of it, measured here because a wrapping Label
 ## has to be told its width before it can say its height. At 0 the name takes what the parent gives.
-## Where the name and the value will not share one line, the value drops under the name, against the
-## right edge: a long value ("+607K(416K-997K)%") squeezed the name into a word a line, four lines tall.
-## The value's Label is named `TABLE_VALUE`, for a caller with a tooltip to hang on it. With `can_stack`
-## false the value always stands on the name's first line, the name wrapping in what it leaves: a short
-## value beside a long name (the changelog's table).
+## Where the two will not share one line the value drops under the name, against the right edge: a
+## long value ("+607K(416K-997K)%") squeezed the name into a word a line. With `can_stack` false it
+## never drops, the name wrapping in what it leaves: a short value beside a long name (the changelog's).
 static func table_row(text: String, value: String, striped: bool, width := 0.0,
 		text_color: Variant = null, value_color: Variant = null, can_stack := true) -> PanelContainer:
-	var row := _row_panel(striped)
+	var row := row_panel(striped)
 	var room := width - 2 * TABLE_PAD.x
 	var taken := 0.0
 	var stacked := false
@@ -647,19 +622,17 @@ static func table_row(text: String, value: String, striped: bool, width := 0.0,
 	return row
 
 
-## The padded, maybe washed box every table row stands in.
-static func _row_panel(striped: bool) -> PanelContainer:
+## The padded, maybe washed box a table row stands in. `TranscendPage` builds its curse rows on it too.
+static func row_panel(striped: bool) -> PanelContainer:
 	var row := PanelContainer.new()
 	var box := StyleBoxFlat.new()
 	box.bg_color = TABLE_STRIPE if striped else Color.TRANSPARENT
-	box.set_content_margin_all(TABLE_PAD.y)
-	box.content_margin_left = TABLE_PAD.x
-	box.content_margin_right = TABLE_PAD.x
+	_pad(box, TABLE_PAD)
 	row.add_theme_stylebox_override("panel", box)
 	return row
 
 
-## A green title bar with an X at its right end over a cream body. Two panels stacked rather than the
+## A green title bar with an X at its right end over a cream body. Two panels stacked and not the
 ## pack's one headered sprite, whose bar is 13 px and too short for Pixellari (see tools/ui_kit.py);
 ## the body is the `HeadedPanel` cut, which has no top frame, so the two meet as the pack's one
 ## sprite does. Fill the body through `body_of`.
@@ -679,8 +652,7 @@ static func titled_panel(title_text: String, tooltip: String, on_close: Callable
 	header.add_child(title)
 	# Air between a long name and the X, which otherwise runs the one into the other.
 	header.add_theme_constant_override("separation", 6)
-	# A drawn X at the size the pack drew it: a Button with no text has no minimum size of its own.
-	# None where `on_close` is empty: a panel left by its own button (a verdict's Collect).
+	# No X where `on_close` is empty: a panel left by its own button (a verdict's Collect).
 	if on_close.is_valid():
 		var close := button("", "CloseButton", tooltip)
 		close.custom_minimum_size = Vector2(icon_size("CloseButton"))
@@ -699,15 +671,11 @@ static func titled_panel(title_text: String, tooltip: String, on_close: Callable
 	return stack
 
 
-## The pack's frames wobble: along every edge the brown shifts a shade for a stretch and swells a
-## pixel or three into the cream, which is what makes its panels look torn rather than drawn. A
-## nine-slice cannot carry that, so the wobbles are patches (tools/ui_kit.py `NOTCHES`, cut off the
-## pack's own composed panel) laid over a cream panel's left, right and bottom edges as it draws --
-## the frame under them is the same art, so only the wobble shows. Left and right alternate their two
-## patches down the edge at `NOTCH_PITCH`, staggered against each other; the bottom cycles its three
-## along; a patch goes only where it fits clear of the corners. Not a cream panel's top, which is
-## its bar or, on a card, too short to wobble -- the bar wobbles on its own (`bar`): its highlight
-## breaks along its top at `NOTCH_BAR_PITCH`.
+## The pack's frames wobble, which a nine-slice cannot carry, so the wobbles are patches (tools/ui_kit.py
+## `NOTCHES`) laid over a cream panel's left, right and bottom edges as it draws. Left and right
+## alternate their two patches down the edge at `NOTCH_PITCH`, staggered against each other; the bottom
+## cycles its three along; a patch goes only where it fits clear of the corners. A bar wobbles on its
+## own (`bar`), along its top at `NOTCH_BAR_PITCH`. (DESIGN.md: "ui_theme.gd")
 const NOTCH := "res://Assets/UI/ui_notch_%s_%s.png"
 ## The red title bar's variation (`danger_bar`).
 const DANGER_BAR := "HeaderBarDanger"

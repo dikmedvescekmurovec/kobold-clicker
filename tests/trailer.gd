@@ -154,7 +154,7 @@ func _until_kill(rarity: int) -> void:
 		if (Engine.get_process_frames() - _start) % CLICK_EVERY == 0:
 			_combat._swing()
 			fight.hit()
-			_combat._refresh()
+			_combat.hud.refresh()
 		await process_frame
 	# Nobody steps in over it before the cut.
 	fight.phase_left = 10.0
@@ -189,7 +189,7 @@ func _gryphon() -> void:
 	fight.hp = 1.0
 	_combat._swing()
 	fight.hit()
-	_combat._refresh()
+	_combat.hud.refresh()
 	# Down: the clock stands where the last blow left it, and nobody steps in over him.
 	_combat.fight = null
 	_main._combat = _combat
@@ -199,7 +199,7 @@ func _gryphon() -> void:
 	_main._on_loot_dropped(0, prize)
 	# Gone before the cut: it fades for half a second.
 	await _until(GRYPHON_FALLS + 3.3)
-	_main._close_banner()
+	_main.banner.close()
 	await _until(GRYPHON_FALLS + 4.0)
 	_main._combat = null
 	_close_fight()
@@ -793,7 +793,7 @@ func _clicking(beat: float, every: int, tick := Callable()) -> void:
 				and not _combat.fight.finished:
 			_combat._swing()
 			_combat.fight.hit()
-			_combat._refresh()
+			_combat.hud.refresh()
 		await process_frame
 
 

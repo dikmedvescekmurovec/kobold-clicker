@@ -1,12 +1,10 @@
 class_name IceOverlay
 extends Node2D
-## The ice at the edge of the land: the wall ring the player has to break, and the frozen wasteland past
-## it, drawn from the generated sheets in `Assets/Ice/` (`AI-sprites-generator/build_ice.py`). Every ice
-## cell is wasteland snow; a wall cell carries the wall's band over it, running between its two ring
-## neighbours the way a road runs through its tile; a quarter of the wasteland carries something lying on
-## the snow; and every drawn land tile beside the ice gets the snow drifting onto it, the way one
-## environment's blend runs onto the next. Drawn a hex a cell, like `FogOverlay`; `MapBuilder` puts it
-## under `HexMap.chests`, so it sits over the fog and under the outlines.
+## The ice at the edge of the land, from the generated sheets in `Assets/Ice/`
+## (`AI-sprites-generator/build_ice.py`). Every ice cell is wasteland snow; a wall cell carries the wall's
+## band over it, running between its two ring neighbours; a quarter of the wasteland carries something
+## lying on the snow; and every drawn land tile beside the ice gets the snow drifting onto it. `MapBuilder`
+## puts it under `HexMap.chests`, so it sits over the fog and under the outlines.
 
 enum Kind { WALL, WASTE }
 

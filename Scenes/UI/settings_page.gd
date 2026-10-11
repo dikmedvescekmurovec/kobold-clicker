@@ -1,30 +1,18 @@
 class_name SettingsPage
 extends Control
-## What the player has chosen about the game, as a page against the left edge, in small sections:
-## Sound (two volumes), Display (full screen on a desktop, screen shake, the animation level), Items
-## (detailed descriptions, what a whole level's Sell all and bin do with a unique), the cloud save --
-## and, at its foot, Controls, Credits, a debug build's Developer, and the way to start over.
-##
-## Controls, Credits and Developer each stand in the settings' place under a title of their own, with
-## the back arrow at their foot (`_screen`); Developer holds every dev tool there is, and the balancing
-## page and the item generator open from it and come back to it.
-##
-## Built like the other left-hand pages (`BountyList`): `open()` redraws it, `layout()` fits it to the
-## window, `closed` is its X, and it carries `UITheme.theme()` because it hangs off a `CanvasLayer`.
-## Every change goes straight into `Settings` and its file; the saves are nothing to do with it, which
-## is why Reset is a signal -- deleting them and reloading is the main scene's.
+## The settings on the left edge, and the Controls, Credits and Developer screens that stand in their
+## place (`_screen`). Every change goes straight into `Settings` and its file; the saves are nothing to
+## do with it, which is why Reset is a signal -- deleting them and reloading is the main scene's.
 
-## The page's X was pressed.
 signal closed
 ## Delete was pressed under the question Reset asks.
 signal reset_pressed
-## The debug build's Gold x10 was pressed.
+## Dev: Gold x10 was pressed, and Skill points +10.
 signal cash_pressed
-## The debug build's Skill points +10 was pressed.
 signal points_pressed
-## The debug build's "Show all uniques" was ticked or unticked: the trophy may have come or gone.
+## Dev: "Show all uniques" moved (the trophy may have come or gone), and "Show all chests" (the main
+## scene redraws the map's).
 signal uniques_toggled
-## Dev: the "show all chests" box moved; the main scene redraws the map's chests.
 signal chests_toggled
 ## The panel changed size: the corner buttons beside it move.
 signal laid_out
@@ -51,9 +39,9 @@ const FILTER_MATERIALS := ["Any", "Iron", "Steel", "Gold", "Master"]
 const FILTER_MATERIAL_TIPS := ["Every material", "The second material or better", "The third material or better",
 		"The fourth material or better", "Masterwork only"]
 const FILTER_NUDGES := [-10, -1, 1, 10]
-const DETAILS_TIP := "Shows beside each modifier the lowest and highest it could have rolled at the item's level, like +14(8-20)% increased Damage"
-## A volume row: the name's room, the percentage's, and the knob the slider is dragged by, drawn here
-## pixel by pixel in the brown buttons' face (`_knob`), lit tan under the mouse.
+const DETAILS_TIP := "Shows beside each modifier the lowest and highest it could have rolled at the item's" \
+		+ " level, like +14(8-20)% increased Damage"
+## A volume row: the name's room, the percentage's, and the knob the slider is dragged by (`_knob`).
 const VOLUME_NAME := 44.0
 const VOLUME_SHOWN := 26.0
 const KNOB := Vector2i(6, 10)
@@ -64,13 +52,13 @@ const SAMPLE := preload("res://Sounds/UI/click1.ogg")
 ## number: [face, what it does to the number].
 const WALL_HP_NAMES := ["Inside wall 1", "Wall 1 to wall 2", "Wall 2 to wall 3"]
 const HP_NUDGES := [["/10", "Divide by 10"], ["-1", "Take 1 away"], ["+1", "Add 1"], ["x10", "Multiply by 10"]]
-const HP_BASE_TIP := "The health of an ordinary body on this circle's first ring. Every body in the circle scales with it"
-## The credits' link mark, a bare button after a name that has a link.
+const HP_BASE_TIP := "The health of an ordinary body on this circle's first ring." \
+		+ " Every body in the circle scales with it"
 const LINK_ICON := preload("res://Assets/UI/ui_icon_linkedin.png")
 ## The credits whose work was made by AI, each followed by a small "AI" chip (`UITheme.chip`).
 const AI_MADE := ["PixelLab"]
-## The controls screen's mouse keys, after the corner buttons' letters (`hotkeys`): the item card's own
-## key pictures (`ItemCard.KEY_ICONS`) and what each does on a square.
+## The controls screen's mouse keys, after the corner buttons' letters (`hotkeys`): [a key of
+## `ItemCard.KEY_ICONS`, what it does on a square].
 const MOUSE_KEYS := [["shift", "Click to equip or unequip"], ["ctrl", "Click to sell or discard"],
 		["alt", "Hold to compare"]]
 ## Whose work the game is built on, as `credits.md` has it in full -- `test_ui_theme` holds every name
@@ -108,14 +96,14 @@ const CREDITS := [
 	]],
 ]
 
-## The debug build's item generator works on these; the main scene sets them, as it sets a town
-## page's `view`. Without them there is no button for it.
+## What the item generator works on, set by the main scene; without them it has no button.
 var inventory: Inventory
 var inventory_path := ""
 ## The account and cloud save, set by the main scene; its section is left out while it is off.
 var cloud: Cloud
 ## The controls screen's letters, [key, the page it opens], set by the main scene off its corner buttons.
 var hotkeys: Array = []
+var area := Rect2()
 
 var _ui_scale: float
 var _panel: VBoxContainer
@@ -140,11 +128,10 @@ func _ready() -> void:
 	_panel = UITheme.titled_panel(TITLE, "Close the settings", closed.emit)
 	_panel.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_panel)
-	# Scrolled: the credits run past a 648 px window's foot, and so does all of it held upright.
-	# `_rows` is at least as tall as the scroll, so the foot still sinks to the bottom when there is room.
 	var scroll := UITheme.scroll()
 	UITheme.body_of(_panel).add_child(scroll)
 	_rows = UITheme.vbox(ROW_GAP, WIDTH)
+	# At least as tall as the scroll, so the foot still sinks to the bottom when there is room.
 	_rows.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_rows)
 	if cloud != null:
@@ -154,8 +141,8 @@ func _ready() -> void:
 	open()
 
 
-## Redraws the page from `Settings`, with Reset back to a button: a question left hanging is cancelled
-## by closing the page, whichever way it was closed, and so is a screen opened from it.
+## Redraws the settings themselves: a question left hanging, or a screen opened from them, is put away
+## by closing the page, whichever way it was closed.
 func open() -> void:
 	UITheme.title_of(_panel).text = TITLE
 	UITheme.clear(_rows)
@@ -174,16 +161,11 @@ func open() -> void:
 	_rows.add_child(_choice(ANIM_NAMES, [], Settings.animations,
 			func(level: int) -> void: Settings.animations = level as Settings.Anim))
 	_rows.add_child(UITheme.section("Items"))
-	var details := _tick("Detailed item descriptions", Settings.item_details,
-			func(on: bool) -> void: Settings.item_details = on)
-	# On the box and the words both: either is what the cursor may be resting on.
-	for part: Control in details.get_children():
-		part.tooltip_text = DETAILS_TIP
-	_rows.add_child(details)
+	_rows.add_child(_tipped_tick("Detailed item descriptions", Settings.item_details, DETAILS_TIP,
+			func(on: bool) -> void: Settings.item_details = on))
 	_rows.add_child(BountyList.wrapped(UNIQUES_LABEL, WIDTH))
 	_rows.add_child(_choice(UNIQUES_NAMES, UNIQUES_TIPS, Settings.uniques,
 			func(rule: int) -> void: Settings.uniques = rule as Settings.Uniques))
-	# Once the sixth wall has fallen in some world (`WallUnlocks.FILTER`).
 	if inventory != null and WallUnlocks.has(inventory.walls_ever(), WallUnlocks.FILTER):
 		_draw_filter()
 	if cloud != null and cloud.enabled():
@@ -200,8 +182,6 @@ func _process(_delta: float) -> void:
 		_synced.text = cloud.status_text()
 
 
-## Cloud save: Sign in, the letters a sign-in under way shows, or the account -- what it was signed in
-## with, when the save last reached the cloud, Sign out, and Delete cloud account asking in place.
 func _draw_account() -> void:
 	UITheme.clear(_account)
 	_synced = null
@@ -210,35 +190,29 @@ func _draw_account() -> void:
 		_account.add_child(LeaderboardPage.check_letters(cloud.signing_check))
 		_account.add_child(_button("Cancel", "LightButton", "Stop signing in", cloud.cancel_sign_in))
 	elif not cloud.signed_in():
-		var sign_in := _button("Sign in", UITheme.GO_BUTTON,
-				"Keep your save in the cloud and play it on any device. You sign in with Google or Discord, in your browser",
-				cloud.sign_in)
+		var sign_in := _button("Sign in", UITheme.GO_BUTTON, "Keep your save in the cloud and play it on"
+				+ " any device. You sign in with Google or Discord, in your browser", cloud.sign_in)
 		sign_in.disabled = cloud.busy()
 		_account.add_child(sign_in)
 	elif _deleting:
 		_account.add_child(BountyList.wrapped("Delete your cloud account?", WIDTH, Palette.RUST))
-		var buttons := HBoxContainer.new()
-		buttons.add_theme_constant_override("separation", 2)
-		for made: Button in [_button("Cancel", "LightButton", "", func() -> void:
-					_deleting = false
-					_draw_account()),
-				_button("Delete", "LightDangerButton", "", cloud.delete_account)]:
-			made.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			buttons.add_child(made)
-		_account.add_child(buttons)
+		_account.add_child(_cancel_or_delete(_ask_delete.bind(false), cloud.delete_account))
 	else:
 		_account.add_child(UITheme.label("Signed in with %s" % cloud.provider.capitalize(), null, true))
 		_synced = UITheme.label(cloud.status_text(), Palette.TEXT_SOFT, true)
 		_account.add_child(_synced)
-		_account.add_child(_button("Sign out", "LightButton", "This device stops saving to the cloud and keeps its save",
-				cloud.sign_out))
+		_account.add_child(_button("Sign out", "LightButton",
+				"This device stops saving to the cloud and keeps its save", cloud.sign_out))
 		_account.add_child(_button("Delete cloud account", "LightDangerButton",
 				"Delete your cloud save, your board name and your place on the board. This device keeps its save",
-				func() -> void:
-					_deleting = true
-					_draw_account()))
+				_ask_delete.bind(true)))
 	if not cloud.problem.is_empty():
 		_account.add_child(BountyList.wrapped(cloud.problem, WIDTH, Palette.BRICK))
+
+
+func _ask_delete(asking: bool) -> void:
+	_deleting = asking
+	_draw_account()
 
 
 func _button(text: String, variation: String, tooltip: String, deed: Callable) -> Button:
@@ -247,9 +221,19 @@ func _button(text: String, variation: String, tooltip: String, deed: Callable) -
 	return made
 
 
-## A volume: its name, a slider in `Settings.VOLUME_STEP`s from silent to full (named `key`, for the
-## tests), and the percentage. Every step is heard at once and written; the wheel scrolls the page, not
-## the slider. The effects' plays `SAMPLE` as it is let go.
+## Cancel beside Delete, sharing the row: the answers to a question asked in place.
+func _cancel_or_delete(cancel: Callable, delete: Callable) -> HBoxContainer:
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 2)
+	for made: Button in [_button("Cancel", "LightButton", "", cancel),
+			_button("Delete", "LightDangerButton", "", delete)]:
+		made.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		buttons.add_child(made)
+	return buttons
+
+
+## A volume: its name, a slider in `Settings.VOLUME_STEP`s named `key` (for the tests), and the
+## percentage. Every step is heard at once and written; the wheel scrolls the page, not the slider.
 func _volume(text: String, key: String, value: float, write: Callable) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
@@ -312,14 +296,13 @@ static func _knob(lit: bool) -> ImageTexture:
 	return _knobs[lit]
 
 
-## A row of buttons one of which is `picked`, which wears the green face (the pack's held face is one
-## pixel, too little to read a choice off). `write` puts the pressed one into `Settings`; `tips`, where
-## there are any, go on the buttons in order. The small faces: a choice is not the page's heading.
+## A row of small buttons one of which is `picked`, which wears the green face: the pack's held face is
+## one pixel, too little to read a choice off, and the rest faded read as dead buttons, not as choices
+## not taken. `write` puts the pressed one into `Settings`; `tips`, where there are any, go on the
+## buttons in order.
 func _choice(names: Array, tips: Array, picked: int, write: Callable) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 2)
-	# The picked one green, as an open town tab is; the rest a plain live face. Faded, they read as
-	# dead buttons rather than as choices not taken.
 	for at in names.size():
 		var pick := UITheme.button(names[at], "SmallGoButton" if at == picked else "SmallButton",
 				tips[at] if at < tips.size() else "")
@@ -332,9 +315,26 @@ func _choice(names: Array, tips: Array, picked: int, write: Callable) -> HBoxCon
 	return row
 
 
-## The loot filter (`Settings.filter_*`, which `Inventory.leaves_behind` reads as each find drops): the
-## least rarity and the least material kept, a row of choices each; the least item level between
-## `FILTER_NUDGES`, never under 1, which keeps every level; and ascended pieces only.
+## A number between the buttons that move it, two either side: `nudges` are [face, tooltip, what the
+## number would become], one that would leave it at `now` dead. A press hands `write` the new number.
+static func stepper(nudges: Array, now: Variant, shown: Label, write: Callable,
+		variation := "SmallButton") -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 2)
+	for nudge_of: Array in nudges:
+		var nudge := UITheme.button(nudge_of[0], variation, nudge_of[1])
+		nudge.disabled = nudge_of[2] == now
+		nudge.pressed.connect(write.bind(nudge_of[2]))
+		row.add_child(nudge)
+	shown.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shown.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.add_child(shown)
+	row.move_child(shown, 2)
+	return row
+
+
+## The loot filter (`Settings.filter_*`, which `Inventory.leaves_behind` reads as each find drops). The
+## least item level is never under 1, which keeps every level.
 func _draw_filter() -> void:
 	_rows.add_child(UITheme.section("Loot filter"))
 	_rows.add_child(UITheme.label("Rarity", null, true))
@@ -344,23 +344,13 @@ func _draw_filter() -> void:
 	_rows.add_child(_choice(FILTER_MATERIALS, FILTER_MATERIAL_TIPS, Settings.filter_material,
 			func(at: int) -> void: Settings.filter_material = at))
 	_rows.add_child(UITheme.label("Item level", null, true))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 2)
-	for step: int in FILTER_NUDGES:
-		var next := maxi(1, Settings.filter_level + step)
-		var nudge := UITheme.button("%+d" % step, "SmallButton", "")
-		nudge.disabled = next == Settings.filter_level
-		nudge.pressed.connect(func() -> void:
-			Settings.filter_level = next
-			Settings.save()
-			open.call_deferred())
-		row.add_child(nudge)
+	var nudges := FILTER_NUDGES.map(func(step: int) -> Array:
+			return ["%+d" % step, "", maxi(1, Settings.filter_level + step)])
 	var least := UITheme.label("Any" if Settings.filter_level <= 1 else "%d+" % Settings.filter_level)
-	least.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	least.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	row.add_child(least)
-	row.move_child(least, 2)
-	_rows.add_child(row)
+	_rows.add_child(stepper(nudges, Settings.filter_level, least, func(next: int) -> void:
+		Settings.filter_level = next
+		Settings.save()
+		open.call_deferred()))
 	_rows.add_child(_tick("Ascended items only", Settings.filter_ascended,
 			func(on: bool) -> void: Settings.filter_ascended = on))
 
@@ -378,39 +368,37 @@ func _tick(text: String, on: bool, write: Callable) -> HBoxContainer:
 	return row
 
 
-## The page's foot: Controls and Credits side by side (no Controls where there is no keyboard), a debug
-## build's Developer, and Reset -- or the question Reset asks once pressed, asked in place rather than
-## over the window: there is nothing else on the page to press by mistake.
+## A tick row with `tip` on the box and the words both: either is what the cursor may be resting on.
+func _tipped_tick(text: String, on: bool, tip: String, write: Callable) -> HBoxContainer:
+	var row := _tick(text, on, write)
+	for part: Control in row.get_children():
+		part.tooltip_text = tip
+	return row
+
+
+## The page's foot, or with `asking` the question Reset asks -- in place rather than over the window:
+## there is nothing else on the page to press by mistake.
 func _foot(asking: bool) -> VBoxContainer:
 	var foot := UITheme.vbox(ROW_GAP, WIDTH)
 	foot.size_flags_vertical = Control.SIZE_EXPAND | Control.SIZE_SHRINK_END
-	if not asking:
-		# One row of the small faces, and Reset small too: the settings fit a 648 px window to the foot.
-		var pages := HBoxContainer.new()
-		pages.add_theme_constant_override("separation", 2)
-		if not OS.has_feature("mobile"):
-			pages.add_child(_button(CONTROLS_TITLE, "SmallButton", "", _open_controls))
-		pages.add_child(_button(CREDITS_TITLE, "SmallButton", "", _open_credits))
-		if OS.is_debug_build():
-			pages.add_child(_button(DEV_TITLE, "SmallButton", "Dev: the tools a release build has none of", _open_dev))
-		for made: Control in pages.get_children():
-			made.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		foot.add_child(pages)
-		foot.add_child(_button("Reset save", "SmallDangerButton", "Delete the saves and start a new game",
-				_ask.bind(true)))
+	if asking:
+		foot.add_child(BountyList.wrapped("Delete everything, here and in the cloud, and start over?"
+				if cloud != null and cloud.signed_in() else "Delete everything and start over?", WIDTH, Palette.RUST))
+		foot.add_child(_cancel_or_delete(_ask.bind(false), reset_pressed.emit))
 		return foot
-	foot.add_child(BountyList.wrapped("Delete everything, here and in the cloud, and start over?"
-			if cloud != null and cloud.signed_in() else "Delete everything and start over?", WIDTH, Palette.RUST))
-	var buttons := HBoxContainer.new()
-	buttons.add_theme_constant_override("separation", 2)
-	var cancel := UITheme.button("Cancel", "LightButton", "")
-	cancel.pressed.connect(_ask.bind(false))
-	var delete := UITheme.button("Delete", "LightDangerButton", "")
-	delete.pressed.connect(reset_pressed.emit)
-	for made: Button in [cancel, delete]:
+	# One row of the small faces, and Reset small too: the settings fit a 648 px window to the foot.
+	var pages := HBoxContainer.new()
+	pages.add_theme_constant_override("separation", 2)
+	if not OS.has_feature("mobile"):
+		pages.add_child(_button(CONTROLS_TITLE, "SmallButton", "", _open_controls))
+	pages.add_child(_button(CREDITS_TITLE, "SmallButton", "", _open_credits))
+	if OS.is_debug_build():
+		pages.add_child(_button(DEV_TITLE, "SmallButton", "Dev: the tools a release build has none of", _open_dev))
+	for made: Control in pages.get_children():
 		made.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		buttons.add_child(made)
-	foot.add_child(buttons)
+	foot.add_child(pages)
+	foot.add_child(_button("Reset save", "SmallDangerButton", "Delete the saves and start a new game",
+			_ask.bind(true)))
 	return foot
 
 
@@ -438,7 +426,6 @@ func _screen(title: String, back: Callable, back_tip: String) -> VBoxContainer:
 	return body
 
 
-## Each corner button's key beside the page it opens, then the keys a square answers to.
 func _open_controls() -> void:
 	var body := _screen(CONTROLS_TITLE, open, "Back to the settings")
 	if not hotkeys.is_empty():
@@ -465,7 +452,6 @@ static func _key_row(picture: String, what: String) -> HBoxContainer:
 	return row
 
 
-## `CREDITS`, a section each, every name over what it gave, a linked name with its mark after it.
 func _open_credits() -> void:
 	var body := _screen(CREDITS_TITLE, open, "Back to the settings")
 	for part: Array in CREDITS:
@@ -488,29 +474,28 @@ func _open_credits() -> void:
 			body.add_child(block)
 
 
-## Every dev tool, which a release build has none of: the six switches, the two cheats, the balancing
-## page and the item generator, which both come back here.
+## Every dev tool there is; the balancing page and the item generator both come back here.
 func _open_dev() -> void:
 	var body := _screen(DEV_TITLE, open, "Back to the settings")
-	body.add_child(_dev_tick("Show all uniques", Settings.all_uniques,
+	body.add_child(_tipped_tick("Show all uniques", Settings.all_uniques,
 			"The collection log draws every unique as found", func(on: bool) -> void:
 				Settings.all_uniques = on
 				uniques_toggled.emit()))
-	body.add_child(_dev_tick("Show all chests", Settings.all_chests,
+	body.add_child(_tipped_tick("Show all chests", Settings.all_chests,
 			"Every chest is drawn on the map, fog or not", func(on: bool) -> void:
 				Settings.all_chests = on
 				chests_toggled.emit()))
-	body.add_child(_dev_tick("Show old icons", Settings.old_icons,
+	body.add_child(_tipped_tick("Show old icons", Settings.old_icons,
 			"An item whose icon was replaced wears its old one, from the next time it is drawn",
 			func(on: bool) -> void: Settings.old_icons = on))
-	body.add_child(_dev_tick("Show all services", Settings.all_services,
+	body.add_child(_tipped_tick("Show all services", Settings.all_services,
 			"Every settlement offers every counter, from the next time one is entered", func(on: bool) -> void:
 				Settings.all_services = on
 				TownServices.show_all = Settings.show_all_services()))
-	body.add_child(_dev_tick("Even loot", Settings.even_loot,
+	body.add_child(_tipped_tick("Even loot", Settings.even_loot,
 			"A body drops loot one time in three, every rarity from common to unique as likely, from the next fight",
 			func(on: bool) -> void: Settings.even_loot = on))
-	body.add_child(_dev_tick("Unlock Banish", Settings.banish_now,
+	body.add_child(_tipped_tick("Unlock Banish", Settings.banish_now,
 			"The fortuneteller offers Banish however few uniques are unlocked, from the next time her tab is opened",
 			func(on: bool) -> void: Settings.banish_now = on))
 	body.add_child(_button("Gold x10", "LightButton", "Multiply your gold by ten", cash_pressed.emit))
@@ -521,24 +506,14 @@ func _open_dev() -> void:
 		body.add_child(_button("Item generator", "LightButton", "Make an item to order", _open_generator))
 
 
-## A dev switch: a tick row with what it does on the box and the words both.
-func _dev_tick(text: String, on: bool, tip: String, write: Callable) -> HBoxContainer:
-	var row := _tick(text, on, write)
-	for part: Control in row.get_children():
-		part.tooltip_text = tip
-	return row
-
-
-## The generator in the settings' place; its back arrow is the developer screen.
 func _open_generator() -> void:
 	UITheme.clear(_rows)
 	_rows.add_child(ItemGenerator.new(inventory, inventory_path, _open_dev))
 	layout.call_deferred()
 
 
-## Dev: enemy health scaled by how many walls stand inside the tile (`Settings.wall_hp`), a row a
-## circle of land: its base health (`Encounter.baseline_hp` until changed) between /10 -1 and +1 x10,
-## never under 1. Takes hold from the next fight.
+## Dev: a row a circle of land (`Settings.wall_hp`, by how many walls stand inside the tile), its base
+## enemy health (`Encounter.baseline_hp` until changed) between `HP_NUDGES`. Takes hold from the next fight.
 func _open_balance() -> void:
 	var body := _screen(DEV_TITLE, _open_dev, "Back to the developer tools")
 	body.add_child(UITheme.label("Enemy health"))
@@ -548,26 +523,15 @@ func _open_balance() -> void:
 		var now := Settings.hp_base(walls)
 		if now <= 0.0:
 			now = Encounter.baseline_hp(walls)
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 2)
-		for nudge_of: Array in HP_NUDGES:
-			var next := _nudged(now, nudge_of[0])
-			# The small face: four buttons and a growing number share the page's width.
-			var nudge := UITheme.button(nudge_of[0], "SmallButton", nudge_of[1])
-			nudge.disabled = next == now
-			nudge.pressed.connect(func() -> void:
-				Settings.wall_hp[walls] = next
-				Settings.save()
-				_open_balance.call_deferred())
-			row.add_child(nudge)
 		var value := UITheme.label(BigNumber.format(now))
 		value.tooltip_text = HP_BASE_TIP
 		value.mouse_filter = Control.MOUSE_FILTER_PASS
-		value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		row.add_child(value)
-		row.move_child(value, 2)
-		body.add_child(row)
+		var nudges := HP_NUDGES.map(func(nudge: Array) -> Array:
+				return [nudge[0], nudge[1], _nudged(now, nudge[0])])
+		body.add_child(stepper(nudges, now, value, func(next: float) -> void:
+			Settings.wall_hp[walls] = next
+			Settings.save()
+			_open_balance.call_deferred()))
 
 
 ## `from` after one of `HP_NUDGES`' faces: whole numbers, never under 1.
@@ -579,11 +543,6 @@ static func _nudged(from: float, face: String) -> float:
 		_: return from * 10.0
 
 
-## Where the main scene stands the page, in window pixels: empty for the whole window.
-var area := Rect2()
-
-
-## Full window height against the left edge, where the other pages stand.
 func layout() -> void:
 	UITheme.dock(_panel, area, _ui_scale, UITheme.Dock.LEFT, layout)
 	laid_out.emit()

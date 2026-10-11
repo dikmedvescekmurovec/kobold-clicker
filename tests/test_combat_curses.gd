@@ -200,7 +200,8 @@ func _test_fight_tally() -> bool:
 	dry.crit_chance = 1.0e-9
 	for i in 12:
 		dry.hit()
-	_check(dry.tally.get("dry_streak") == 12 and not dry.tally.has("crits"), "twelve blows with no crit (%s)" % [dry.tally])
+	_check(dry.tally.get("dry_streak") == 12 and not dry.tally.has("crits"),
+			"twelve blows with no crit (%s)" % [dry.tally])
 
 	var bled := Encounter.for_tile(Vector2i(1, 0), "grass")
 	bled.health[0] = 50.0
@@ -287,7 +288,8 @@ func _test_tile_mods() -> bool:
 	var plain := Encounter.for_tile(here, "grass", "plain")
 	var more := int(rows["horde"]["enemies"])
 	var horde := Encounter.for_tile(here, "grass", "plain", false, ["horde"])
-	_check(horde.enemies == plain.enemies + more and horde.lineup.size() == horde.enemies and horde.seconds == plain.seconds,
+	_check(horde.enemies == plain.enemies + more and horde.lineup.size() == horde.enemies
+			and horde.seconds == plain.seconds,
 			"a Horde is its row's more on the same clock (%d)" % horde.enemies)
 	_check(Encounter.tier_in(horde, horde.enemies - 1) == EnemyRoster.Tier.ELITE
 			and Encounter.tier_in(horde, plain.enemies - 1) == EnemyRoster.Tier.COMMON,
@@ -297,7 +299,8 @@ func _test_tile_mods() -> bool:
 			and Encounter.tier_in(sparse, sparse.lineup.size() - 1) == EnemyRoster.Tier.ELITE,
 			"a Sparse tile is its row's fewer, the last of them the elite (%d)" % sparse.lineup.size())
 	var short := Encounter.for_tile(here, "grass", "plain", false, ["short_day"])
-	_check(is_equal_approx(short.seconds, plain.seconds + float(rows["short_day"]["seconds"])) and short.time_left == short.seconds,
+	_check(is_equal_approx(short.seconds, plain.seconds + float(rows["short_day"]["seconds"]))
+			and short.time_left == short.seconds,
 			"a Dusk is its row's seconds off the clock (%s)" % short.seconds)
 	var pace := int(rows["elite_ground"]["elite_every"])
 	var elites := Encounter.for_tile(here, "grass", "plain", false, ["elite_ground"])
@@ -305,8 +308,10 @@ func _test_tile_mods() -> bool:
 			and Encounter.tier_in(elites, 2 * pace - 1) == EnemyRoster.Tier.ELITE, "Elite Ground fields one at its row's pace")
 	# A modifier drawn twice is its second tier: tougher and paying more, and written so.
 	var hordes := Encounter.for_tile(here, "grass", "plain", false, ["horde", "horde"])
-	_check(hordes.enemies == plain.enemies + 2 * more and Encounter.tier_in(hordes, hordes.enemies - 1) == EnemyRoster.Tier.ELITE
-			and Encounter.tier_in(hordes, horde.enemies - 1) == EnemyRoster.Tier.COMMON, "Horde II is as many more again, still ending on its elite")
+	_check(hordes.enemies == plain.enemies + 2 * more
+			and Encounter.tier_in(hordes, hordes.enemies - 1) == EnemyRoster.Tier.ELITE
+			and Encounter.tier_in(hordes,
+					horde.enemies - 1) == EnemyRoster.Tier.COMMON, "Horde II is as many more again, still ending on its elite")
 	var more_elites := Encounter.for_tile(here, "grass", "plain", false, ["elite_ground", "elite_ground"])
 	_check(more_elites.elite_every == maxi(2, ceili(pace / 2.0)) and more_elites.elite_every < elites.elite_every,
 			"Elite Ground II fields them twice as close (%d)" % more_elites.elite_every)
@@ -337,7 +342,8 @@ func _test_tile_mods() -> bool:
 	_check(is_equal_approx(thick.health[0], roundf(plain.health[0] * (1.0 + float(rows["thick_skinned"]["hp"])))),
 			"Thick-skinned is its row's more health (%s against %s)" % [thick.health[0], plain.health[0]])
 	var mire := Encounter.for_tile(here, "grass", "plain", false, ["mire"])
-	_check(is_equal_approx(mire.walk_in, Encounter.WALK_IN * float(rows["mire"]["walk_in"])) and mire.phase_left == mire.walk_in,
+	_check(is_equal_approx(mire.walk_in, Encounter.WALK_IN * float(rows["mire"]["walk_in"]))
+			and mire.phase_left == mire.walk_in,
 			"a Mire is its row's times the walk-in")
 	mire.start()
 	mire.advance(Encounter.WALK_IN)
@@ -368,7 +374,8 @@ func _test_tile_mods() -> bool:
 	var wild_pay := Encounter.for_tile(here, "grass", "plain", false, ["savage"])
 	wild_pay.wear([Curses.effect(Curses.WILD_TILES)])
 	wild_pay.arm(stats)
-	_check(is_equal_approx(wild_pay.drop_rate, float(stats["drop_rate"]) + float(brutal["drop_rate"]) * TileMods.WILD_REWARD),
+	_check(is_equal_approx(wild_pay.drop_rate,
+			float(stats["drop_rate"]) + float(brutal["drop_rate"]) * TileMods.WILD_REWARD),
 			"Wild Tiles lifts what a tile pays")
 
 	# The blows: a Savage tile's are half again, a Frenzied one's come round sooner.
@@ -384,7 +391,8 @@ func _test_tile_mods() -> bool:
 		fight.advance(3.2)
 		blows[id] = lost
 	_check(blows[""].size() == 3 and blows["frenzied"].size() > 3, "a Frenzied tile strikes oftener %s" % [blows])
-	_check(is_equal_approx(blows["savage"][0], blows[""][0] * (1.0 + float(brutal["hit"]))), "and a Brutal one its row's share harder")
+	_check(is_equal_approx(blows["savage"][0], blows[""][0] * (1.0 + float(brutal["hit"]))),
+			"and a Brutal one its row's share harder")
 
 	# What a body leaves: nothing in a Barren purse, no gear off a Gilded one.
 	for id: String in ["barren", "gilded"]:
@@ -402,7 +410,8 @@ func _test_tile_mods() -> bool:
 	# A farm run has no clock and is never struck, so it carries only what changes the bodies.
 	var every: Array = TileMods.MODS.keys()
 	var run := Encounter.farm(here, "grass", "plain", every)
-	_check(run.mods == TileMods.farmable(every) and not run.mods.is_empty(), "a run keeps the farmable ones %s" % [run.mods])
+	_check(run.mods == TileMods.farmable(every) and not run.mods.is_empty(),
+			"a run keeps the farmable ones %s" % [run.mods])
 	for id: String in run.mods:
 		_check(bool(TileMods.MODS[id]["farm"]), "%s is one a run can carry" % id)
 	_check(not "short_day" in run.mods and not "savage" in run.mods, "and none that needs a clock")
@@ -433,10 +442,12 @@ func _test_curses() -> bool:
 	var thick := float(TileMods.MODS["thick_skinned"]["hp"])
 	var iron := Encounter.for_tile(here, "grass", "plain", false, ["thick_skinned"])
 	iron.wear([Curses.effect(Curses.IRON_FOES)])
-	_check(is_equal_approx(iron.health[3], roundf(Encounter.hp_of(iron.lineup[3], here) * (1.0 + thick + Encounter.IRON_HP)))
+	_check(is_equal_approx(iron.health[3],
+			roundf(Encounter.hp_of(iron.lineup[3], here) * (1.0 + thick + Encounter.IRON_HP)))
 			and iron.hp == iron.health[0], "Iron Foes adds to a tile's own, never compounds (%s)" % iron.health[3])
 	iron.wear([Curses.effect(Curses.IRON_FOES)])
-	_check(is_equal_approx(iron.health[3], roundf(Encounter.hp_of(iron.lineup[3], here) * (1.0 + thick + Encounter.IRON_HP))),
+	_check(is_equal_approx(iron.health[3],
+			roundf(Encounter.hp_of(iron.lineup[3], here) * (1.0 + thick + Encounter.IRON_HP))),
 			"and is taken on once however often the fight is dressed")
 	var run := Encounter.farm(here, "grass", "plain")
 	run.wear([Curses.effect(Curses.IRON_FOES)])
@@ -505,7 +516,8 @@ func _test_curses() -> bool:
 	_check(is_equal_approx(Encounter._lifted(20.0, 0.5), -40.0) and is_equal_approx(Encounter._lifted(0.0, 2.0), 100.0),
 			"a finished chance is halved and doubled through the lift")
 	var some := plain.lineup[0]
-	_check(is_equal_approx(LootTable.chance_for(some, Encounter._lifted(20.0, 0.5)), LootTable.chance_for(some, 20.0) * 0.5),
+	_check(is_equal_approx(LootTable.chance_for(some, Encounter._lifted(20.0, 0.5)),
+			LootTable.chance_for(some, 20.0) * 0.5),
 			"and half of it is half the drops")
 	_check(LootTable.chance_for(some, -500.0) == 0.0, "down to nothing and no further")
 	var lean := Encounter.farm(here, "grass", "plain")
@@ -554,7 +566,8 @@ func _test_curses() -> bool:
 
 
 ## The dungeon from the main scene: no way down until the third wall has fallen in some world (Gollux's
-## unlock, `WallUnlocks`), then the world's cave, entered stood on; the hero feels it at the map's edge until it is seen; a descent pays nothing
+## unlock, `WallUnlocks`), then the world's cave, entered stood on; the hero feels it at the map's edge until it is
+## seen; a descent pays nothing
 ## and counts no kill, and a depth is written down only once its Gollux is dead.
 func _test_the_way_down() -> bool:
 	_clear_saves()
@@ -594,7 +607,8 @@ func _test_the_way_down() -> bool:
 	_check(main._tip_due("first_sense"), "and says so")
 	# From the hero out: the light stands where the line toward the cave leaves the map.
 	var area := Rect2(0, 0, 100, 60)
-	_check(CaveSense.leaving(Vector2(50, 30), Vector2(1, 0), area) == Vector2(100, 30), "a cave east lights the right edge")
+	_check(CaveSense.leaving(Vector2(50, 30), Vector2(1, 0), area) == Vector2(100, 30),
+			"a cave east lights the right edge")
 	_check(CaveSense.leaving(Vector2(50, 30), Vector2(-1, -1), area) == Vector2(20, 0),
 			"one up and to the left the top edge, where the line from the hero meets it")
 	_check(CaveSense.leaving(Vector2(-40, 30), Vector2(0, 1), area) == Vector2(0, 60),
@@ -605,14 +619,14 @@ func _test_the_way_down() -> bool:
 	view._cover()
 	view.reveal_all()
 	main.map.select_cell(MapBuilder.CENTER)
-	main._update_buttons()
-	_check(not main._cave_button.visible, "no way down from anywhere but the cave")
+	main.tile_panel.update_buttons()
+	_check(not main.tile_panel.cave_button.visible, "no way down from anywhere but the cave")
 	view.player_cell = cave
 	main.map.select_cell(cave)
 	main._on_tile_clicked(cave, main.map.get_tile_info(cave))
-	_check(main._cave_button.visible and "depth 1" in main._cave_button.tooltip_text
-			and main._level_label.text.begins_with("Cave"),
-			"stood on the cave, Enter cave goes down to depth 1 (%s)" % main._cave_button.tooltip_text)
+	_check(main.tile_panel.cave_button.visible and "depth 1" in main.tile_panel.cave_button.tooltip_text
+			and main.tile_panel.level_label.text.begins_with("Cave"),
+			"stood on the cave, Enter cave goes down to depth 1 (%s)" % main.tile_panel.cave_button.tooltip_text)
 	_check(not main._cave_sense.shown() and not main._tip_due("first_sense"), "and seen, the light goes out")
 	main._on_cave_pressed()
 	var fight: Encounter = main._combat.fight if main._combat != null else null
@@ -651,8 +665,8 @@ func _test_the_way_down() -> bool:
 	_check(main.inventory.dungeon_floors == 30 and Cloud.depth_and_floor(30) == Vector2i(3, 0)
 			and Cloud.depth_and_floor(44) == Vector2i(3, 14) and Cloud.depth_and_floor(5) == Vector2i(1, 5),
 			"a score is the depth and the floors of it beaten (%d)" % main.inventory.dungeon_floors)
-	_check("depth 3" in main._cave_button.tooltip_text, "Enter cave says where that leaves the player (%s)"
-			% main._cave_button.tooltip_text)
+	_check("depth 3" in main.tile_panel.cave_button.tooltip_text, "Enter cave says where that leaves the player (%s)"
+			% main.tile_panel.cave_button.tooltip_text)
 	main._on_cave_pressed()
 	_check(main._combat.fight.depth() == 3 and main._combat.fight.first_floor == 30,
 			"and the next descent begins under them")
@@ -698,13 +712,13 @@ func _test_a_world_under_the_fog() -> bool:
 	# The first tile into the fog: nothing drawn, and still a tile to click, read and fight for.
 	main.map.select_cell(blind)
 	await process_frame
-	_check(main._panel.visible and main._tile_title.text == "Unknown land"
-			and main._level_label.text == "Level %d" % main.view.level_of(blind),
-			"a tile under the fog reads as unknown land, and its level is the walk's (%s)" % main._tile_title.text)
-	_check(main._env_rows.get_child_count() == 0 and main._service_rows.get_child_count() == 0
-			and main._mod_rows.get_child_count() == 0, "with nothing said of what is on it")
+	_check(main.tile_panel.panel.visible and main.tile_panel.title.text == "Unknown land"
+			and main.tile_panel.level_label.text == "Level %d" % main.view.level_of(blind),
+			"a tile under the fog reads as unknown land, and its level is the walk's (%s)" % main.tile_panel.title.text)
+	_check(main.tile_panel.env_rows.get_child_count() == 0 and main.tile_panel.service_rows.get_child_count() == 0
+			and main.tile_panel.mod_rows.get_child_count() == 0, "with nothing said of what is on it")
 	_check(main.view.to_save().names.get(blind, "") == "", "and looking at it has not named it")
-	_check(main._chart_button.visible, "Chart is offered on it")
+	_check(main.tile_panel.chart_button.visible, "Chart is offered on it")
 	main._on_chart_pressed()
 	main.map.player.finish_walk()
 	_check(main._combat != null and main._combat.fight.env == main.view.env_at(blind) and main._combat.fight.env != "",
@@ -717,7 +731,8 @@ func _test_a_world_under_the_fog() -> bool:
 	# The torch: a ring of sight back, read as the tile is charted.
 	var torch := Item.rolled(LootTable.BROKEN_TORCH, ItemRarity.Rarity.COMMON, RandomNumberGenerator.new())
 	main.inventory.items.append(torch)
-	_check(main.inventory.equip(torch, Equipment.Socket.OFFHAND) and main._sight() == 1, "the Broken Torch in hand is a ring of sight")
+	_check(main.inventory.equip(torch, Equipment.Socket.OFFHAND) and main._sight() == 1,
+			"the Broken Torch in hand is a ring of sight")
 	main.map.select_cell(blind)
 	main._on_chart_pressed()
 	main.map.player.finish_walk()
@@ -806,7 +821,8 @@ func _test_more_curses() -> bool:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 5
 	var unique := Item.rolled_unique(UniqueTable.ids()[0], rng, 5)
-	_check(raw._raw(unique).rarity == ItemRarity.Rarity.UNIQUE and not unique.mods.is_empty(), "a unique is left as it fell")
+	_check(raw._raw(unique).rarity == ItemRarity.Rarity.UNIQUE and not unique.mods.is_empty(),
+			"a unique is left as it fell")
 	var some := raw.lineup[0]
 	_check(is_equal_approx(OrbTable.chance_for(some, Encounter._lifted(10.0, Encounter.RAW_ORBS)),
 			minf(OrbTable.chance_for(some, 10.0) * Encounter.RAW_ORBS, 1.0)), "three times the finished chance of an orb")
@@ -856,7 +872,8 @@ func _test_more_curses() -> bool:
 			and is_equal_approx(float(rested[1][Camp.XP]), float(rested[0][Camp.XP]) * Camp.RESTLESS_PAY),
 			"a Restless camp pays double a second")
 	var long := Camp.earned(rested[1], 1000.0 + Camp.MAX_SECONDS)
-	_check(bool(long["full"]) and is_equal_approx(float(long["seconds"]), Camp.RESTLESS_SECONDS), "and is full after two hours")
+	_check(bool(long["full"]) and is_equal_approx(float(long["seconds"]), Camp.RESTLESS_SECONDS),
+			"and is full after two hours")
 	var old_camp: Dictionary = rested[0].duplicate()
 	old_camp.erase(Camp.MOST)
 	_check(is_equal_approx(float(Camp.earned(old_camp, 1000.0 + Camp.MAX_SECONDS * 2.0)["seconds"]), Camp.MAX_SECONDS),
@@ -941,7 +958,8 @@ func _test_a_death_beats_the_clock() -> bool:
 			fight.won.connect(func() -> void: results.append(true))
 			fight.lost.connect(func() -> void: results.append(false))
 			fight.time_left = Encounter.DEATH / 2.0
-			_check(fight.hit() and fight.phase == Encounter.Phase.DYING, "the last body is felled with half its death's time left")
+			_check(fight.hit() and fight.phase == Encounter.Phase.DYING,
+					"the last body is felled with half its death's time left")
 			var spent := 0.0
 			while not fight.finished and spent < Encounter.DEATH * 8.0:
 				fight.advance(step)
@@ -961,7 +979,8 @@ func _test_a_death_beats_the_clock() -> bool:
 		down.advance(Encounter.DEATH)
 	down.advance(down.walk_in)
 	down.time_left = Encounter.DEATH / 2.0
-	_check(down.hit() and down.phase == Encounter.Phase.DYING and down.cleared() == 0, "Gollux is going down as the clock runs out")
+	_check(down.hit() and down.phase == Encounter.Phase.DYING and down.cleared() == 0,
+			"Gollux is going down as the clock runs out")
 	for i in 60:
 		down.advance(Encounter.DEATH / 30.0)
 	_check(down.finished and down.victory and down.cleared() == 1, "and his depth is won (%d)" % down.cleared())
@@ -1077,10 +1096,12 @@ func _test_the_fight_names_what_the_tables_have() -> bool:
 		for found: RegExMatch in dials.search_all(source):
 			seen[0] += 1
 			var row: Dictionary = UniqueTable.UNIQUES.get(found.get_string(1), {})
-			_check(row.get("ranks", {}).has(found.get_string(2)), "%s: %s is a dial some unique has" % [file, found.get_string()])
+			_check(row.get("ranks", {}).has(found.get_string(2)),
+					"%s: %s is a dial some unique has" % [file, found.get_string()])
 		for found: RegExMatch in peaks.search_all(source):
 			seen[1] += 1
-			_check(not UniqueTable.peak_text(found.get_string(1)).is_empty() if UniqueTable.UNIQUES.has(found.get_string(1)) else false,
+			_check(not UniqueTable.peak_text(found.get_string(1)).is_empty() if UniqueTable.UNIQUES.has(found.get_string(1))
+					else false,
 					"%s: %s is a unique with a rank IV line" % [file, found.get_string()])
 		for found: RegExMatch in worn.search_all(source):
 			seen[2] += 1
@@ -1102,8 +1123,10 @@ func _test_the_fight_names_what_the_tables_have() -> bool:
 	# numbers, or a dial `_take_mods` takes on -- and one of those on a row a run can carry (`farm`),
 	# and so lose as a rune wears off, is one `forget_mod` takes back.
 	var quoted := RegEx.create_from_string(r'"(\w+)"')
-	var taken := quoted.search_all(_body_of(encounter, "_take_mods")).map(func(found: RegExMatch) -> String: return found.get_string(1))
-	var undone := quoted.search_all(_body_of(encounter, "forget_mod")).map(func(found: RegExMatch) -> String: return found.get_string(1))
+	var taken := quoted.search_all(_body_of(encounter, "_take_mods")).map(
+			func(found: RegExMatch) -> String: return found.get_string(1))
+	var undone := quoted.search_all(_body_of(encounter, "forget_mod")).map(
+			func(found: RegExMatch) -> String: return found.get_string(1))
 	_check(not taken.is_empty() and not undone.is_empty(), "the tile's two functions were read")
 	var words := ["name", "text", "weight", "farm", "once", "not_with"]
 	for id: String in TileMods.MODS:
@@ -1150,14 +1173,16 @@ func _test_the_arena_follows_the_window() -> bool:
 		_check(combat._player.position.is_equal_approx(fresh._player.position)
 				and combat._player.position.is_equal_approx(Vector2(view.x * CombatScene.PLAYER_X, view.y * combat._ground()))
 				and combat._player.scale.is_equal_approx(fresh._player.scale),
-				"the hero stands where and as tall as that window has him (%s, %s)" % [combat._player.position, combat._player.scale])
+				"the hero stands where and as tall as that window has him (%s, %s)" % [combat._player.position,
+						combat._player.scale])
 		_check(is_equal_approx(combat._enemy.position.y, fresh._enemy.position.y)
 				and combat._enemy.scale.is_equal_approx(fresh._enemy.scale) and combat._enemy_scale == combat._enemy.scale,
 				"and so does the enemy (%s, %s)" % [combat._enemy.position, combat._enemy.scale])
 		var is_layer := func(node: Node) -> bool: return node is Sprite2D
 		var laid: Array = combat._arena.get_children().filter(is_layer)
 		var wanted: Array = fresh._arena.get_children().filter(is_layer)
-		_check(laid.size() == wanted.size() and is_equal_approx(combat._pixel, fresh._pixel), "every layer is there, on one grid")
+		_check(laid.size() == wanted.size() and is_equal_approx(combat._pixel, fresh._pixel),
+				"every layer is there, on one grid")
 		for at in mini(laid.size(), wanted.size()):
 			var layer: Sprite2D = laid[at]
 			var want: Sprite2D = wanted[at]
@@ -1166,7 +1191,8 @@ func _test_the_arena_follows_the_window() -> bool:
 			# Short of the window's foot it has its own rows under it, and in step with it.
 			var under: Sprite2D = layer.get_child(0) if layer.get_child_count() > 0 else null
 			var short := want.get_child_count() > 0
-			_check((under != null and under.visible) == short, "layer %d is filled in under its foot only where it stops short" % at)
+			_check((under != null and under.visible) == short,
+					"layer %d is filled in under its foot only where it stops short" % at)
 			if short and under != null:
 				_check(is_equal_approx(under.region_rect.size.y, (want.get_child(0) as Sprite2D).region_rect.size.y)
 						and under.region_rect.position.x == layer.region_rect.position.x,

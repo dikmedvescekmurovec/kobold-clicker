@@ -8,7 +8,7 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
 ## Rules
 
 ### Layout: whole scales, the room, the sheet held upright
-- **Use whole-number scales only** (`PIXEL`, `DOLL_SCALE`, 2:1 orb icons on an even offset), so a sprite pixel stays square. (DESIGN.md)
+- **Use whole-number scales only** (`PIXEL`, `Doll.SCALE`, 2:1 orb icons on an even offset), so a sprite pixel stays square. (DESIGN.md)
   - **Pick `ui_scale` with `UITheme.pick_scale`:** the largest whole one leaving 324 x 576 panel pixels (`MIN_SHORT`, `MIN_LONG`). A window under `MIN_LONG` across, held upright, is `UITheme.narrow`. (DESIGN.md: "ui_theme.gd")
 - **Stand every page in the room the main scene hands it** (`area`, set in `_layout_ui`), through `UITheme.dock`, never against the window itself. A new page gets an `area` and a `layout()` that docks and applies `UITheme.EDGE`. (DESIGN.md)
   - **Held upright, dock a page as a sheet along the foot of its room:** centred at its own width, as tall as what it holds (`natural_height`), never more than half the window. (DESIGN.md: "ui_theme.gd")
@@ -17,7 +17,7 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
   - **Give a new page, or a new state of one, a line in `_pages` of `tests/test_ui_pages.gd`** (every page, headless, in four windows; `KOBOLD_LAYOUT_DUMP` writes the layouts as JSON).
 - **Put a panel's long part in `UITheme.scroll()`,** with what must stay in reach pinned above or below it: a page that outgrows a 648 px window scrolls rather than running off the foot. (DESIGN.md)
   - **Show a scroll bar only on the skill tree's scrolls** (`SCROLL_BAR`, `SCROLL_MODE_AUTO`); `UITheme.scroll` is barless and down-only. (DESIGN.md: "ui_theme.gd")
-- **Work widths out by arithmetic, not taste:** six `OrbSlot.SIDE` and five `ORB_GAP` fit `BagPage.WIDTH` (`test_ui_theme`), and `DOLL_SOCKETS` keep 40 px sockets apart (`test_inventory`). (DESIGN.md)
+- **Work widths out by arithmetic, not taste:** six `OrbSlot.SIDE` and five `ORB_GAP` fit `BagPage.WIDTH` (`test_ui_theme`), and `Doll.SOCKETS` keep 40 px sockets apart (`test_inventory`). (DESIGN.md)
   - **Treat `TownPage.BODY_WIDTH`, `ROW_GAP` and `TranscendPage`'s `CURSE_*_WIDTH` as budgets,** not taste. (DESIGN.md: "town_page.gd", "transcend_page.gd")
   - **Keep the left pages at `BagPage.WIDTH`:** the skill tree never narrower than the bag, and a zoomed tree scrolling in its box, never widening the page. (DESIGN.md: "skills_page.gd")
 - **Fit three panels in a town's 576 panel pixels:** the bag's grid and the town page's width never move, and the doll stands between them. (DESIGN.md)
@@ -87,7 +87,7 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
   - **Put the card away at a press, but never at a craft:** with an orb held it stays (`hovered`, `Cursors.holding`, `_orb_press`) and is lit (`BagPage.crafted` -> `shine`). It is the pressed place that goes quiet, not the piece: a redraw makes new squares, a shelf new `Item`s.
 
 ### Squares, presses and cursors
-- **Leave a bag square deaf to the mouse,** so the grid's and the doll's handlers see every press and work out the square from the cursor (`_index_at`, `_socket_at`); an `OrbSlot` is the opposite on purpose. (DESIGN.md)
+- **Leave a bag square deaf to the mouse,** so the grid's and the doll's handlers see every press and work out the square from the cursor (`_index_at`, `Doll.socket_at`); an `OrbSlot` is the opposite on purpose. (DESIGN.md)
   - **Let a filled `ItemSlot` join `GROUP`,** which is how `ItemCard` finds it; a `teaser` stays out, so the card writes nothing beside it. (DESIGN.md: "item_slot.gd")
   - **Lay the rarity frame over the icon** (`FRAME_NAME`), so the icon stays child 0. (DESIGN.md: "item_slot.gd")
 - **Stand a selected piece's buttons in `BagPage._actions`, beside its square** (stacked, no Back); tests find them with `_deep_button(page._actions, ..)`. Escape clears the selection first and closes the bag only on a second press. (DESIGN.md)
@@ -137,7 +137,7 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
   - **Draw nothing of a shelf piece in the bag:** `offer(item)` is only the counter's redraw of it.
 
 ### Towns and bounties (DESIGN.md: "town_page.gd", "bounty_list.gd")
-- **Save every purchase and every blow** (`TownPage`); `view` and the bag's `craft_held` are set on it from outside, and only the board reads `view`.
+- **Save every purchase and every blow** (`TownPage`); `view` and the bag's `craft_held` are set on it from outside, and only the board and the fortuneteller read `view`. Every deed ends in `_deed_done` (save, redraw, `offer_changed(null)`).
 - **Give every service a tab:** `COUNTERS` is `TownServices.ORDER`, and one `_fill` has no counter for says so (`push_error`) and draws nothing.
 - **Call `BountyBoard.clear` before `restock` in the Claim that clears a board,** and keep the claim's order in `take_choice(index)`: `item_claimed` -> `note_unique` -> `add`, orbs to the tray, then save.
 - **Open a town on its board,** the one tab every settlement has; it has no Show.
@@ -160,7 +160,7 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
 - **Stand the corner words in `_marks`,** over the canvas, never scaled or faded with it.
 - **Count a press as it lets go** (`slot_pressed`): past `BagPage.DRAG_THRESHOLD` it drags the scroll, and held still it repeats on the skills page only (`repeating`), saved once as it lets go (`hold_ended`).
 - **Scale the tree in whole steps** (`fit`; `zoom_by` up to `ZOOM_MOST`, the user's, 2026-10-09), and keep `zoom` across redraws.
-- **Keep the nodes small** (the user's, 2026-10-09): a stone is `ItemSlot.bare` with `SkillTree.node_icon`, kept apart by `_crowded`; the root has one branch, straight down.
+- **Keep the nodes small** (the user's, 2026-10-09): a stone is `ItemSlot.bare` with `SkillTree.node_icon`, kept apart by `_room`; the root has one branch, straight down.
 
 ### The other pages
 - **Read every number on `CharacterPage` off the fight** (`_numbers`: `Encounter.armed(owner, totals)`, never `wear`, which wants a lineup), as the character panel's are. (DESIGN.md: "character_page.gd")
@@ -225,10 +225,13 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
 | `accordion.gd` (`Accordion`) | A section that folds: a heading with a drawn triangle over a `body` the caller fills. |
 | `palette.gd` (`Palette`) | The colours drawn in code, every one in ENDESGA 64. |
 | `bag_page.gd` (`BagPage`) | The bag, the doll beside it and the orb and rune trays at its foot; also the heirlooms' page, a transcension's bag and its stones page. |
+| `doll.gd` (`Doll`) | The figure on the bag's sheet under its eight socket squares: where each sits, and which is under a point. |
 | `skills_page.gd` (`SkillsPage`) | The skill tree page: the free points and the zoom over a `SkillTreeView`, and one Reset. |
 | `town_page.gd` (`TownPage`) | The settlement on the right edge, a tab a counter: shelves, smith, bounty board, fortuneteller and her banishing. |
+| `smith_swing.gd` (`SmithSwing`) | The smith at `TownPage`'s bench: his portrait, his hammer strike's clock and its sound. |
 | `transcend_page.gd` (`TranscendPage`) | The black screen between two worlds: four cards (heirlooms, curses, skill tree) and the way into the new world. |
 | `bounty_list.gd` (`BountyList`) | The bounty journal on the left edge, and `row`, the card a posting is written out as. |
+| `bounty_rewards.gd` (`BountyRewards`) | What the bounty board hands over, each a panel in a screen-wide catch over the town: a claim's verdict (`show_paid`) and a cleared board's three options (`show_choice`). |
 | `leaderboard_page.gd` (`LeaderboardPage`) | The leaderboards on the left edge, a tab a board, with the sign-in and the name. |
 | `cloud_question.gd` (`CloudQuestion`) | The cloud's "Keep which save?" over the whole window: the two saves and a button each. |
 | `text_prompt.gd` (`TextPrompt`) | A line of text asked for over the whole window: a field, Cancel and a green verb. |
@@ -242,6 +245,9 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
 | `item_slot.gd` (`ItemSlot`) | One item as a square: icon on a tan socket under its rarity's frame, with its corner marks. |
 | `item_card.gd` (`ItemCard`) | The floating card for the piece under the cursor, the worn piece's under Alt, its key row and its light. |
 | `tip_card.gd` (`TipCard`) | Every `tooltip_text` in the game as a cream card beside its Control. |
+| `tile_panel.gd` (`TilePanel`) | The selected tile's panel on the right edge: name, kind and level, lands, services, modifiers, runes, a wall's unlocks, and the buttons that can be pressed (`fill`, `update_buttons`). |
+| `banner.gd` (`Banner`) | What is announced over the map and a fight: the banner (a new unique, a filled bounty, an achievement), the bounty toast and the level-up fanfare. |
+| `changelog.gd` (`Changelog`) | `CHANGELOG.md` read into versions (`versions`, `since`) and laid out as the web build's start-up page (`page`). |
 | `dialogue_box.gd` (`DialogueBox`) | Someone speaking: a box along the window's foot, words coming in beside a portrait. |
 | `orb_slot.gd` (`OrbSlot`) | One orb, super orb or rune as a square in its tray. |
 | `orb_card.gd` (`OrbCard`) | The floating card for the orb under the cursor. |

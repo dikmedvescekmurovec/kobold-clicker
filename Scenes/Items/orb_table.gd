@@ -1,39 +1,16 @@
 class_name OrbTable
 extends RefCounted
-## The six orbs: what each one is, what it does to a piece, and how often a body carries one.
+## The six orbs, one job each: what each does to a piece, which exist behind which wall, and their
+## drop and shelf rolls. An orb is a count by name in `Inventory.orbs`, never an `Item`.
 ##
-## The same shape as LootTable -- const tables and static accessors, no nodes -- and the same
-## philosophy about the drop rate: TIER_CHANCE and `LootTable.SIZE_CHANCE` multiply into `chance_for`,
-## so the whole curve is two small tables rather than a number per enemy.
-##
-## An orb is not an Item and deliberately not one. It has no rarity, no level, no modifiers and no
-## socket; it is a count, the way gold is, and the whole of it lives in Inventory.orbs as a name and
-## a number. That is what keeps Item, ItemSlot, DropsView and the bag's ordering untouched by this
-## chunk: there is nothing new for them to sort, cap, filter or draw.
-##
-## What an orb *does* is the one thing here that cannot be a table. Six verbs, six branches of
-## one match, in one file -- because the rule that decides whether an orb is offered (`can_apply`),
-## the rule that carries it out (`apply`) and the sentence that explains a refusal (`why_not`) are
-## three faces of one piece of knowledge, and splitting them is how they come to disagree. The rule is
-## written once, in `why_not`: `can_apply` is that with nothing to say.
-##
-## No orb ever touches a piece's level or its base stats. Those are frozen when it is rolled and stay
-## frozen; rarity and modifiers are what an orb exists to change. (A blacksmith's upgrade does move
-## them, which is the one exception in the game and lives in `Scenes/Town/blacksmith.gd`.)
-##
-## One job an orb: Transmutation, Alchemy and Exalted each make a piece their rarity -- from below or
-## from above -- or reroll one already there, Augmentation adds a modifier, Divine rerolls the numbers
-## and Chaos the tiers.
-##
-## Two things a smith leaves on a piece are the orbs' business, and both are handled in one place
-## each. A **broken** piece refuses every orb, so the branches below never see one. A **locked**
-## modifier survives all six: `_reroll_at` puts it back and fills the rest around it, and Divine and
-## Chaos step over it.
+## The rule for each is written once, in `why_not`: `can_apply` is it, empty, and `apply` refuses on
+## it, so the square that lights, the act and the sentence for a refusal cannot disagree. No orb
+## touches a piece's level or base stats. A broken piece refuses every orb, and a held-fast modifier
+## survives all six (`_reroll_at` fills around it; Divinity and Chaos step over it).
 
 const ROOT := "res://Assets/Orbs/"
 
-## Orbs a save may name under an older name -> the name they carry now: Alteration's job went to
-## Transmutation, and Exalted and Divine were adjectives where every other orb is "of" a noun (2026-09-30).
+## An orb's name in an older save -> its name now (`current`, asked wherever a save is read).
 const RENAMED := {
 	"Orb of Alteration": "Orb of Transmutation",
 	"Orb of Exalted": "Orb of Exaltation",
@@ -41,22 +18,17 @@ const RENAMED := {
 }
 
 
-## What a saved orb's name is called now (`RENAMED`); a name that never changed is itself.
 static func current(orb: String) -> String:
 	return RENAMED.get(orb, orb)
 
 
-## The order the tray draws them in, and it never changes: six fixed squares whose places the
-## player learns. Cheap and frequent first, running to the rare.
-##
-## `does` is the sentence the hover card reads out, written as a whole statement rather than a
-## fragment, because it is the only explanation of an orb anywhere in the game.
-##
-## The weights are relative and flat -- no depth gating. Fighting deeper buys better *modifiers*,
-## which is what a tile's level ceiling already decides; an orb rate that climbed with it would make
-## the frontier the only place worth farming, and the frontier is the part the player cannot reach.
-## What does move is which orbs exist at all: the deepest wall ever broken unlocks them two at a time
-## (`unlocked`, `WallUnlocks`), anywhere on the land and in every world after.
+## The six, in the tray's order, which never changes and which `unlocked` and `upscale_from` read.
+##   icon    its file under `ROOT`.
+##   glow    its colour off its icon, in ENDESGA 64: the light behind the card of a piece it goes into
+##           (`ItemCard.shine`) and the colour of its drop beam.
+##   beam    the rarity whose `LootBeam` a good one stands in as it drops; absent, it drops plain.
+##   weight  how often it is drawn against the others: flat, with no depth gating (DESIGN.md).
+##   does    the hover card's sentence, whole: the only explanation of an orb in the game.
 const ORBS := {
 	"Orb of Transmutation": {
 		"icon": "Orb of Transmutation.png", "glow": Color("0069aa"), "weight": 24,
@@ -84,43 +56,33 @@ const ORBS := {
 	},
 }
 
-## `glow` is the orb's colour, picked off its icon in ENDESGA 64: the light it leaves behind the card of a
-## piece it goes into (`ItemCard.shine`), and the `LootBeam` a good one stands in the arena when it drops,
-## in the shape of the rarity `beam` names; the cheap ones drop plain.
-
-## Kills the player makes, across every fight, before the first orb can fall. Orbs change gear, so
-## they wait until the player has had time to find some.
+## Lifetime kills before an orb can fall by luck.
 const FIRST_ORB_KILLS := 20
 
-## The orb a new player is promised before FIRST_ORB_KILLS are made (`Encounter.PROMISED`'s `TRANSMUTE`,
-## `Inventory.first_orb_taken`), so crafting is met early, on the cheapest orb there is and with the
-## Broken Sword already in hand to spend it on.
+## The orb a new player is promised before then (`Encounter.PROMISED`'s `TRANSMUTE`,
+## `Inventory.first_orb_taken`), with the Broken Sword already in hand to spend it on.
 const FIRST_ORB := "Orb of Transmutation"
-## The one promised next (`Encounter.PROMISED`'s `AUGMENT`, `Inventory.FIRST_AUGMENT`): a common takes no
-## modifier, so it comes after the orb that makes the sword uncommon, whose one sure line leaves room for it.
+## The one promised next (`Encounter.PROMISED`'s `AUGMENT`, `Inventory.FIRST_AUGMENT`). After the
+## first, since a common takes no modifier and the uncommon the first makes has room for one.
 const SECOND_ORB := "Orb of Augmentation"
 
-## How often a body carries an orb at all. Read beside LootTable's own pair: an orb is a little more
-## common than a piece of gear off the same body, because one piece of gear is worth a great many
-## Transmutation orbs and a currency nobody accumulates is a currency nobody spends.
+## How often a body carries an orb, by its tier (`chance_for`).
 const TIER_CHANCE := {
 	EnemyRoster.Tier.COMMON: 0.05,
 	EnemyRoster.Tier.ELITE: 0.22,
 	EnemyRoster.Tier.BOSS: 0.50,
 }
 
-## The rarity each of the three rarity orbs makes. UNIQUE is hand-crafted, weighted zero in every
-## drop table, and must stay unreachable -- so the ladder stops at Exalted's elite.
+## The rarity each of the three rarity orbs makes. UNIQUE must stay unreachable.
 const RARITY_OF := {
 	"Orb of Transmutation": ItemRarity.Rarity.UNCOMMON,
 	"Orb of Alchemy": ItemRarity.Rarity.RARE,
 	"Orb of Exaltation": ItemRarity.Rarity.ELITE,
 }
 
-## How many orbs each wall unlocks, in tray order: Transmutation and Augmentation from the start,
-## Alchemy and Divinity behind the first wall, Chaos and Exaltation behind the second (the user's
-## ruling, 2026-10-03), for good once broken in any world (`Inventory.walls_ever`, the user's, 2026-10-09). Every way an orb is had -- a body, a shelf, a bounty, the Sack, a
-## trade up -- draws only from `unlocked`.
+## How many orbs each wall unlocks, in tray order, off the deepest wall ever broken in any world
+## (`Inventory.walls_ever`; the user's, 2026-10-03, for good since 2026-10-09). Every way an orb is
+## had -- a body, a shelf, a bounty, the Sack, a trade up -- draws only from `unlocked`.
 const ORBS_A_WALL := 2
 
 ## Walls down by which every orb is unlocked: the default for a caller no world stands behind (tests).
@@ -132,7 +94,6 @@ const UPSCALE_COST := 3
 static var _icons := {}
 
 
-## Every orb, in the tray's order.
 static func orbs() -> Array:
 	return ORBS.keys()
 
@@ -153,39 +114,31 @@ static func upscale_from(orb: String) -> String:
 	return orbs()[at - 1] if at > 0 else ""
 
 
-## The sprite, loaded once. The same cache LootTable keeps, for the same reason: six squares are
-## rebuilt every time the bag refreshes, and a kill refreshes it.
 static func icon(orb: String) -> Texture2D:
 	if not _icons.has(orb):
 		_icons[orb] = load(icon_path(orb))
 	return _icons[orb]
 
 
-## What the hover card says this orb is for.
 static func describe(orb: String) -> String:
 	return str(ORBS[orb]["does"])
 
 
-## Whether this orb has anything to do to this piece: the tray lights a square when this is true and
-## greys it when it is false, and `apply` refuses on it rather than trusting whoever called. Nothing,
-## and an orb nobody has heard of, are refused without a word; every other refusal is `why_not`'s.
+## `why_not`, empty. No piece, and an orb nobody has heard of, are refused without a word.
 static func can_apply(orb: String, item: Item) -> bool:
 	return item != null and ORBS.has(orb) and why_not(orb, item).is_empty()
 
 
-## Why this orb is greyed out, for the hover card. Empty when it is not -- so a caller can ask this
-## one question instead of asking `can_apply` and then inventing a sentence of its own. **The whole
-## rule is here**, the refusal and its reason in one place, so the two cannot drift apart.
+## Why this orb is greyed out, for the hover card; "" when it is not. **The whole rule is here.**
 static func why_not(orb: String, item: Item) -> String:
 	if item == null or not ORBS.has(orb):
 		return ""
-	# One answer for all six: a piece the hammer ruined is out of the game as far as crafting goes.
 	if item.broken:
 		return "A broken item cannot be changed"
-	# A skill stone's capstone is what it dropped as, and stays it (the user's, 2026-10-08).
+	# The user's, 2026-10-08.
 	if not item.capstone.is_empty():
 		return "A capstone cannot be changed"
-	# A unique's modifiers are its row's and stay: only their numbers may move, which is Divine and Chaos.
+	# A unique's modifiers are its row's: only their numbers may move.
 	if item.rarity == ItemRarity.Rarity.UNIQUE and orb not in ["Orb of Divinity", "Orb of Chaos"]:
 		return "Only an Orb of Divinity or Chaos can change a unique"
 	var piece := "%s %s" % [item.rarity_label().to_lower(), item.display_name()]
@@ -206,11 +159,8 @@ static func why_not(orb: String, item: Item) -> String:
 	return "Cannot be used on this %s" % piece
 
 
-## Spends one orb on one piece, in place. False when the orb has nothing to do here, in which case
-## the piece is untouched and the caller must not decrement its count.
-##
-## Level and base stats are never touched by any branch. A piece's numbers were settled when it was
-## rolled; what an orb buys is what the piece carries on top of them.
+## Spends one orb on one piece, in place. False where the orb has nothing to do here: the piece is
+## untouched, and the caller must not take one off its count.
 static func apply(orb: String, item: Item, rng: RandomNumberGenerator) -> bool:
 	if not can_apply(orb, item):
 		return false
@@ -218,7 +168,7 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator) -> bool:
 		"Orb of Transmutation", "Orb of Alchemy", "Orb of Exaltation":
 			_reroll_at(item, RARITY_OF[orb], rng)
 		"Orb of Augmentation":
-			var extra := ModifierTable.add_one(item.type, item.mods, rng, item.mod_level(), item.stone_tier)
+			var extra := item.extra_mod(item.mods, rng)
 			if extra.is_empty():
 				return false
 			item.mods.append(extra)
@@ -229,28 +179,17 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator) -> bool:
 	return true
 
 
-## Rolls every modifier's number again in its own tier's band (`Item.tier_of`), leaving the ids and
-## the tiers alone:
-## that is the whole difference between a Divine and a Chaos, and the reason a piece with the right
-## modifiers and poor rolls is worth keeping.
-##
-## A locked or bound modifier is locked at the roll it was locked at -- paying the smith and then
-## rerolling the number would be paying to keep a line and losing it anyway -- and a perfected one
-## sits at the top of its band and stays there (`Item.refresh_perfect` moves it up with the level).
+## Divinity's act: every modifier's number again in its own tier's band (`Item.tier_of`), the ids and
+## the tiers staying.
 static func reroll_values(item: Item, rng: RandomNumberGenerator) -> void:
-	for mod in item.mods:
-		if Item.held_fast(mod) or bool(mod.get("perfect", false)):
-			continue
+	for mod: Dictionary in _rerollable(item):
 		mod["value"] = ModifierTable.reroll_value(str(mod["id"]), rng, item.tier_of(mod))
 
 
-## Rolls every modifier's tier again, and its number in the new tier's band: a Divine with the band
-## itself thrown in, which is why a Chaos is the rarer of the two. The id stays, so a unique takes it.
-## Held-fast and perfected lines are stepped over for Divine's reasons.
+## Chaos's: every modifier's tier again, and its number in the new tier's band. The ids stay, so a
+## unique takes it.
 static func reroll_tiers(item: Item, rng: RandomNumberGenerator) -> void:
-	for mod in item.mods:
-		if Item.held_fast(mod) or bool(mod.get("perfect", false)):
-			continue
+	for mod: Dictionary in _rerollable(item):
 		var fresh := ModifierTable.rolled_mod(str(mod["id"]), rng, item.band_level(mod))
 		mod["value"] = fresh["value"]
 		mod.erase("under")
@@ -258,14 +197,16 @@ static func reroll_tiers(item: Item, rng: RandomNumberGenerator) -> void:
 			mod["under"] = fresh["under"]
 
 
-## Sets the piece to a rarity and gives it that rarity's own fresh handful of modifiers. Three of the
-## six end here, because "what rarity is it now" and "how many modifiers does it carry" are one
-## question in this game -- `ItemRarity.band` is the join, and nothing else may answer it.
-##
-## A locked modifier is one of that handful rather than an extra on top: it is put back first and the
-## draw fills what is left around it, so the rarity's ceiling holds exactly as it does on a piece
-## with no lock. `ModifierTable.add_one` already draws only what the piece is not carrying, which is
-## what keeps the lock from being rolled a second time.
+## The lines a reroll may move, in their order: a held-fast one stays at the roll it was held at, and
+## a perfected one at its band's top.
+static func _rerollable(item: Item) -> Array:
+	return item.mods.filter(func(mod: Dictionary) -> bool:
+		return not (Item.held_fast(mod) or bool(mod.get("perfect", false))))
+
+
+## Sets the piece to `rarity` with that rarity's fresh handful of modifiers; `ItemRarity.band` alone
+## says how many, an Orb of Expansion's one on top. Held-fast lines are of that handful and never
+## extras: they are put back first and the draw fills around them.
 static func _reroll_at(item: Item, rarity: ItemRarity.Rarity, rng: RandomNumberGenerator) -> void:
 	# The first craft is a sure thing (the user's, 2026-10-10): a common Broken Sword transmuted carries
 	# "+1 Damage" and nothing else. No orb makes a common, so a common one is on its first Transmutation.
@@ -287,33 +228,28 @@ static func _reroll_at(item: Item, rarity: ItemRarity.Rarity, rng: RandomNumberG
 		item.mods = ModifierTable.roll(item.type, count, rng, item.mod_level(), item.stone_tier)
 		return
 	for i in count - mods.size():
-		var extra := ModifierTable.add_one(item.type, mods, rng, item.mod_level(), item.stone_tier)
+		var extra := item.extra_mod(mods, rng)
 		if extra.is_empty():
 			break
 		mods.append(extra)
 	item.mods = mods
 
 
-## The most modifiers this piece's rarity allows. A common's is zero, which is what makes a common
-## with a modifier a contradiction rather than a rare event. The card writes what is left of it as an
-## empty row (`ItemDetails.fill`).
+## The most modifiers the piece's rarity allows, an Expansion's included: Augmentation's test, and the
+## card's open rows (`ItemDetails.fill`).
 static func room(item: Item) -> int:
 	return int(ItemRarity.band(item.rarity, item.type)[1]) + int(item.extra_slot)
 
 
-## How often this enemy leaves an orb: its tier times its body, and never more than certain. Rolled
-## on its own, beside the gear roll rather than against it, so one body can hand over both. `orb_find`
-## lifts it the way `drop_rate` lifts the gear chance: 50 is half again as many orbs.
+## How often this enemy leaves an orb, rolled beside the gear and not against it: its tier times its
+## size, lifted by `orb_find` percent, capped at 1.
 static func chance_for(enemy_name: String, orb_find := 0.0) -> float:
 	var tier: float = TIER_CHANCE[EnemyRoster.tier_of(enemy_name)]
-	# What the body itself is worth against that: the same spread gear uses, for the same reason.
 	var size: float = LootTable.SIZE_CHANCE[EnemyRoster.size_of(enemy_name)]
 	return minf(tier * size * (1.0 + maxf(orb_find, 0.0) / 100.0), 1.0)
 
 
-## One kill's worth of currency: "" for nothing, or the orb that dropped. The chance is drawn first
-## and on its own, so a kill that leaves nothing costs exactly one draw -- LootTable.roll's rule, and
-## what keeps the two rates independently tunable.
+## One kill's orb, or "". The chance is drawn first and alone, as `LootTable.roll`'s is.
 static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := false,
 		orb_find := 0.0, walls := EVERY_WALL) -> String:
 	if not guaranteed and rng.randf() >= chance_for(enemy_name, orb_find):
@@ -321,9 +257,8 @@ static func roll(enemy_name: String, rng: RandomNumberGenerator, guaranteed := f
 	return _weighted(rng, walls)
 
 
-## An orb a vendor would have on its shelf: two draws, and the rarer of the two. What a shop is for
-## is the orb nobody has seen fall, so the shelf leans up the table -- and it leans by drawing twice
-## rather than by carrying a second set of weights, so tuning a drop rate tunes the shelf with it.
+## An orb for a vendor's shelf: two draws and the rarer kept, so the shops lean on the drop weights
+## and have no table of their own.
 static func roll_favoured(rng: RandomNumberGenerator, walls := EVERY_WALL) -> String:
 	var first := _weighted(rng, walls)
 	var second := _weighted(rng, walls)
@@ -333,4 +268,5 @@ static func roll_favoured(rng: RandomNumberGenerator, walls := EVERY_WALL) -> St
 ## An orb picked by weight among those `walls` unlocks (`LootTable.weighted_index`).
 static func _weighted(rng: RandomNumberGenerator, walls := EVERY_WALL) -> String:
 	var pool := unlocked(walls)
-	return pool[LootTable.weighted_index(pool.map(func(orb: String) -> int: return int(ORBS[orb]["weight"])), rng)]
+	var weights := pool.map(func(orb: String) -> int: return int(ORBS[orb]["weight"]))
+	return pool[LootTable.weighted_index(weights, rng)]

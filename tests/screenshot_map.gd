@@ -25,7 +25,8 @@ func _run() -> void:
 	var towns: TownWorld = main.towns
 	var map: HexMap = main.map
 	var camera: Camera2D = main.camera
-	var fortress := towns.towns().filter(func(spot: Vector2i) -> bool: return towns.tier_at(spot) == TownWorld.Tier.FORTRESS)[0] as Vector2i
+	var fortress := towns.towns().filter(
+			func(spot: Vector2i) -> bool: return towns.tier_at(spot) == TownWorld.Tier.FORTRESS)[0] as Vector2i
 	var origin := Vector2i(fortress.x + 8, fortress.y & ~1)
 	main.map_origin = origin
 	for map_seed: int in MAP_SEEDS:

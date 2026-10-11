@@ -1,33 +1,23 @@
 class_name BountyList
 extends Control
-## The bounty the player has taken on, as a page against the left edge: what the board wants, how
-## far along it is, what it pays, and -- the whole point of it -- the lands that monster lives on.
-##
-## The same rows the town page's board draws, because they are built here and it calls them: a bounty
-## reads the same standing at the board that posted it and standing ten tiles away from it. What this
-## page adds is the town's name over the postings and a line saying where to hand a finished one in;
-## what the board adds is the Claim button, which only the town that posted it ever shows.
-##
-## Built like the other left-hand pages (`SkillsPage`): `open()` redraws it, `layout()` fits it to the
-## window, `closed` is its X, and it carries `UITheme.theme()` because it hangs off a `CanvasLayer`.
-## The one thing it changes is giving the work up (Cancel), which it saves; a bounty is still handed
-## in only at the town that posted it.
+## The bounty journal on the left edge, and `row`, the one card a posting is written out as: the town
+## page's board calls it, so a bounty reads the same at the board that posted it and ten tiles away.
+## The one thing the page changes is giving the work up (Give up), which it saves; a bounty is still
+## handed in only at the town that posted it.
 
-## The page's X was pressed.
 signal closed
-## Cancel gave the work up (and saved): a board open on the other edge has to be drawn again.
+## Give up gave the work up (and saved): a board open on the other edge has to be drawn again.
 signal abandoned
 ## A finished bounty's "Claim at" was pressed: the main scene shows the town on `spot` on the map.
 signal town_shown(spot: Vector2i)
 
 ## How wide the page's rows run, in panel pixels. Wider than the town page's 140, because nothing here
-## is standing beside a bag: a tile's name and the line it sits on are what set it.
+## is standing beside a bag.
 const WIDTH := 170.0
 ## The air between one posting and the next, and between the rows inside one.
 const ROW_GAP := 8
 const LINE_GAP := 4
-## The coin beside a reward, at half the sprite's own 16 -- the same whole-number step the shelf's
-## prices take.
+## The coin beside a reward, at half the sprite's own 16: the whole-number step the shelf's prices take.
 const REWARD_COIN := 8
 ## The progress bar: how tall it is, and how far its count hangs off its bottom-right corner -- it
 ## overhangs for the reason `OrbSlot`'s does, 16 px being the smallest Pixellari draws cleanly and
@@ -55,6 +45,7 @@ const LEVEL_NAME := "Level"
 
 var inventory: Inventory
 var view: MapBuilder
+var area := Rect2()
 var _save_path: String
 var _ui_scale: float
 var _panel: VBoxContainer
@@ -75,9 +66,6 @@ func _ready() -> void:
 	_panel = UITheme.titled_panel("Bounties", "Close the bounty list", closed.emit)
 	_panel.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_panel)
-	# Everything on the page scrolls: three postings a board and a board for every town walked into is
-	# more than a 648 px window holds, and a page that cannot be wound down is a page with work hidden
-	# under its own foot.
 	var scroll := UITheme.scroll()
 	UITheme.body_of(_panel).add_child(scroll)
 	_rows = UITheme.vbox(ROW_GAP, WIDTH)
@@ -87,7 +75,6 @@ func _ready() -> void:
 	open()
 
 
-## Redraws the page: the accepted bounty, under the name of the town that posted it.
 func open() -> void:
 	UITheme.clear(_rows)
 	var listed := 0
@@ -107,8 +94,8 @@ func open() -> void:
 			listed += 1
 			var card := BountyList.row(bounty, view, WIDTH)
 			var actions := BountyList.actions_of(card)
-			# A finished bounty is paid for where it was taken on, which is the one thing this page
-			# cannot do: its button names that town and shows it on the map.
+			# A finished bounty is paid for where it was taken on, which this page cannot do: its button
+			# names that town and shows it on the map.
 			if BountyBoard.ready(bounty):
 				var claim := UITheme.button("Claim at %s" % town, "SmallGoButton", "Show %s on the map" % town)
 				claim.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -120,11 +107,6 @@ func open() -> void:
 		_rows.add_child(wrapped("No work is out. Accept a bounty at a board.", WIDTH, Palette.TEXT_SOFT))
 
 
-## Where the main scene stands the page, in window pixels: empty for the whole window.
-var area := Rect2()
-
-
-## Full window height against the left edge, where the other pages stand.
 func layout() -> void:
 	UITheme.dock(_panel, area, _ui_scale, UITheme.Dock.LEFT, layout)
 
@@ -134,10 +116,9 @@ func layout() -> void:
 ## whatever the caller adds through `actions_of` (the board's Accept or Claim, the journal's Give up).
 ## An accepted posting carries its progress bar; `note` is one leaf-green line over the buttons.
 ##
-## Where it lives is always shown, on the board and the journal alike (the user's, 2026-10-07): the
-## level of land a kill has to fall on as a chip beside the name, and the lands that monster lives on as
-## the tile panel's own swatches -- which lands, never which tile: finding one is the map's business
-## (the user's, 2026-10-01).
+## Where it lives is always shown (the user's, 2026-10-07): the level of land a kill has to fall on as a
+## chip beside the name, and the lands that monster lives on as the tile panel's own swatches -- which
+## lands, never which tile: finding one is the map's business (the user's, 2026-10-01).
 static func row(bounty: Dictionary, map_view: MapBuilder, width: float, note := "") -> PanelContainer:
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", flat(Color.TRANSPARENT, CARD_PAD))
@@ -164,7 +145,7 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float, note := 
 	heading.add_theme_constant_override("h_separation", 3)
 	heading.add_theme_constant_override("v_separation", 2)
 	if elite:
-		var skull: Texture2D = CombatScene.TIER_MARK[EnemyRoster.Tier.ELITE]
+		var skull: Texture2D = FightHud.TIER_MARK[EnemyRoster.Tier.ELITE]
 		heading.add_child(icon(skull, skull.get_width()))
 	heading.add_child(UITheme.label(enemy if taken or need <= 1 else "%s x%d" % [enemy, need]))
 	# The level of land a kill has to fall on, or deeper.
@@ -174,8 +155,7 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float, note := 
 	lines.add_child(heading)
 	# The picture beside what it pays rather than over it: three postings share one column, and a
 	# poster stacked picture, name, gold, goods was two of them to a window.
-	var poster := HBoxContainer.new()
-	poster.add_theme_constant_override("separation", CARD_PAD)
+	var poster := _hbox(CARD_PAD)
 	poster.add_child(face)
 	var pays := UITheme.vbox(LINE_GAP)
 	pays.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -188,9 +168,8 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float, note := 
 		lines.add_child(progress_bar(int(bounty.get(BountyBoard.HAVE, 0)), need, inner))
 
 	if map_view != null and known:
-		var swatches := HBoxContainer.new()
+		var swatches := _hbox(2)
 		swatches.name = LANDS_NAME
-		swatches.add_theme_constant_override("separation", 2)
 		for env: String in EnemyRoster.environments_of(enemy):
 			var swatch := map_view.map.tileset.env_icon(env)
 			swatch.tooltip_text = HexTileset.env_name(env)
@@ -199,8 +178,7 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float, note := 
 	if not note.is_empty():
 		lines.add_child(wrapped(note, inner, Palette.LEAF))
 
-	var actions := HBoxContainer.new()
-	actions.add_theme_constant_override("separation", CARD_PAD)
+	var actions := _hbox(CARD_PAD)
 	# At the card's foot however tall the card has been stretched.
 	actions.size_flags_vertical = Control.SIZE_EXPAND | Control.SIZE_SHRINK_END
 	lines.add_child(actions)
@@ -209,30 +187,28 @@ static func row(bounty: Dictionary, map_view: MapBuilder, width: float, note := 
 
 ## What a posting pays that is a figure: the gold behind a coin and the experience behind a gem.
 static func _sums(bounty: Dictionary) -> HBoxContainer:
-	var sums := _reward_row(6)
-	var purse := HBoxContainer.new()
-	purse.add_theme_constant_override("separation", 2)
-	purse.add_child(icon(Coins.icon(), REWARD_COIN))
-	purse.add_child(UITheme.label(BigNumber.format(float(bounty.get(BountyBoard.GOLD, 0))),
-			Palette.TEXT_SOFT, true))
-	sums.add_child(purse)
+	var sums := _hbox(6)
+	sums.add_child(_figure(Coins.icon(), REWARD_COIN, float(bounty.get(BountyBoard.GOLD, 0))))
 	var xp := int(bounty.get(BountyBoard.XP, 0))
 	if xp > 0:
-		var worth := HBoxContainer.new()
-		worth.add_theme_constant_override("separation", 2)
-		worth.add_child(icon(XP_GEM, REWARD_GEM))
-		worth.add_child(UITheme.label(BigNumber.format(float(xp)), Palette.TEXT_SOFT, true))
-		sums.add_child(worth)
+		sums.add_child(_figure(XP_GEM, REWARD_GEM, float(xp)))
 	return sums
 
 
+static func _figure(mark: Texture2D, side: int, amount: float) -> HBoxContainer:
+	var pair := _hbox(2)
+	pair.add_child(icon(mark, side))
+	pair.add_child(UITheme.label(BigNumber.format(amount), Palette.TEXT_SOFT, true))
+	return pair
+
+
 ## What a posting pays that goes in the bag: each orb once, in the tray's order, with how many on its
-## corner as the tray writes it, and its name for whoever hovers -- then the promised piece, its kind's
+## corner as the tray writes it, and its name in its tooltip -- then the promised piece, its kind's
 ## plainest picture in its rarity's frame and no more, since what it is exactly is rolled at the
 ## hand-in. A unique shows the relic mark, not a kind.
 static func _goods(bounty: Dictionary) -> HBoxContainer:
 	# Wide enough for a count hanging off an orb's corner (`OrbSlot.COUNT_OVERHANG`).
-	var goods := _reward_row(8)
+	var goods := _hbox(8)
 	var orbs := BountyBoard.orbs_of(bounty)
 	for orb: String in OrbTable.ORBS:
 		var count := orbs.count(orb)
@@ -256,10 +232,10 @@ static func _goods(bounty: Dictionary) -> HBoxContainer:
 	return goods
 
 
-static func _reward_row(gap: int) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", gap)
-	return row
+static func _hbox(gap: int) -> HBoxContainer:
+	var made := HBoxContainer.new()
+	made.add_theme_constant_override("separation", gap)
+	return made
 
 
 ## The monster's picture on a tan socket, `side` panel pixels tall: the card's, and the toast's and the
@@ -280,8 +256,8 @@ static func portrait_box(enemy: String, side: int, frame: Texture2D = null) -> P
 	box.custom_minimum_size = Vector2.ONE * outer
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var face := TextureRect.new()
-	# Set before the texture and the size: a TextureRect's minimum is its own texture until
-	# `expand_mode` says otherwise, and the packs' frames run to 245 px.
+	# Before the texture and the size: a TextureRect's minimum is its own texture until `expand_mode`
+	# says otherwise, and the packs' frames run to 245 px.
 	face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	face.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -311,8 +287,8 @@ static func actions_of(card: PanelContainer) -> HBoxContainer:
 ## A reward's picture at `side` panel pixels, a whole-number step down from its sprite.
 static func icon(texture: Texture2D, side: int) -> TextureRect:
 	var icon := TextureRect.new()
-	# Set before the texture and the size: a TextureRect's minimum is its own texture until
-	# `expand_mode` says otherwise, so a 16 px coin asked for 8 comes back 16.
+	# Before the texture and the size: a TextureRect's minimum is its own texture until `expand_mode`
+	# says otherwise, so a 16 px coin asked for 8 comes back 16.
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -334,10 +310,20 @@ static func flat(fill: Color, pad: int) -> StyleBoxFlat:
 	return style
 
 
+## A table's framed block, with no gap: a page's row gap is for cards, and would part a table's
+## stripes. Returns the column to fill with `UITheme.table_row`s; its parent is the frame to add.
+static func framed() -> VBoxContainer:
+	var frame := PanelContainer.new()
+	frame.add_theme_stylebox_override("panel", flat(Color.TRANSPARENT, 1))
+	var body := UITheme.vbox(0)
+	frame.add_child(body)
+	return body
+
+
 ## How far along a posting is, as a bar: an ink trough filling with leaf, snapped to whole panel pixels,
-## with the count hanging off its bottom-right corner the way an orb's does. The row under it is kept
-## clear of the numeral by the control's own height. Not `counted`, the bar alone, for a caller that
-## writes the count itself (the character page, in the body font under it).
+## with the count hanging off its bottom-right corner the way an orb's does (the control's own height
+## keeps the row under it clear of the numeral). Not `counted`, the bar alone, for a caller that writes
+## the count itself (the character page).
 static func progress_bar(have: int, need: int, width: float, counted := true) -> Control:
 	var holder := Control.new()
 	holder.custom_minimum_size = Vector2(width, BAR_HEIGHT + (COUNT_OVERHANG if counted else 0))
@@ -368,7 +354,7 @@ static func progress_bar(have: int, need: int, width: float, counted := true) ->
 	return holder
 
 
-## A wrapped line of the page's own width. Word wrapping, because these are sentences.
+## A wrapped line in the body font, `width` wide. Word wrapping, because these are sentences.
 static func wrapped(text: String, width: float, color: Variant = null) -> Label:
 	var label := UITheme.label(text, color, true)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -376,9 +362,8 @@ static func wrapped(text: String, width: float, color: Variant = null) -> Label:
 	return label
 
 
-## What the town on a world spot is called. Read off the map, which is what named it -- the drawers
-## are filed by spot, and a spot is not something to show the player. The main scene asks it for the
-## banner a filled bounty raises, which says where to hand the work in.
+## What the town on a world spot is called, read off the map, which is what named it. The main scene's
+## too, for the banner a filled bounty raises.
 func town_name(spot: Vector2i) -> String:
 	if view == null:
 		return "Town"
@@ -386,8 +371,8 @@ func town_name(spot: Vector2i) -> String:
 	return called if not called.is_empty() else "Town"
 
 
-## Cancel gives the work up, and asks first on the button itself: a second press is the answer, since
-## what it throws away is every kill counted so far.
+## Give up asks first on the button itself: a second press is the answer, since what it throws away is
+## every kill counted so far.
 func _cancel_button(bounty: Dictionary) -> Button:
 	var button := UITheme.button("Give up", "SmallDangerButton", "Give this bounty up")
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -402,4 +387,3 @@ func _cancel_button(bounty: Dictionary) -> Button:
 			abandoned.emit()
 		open.call_deferred())
 	return button
-

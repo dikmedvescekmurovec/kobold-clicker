@@ -2,11 +2,8 @@ class_name MapPointer
 extends Node2D
 ## A badge pinned to the window's edge in the direction of a cell: a picture on a dark disc ringed with
 ## gold, and a gold arrow beating towards the cell. Two stand over the map: the chest a fortuneteller was
-## paid to find, and the hero, whose badge is a button that brings the camera back to them.
-##
-## It was a pale four-point glimmer while it was free, and that was too quiet for something bought:
-## cream on sand or ice disappears, and a sparkle does not say "chest" or "that way". The disc is what
-## makes it read on any ground, the picture says what it is, and the arrow says where.
+## paid to find, and the hero, whose badge is a button that brings the camera back to them. The disc is
+## what makes it read on any ground (DESIGN.md: "map_pointer.gd").
 
 ## How far in from the window's edge the badge's middle sits, in screen pixels: room for the arrow at the
 ## far end of its beat, which reaches 33 badge pixels out at `ui_scale` 2.
@@ -39,9 +36,7 @@ func _init(map: HexMap, view: MapBuilder, ui_scale: float, picture: Texture2D, t
 	_view = view
 	# Whole, like everything else drawn at `ui_scale`, so the picture's pixels stay square.
 	scale = Vector2(ui_scale, ui_scale)
-	# Under every panel on the interface layer, and over nothing else there: the badge stands for as
-	# long as its target does rather than ducking out for whatever page is open, and a panel that
-	# happens to lie over it simply covers that corner of it.
+	# Under every panel on the interface layer: it never ducks out for whatever page is open.
 	z_index = -1
 	add_child(_disc(DISC_RADIUS + RING_WIDTH, Palette.GOLD))
 	var disc := _disc(DISC_RADIUS, Palette.INK)
@@ -91,10 +86,8 @@ func _set_beat(out: float) -> void:
 
 ## Where the line from the middle of the room to the target leaves it. A target already on screen and
 ## seen needs no pointer; one on screen but still in the dark gets the badge over its own tile, with
-## no arrow, since there is nowhere further to point.
-##
-## A button stands still at the foot of the room instead, and only its arrow turns: running round the
-## edge, it went under the character panel and the tile panel, where a press never reached it.
+## no arrow. A button stands still at the foot of the room instead, and only its arrow turns: running
+## round the edge, it went under the panels, where a press never reached it.
 func _process(_delta: float) -> void:
 	visible = target != HexMap.NO_CELL and _map.visible
 	if not visible:

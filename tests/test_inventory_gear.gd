@@ -642,7 +642,8 @@ func _test_defence_pools() -> bool:
 			continue
 		for lines_slot: String in own:
 			for id: String in own[lines_slot]:
-				_check((id in pool) == (slot == lines_slot), "%s %s %s" % [item, "rolls" if slot == lines_slot else "never rolls", id])
+				_check((id in pool) == (slot == lines_slot),
+						"%s %s %s" % [item, "rolls" if slot == lines_slot else "never rolls", id])
 		for id: String in ["added_parry", "added_time_on_block", "added_burn"]:
 			var mine: bool = id in held.get(kind, [])
 			_check((id in pool) == mine, "%s %s %s" % [item, "rolls" if mine else "never rolls", id])
@@ -823,7 +824,8 @@ func _test_rolls() -> bool:
 		if LootTable.first_level(kind) > 1:
 			dealt = str(LootTable.ITEMS[LootTable._first_of_slot(str(LootTable.KINDS[kind]["slot"]))]["kind"])
 		weight_of[dealt] = int(weight_of.get(dealt, 0)) + weight
-	_check(LootTable.tier_at("greaves", 2, rng) == "Leather Boots" and LootTable.tier_at("greaves", 3, rng) == "Iron Greaves"
+	_check(LootTable.tier_at("greaves", 2, rng) == "Leather Boots"
+			and LootTable.tier_at("greaves", 3, rng) == "Iron Greaves"
 			and int(LootTable.ITEMS["Iron Greaves"]["material"]) == int(LootTable.ITEMS["Iron Helmet"]["material"]),
 			"the greaves begin at iron, worth iron's step, and under it are dealt as a Leather Boots")
 	for kind: String in LootTable.KINDS:

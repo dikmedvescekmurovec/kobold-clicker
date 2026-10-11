@@ -18,7 +18,8 @@ Every kill rolls for gear (about one body in thirty), always hands over gold, an
 | `wall_unlocks.gd` (`WallUnlocks`) | What each ice wall opens for good, read off `Inventory.walls_ever()`. |
 | `rune_table.gd` (`RuneTable`) | The six runes, dropped only in Gollux's cave and spent on a charted tile, and a tile's rune work. |
 | `player_level.gd` (`PlayerLevel`) | What a level costs in experience, and banking it. |
-| `inventory.gd` (`Inventory`) | All the player holds (bag, worn gear, heirloom stash, gold, orbs, runes, skills, tallies), the stats a fight is armed with, and the save. |
+| `inventory.gd` (`Inventory`) | All the player holds (bag, worn gear, heirloom stash, gold, orbs, runes, skills, tallies), the stats a fight is armed with, and `save` / `load_from`. |
+| `inventory_save.gd` (`InventorySave`) | The save file's shape behind `Inventory.save` and `load_from`: every key written, every older version read, and the list of what each version added. |
 
 ## Rules
 Full text, numbers and reasons: `DESIGN.md`, "Reference (moved here from CLAUDE.md on 2026-10-10)". `(DESIGN.md)` is the `####` heading there that is the rule's own title, `(DESIGN.md: "x")` the heading x (a file's name is its heading under "Files in full"), and an indented rule is under its parent's heading.
@@ -29,8 +30,8 @@ Full text, numbers and reasons: `DESIGN.md`, "Reference (moved here from CLAUDE.
 - **Never let `Inventory` save itself:** the path is always a parameter, so tests never touch the player's save. (DESIGN.md)
   - **Never save over a file that came back with a `problem`:** one that is there and cannot be honoured comes back empty, with the reason in it.
 - **Write the save through `SafeFile`:** `Inventory.save(path)` stamps `saved_at` only where the write got there, and says `save_written` either way. (DESIGN.md: "inventory.gd")
-- **Read a field of the wrong kind as absent** (`Inventory.load_from`, which migrates old versions); a `version` that is no number is a `problem`. (DESIGN.md: "inventory.gd")
-- **Name in `lost`, and in the log, every name a save holds and this build has not got** (`load_from`; `Item.from_dict(data, lost)`). (DESIGN.md: "inventory.gd", "item.gd")
+- **Read a field of the wrong kind as absent** (`Inventory.load_from`, which migrates old versions); a `version` that is no number is a `problem`. (DESIGN.md: "inventory_save.gd")
+- **Name in `lost`, and in the log, every name a save holds and this build has not got** (`load_from`; `Item.from_dict(data, lost)`). (DESIGN.md: "inventory_save.gd", "item.gd")
 - **Read a hand-edited number or flag of another kind as none,** and `broken` absent as whole (`Item.from_dict`). (DESIGN.md: "item.gd")
 - **Load a renamed piece under its new name:** `LootTable.RENAMED` / `current(type)`, in `Item.from_dict`. (DESIGN.md: "loot_table.gd")
 - **Count a renamed orb under its new name wherever a save is read** (bag, shelf, posting): `OrbTable.RENAMED` / `current(orb)`. (DESIGN.md: "orb_table.gd")
@@ -45,8 +46,9 @@ Full text, numbers and reasons: `DESIGN.md`, "Reference (moved here from CLAUDE.
 - **Let a version 24 save learn `farthest_land`** (version 25) in the main scene's `_credit_walls`; ignore the `seeing_stone` saved beside it until 2026-10-03. (DESIGN.md: "Only ever raise `farthest_land`")
 - **Read a version 25 save's `dungeon_floors` as `dungeon_depth * Encounter.DUNGEON.enemies`** (the field is version 26). (DESIGN.md: "Only ever raise `dungeon_floors`")
 - **Read a version 28 `achievements` list as rank I** (id -> rank since version 29; `achievements_new` and `tally` are version 28 too). (DESIGN.md: "Drop a unique only once it is unlocked")
-- **Mind the other versions:** 20 the second batch of curses (`homeland`, `uniques_doubled`), 31 `hero_name`, 33 `skill_tree` and `skill_ranks`, 34 `runed` (only tiles still worked). (DESIGN.md: "Spend a skill point through the inventory, never `skills`", "inventory.gd", "Treat skill nodes as items you cannot wear")
+- **Mind the other versions** (the whole list heads `inventory_save.gd`): 20 the second batch of curses (`homeland`, `uniques_doubled`), 31 `hero_name`, 33 `skill_tree` and `skill_ranks`, 34 `runed` (only tiles still worked). (DESIGN.md: "Spend a skill point through the inventory, never `skills`", "inventory.gd", "Treat skill nodes as items you cannot wear")
 - **Set `SkillTree.root_slots` before the tree is read:** `load_from` sets the root's one at the top and the save's own after `farthest_land` and before the tree, which keeps a stone only in a slot the root has. (DESIGN.md: "Only ever raise `farthest_land`")
+- **Add a saved field in `InventorySave`, in `write` and in `_read_fields`, whose order is a rule:** the level before the tree, and the uniques found before the curses, or `note_unique` doubles every find of a Forgotten world. (DESIGN.md: "inventory_save.gd")
 - **Never save `most_worn`:** `stash()` sets it on the heirlooms. (DESIGN.md: "Spend a skill point through the inventory, never `skills`")
 - **Hold every build to the golden save** `tests/fixtures/inventory_golden.json`: read with nothing lost, written back field for field (`test_inventory._test_golden_save`, `_test_wrong_types`). A meant change shows there first; renew the file by loading and saving it. (DESIGN.md: "The walls' ladder (2026-10-09)")
 
@@ -88,7 +90,7 @@ Full text, numbers and reasons: `DESIGN.md`, "Reference (moved here from CLAUDE.
 
 ### Modifiers
 - **Build only legal candidates in `ModifierTable.pool_for`:** PERCENT needs `has_stat` and not `can_globalize` of that stat, FLAT `can_roll`, GLOBAL `can_globalize`. (DESIGN.md: "modifier_table.gd")
-- **Pass a stone's `stone_tier` to every draw on it** (`Item.rolled`, the orbs, the super orbs, the fortuneteller's odds). (DESIGN.md: "modifier_table.gd")
+- **Pass a stone's `stone_tier` to every draw on it** (`Item.rolled`, the orbs, the super orbs, the fortuneteller's odds); a new line on a made piece is `Item.extra_mod`, which does. (DESIGN.md: "modifier_table.gd", "item.gd")
 - **Make a line only with `ModifierTable.rolled_mod`:** it has a tier, 1 to the level its bands are read at, and `Item._set_tier` is the one place a line is put at a tier by hand. (DESIGN.md: "modifier_table.gd", "item.gd")
 - **Write `line` and `band_line` through the same `_written`.** (DESIGN.md: "modifier_table.gd")
 - **Read a made piece's bands at `Item.mod_level()`, never `item.level`,** and a line's tier with `item.tier_of(mod)`. (DESIGN.md: "item.gd", "Honour what a super orb leaves on a piece")

@@ -1,95 +1,60 @@
 class_name TownPage
 extends Control
-## The settlement the player is standing in, as a panel on the right edge in the tile panel's place:
-## what the town is, one tab per counter it has, and under the open tab the six things that counter
-## has for sale.
-##
-## A counter is two halves and the page is only one of them. **Buying** happens here, because a
-## vendor's shelf is the vendor's; **selling** happens in the bag on the other edge, because what the
-## player wants to sell is already laid out there and a second grid of the same items would be a
-## second place to hunt through. So a tab is six squares with their prices under them, and the bag's
-## own Sell button is what says where the selling is done.
-##
-## The smith is the same arrangement with no shelf at all: he works on whatever the bag has open, and
-## his tab is the two prices for it and the reasons he will not. The board is the third shape again:
-## three postings that say who to kill, what it pays and where that monster lives, with a Claim on a
-## finished one. The fortuneteller is the fourth: two grids of what she can be asked, each square with
-## its price, and what she said in their place once one has been paid for (`FortuneTeller`).
-##
-## Built like `SkillsPage`: it takes the inventory and the save path, `open()` redraws it, `layout()`
-## fits it to the window, `closed` is its X, and it carries `UITheme.theme()` itself because it hangs
-## straight off a `CanvasLayer`.
+## The settlement the player stands in, on the right edge in the tile panel's place: a tab a counter,
+## and under the open tab what that counter has -- a vendor's six squares with their prices, the
+## smith's two prices for the piece the bag has open, the board's postings, the fortuneteller's spells.
+## Buying is here; selling is the bag's, beside it. The rules are `Scenes/Town/`'s, and why the page is
+## laid out as it is is `Scenes/Town/DESIGN.md`. It hangs straight off a `CanvasLayer`, so it carries
+## `UITheme.theme()` itself.
 
-## The page's X was pressed.
 signal closed
-## Another counter was opened. The bag beside the page buys what *this* counter buys and nothing else,
-## so its Sell button is live only at the gear merchant's.
+## Another counter was opened: the bag beside the page sells only what the open one buys.
 signal tab_changed(service: String)
-## What the page has open off the shelf, or null when it is showing the shelf itself. The bag beside
-## it redraws around this: what wearing it would replace is the hover card's under Alt, and a purchase
-## reaches the purse, the grid and the tray the same way.
+## The piece open off the shelf, or null for the shelf itself. Null again after every deed: that is how
+## the bag hears the purse, the grid or the tray moved, and it keeps what it has open.
 signal offer_changed(item: Item)
 ## The fortuneteller was paid to put the star over the chest on `cell`. The star is the main scene's.
 signal chest_bought(cell: Vector2i)
-## A bounty handed in paid this piece, said before the bag or the log hears of it, so the main scene
-## can raise the banner a unique new to the log gets off a body.
+## A bounty or a cleared board paid this piece, said before the bag or the log hears of it, so the main
+## scene can raise the banner a unique new to the log gets.
 signal item_claimed(item: Item)
-## A bounty handed in paid this much experience, already banked: the main scene fills the bar with it.
+## This much experience was paid and is already banked: the main scene fills the bar with it.
 signal xp_claimed(amount: int)
-## A bounty on `enemy` was handed in and everything it paid is already in the purse, the tray and the
-## bag: `orbs` is name -> count and `piece` null for none. The main scene says so, as a fight's
-## verdict does.
+## A bounty on `enemy` was handed in and all it paid is already in the purse, the tray and the bag:
+## `orbs` is name -> count, `piece` null for none.
 signal bounty_paid(enemy: String, gold: float, xp: int, orbs: Dictionary, piece: Item)
-## The board's Reward was pressed: the main scene puts the three options of a cleared board back up.
+## The board's Reward was pressed: the main scene puts a cleared board's three options back up.
 signal choice_asked
-## A posting was taken on and saved: the main scene checks the tips, the smith's first word on it.
+## A posting was taken on and saved.
 signal bounty_accepted
 ## The roads lifted settlements out of the dark: the map has changed and wants saving.
 signal towns_revealed
-## A spell that is aimed at the map was asked for, at `price`, in the town on `spot`. Nothing has been
-## charged and nothing is written down: choosing the land happens on the map, which is the main
-## scene's, and so does the paying -- and the marking of that town's drawer -- once land has been
-## chosen. The scour and the road home are both bought this way.
+## A spell aimed at the map was asked for, at `price`, in the town on `spot`. Nothing is charged or
+## written here: the main scene does both, and marks that town's drawer, once land has been chosen.
 signal spell_aimed(reading: String, price: float, spot: Vector2i)
-## The way out of the world was asked for, and the question under it answered yes. Nothing has been
-## charged and nothing need be: the purse is one of the things left behind. The main scene does it.
+## The way out's question was answered yes. Nothing is charged: the purse is left behind anyway.
 signal transcend_pressed
 
-## How wide the page's contents run before they wrap, in panel pixels. It shares a 1152 px window
-## with the bag and the doll beside it, so this is a width budget rather than a matter of taste
-## -- and it is settled by the shelf: three squares across and the gutters between them, which is
-## what makes a price readable under each one. See `Scenes/Town/DESIGN.md`.
+## The shelf is three squares across, and that sets `BODY_WIDTH`, the page's width: a budget shared
+## with the bag and the doll, not taste (`Scenes/Town/DESIGN.md`, "Making the counter obvious").
 const STOCK_COLS := 3
 const STOCK_GAP := 8
-## A shelf square and the price under it. Four panel pixels wider than `ItemSlot.SIDE`, because what
-## sets this is the price and not the square: a coin and four figures at Pixellari's 16 px come to
-## just over forty, and a price is no use to anybody cut off after three.
+## A square and the price under it. Wider than the square: the price sets it.
 const STOCK_CELL := ItemSlot.SIDE + 4
 const BODY_WIDTH := STOCK_COLS * STOCK_CELL + (STOCK_COLS - 1) * STOCK_GAP
+const ROW_GAP := 8
+## The coin beside a price on a square: half the sprite's 16, a whole-number step.
+const PRICE_COIN := 8
+
 const TAB_GAP := 2
-## A tab's width and the open one's height. Every mark stands centred on one, so a small mark (the
-## fortuneteller's) takes as much of the row as a wide one. A shut tab stands `TAB_RISE` lower, which
-## is what puts the open one in front of the rest; `TAB_CORNER` rounds a tab's two top corners.
+## A tab's width and the open one's height; a shut one stands `TAB_RISE` lower. `TAB_CORNER` rounds a
+## tab's two top corners.
 const TAB_SIDE := 22
 const TAB_RISE := 3
 const TAB_CORNER := 2
-## A shut tab's face and the same under the cursor: the tan every socket is, washed out, so the row
-## reads as cards standing behind the page and the open one as the page itself.
 const TAB_SHUT := Color(Palette.SLOT_TAN, 0.45)
 const TAB_SHUT_HOVER := Color(Palette.SLOT_TAN, 0.8)
-## The coin beside a price on a square, at half the sprite's own 16 -- a whole-number step, the way
-## the orb tray halves its icons. Full size it would take a fifth of the shelf's width and leave a
-## four-figure price nowhere to go.
-const PRICE_COIN := 8
-## How far apart the page's own rows sit. Everything under the tabs scrolls and the buttons are pinned,
-## so the column's height is no longer what sets this: 8 is air, where the 4 it was made the counter
-## read as one block.
-const ROW_GAP := 8
-## What each counter wears on its tab. A mark rather than a word, so a fortress's five stand in one
-## row: in words they took two, and the second row was what pushed the gear tab past the window's
-## foot. The full name is the heading under them and the tab's tooltip. The marks stand bare on the
-## cream as the pack's craft tabs do, in the pack's brown, and the open one alone is green
-## (`tab_mark`) -- which is all the pack changes on its open tab.
+## Each counter's mark on its tab (`tab_mark`): `TAB_MARK` % [its name here, "brown" or "green"].
 const TAB_ICONS := {
 	TownServices.BOUNTIES: "scroll",
 	TownServices.GEAR: "sword",
@@ -98,16 +63,13 @@ const TAB_ICONS := {
 	TownServices.FORTUNE: "crystal",
 }
 const TAB_MARK := "res://Assets/UI/ui_icon_%s_%s.png"
-## How far a row that cannot be taken now is faded: a posting while another bounty is out, and a curse
-## the skulls cannot pay for.
+## Not the tabs': how far a row that cannot be taken now is faded -- a posting while another bounty is
+## out, and `TranscendPage`'s curse the skulls cannot pay for.
 const TAB_REST := Color(1, 1, 1, 0.55)
 
-## The counters that get a tab: every service there is, in the order they are ever listed. One added
-## there with nothing here to draw it says so, loudly, and draws nothing (`_fill`).
+## Every service there is gets a tab. One added there with no counter here is a logged error (`_fill`).
 const COUNTERS := TownServices.ORDER
 
-## What each of her readings wears on its square. Placeholder art, cut by `tools/ui_kit.py` off the
-## skill icons' pack in the one colourway neither tree uses: purple is hers.
 const FORTUNE_ICONS := {
 	FortuneTeller.ROADS: "res://Assets/Fortune/roads.png",
 	FortuneTeller.TREASURE: "res://Assets/Fortune/treasure.png",
@@ -118,132 +80,101 @@ const FORTUNE_ICONS := {
 	# A stand-in: the retired Relic reading's badge, which is a unique's mark on a bounty card too.
 	FortuneTeller.BANISH: "res://Assets/Fortune/relic.png",
 }
-## A spell's mark, at the 16 px it is drawn at doubled -- a whole-number step, as a skill's is.
+## A spell's 16 px mark is drawn doubled, a whole-number step.
 const SPELL_SIDE := 32
-## The halo a live square wears while the cursor is on it, in panel pixels, and how far its mark
-## lifts under it. The pack draws no hover face for a loose mark, so this is a `StyleBoxFlat` in the
-## gold everything precious in this game is lit in, grown past the square by `expand_margin` and
-## drawn behind the mark -- so what shows is a rim of light around it rather than a frame on it.
+## A live spell square under the cursor: a gold stylebox grown `HOVER_GLOW` px past it and drawn behind
+## the mark, so a rim of light shows round it, and the mark lifted by `HOVER_LIFT`.
 const HOVER_GLOW := 3
 const HOVER_GLOW_COLOR := Color(Palette.GOLD, 0.85)
 const HOVER_LIFT := Color(1.2, 1.2, 1.2)
 
-## What each of the fortuneteller's squares says when hovered, after its name: what the spell does,
-## as an outcome -- never how it is asked for (the user's rule, 2026-09-25).
+## A spell square's tooltip: what the spell does, as an outcome -- no name before it, never how it is
+## asked for and never how often it was (the user's rule, 2026-09-25).
 const FORTUNE_TIPS := {
-	FortuneTeller.ROADS: "Brings every settlement between the ice walls around you, and the land beside it, out of the fog",
+	FortuneTeller.ROADS: "Brings every settlement between the ice walls around you, "
+			+ "and the land beside it, out of the fog",
 	FortuneTeller.TREASURE: "Puts a star over the nearest chest you have not seen. It stays until that chest is opened",
-	FortuneTeller.APPRAISE: "Lists every modifier the open item can roll, the range it rolls in at the item's level, and how often it comes up",
+	FortuneTeller.APPRAISE: "Lists every modifier the open item can roll, "
+			+ "the range it rolls in at the item's level, and how often it comes up",
 	FortuneTeller.SCOUR: "Brings a tile and the two rings of land around it, nineteen tiles, out of the fog",
 	FortuneTeller.HOMECOMING: "Moves you to a settlement or the Gollux cave you have already charted",
 	FortuneTeller.TRANSCEND: "Ends this world and starts a new one, worth far more",
 	# Nothing of the doubling (the user's, 2026-10-10): the price under the square says it has climbed.
 	FortuneTeller.BANISH: "Keeps a unique you choose from dropping in this world",
 }
-## What stands over each half of her list. A reading is asked again and again at a climbing price; a
-## great spell is one a settlement. Two words each: the rule itself is in every square's tooltip, and
-## a sentence on the page is what this page never writes.
-const FORTUNE_HEADINGS := {
-	"common": "Readings",
-	"great": "Great spells",
-}
 
-## What goes in front of a reading's id in `inventory.tips` once its answer's "Don't show this again"
-## has been ticked, and how wide her answer is set.
+## `SKIP_TOLD + reading` in `inventory.tips`: that reading's answer was ticked "Don't show this again".
 const SKIP_TOLD := "skip_told_"
 const TOLD_WIDTH := 180.0
-## What stands round her answer inside the window: its title bar, its padding, and the Dismiss and the
-## tick under it. The answer scrolls in what the window has left after these.
+## What stands round her answer's scroll inside the window: its title bar, its padding, and the Dismiss
+## and the tick under it.
 const TOLD_CHROME := 100.0
 const TOLD_PANEL := "Panel"
-## The arrow on the banishing's screen that goes back to her spells.
+## The banishing screen's arrow back to her spells, named for the tests.
 const BANISH_BACK := "Back"
 
-## What she says before the way out is taken, in the list's place, over the button that takes it.
+## Her warning before the way out is taken, in her own voice. It never says what waits (the user's).
 const TRANSCEND_LINES := [
 	"The ice takes this world back, and you wake up in another.",
 	"You'll lose the bag, the gold, the orbs, the levels and the land. You'll say it was worth it. They always do.",
 ]
 
 var inventory: Inventory
-## The map the town stands on, set from outside the way the fight's is. The board needs it and only
-## the board does: where a monster lives is a question about the land, and the answer is a tile's name
-## and a cell to put the map on.
+## The main scene's map, set from outside. The board and the fortuneteller read it; with none she
+## refuses every spell and the board posts nothing.
 var view: MapBuilder
+## Where the main scene stands the page, in window pixels: empty for the whole window.
+var area := Rect2()
+## The bag's own `craft_held(item, written)`, set from outside (see `_held`).
+var craft_held: Callable
 var _save_path: String
 var _ui_scale: float
 var _panel: VBoxContainer
 var _title: Label
 var _rows: VBoxContainer
-## The town's own cell, which is what everything on its shelves is priced against.
+## The town: its cell (what everything here is priced against), its world spot (where a spell aimed at
+## the map is cast from), its `TownWorld.Tier` (what a Restock stocks the shelf as) and its drawer in
+## the save (`TownState.visit`), written in place so a purchase is saved with the purse it came out of.
 var _cell := Vector2i.ZERO
-## Its `TownWorld.Tier`, which is what a paid reroll stocks the shelves as.
+var _spot := Vector2i.ZERO
 var _tier := -1
-## That town's drawer in the save, where its shelves live. `TownState.visit` hands it over and it is
-## written in place, so a purchase is saved with the purse it came out of.
 var _drawer := {}
-## A counter's mark: the pack's brown, or green for the open tab.
-static func tab_mark(service: String, lit: bool) -> Texture2D:
-	return load(TAB_MARK % [TAB_ICONS[service], "green" if lit else "brown"])
-
-
+## The nearest unseen chest as the town was walked into: finding it scans the whole map, and the
+## player does not move while the page is up.
+var _near_chest := HexMap.NO_CELL
 ## The counters with a tab, in `TownServices.ORDER`, and which of them is open.
 var _tabs: PackedStringArray = []
 var _open_tab := ""
-## The piece off the shelf the page has open, and which square it stands on. A piece rather than an
-## index into the shelf, because it is what `ItemDetails` is reading.
+## The piece off the shelf the page has open, and the square it stands on there.
 var _offer: Item
 var _offer_at := -1
-## What the bag has open, which is the piece the smith works on -- a piece in the grid or one off the
-## doll beside it, never one off a shelf. It arrives through `bag_changed`.
+## What the bag has open, carried or worn (`bag_changed`): the piece the smith works on.
 var _bag_piece: Item
-## The orb the bag has in hand ("" for none, `orb_held`), and the bag's own `craft_held`, set from
-## outside: a press on a shelf piece spends that orb on it instead of opening it. The orb, the purse
-## and the save stay the bag's.
+## The orb the bag has in hand ("" for none, `orb_held`): a press on a shelf piece spends it there
+## through `craft_held` instead of opening the piece. The orb, the purse and the save stay the bag's.
 var _held := ""
-## The bag's orb card, for the orb vendor's squares (`_card_for`).
 var _orb_card: OrbCard
-var craft_held: Callable
-## What the last blow of the hammer did, when it is worth saying out loud. A break is the one thing
-## that happens on this page the player did not ask for, so it is said rather than left to be noticed.
+## That the hammer broke the piece now up, said on the page: the one thing here nobody asked for.
 var _smith_note := ""
-## The smith's strike, which survives the counter being drawn again: seconds into the one playing (-1
-## when he stands still), strikes pressed for while it played, still owed, and the face the bench on
-## screen now shows. An owed strike starts `SWING_OVERLAP` frames before the one playing would end.
-const SWING_OVERLAP := 3
-## The anvil's ring as the hammer meets it -- on the strike's third frame -- and the crack of a piece
-## it breaks in its place.
-const STRIKE_LANDS := 2 * DialogueBox.FRAME_TIME
-const ANVIL_SOUND := preload("res://Sounds/Sfx/anvil_hit.ogg")
-const BREAK_SOUND := preload("res://Sounds/Sfx/anvil_break.ogg")
-var _swing_clock := -1.0
-var _swings_owed := 0
-var _smith_face: AtlasTexture
-## Her answer, over the whole window while it is up (null otherwise), and the scroll it is written in.
+var _swing := SmithSwing.new()
+## Her answer over the whole window (null while none is up), and the scroll it is written in.
 var _told: Control
 var _told_scroll: ScrollContainer
-## The counter's one scroll and what it holds, kept through every redraw (`_scrolled` empties and
-## refills them) so a purchase, a blow or an orb picked up leaves it where the player had it; another
-## counter or another piece off the shelf puts it back at the top (`_scroll_for`).
+## The counter's one scroll and what it holds, kept through every redraw so a deed leaves it where the
+## player had it. `_scroll_for` is what it was last filled for: anything else puts it back at the top.
 var _scroll: ScrollContainer
 var _scroll_lines: VBoxContainer
 var _scroll_for := []
-## The last reading cast whose answer is not shown any more (ticked "Don't show this again"): the page
-## says it in one line under her grids instead, until another counter is opened.
+## The last reading cast whose answer is ticked away: said in one line under her grids instead.
 var _cast := ""
-## The banishing's screen in her list's place (`_fill_banish`), the unique picked on it ("" for none),
-## and where the press on its grid went down: a press that travels is a finger scrolling it.
+## Her banishing's screen is up in her list's place; the unique picked on it ("" for none); and where
+## the press on its grid went down (one that travels is a finger scrolling).
 var _banishing := false
 var _banish_pick := ""
 var _banish_press := Vector2.INF
-## The town's world spot, which a spell aimed at the map is cast from, and the nearest unseen chest as the town was
-## walked into -- the player does not move while the page is up, and finding it scans the whole map.
-var _spot := Vector2i.ZERO
-var _near_chest := HexMap.NO_CELL
-## What a shelf is rolled with. Unseeded, the way the bag's crafting rng is: a test that wants a
-## known shelf seeds it.
+## What a shelf is rolled with and a break drawn against. Unseeded: a test that wants a known one
+## seeds it.
 var _stock_rng := RandomNumberGenerator.new()
-## And what the smith's break is drawn against, for the same reason and in the same way.
 var _smith_rng := RandomNumberGenerator.new()
 
 
@@ -262,8 +193,8 @@ func _ready() -> void:
 	_title = UITheme.title_of(_panel)
 	_rows = UITheme.body_of(_panel)
 	_rows.add_theme_constant_override("separation", ROW_GAP)
-	# However the town goes away, her answer goes with it: left up, it would still be the window's to
-	# every hotkey and banner that asks (`telling`).
+	# Her answer goes with the page however it goes: left up, it would still hold every hotkey and
+	# banner that asks `telling`.
 	visibility_changed.connect(func() -> void:
 		if not is_visible_in_tree():
 			_close_told())
@@ -272,8 +203,7 @@ func _ready() -> void:
 	_scroll_lines = UITheme.vbox(0, BODY_WIDTH)
 	# At least as tall as the scroll, so a row that asks to expand (an accepted bounty's card) can.
 	_scroll_lines.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	# Room over the first row inside the scroll, which clips: a shelf's squares wear frames that stand
-	# `FRAME_HEAD` above them.
+	# The scroll clips, and a shelf square's frame stands `FRAME_HEAD` above it.
 	var headroom := MarginContainer.new()
 	headroom.add_theme_constant_override("margin_top", ItemRarity.FRAME_HEAD)
 	headroom.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -287,25 +217,18 @@ func _ready() -> void:
 
 
 ## Redraws the page for the town at `cell`, whose world spot is `spot` and whose tier is a
-## `TownWorld.Tier`. Services this build has no counter for are dropped rather than shown as a dead
-## tab, and the tabs open the page: what tier of settlement it is went the way of every other row
-## that was not paying for itself once the shelf wanted the room (`Scenes/Town/DESIGN.md`).
-##
-## This is also where a town's shelves are filled, the first time it is walked into. After that a
-## shelf is new only when Restock is paid for.
+## `TownWorld.Tier`. A service with no counter here gets no tab. This is also the one place a town's
+## shelves are first stocked and its board posted.
 func open(town_name: String, services: PackedStringArray, cell: Vector2i, spot: Vector2i,
 		tier: int) -> void:
 	_cell = cell
 	_spot = spot
 	_tier = tier
-	_cast = ""
-	_banishing = false
-	_close_told()
+	_put_away()
 	_near_chest = view.nearest_chest(true) if view != null else HexMap.NO_CELL
 	_title.text = town_name if not town_name.is_empty() else "Town"
 	_drawer = inventory.towns.visit(spot)
-	# The shelves are filled once and the board whenever all its work has been handed in. Both are
-	# asked, so not `or`, which would skip the board whenever the shelves had news.
+	# Both are asked, so not `or`, which would skip the board whenever the shelves had news.
 	var stocked := VendorStock.restock(_drawer, tier, cell, _stock_rng, inventory.walls_ever())
 	var posted := BountyBoard.restock(_drawer, _board_land(), cell, _stock_rng, inventory.walls_ever())
 	if stocked or posted:
@@ -316,206 +239,146 @@ func open(town_name: String, services: PackedStringArray, cell: Vector2i, spot: 
 			_tabs.append(service)
 	if not (_open_tab in _tabs):
 		_open_tab = "" if _tabs.is_empty() else _tabs[0]
-	# Nothing is open in the bag until it says so, and last town's hammer blow is not news here.
+	# Nothing is open in the bag until it says so.
 	_bag_piece = null
-	_smith_note = ""
 	_scroll_for = []
 	_close_offer(false)
 
 
-## Which counter is open, for whoever is standing the bag beside it.
 func open_tab() -> String:
 	return _open_tab
 
 
-## Whether this town has `service`'s counter at all, open or not.
 func has_counter(service: String) -> bool:
 	return service in _tabs
 
 
-## The bag beside the counter changed what it has open -- which, because selling and discarding both
-## close what was open, is also how the counter hears that the bag and the purse have moved. What is
-## up is drawn again, so a Buy greyed out for a full bag comes back live the moment a piece is sold
-## out from under it, and the smith is pointed at whatever the player is holding up to him.
+## The bag beside the counter changed what it has open. Selling and discarding both close what was
+## open, so this is also how the counter hears the bag and the purse moved: a Buy greyed by a full bag
+## comes back live as a piece is sold from under it.
 func bag_changed(open_piece: Item) -> void:
 	if not visible:
 		return
 	_bag_piece = open_piece
-	# What the hammer did belongs to the piece it did it to, and that piece is no longer the one up.
 	_smith_note = ""
-	_fill()
-	layout()
+	_refresh()
 
 
-## The bag picked an orb up or put it down: the shelf is greyed by it.
+## The bag picked an orb up or put it down: the shelf greys what it cannot go into.
 func orb_held(orb: String) -> void:
 	_held = orb if craft_held.is_valid() else ""
-	if visible:
-		_fill()
-		layout()
+	redraw()
 
 
 ## Draws the open counter again, for a change made off this page (a bounty given up on the journal).
 func redraw() -> void:
 	if visible:
-		_fill()
-		layout()
+		_refresh()
 
 
-## Where the main scene stands the page, in window pixels: empty for the whole window. Held upright,
-## the top of it, over the bag.
-var area := Rect2()
-
-
-## Full window height against the right edge, where the tile panel stands when no town is open.
 func layout() -> void:
 	UITheme.dock(_panel, area, _ui_scale, UITheme.Dock.RIGHT, layout)
 	_place_told()
+
+
+func _process(delta: float) -> void:
+	_swing.tick(delta)
+
+
+func _refresh() -> void:
+	_fill()
+	layout()
+
+
+## The end of every deed that moved the purse, the tray or the bag: saved, drawn again, and the bag
+## told to draw itself again (`offer_changed`).
+func _deed_done() -> void:
+	inventory.save(_save_path)
+	_refresh()
+	offer_changed.emit(null)
+
+
+## A new town or another counter puts away what the last one was saying.
+func _put_away() -> void:
+	_smith_note = ""
+	_cast = ""
+	_banishing = false
+	_close_told()
+
+
+## Why the purse or the bag refuses this, or "" when neither does. `needs_room` is for what goes in
+## the bag, which is never added to when full (`Scenes/Town/CLAUDE.md`); an orb is a count and needs none.
+func _why_not(price: float, needs_room: bool) -> String:
+	if inventory.gold < price:
+		return "Not enough gold"
+	if needs_room and inventory.is_full():
+		return "The bag is full"
+	return ""
 
 
 func _fill() -> void:
 	UITheme.clear(_rows, _scroll)
 	UITheme.clear(_scroll_lines)
 	_scroll.hide()
-	# Folder tabs standing on a line: the line runs under every shut tab, through the gaps and out to
-	# the page's edge, and breaks under the open one, which is drawn in the page's own cream -- so the
-	# counter below reads as that tab's page. No gap between the tabs and the line: they are one thing.
+	_rows.add_child(_tab_row())
+	if _open_tab.is_empty():
+		_rows.add_child(_sign("Nobody here is trading yet."))
+		return
+	# The open counter is named in words too -- but not over a piece held up to the smith, whose name
+	# heads him.
+	if not (_open_tab == TownServices.SMITH and _bag_piece != null):
+		_rows.add_child(UITheme.label(TownServices.label(_open_tab)))
+	match _open_tab:
+		TownServices.BOUNTIES:
+			_fill_board()
+		TownServices.SMITH:
+			_fill_smith()
+		TownServices.FORTUNE:
+			_fill_fortune()
+		TownServices.GEAR, TownServices.ORBS:
+			if _offer != null:
+				_fill_offer()
+			else:
+				_fill_vendor()
+		_:
+			# A service this page was never taught: said, never drawn as a gear shelf with a Restock.
+			push_error("TownPage has no counter for \"%s\"" % _open_tab)
+
+
+## The tabs and the line they stand on, one thing with no gap: the line runs under every shut tab,
+## through the gaps and out to the page's edge, and breaks under the open one.
+func _tab_row() -> HBoxContainer:
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 0)
 	tabs.custom_minimum_size.x = BODY_WIDTH
-	_rows.add_child(tabs)
 	var group := ButtonGroup.new()
 	for service: String in _tabs:
 		if tabs.get_child_count() > 0:
 			tabs.add_child(tab_line(TAB_GAP))
+		var lit := service == _open_tab
 		var tab := UITheme.button("", UITheme.BARE_BUTTON, TownServices.label(service))
-		tab.icon = tab_mark(service, service == _open_tab)
-		tab_faces(tab, service == _open_tab)
+		tab.icon = tab_mark(service, lit)
+		tab_faces(tab, lit)
 		tab.toggle_mode = true
 		tab.button_group = group
-		tab.button_pressed = service == _open_tab
+		tab.button_pressed = lit
 		tab.pressed.connect(_on_tab_pressed.bind(service))
 		tabs.add_child(tab)
 	var rest := tab_line(0)
 	rest.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tabs.add_child(rest)
-	if _open_tab.is_empty():
-		_rows.add_child(_sign("Nobody here is trading yet."))
-		return
-	# The open counter is named in words as well as by the tab that is down: the pack presses a button
-	# by drawing it a pixel lower, which is right for a press you are watching and far too quiet for a
-	# state you are reading off a row of them. Not over a piece held up to the smith: its name heads him.
-	if not (_open_tab == TownServices.SMITH and _bag_piece != null):
-		_rows.add_child(UITheme.label(TownServices.label(_open_tab)))
-	if _open_tab == TownServices.BOUNTIES:
-		_fill_board()
-		return
-	if _open_tab == TownServices.SMITH:
-		_fill_smith()
-		return
-	if _open_tab == TownServices.FORTUNE:
-		_fill_fortune()
-		return
-	# Every other counter is a shelf, and there are two. A service with nothing above to draw it is one
-	# this page was never taught: said, rather than drawn as a gear shelf with a Restock.
-	if _open_tab != TownServices.GEAR and _open_tab != TownServices.ORBS:
-		push_error("TownPage has no counter for \"%s\"" % _open_tab)
-		return
-	if _offer != null:
-		_fill_offer()
-		return
-	# The shelf and the lines under it scroll, because tabs, a heading, six squares and their prices
-	# and an open piece's lines are more than a 648 px window has room for. The tabs and the
-	# counter's name stay pinned above, so what moves is the counter's own contents.
-	var body := _scrolled(ROW_GAP)
-	body.add_child(_shelf())
-	if _open_tab == TownServices.ORBS:
-		body.add_child(UITheme.section("Trade up"))
-		body.add_child(_upscales())
-	# New stock now, for gold: pinned at the page's foot, under the scroll, where every counter keeps its buttons -- this shelf only, and dearer every time for good: the town remembers.
-	var price := TownPrices.reroll_price(_cell, VendorStock.rerolls(_drawer, _shelf_key()))
-	var short := _why_not(price, false)
-	var reroll := UITheme.priced_button("Restock", price, "LightButton",
-			short if not short.is_empty()
-			else "Clear this shelf for new stock. Each time costs twice the last")
-	reroll.disabled = not short.is_empty()
-	reroll.pressed.connect(_on_reroll_pressed)
-	_rows.add_child(reroll)
+	return tabs
 
 
-## The six squares. A bought one stays on the shelf with nothing on it, so what is gone is as plain
-## as what is left and the restock has somewhere to land.
-func _shelf() -> GridContainer:
-	var grid := GridContainer.new()
-	grid.columns = STOCK_COLS
-	grid.add_theme_constant_override("h_separation", STOCK_GAP)
-	grid.add_theme_constant_override("v_separation", STOCK_GAP)
-	if _open_tab == TownServices.ORBS:
-		var orbs := VendorStock.orbs(_drawer)
-		for at in orbs.size():
-			var orb := orbs[at]
-			if orb.is_empty():
-				grid.add_child(_sold_square(ItemSlot.SIDE))
-				continue
-			var price := TownPrices.orb_value(orb, _cell)
-			# The tray's own square, so an orb is the same square wherever it is: lit when the purse
-			# can cover it and grey when it cannot, which is the state it already draws for "held but
-			# no use to you". A grey one still takes the cursor and says why in its tooltip.
-			var square := OrbSlot.make(orb, 1, inventory.gold >= price, false, ItemSlot.SIDE)
-			# The bag's own card for it, with the price where the bag says how to use one.
-			_card_for(square, "%s gold%s" % [BigNumber.format(price),
-					"" if inventory.gold >= price else ". " + _why_not(price, false)],
-					Palette.TEXT_SOFT if inventory.gold >= price else Palette.RUST)
-			square.pressed.connect(_on_buy_orb.bind(at))
-			grid.add_child(_price_cell(square, price))
-		return grid
-	var shelf := VendorStock.items(_drawer)
-	for at in shelf.size():
-		var item: Item = shelf[at]
-		if item == null:
-			grid.add_child(_sold_square(ItemSlot.SIDE))
-			continue
-		# A bag square takes no mouse input, so the cell around it is what is pressed. There is no
-		# scroll under this grid to protect a drag from, which is the whole reason that rule exists.
-		var cell := _price_cell(ItemSlot.make(item), TownPrices.buy_price(item))
-		# Grey, as the bag's grid greys, where the orb in the player's hand has nothing to do.
-		if _held != "" and not OrbTable.can_apply(_held, item):
-			cell.get_child(0).modulate = OrbSlot.DIM
-		cell.mouse_filter = Control.MOUSE_FILTER_STOP
-		Cursors.wear(cell, Cursors.HAND)
-		cell.gui_input.connect(_on_shelf_input.bind(at))
-		grid.add_child(cell)
-	return grid
+func _on_tab_pressed(service: String) -> void:
+	_open_tab = service
+	_put_away()
+	_close_offer(true)
+	tab_changed.emit(service)
 
 
-## The orb vendor's trades: every unlocked orb but the first, each for `OrbTable.UPSCALE_COST` of the
-## orb before it in the tray, with that orb and the count under it where a price would be. Lit while
-## the player holds enough.
-func _upscales() -> GridContainer:
-	var grid := GridContainer.new()
-	grid.columns = STOCK_COLS
-	grid.add_theme_constant_override("h_separation", STOCK_GAP)
-	grid.add_theme_constant_override("v_separation", STOCK_GAP)
-	for orb: String in OrbTable.unlocked(inventory.walls_ever()):
-		var from := OrbTable.upscale_from(orb)
-		if from.is_empty():
-			continue
-		var held := inventory.orb_count(from)
-		var enough := held >= OrbTable.UPSCALE_COST
-		var square := OrbSlot.make(orb, 1, enough, false, ItemSlot.SIDE)
-		_card_for(square, "Trade %d %s for one" % [OrbTable.UPSCALE_COST, from],
-				Palette.TEXT_SOFT if enough else Palette.RUST)
-		square.pressed.connect(_on_upscale)
-		# Priced the way gold is, with the orb it costs standing in the coin's place.
-		grid.add_child(_cost_cell(square, str(OrbTable.UPSCALE_COST), OrbTable.icon(from), enough,
-				OrbSlot.ICON))
-	return grid
-
-
-## A box under the counter's name for whatever is too tall for the page, with `gap` between its rows.
-## Everything added to it scrolls and everything added to `_rows` after it stays pinned below -- which
-## is how an open piece's modifiers can run past the foot of the window while its Buy button cannot.
-## No bar is drawn, the way the bag's own stat block draws none.
+## The counter's scroll, with `gap` between its rows. What is added to the box returned scrolls; what
+## is added to `_rows` after this call stays pinned under it, in reach.
 func _scrolled(gap: int) -> VBoxContainer:
 	_rows.move_child(_scroll, _rows.get_child_count() - 1)
 	_scroll.show()
@@ -526,55 +389,25 @@ func _scrolled(gap: int) -> VBoxContainer:
 	return _scroll_lines
 
 
-## One square with what it costs under it. The price is on the shelf rather than behind a click
-## because six squares with no numbers on them are six questions, and a shop that has to be opened
-## six times to be read is a shop nobody reads.
-func _price_cell(square: Control, price: float) -> VBoxContainer:
-	return _cost_cell(square, BigNumber.format(price), Coins.icon(), inventory.gold >= price)
-
-
-## A square with a cost under it: `mark` (a coin at `PRICE_COIN`, or the orb a trade takes at the
-## tray's size, since an orb at 8 is a speck of colour and not an orb) and the
-## figure beside it, the pair centred under the square in the body font -- so every counter's cells
-## are the one cell, and a four-figure price sits inside its column instead of running into the next.
-## The figure is brick while `ok` is false: what the purse cannot cover is read off the shelf at a
-## glance, not only off a tooltip.
-func _cost_cell(square: Control, figure: String, mark: Texture2D, ok: bool,
-		mark_side := PRICE_COIN) -> VBoxContainer:
-	var cell := UITheme.vbox(2, STOCK_CELL)
-	square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	cell.add_child(square)
+## The foot of a screen standing in a counter's place: the arrow back, then its one verb. Returns the arrow.
+func _back_row(tooltip: String, on_back: Callable, verb: Button) -> Button:
 	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 2)
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var room := float(STOCK_CELL)
-	if mark != null:
-		var icon := BountyList.icon(mark, mark_side)
-		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(icon)
-		room -= mark_side + 2
-	var label := UITheme.label(figure, Palette.TEXT_SOFT if ok else Palette.BRICK, true)
-	# Clipped rather than allowed to push: gold grows with the walk, and a seven-figure price out at the
-	# frontier would widen the shelf into the panel beside it. A clipped Label has no width of its own,
-	# so it is given the figure's, up to what the cell has left. The whole number is in the square's
-	# tooltip and on the Buy button.
-	label.clip_text = true
-	var wide := UITheme.theme().get_font("font", "SmallLabel").get_string_size(figure,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, UITheme.SMALL_FONT_SIZE).x
-	label.custom_minimum_size.x = minf(ceilf(wide), room)
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(label)
-	cell.add_child(row)
-	return cell
+	var back := UITheme.back_button(tooltip)
+	back.pressed.connect(on_back)
+	row.add_child(back)
+	verb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(verb)
+	_rows.add_child(row)
+	return back
 
 
-## A counter's tab as a folder tab: framed on three sides in the socket's dark brown with its top
-## corners rounded. A shut one stands lower, washed in tan, with the line it stands on for a bottom
-## edge; the open one stands full height in the page's own cream with no bottom edge, so it runs on
-## into the counter under it -- a state read off the row at a glance, where the green mark alone was
-## a colour change on twelve pixels. `side` is its width: the bag's filter tabs are narrower
-## (`BagPage.FILTER_TAB`), eight of them sharing its width.
+static func tab_mark(service: String, lit: bool) -> Texture2D:
+	return load(TAB_MARK % [TAB_ICONS[service], "green" if lit else "brown"])
+
+
+## Dresses `tab` as a folder tab `side` wide (the bag's filter tabs and the leaderboards' wear it too),
+## framed on three sides. A shut one stands lower, washed in tan, on the line; the open one stands full
+## height in the page's own cream with no bottom edge, so it runs on into the counter under it.
 static func tab_faces(tab: Button, lit: bool, side := TAB_SIDE) -> void:
 	tab.custom_minimum_size = Vector2(side, TAB_SIDE if lit else TAB_SIDE - TAB_RISE)
 	tab.size_flags_vertical = Control.SIZE_SHRINK_END
@@ -591,9 +424,6 @@ static func tab_faces(tab: Button, lit: bool, side := TAB_SIDE) -> void:
 	tab.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
 
-## One tab's face. Square pixels: no anti-aliasing on the rounded corners, which at `ui_scale` 2 would
-## blur them into the cream. The mark sits a pixel off the top so it is centred on what shows of the
-## tab rather than on the line under it.
 static func _tab_face(fill: Color, floor_line: bool) -> StyleBoxFlat:
 	var face := StyleBoxFlat.new()
 	face.bg_color = fill
@@ -604,6 +434,7 @@ static func _tab_face(fill: Color, floor_line: bool) -> StyleBoxFlat:
 	face.border_width_bottom = 1 if floor_line else 0
 	face.corner_radius_top_left = TAB_CORNER
 	face.corner_radius_top_right = TAB_CORNER
+	# Square pixels: anti-aliased, the rounded corners blur into the cream at `ui_scale` 2.
 	face.anti_aliasing = false
 	face.set_content_margin_all(2)
 	return face
@@ -622,13 +453,169 @@ static func tab_line(width: float) -> Panel:
 	return line
 
 
-## A square whose thing has been bought: the socket it stood on, at that shelf's own size, with
-## nothing on it and no price under it. In a cell of its own so the shelf keeps its three columns
-## however much of it has been sold.
-static func _sold_square(side: float) -> VBoxContainer:
+static func _sign(text: String, color: Variant = null) -> Label:
+	return BountyList.wrapped(text, BODY_WIDTH, color)
+
+
+## The shelf's grid, which her spells and the banishing stand on too.
+static func _grid(h_gap := STOCK_GAP) -> GridContainer:
+	var grid := GridContainer.new()
+	grid.columns = STOCK_COLS
+	grid.add_theme_constant_override("h_separation", h_gap)
+	grid.add_theme_constant_override("v_separation", STOCK_GAP)
+	return grid
+
+
+## A button gold moves through that does `action`. While `refused` says why not it is dead and that is
+## its tooltip, never a line on the page; otherwise `tooltip` is.
+static func _priced(word: String, price: float, variation: String, refused: String, tooltip: String,
+		action: Callable, figure := true) -> Button:
+	var button := UITheme.priced_button(word, price, variation,
+			tooltip if refused.is_empty() else refused, figure)
+	button.disabled = not refused.is_empty()
+	button.pressed.connect(action)
+	return button
+
+
+static func _left_press(event: InputEvent) -> bool:
+	return event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed
+
+
+# ---- the vendors' shelves
+
+## A vendor's counter: the shelf in the scroll -- the orb vendor's trades under it -- and Restock
+## pinned at the foot.
+func _fill_vendor() -> void:
+	var body := _scrolled(ROW_GAP)
+	if _open_tab == TownServices.ORBS:
+		body.add_child(_orb_shelf())
+		body.add_child(UITheme.section("Trade up"))
+		body.add_child(_upscales())
+	else:
+		body.add_child(_item_shelf())
+	var price := _reroll_price()
+	_rows.add_child(_priced("Restock", price, "LightButton", _why_not(price, false),
+			"Clear this shelf for new stock. Each time costs twice the last", _on_reroll_pressed))
+
+
+## The gear vendor's six squares. A bought one stays on the shelf with nothing on it.
+func _item_shelf() -> GridContainer:
+	var grid := _grid()
+	var shelf := VendorStock.items(_drawer)
+	for at in shelf.size():
+		var item: Item = shelf[at]
+		if item == null:
+			grid.add_child(_sold_square())
+			continue
+		# A bag square takes no mouse, so the cell round it is what is pressed.
+		var cell := _price_cell(ItemSlot.make(item), TownPrices.buy_price(item))
+		# Grey, as the bag's grid greys, where the orb in the player's hand has nothing to do.
+		if _held != "" and not OrbTable.can_apply(_held, item):
+			cell.get_child(0).modulate = OrbSlot.DIM
+		cell.mouse_filter = Control.MOUSE_FILTER_STOP
+		Cursors.wear(cell, Cursors.HAND)
+		cell.gui_input.connect(_on_shelf_input.bind(at))
+		grid.add_child(cell)
+	return grid
+
+
+## The orb vendor's six squares, each lit while the purse can cover it.
+func _orb_shelf() -> GridContainer:
+	var grid := _grid()
+	var orbs := VendorStock.orbs(_drawer)
+	for at in orbs.size():
+		var orb := orbs[at]
+		if orb.is_empty():
+			grid.add_child(_sold_square())
+			continue
+		var price := TownPrices.orb_value(orb, _cell)
+		var short := _why_not(price, false)
+		var note := "%s gold%s" % [BigNumber.format(price), "" if short.is_empty() else ". " + short]
+		grid.add_child(_price_cell(_orb_square(orb, short.is_empty(), note, _on_buy_orb.bind(at)), price))
+	return grid
+
+
+## The orb vendor's trades: every unlocked orb but the first, each for `OrbTable.UPSCALE_COST` of the
+## orb before it in the tray. That orb and the count stand where a price would, at the tray's size
+## (an orb at `PRICE_COIN` is a speck of colour).
+func _upscales() -> GridContainer:
+	var grid := _grid()
+	for orb: String in OrbTable.unlocked(inventory.walls_ever()):
+		var from := OrbTable.upscale_from(orb)
+		if from.is_empty():
+			continue
+		var enough := inventory.orb_count(from) >= OrbTable.UPSCALE_COST
+		var square := _orb_square(orb, enough, "Trade %d %s for one" % [OrbTable.UPSCALE_COST, from], _on_upscale)
+		grid.add_child(_cost_cell(square, str(OrbTable.UPSCALE_COST), OrbTable.icon(from), enough, OrbSlot.ICON))
+	return grid
+
+
+## One orb on a shelf, as the tray's own square at an item's size: lit while `ok` and grey otherwise,
+## though a grey one still takes the cursor. Hovered, it shows the orb's card as the bag does, with
+## `note` as its last line where the bag says how to use one. Pressed, it calls `on_press(orb)`.
+func _orb_square(orb: String, ok: bool, note: String, on_press: Callable) -> OrbSlot:
+	var square := OrbSlot.make(orb, 1, ok, false, ItemSlot.SIDE)
+	square.hovered.connect(func(which: String) -> void:
+		_orb_card.fill(which, inventory.orb_count(which), note, Palette.TEXT_SOFT if ok else Palette.RUST)
+		_orb_card.show()
+		# Twice: the first pass measures labels that have not laid out yet.
+		_place_orb_card(square)
+		_place_orb_card.call_deferred(square))
+	square.unhovered.connect(_orb_card.hide)
+	# A square freed under the cursor (a purchase redraws the tab) takes the card with it.
+	square.tree_exiting.connect(_orb_card.hide)
+	square.pressed.connect(on_press)
+	return square
+
+
+func _place_orb_card(square: OrbSlot) -> void:
+	if not _orb_card.visible or not is_instance_valid(square) or not square.is_inside_tree():
+		return
+	_orb_card.reset_size()
+	_orb_card.position = ItemCard.beside(square.get_global_rect(),
+			_orb_card.get_combined_minimum_size() * _ui_scale, get_viewport_rect().size, ItemCard.GAP * _ui_scale)
+
+
+func _price_cell(square: Control, price: float) -> VBoxContainer:
+	return _cost_cell(square, BigNumber.format(price), Coins.icon(), inventory.gold >= price)
+
+
+## Every priced square on the page is this one cell: `square`, and centred under it `mark` at
+## `mark_side` (null for none) beside `figure` in the body font, brick while `ok` is false.
+func _cost_cell(square: Control, figure: String, mark: Texture2D, ok: bool,
+		mark_side := PRICE_COIN) -> VBoxContainer:
+	var cell := UITheme.vbox(2, STOCK_CELL)
+	square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	cell.add_child(square)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 2)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var room := float(STOCK_CELL)
+	if mark != null:
+		var icon := BountyList.icon(mark, mark_side)
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(icon)
+		room -= mark_side + 2
+	var label := UITheme.label(figure, Palette.TEXT_SOFT if ok else Palette.BRICK, true)
+	# Clipped, never pushing: a seven-figure price would widen the shelf into the panel beside it. A
+	# clipped Label has no width of its own, so it gets the figure's, up to what the cell has left.
+	label.clip_text = true
+	var wide := UITheme.theme().get_font("font", "SmallLabel").get_string_size(figure,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, UITheme.SMALL_FONT_SIZE).x
+	label.custom_minimum_size.x = minf(ceilf(wide), room)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(label)
+	cell.add_child(row)
+	return cell
+
+
+## A bought square: the bare socket with no price under it, in a cell of its own so the shelf keeps
+## its three columns.
+static func _sold_square() -> VBoxContainer:
 	var cell := UITheme.vbox(2, STOCK_CELL)
 	var square := Panel.new()
-	square.custom_minimum_size = Vector2(side, side)
+	square.custom_minimum_size = Vector2(ItemSlot.SIDE, ItemSlot.SIDE)
 	square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	square.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	square.add_theme_stylebox_override("panel", ItemRarity.slot_style(ItemRarity.Rarity.COMMON))
@@ -637,78 +624,135 @@ static func _sold_square(side: float) -> VBoxContainer:
 	return cell
 
 
-## The piece the player has picked up off the shelf, written out the way the bag writes one, with
-## Buy and Back under it. The same `ItemDetails` block, so a piece reads the same on a shelf as it
-## does in the bag, and the hover card's Alt is doing the rest of the work.
+## The piece picked up off the shelf, written out as the bag writes one, over Back and Buy.
 func _fill_offer() -> void:
 	ItemDetails.fill(_scrolled(2), _offer, BODY_WIDTH)
-
 	var price := TownPrices.buy_price(_offer)
-	var refused := _why_not(price, true)
-	var buy := UITheme.priced_button("Buy", price, UITheme.GO_BUTTON,
-			refused if not refused.is_empty()
-			else "Buy this and put it in your bag for %s gold" % BigNumber.format(price))
-	buy.disabled = not refused.is_empty()
-	buy.pressed.connect(_on_buy_item)
-	buy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	# One row, the arrow first.
-	var row := HBoxContainer.new()
-	var back := UITheme.back_button("Back to what the vendor has")
-	back.pressed.connect(_close_offer.bind(true))
-	row.add_child(back)
-	row.add_child(buy)
-	_rows.add_child(row)
+	_back_row("Back to what the vendor has", _close_offer.bind(true),
+			_priced("Buy", price, UITheme.GO_BUTTON, _why_not(price, true),
+			"Buy this and put it in your bag for %s gold" % BigNumber.format(price), _on_buy_item))
 
 
-## The board. Three postings, each saying who, how far along, what it pays and -- the whole reason a
-## board is worth walking up to -- the lands that monster lives on, which `BountyList` writes so that a
-## posting reads the same here as it does on the journal ten tiles away.
-##
-## Each posting carries **Accept**, and only one bounty anywhere may be out at a time: kills count
-## against the accepted one and nothing else, and the rest are refused until it is handed in. A
-## handed-in posting stays on the board, spent, until all three are in and new work is posted.
+## Which of the drawer's two shelves the open tab is.
+func _shelf_key() -> String:
+	return VendorStock.ORBS if _open_tab == TownServices.ORBS else VendorStock.ITEMS
+
+
+## What Restock costs on the open shelf now: dearer every time, for good.
+func _reroll_price() -> float:
+	return TownPrices.reroll_price(_cell, VendorStock.rerolls(_drawer, _shelf_key()))
+
+
+## A press on a shelf piece's cell: it opens the piece, or with an orb in hand spends the orb on it
+## where it stands.
+func _on_shelf_input(event: InputEvent, at: int) -> void:
+	if not _left_press(event):
+		return
+	accept_event()  # Before the redraw frees the cell, which would let the press through to the map.
+	var shelf := VendorStock.items(_drawer)
+	if at < 0 or at >= shelf.size() or shelf[at] == null:
+		return
+	if _held != "":
+		# Under a finger the first tap only puts the piece's card up -- asked by its place on the shelf,
+		# which makes its pieces anew every time it is drawn. The shelf is drawn again when the orb
+		# lands, which a question about lowering the piece may put off.
+		if Cursors.applies("shelf:%d" % at):
+			craft_held.call(shelf[at], func() -> void:
+				VendorStock.put(_drawer, at, shelf[at])
+				redraw())
+		return
+	_offer = shelf[at]
+	_offer_at = at
+	_refresh()
+	offer_changed.emit(_offer)
+
+
+## Back to the shelf. `tell` is false while `open` rebuilds the page: whoever opened it is about to
+## point the bag at this counter anyway.
+func _close_offer(tell: bool) -> void:
+	_offer = null
+	_offer_at = -1
+	_refresh()
+	if tell:
+		offer_changed.emit(null)
+
+
+## One piece over the counter, paid for and taken off the shelf together. The grey button's refusals
+## are checked again here, for a caller that cannot see the button.
+func _on_buy_item() -> void:
+	var price := TownPrices.buy_price(_offer)
+	if _offer == null or not _why_not(price, true).is_empty():
+		return
+	inventory.gold -= price
+	inventory.add(_offer)
+	VendorStock.take(_drawer, VendorStock.ITEMS, _offer_at)
+	print("Bought %s (%s, level %d) for %s gold"
+			% [_offer.type, _offer.rarity_name(), _offer.level, BigNumber.format(price)])
+	inventory.save(_save_path)
+	_close_offer(true)
+
+
+func _on_buy_orb(orb: String, at: int) -> void:
+	var price := TownPrices.orb_value(orb, _cell)
+	if not _why_not(price, false).is_empty():
+		return
+	inventory.gold -= price
+	inventory.add_orb(orb)
+	VendorStock.take(_drawer, VendorStock.ORBS, at)
+	print("Bought %s for %s gold" % [orb, BigNumber.format(price)])
+	_deed_done()
+
+
+## `OrbTable.UPSCALE_COST` of the orb before this one traded for one of it. No gold changes hands.
+func _on_upscale(orb: String) -> void:
+	var from := OrbTable.upscale_from(orb)
+	if from.is_empty() or inventory.orb_count(from) < OrbTable.UPSCALE_COST \
+			or orb not in OrbTable.unlocked(inventory.walls_ever()):
+		return
+	for i in OrbTable.UPSCALE_COST:
+		inventory.spend_orb(from)
+	inventory.add_orb(orb)
+	print("Traded %d %s for one %s" % [OrbTable.UPSCALE_COST, from, orb])
+	_deed_done()
+
+
+## The open vendor's shelf only: the other shelf and the board are not touched.
+func _on_reroll_pressed() -> void:
+	var price := _reroll_price()
+	if inventory.gold < price:
+		return
+	inventory.gold -= price
+	VendorStock.reroll(_drawer, _shelf_key(), _tier, _cell, _stock_rng, inventory.walls_ever())
+	print("Restocked the %s shelf for %s gold" % [_shelf_key(), BigNumber.format(price)])
+	_deed_done()
+
+
+# ---- the board
+
+## The board: its tier and pips, a cleared board's Reward, work taken at another board, then the open
+## postings as `BountyList` writes them -- the one taken on here first, and while any work is out the
+## rest dimmed with Accept grey.
 func _fill_board() -> void:
 	# Having read a board is what puts the journal in the corner, so it is written down as it is drawn.
 	if BountyBoard.see(_drawer):
 		inventory.save(_save_path)
 	var body := _scrolled(ROW_GAP)
-	var heading := UITheme.section("Tier " + Achievements.RANK_NAMES[BountyBoard.board_tier(_drawer)])
-	body.add_child(heading)
-	# How far the board is to its reward, at the heading's end: a round pip lit for each posting handed
-	# in, and the gift in the last place, lit while a cleared board's reward waits.
 	var board := BountyBoard.bounties(_drawer)
-	if not board.is_empty():
-		var done := board.filter(func(b: Dictionary) -> bool: return bool(b.get(BountyBoard.DONE, false))).size()
-		var waiting := not pending_choice().is_empty()
-		var pips := KillPips.new(board.size())
-		pips.show_board(done, waiting)
-		pips.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		pips.mouse_filter = Control.MOUSE_FILTER_PASS
-		pips.tooltip_text = ("Your reward is waiting" if waiting
-				else "%d of %d handed in. Clear the board for a reward" % [done, board.size()])
-		heading.add_child(pips)
-	# A cleared board's reward put away untaken is brought back from here, at the head of the board.
-	if not pending_choice().is_empty():
+	var waiting := not pending_choice().is_empty()
+	body.add_child(_board_heading(board, waiting))
+	if waiting:
 		var reward := UITheme.button("Reward", "SmallGoButton", "Choose your reward for clearing this board")
 		reward.pressed.connect(choice_asked.emit)
 		body.add_child(reward)
-	var posted := 0
 	var active_at := BountyBoard.active_spot(inventory.towns)
 	var busy := not active_at.is_empty()
-	# Work taken on at another board heads this one: which bounty is out, and where it is handed in --
-	# a board that only said "no" left the player to go and find out both.
 	if busy and active_at != TownState.key(_spot):
-		var away := BountyList.row(BountyBoard.active(inventory.towns), view, BODY_WIDTH,
-				"Taken at %s. Claim it there." % _town_at(active_at))
-		body.add_child(away)
-	# The one taken on here first, then the rest -- still shown while work is out, dimmed and with Accept
-	# grey, so the player can see what is waiting for them to come back.
-	var postings := BountyBoard.bounties(_drawer).filter(func(b: Dictionary) -> bool:
-			return BountyBoard.is_active(b))
-	postings.append_array(BountyBoard.bounties(_drawer).filter(func(b: Dictionary) -> bool:
+		body.add_child(BountyList.row(BountyBoard.active(inventory.towns), view, BODY_WIDTH,
+				"Taken at %s. Claim it there." % _town_at(active_at)))
+	var postings := board.filter(func(b: Dictionary) -> bool: return BountyBoard.is_active(b))
+	postings.append_array(board.filter(func(b: Dictionary) -> bool:
 			return not BountyBoard.is_active(b) and not bool(b.get(BountyBoard.DONE, false))))
 	for bounty: Dictionary in postings:
-		posted += 1
 		var taken := BountyBoard.is_active(bounty)
 		var row := BountyList.row(bounty, view, BODY_WIDTH,
 				"Accepted." if taken and not BountyBoard.ready(bounty) else "")
@@ -720,28 +764,43 @@ func _fill_board() -> void:
 			if busy:
 				row.modulate = TAB_REST
 			action.pressed.connect(_on_accept_pressed.bind(bounty))
-		# The one thing this board can do that the journal cannot: pay. A bounty is handed in where it
-		# was taken on, so the button is here and nowhere else. The figure is on the card above it and
-		# in the tooltip: a small button has no room for a reward that grows with the walk.
 		elif BountyBoard.ready(bounty):
-			var gold := float(bounty.get(BountyBoard.GOLD, 0))
-			var prize := BountyBoard.reward_text(bounty)
-			var xp := int(bounty.get(BountyBoard.XP, 0))
-			action = UITheme.priced_button("Claim", gold, "SmallGoButton", "Hand this in for %s gold%s%s"
-					% [BigNumber.format(gold), "" if xp == 0 else ", %d experience" % xp,
-						"" if prize.is_empty() else " and " + prize], false)
-			# A promised piece has to go in the bag, which the vendor's own rule refuses on a full one.
-			var why := _why_not(0.0, not prize.is_empty())
-			if not why.is_empty():
-				action.disabled = true
-				action.tooltip_text = why
-			action.pressed.connect(_on_claim_pressed.bind(bounty))
+			action = _claim_button(bounty)
 		if action != null:
 			action.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			BountyList.actions_of(row).add_child(action)
 		body.add_child(row)
-	if posted == 0 and not busy:
+	if postings.is_empty() and not busy:
 		body.add_child(_sign("Nothing is posted here now."))
+
+
+## The board's tier, ending in its pips: a round one lit for each posting handed in, and the gift in
+## the last place, lit while a cleared board's reward waits.
+func _board_heading(board: Array, waiting: bool) -> HBoxContainer:
+	var heading := UITheme.section("Tier " + Achievements.RANK_NAMES[BountyBoard.board_tier(_drawer)])
+	if board.is_empty():
+		return heading
+	var done := board.filter(func(b: Dictionary) -> bool:
+			return bool(b.get(BountyBoard.DONE, false))).size()
+	var pips := KillPips.new(board.size())
+	pips.show_board(done, waiting)
+	pips.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	pips.mouse_filter = Control.MOUSE_FILTER_PASS
+	pips.tooltip_text = ("Your reward is waiting" if waiting
+			else "%d of %d handed in. Clear the board for a reward" % [done, board.size()])
+	heading.add_child(pips)
+	return heading
+
+
+## A finished posting's Claim. Its figure is on the card above and in the tooltip: a small button has
+## no room for a reward that grows with the walk. A promised piece needs room in the bag.
+func _claim_button(bounty: Dictionary) -> Button:
+	var gold := float(bounty.get(BountyBoard.GOLD, 0))
+	var prize := BountyBoard.reward_text(bounty)
+	var xp := int(bounty.get(BountyBoard.XP, 0))
+	return _priced("Claim", gold, "SmallGoButton", _why_not(0.0, not prize.is_empty()),
+			"Hand this in for %s gold%s%s" % [BigNumber.format(gold), "" if xp == 0 else ", %d experience" % xp,
+			"" if prize.is_empty() else " and " + prize], _on_claim_pressed.bind(bounty), false)
 
 
 ## What the town whose drawer is filed under `at` is called, off the map that named it.
@@ -750,12 +809,23 @@ func _town_at(at: String) -> String:
 	return called if not called.is_empty() else "another town"
 
 
-## The land around the town, which is every monster a board may post: a target has to live somewhere
-## the player can walk to, and what the map actually generated is the only honest answer to that.
+## The land around the town: a board posts only what lives where the player can walk to.
 func _board_land() -> PackedStringArray:
 	if view == null:
 		return PackedStringArray()
 	return view.envs_within(_cell, BountyBoard.BOUNTY_RANGE)
+
+
+## The uniques a bounty or a cleared board may hand over: the unlocked ones less what she has banished.
+func _dropping() -> Array:
+	return FortuneTeller.dropping(Achievements.unlocked(inventory), inventory.fortunes)
+
+
+## A piece the board pays, in the one order: said, then the log hears, then the bag.
+func _hand_over(piece: Item) -> void:
+	item_claimed.emit(piece)
+	inventory.note_unique(piece.unique)
+	inventory.add(piece)
 
 
 func _on_accept_pressed(bounty: Dictionary) -> void:
@@ -763,8 +833,7 @@ func _on_accept_pressed(bounty: Dictionary) -> void:
 		return
 	print("Accepted the bounty on %s" % str(bounty.get(BountyBoard.ENEMY, "")))
 	inventory.save(_save_path)
-	_fill()
-	layout()
+	_refresh()
 	bounty_accepted.emit()
 
 
@@ -775,6 +844,7 @@ func _on_claim_pressed(bounty: Dictionary) -> void:
 		return
 	if not BountyBoard.claim(bounty):
 		return
+	var enemy := str(bounty.get(BountyBoard.ENEMY, ""))
 	var reward := float(bounty.get(BountyBoard.GOLD, 0))
 	var orbs := BountyBoard.orbs_of(bounty)
 	var xp := int(bounty.get(BountyBoard.XP, 0))
@@ -784,28 +854,20 @@ func _on_claim_pressed(bounty: Dictionary) -> void:
 	if xp > 0:
 		inventory.add_xp(xp)
 		xp_claimed.emit(xp)
-	# The promised piece, rolled now: the log hears of a unique as it would off a body.
 	var piece := BountyBoard.reward_item(bounty, _cell, _stock_rng, _dropping())
 	if piece != null:
-		item_claimed.emit(piece)
-		inventory.note_unique(piece.unique)
-		inventory.add(piece)
-	# The last one handed in clears the board, which offers its reward and raises the town's tier, and
-	# brings new work there and then -- in that order, so the new work is posted at the new tier.
+		_hand_over(piece)
+	# `clear` before `restock`: the last one handed in clears the board, which offers its reward and
+	# raises the town's tier, and the new work is posted at the new tier.
 	BountyBoard.clear(_drawer, _cell, _stock_rng, _dropping(), inventory.walls_ever())
 	BountyBoard.restock(_drawer, _board_land(), _cell, _stock_rng, inventory.walls_ever())
-	print("Claimed the bounty on %s for %s gold, %d experience and %s" % [str(bounty.get(BountyBoard.ENEMY, "")),
-			BigNumber.format(reward), xp, orbs])
+	print("Claimed the bounty on %s for %s gold, %d experience and %s"
+			% [enemy, BigNumber.format(reward), xp, orbs])
 	var counted := {}
 	for orb: String in orbs:
 		counted[orb] = int(counted.get(orb, 0)) + 1
-	bounty_paid.emit(str(bounty.get(BountyBoard.ENEMY, "")), reward, xp, counted, piece)
-	inventory.save(_save_path)
-	_fill()
-	layout()
-	# Nothing is open, but the bag still has to hear: the purse it draws and the tray it counts have
-	# both just moved.
-	offer_changed.emit(null)
+	bounty_paid.emit(enemy, reward, xp, counted, piece)
+	_deed_done()
 
 
 ## The options this town's cleared board has offered and the player has not taken (`BountyBoard.choice`).
@@ -821,80 +883,50 @@ func why_not_take(index: int) -> String:
 	return _why_not(0.0, offered[index].has(BountyBoard.CHOICE_ITEM))
 
 
-## Takes option `index` of the cleared board, the claim's way: a piece is said before the log and the bag
-## hear of it, orbs go to the tray, gold to the purse and experience to the bar. The other two are gone.
-## False when it was refused.
+## Takes option `index` of the cleared board; the other two are gone. False when it was refused.
 func take_choice(index: int) -> bool:
 	if not why_not_take(index).is_empty():
 		return false
 	var option := BountyBoard.take_choice(_drawer, index)
 	var piece: Item = option.get(BountyBoard.CHOICE_ITEM)
 	if piece != null:
-		item_claimed.emit(piece)
-		inventory.note_unique(piece.unique)
-		inventory.add(piece)
+		_hand_over(piece)
 		print("Took %s for clearing the board" % piece.display_name())
 	elif option.has(BountyBoard.CHOICE_GOLD):
-		inventory.gold += float(option[BountyBoard.CHOICE_GOLD])
-		print("Took %s gold for clearing the board" % BigNumber.format(float(option[BountyBoard.CHOICE_GOLD])))
+		var gold := float(option[BountyBoard.CHOICE_GOLD])
+		inventory.gold += gold
+		print("Took %s gold for clearing the board" % BigNumber.format(gold))
 	elif option.has(BountyBoard.CHOICE_XP):
-		inventory.add_xp(int(option[BountyBoard.CHOICE_XP]))
-		xp_claimed.emit(int(option[BountyBoard.CHOICE_XP]))
-		print("Took %d experience for clearing the board" % int(option[BountyBoard.CHOICE_XP]))
+		var xp := int(option[BountyBoard.CHOICE_XP])
+		inventory.add_xp(xp)
+		xp_claimed.emit(xp)
+		print("Took %d experience for clearing the board" % xp)
 	else:
-		inventory.add_orb(str(option[BountyBoard.CHOICE_ORB]), int(option[BountyBoard.CHOICE_COUNT]))
-		print("Took %d %s for clearing the board" % [int(option[BountyBoard.CHOICE_COUNT]),
-				option[BountyBoard.CHOICE_ORB]])
-	inventory.save(_save_path)
-	_fill()
-	layout()
-	offer_changed.emit(null)
+		var count := int(option[BountyBoard.CHOICE_COUNT])
+		inventory.add_orb(str(option[BountyBoard.CHOICE_ORB]), count)
+		print("Took %d %s for clearing the board" % [count, option[BountyBoard.CHOICE_ORB]])
+	_deed_done()
 	return true
 
 
-## Which of the drawer's two shelves the open tab is.
-func _shelf_key() -> String:
-	return VendorStock.ORBS if _open_tab == TownServices.ORBS else VendorStock.ITEMS
+# ---- the smith
 
-
-## New stock bought rather than waited for: the open vendor's shelf only, at that vendor's own price.
-## The other shelf and the board are not touched.
-func _on_reroll_pressed() -> void:
-	var price := TownPrices.reroll_price(_cell, VendorStock.rerolls(_drawer, _shelf_key()))
-	if inventory.gold < price:
-		return
-	inventory.gold -= price
-	VendorStock.reroll(_drawer, _shelf_key(), _tier, _cell, _stock_rng, inventory.walls_ever())
-	print("Restocked the %s shelf for %s gold" % [_shelf_key(), BigNumber.format(price)])
-	inventory.save(_save_path)
-	_fill()
-	layout()
-	offer_changed.emit(null)
-
-
-## The smith's counter. He has no shelf: what he works on is the piece the bag page has open, carried
-## or worn. No fight can be on while the page is up, so the piece is nobody else's to hold.
-##
-## The two prices, and what an upgrade would make of the piece and what it risks. Why a button is
-## grey is in that button's tooltip and nowhere else on the page.
+## The smith's counter. With a piece open in the bag: that piece written out whole in the scroll, so
+## what a blow changes is watched where it changes, and Upgrade over Lock pinned at the foot -- no
+## square, no smith and no counter name (the user's, 2026-10-07).
 func _fill_smith() -> void:
 	if not _smith_note.is_empty():
 		_rows.add_child(_sign(_smith_note, Palette.BRICK))
 	if _bag_piece == null:
 		_fill_idle_smith()
 		return
-	# The piece on the anvil, written out whole as an offer is, with no square and no smith over it (the
-	# user's, 2026-10-07): watching its numbers change after a blow is the whole of what the blow bought.
-	# It scrolls; the buttons stay pinned at the foot.
-	var body := _scrolled(ROW_GAP)
 	var details := UITheme.vbox(2, BODY_WIDTH)
-	body.add_child(details)
+	_scrolled(ROW_GAP).add_child(details)
 	ItemDetails.fill(details, _bag_piece, BODY_WIDTH)
 	var cap := _upgrade_cap()
 	var up_price := TownPrices.upgrade_price(_bag_piece)
 	var up_why := _smith_why_not(Blacksmith.why_not_upgrade(_bag_piece, cap), up_price)
-	# What the press would buy and what it risks, over the button, and only while it can be pressed:
-	# the level it goes from and to on the left, the risk on the right in the colour a loss is.
+	# Only while the blow can be struck: the level it goes from and to, and the risk in a loss's colour.
 	if up_why.is_empty():
 		var odds := HBoxContainer.new()
 		var step := UITheme.label("Level %d → %d of %d" % [_bag_piece.level, _bag_piece.level + 1, cap],
@@ -913,13 +945,11 @@ func _fill_smith() -> void:
 			_on_lock_pressed))
 
 
-## The smith with nothing held up to him: the empty square a piece would stand on beside himself at
-## his anvil, and his two services with what each does and the least it costs on anything the player
-## has -- so the tab says what he is for before a piece is picked, rather than one line sending the
-## player off to the bag to find out.
+## The smith with nothing held up to him: the bench, where to pick a piece, and his two services with
+## the least each costs on anything carried or worn that he would take.
 func _fill_idle_smith() -> void:
 	var body := _scrolled(ROW_GAP)
-	_smith_bench(body, ItemSlot.empty("Open an item in your bag or on your doll", tab_mark(TownServices.SMITH, false)))
+	body.add_child(_smith_bench())
 	body.add_child(_sign("Open an item in your bag or on your doll.", Palette.TEXT_SOFT))
 	body.add_child(UITheme.rule(BODY_WIDTH))
 	var cap := _upgrade_cap()
@@ -932,77 +962,20 @@ func _fill_idle_smith() -> void:
 				.map(func(p: Item) -> float: return TownPrices.lock_price(p)))
 
 
-## The top of the smith's counter while no piece is open: `square` -- the empty anvil square -- on the
-## left, by the anvil he is drawn with, and the smith on the right. The portrait rests on its first
-## frame. An Upgrade or a Lock still runs his strike (`_strike`), but only with a piece open, so it is
-## never on screen now -- only its sound is.
-func _smith_bench(body: VBoxContainer, square: Control) -> void:
+## The empty square a piece would stand on, wearing the anvil, beside the smith's portrait.
+func _smith_bench() -> HBoxContainer:
 	var bench := HBoxContainer.new()
 	bench.add_theme_constant_override("separation", ROW_GAP)
 	bench.alignment = BoxContainer.ALIGNMENT_CENTER
+	var square := ItemSlot.empty("Open an item in your bag or on your doll", tab_mark(TownServices.SMITH, false))
 	square.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	bench.add_child(square)
-	var socket := PanelContainer.new()
-	var style := BountyList.flat(Palette.SLOT_TAN, 0)
-	style.content_margin_left = DialogueBox.SOCKET_PAD.x
-	style.content_margin_top = DialogueBox.SOCKET_PAD.y
-	style.content_margin_right = DialogueBox.SOCKET_PAD.z
-	style.content_margin_bottom = DialogueBox.SOCKET_PAD.w
-	socket.add_theme_stylebox_override("panel", style)
-	var strip: Texture2D = load(DialogueBox.PORTRAITS % "blacksmith")
-	var face := AtlasTexture.new()
-	face.atlas = strip
-	face.region = Rect2(0, 0, strip.get_width(), DialogueBox.PORTRAIT_HEIGHT)
-	var picture := TextureRect.new()
-	picture.texture = face
-	picture.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	socket.add_child(picture)
-	bench.add_child(socket)
-	body.add_child(bench)
-	_smith_face = face
-	_show_swing()
+	bench.add_child(_swing.portrait())
+	return bench
 
 
-## An Upgrade or a Lock went through: he strikes now, or once the strike playing is nearly done, and
-## `sound` rings out as the hammer lands -- at once when he does not move.
-func _strike(sound: AudioStream) -> void:
-	if Settings.animations == Settings.Anim.NONE:
-		Juice.sound(sound)
-		return
-	create_tween().tween_callback(func() -> void: Juice.sound(sound)).set_delay(STRIKE_LANDS)
-	if _swing_clock >= 0.0:
-		_swings_owed += 1
-	else:
-		_swing_clock = 0.0
-
-
-func _process(delta: float) -> void:
-	if _swing_clock < 0.0:
-		return
-	_swing_clock += delta
-	var end := _swing_frames() - (SWING_OVERLAP if _swings_owed > 0 else 0)
-	if _swing_clock >= end * DialogueBox.FRAME_TIME:
-		if _swings_owed > 0:
-			_swings_owed -= 1
-			_swing_clock = 0.0
-		else:
-			_swing_clock = -1.0
-	_show_swing()
-
-
-func _swing_frames() -> int:
-	return maxi(1, _smith_face.atlas.get_height() / DialogueBox.PORTRAIT_HEIGHT) if _smith_face != null else 1
-
-
-## The frame the strike is on, or the first while he stands still.
-func _show_swing() -> void:
-	if _smith_face != null:
-		var frame := int(_swing_clock / DialogueBox.FRAME_TIME) if _swing_clock >= 0.0 else 0
-		_smith_face.region.position.y = mini(frame, _swing_frames() - 1) * DialogueBox.PORTRAIT_HEIGHT
-
-
-## One of the smith's services on his idle counter: its name, the least it costs on any piece in
-## `prices` (none when nothing the player has can take it), and what it does.
+## One of the smith's services on his idle counter: its name and "from" the least of `prices`, or the
+## name alone when nothing the player has can take it.
 func _smith_service(body: VBoxContainer, title: String, prices: Array) -> void:
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 2)
@@ -1018,63 +991,405 @@ func _smith_service(body: VBoxContainer, title: String, prices: Array) -> void:
 	body.add_child(head)
 
 
-## One of the smith's two, with the coin and the price on it the way a Buy carries them, and the
-## reason in its tooltip when it is dead.
+## One of the smith's two buttons, wearing the hammer for a cursor while it is live.
 func _smith_button(text: String, price: float, refused: String, tooltip: String,
 		action: Callable, variation := "SmallButton") -> Button:
-	var button := UITheme.priced_button(text, price, variation,
-			refused if not refused.is_empty() else tooltip)
-	button.disabled = not refused.is_empty()
-	button.pressed.connect(action)
+	var button := _priced(text, price, variation, refused, tooltip, action)
 	if refused.is_empty():
 		Cursors.wear(button, Cursors.HAMMER)
 	return button
 
 
-## The fortuneteller's table: what she can be asked, each with its price, and under it one line naming
-## the last spell cast whose answer the player said not to show again. Her answers are popups (`_tell`),
-## and so is the way out's question (`_ask_way_out`).
+## The smith's own refusal (`rule`), or a purse that cannot pay. Carried or worn is all one to him.
+func _smith_why_not(rule: String, price: float) -> String:
+	if not rule.is_empty():
+		return rule
+	return _why_not(price, false)
+
+
+## The level the smith here may take a piece to: the deepest land of this town's wall circle, so every
+## fortress between the same two walls works to the same ceiling.
+func _upgrade_cap() -> int:
+	return MapBuilder.circle_level(_cell)
+
+
+## One blow of the hammer. The gold goes whichever way it falls, and the piece stays where it is, a
+## level better or broken for good.
+func _on_upgrade_pressed() -> void:
+	var cap := _upgrade_cap()
+	var price := TownPrices.upgrade_price(_bag_piece)
+	if not _smith_why_not(Blacksmith.why_not_upgrade(_bag_piece, cap), price).is_empty():
+		return
+	inventory.gold -= price
+	var upgraded := Blacksmith.upgrade(_bag_piece, cap, _smith_rng)
+	_swing.strike(SmithSwing.ANVIL_SOUND if upgraded else SmithSwing.BREAK_SOUND, self)
+	_smith_note = "" if upgraded else "The hammer broke it."
+	print(("Upgraded %s to level %d for %s gold" if upgraded else "Broke %s at level %d for %s gold")
+			% [_bag_piece.display_name(), _bag_piece.level, BigNumber.format(price)])
+	_deed_done()
+
+
+## One modifier pinned, drawn by the smith rather than chosen. Never breaks anything.
+func _on_lock_pressed() -> void:
+	var price := TownPrices.lock_price(_bag_piece)
+	if not _smith_why_not(Blacksmith.why_not_lock(_bag_piece), price).is_empty():
+		return
+	inventory.gold -= price
+	if not Blacksmith.lock(_bag_piece, _smith_rng):
+		return
+	_swing.strike(SmithSwing.ANVIL_SOUND, self)
+	print("Locked %s on %s for %s gold" % [ModifierTable.line(_bag_piece.locked_mod()),
+			_bag_piece.display_name(), BigNumber.format(price)])
+	_deed_done()
+
+
+# ---- the fortuneteller
+
+## Her table: her spells on the shelf's own grid in two halves, each square with its price under it,
+## and pinned under them one line naming the last spell cast whose answer is ticked away.
 func _fill_fortune() -> void:
 	if _banishing:
 		_fill_banish()
 		return
 	var body := _scrolled(ROW_GAP)
-	# Her spells on the shelf's own grid, each with its price under it: what she sells is bought the way
-	# everything else in a town is, and words in a column read as a menu rather than a shop. Two grids,
-	# because her list is in two halves and which half a spell is in is its whole rule: a reading is
-	# asked as often as it is paid for, a great spell is one a settlement. Why a square is dead is only ever in
-	# its tooltip.
-	body.add_child(_spell_grid(FORTUNE_HEADINGS["common"], FortuneTeller.COMMON))
-	# The way out stands with the great spells, as a square of its own, once a wall has fallen: before
-	# that there is nothing yet to take along (the user, 2026-09-25, in place of a full-width button).
+	body.add_child(_spell_grid("Readings", FortuneTeller.COMMON))
 	var great: Array = FortuneTeller.GREAT.duplicate()
+	# The way out is a square among the great spells, once a wall has fallen (the user's, 2026-09-25).
 	if view != null and view.walls_fallen() > 0:
 		great.append(FortuneTeller.TRANSCEND)
-	# And the banishing, once enough uniques are unlocked for one to be in another's way -- or at
-	# once under the dev's switch.
 	if _unlocked().size() >= FortuneTeller.BANISH_FROM or Settings.banish_unlocked():
 		great.append(FortuneTeller.BANISH)
-	body.add_child(_spell_grid(FORTUNE_HEADINGS["great"], great))
+	body.add_child(_spell_grid("Great spells", great))
 	if not _cast.is_empty():
 		_rows.add_child(_sign("You cast %s." % FortuneTeller.LABELS[_cast], Palette.TEXT_SOFT))
 
 
-## The banishing's screen, in her list's place as a shelf piece's is in the shelf's (`_fill_offer`; the
-## user's, 2026-10-10): every unlocked unique by name where a shelf's squares stand, a banished one
-## greyed where it is, and pinned at the foot the arrow back to her spells beside **Banish** with what
-## the next one costs -- or **Restore**, for nothing, while a banished one is picked. What a unique is
-## is its own card's to say: the picked square keeps it up past the page (`ItemCard.PINNED`, `BESIDE`).
-## The screen stays through as many as the player pays for.
+## One half of her list: its heading over that half's squares.
+func _spell_grid(heading: String, readings: Array) -> VBoxContainer:
+	var box := UITheme.vbox(ROW_GAP, BODY_WIDTH)
+	box.add_child(UITheme.section(heading))
+	var grid := _grid()
+	for reading: String in readings:
+		var square := _spell_square(reading)
+		# The roads, once bought in this town, say so where the price was, and no coin.
+		grid.add_child(_cost_cell(square, "Bought", null, true) if _roads_bought(reading)
+				else _price_cell(square, _fortune_price(reading)))
+	box.add_child(grid)
+	return box
+
+
+## One spell on her grid: its mark with no name over it (the user's, 2026-09-25), named for its
+## reading, which is how the tests find it. A live one is lit by a halo under the cursor; one she
+## refuses is greyed and deaf, the reason in its tooltip.
+func _spell_square(reading: String) -> Control:
+	var refused := _fortune_why_not(reading)
+	# A Panel, not the mark itself: what the hover lights is a stylebox, and the mark fills it.
+	var square := Panel.new()
+	square.name = reading
+	square.custom_minimum_size = Vector2(SPELL_SIDE, SPELL_SIDE)
+	square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	square.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	square.tooltip_text = refused if not refused.is_empty() else FORTUNE_TIPS[reading]
+	# A finger's first tap reads a spell and the next casts it (`Cursors.applies`), so under one the
+	# words come up with the tap and stay.
+	if Cursors.touched:
+		square.set_meta(TipCard.NOW, true)
+	var icon := TextureRect.new()
+	# Mode before texture: a TextureRect's minimum is its texture until `expand_mode` says otherwise.
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_SCALE
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.texture = load(FORTUNE_ICONS[reading])
+	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	square.add_child(icon)
+	if not refused.is_empty():
+		square.modulate = OrbSlot.DIM
+		return square
+	Cursors.wear(square, Cursors.HAND)
+	var glow := StyleBoxFlat.new()
+	glow.bg_color = HOVER_GLOW_COLOR
+	glow.set_expand_margin_all(HOVER_GLOW)
+	square.mouse_entered.connect(func() -> void:
+		square.add_theme_stylebox_override("panel", glow)
+		icon.modulate = HOVER_LIFT)
+	square.mouse_exited.connect(func() -> void:
+		square.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+		icon.modulate = Color.WHITE)
+	square.gui_input.connect(func(event: InputEvent) -> void:
+		if _left_press(event):
+			square.accept_event()  # Before the redraw frees it, which would let the press through to the map.
+			if Cursors.applies("spell:" + reading):
+				_on_reading_pressed(reading))
+	return square
+
+
+## What a spell costs here, off the town's level -- the banishing's doubled for each one paid for.
+func _fortune_price(reading: String) -> float:
+	return TownPrices.fortune_price(reading, _cell,
+			FortuneTeller.banishes(inventory.fortunes) if reading == FortuneTeller.BANISH else 0)
+
+
+## Whether this town has sold the roads already: once a town, as a great spell is.
+func _roads_bought(reading: String) -> bool:
+	return reading == FortuneTeller.ROADS and FortuneTeller.asked(_drawer, reading)
+
+
+## Why she will not give this spell, or "" when she will.
+func _fortune_why_not(reading: String) -> String:
+	if view == null:
+		return "She sees nothing here"
+	if reading in FortuneTeller.GREAT and FortuneTeller.asked(_drawer, reading):
+		return "That spell is spent here"
+	if _roads_bought(reading):
+		return "Already bought here"
+	match reading:
+		FortuneTeller.TREASURE:
+			var told := FortuneTeller.chest(inventory.fortunes)
+			if told != TownWorld.NO_SPOT and view.has_chest(told - view.origin):
+				return "The star is already out"
+			if _near_chest == HexMap.NO_CELL:
+				return "She sees no hidden chest"
+		FortuneTeller.APPRAISE:
+			var why := FortuneTeller.why_not_appraise(_bag_piece)
+			if not why.is_empty():
+				return why
+		FortuneTeller.HOMECOMING:
+			if view.homes().is_empty():
+				return "You have found nowhere else to stand"
+		FortuneTeller.TRANSCEND, FortuneTeller.BANISH:
+			# Never greyed: asking is free. A short purse greys the Transcend in her question, and the
+			# banishing's screen is also where one is brought back, for nothing.
+			return ""
+	return _why_not(_fortune_price(reading), false)
+
+
+## One spell asked for. The two aimed at the map are paid for there (`spell_aimed`), the way out only
+## asks and the banishing opens its screen; any other is paid for and written down here, together.
+func _on_reading_pressed(reading: String) -> void:
+	if not _fortune_why_not(reading).is_empty():
+		return
+	var price := _fortune_price(reading)
+	if reading in FortuneTeller.GREAT:
+		spell_aimed.emit(reading, price, _spot)
+		return
+	if reading == FortuneTeller.TRANSCEND:
+		_ask_way_out()
+		return
+	if reading == FortuneTeller.BANISH:
+		_banishing = true
+		_banish_pick = ""
+		_refresh()
+		return
+	inventory.gold -= price
+	match reading:
+		FortuneTeller.ROADS:
+			# The one drawer key a reading still writes: this town has sold the roads, and sells them no more.
+			_drawer[FortuneTeller.ASKED + reading] = true
+			if view.reveal_ring_towns(_cell) > 0:
+				# A chest the roads brought into sight is no longer one she may point at.
+				_near_chest = view.nearest_chest(true)
+				towns_revealed.emit()
+		FortuneTeller.TREASURE:
+			var spot := view.origin + _near_chest
+			inventory.fortunes[FortuneTeller.CHEST] = [spot.x, spot.y]
+			chest_bought.emit(_near_chest)
+	print("The fortuneteller read %s for %s gold" % [reading, BigNumber.format(price)])
+	inventory.save(_save_path)
+	_tell(reading)
+	_refresh()
+	offer_changed.emit(null)
+
+
+# ---- her answers: popups over the whole window
+
+## Whether one of her answers (or the way out's question) stands over the window, for a banner to wait behind.
+func telling() -> bool:
+	return _told != null
+
+
+## What she said to a reading just paid for, as a popup built the way `BagPage._ask` is: the answer in
+## a scroll, with Dismiss and "Don't show this again" in reach under it however long it is. A ticked
+## Dismiss writes `SKIP_TOLD + reading` into `inventory.tips`, and from then on that reading answers in
+## one line on the page (`_cast`). The appraisal offers no tick: its table is the whole of what was bought.
+func _tell(reading: String) -> void:
+	_close_told()
+	var can_skip := reading != FortuneTeller.APPRAISE
+	if can_skip and SKIP_TOLD + reading in inventory.tips:
+		_cast = reading
+		return
+	_cast = ""
+	var body := _open_told(FortuneTeller.LABELS[reading])
+	_answer(reading, _told_scroll.get_child(0))
+	var panel: Control = _told.get_node(TOLD_PANEL)
+	var dismiss := UITheme.button("Dismiss", "LightButton", "")
+	dismiss.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	body.add_child(dismiss)
+	var skip := BagPage.check_box("Don't show this again")
+	skip.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	skip.visible = can_skip
+	body.add_child(skip)
+	dismiss.pressed.connect(func() -> void:
+		# Once: pressed again as the answer shrinks away, a ticked Dismiss would write its reading twice.
+		if Juice.leaving(panel):
+			return
+		if (skip.get_node(BagPage.TICK_NAME) as Button).button_pressed:
+			inventory.tips.append(SKIP_TOLD + reading)
+			inventory.save(_save_path)
+		_leave_told())
+	# A reading is something bought, so it comes up as a reward does: the wash and the sparks.
+	_show_told(true)
+
+
+## The way out, asked before it is done: her warning over Cancel and Transcend. The price is only on
+## the square that brought the player here; the button carries the coin and no figure, as Claim does.
+## A short purse greys the deed, never the asking.
+func _ask_way_out() -> void:
+	var body := _open_told(FortuneTeller.LABELS[FortuneTeller.TRANSCEND])
+	var lines: VBoxContainer = _told_scroll.get_child(0)
+	for line: String in TRANSCEND_LINES:
+		lines.add_child(_told_line(line))
+	var price := _fortune_price(FortuneTeller.TRANSCEND)
+	var answers := HBoxContainer.new()
+	answers.add_theme_constant_override("separation", ROW_GAP)
+	body.add_child(answers)
+	var cancel := UITheme.button("Cancel", "LightButton", "Stay in this world")
+	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cancel.pressed.connect(_leave_told)
+	answers.add_child(cancel)
+	var panel: Control = _told.get_node(TOLD_PANEL)
+	var take := func() -> void:
+		# Not once Cancel has answered: the question takes a moment to shrink away, its buttons with it.
+		if Juice.leaving(panel):
+			return
+		_close_told()
+		transcend_pressed.emit()
+	var leave := _priced("Transcend", price, "LightButton", _why_not(price, false),
+			"Leave this world for %s gold" % BigNumber.format(price), take, false)
+	leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	answers.add_child(leave)
+	# A warning, not a reward: no wash.
+	_show_told(false)
+
+
+## One of her popups, empty: a holder for the whole window, a titled panel with no X -- like a
+## reward's, its way out is at its foot (and Escape) -- and a scroll in `_told_scroll` for what she
+## says. Returns the body, for the buttons that go under the scroll.
+func _open_told(title: String) -> VBoxContainer:
+	_close_told()
+	_told = Control.new()
+	add_child(_told)
+	# Over the bag too, which a window held upright stands under this page (`BagPage._ask` does the same).
+	move_to_front()
+	var panel := UITheme.titled_panel(title, "", Callable())
+	panel.name = TOLD_PANEL
+	_told.add_child(panel)
+	var body := UITheme.body_of(panel)
+	_told_scroll = UITheme.scroll()
+	body.add_child(_told_scroll)
+	_told_scroll.add_child(UITheme.vbox(ROW_GAP, TOLD_WIDTH))
+	return body
+
+
+## Brings the popup `_open_told` built up, the rewards' way.
+func _show_told(win: bool) -> void:
+	Juice.popup(_told, _told.get_node(TOLD_PANEL), _ui_scale, win)
+	# Twice: a wrapped label only knows how tall it is once it has been laid out once.
+	_place_told()
+	_place_told.call_deferred()
+
+
+## Her answer's scroll, as tall as the answer or as what the window leaves, measured again at every
+## `layout()`. A window made smaller leaves the scroll less, and a panel never shrinks to what it
+## holds by itself.
+func _place_told() -> void:
+	if _told == null:
+		return
+	var lines: Control = _told_scroll.get_child(0)
+	var tall := minf(lines.get_combined_minimum_size().y, get_viewport_rect().size.y / _ui_scale - TOLD_CHROME)
+	var less := tall < _told_scroll.custom_minimum_size.y
+	_told_scroll.custom_minimum_size.y = tall
+	if less:
+		(_told.get_node(TOLD_PANEL) as Control).reset_size()
+
+
+## Dismiss and Escape: the answer shrinks away, then goes. It is let go of at once, so the page under
+## it can be pressed again the moment it starts to leave.
+func _leave_told() -> void:
+	if _told == null:
+		return
+	var holder := _told
+	_told = null
+	_told_scroll = null
+	Juice.pop_out(holder.get_node(TOLD_PANEL), holder.queue_free)
+
+
+## Gone at once, with no shrink: a new town, another counter, or another answer taking its place.
+func _close_told() -> void:
+	if _told != null:
+		remove_child(_told)
+		_told.queue_free()
+		_told = null
+		_told_scroll = null
+
+
+## Escape on her answer is its Dismiss, reading no tick, and the press stops here: the town stays up.
+func _unhandled_input(event: InputEvent) -> void:
+	if _told != null and is_visible_in_tree() and event.is_action_pressed("ui_cancel"):
+		get_viewport().set_input_as_handled()
+		_leave_told()
+
+
+static func _told_line(text: String, color: Variant = null) -> Label:
+	return BountyList.wrapped(text, TOLD_WIDTH, color)
+
+
+func _answer(reading: String, lines: VBoxContainer) -> void:
+	match reading:
+		FortuneTeller.ROADS:
+			# That they are all on the map, and no more: where each one lies is the map's to show.
+			lines.add_child(_told_line("There. Every settlement between these walls is on your map. "
+					+ "You'll walk past half of them anyway."))
+		FortuneTeller.TREASURE:
+			lines.add_child(_told_line("There's a star over the nearest chest you haven't seen. "
+					+ "Come back when you want another."))
+			lines.add_child(_told_line("It stays until you open it. I don't do refunds.", Palette.TEXT_SOFT))
+		FortuneTeller.APPRAISE:
+			lines.add_child(ItemDetails.line(_bag_piece.display_name(), _bag_piece.text_color(), TOLD_WIDTH))
+			# What the table is -- the base's whole pool, not what this piece has.
+			lines.add_child(_told_line("%s: every modifier it can roll" % _bag_piece.type, Palette.TEXT_SOFT))
+			lines.add_child(UITheme.rule(TOLD_WIDTH))
+			# Its own box: the answer's row gap would pull the table's stripes apart.
+			var table := UITheme.vbox(0)
+			lines.add_child(table)
+			for row in FortuneTeller.odds(_bag_piece):
+				table.add_child(_odds_row(row, table.get_child_count() % 2 == 1, TOLD_WIDTH))
+
+
+## One modifier she read off a piece: the line with its band on the left, how often it comes up on the right.
+func _odds_row(row: Dictionary, striped: bool, width: float) -> PanelContainer:
+	var line := UITheme.table_row(str(row["line"]), "%.1f%%" % float(row["share"]), striped,
+			width, null, Palette.TEXT_SOFT)
+	var share: Label = line.find_child(UITheme.TABLE_VALUE, true, false)
+	share.tooltip_text = "Weight %d" % int(row["weight"])
+	share.mouse_filter = Control.MOUSE_FILTER_STOP
+	return line
+
+
+# ---- her banishing
+
+## The banishing's screen, in her list's place as a shelf piece's is in the shelf's (the user's,
+## 2026-10-10): every unlocked unique by name where a shelf's squares stand, a banished one greyed, and
+## pinned at the foot the arrow back beside Banish with what the next one costs -- or Restore, for
+## nothing, while a banished one is picked. It stays through as many as the player pays for.
 func _fill_banish() -> void:
 	var ids := _unlocked()
 	ids.sort_custom(func(a: String, b: String) -> bool:
-		return str(UniqueTable.UNIQUES[a]["name"]).naturalnocasecmp_to(str(UniqueTable.UNIQUES[b]["name"])) < 0)
+		return str(UniqueTable.UNIQUES[a]["name"]).naturalnocasecmp_to(
+				str(UniqueTable.UNIQUES[b]["name"])) < 0)
 	var gone := FortuneTeller.banished(inventory.fortunes)
-	var grid := GridContainer.new()
-	grid.columns = STOCK_COLS
 	# The shelf's own pitch with no price cell round a square, centred as its squares are in theirs.
-	grid.add_theme_constant_override("h_separation", STOCK_CELL - ItemSlot.SIDE + STOCK_GAP)
-	grid.add_theme_constant_override("v_separation", STOCK_GAP)
+	var grid := _grid(STOCK_CELL - ItemSlot.SIDE + STOCK_GAP)
 	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	# Pass, not stop: the scroll under it has to see a finger's drag (`_on_banish_input`).
 	grid.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -1083,7 +1398,8 @@ func _fill_banish() -> void:
 		var slot := ItemSlot.make(piece, id == _banish_pick)
 		slot.still()
 		slot.hint = CollectionPage.write_hint.bind(piece, true)
-		# Past the whole page, never over the squares still to be looked at.
+		# What a unique is is its own card's to say, past the whole page: never over the squares still
+		# to be looked at. The picked square keeps it up while the cursor goes to the button.
 		slot.set_meta(ItemCard.BESIDE, _panel)
 		if id == _banish_pick:
 			slot.set_meta(ItemCard.PINNED, true)
@@ -1093,17 +1409,8 @@ func _fill_banish() -> void:
 	grid.gui_input.connect(_on_banish_input.bind(grid))
 	_scrolled(ROW_GAP).add_child(grid)
 
-	var row := HBoxContainer.new()
-	# No tooltip (the user's, 2026-10-10): the arrow says it. Named, which is how the tests find it.
-	var back := UITheme.back_button("")
-	back.name = BANISH_BACK
-	back.pressed.connect(func() -> void:
-		_banishing = false
-		_fill()
-		layout())
-	row.add_child(back)
-	# The small face: at Pixellari's 16 px the word, a six-figure price and the coin beside the arrow
-	# ran the page a dozen panel pixels past `BODY_WIDTH`, as the smith's two did side by side.
+	# The verb on the small face: at Pixellari's 16 px the word, a six-figure price and the coin beside
+	# the arrow ran the page past `BODY_WIDTH`.
 	var verb: Button
 	if gone.has(_banish_pick):
 		verb = UITheme.button("Restore", "SmallButton", "")
@@ -1116,9 +1423,11 @@ func _fill_banish() -> void:
 				FortuneTeller.why_not_banish(_banish_pick, _unlocked(), inventory.fortunes))
 		verb.disabled = not _banish_why_not(price).is_empty()
 		verb.pressed.connect(_on_banish_pressed)
-	verb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(verb)
-	_rows.add_child(row)
+	var to_spells := func() -> void:
+		_banishing = false
+		_refresh()
+	# The arrow has no tooltip either (the user's, 2026-10-10).
+	_back_row("", to_spells, verb).name = BANISH_BACK
 
 
 ## The uniques this build has that the player has unlocked: what she counts before she offers the
@@ -1159,11 +1468,9 @@ func _on_banish_input(event: InputEvent, grid: Control) -> void:
 ## One unique picked on the banishing's screen, or put down again by a second press.
 func _on_banish_picked(id: String) -> void:
 	_banish_pick = "" if id == _banish_pick else id
-	_fill()
-	layout()
+	_refresh()
 
 
-## The picked unique out of this world's drops, paid for at the price the button showed.
 func _on_banish_pressed() -> void:
 	var price := _fortune_price(FortuneTeller.BANISH)
 	if not _banish_why_not(price).is_empty():
@@ -1174,555 +1481,12 @@ func _on_banish_pressed() -> void:
 	_after_banish()
 
 
-## The picked unique back in the drops, for nothing.
 func _on_restore_pressed() -> void:
 	FortuneTeller.restore(inventory.fortunes, _banish_pick)
 	_after_banish()
 
 
-## Written down and drawn again where it stands, nothing picked: the screen stays for the next one.
+## Nothing picked, and the screen stays for the next one.
 func _after_banish() -> void:
 	_banish_pick = ""
-	inventory.save(_save_path)
-	_fill()
-	layout()
-	# Nothing is open, but the bag still has to hear: the purse it draws may have just moved.
-	offer_changed.emit(null)
-
-
-## What she said, over the whole window as the bag's questions are (`BagPage._ask`): a titled panel
-## with the reading's name on its bar, the answer in a scroll, and Dismiss and "Don't show this again"
-## under it, in reach from the moment it opens however long the answer is. A ticked Dismiss writes
-## `SKIP_TOLD + reading` into `inventory.tips`, and from then on that reading answers with one line on
-## the page instead (`_cast`). The appraisal offers no tick: its table is the whole of what was bought.
-func _tell(reading: String) -> void:
-	_close_told()
-	var can_skip := reading != FortuneTeller.APPRAISE
-	if can_skip and SKIP_TOLD + reading in inventory.tips:
-		_cast = reading
-		return
-	_cast = ""
-	var body := _open_told(FortuneTeller.LABELS[reading])
-	_answer(reading, _told_scroll.get_child(0))
-	var panel: Control = _told.get_node(TOLD_PANEL)
-
-	var dismiss := UITheme.button("Dismiss", "LightButton", "")
-	dismiss.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	body.add_child(dismiss)
-	var skip := BagPage.check_box("Don't show this again")
-	skip.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	skip.visible = can_skip
-	body.add_child(skip)
-	# Once: pressed again as the answer shrinks away, a ticked Dismiss would write its reading twice.
-	dismiss.pressed.connect(func() -> void:
-		if Juice.leaving(panel):
-			return
-		if (skip.get_node(BagPage.TICK_NAME) as Button).button_pressed:
-			inventory.tips.append(SKIP_TOLD + reading)
-			inventory.save(_save_path)
-		_leave_told())
-	# A reading is something bought, so it comes up as a reward does: the wash and the sparks.
-	_show_told(true)
-
-
-## One of her popups, empty: a holder for the whole window (`Juice.popup` stands it there), a titled
-## panel with no X -- like a reward's, its way out is at its foot (and Escape) -- and a scroll in
-## `_told_scroll` for what she says. Returns the body, for the buttons that go under the scroll.
-func _open_told(title: String) -> VBoxContainer:
-	_close_told()
-	_told = Control.new()
-	add_child(_told)
-	# Over the bag too, which a window held upright stands under this page (`BagPage._ask` does the same).
-	move_to_front()
-	var panel := UITheme.titled_panel(title, "", Callable())
-	panel.name = TOLD_PANEL
-	_told.add_child(panel)
-	var body := UITheme.body_of(panel)
-	_told_scroll = UITheme.scroll()
-	body.add_child(_told_scroll)
-	_told_scroll.add_child(UITheme.vbox(ROW_GAP, TOLD_WIDTH))
-	return body
-
-
-## Brings the popup `_open_told` built up, the rewards' way.
-func _show_told(win: bool) -> void:
-	Juice.popup(_told, _told.get_node(TOLD_PANEL), _ui_scale, win)
-	# Twice: a wrapped label only knows how tall it is once it has been laid out once.
-	_place_told()
-	_place_told.call_deferred()
-
-
-## The way out, asked before it is done: what is lost and what it costs, over Cancel and Transcend. The
-## price is only on the square that brought the player here; the button carries the coin and no figure,
-## as Claim does. A short purse greys the deed, never the asking.
-func _ask_way_out() -> void:
-	var body := _open_told(FortuneTeller.LABELS[FortuneTeller.TRANSCEND])
-	var lines: VBoxContainer = _told_scroll.get_child(0)
-	for line: String in TRANSCEND_LINES:
-		lines.add_child(BountyList.wrapped(line, TOLD_WIDTH))
-	var price := _fortune_price(FortuneTeller.TRANSCEND)
-	var answers := HBoxContainer.new()
-	answers.add_theme_constant_override("separation", ROW_GAP)
-	body.add_child(answers)
-	var cancel := UITheme.button("Cancel", "LightButton", "Stay in this world")
-	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cancel.pressed.connect(_leave_told)
-	answers.add_child(cancel)
-	var refused := _why_not(price, false)
-	var leave := UITheme.priced_button("Transcend", price, "LightButton", refused if not refused.is_empty()
-			else "Leave this world for %s gold" % BigNumber.format(price), false)
-	leave.disabled = not refused.is_empty()
-	leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	# Not once Cancel has answered: the question takes a moment to shrink away, its buttons with it.
-	var panel: Control = _told.get_node(TOLD_PANEL)
-	leave.pressed.connect(func() -> void:
-		if Juice.leaving(panel):
-			return
-		_close_told()
-		transcend_pressed.emit())
-	answers.add_child(leave)
-	_show_told(false)
-
-
-## Her answer to `reading`, written into `lines`.
-func _answer(reading: String, lines: VBoxContainer) -> void:
-	match reading:
-		FortuneTeller.ROADS:
-			# That they are all on the map, and no more: where each one lies is the map's to show.
-			lines.add_child(BountyList.wrapped("There. Every settlement between these walls is on your map. "
-					+ "You'll walk past half of them anyway.", TOLD_WIDTH))
-		FortuneTeller.TREASURE:
-			lines.add_child(BountyList.wrapped("There's a star over the nearest chest you haven't seen. "
-					+ "Come back when you want another.", TOLD_WIDTH))
-			lines.add_child(BountyList.wrapped("It stays until you open it. I don't do refunds.", TOLD_WIDTH,
-					Palette.TEXT_SOFT))
-		FortuneTeller.APPRAISE:
-			lines.add_child(ItemDetails.line(_bag_piece.display_name(), _bag_piece.text_color(), TOLD_WIDTH))
-			# What the table is, since a column of lines and percentages says nothing on its own: the
-			# base's whole pool, not what this piece has.
-			lines.add_child(BountyList.wrapped("%s: every modifier it can roll" % _bag_piece.type, TOLD_WIDTH,
-					Palette.TEXT_SOFT))
-			lines.add_child(UITheme.rule(TOLD_WIDTH))
-			# Its own box: the answer's row gap would pull the table's stripes apart.
-			var table := UITheme.vbox(0)
-			lines.add_child(table)
-			for row in FortuneTeller.odds(_bag_piece):
-				table.add_child(_odds_row(row, table.get_child_count() % 2 == 1, TOLD_WIDTH))
-
-
-## Her answer's scroll, as tall as the answer or as what the window leaves, measured again whenever the
-## page is laid out; `Juice.popup` keeps its holder over the window and its panel in the middle. A
-## window made smaller leaves the scroll less, and a panel never shrinks to what it holds by itself.
-func _place_told() -> void:
-	if _told == null:
-		return
-	var lines: Control = _told_scroll.get_child(0)
-	var tall := minf(lines.get_combined_minimum_size().y, get_viewport_rect().size.y / _ui_scale - TOLD_CHROME)
-	var less := tall < _told_scroll.custom_minimum_size.y
-	_told_scroll.custom_minimum_size.y = tall
-	if less:
-		(_told.get_node(TOLD_PANEL) as Control).reset_size()
-
-
-## Whether one of her answers (or the way out's question) stands over the window, for a banner to wait behind.
-func telling() -> bool:
-	return _told != null
-
-
-## Dismiss and Escape: the answer shrinks away, then goes. It is let go of at once, so the page under
-## it can be pressed again the moment it starts to leave.
-func _leave_told() -> void:
-	if _told == null:
-		return
-	var holder := _told
-	_told = null
-	_told_scroll = null
-	Juice.pop_out(holder.get_node(TOLD_PANEL), holder.queue_free)
-
-
-## Gone at once, with no shrink: a new town, another counter, or another answer taking its place.
-func _close_told() -> void:
-	if _told != null:
-		remove_child(_told)
-		_told.queue_free()
-		_told = null
-		_told_scroll = null
-
-
-## Escape on her answer is its Dismiss, reading no tick, and the press stops here: the town stays up.
-func _unhandled_input(event: InputEvent) -> void:
-	if _told != null and is_visible_in_tree() and event.is_action_pressed("ui_cancel"):
-		get_viewport().set_input_as_handled()
-		_leave_told()
-
-
-## One half of her list: a heading, a rule under it and that half's squares on the shelf's own grid.
-func _spell_grid(heading: String, readings: Array) -> VBoxContainer:
-	var box := UITheme.vbox(ROW_GAP, BODY_WIDTH)
-	box.add_child(UITheme.section(heading))
-	var grid := GridContainer.new()
-	grid.columns = STOCK_COLS
-	grid.add_theme_constant_override("h_separation", STOCK_GAP)
-	grid.add_theme_constant_override("v_separation", STOCK_GAP)
-	for reading: String in readings:
-		var square := _spell_square(reading)
-		# The roads, once bought in this town, say so where the price was, and no coin.
-		grid.add_child(_cost_cell(square, "Bought", null, true) if _roads_bought(reading)
-				else _price_cell(square, _fortune_price(reading)))
-	box.add_child(grid)
-	return box
-
-
-## One reading on her grid: its mark, lit by a halo while the cursor is on it, and what she will not
-## read greyed and dead with the reason in its tooltip -- the shelf's rule, where a piece the purse
-## cannot cover greys where it stands. `_price_cell` puts the price under what this returns. No name
-## over it (the user's call, 2026-09-25): the badges carry the spell, and the tooltip says what it does.
-func _spell_square(reading: String) -> Control:
-	var refused := _fortune_why_not(reading)
-	# A Panel rather than the mark itself, because what the hover lights is a stylebox: the mark is
-	# its child and fills it.
-	var square := Panel.new()
-	# Named after the reading, which is how the tests pick one square out of the six.
-	square.name = reading
-	square.custom_minimum_size = Vector2(SPELL_SIDE, SPELL_SIDE)
-	square.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	square.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
-	# What a reading does, with no name before it (the user's call, 2026-09-25). Not how often it has
-	# been asked: the price under it already says it has climbed.
-	square.tooltip_text = refused if not refused.is_empty() else FORTUNE_TIPS[reading]
-	# A finger's first tap on a spell reads it and the next casts it (`Cursors.applies`), so under one
-	# its words come up with the tap and stay, as an info mark's do, rather than wait for a hover.
-	if Cursors.touched:
-		square.set_meta(TipCard.NOW, true)
-	var icon := TextureRect.new()
-	# Mode before texture and size, for the reason `_price_cell`'s coin gives: a TextureRect's minimum
-	# is its own texture until `expand_mode` says otherwise.
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_SCALE
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	icon.texture = load(FORTUNE_ICONS[reading])
-	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
-	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	square.add_child(icon)
-	if not refused.is_empty():
-		# OrbSlot's grey, so "you could, and cannot now" reads the same here as on the orb tray.
-		square.modulate = OrbSlot.DIM
-		return square
-	Cursors.wear(square, Cursors.HAND)
-	var glow := StyleBoxFlat.new()
-	glow.bg_color = HOVER_GLOW_COLOR
-	glow.set_expand_margin_all(HOVER_GLOW)
-	square.mouse_entered.connect(func() -> void:
-		square.add_theme_stylebox_override("panel", glow)
-		icon.modulate = HOVER_LIFT)
-	square.mouse_exited.connect(func() -> void:
-		square.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
-		icon.modulate = Color.WHITE)
-	square.gui_input.connect(func(event: InputEvent) -> void:
-		if (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT
-				and event.pressed):
-			square.accept_event()  # Before the redraw frees it, which would let the press through to the map.
-			if Cursors.applies("spell:" + reading):
-				_on_reading_pressed(reading))
-	return square
-
-
-## One modifier she read off a piece: the line with its band on the left, how often it comes up on the right.
-func _odds_row(row: Dictionary, striped: bool, width: float) -> PanelContainer:
-	var line := UITheme.table_row(str(row["line"]), "%.1f%%" % float(row["share"]), striped,
-			width, null, Palette.TEXT_SOFT)
-	var share: Label = line.find_child(UITheme.TABLE_VALUE, true, false)
-	share.tooltip_text = "Weight %d" % int(row["weight"])
-	share.mouse_filter = Control.MOUSE_FILTER_STOP
-	return line
-
-
-## What a spell costs here, off the town's level -- the banishing's doubled for each one paid for.
-func _fortune_price(reading: String) -> float:
-	return TownPrices.fortune_price(reading, _cell,
-			FortuneTeller.banishes(inventory.fortunes) if reading == FortuneTeller.BANISH else 0)
-
-
-## The uniques a bounty may hand over: the unlocked ones less what she has banished.
-func _dropping() -> Array:
-	return FortuneTeller.dropping(Achievements.unlocked(inventory), inventory.fortunes)
-
-
-## Whether this town has sold the roads already: once a town, as a great spell is.
-func _roads_bought(reading: String) -> bool:
-	return reading == FortuneTeller.ROADS and FortuneTeller.asked(_drawer, reading)
-
-
-## Why she will not give this spell, or "" when she will. A great spell is sold once a settlement; a
-## reading is sold as often as it is paid for.
-func _fortune_why_not(reading: String) -> String:
-	if view == null:
-		return "She sees nothing here"
-	if reading in FortuneTeller.GREAT and FortuneTeller.asked(_drawer, reading):
-		return "That spell is spent here"
-	if _roads_bought(reading):
-		return "Already bought here"
-	match reading:
-		FortuneTeller.TREASURE:
-			var told := FortuneTeller.chest(inventory.fortunes)
-			if told != TownWorld.NO_SPOT and view.has_chest(told - view.origin):
-				return "The star is already out"
-			if _near_chest == HexMap.NO_CELL:
-				return "She sees no hidden chest"
-		FortuneTeller.APPRAISE:
-			var why := FortuneTeller.why_not_appraise(_bag_piece)
-			if not why.is_empty():
-				return why
-		FortuneTeller.HOMECOMING:
-			if view.homes().is_empty():
-				return "You have found nowhere else to stand"
-		FortuneTeller.TRANSCEND, FortuneTeller.BANISH:
-			# Asking is free and is where the price is said; the Transcend in her question is what a
-			# short purse greys, and the price under the square is brick. The banishing's screen is
-			# also where one is brought back, for nothing.
-			return ""
-	return _why_not(_fortune_price(reading), false)
-
-
-## One spell asked for. Paid for and written down together, the way a purchase is -- all but the two
-## that are aimed at the map, which are paid for once land has been chosen (`spell_aimed`).
-func _on_reading_pressed(reading: String) -> void:
-	if not _fortune_why_not(reading).is_empty():
-		return
-	var price := _fortune_price(reading)
-	if reading in FortuneTeller.GREAT:
-		spell_aimed.emit(reading, price, _spot)
-		return
-	# Asked for, not done: she says what it costs the player first, and the button under that is the deed.
-	if reading == FortuneTeller.TRANSCEND:
-		_ask_way_out()
-		return
-	# Its own screen in her list's place: which unique goes is picked there, and paid for there.
-	if reading == FortuneTeller.BANISH:
-		_banishing = true
-		_banish_pick = ""
-		_fill()
-		layout()
-		return
-	inventory.gold -= price
-	match reading:
-		FortuneTeller.ROADS:
-			# The one drawer key a reading still writes: this town has sold the roads, and sells them no more.
-			_drawer[FortuneTeller.ASKED + reading] = true
-			if view.reveal_ring_towns(_cell) > 0:
-				# A chest the roads brought into sight is no longer one she may point at.
-				_near_chest = view.nearest_chest(true)
-				towns_revealed.emit()
-		FortuneTeller.TREASURE:
-			var spot := view.origin + _near_chest
-			inventory.fortunes[FortuneTeller.CHEST] = [spot.x, spot.y]
-			chest_bought.emit(_near_chest)
-	print("The fortuneteller read %s for %s gold" % [reading, BigNumber.format(price)])
-	inventory.save(_save_path)
-	_tell(reading)
-	_fill()
-	layout()
-	# Nothing is open, but the bag still has to hear: the purse it draws has just moved.
-	offer_changed.emit(null)
-
-
-## The smith's own refusal, or the one the page owns: a purse that cannot pay. Carried or worn is all
-## one to him -- `_bag_piece` is whatever the bag page has open, and that is the player's own piece
-## either way -- so a set that is being worn is improved without stripping it off first.
-func _smith_why_not(rule: String, price: float) -> String:
-	if not rule.is_empty():
-		return rule
-	return _why_not(price, false)
-
-
-## The deepest level the smith here may take a piece to: the level of the deepest land in this town's
-## wall circle (`MapBuilder.circle_level`), 3 inside the first wall -- a boss's tier rode on top of it
-## until the user's 2026-10-03. Gated by the circle, not the town's own tile, so every fortress
-## between the same two walls works to the same ceiling.
-func _upgrade_cap() -> int:
-	return MapBuilder.circle_level(_cell)
-
-
-## One blow of the hammer. The gold goes whichever way it falls -- that is what the break chance is --
-## and the piece stays where it is either way, a level better or ruined for good.
-func _on_upgrade_pressed() -> void:
-	var cap := _upgrade_cap()
-	var price := TownPrices.upgrade_price(_bag_piece)
-	if not _smith_why_not(Blacksmith.why_not_upgrade(_bag_piece, cap), price).is_empty():
-		return
-	inventory.gold -= price
-	var upgraded := Blacksmith.upgrade(_bag_piece, cap, _smith_rng)
-	_strike(ANVIL_SOUND if upgraded else BREAK_SOUND)
-	if upgraded:
-		_smith_note = ""
-		print("Upgraded %s to level %d for %s gold"
-				% [_bag_piece.display_name(), _bag_piece.level, BigNumber.format(price)])
-	else:
-		_smith_note = "The hammer broke it."
-		print("Broke %s at level %d for %s gold"
-				% [_bag_piece.display_name(), _bag_piece.level, BigNumber.format(price)])
-	_smith_done()
-
-
-## One modifier pinned, drawn by the smith rather than chosen. Never breaks anything.
-func _on_lock_pressed() -> void:
-	var price := TownPrices.lock_price(_bag_piece)
-	if not _smith_why_not(Blacksmith.why_not_lock(_bag_piece), price).is_empty():
-		return
-	inventory.gold -= price
-	if not Blacksmith.lock(_bag_piece, _smith_rng):
-		return
-	_strike(ANVIL_SOUND)
-	print("Locked %s on %s for %s gold" % [ModifierTable.line(_bag_piece.locked_mod()),
-			_bag_piece.display_name(), BigNumber.format(price)])
-	_smith_done()
-
-
-## After either blow: the save, the counter and the bag. `offer_changed` with nothing off the shelf is
-## how the bag is told to draw itself again -- it keeps the piece it has open, which is the piece that
-## has just changed under the player's eyes, and the purse it draws has just moved too.
-func _smith_done() -> void:
-	inventory.save(_save_path)
-	_fill()
-	layout()
-	offer_changed.emit(null)
-
-
-## The bag's orb card on `square` while the cursor is over it, with `note` as its last line where the
-## bag says how to use one. Beside the square, as `TipCard` stands; placed again deferred, since the
-## first pass measures labels that have not laid out yet. A square freed under the cursor (the tab
-## redrawn by a purchase) takes the card with it.
-func _card_for(square: OrbSlot, note: String, tone: Color) -> void:
-	square.hovered.connect(func(orb: String) -> void:
-		_orb_card.fill(orb, inventory.orb_count(orb), note, tone)
-		_orb_card.show()
-		_place_orb_card(square)
-		_place_orb_card.call_deferred(square))
-	square.unhovered.connect(_orb_card.hide)
-	square.tree_exiting.connect(_orb_card.hide)
-
-
-func _place_orb_card(square: OrbSlot) -> void:
-	if not _orb_card.visible or not is_instance_valid(square) or not square.is_inside_tree():
-		return
-	_orb_card.reset_size()
-	_orb_card.position = ItemCard.beside(square.get_global_rect(),
-			_orb_card.get_combined_minimum_size() * _ui_scale, get_viewport_rect().size, ItemCard.GAP * _ui_scale)
-
-
-## Why this cannot be bought, or "" when it can. The bag's refusal is not a nicety: `Inventory.add`
-## on a full bag destroys the worst piece in it, so buying into one would be paying a vendor to throw
-## something away. An orb passes `needs_room` false -- orbs are counts, outside the cap entirely.
-func _why_not(price: float, needs_room: bool) -> String:
-	if inventory.gold < price:
-		return "Not enough gold"
-	if needs_room and inventory.is_full():
-		return "The bag is full"
-	return ""
-
-
-## Opens the square that was pressed. The cell takes the press because the square inside it does not.
-func _on_shelf_input(event: InputEvent, at: int) -> void:
-	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT
-			and event.pressed):
-		return
-	accept_event()  # Before the redraw frees the cell, which would let the press through to the map.
-	var shelf := VendorStock.items(_drawer)
-	if at < 0 or at >= shelf.size() or shelf[at] == null:
-		return
-	# With an orb in hand the press spends it on the piece where it stands, the player's gamble on a
-	# piece that is not theirs yet: the price under it is read off the rarity and moves with it. The
-	# shelf is drawn again when the orb lands, which a question about lowering it may put off.
-	if _held != "":
-		# Under a finger the first tap only puts the piece's card up (`Cursors.applies`) -- asked by its
-		# place on the shelf, which makes its pieces anew every time it is drawn.
-		if Cursors.applies("shelf:%d" % at):
-			craft_held.call(shelf[at], func() -> void:
-				VendorStock.put(_drawer, at, shelf[at])
-				redraw())
-		return
-	_offer = shelf[at]
-	_offer_at = at
-	_fill()
-	layout()
-	offer_changed.emit(_offer)
-
-
-## Back to the shelf. `tell` is false while the page is being rebuilt from scratch, where whoever
-## opened it is about to point the bag at this counter anyway.
-func _close_offer(tell: bool) -> void:
-	_offer = null
-	_offer_at = -1
-	_fill()
-	layout()
-	if tell:
-		offer_changed.emit(null)
-
-
-## One piece over the counter. Paid for and taken off the shelf together, and refused outright on a
-## short purse or a full bag -- the button is already grey, and this is the same rule where a caller
-## cannot see one.
-func _on_buy_item() -> void:
-	var price := TownPrices.buy_price(_offer)
-	if _offer == null or not _why_not(price, true).is_empty():
-		return
-	inventory.gold -= price
-	inventory.add(_offer)
-	VendorStock.take(_drawer, VendorStock.ITEMS, _offer_at)
-	print("Bought %s (%s, level %d) for %s gold"
-			% [_offer.type, _offer.rarity_name(), _offer.level, BigNumber.format(price)])
-	inventory.save(_save_path)
-	_close_offer(true)
-
-
-## One orb over the counter. Counted in rather than added to the bag, so nothing can refuse it but
-## the purse.
-func _on_buy_orb(orb: String, at: int) -> void:
-	var price := TownPrices.orb_value(orb, _cell)
-	if not _why_not(price, false).is_empty():
-		return
-	inventory.gold -= price
-	inventory.add_orb(orb)
-	VendorStock.take(_drawer, VendorStock.ORBS, at)
-	print("Bought %s for %s gold" % [orb, BigNumber.format(price)])
-	inventory.save(_save_path)
-	_fill()
-	layout()
-	# Nothing is open, but the bag still has to hear: the purse it draws and the tray it counts have
-	# both just moved.
-	offer_changed.emit(null)
-
-
-## `OrbTable.UPSCALE_COST` of the orb before this one traded for one of it. No gold changes hands.
-func _on_upscale(orb: String) -> void:
-	var from := OrbTable.upscale_from(orb)
-	if from.is_empty() or inventory.orb_count(from) < OrbTable.UPSCALE_COST \
-			or orb not in OrbTable.unlocked(inventory.walls_ever()):
-		return
-	for i in OrbTable.UPSCALE_COST:
-		inventory.spend_orb(from)
-	inventory.add_orb(orb)
-	print("Traded %d %s for one %s" % [OrbTable.UPSCALE_COST, from, orb])
-	inventory.save(_save_path)
-	_fill()
-	layout()
-	offer_changed.emit(null)
-
-
-func _on_tab_pressed(service: String) -> void:
-	_open_tab = service
-	_smith_note = ""
-	_cast = ""
-	_banishing = false
-	_close_told()
-	_close_offer(true)
-	tab_changed.emit(service)
-
-
-## A wrapped line of the page's own width. Word wrapping rather than the refusal panel's arbitrary
-## kind: these are sentences, not file paths.
-static func _sign(text: String, color: Variant = null) -> Label:
-	var label := UITheme.label(text, color, true)
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.custom_minimum_size.x = BODY_WIDTH
-	return label
+	_deed_done()

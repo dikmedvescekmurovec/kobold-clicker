@@ -1,13 +1,8 @@
 class_name WallUnlocks
 extends RefCounted
-## What breaking each ice wall opens for good (the user's ladder, 2026-10-09): every unlock is read off
-## the deepest wall ever broken, in any world (`Inventory.walls_ever`), so a transcension never takes
-## one back and a wall broken again in a later world opens nothing new.
-##
-## Walls 1 and 2 are the orbs, two each (`OrbTable.unlocked`). Then Gollux, the runes and a branch off
-## the skill tree's root, distant charting, another branch, the item filter and the abilities, and from
-## the 8th wall on one more branch a wall (`root_branches`). The wall's tile panel lists what it
-## opens (`of_wall`), so the next wall is always something to look forward to.
+## What breaking each ice wall opens for good (the user's ladder, 2026-10-09). Every unlock is read
+## off the deepest wall ever broken, in any world (`Inventory.walls_ever`), so a transcension takes
+## none back. Walls 1 and 2 are the orbs', two each (`OrbTable.unlocked`), and are not in `WALL`.
 
 const GOLLUX := "gollux"
 const RUNES := "runes"
@@ -17,7 +12,8 @@ const ABILITIES := "abilities"
 
 ## The wall that opens each.
 const WALL := {GOLLUX: 3, RUNES: 3, DISTANT: 4, FILTER: 6, ABILITIES: 7}
-## The walls short of `BRANCH_FROM` that add a branch to the root, and the first of the walls that add one each.
+## The walls short of `BRANCH_FROM` that each add a branch to the skill tree's root; from `BRANCH_FROM`
+## on, every wall adds one.
 const BRANCH_WALLS := [3, 5]
 const BRANCH_FROM := 8
 
@@ -38,7 +34,6 @@ const SHOWN := {
 const BRANCH_ICON := "res://Assets/Skills/root.png"
 
 
-## Whether `walls` broken opens `id`.
 static func has(walls: int, id: String) -> bool:
 	return walls >= int(WALL[id])
 

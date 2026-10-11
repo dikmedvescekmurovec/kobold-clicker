@@ -1,25 +1,23 @@
 class_name DialogueBox
 extends Control
-## Someone in the world speaking: their name and words on the left, their portrait in a tan socket on
-## the right behind a rule (the user's sketch, 2026-09-26) -- the hero the other way round, his portrait
-## on the left (the user's rule, the same day) -- one page at a time along the window's foot,
-## over a shade across the whole window that takes every click. The words come in quickly a letter at
-## a time; a click anywhere finishes the page, the next turns it, and past the last it says `finished`.
-## Escape is the main scene's, which lets it go whole. The main scene raises one for a tip that names a
-## speaker (`TIPS`).
+## Someone in the world speaking (the user's sketch, 2026-09-26): their name and words on the left and
+## their portrait in a tan socket on the right behind a rule -- the hero's the other way round, his
+## portrait on the left (the user's rule, the same day) -- one page at a time along the window's foot,
+## over a shade across the whole window that takes every click. The words come in a letter at a time;
+## a click anywhere finishes the page, the next turns it, and past the last it says `finished`. Escape
+## is the main scene's, which lets it go whole and raises one for a tip that names a speaker (`TIPS`).
 
 signal finished
 
 ## A speaker's portrait: their idle's frames stacked top to bottom, cut by `tools/npc_portraits.py`.
 const PORTRAITS := "res://Assets/NPC/%s.png"
-## How tall every portrait frame is (the cutter's `HEIGHT`), so every box stands the same height. How
-## wide one is, is the strip's own width: the smith's is wider, to keep his anvil.
+## How tall every portrait frame is (the cutter's `HEIGHT`), so every box stands the same height. Its
+## width is the strip's own: the smith's is wider, to keep his anvil.
 const PORTRAIT_HEIGHT := 52
 ## The hero's portrait's name under `PORTRAITS`: the one speaker whose portrait stands on the left.
 const PLAYER := "player"
 ## How wide the words wrap, in panel pixels.
 const TEXT_WIDTH := 220
-## How fast the words come in, in letters a second.
 const LETTERS_PER_SECOND := 30.0
 ## Seconds a portrait frame is held.
 const FRAME_TIME := 0.15
@@ -27,11 +25,10 @@ const FRAME_TIME := 0.15
 const SOCKET_PAD := Vector4i(6, 11, 6, 1)  # left, top, right, bottom
 ## How far off the window's foot the box stands, in panel pixels.
 const FOOT_GAP := 8
-## The shade over everything behind the box.
 const SHADE := Color(Palette.INK, 0.5)
 ## The speaker's babble while a page comes in: a syllable every `LETTERS_PER_SYLLABLE` letters, each
-## cutting off the last, so it chatters in quick succession (the user's ask) -- one at least, even when
-## the page comes in whole. The hero's is pitched `PLAYER_PITCH` lower.
+## cutting off the last (the user's ask), and one at least, even when the page comes in whole. The
+## hero's is pitched `PLAYER_PITCH` lower.
 const VOICE := [preload("res://Sounds/Sfx/voice_1.ogg"), preload("res://Sounds/Sfx/voice_2.ogg"),
 		preload("res://Sounds/Sfx/voice_3.ogg"), preload("res://Sounds/Sfx/voice_4.ogg"),
 		preload("res://Sounds/Sfx/voice_5.ogg")]
@@ -81,7 +78,7 @@ func _init(speaker: String, pages: Array, portrait: Texture2D, left := false) ->
 	_words.custom_minimum_size.x = TEXT_WIDTH
 	_words.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(_words)
-	# The page is all there and there is more: a mark in the corner, blinking, the way a letter ends "over".
+	# Blinking in the corner once the page is all there: a click goes on.
 	_more = UITheme.label(">", Palette.TEXT_SOFT, true)
 	_more.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	column.add_child(_more)
@@ -132,7 +129,7 @@ func pop_up(final: float) -> void:
 		# The box took its wider size as it joined the tree, and a Control never shrinks back by itself.
 		_panel.reset_size()
 	_panel.resized.connect(_settle)
-	# And the window turned or resized under it: the box goes back to its foot.
+	# The window turned or resized under it: the box goes back to its foot.
 	resized.connect(_settle)
 	Juice.pop_in(_panel, final)
 	_settle()

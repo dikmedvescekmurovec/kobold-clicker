@@ -1,43 +1,36 @@
 class_name BagPage
 extends Control
-## The bag against the left edge, with the character sheet standing beside it and the orb tray at its
-## foot. Showing or hiding this node opens or closes all of it. Design notes in Scenes/DESIGN.md.
-##
-## Children, in draw order: the bag panel, the sheet, then the orb card, which overhangs the sheet.
+## The bag against the left edge, the sheet beside it (the doll; on the stones page the skill tree) and
+## the orb and rune trays at its foot. Built four ways by `_init`'s flags: the bag, the heirlooms, and
+## a transcension's bag and stones page. What each does and why: "bag_page.gd" in Scenes/UI/DESIGN.md
+## and the rules it points to; how the bag came to be this way: Scenes/DESIGN.md.
 
-## The bag's X was pressed.
 signal closed
-## The piece the bag has open changed, bag item or worn, and null when it went back to the grid.
-## Whoever is standing beside the bag acts on what is open in it -- the blacksmith's counter does.
+## The open piece changed, bag item or worn; null when none is open.
 signal selection_changed(item: Item)
-## `orb` went into a piece, ordinary or super. The main scene lights the hover card with it
-## (`ItemCard.shine`), the card being where the piece is read.
+## An orb, ordinary or super, went into a piece.
 signal crafted(orb: String)
-## The page has measured itself again, and `column_origin` may have moved: the sheet beside the bag
-## comes, goes and changes face with what is open.
+## The page measured itself again: `column_origin` may have moved.
 signal laid_out
-## The orb in hand changed, "" for none. The town page greys its shelf by it, as the grid is greyed.
+## The orb in hand changed, "" for none.
 signal held_changed(orb: String)
-## A piece was made an heirloom, which only a transcension's page can do (`TranscendPage`).
 signal heirloom_made(item: Item)
 
-## Four squares to a row: the narrowest a level's heading fits with its Auto and Clear marks beside
-## it. The gutter is the pack's own seven-to-one square-to-gutter proportion.
+## Four to a row is the narrowest a level's heading fits beside its two marks; the gutter is the pack's
+## own 7:1 square to gutter.
 const GRID_COLS := 4
 const SLOT_GAP := ItemSlot.SIDE / 7
-## The marks on a level's two buttons and the count's chest. Bare on the cream, so the pack's own brown
-## cut of each mark; Auto's struck-through chest turns green while it is on, as the pack turns its open
-## tab green.
 const AUTO_ICON := "res://Assets/UI/ui_icon_auto_brown.png"
 const AUTO_ON_ICON := "res://Assets/UI/ui_icon_auto_green.png"
 const CLEAR_ICON := "res://Assets/UI/ui_icon_trash_brown.png"
 const SELL_ICON := "res://Assets/UI/ui_icon_coins_brown.png"
 const COUNT_ICON := "res://Assets/UI/ui_icon_chest_brown.png"
-const SWAP_ICON :="res://Assets/UI/ui_icon_swap.png"
-## The filter's folder tabs over the grid (the user's pick of tools/qa/bag_filter_m1_b.png, 2026-10-07):
-## "" for everything, then each `LootTable.slot_of`, with its mark and its name -- the skill stones'
-## last (the user's, 2026-10-09). The town page's tabs, `FILTER_TAB` wide -- the least a mark and the face's
-## margins come to -- and `FILTER_GAP` apart, so nine stand in `WIDTH`.
+const SWAP_ICON := "res://Assets/UI/ui_icon_swap.png"
+const HIDE_ICON := "res://Assets/UI/ui_icon_caret_left.png"
+const SHOW_ICON := "res://Assets/UI/ui_icon_caret_right.png"
+## Filter tab -> [mark, tooltip], in tab order: "" shows everything, the rest are `LootTable.slot_of`
+## values, the stones' last (the user's, 2026-10-09). Nine tabs `FILTER_TAB` wide and `FILTER_GAP`
+## apart fit `WIDTH`.
 const FILTERS := {
 	"": ["slot_all", "All items"],
 	"weapon": ["sword", "Weapons"],
@@ -49,27 +42,23 @@ const FILTERS := {
 	"amulet": ["slot_amulet", "Amulets"],
 	SkillTree.SLOT: ["slot_stone", "Skill nodes"],
 }
+## Filled with a tab's mark and "green" (the open tab) or "brown".
 const FILTER_MARK := "res://Assets/UI/ui_icon_%s_%s.png"
 const FILTER_TAB := 18
 const FILTER_GAP := 1
-## Hide points back at the bag the doll folds into, Show out to where it opens.
-const HIDE_ICON := "res://Assets/UI/ui_icon_caret_left.png"
-const SHOW_ICON := "res://Assets/UI/ui_icon_caret_right.png"
-## An orb taking to a piece, a super orb's included -- its knock and its swell together, the user's
-## pairing; one that has nothing to do to it is silent.
+## Played together: the user's pairing.
 const ORB_APPLIED_SOUNDS := [preload("res://Sounds/Sfx/orb_applied.ogg"),
 		preload("res://Sounds/Sfx/orb_applied_layer.ogg")]
-## A piece put on or taken off.
 const EQUIP_SOUND := preload("res://Sounds/Sfx/equip.ogg")
-## What goes in front of a question's id in `inventory.tips` once the player has said not to ask it
-## again, how wide the question is set, and its tick box: the node's name and the mark it wears.
+## `SKIP_CONFIRM + id` in `inventory.tips` (the save): question `id` is not asked again.
 const SKIP_CONFIRM := "skip_confirm_"
-## The one question whose tick is remembered in `Settings.uniques` as the answer given, not in the save.
+## The one question whose tick keeps the answer given, in `Settings.uniques`, not in the save.
 const UNIQUES := "uniques"
 const CONFIRM_WIDTH := 150.0
+## The tick box's node name: how `_ask`, the other pages and the tests read it.
 const TICK_NAME := "Tick"
-## What a question's panel is called inside its holder, which the win's wash would otherwise push off
-## child 0 -- and which is how the shrink finds it.
+## A question's panel inside its holder, found by name (`_close_confirm`): a win's wash would push it
+## off child 0.
 const CONFIRM_PANEL := "Panel"
 const TICK: Array[String] = [
 	"......#",
@@ -79,8 +68,7 @@ const TICK: Array[String] = [
 	".###...",
 	"..#....",
 ]
-## A square's upgrade arrow (`is_upgrade`): leaf over an ink outline, so it reads on any frame; and
-## the child's name, which is how a test finds it.
+## A square's upgrade arrow (`is_upgrade`): `#` leaf over an `o` ink outline, so it reads on any frame.
 const UPGRADE: Array[String] = [
 	"...o...",
 	"..o#o..",
@@ -90,10 +78,10 @@ const UPGRADE: Array[String] = [
 	".o###o.",
 	".ooooo.",
 ]
+## The arrow's node name: how a test finds it.
 const UPGRADE_NAME := "Upgrade"
 static var _upgrade_texture: ImageTexture
-## The chevron in the middle of the tray's rule, there once the runes are (`_trays_hidden`): pointing down
-## while the runes and the orbs stand under it, up while they are folded away.
+## The trays' fold mark (`_fold_button`): as drawn while they stand under it, flipped while folded away.
 const CHEVRON: Array[String] = [
 	"#.....#",
 	"##...##",
@@ -104,137 +92,104 @@ const CHEVRON: Array[String] = [
 static var _chevrons: Array[ImageTexture] = []
 ## How many squares short of the cap the count turns rust.
 const NEARLY_FULL := 4
-## Fixed, so the panel keeps its width as the bag fills.
 const WIDTH := GRID_COLS * ItemSlot.SIDE + (GRID_COLS - 1) * SLOT_GAP
-## All six orbs in one row across WIDTH; the whole-pixel gap leaves under a gap's worth of slack,
-## which the centred tray splits (test_ui_theme holds the arithmetic).
+## Six orbs in one row across `WIDTH` (`test_ui_theme` holds the arithmetic).
 const ORB_COLS := 6
 const ORB_GAP := (WIDTH - ORB_COLS * OrbSlot.SIDE) / (ORB_COLS - 1)
 ## How far a press may travel, in panel pixels, and still be a click rather than a drag.
 const DRAG_THRESHOLD := 4.0
-## The outline round the square a dragged piece would drop into (`_process`): the gold the tree's lit
-## lines are drawn in, a pixel outside the square so it hides none of it; and the node's name, which is
-## how a test finds it.
+## The outline round the square a dragged piece would drop into (`_process`), a pixel outside it, and
+## its node name: how a test finds it.
 const DROP_MARK := Palette.GOLD
 const DROP_MARK_NAME := "DropMark"
 
-const DOLL_TEXTURE := preload("res://Assets/UI/ui_doll.png")
-const SOCKET_RING_TEXTURE := preload("res://Assets/UI/ui_socket_ring.png")
-const SOCKET_AMULET_TEXTURE := preload("res://Assets/UI/ui_socket_amulet.png")
-## The doll is drawn at the item icons' own pixel size: a 128 px figure (`tools/ui_kit.py`'s `doll()`) standing
-## where the pack's 43x46 one stood at 3x.
-const DOLL_SCALE := 1.0
 ## The air between the bag panel and the sheet.
 const WORN_GAP := 6.0
-## How much of the window's height the bag takes on a transcension's black screen.
+## How much of the room's height the bag takes on a transcension's black screen.
 const TRANSCEND_HEIGHT := 0.7
 ## How many rows of the grid a room held upright has to leave showing (`least_height`).
 const LEAST_ROWS := 2
-## Each socket's centre in the doll sprite's own pixels, before DOLL_SCALE. The places the pack's figure had
-## at 3x, kept when the pixellab doll replaced it (2026-09-23), which was generated and fitted to sit under them:
-## head, chest and feet down the middle, the shield at the left edge and the sword hand at the right. The
-## jewellery sits in a row below the figure. Rows and columns are one 51 px grid.
-const DOLL_SOCKETS := {
-	Equipment.Socket.HELMET: Vector2(63, 24),
-	Equipment.Socket.OFFHAND: Vector2(12, 75),
-	Equipment.Socket.BODY: Vector2(63, 75),
-	Equipment.Socket.WEAPON: Vector2(114, 75),
-	Equipment.Socket.BOOTS: Vector2(63, 126),
-	Equipment.Socket.RING_LEFT: Vector2(12, 177),
-	Equipment.Socket.AMULET: Vector2(63, 177),
-	Equipment.Socket.RING_RIGHT: Vector2(114, 177),
-}
 
-## Whose grid and whose doll this page is: the player's inventory, or -- on the heirlooms' page --
-## the stash inside it (`Inventory.stash`), which is an inventory too and so needs no second page.
+## Whose grid and doll this page shows: the player's inventory, or on the heirlooms' page the stash
+## inside it (`Inventory.stash`).
 var inventory: Inventory
-## The player's inventory whichever page this is: the purse, the orbs, the tips, the super orbs, and the
-## one thing that is ever saved. The same object as `inventory` on the ordinary bag.
+## Always the player's inventory: the gold, the orbs, the tips, the super orbs, and the one thing saved.
 var _purse: Inventory
-## Whether this is the heirlooms' page. An heirloom is not sold, not thrown away by the level and not
-## filtered as it arrives; thrown away one at a time it is, and that always asks first.
+## The heirlooms' page: nothing is sold or thrown away by the level, and a Discard always asks.
 var _heirlooms := false
-## Whether this page stands on the black screen of a transcension (`TranscendPage`) rather than
-## against the left edge: centred, written to no file -- the whole transcension is one write, made
-## when it is over -- and there for one thing. Over the bag that is choosing the piece to keep, so a
-## selected piece gets no Equip and no Discard and **Make heirloom** stands at the foot in the tray's
-## place; over the heirlooms it is the super orbs (`SuperOrbTable`), which are the tray.
+## On `TranscendPage`'s black screen: centred, and written to no file (`_save`). Over the bag a piece
+## gets no buttons and Make heirloom stands in the tray's place; over the heirlooms the tray is the
+## super orbs.
 var _transcending := false
-## Whether this is the black screen's skill stones page (`TranscendPage`): only the stones in the bag,
-## the ordinary orbs left over in the tray, and the skill tree in the doll's place, where a stone open in
-## the bag is placed (`_show_tree`).
+## The black screen's stones page: only the bag's stones, the ordinary orbs, and the skill tree in the
+## doll's place (`_show_tree`).
 var _stones := false
-## Its skill tree's zoom (`SkillTreeView.zoom`), kept while the page draws the tree again.
+## The tree's `SkillTreeView.zoom`, kept while the page draws it again.
 var _tree_zoom := 0
 var _make_button: Button
 var _save_path: String
 var _ui_scale: float
+## The room the main scene hands the page, in window pixels; empty is the whole window.
+var area := Rect2()
 
-## What the counter the bag is standing at buys, by `TownServices` name -- the town page's open tab
-## and not everything the town offers, so only the gear merchant turns Discard into Sell. Empty
-## everywhere else. Orbs are never bought back: the tray is crafting alone at every counter.
+## What the counter the bag stands at buys, by `TownServices` name: the town page's open tab, not
+## everything the town offers. Empty outside a town.
 var _services: PackedStringArray = []
 
 var _panel: VBoxContainer
 var _filter_tabs: HBoxContainer
-## Which of `FILTERS` the grid shows. Kept while the game runs, never saved.
+## A key of `FILTERS`. The session's, never saved.
 var _filter := ""
 var _count: Label
 var _gold: Label
 var _scroll: ScrollContainer
-## One heading, rule and grid per level, highest first. Each square carries its item's `bag_index`.
+## A heading, then a grid, per level, highest first. Each square carries its item's `bag_index` meta.
 var _sections: VBoxContainer
-## The buttons beside the selected square (Equip and Sell or Discard; Unequip on a doll socket), a
-## cream card placed by `ItemCard.beside` and following the grid as it scrolls (`_place_actions`).
-## The square says what it is through the hover card; the card beside it only says what can be done.
+## The selected square's buttons, a cream card stood beside it (`_place_actions`).
 var _actions: PanelContainer
 var _action_box: VBoxContainer
-## The selected bag item as an index into `inventory.items`, or -1. At most one of this and
-## `_worn_selected` is set: both darken their square and stand `_actions` beside it.
+## The selected bag item's index in `inventory.items`, or -1. At most one of this and `_worn_selected`
+## is set.
 var _selected := -1
-## Each piece's rarity when the bag was last sorted (Item -> rarity), which the grid sorts by: an orb
-## that lifts a piece leaves it where the cursor is until the bag is shut or a town's tab changes.
+## Item -> its rarity when the bag was last sorted, which the grid sorts by: a piece an orb lifts stays
+## under the cursor until the bag is shut or opened again (`open`).
 var _sorted_as := {}
-## The open worn piece as an `Equipment.Socket`, or -1.
+## The open worn piece's `Equipment.Socket`, or -1.
 var _worn_selected := -1
-## Which of the sockets the selected piece fits is the one Equip fills: an index into `sockets_for`,
-## moved by the Swap beside a ring and back to the emptiest with every new selection.
+## Which of `sockets_for(item)` Equip fills: moved by a ring's Swap, back to 0 (the emptiest) at every
+## new selection.
 var _socket_pick := 0
-## The doll put away, leaving `_show_button` in its place. Kept for the session, not saved.
+## The doll put away, leaving `_show_button` where it stood. The session's, never saved.
 var _doll_hidden := false
-## Stands against the bag's edge where the hidden doll was, and brings it back.
 var _show_button: Button
+## The press being followed, the grid's or the doll's: where it began, the grid's scroll then, and how
+## far it has travelled.
 var _drag_from := Vector2.ZERO
 var _drag_scroll := 0
 var _dragged := 0.0
 
 var _worn_panel: PanelContainer
 var _worn_body: VBoxContainer
-## The doll, while the sheet is not folded away.
-var _doll: Control
-## The stones page's tree, in the doll's place, or null.
+## The doll, or null while the sheet is folded away or holds the tree.
+var _doll: Doll
+## The stones page's tree, or null.
 var _tree: SkillTreeView
 
-## The question standing over the page (`_ask`), or null.
+## The question standing over the page (`_ask`, `_super_press`), or null.
 var _confirm: Control
 
-## The rule over the tray, `_fold_button` in its middle.
+## The rule over the trays, `_fold_button` (the chevron) in its middle.
 var _orb_rule: HBoxContainer
 var _fold_button: Button
-## The runes and the orbs folded away under the grid by the chevron. Kept for the session, not saved.
+## The trays folded away by the chevron. The session's, never saved.
 var _trays_hidden := false
-## The six runes over the orbs, once one has been found: picked up as an orb is, and pressed on a tile of
-## the map rather than a piece (`rune_on`). The ordinary bag's alone.
 var _rune_tray: HBoxContainer
 var _orb_tray: HBoxContainer
 var _orb_card: OrbCard
 ## What a spent orb rolls with. Unseeded: a test that wants a known answer seeds it.
 var _craft_rng := RandomNumberGenerator.new()
-## The orb pressed with no piece open, or "". The next square or worn socket pressed is crafted with
-## it where it lies, unopened, and it stays held while any are left. Opening a piece, a press on
-## anything but a piece or the tray (`_input`), the same orb again, Escape, a right click or the bag
-## going away puts it down. While it is held it is the cursor, at the 32 px it is cut at -- which is
-## the tray's 16 at `ui_scale` 2.
+## The orb, super orb or rune in hand, or "". Only ever assign it: the setter makes it the cursor and
+## tells the listeners. What picks it up and puts it down: DESIGN.md, "Use an orb one way".
 var _armed := "":
 	set(orb):
 		if orb == _armed:
@@ -246,10 +201,9 @@ var _armed := "":
 		Cursors.hold(mark, 2 if RuneTable.has(orb) else 1)
 		held_changed.emit(orb)
 
-## A left press off any piece put the held orb down, and the bag waits for its release to redraw.
+## A left press off any piece put the held orb down, and the redraw waits for its release (`_input`).
 var _put_down := false
-## The piece on the cursor (`_lift`) until the drag ends, or null: the doll's sockets and the tree's
-## slots it cannot go in are dimmed for it.
+## The piece on the cursor (`_lift`) until the drag ends, or null: what cannot take it is dimmed.
 var _lifted: Item
 ## The outline on the square `_lifted` would drop into, or null.
 var _drop_mark: Panel
@@ -275,13 +229,66 @@ func _ready() -> void:
 	_panel.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_panel)
 	var rows := UITheme.body_of(_panel)
+	_build_top(rows)
+	# The wheel is the scroll's own, a drag `_on_grid_input`'s; a worn piece off the doll drops here.
+	_scroll = UITheme.scroll()
+	_scroll.gui_input.connect(_on_grid_input)
+	_scroll.set_drag_forwarding(Callable(), _can_drop_in_bag, _drop_in_bag)
+	_scroll.get_v_scroll_bar().value_changed.connect(func(_at: float) -> void: _place_actions())
+	rows.add_child(_scroll)
+	_sections = UITheme.vbox(SLOT_GAP, WIDTH)
+	_scroll.add_child(_sections)
+	_build_trays(rows)
+	if _choosing():
+		_make_button = UITheme.button("Make heirloom", "LightButton", "")
+		_make_button.pressed.connect(_on_make_pressed)
+		rows.add_child(_make_button)
 
-	# How full it is and the purse, the two things true of the whole bag, on one line at the top.
+	_worn_body = UITheme.vbox(SLOT_GAP)
+	_worn_panel = PanelContainer.new()
+	if _stones:
+		# The tree's own titled panel is the frame: the bag's twin, not the doll's wood.
+		_worn_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	else:
+		_worn_panel.theme_type_variation = "WoodPanel"
+	_worn_panel.scale = Vector2(_ui_scale, _ui_scale)
+	_worn_panel.add_child(_worn_body)
+	add_child(_worn_panel)
+	_show_button = UITheme.icon_button(load(SHOW_ICON), "Show what is equipped", _ui_scale)
+	_show_button.pressed.connect(_on_fold_pressed)
+	_show_button.hide()
+	add_child(_show_button)
+
+	# Tree order is draw order: the buttons over whichever panel holds the selected square, then the
+	# orb card, which overhangs the sheet.
+	_actions = PanelContainer.new()
+	_actions.theme_type_variation = "TextPanel"
+	_actions.scale = Vector2(_ui_scale, _ui_scale)
+	_actions.hide()
+	_action_box = UITheme.vbox(2)
+	_actions.add_child(_action_box)
+	add_child(_actions)
+	_orb_card = OrbCard.new()
+	_orb_card.scale = Vector2(_ui_scale, _ui_scale)
+	_orb_card.hide()
+	add_child(_orb_card)
+
+	# However the bag goes away (its X, another page, a fight), no orb stays on the cursor and no
+	# question stays asked where nobody can answer it (`asking`).
+	visibility_changed.connect(func() -> void:
+		if not is_visible_in_tree():
+			_armed = ""
+			_sorted_as.clear()
+			_close_confirm())
+	refresh()
+
+
+## The count and the purse on one line, then the filter's tabs.
+func _build_top(rows: VBoxContainer) -> void:
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", SLOT_GAP)
 	top.custom_minimum_size = Vector2(WIDTH, 0)
 	rows.add_child(top)
-	# The corner button's chest in front of the count, so "12 / 40" says what it counts.
 	if not _heirlooms:
 		var chest := TextureRect.new()
 		chest.texture = load(COUNT_ICON)
@@ -295,91 +302,58 @@ func _ready() -> void:
 	coin.custom_minimum_size = Vector2(Coins.SIZE, Coins.SIZE)
 	coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	top.add_child(coin)
-	# Slate rather than GOLD: amber on cream is too weak a pairing.
 	_gold = UITheme.label("", Palette.TEXT_SOFT)
 	top.add_child(_gold)
 	_filter_tabs = HBoxContainer.new()
 	_filter_tabs.add_theme_constant_override("separation", 0)
 	rows.add_child(_filter_tabs)
 
-	# Wheel scrolling is the container's, dragging is `_on_grid_input`'s; no bar is drawn. A worn piece
-	# dragged off the doll is dropped here.
-	_scroll = UITheme.scroll()
-	_scroll.gui_input.connect(_on_grid_input)
-	_scroll.set_drag_forwarding(Callable(), _can_drop_in_bag, _drop_in_bag)
-	# The buttons beside the selected square move with it.
-	_scroll.get_v_scroll_bar().value_changed.connect(func(_at: float) -> void: _place_actions())
-	rows.add_child(_scroll)
-	_sections = UITheme.vbox(SLOT_GAP, WIDTH)
-	_scroll.add_child(_sections)
 
-	# The tray comes after the grid, so it is a footer under it: the rule with the chevron in its middle,
-	# then the runes over the orbs.
+## The footer under the grid: the rule with the chevron in its middle, then the runes over the orbs.
+func _build_trays(rows: VBoxContainer) -> void:
 	_orb_rule = HBoxContainer.new()
 	_orb_rule.add_theme_constant_override("separation", 0)
 	rows.add_child(_orb_rule)
-	for half in 2:
-		var line := UITheme.rule()
-		line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		_orb_rule.add_child(line)
-		if half == 0:
-			_fold_button = UITheme.button("", UITheme.BARE_BUTTON, "")
-			_fold_button.pressed.connect(_on_trays_pressed)
-			_orb_rule.add_child(_fold_button)
-	for tray in 2:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", ORB_GAP)
-		row.alignment = BoxContainer.ALIGNMENT_CENTER
-		row.custom_minimum_size = Vector2(WIDTH, 0)
-		rows.add_child(row)
-		if tray == 0:
-			_rune_tray = row
-		else:
-			_orb_tray = row
-	if _transcending and not _heirlooms and not _stones:
-		_make_button = UITheme.button("Make heirloom", "LightButton", "")
-		_make_button.pressed.connect(_on_make_pressed)
-		rows.add_child(_make_button)
-
-	_worn_body = UITheme.vbox(SLOT_GAP)
-	_worn_panel = PanelContainer.new()
-	_worn_panel.theme_type_variation = "WoodPanel"
-	_worn_panel.scale = Vector2(_ui_scale, _ui_scale)
-	_worn_panel.add_child(_worn_body)
-	add_child(_worn_panel)
-	_show_button = UITheme.icon_button(load(SHOW_ICON), "Show what is equipped", _ui_scale)
-	_show_button.pressed.connect(_on_fold_pressed)
-	_show_button.hide()
-	add_child(_show_button)
-
-	# After the bag and the sheet, over whichever holds the selected square.
-	_actions = PanelContainer.new()
-	_actions.theme_type_variation = "TextPanel"
-	_actions.scale = Vector2(_ui_scale, _ui_scale)
-	_actions.hide()
-	_action_box = UITheme.vbox(2)
-	_actions.add_child(_action_box)
-	add_child(_actions)
-
-	# After the sheet: it hangs over the sheet for most of the tray, and tree order decides who is on top.
-	_orb_card = OrbCard.new()
-	_orb_card.scale = Vector2(_ui_scale, _ui_scale)
-	_orb_card.hide()
-	add_child(_orb_card)
-
-	# However the bag goes away -- its X, another page, a fight -- an orb must not stay on the cursor,
-	# nor a question stay asked where nobody can answer it (`asking`).
-	visibility_changed.connect(func() -> void:
-		if not is_visible_in_tree():
-			_armed = ""
-			_sorted_as.clear()
-			_close_confirm())
-	refresh()
+	_orb_rule.add_child(_long_rule())
+	_fold_button = UITheme.button("", UITheme.BARE_BUTTON, "")
+	_fold_button.pressed.connect(func() -> void:
+		_trays_hidden = not _trays_hidden
+		refresh())
+	_orb_rule.add_child(_fold_button)
+	_orb_rule.add_child(_long_rule())
+	_rune_tray = _tray_row()
+	rows.add_child(_rune_tray)
+	_orb_tray = _tray_row()
+	rows.add_child(_orb_tray)
 
 
-## Opens on the grid, never on a stat block left over from last time, and sorted afresh (a town's
-## tab changing comes through here too, by `shop`).
+## A rule that takes what its row has left, level with the row's middle.
+static func _long_rule() -> ColorRect:
+	var line := UITheme.rule()
+	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return line
+
+
+static func _tray_row() -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", ORB_GAP)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.custom_minimum_size = Vector2(WIDTH, 0)
+	return row
+
+
+## Whether this is the bag a transcension only chooses its heirloom from.
+func _choosing() -> bool:
+	return _transcending and not _heirlooms and not _stones
+
+
+## Whether a piece here gets no buttons and names no keys: a transcension's bag and its stones page.
+func _buttonless() -> bool:
+	return _transcending and not _heirlooms
+
+
+## Nothing open or held, and sorted afresh. A town's tab changing comes through here too (`shop`).
 func open() -> void:
 	_sorted_as.clear()
 	_close_confirm()
@@ -389,24 +363,20 @@ func open() -> void:
 	refresh()
 
 
-## Stands the bag at a counter that buys `services`, or takes it away from one with none. The bag is
-## where a sale happens rather than a second grid on the town page: what the player wants to sell is
-## already laid out here, and two grids of the same items is two places to hunt through.
+## Stands the bag at a counter that buys `services`, or with none takes it away from one.
 func shop(services: PackedStringArray) -> void:
 	_services = services
 	open()
 
 
-## The counter beside the bag opened a piece off its shelf, or put it back, or sold it: the purse,
-## the grid and the tray are all redrawn by the same call. The bag draws nothing of the piece itself;
-## what wearing it would replace is read off the hover card under Alt, as for any square.
+## The counter's redraw of the bag: a piece opened off its shelf, put back or bought. The bag draws
+## nothing of the piece itself.
 func offer(_item: Item) -> void:
 	refresh()
 
 
-## Whether the town the bag is standing in buys this. False everywhere outside one.
+## Whether the counter the bag stands at buys this: the one place that asks. No counter buys an heirloom.
 func _buys(service: String) -> bool:
-	# No counter buys an heirloom, so beside one Discard stays Discard and a level has no coins.
 	if _heirlooms and service == TownServices.GEAR:
 		return false
 	return service in _services
@@ -416,37 +386,41 @@ func refresh_gold() -> void:
 	_gold.text = BigNumber.format(_purse.gold)
 
 
-## Where the main scene stands the page, in window pixels: empty for the whole window. Held upright in a
-## town, the foot of it, under the counter.
-var area := Rect2()
-
-
-## The bag stretched to its room's height, and the sheet centred against its right edge. At a
-## transcension the two stand in the middle of the window instead, the bag `TRANSCEND_HEIGHT` of it.
-## Where the room is too narrow for the sheet beside the bag (a phone held upright), it stands over it.
 func layout() -> void:
-	var room := area if area.has_area() else get_viewport_rect()
+	var room := _room()
 	_worn_panel.size = _worn_panel.get_combined_minimum_size()
 	_show_button.size = _show_button.get_combined_minimum_size()
-	if UITheme.narrow(get_viewport_rect().size, _ui_scale):
+	if _narrow():
 		_sheet(room)
 	else:
-		_side_by_side(room, _panel.get_combined_minimum_size().x)
+		_side_by_side(room)
 	_place_actions()
 	laid_out.emit()
 
 
-## The bag against the room's left edge (centred on a transcension's screen) and the sheet or its caret
-## beside it, the sheet centred down the room.
-func _side_by_side(room: Rect2, width: float) -> void:
-	_panel.size = Vector2(width, room.size.y / _ui_scale - 2 * UITheme.EDGE)
-	_panel.position = room.position + Vector2.ONE * UITheme.EDGE * _ui_scale
-	var beside: Control = (_worn_panel if _worn_panel.visible
-			else _show_button if _show_button.visible else null)
-	var both := width + (0.0 if beside == null else WORN_GAP + beside.get_combined_minimum_size().x)
+func _room() -> Rect2:
+	return area if area.has_area() else get_viewport_rect()
+
+
+func _narrow() -> bool:
+	return UITheme.narrow(get_viewport_rect().size, _ui_scale)
+
+
+## What stands by the bag: the sheet, or folded away the caret that brings it back.
+func _beside() -> Control:
+	return _worn_panel if _worn_panel.visible else _show_button if _show_button.visible else null
+
+
+## Across a window: the bag against the room's left edge, the sheet beside it and centred down the
+## room. On a transcension's screen the two stand in the room's middle, the bag `TRANSCEND_HEIGHT` of it.
+func _side_by_side(room: Rect2) -> void:
+	UITheme.dock(_panel, room, _ui_scale)
+	var beside := _beside()
+	var both := _panel.size.x + (0.0 if beside == null else WORN_GAP + beside.get_combined_minimum_size().x)
 	if _transcending:
 		_panel.size.y = _transcend_height(room)
-		_panel.position = (room.position + (room.size - Vector2(both, _panel.size.y) * _ui_scale) / 2.0).floor()
+		_panel.position = (room.position
+				+ (room.size - Vector2(both, _panel.size.y) * _ui_scale) / 2.0).floor()
 	_worn_panel.position = Vector2(_panel.position.x + (_panel.size.x + WORN_GAP) * _ui_scale,
 			room.position.y + (room.size.y - _worn_panel.size.y * _ui_scale) / 2.0)
 	if _stones:
@@ -457,32 +431,33 @@ func _side_by_side(room: Rect2, width: float) -> void:
 	_show_button.position = Vector2(_worn_panel.position.x, _panel.position.y + WORN_GAP * _ui_scale)
 
 
-## Held upright (`UITheme.narrow`): the bag a sheet along the foot of the room (`UITheme.dock`: centred,
-## as tall as its grid and never more than half the window), and straight over it the doll's sheet,
-## centred too -- or, folded away, the caret that brings it back, over the bag's right end.
+## Held upright: the bag a sheet along the foot of the room (`UITheme.dock`) and the doll's sheet
+## centred straight over it; or, folded away, its caret over the bag's right end.
 func _sheet(room: Rect2) -> void:
-	var over: Control = (_worn_panel if _worn_panel.visible
-			else _show_button if _show_button.visible else null)
+	var over := _beside()
 	var lift := 0.0 if over == null else (over.size.y + WORN_GAP) * _ui_scale
 	UITheme.dock(_panel, Rect2(room.position.x, room.position.y + lift, room.size.x, room.size.y - lift),
 			_ui_scale, UITheme.Dock.LEFT, layout)
-	_worn_panel.position = Vector2(floorf(room.position.x + (room.size.x - _worn_panel.size.x * _ui_scale) / 2.0),
+	_worn_panel.position = Vector2(
+			floorf(room.position.x + (room.size.x - _worn_panel.size.x * _ui_scale) / 2.0),
 			_panel.position.y - lift)
-	_show_button.position = _panel.position + Vector2((_panel.size.x - _show_button.size.x) * _ui_scale, -lift)
+	_show_button.position = _panel.position + Vector2(
+			(_panel.size.x - _show_button.size.x) * _ui_scale, -lift)
 
 
-## The least height, in window pixels, the page needs held upright: the bag with `LEAST_ROWS` rows of
-## its grid showing, and the sheet over it. A town gives its counter what is left (`_layout_ui`).
+## The least height, in window pixels, the page needs held upright: `LEAST_ROWS` of the grid, and the
+## sheet over the bag. A town gives its counter what is left (the main scene's `_layout_ui`).
 func least_height() -> float:
-	var tall := _panel.get_combined_minimum_size().y + LEAST_ROWS * (ItemSlot.SIDE + SLOT_GAP) + 2 * UITheme.EDGE
+	var tall := (_panel.get_combined_minimum_size().y + LEAST_ROWS * (ItemSlot.SIDE + SLOT_GAP)
+			+ 2 * UITheme.EDGE)
 	if _worn_panel.visible:
 		tall += _worn_panel.get_combined_minimum_size().y + WORN_GAP
 	return tall * _ui_scale
 
 
-## Where a column of buttons beside the page begins, in window pixels: `gap` past the sheet beside
-## the bag and level with its top; under the caret that brings the sheet back, in line with it; or
-## `gap` past the bag itself at `top` where there is neither.
+## Where a column of buttons beside the page begins, in window pixels: `gap` past the sheet and level
+## with its top; under the caret that brings the sheet back, in line with it; or `gap` past the bag
+## itself at `top` where there is neither.
 func column_origin(gap: float, top: float) -> Vector2:
 	if _worn_panel.visible:
 		return Vector2(_worn_panel.position.x + (_worn_panel.size.x + gap) * _ui_scale,
@@ -493,53 +468,18 @@ func column_origin(gap: float, top: float) -> Vector2:
 	return Vector2(_panel.position.x + (_panel.size.x + gap) * _ui_scale, top)
 
 
-## The bag panel's top-left corner in window pixels: the origin but on a transcension's screen, where
-## `TranscendPage` stands its way back beside it.
+## The bag panel's top-left corner in window pixels (`TranscendPage` stands its way back beside it).
 func panel_corner() -> Vector2:
 	return _panel.position
 
 
-## Everything redrawn from the inventory, reopening whatever was open.
+## Everything redrawn from the inventory, whatever was open still open.
 func refresh() -> void:
-	# Cleared at once: the click hit-test walks these children, and a queued square is still one.
-	UITheme.clear(_sections)
-	var by_level := {}
-	for item in inventory.items:
-		if not _sorted_as.has(item):
-			_sorted_as[item] = item.rarity
-	for i in inventory.order(_sorted_as):
-		if _shows(inventory.items[i]):
-			by_level.get_or_add(inventory.items[i].level, []).append(i)
 	_fill_tabs()
-	for level: int in inventory.levels():
-		# Under a filter a level holding nothing of its slot is left out -- but never one holding nothing at all.
-		if not by_level.has(level) and inventory.count_at(level) > 0:
-			continue
-		_sections.add_child(_section_heading(level))
-		# A level with a rule and no items keeps its heading, the only place the rule can be undone.
-		if not by_level.has(level):
-			continue
-		var grid := GridContainer.new()
-		grid.columns = GRID_COLS
-		grid.add_theme_constant_override("h_separation", SLOT_GAP)
-		grid.add_theme_constant_override("v_separation", SLOT_GAP)
-		_sections.add_child(grid)
-		for i: int in by_level[level]:
-			var slot := ItemSlot.make(inventory.items[i], i == _selected)
-			slot.set_meta("bag_index", i)
-			if not _bag_keys().is_empty():
-				slot.set_meta(ItemCard.KEYS, _bag_keys())
-			if i == _selected:
-				slot.set_meta(ItemCard.BESIDE, _actions)
-			_dim_for_orb(slot, inventory.items[i])
-			# Not on the way out of a world: there the bag is only being chosen from.
-			if not _transcending and is_upgrade(inventory.items[i], inventory):
-				slot.add_child(_upgrade_mark())
-			grid.add_child(slot)
+	_fill_grid()
 	_count.text = ("%d to spend" % _purse.super_orbs if _heirlooms and _transcending
 			else "" if _heirlooms
 			else "%d / %d" % [inventory.total(), inventory.capacity()])
-	# Rust a few squares early: a full bag is a fight throwing finds away, and that should be seen coming.
 	_count.add_theme_color_override("font_color", Palette.RUST
 			if not _heirlooms and inventory.total() >= inventory.capacity() - NEARLY_FULL
 			else Palette.TEXT_SOFT)
@@ -556,6 +496,44 @@ func refresh() -> void:
 	_place_actions.call_deferred()
 
 
+func _fill_grid() -> void:
+	UITheme.clear(_sections)
+	for item in inventory.items:
+		if not _sorted_as.has(item):
+			_sorted_as[item] = item.rarity
+	var by_level := {}
+	for i in inventory.order(_sorted_as):
+		if _shows(inventory.items[i]):
+			by_level.get_or_add(inventory.items[i].level, []).append(i)
+	var keys := _bag_keys()
+	for level: int in inventory.levels():
+		# A filter leaves out a level holding none of its slot, but never one holding nothing at all:
+		# a level under a rule keeps its heading, the only place the rule can be undone.
+		if not by_level.has(level) and inventory.count_at(level) > 0:
+			continue
+		_sections.add_child(_section_heading(level))
+		if not by_level.has(level):
+			continue
+		var grid := GridContainer.new()
+		grid.columns = GRID_COLS
+		grid.add_theme_constant_override("h_separation", SLOT_GAP)
+		grid.add_theme_constant_override("v_separation", SLOT_GAP)
+		_sections.add_child(grid)
+		for i: int in by_level[level]:
+			var item := inventory.items[i]
+			var slot := ItemSlot.make(item, i == _selected)
+			slot.set_meta("bag_index", i)
+			if not keys.is_empty():
+				slot.set_meta(ItemCard.KEYS, keys)
+			if i == _selected:
+				slot.set_meta(ItemCard.BESIDE, _actions)
+			_dim_for_orb(slot, item)
+			# No arrow on the way out of a world: there the bag is only being chosen from.
+			if not _transcending and is_upgrade(item, inventory):
+				slot.add_child(_upgrade_mark())
+			grid.add_child(slot)
+
+
 ## Whether the filter lets this piece into the grid.
 func _shows(item: Item) -> bool:
 	if _stones:
@@ -563,11 +541,10 @@ func _shows(item: Item) -> bool:
 	return _filter.is_empty() or LootTable.slot_of(item.type) == _filter
 
 
-## The filter's folder tabs, built again with the grid: the open one's face and mark change with it.
-## A selected piece the filter hides stays selected (its buttons put away with no square to stand by).
+## Built again with the grid: the open tab's face and mark change with it. None on the stones page,
+## which is one kind already.
 func _fill_tabs() -> void:
 	UITheme.clear(_filter_tabs)
-	# The stones page is one kind already.
 	_filter_tabs.visible = not _stones
 	if _stones:
 		return
@@ -586,67 +563,56 @@ func _fill_tabs() -> void:
 	_filter_tabs.add_child(rest)
 
 
-## A level's heading, one line: its name in the body font, the rule running on from it, Auto (a chest struck through,
-## which stays down while the level is being thrown away as it drops) and Clear (a bin: drop what is
-## held). The name used to be Pixellari over a rule of its own, which cost three levels most of a row.
+## A level's heading on one line: its name, a rule, then Auto and the bin (DESIGN.md: "Give a level's
+## heading marks, not words"). No marks on the heirlooms' page or a transcension's.
 func _section_heading(level: int) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", SLOT_GAP)
-	# The rule is said in red: the toggle's pressed face is too quiet to read a state off.
 	var ruled := inventory.autodiscards(level)
+	# A level under the rule is named in red: the toggle's pressed face is too quiet to read a state off.
 	var title := UITheme.label("Level %d" % level, Palette.BRICK if ruled else Palette.TEXT_SOFT, true)
 	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(title)
-	var line := UITheme.rule()
-	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(line)
-	# An heirloom never arrives by dropping and is never thrown away by the handful: no marks. Nor on
-	# the way out of a world, where the bag is only being chosen from.
+	row.add_child(_long_rule())
 	if _heirlooms or _transcending:
 		return row
-
 	var auto := UITheme.button("", UITheme.BARE_BUTTON,
 			("Continue" if ruled else "Stop") + " collecting level %d loot" % level)
-	# Held down is a pixel lower -- and green as well, because that pixel alone is a press being
-	# watched and not a state being read off a column of headings.
 	auto.icon = load(AUTO_ON_ICON if ruled else AUTO_ICON)
 	auto.toggle_mode = true
 	auto.button_pressed = ruled
 	auto.toggled.connect(_on_autodiscard_toggled.bind(level))
 	row.add_child(auto)
-
-	# In a town that buys gear the same button sells the handful instead of destroying it: it is the
-	# same act -- being done with a level -- and the merchant is simply a better way to do it.
-	# What the press would take: a locked piece stays, and so does whatever the filter hides.
-	var loose := inventory.items.filter(
-			func(item: Item) -> bool: return item.level == level and not item.locked and _shows(item))
-	var held := loose.size()
-	var selling := _buys(TownServices.GEAR)
-	var worth := TownPrices.sell_total(loose) if selling else 0.0
-	# A mark either way, coins for selling and a bin for discarding; the tooltip says the sum.
-	var things := "item" if held == 1 else "items"
-	var clear := UITheme.button("", UITheme.BARE_BUTTON,
-			"Sell %d level %d %s for %s gold" % [held, level, things, BigNumber.format(worth)] if selling
-			else "Discard %d level %d %s" % [held, level, things])
-	clear.icon = load(SELL_ICON if selling else CLEAR_ICON)
-	clear.disabled = held == 0
-	# Both ask first: a whole level goes in one press, and neither can be taken back.
-	if selling:
-		clear.pressed.connect(_ask.bind("sell", "Sell all", clear.tooltip_text + "?", "Sell",
-				"LightButton", _on_sell_level_pressed.bind(level)))
-	else:
-		clear.pressed.connect(_ask.bind("clear", "Discard", clear.tooltip_text + "?", "Discard",
-				"LightDangerButton", _on_clear_level_pressed.bind(level)))
-	row.add_child(clear)
+	row.add_child(_clear_button(level))
 	return row
 
 
-## Asks before `deed` is done, over everything else on the page, unless the player has ticked this
-## question's "Don't show this again" -- which is kept per question (`id`) in `inventory.tips`, the
-## save's list of what the player has already been told, and only a Yes writes it (`_remember`, where
-## the `UNIQUES` question keeps either answer instead). `can_skip` false is a question that is asked
-## every time and offers no tick: an heirloom is runs of work. `no` is the first button's face.
+## A level's bin, or at a counter that buys gear the coins that sell it. Either asks first.
+func _clear_button(level: int) -> Button:
+	var loose := _loose(level)
+	var held := loose.size()
+	var selling := _buys(TownServices.GEAR)
+	var things := "item" if held == 1 else "items"
+	var clear := UITheme.button("", UITheme.BARE_BUTTON,
+			"Sell %d level %d %s for %s gold" % [held, level, things,
+				BigNumber.format(TownPrices.sell_total(loose))] if selling
+			else "Discard %d level %d %s" % [held, level, things])
+	clear.icon = load(SELL_ICON if selling else CLEAR_ICON)
+	clear.disabled = held == 0
+	clear.pressed.connect(_ask.bind("sell" if selling else "clear", "Sell all" if selling else "Discard",
+			clear.tooltip_text + "?", "Sell" if selling else "Discard",
+			"LightButton" if selling else "LightDangerButton", _drop_level.bind(level, selling)))
+	return clear
+
+
+## What a level's bin or Sell all would take: a locked piece stays, and so does whatever the filter hides.
+func _loose(level: int) -> Array:
+	return inventory.items.filter(
+			func(item: Item) -> bool: return item.level == level and not item.locked and _shows(item))
+
+
+## Asks before `deed` is done, unless question `id` has been ticked away (`SKIP_CONFIRM`). `can_skip`
+## false is a question asked every time, with no tick; `no` is the first button's face.
 func _ask(id: String, title: String, question: String, verb: String, variation: String,
 		deed: Callable, can_skip := true, no := "Cancel") -> void:
 	if can_skip and SKIP_CONFIRM + id in _purse.tips:
@@ -658,42 +624,37 @@ func _ask(id: String, title: String, question: String, verb: String, variation: 
 	asked.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	asked.custom_minimum_size.x = CONFIRM_WIDTH
 	body.add_child(asked)
-
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", SLOT_GAP)
 	body.add_child(buttons)
+	# Built even where it is not offered, so the verb has a tick to read.
 	var skip := check_box("Don't show this again")
-	var ticked := func() -> bool: return (skip.get_node(TICK_NAME) as Button).button_pressed
-	for made: Button in [UITheme.button(no, "LightButton", ""), UITheme.button(verb, variation, "")]:
-		made.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		buttons.add_child(made)
-	# Answered once: either button can still be pressed while the question shrinks away, and a second
-	# Yes would do the deed again -- two orbs for one question.
-	buttons.get_child(0).pressed.connect(func() -> void:
-		if not Juice.leaving(panel):
-			_remember(id, ticked.call(), false)
-			_close_confirm())
-	buttons.get_child(1).pressed.connect(func() -> void:
-		if not Juice.leaving(panel):
-			_remember(id, ticked.call(), true)
-			_close_confirm()
-			deed.call())
-	# Built either way, so the Yes above has a tick to read; only shown where it may be ticked.
 	skip.visible = can_skip
 	body.add_child(skip)
+	var tick: Button = skip.get_node(TICK_NAME)
+	for yes: bool in [false, true]:
+		var made := UITheme.button(verb if yes else no, variation if yes else "LightButton", "")
+		made.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# Answered once: a button can still be pressed while the question shrinks away, and a second
+		# press of the verb would do the deed again.
+		made.pressed.connect(func() -> void:
+			if Juice.leaving(panel):
+				return
+			_remember(id, tick.button_pressed, yes)
+			_close_confirm()
+			if yes:
+				deed.call())
+		buttons.add_child(made)
 	Juice.popup(_confirm, panel, _ui_scale)
 
 
-## A question's holder and its panel, empty, in the place of whatever question was up: the holder is
-## the whole window's (`Juice.popup` stands it there), so nothing under the question can be pressed
-## while it is up, and the panel has no X, as a reward's has none -- its buttons and Escape are the
-## way out. Returns the panel, to fill and then bring up.
+## An empty question panel in a fresh holder (`_confirm`), in the place of whatever question was up.
+## The caller fills it, then brings it up: `Juice.popup(_confirm, panel, _ui_scale)`.
 func _open_confirm(title: String) -> VBoxContainer:
 	_close_confirm()
 	_confirm = Control.new()
 	add_child(_confirm)
-	# Over every other page too: held upright the town's counter stands over the bag, and the question
-	# is centred across both.
+	# Held upright the town's counter stands over the bag, and the question is centred across both.
 	move_to_front()
 	var panel := UITheme.titled_panel(title, "", Callable())
 	panel.name = CONFIRM_PANEL
@@ -701,9 +662,9 @@ func _open_confirm(title: String) -> VBoxContainer:
 	return panel
 
 
-## A ticked "Don't show this again". The uniques' question keeps the answer given -- Sell or Keep --
-## in the settings, where it can be changed back; every other question only ever stops being asked,
-## on a Yes, in the save (written by the deed's own save). Escape and the X read no tick.
+## A ticked "Don't show this again". The uniques' question keeps the answer given, Sell or Keep, in the
+## settings; any other only ever stops being asked, on a Yes, in the save (written by the deed's own
+## save). Escape reads no tick.
 func _remember(id: String, ticked: bool, yes: bool) -> void:
 	if not ticked:
 		return
@@ -714,31 +675,27 @@ func _remember(id: String, ticked: bool, yes: bool) -> void:
 		_purse.tips.append(SKIP_CONFIRM + id)
 
 
-## Escape on a question is its Cancel, and the press stops here: the page under it stays up. With no
-## question up the key is left for the main scene, which closes the pages.
+## Escape is a question's Cancel, else puts a held orb down, else shuts the open piece, and each time
+## the page stays up; only a bare bag leaves the key to the main scene, which closes the page.
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_visible_in_tree() or not event.is_action_pressed("ui_cancel"):
 		return
 	if _confirm != null:
-		get_viewport().set_input_as_handled()
 		_close_confirm()
 	elif _armed != "":
-		# A held orb is put down the same way, and the bag stays up.
-		get_viewport().set_input_as_handled()
 		_armed = ""
 		refresh()
 	elif _open_piece() != null:
-		# And so is a selected piece: one press clears it, the next closes the bag.
-		get_viewport().set_input_as_handled()
 		_select_item(-1)
+	else:
+		return
+	get_viewport().set_input_as_handled()
 
 
-## A right click anywhere puts a held orb down, as Escape does, and so does a left press on anything
-## but a piece or the tray -- the map, a button, bare panel -- which still goes on to do its own work:
-## so that press is not redrawn under (a heading's button freed before its release lands), and the
-## bag is redrawn once the release has been and gone (`_put_down`). Not under a question, whose Use
-## spends the orb. `_input` rather than `_unhandled_input`: a press over a panel is handled by the
-## panel and would never reach the other.
+## A right click anywhere puts a held orb down, and so does a left press on anything but a piece or the
+## tray. That press still goes on to do its own work, so nothing is redrawn under it (a heading's
+## button would be freed before its release lands) until its release (`_put_down`). Not under a
+## question, whose Use spends the orb. `_input`, not `_unhandled_input`: a panel eats a press over it.
 func _input(event: InputEvent) -> void:
 	if not event is InputEventMouseButton:
 		return
@@ -772,13 +729,13 @@ func _over_tray(at: Vector2) -> bool:
 		return orb.is_visible_in_tree() and orb.get_global_rect().has_point(at))
 
 
-## Whether one of the page's questions stands over the window, for a banner to wait behind.
+## Whether a question stands over the window: the main scene holds banners and hotkeys behind it.
 func asking() -> bool:
 	return _confirm != null
 
 
-## The question shrinks away, as a reward's panel does, then goes. It is let go of at once, so a deed
-## that follows an answer -- or the next question -- never finds the old one in its way.
+## The question shrinks away, then goes. Let go of at once, so a deed that follows an answer, or the
+## next question, never finds the old one.
 func _close_confirm() -> void:
 	if _confirm == null:
 		return
@@ -787,21 +744,15 @@ func _close_confirm() -> void:
 	Juice.pop_out(holder.get_node(CONFIRM_PANEL), holder.queue_free)
 
 
-## A tick box as the rest of the interface would draw one: the brown button face, small, held down
-## with a cream tick on it while it is on -- the way Auto holds. The row's words press it too. Named
-## `TICK_NAME` so whoever wants its state (`_ask`, a test) can find it.
+## A tick box and its words, which press it too: a small toggled `BrownIconButton` named `TICK_NAME`,
+## a cream tick on it while it is on.
 static func check_box(text: String) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", SLOT_GAP)
+	# The blank is the tick's size, so the face does not change size as it is pressed.
 	var marks: Array[ImageTexture] = []
-	for ticked: bool in [false, true]:
-		# The blank is the tick's size, so the face does not change size as it is pressed.
-		var image := Image.create(TICK[0].length(), TICK.size(), false, Image.FORMAT_RGBA8)
-		for y in TICK.size() if ticked else 0:
-			for x in TICK[y].length():
-				if TICK[y][x] == "#":
-					image.set_pixel(x, y, UITheme.FONT_COLOR)
-		marks.append(ImageTexture.create_from_image(image))
+	for inks: Dictionary in [{}, {"#": UITheme.FONT_COLOR}]:
+		marks.append(ImageTexture.create_from_image(UITheme.stamp(TICK, inks)))
 	var box := UITheme.button("", "BrownIconButton", "")
 	box.name = TICK_NAME
 	box.toggle_mode = true
@@ -819,65 +770,55 @@ static func check_box(text: String) -> HBoxContainer:
 	return row
 
 
-## Touches nothing already held: that is Clear's job.
+## Touches nothing already held: that is the bin's job.
 func _on_autodiscard_toggled(on: bool, level: int) -> void:
 	inventory.set_autodiscard(level, on)
 	_save()
 	_select_item(-1)
 
 
-func _on_clear_level_pressed(level: int) -> void:
-	_drop_level(level, false)
-
-
-func _on_sell_level_pressed(level: int) -> void:
-	_drop_level(level, true)
-
-
-## The level's ordinary pieces go at once. Its uniques go with them under the settings' Sell, stay
-## under Keep, and under Ask are a second question of their own, naming them -- whose Don't sell (or
-## Escape, or the X) leaves them where they are, and whose tick keeps the answer given (`_remember`).
+## A level's bin (or Sell all), once asked. The ordinary pieces go at once. The uniques go with them
+## under the settings' Sell, stay under Keep, and under Ask are a second question, by name: its Don't
+## sell or Escape leaves them, and its tick keeps the answer given (`_remember`).
 func _drop_level(level: int, selling: bool) -> void:
-	var deed := _sell_level if selling else _clear_level
-	deed.call(level, Settings.uniques == Settings.Uniques.SELL)
-	var uniques := inventory.items.filter(func(item: Item) -> bool:
-		return item.level == level and item.rarity == ItemRarity.Rarity.UNIQUE and not item.locked and _shows(item))
+	_take_level(level, selling, Settings.uniques == Settings.Uniques.SELL)
+	var uniques := _loose(level).filter(
+			func(item: Item) -> bool: return item.rarity == ItemRarity.Rarity.UNIQUE)
 	if Settings.uniques != Settings.Uniques.ASK or uniques.is_empty():
 		return
 	var names := ", ".join(uniques.map(func(item: Item) -> String: return item.display_name()))
+	var verb := "Sell" if selling else "Discard"
 	var question := "%s %s unique. %s %s as well?" % [names, "is" if uniques.size() == 1 else "are",
-			"Sell" if selling else "Discard", "it" if uniques.size() == 1 else "them"]
-	_ask(UNIQUES, "Uniques", question, "Sell" if selling else "Discard",
-			"LightButton" if selling else "LightDangerButton", deed.bind(level, true), true,
-			"Don't sell" if selling else "Don't discard")
+			verb, "it" if uniques.size() == 1 else "them"]
+	_ask(UNIQUES, "Uniques", question, verb, "LightButton" if selling else "LightDangerButton",
+			_take_level.bind(level, selling, true), true, "Don't sell" if selling else "Don't discard")
 
 
-func _clear_level(level: int, uniques: bool) -> void:
+## What the open filter shows of a level, sold or thrown away. Paid from what `discard_level` hands
+## back, so the purse is paid for exactly what left the bag.
+func _take_level(level: int, selling: bool, uniques: bool) -> void:
 	var gone := inventory.discard_level(level, uniques, _filter)
-	print("Discarded %d item(s) at level %d" % [gone.size(), level])
-	# The Rag and Bone Sack pays for what is thrown away, which is nothing unless it is worn.
+	if selling:
+		var paid := TownPrices.sell_total(gone)
+		_purse.sell_for(paid)
+		print("Sold %d item(s) at level %d for %s gold" % [gone.size(), level, BigNumber.format(paid)])
+	else:
+		print("Discarded %d item(s) at level %d" % [gone.size(), level])
+		_salvaged(gone)
+	_save()
+	_select_item(-1)
+
+
+## Gear thrown away pays `Inventory.salvage`, which is nothing unless the Rag and Bone Sack is worn.
+func _salvaged(gone: Array[Item]) -> void:
 	for item: Item in gone:
 		_purse.gold += _purse.salvage(item)
 		_purse.add_orb(_purse.salvage_orb())
 	_purse.tick("discarded", gone.size())
-	_save()
-	_select_item(-1)
 
 
-## A whole level over the counter. The price is summed off what `discard_level` hands back, so the
-## purse is paid for exactly what left the bag rather than for what was in it a moment ago.
-func _sell_level(level: int, uniques: bool) -> void:
-	var gone := inventory.discard_level(level, uniques, _filter)
-	var paid := TownPrices.sell_total(gone)
-	_purse.sell_for(paid)
-	print("Sold %d item(s) at level %d for %s gold"
-			% [gone.size(), level, BigNumber.format(paid)])
-	_save()
-	_select_item(-1)
-
-
-## A press that stays put clicks the square under it; one that travels drags the list. The squares
-## ignore the mouse so a drag starting on one still reaches here.
+## A press that stays put clicks the square under it; one that travels scrolls the grid, or lifts the
+## piece it began on (`_lifts`).
 func _on_grid_input(event: InputEvent) -> void:
 	Cursors.over_squares(_scroll, event, _armed != "")
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -885,13 +826,11 @@ func _on_grid_input(event: InputEvent) -> void:
 			_drag_from = event.position
 			_drag_scroll = _scroll.scroll_vertical
 			_dragged = 0.0
-		elif _dragged < (Cursors.TOUCH_SLOP if Cursors.touched else DRAG_THRESHOLD):
+		elif _dragged < _slop():
 			_on_clicked(event.position + Vector2(0.0, _scroll.scroll_vertical),
 					event.shift_pressed, event.ctrl_pressed)
-	elif event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0 \
-			and not get_viewport().gui_is_dragging():
+	elif _travelling(event):
 		_dragged += event.relative.length()
-		# A mouse's press that travels from a piece lifts it; from bare panel, or a finger's, it scrolls.
 		var index := _index_at(_drag_from + Vector2(0.0, _drag_scroll)) if _lifts() else -1
 		if index < 0:
 			_scroll.scroll_vertical = _drag_scroll - int(event.position.y - _drag_from.y)
@@ -899,8 +838,20 @@ func _on_grid_input(event: InputEvent) -> void:
 			_lift(inventory.items[index])
 
 
-## Opens the square under `at` (in the sections' own space), or closes the block on bare panel. Under
-## Shift or Ctrl the square is opened and its own button pressed for it (`_press_action`).
+## Whether `event` is the mouse moving with its left button down and nothing on the cursor yet.
+func _travelling(event: InputEvent) -> bool:
+	return event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0 \
+			and not get_viewport().gui_is_dragging()
+
+
+## How far a press may travel, in panel pixels, and still be a click: a finger wobbles more.
+func _slop() -> float:
+	return Cursors.TOUCH_SLOP if Cursors.touched else DRAG_THRESHOLD
+
+
+## A click at `at` (the sections' own space): a held orb goes into the square under it, a bare click
+## opens or shuts it, and on bare panel shuts whatever is open. Under Shift or Ctrl the square is
+## opened and its own button pressed for it (`_press_action`).
 func _on_clicked(at: Vector2, shift := false, ctrl := false) -> void:
 	var index := _index_at(at)
 	if index < 0:
@@ -914,29 +865,34 @@ func _on_clicked(at: Vector2, shift := false, ctrl := false) -> void:
 		_select_item(-1 if index == _selected else index)
 
 
+## Every square of the grid, level after level.
+func _squares() -> Array[Node]:
+	var squares: Array[Node] = []
+	for section: Node in _sections.get_children():
+		if section is GridContainer:
+			squares.append_array(section.get_children())
+	return squares
+
+
 ## The bag index of the square under `at` (in the sections' own space), or -1 on bare panel.
 func _index_at(at: Vector2) -> int:
-	for section: Node in _sections.get_children():
-		if not (section is GridContainer):
-			continue
-		for slot: Control in section.get_children():
-			if Rect2((section as Control).position + slot.position, slot.size).has_point(at):
-				return slot.get_meta("bag_index", -1)
+	for slot: Control in _squares():
+		if Rect2((slot.get_parent() as Control).position + slot.position, slot.size).has_point(at):
+			return slot.get_meta("bag_index", -1)
 	return -1
 
 
-## Whether a press that travels from a piece lifts it (`_lift`) rather than scrolling: a mouse's alone,
-## since a finger's drag is the only scroll it has; never with an orb in the hand, nor on the bag a
+## Whether a press that travels from a piece lifts it (`_lift`) rather than scrolls: a mouse's alone,
+## a finger's drag being the only scroll it has; never with an orb in hand, nor on the bag a
 ## transcension only chooses from, where a piece has nowhere to go.
 func _lifts() -> bool:
-	return not Cursors.touched and _armed == "" and not (_transcending and not _heirlooms and not _stones)
+	return not Cursors.touched and _armed == "" and not _choosing()
 
 
-## `item` onto the cursor, its own square centred under it, for the doll, the bag or the stones page's
-## tree to take (`set_drag_forwarding` on each). Whatever was open shuts, so no buttons stand beside a
-## piece being dragged (the user's, 2026-10-09: they are a click's), and what cannot take it is dimmed
-## until the drag ends (`_lifted`). The square leaves `ItemSlot.GROUP`, or the hover card would read it
-## rather than whatever it is held over.
+## `item` onto the cursor, its square centred under it, for the doll, the bag or the stones page's tree
+## to take. Whatever was open shuts: no buttons stand beside a piece being dragged (the user's,
+## 2026-10-09). The square leaves `ItemSlot.GROUP`, or the hover card would read it rather than
+## whatever it is held over.
 func _lift(item: Item) -> void:
 	var square := ItemSlot.make(item)
 	square.remove_from_group(ItemSlot.GROUP)
@@ -957,8 +913,8 @@ func _notification(what: int) -> void:
 		_refresh_worn()
 
 
-## The square a drop would land in, outlined (`DROP_MARK`) while a piece is on the cursor: followed every
-## frame from where the mouse is, since nothing tells a socket the cursor has left it mid-drag.
+## Keeps the outline (`DROP_MARK`) on the square a drop would land in: found every frame from the
+## mouse, since nothing tells a socket the cursor has left it mid-drag.
 func _process(_delta: float) -> void:
 	var host: Control = _drop_square() if _lifted != null else null
 	if is_instance_valid(_drop_mark) and _drop_mark.get_parent() == host:
@@ -982,33 +938,32 @@ func _process(_delta: float) -> void:
 	host.add_child(_drop_mark)
 
 
-## The square under the mouse that would take `_lifted` were it let go now -- a doll socket, or a slot of
-## the stones page's tree inside the box it scrolls in -- or null.
+## The square under the mouse that would take `_lifted` were it let go now: a doll socket, or a slot of
+## the stones page's tree inside the box it scrolls in. Null with neither.
 func _drop_square() -> Control:
 	if _doll != null and _doll.is_visible_in_tree():
 		var at := _doll.get_local_mouse_position()
 		if _can_drop_on_doll(at, _lifted):
-			return _socket_square_at(at)
+			return _doll.squares[_doll.socket_at(at)]
 	if _tree != null and _tree.is_visible_in_tree() \
 			and (_tree.get_parent() as Control).get_global_rect().has_point(get_global_mouse_position()):
 		var at := _tree.get_local_mouse_position()
-		if _can_drop_on_tree(at, _lifted, _tree):
+		if _can_drop_on_tree(at, _lifted):
 			return _tree.squares[_tree.slot_at(at)]
 	return null
 
 
-## A bag piece held over the doll: worn at the socket under it wherever Equip could put it there
-## (`Inventory.can_equip`, every refusal the button's).
+## The three places a lifted piece drops (`set_drag_forwarding`). Each drop calls the button's own
+## handler, so every refusal is the button's.
 func _can_drop_on_doll(at: Vector2, data: Variant) -> bool:
-	var socket := _socket_at(at)
+	var socket := _doll.socket_at(at)
 	return data is Item and socket >= 0 and inventory.items.has(data) and inventory.can_equip(data, socket)
 
 
 func _drop_on_doll(at: Vector2, data: Variant) -> void:
-	_on_equip_pressed(data, _socket_at(at))
+	_on_equip_pressed(data, _doll.socket_at(at))
 
 
-## A worn piece held over the bag: taken off as Unequip would, so never into a full bag.
 func _can_drop_in_bag(_at: Vector2, data: Variant) -> bool:
 	return data is Item and inventory.equipment.worn.find_key(data) != null and not inventory.is_full()
 
@@ -1017,29 +972,26 @@ func _drop_in_bag(_at: Vector2, data: Variant) -> void:
 	_on_unequip_pressed(inventory.equipment.worn.find_key(data))
 
 
-## A bag stone held over the tree's slot: placed there as a press on the slot with it open would.
-func _can_drop_on_tree(at: Vector2, data: Variant, view: SkillTreeView) -> bool:
-	var path: Variant = view.slot_at(at)
+func _can_drop_on_tree(at: Vector2, data: Variant) -> bool:
+	var path: Variant = _tree.slot_at(at)
 	return data is Item and path is String and inventory.items.has(data) \
 			and SkillTree.can_place(data, path, _purse.skills.stones)
 
 
-func _drop_on_tree(at: Vector2, data: Variant, view: SkillTreeView) -> void:
-	_place(data, view.slot_at(at))
+func _drop_on_tree(at: Vector2, data: Variant) -> void:
+	_place(data, _tree.slot_at(at))
 
 
-## Which keys a click on a bag square answers to, for the card's foot: nothing on a transcension's
-## bag, whose squares have no buttons.
+## Which keys a click on a bag square answers to, for the hover card's foot.
 func _bag_keys() -> Dictionary:
-	if _transcending and not _heirlooms:
+	if _buttonless():
 		return {}
 	return {"shift": "equip", "ctrl": "sell" if _buys(TownServices.GEAR) else "discard"}
 
 
 ## A Shift-click's Equip or Unequip, a Ctrl-click's Sell or Discard: the open square's own button,
-## pressed, so every refusal (a full bag, a socket that will not take it) and every question (an
-## heirloom's Discard) is the button's as ever. A grey button leaves the square open with the reason
-## on it.
+## pressed, so every refusal and every question is the button's. A grey button leaves the square open
+## with the reason on it.
 func _press_action(shift: bool) -> void:
 	var verbs := ["Equip", "Unequip"] if shift else ["Sell", "Discard"]
 	for button: Node in _action_box.get_children():
@@ -1049,63 +1001,35 @@ func _press_action(shift: bool) -> void:
 			return
 
 
-## Every change of selection puts a held orb down: an open piece and an orb in the hand never stand
-## together, and an orb is only ever spent by pressing a piece with it held.
+## -1 shuts whatever is open.
 func _select_item(index: int) -> void:
 	_socket_pick = 0
-	_selected = index
-	_worn_selected = -1
-	_armed = ""
-	refresh()
-	selection_changed.emit(_open_piece())
+	_select(index, -1)
 
 
-## -1 closes it.
+## -1 shuts whatever is open.
 func _select_socket(socket: int) -> void:
-	_armed = ""
+	_select(-1, socket)
+
+
+## Every change of selection puts a held orb down: an open piece and an orb in hand never stand together.
+func _select(index: int, socket: int) -> void:
+	_selected = index
 	_worn_selected = socket
-	_selected = -1
+	_armed = ""
 	refresh()
 	selection_changed.emit(_open_piece())
 
 
-## A bag item's buttons: Equip (into the emptiest socket it fits) over Sell or Discard, beside its
-## square. No Back: the square pressed again, or bare panel, is the way out.
+## A bag item's buttons, stacked: Equip (and a ring's Swap), Sell or Discard, Never sell. No Back: the
+## square pressed again, or bare panel, is the way out.
 func _show_item(index: int) -> void:
-	var item := inventory.items[index]
-	var open_sockets := inventory.equipment.sockets_for(item)
-	# Choosing what to keep: the world is ending, and there is nothing else to do with a piece.
-	if _transcending and not _heirlooms:
+	if _buttonless():
 		return
-	if not open_sockets.is_empty():
-		var socket: Equipment.Socket = open_sockets[_socket_pick % open_sockets.size()]
-		# Everything the press would take off, named: a two-hander hands back the offhand as well, and
-		# the tooltip is the only place the player is told so before pressing.
-		var coming_off := PackedStringArray()
-		for piece: Item in inventory.equipment.displaced_by(socket, item):
-			coming_off.append(piece.display_name())
-		# Greyed rather than destroying a piece to make room for what comes off -- `_unequip_button`'s
-		# rule, and the reason is in the tooltip as it is there.
-		var refusal := inventory.why_not_equip(item, socket)
-		var full := not refusal.is_empty()
-		var equip := UITheme.button("Equip", "LightButton", refusal if full
-				else "Wear this in the %s slot%s" % [Equipment.LABELS[socket].to_lower(),
-					"" if coming_off.is_empty()
-					else ", putting %s back in the bag" % ", ".join(coming_off)])
-		equip.disabled = full
-		equip.pressed.connect(_on_equip_pressed.bind(item, socket))
-		equip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_action_box.add_child(equip)
-		# Only a ring has a second finger to go on: Swap turns Equip to the other one, and its tooltip
-		# says what that would take off.
-		if open_sockets.size() > 1:
-			var swap := UITheme.button("", "BrownIconButton", "Equip over the other ring instead")
-			swap.icon = load(SWAP_ICON)
-			swap.pressed.connect(_on_swap_pressed)
-			_action_box.add_child(swap)
-	# In a town that buys gear, the button that got rid of a piece sells it instead: one button in one
-	# place, so there is never a Discard sitting next to a Sell for the player to press by mistake.
-	# No confirmation either way: two clicks deep already, and asking twice teaches clicking through.
+	var item := inventory.items[index]
+	_add_equip(item)
+	# One button, Sell or Discard, never both. Neither asks (but an heirloom's Discard, every time):
+	# two clicks deep already, and asking twice teaches clicking through.
 	if _buys(TownServices.GEAR):
 		var price := TownPrices.sell_price(item)
 		var sell := UITheme.priced_button("Sell", price, "LightButton",
@@ -1113,11 +1037,9 @@ func _show_item(index: int) -> void:
 				else "Sell this to the merchant for %s gold" % BigNumber.format(price))
 		sell.disabled = item.locked
 		sell.pressed.connect(_on_sell_pressed.bind(item))
-		sell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_action_box.add_child(sell)
+		_add_action(sell)
 	else:
 		var discard := UITheme.button("Discard", "LightDangerButton", "Discard this for good")
-		# An heirloom is asked about every time, with no tick to stop the asking.
 		if _heirlooms:
 			discard.pressed.connect(_ask.bind("discard_heirloom", "Discard",
 					"Discard %s for good? The choice that made it an heirloom does not come back."
@@ -1125,12 +1047,9 @@ func _show_item(index: int) -> void:
 					_on_discard_pressed.bind(item), false))
 		else:
 			discard.pressed.connect(_on_discard_pressed.bind(item))
-		discard.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_action_box.add_child(discard)
-	# The padlock, held down and green while the piece is locked, as Auto is (the pressed pixel alone is
-	# too quiet): a level's Sell all and bin pass it by. Never "Lock", which is the smith's on a
-	# modifier. Not on the heirlooms, which are never thrown away by the handful.
+		_add_action(discard)
 	if not _heirlooms:
+		# "Never sell", never "Lock", which is the smith's word. Green while on, as Auto is.
 		var lock := UITheme.button("Never sell", UITheme.GO_BUTTON if item.locked else "LightButton",
 				"Let Sell all and the bin take this again" if item.locked
 				else "Sell all and the bin pass this by")
@@ -1138,8 +1057,40 @@ func _show_item(index: int) -> void:
 		lock.toggle_mode = true
 		lock.button_pressed = item.locked
 		lock.toggled.connect(_on_lock_toggled.bind(item))
-		lock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_action_box.add_child(lock)
+		_add_action(lock)
+
+
+## Equip, into the socket `_socket_pick` names of those the piece fits, and beside it a ring's Swap.
+func _add_equip(item: Item) -> void:
+	var sockets := inventory.equipment.sockets_for(item)
+	if sockets.is_empty():
+		return
+	var socket: Equipment.Socket = sockets[_socket_pick % sockets.size()]
+	# The tooltip is the only place the player is told what the press takes off before pressing: a
+	# two-hander hands back the offhand as well.
+	var coming_off := PackedStringArray()
+	for piece: Item in inventory.equipment.displaced_by(socket, item):
+		coming_off.append(piece.display_name())
+	# Greyed, with the reason, rather than destroying a piece to make room for what comes off.
+	var refusal := inventory.why_not_equip(item, socket)
+	var equip := UITheme.button("Equip", "LightButton", refusal if not refusal.is_empty()
+			else "Wear this in the %s slot%s" % [Equipment.LABELS[socket].to_lower(),
+				"" if coming_off.is_empty() else ", putting %s back in the bag" % ", ".join(coming_off)])
+	equip.disabled = not refusal.is_empty()
+	equip.pressed.connect(_on_equip_pressed.bind(item, socket))
+	_add_action(equip)
+	if sockets.size() > 1:
+		var swap := UITheme.button("", "BrownIconButton", "Equip over the other ring instead")
+		swap.icon = load(SWAP_ICON)
+		swap.pressed.connect(func() -> void:
+			_socket_pick += 1
+			refresh())
+		_action_box.add_child(swap)
+
+
+func _add_action(button: Button) -> void:
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_action_box.add_child(button)
 
 
 func _on_lock_toggled(on: bool, item: Item) -> void:
@@ -1148,18 +1099,21 @@ func _on_lock_toggled(on: bool, item: Item) -> void:
 	refresh()
 
 
-## A worn piece's one button. No Discard: the cap is the bag's alone, so nothing pushes the player to
-## destroy what they wear.
+## A worn piece's one button, greyed on a full bag rather than destroying something to make room. No
+## Discard: the cap is the bag's alone, so nothing pushes the player to destroy what they wear.
 func _show_worn(socket: Equipment.Socket) -> void:
-	if _transcending and not _heirlooms:
+	if _buttonless():
 		return
-	var unequip := _unequip_button(_on_unequip_pressed.bind(socket))
-	unequip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_action_box.add_child(unequip)
+	var full := inventory.is_full()
+	var unequip := UITheme.button("Unequip", "LightButton",
+			"The bag is full" if full else "Take this off and put it back in the bag")
+	unequip.disabled = full
+	unequip.pressed.connect(_on_unequip_pressed.bind(socket))
+	_add_action(unequip)
 
 
-## The buttons stood beside the selected square, bag or doll, or put away: with nothing selected,
-## with nothing to press (a transcension's bag), or while the square is scrolled out of the grid.
+## The buttons stood beside the selected square, bag or doll, or put away: with nothing selected, with
+## nothing to press, or while the square is scrolled out of the grid.
 func _place_actions() -> void:
 	var square := _selected_square()
 	var shown := square != null and _action_box.get_child_count() > 0
@@ -1181,20 +1135,16 @@ func _place_actions() -> void:
 ## The square the selection points at, in the grid or on the doll, or null.
 func _selected_square() -> Control:
 	if _selected >= 0:
-		for section: Node in _sections.get_children():
-			if section is GridContainer:
-				for slot: Control in section.get_children():
-					if slot.get_meta("bag_index", -1) == _selected:
-						return slot
-	elif _worn_selected >= 0 and _doll != null:
-		for slot: Node in _doll.get_children():
-			if slot.get_meta("socket", -1) == _worn_selected:
+		for slot: Control in _squares():
+			if slot.get_meta("bag_index", -1) == _selected:
 				return slot
+	elif _worn_selected >= 0 and _doll != null:
+		return _doll.squares.get(_worn_selected)
 	return null
 
 
-## Make heirloom, at the foot of a transcension's bag: live while the piece that is open, bag piece
-## or worn, can be made one.
+## Make heirloom, at the foot of a transcension's bag: live while the open piece, bag or worn, can be
+## made one.
 func _refresh_make() -> void:
 	if _make_button == null:
 		return
@@ -1219,21 +1169,11 @@ func _on_heirloom_pressed(item: Item) -> void:
 	heirloom_made.emit(item)
 
 
-## What the page changed, written down -- but for a transcension's pages, which have no file: all
-## that is done on the black screen is one write, and `main_scene` makes it when the screen is left.
+## Every write the page makes. Nothing without a path: a transcension's pages have none, the main scene
+## making that one write as the black screen is left.
 func _save() -> void:
 	if not _save_path.is_empty():
 		_purse.save(_save_path)
-
-
-## Greyed on a full bag rather than destroying something to make room.
-func _unequip_button(action: Callable) -> Button:
-	var full := inventory.is_full()
-	var button := UITheme.button("Unequip", "LightButton",
-			"The bag is full" if full else "Take this off and put it back in the bag")
-	button.disabled = full
-	button.pressed.connect(action)
-	return button
 
 
 func _on_equip_pressed(item: Item, socket: Equipment.Socket) -> void:
@@ -1253,15 +1193,12 @@ func _on_unequip_pressed(socket: Equipment.Socket) -> void:
 func _on_discard_pressed(item: Item) -> void:
 	if inventory.remove(item):
 		print("Discarded %s (%s, level %d)" % [item.type, item.rarity_name(), item.level])
-		_purse.gold += _purse.salvage(item)
-		_purse.add_orb(_purse.salvage_orb())
-		_purse.tick("discarded")
+		_salvaged([item])
 		_save()
 	_select_item(-1)
 
 
-## One piece over the counter. Priced and taken out first, paid for second, so a piece that was no
-## longer in the bag can never be paid for twice.
+## Priced and taken out first, paid for second, so a piece no longer in the bag is never paid for.
 func _on_sell_pressed(item: Item) -> void:
 	var price := TownPrices.sell_price(item)
 	if inventory.remove(item):
@@ -1272,15 +1209,12 @@ func _on_sell_pressed(item: Item) -> void:
 	_select_item(-1)
 
 
-## The sheet redrawn: the doll, whatever is selected. What a selected piece would replace is never
-## written here -- the hover card says it under Alt -- so selecting a piece leaves the doll standing.
+## The sheet redrawn: the doll (the stones page's tree), or folded away only the caret that brings it
+## back. What a selected piece would replace is never written here: that is the hover card's, under Alt.
 func _refresh_worn() -> void:
 	_doll = null
 	_tree = null
 	UITheme.clear(_worn_body)
-	# The doll stands at every counter (the user's, 2026-10-07): what is worn is what a shelf piece or a
-	# sale is weighed against, and the smith takes a worn piece off it. Hidden, the whole sheet goes and
-	# only the way back to it stays.
 	_worn_panel.visible = not _doll_hidden
 	_show_button.visible = _doll_hidden
 	if _worn_panel.visible:
@@ -1293,50 +1227,22 @@ func _refresh_worn() -> void:
 	layout.call_deferred()
 
 
-## The eight sockets laid over the figure by hand, translucent so the body shows through.
+## The doll, its squares dressed for what is selected, held or on the cursor, and Hide in its corner.
 func _show_doll() -> void:
-	_worn_panel.theme_type_variation = "WoodPanel"
-	_worn_body.custom_minimum_size = Vector2.ZERO
-	_doll = Control.new()
-	var figure := TextureRect.new()
-	figure.texture = DOLL_TEXTURE
-	figure.scale = Vector2(DOLL_SCALE, DOLL_SCALE)
-	figure.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	figure.position = _doll_origin()
-	_doll.add_child(figure)
-	var art: Vector2 = DOLL_TEXTURE.get_size() * DOLL_SCALE + _doll_origin()
-	for socket: Equipment.Socket in DOLL_SOCKETS:
-		art = art.max(_socket_spot(socket) + Vector2(ItemSlot.SIDE, ItemSlot.SIDE))
-	_doll.custom_minimum_size = art
+	_doll = Doll.new(inventory.equipment, _worn_selected)
 	_doll.gui_input.connect(_on_doll_input)
 	_doll.set_drag_forwarding(Callable(), _can_drop_on_doll, _drop_on_doll)
-	for socket: Equipment.Socket in DOLL_SOCKETS:
+	for socket: Equipment.Socket in _doll.squares:
+		var slot: ItemSlot = _doll.squares[socket]
 		var item := inventory.equipment.item_at(socket)
-		var chosen := _worn_selected == socket
-		var slot: ItemSlot
-		if item != null:
-			slot = ItemSlot.make(item, chosen, true)
-			if not (_transcending and not _heirlooms):
-				slot.set_meta(ItemCard.KEYS, {"shift": "unequip"})
-		elif socket == Equipment.Socket.OFFHAND and inventory.equipment.two_handed_worn():
-			# The hand is not empty, it is full of the weapon. So the socket wears that weapon's own
-			# icon as its faint mark, the way a bare ring socket wears the pack's ring: it reads as
-			# taken rather than as somewhere left to fill.
-			var weapon := inventory.equipment.item_at(Equipment.Socket.WEAPON)
-			slot = ItemSlot.empty("%s takes both hands" % weapon.display_name(), weapon.icon(),
-					chosen, true)
-		else:
-			slot = ItemSlot.empty(Equipment.LABELS[socket], _socket_mark(socket), chosen, true)
-		slot.position = _socket_spot(socket)
-		slot.size = Vector2(ItemSlot.SIDE, ItemSlot.SIDE)
-		slot.set_meta("socket", socket)
-		if chosen:
+		if item != null and not _buttonless():
+			slot.set_meta(ItemCard.KEYS, {"shift": "unequip"})
+		if socket == _worn_selected:
 			slot.set_meta(ItemCard.BESIDE, _actions)
 		_dim_for_orb(slot, item)
-		# A bag piece on the cursor: every socket it cannot be dropped on, as its Equip there would refuse.
+		# A bag piece on the cursor dims every socket its Equip would refuse.
 		if _lifted != null and inventory.items.has(_lifted) and not inventory.can_equip(_lifted, socket):
 			slot.modulate = OrbSlot.DIM
-		_doll.add_child(slot)
 	# Hide, in the corner the figure leaves empty. Anchored and grown leftwards because a button's
 	# size is not known until the theme reaches it.
 	var fold := UITheme.button("", "BrownIconButton", "Hide what is equipped")
@@ -1349,23 +1255,16 @@ func _show_doll() -> void:
 	_worn_body.add_child(_doll)
 
 
-## The skill tree in the doll's place, on the black screen's stones page: the stone open in the bag
-## rings the slots it may go in (`SkillTree.can_place`), a press on one puts it there and what that
-## pushes out comes back to the bag (`Inventory.place_stone`), and an orb in the hand goes into the
-## placed stone pressed. Under a bar of its own on the cream, the bag's twin rather than the doll's wood,
-## as tall as the bag beside it (`_side_by_side`) or held upright the room above it (`_tree_height`),
-## and the tree scaled into that.
+## The skill tree in the doll's place, on the stones page: under a bar of its own, and scaled into the
+## room `_tree_height` leaves it. What its presses and drops do: `_on_tree_pressed`, `_place`.
 func _show_tree() -> void:
-	_worn_panel.theme_type_variation = ""
-	_worn_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
-	_worn_body.custom_minimum_size = Vector2.ZERO
-	# The stone on the cursor, else the one open in the bag.
+	# The stone on the cursor, else the one open in the bag, rings the slots it may go in.
 	var held := _lifted if _lifted != null else _open_piece()
 	var view := SkillTreeView.new()
 	_tree = view
 	view.zoom = _tree_zoom
 	view.slot_pressed.connect(_on_tree_pressed)
-	view.set_drag_forwarding(Callable(), _can_drop_on_tree.bind(view), _drop_on_tree.bind(view))
+	view.set_drag_forwarding(Callable(), _can_drop_on_tree, _drop_on_tree)
 	view.fill(_purse.skills, false, held if held != null and held.is_stone() else null)
 	for path: String in view.squares:
 		if _purse.skills.stones.has(path):
@@ -1373,35 +1272,32 @@ func _show_tree() -> void:
 	var framed := UITheme.titled_panel(SkillsPage.TITLE, "", Callable())
 	framed.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	# No X, but as tall a bar as the bag's beside it, which has one.
-	(framed.get_child(0).get_child(0) as Control).custom_minimum_size.y = UITheme.icon_size("CloseButton").y
-	(framed.get_child(1) as Control).size_flags_vertical = Control.SIZE_EXPAND_FILL
+	(UITheme.title_of(framed).get_parent() as Control).custom_minimum_size.y = UITheme.icon_size("CloseButton").y
 	_worn_body.add_child(framed)
-	var body := UITheme.body_of(framed)
 	# Thin bars once zoomed past its box, as on the skills page.
 	var scroll := UITheme.scroll()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll.add_child(view)
-	# The − and + float over the tree's top-right corner rather than take a row of the height it needs:
-	# a whole window pixel a tree pixel is the step `fit` takes, and a row's worth was often one.
+	# The − and + float over the tree's top-right corner: a row of their own would take height the tree
+	# needs, and often the whole step `fit` scales by.
 	var over := MarginContainer.new()
 	over.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_child(over)
+	UITheme.body_of(framed).add_child(over)
 	over.add_child(scroll)
 	var zoom := SkillTreeView.zoom_buttons(view)
 	zoom.size_flags_horizontal = Control.SIZE_SHRINK_END
 	zoom.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	zoom.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	over.add_child(zoom)
-	# The bar and the frame: the panel less what stands in the scroll's place, the floating − and + included.
-	var outer := framed.get_combined_minimum_size()
-	var chrome := outer - over.get_combined_minimum_size()
-	var room := area if area.has_area() else get_viewport_rect()
+	# The bar and the frame: the panel less what stands in the scroll's place, the − and + included.
+	var chrome := framed.get_combined_minimum_size() - over.get_combined_minimum_size()
+	var room := _room()
 	var most := Vector2(room.size.x / _ui_scale - 2 * UITheme.EDGE, _tree_height(room)) - chrome
-	if not UITheme.narrow(get_viewport_rect().size, _ui_scale):
+	if not _narrow():
 		most.x -= _panel.get_combined_minimum_size().x + WORN_GAP
 	scroll.custom_minimum_size = view.fit(most, _ui_scale).min(most)
-	# Zoomed, it scrolls in the same box; kept, so the next redraw draws it at the same zoom.
+	# Kept, so the next redraw draws the tree at the same zoom.
 	view.zoomed.connect(func() -> void: _tree_zoom = view.zoom)
 
 
@@ -1409,11 +1305,10 @@ func _show_tree() -> void:
 ## upright what is left above the bag once it is docked (`UITheme.dock`: as tall as it holds, half the
 ## window at most).
 func _tree_height(room: Rect2) -> float:
-	var window := get_viewport_rect().size
-	if not UITheme.narrow(window, _ui_scale):
+	if not _narrow():
 		return _transcend_height(room)
-	var bag := minf(UITheme.natural_height(_panel), minf(room.size.y, window.y / 2.0) / _ui_scale - 2 * UITheme.EDGE)
-	return room.size.y / _ui_scale - 2 * UITheme.EDGE - bag - WORN_GAP
+	var most := minf(room.size.y, get_viewport_rect().size.y / 2.0) / _ui_scale - 2 * UITheme.EDGE
+	return room.size.y / _ui_scale - 2 * UITheme.EDGE - minf(UITheme.natural_height(_panel), most) - WORN_GAP
 
 
 ## The bag's height on the black screen across a window: `TRANSCEND_HEIGHT` of what the edges leave.
@@ -1421,8 +1316,8 @@ func _transcend_height(room: Rect2) -> float:
 	return floorf((room.size.y / _ui_scale - 2 * UITheme.EDGE) * TRANSCEND_HEIGHT)
 
 
-## A press on the tree's slot `path`: an orb in the hand goes into the stone placed there; otherwise the
-## stone open in the bag goes in, if it may. The black screen saves nothing until the world is left.
+## A press on the tree's slot `path`: an orb in hand goes into the stone placed there; otherwise the
+## stone open in the bag goes in, if it may.
 func _on_tree_pressed(path: String) -> void:
 	var placed: Item = _purse.skills.stones.get(path)
 	if _armed != "":
@@ -1440,55 +1335,28 @@ func _place(stone: Item, path: String) -> void:
 	_select_item(-1)
 
 
-## How far the doll is pushed right and down so no socket hangs off the page.
-func _doll_origin() -> Vector2:
-	var least := Vector2.ZERO
-	for socket: Equipment.Socket in DOLL_SOCKETS:
-		least = least.min(_socket_corner(socket))
-	return -least.min(Vector2.ZERO)
-
-
-## A socket square's top-left before the doll is shifted to fit.
-func _socket_corner(socket: Equipment.Socket) -> Vector2:
-	return (DOLL_SOCKETS[socket] * DOLL_SCALE - Vector2(ItemSlot.SIDE, ItemSlot.SIDE) / 2.0).floor()
-
-
-func _socket_spot(socket: Equipment.Socket) -> Vector2:
-	return _socket_corner(socket) + _doll_origin()
-
-
-## The faint mark an empty ring or amulet socket carries; the figure explains the rest.
-func _socket_mark(socket: Equipment.Socket) -> Texture2D:
-	if socket == Equipment.Socket.AMULET:
-		return SOCKET_AMULET_TEXTURE
-	if socket in [Equipment.Socket.RING_LEFT, Equipment.Socket.RING_RIGHT]:
-		return SOCKET_RING_TEXTURE
-	return null
-
-
-## A click on a filled socket opens it; a second click on the open one closes it. Counted as it lets go,
-## as the grid's is, so that a mouse's press that travels lifts the piece instead (`_lift`).
+## A click on a filled socket opens it, a second shuts it. Counted as it lets go, as the grid's is, so
+## that a mouse's press that travels lifts the piece instead (`_lift`).
 func _on_doll_input(event: InputEvent) -> void:
 	Cursors.over_squares(_doll, event, _armed != "")
-	if event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0 \
-			and not get_viewport().gui_is_dragging():
+	if _travelling(event):
 		_dragged += event.relative.length()
-		var lifted := _worn_at(_drag_from)
+		var lifted := _doll.worn_at(_drag_from)
 		if lifted >= 0 and _lifts() and _dragged >= DRAG_THRESHOLD:
 			_lift(inventory.equipment.item_at(lifted))
 		return
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
 		return
-	# Before anything redraws the doll out of the tree: freed under its own press, it would let the press
-	# through to the map behind it (`OrbSlot`'s reason).
+	# Before anything redraws the doll out of the tree: freed under its own press, it would let the
+	# press through to the map behind it.
 	_doll.accept_event()
 	var press := event as InputEventMouseButton
 	if press.pressed:
 		_drag_from = press.position
 		_dragged = 0.0
 		return
-	var socket := _worn_at(press.position)
-	if socket < 0 or _dragged >= (Cursors.TOUCH_SLOP if Cursors.touched else DRAG_THRESHOLD):
+	var socket := _doll.worn_at(press.position)
+	if socket < 0 or _dragged >= _slop():
 		return
 	if _armed != "":
 		_orb_on(inventory.equipment.item_at(socket))
@@ -1499,41 +1367,12 @@ func _on_doll_input(event: InputEvent) -> void:
 		_select_socket(-1 if socket == _worn_selected else socket)
 
 
-## The doll's socket under `at` (the doll's own pixels), filled or not, or -1.
-func _socket_at(at: Vector2) -> int:
-	var square := _socket_square_at(at)
-	return -1 if square == null else square.get_meta("socket")
-
-
-## The doll's socket square under `at`, or null.
-func _socket_square_at(at: Vector2) -> Control:
-	for slot: Control in _doll.get_children():
-		if slot.has_meta("socket") and Rect2(slot.position, slot.size).has_point(at):
-			return slot
-	return null
-
-
-## The socket whose piece is drawn under `at`, or -1 over an empty one or bare doll. The offhand square is
-## the two-hander's other half while one is worn, so it answers for the weapon: what it draws is what it
-## answers for.
-func _worn_at(at: Vector2) -> int:
-	var socket := _socket_at(at)
-	if socket == Equipment.Socket.OFFHAND and inventory.equipment.two_handed_worn():
-		socket = Equipment.Socket.WEAPON
-	return socket if socket >= 0 and inventory.equipment.item_at(socket) != null else -1
-
-
-func _on_swap_pressed() -> void:
-	_socket_pick += 1
-	refresh()
-
-
 func _on_fold_pressed() -> void:
 	_doll_hidden = not _doll_hidden
 	refresh()
 
 
-## The piece the bag has open, bag item or worn, or null on the grid.
+## The piece the bag has open, bag item or worn, or null.
 func _open_piece() -> Item:
 	if _selected >= 0 and _selected < inventory.total():
 		return inventory.items[_selected]
@@ -1542,13 +1381,15 @@ func _open_piece() -> Item:
 	return null
 
 
-## Every orb held, lit, whatever is open: an orb is picked up, never spent on the open piece -- the
-## super orbs too, since 2026-10-03 (the user's: "first click orb, then gear").
+## The trays redrawn: every orb lit whatever is open, since an orb is picked up, never spent on the
+## open piece.
 func refresh_orbs() -> void:
 	UITheme.clear(_orb_tray)
 	UITheme.clear(_rune_tray)
 	_rune_tray.hide()
 	_fold_button.hide()
+	# The square the card described has just been freed.
+	_orb_card.hide()
 	if _transcending and not _stones:
 		# Over the bag there is no tray at all, and over the heirlooms it is the super orbs: one count
 		# for the six of them (said in the corner, `_count`), so no square wears a number.
@@ -1556,10 +1397,9 @@ func refresh_orbs() -> void:
 		_orb_rule.visible = _heirlooms
 		for orb: String in SuperOrbTable.orbs() if _heirlooms else []:
 			_orb_tray.add_child(_tray_slot(orb, mini(_purse.super_orbs, 1)))
-		_hide_orb_card()
 		return
-	# No tray until the first orb; once seen it stays, even with every orb spent. The runes the same, over
-	# it and in the bag alone -- and with them the chevron that folds both away.
+	# No tray until the first orb; once seen it stays, even with every orb spent. The runes the same,
+	# on the ordinary bag alone, and with them the chevron that folds both rows away.
 	var orbs := _purse.total_orbs() > 0 or "first_orb" in _purse.tips
 	var runes := not (_heirlooms or _transcending) \
 			and (not _purse.runes.is_empty() or Inventory.FIRST_RUNE in _purse.tips)
@@ -1573,8 +1413,6 @@ func refresh_orbs() -> void:
 		_orb_tray.add_child(_tray_slot(orb, _purse.orb_count(orb)))
 	for rune: String in RuneTable.names() if runes else []:
 		_rune_tray.add_child(_tray_slot(rune, _purse.rune_count(rune)))
-	# The square it described has just been freed.
-	_hide_orb_card()
 
 
 func _tray_slot(orb: String, count: int) -> OrbSlot:
@@ -1582,33 +1420,24 @@ func _tray_slot(orb: String, count: int) -> OrbSlot:
 	slot.picks_up = true
 	slot.pressed.connect(_on_orb_pressed)
 	slot.hovered.connect(_on_orb_hovered.bind(slot))
-	slot.unhovered.connect(_hide_orb_card)
+	slot.unhovered.connect(_orb_card.hide)
 	return slot
 
 
-## `CHEVRON` in the button brown, pointing up when `up`. Made once.
+## `CHEVRON` in the button brown, flipped to point up when `up`. Made once.
 static func _chevron(up: bool) -> ImageTexture:
 	if _chevrons.is_empty():
 		for flip: bool in [false, true]:
-			var image := Image.create(CHEVRON[0].length(), CHEVRON.size(), false, Image.FORMAT_RGBA8)
-			for y in CHEVRON.size():
-				for x in CHEVRON[y].length():
-					if CHEVRON[y][x] == "#":
-						image.set_pixel(x, y, Palette.BUTTON_BROWN)
+			var image := UITheme.stamp(CHEVRON, {"#": Palette.BUTTON_BROWN})
 			if flip:
 				image.flip_y()
 			_chevrons.append(ImageTexture.create_from_image(image))
 	return _chevrons[int(up)]
 
 
-func _on_trays_pressed() -> void:
-	_trays_hidden = not _trays_hidden
-	refresh()
-
-
-## The rune in hand pressed on the map's tile at world `spot`, which carries `own` modifiers: spent there
-## where it does something (`Inventory.use_rune`), saved, and kept in hand while any are left, as an orb
-## is. Whether it was spent.
+## The rune in hand pressed on the map's tile at world `spot`, which carries `own` modifiers (the main
+## scene calls this): spent where it does something (`Inventory.use_rune`), saved, and kept in hand
+## while any are left, as an orb is. Returns whether it was spent.
 func rune_on(spot: Vector2i, own: Array) -> bool:
 	if not RuneTable.has(_armed) or not _purse.use_rune(_armed, spot, own, _craft_rng):
 		return false
@@ -1621,9 +1450,8 @@ func rune_on(spot: Vector2i, own: Array) -> bool:
 	return true
 
 
-## Picks the orb up (`_armed`), and a second press puts it down; the next piece pressed is crafted with
-## it (`_craft`). With a piece open the press shuts it first (the user's rule, 2026-10-01): an orb is
-## never spent on the open piece. Orbs are never sold: a vendor only sells them.
+## A press in the tray picks the orb up, or puts the held one down. With a piece open it shuts the
+## piece first (the user's rule, 2026-10-01): an orb is never spent on the open piece.
 func _on_orb_pressed(orb: String) -> void:
 	if _count_of(orb) <= 0:
 		return
@@ -1656,13 +1484,13 @@ func _super_press(orb: String, item: Item) -> void:
 		var line := UITheme.button(ModifierTable.line(item.mods[i]), "LightButton", "")
 		line.custom_minimum_size.x = CONFIRM_WIDTH
 		line.disabled = not SuperOrbTable.can_aim(orb, item, i)
-		# Once, as `_ask` answers: a line pressed again as the question shrinks would spend a second orb.
+		# Answered once, as in `_ask`: a second press while it shrinks would spend a second orb.
 		line.pressed.connect(func() -> void:
 			if not Juice.leaving(panel):
 				_close_confirm()
 				_super_craft(orb, item, i))
 		body.add_child(line)
-	# With no X the way back out is a button of its own, as every other question's Cancel is.
+	# A question has no X, so its way back out is a Cancel of its own.
 	var cancel := UITheme.button("Cancel", "LightButton", "")
 	cancel.pressed.connect(_close_confirm)
 	body.add_child(cancel)
@@ -1674,17 +1502,12 @@ func _super_craft(orb: String, item: Item, index: int) -> void:
 	if _purse.super_orbs <= 0 or not SuperOrbTable.apply(orb, item, _craft_rng, index):
 		return
 	_purse.super_orbs -= 1
-	print("Spent %s on %s (%s, level %d)" % [orb, item.display_name(), item.rarity_name(), item.level])
-	if _purse.super_orbs <= 0:
-		_armed = ""
-	refresh()
-	_orb_applied()
-	crafted.emit(orb)
+	_spent(orb, item, _purse.super_orbs)
 
 
-## The held orb on a piece that is not the bag's -- one off a vendor's shelf. `written` is called
-## between the change and the save, so whoever owns the piece writes it down in the same write the
-## orb is spent in.
+## The held orb on a piece that is not the bag's: one off a vendor's shelf. `written` is called between
+## the change and the save, so whoever owns the piece writes it down in the same write the orb is
+## spent in.
 func craft_held(item: Item, written: Callable) -> void:
 	if _armed != "":
 		_craft(_armed, item, written)
@@ -1692,7 +1515,7 @@ func craft_held(item: Item, written: Callable) -> void:
 
 ## The held orb pressed on one of the player's own pieces: in the bag, worn, or a stone in the tree.
 ## Under a finger the first tap only puts the piece's card up, and the next spends the orb
-## (`Cursors.applies`): with no hover, a tap is the only way the piece is read first.
+## (`Cursors.applies`).
 func _orb_on(item: Item) -> void:
 	if Cursors.applies(item):
 		_craft(_armed, item)
@@ -1723,23 +1546,29 @@ func _apply_orb(orb: String, item: Item, written: Callable) -> void:
 	if orb == "Orb of Chaos":
 		_purse.tick("chaos")
 	_save()
+	_spent(orb, item, _purse.orb_count(_armed))
+
+
+## What follows an orb going into `item`, `left` of the held one remaining: put down with the last,
+## the page redrawn, heard and told (`crafted`).
+func _spent(orb: String, item: Item, left: int) -> void:
 	print("Spent %s on %s (%s, level %d)" % [orb, item.display_name(), item.rarity_name(), item.level])
-	if _purse.orb_count(_armed) <= 0:
+	if left <= 0:
 		_armed = ""
 	refresh()
 	_orb_applied()
 	crafted.emit(orb)
 
 
+## Silent where the orb had nothing to do: only a spent one is heard.
 func _orb_applied() -> void:
 	for layer: AudioStream in ORB_APPLIED_SOUNDS:
 		Juice.sound(layer)
 
 
-## Whether wearing `item` loses nothing and gains something: against what Equip would take off (the
-## emptiest socket it fits, both hands for a two-hander), and against nothing on a bare socket. A swap
-## that trades one stat for another gets no mark -- that is the Alt card's to weigh, and most swaps are.
-## Nor does a piece Equip would refuse (`Inventory.can_equip`: the attribute it asks for, above all):
+## Whether wearing `item` loses nothing and gains something against what Equip would take off (the
+## emptiest socket it fits, both hands for a two-hander; nothing on a bare socket). A swap that trades
+## one stat for another gets no mark, and nor does a piece Equip would refuse (`Inventory.can_equip`):
 ## an arrow over a greyed Equip is a promise the next press breaks.
 static func is_upgrade(item: Item, player: Inventory) -> bool:
 	var equipment := player.equipment
@@ -1752,16 +1581,11 @@ static func is_upgrade(item: Item, player: Inventory) -> bool:
 	return not changes.is_empty() and changes.all(func(change: float) -> bool: return change >= 0.0)
 
 
-## The green arrow in a square's top-right corner that says `is_upgrade`, drawn from `UPGRADE`.
+## The arrow in a square's top-right corner that says `is_upgrade`.
 static func _upgrade_mark() -> TextureRect:
 	if _upgrade_texture == null:
-		var image := Image.create(UPGRADE[0].length(), UPGRADE.size(), false, Image.FORMAT_RGBA8)
-		for y in UPGRADE.size():
-			for x in UPGRADE[y].length():
-				match UPGRADE[y][x]:
-					"#": image.set_pixel(x, y, Palette.LEAF_LT)
-					"o": image.set_pixel(x, y, Palette.INK)
-		_upgrade_texture = ImageTexture.create_from_image(image)
+		_upgrade_texture = ImageTexture.create_from_image(
+				UITheme.stamp(UPGRADE, {"#": Palette.LEAF_LT, "o": Palette.INK}))
 	var mark := TextureRect.new()
 	mark.name = UPGRADE_NAME
 	mark.texture = _upgrade_texture
@@ -1770,10 +1594,10 @@ static func _upgrade_mark() -> TextureRect:
 	return mark
 
 
-## A square the held orb can do nothing to goes as grey as an orb with nothing to do (`OrbSlot.DIM`).
+## A square the held orb can do nothing to goes as grey as an orb with nothing to do.
 func _dim_for_orb(slot: Control, item: Item) -> void:
-	if _armed != "" and item != null and not (SuperOrbTable.can_apply(_armed, item) if SuperOrbTable.has(_armed)
-			else OrbTable.can_apply(_armed, item)):
+	if _armed != "" and item != null and not (SuperOrbTable.can_apply(_armed, item)
+			if SuperOrbTable.has(_armed) else OrbTable.can_apply(_armed, item)):
 		slot.modulate = OrbSlot.DIM
 
 
@@ -1783,10 +1607,6 @@ func _on_orb_hovered(orb: String, slot: OrbSlot) -> void:
 	_orb_card.show()
 	_place_orb_card(slot.get_global_rect())
 	_place_orb_card.call_deferred(slot.get_global_rect())
-
-
-func _hide_orb_card() -> void:
-	_orb_card.hide()
 
 
 ## Above the square: the screen edge is on one side of the tray and the sheet on the other.

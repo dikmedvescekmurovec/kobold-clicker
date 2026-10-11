@@ -25,7 +25,8 @@ func _choice_kind(option: Dictionary, tier: int, ceiling: int, walls: int) -> St
 				and int(option[BountyBoard.CHOICE_COUNT]) == int(BountyBoard.CHOICE_ORBS[orb][at])
 		return BountyBoard.ORB_BUNDLE if ok else ""
 	if option.has(BountyBoard.CHOICE_GOLD):
-		return BountyBoard.GOLD_PILE if float(option[BountyBoard.CHOICE_GOLD]) == BountyBoard.pile_gold(tier, TOWN_CELL) else ""
+		return BountyBoard.GOLD_PILE if float(option[BountyBoard.CHOICE_GOLD]) == BountyBoard.pile_gold(tier,
+				TOWN_CELL) else ""
 	if option.has(BountyBoard.CHOICE_XP):
 		return BountyBoard.XP_PILE if int(option[BountyBoard.CHOICE_XP]) == BountyBoard.pile_xp(tier, TOWN_CELL) else ""
 	var piece: Item = option[BountyBoard.CHOICE_ITEM]

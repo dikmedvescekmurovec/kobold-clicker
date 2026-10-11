@@ -1,12 +1,11 @@
 class_name FightLedger
 extends RefCounted
-## What one fight has earned, and the one rule for when it is written down.
+## What one fight has earned, and the one rule for when it is written down (`_write`).
 ##
-## Every gain goes into the inventory as it lands, whatever the fight -- the bag can be opened over
-## any fight, so what it shows has to be what the fight has turned up. A charting fight also writes
-## each one to disk: it is over in half a minute, and closing the game mid-fight must not cost a find.
-## A farm run has no end of its own and could go an hour, so it leaves the writing to whatever saves
-## next -- at the latest `bank_kills`, which both ways out of a run call.
+## Every gain goes into the inventory as it lands, whatever the fight: the bag can be opened over any
+## fight, so what it shows has to be what the fight has turned up. A charting fight also writes each
+## one to disk, so closing the game mid-fight never costs a find. A farm run could go an hour, so it
+## leaves the writing to whatever saves next -- at the latest `bank_kills`, which both ways out call.
 
 ## A body the accepted bounty took, and what that bounty stands at with it: `have >= need` is filled.
 ## The one thing the screen hears of a bounty mid-fight.
@@ -17,8 +16,7 @@ signal bounty_too_low(enemy: String, level: int)
 
 ## What the fight has turned up. Kept after it ends, for the report.
 var drops: Array[Item] = []
-## Whether this is a farm run, which writes once as it ends, rather than a fight for a tile, which
-## writes as it goes.
+## A farm run, which writes once as it ends; a fight for a tile writes as it goes.
 var farming: bool
 ## The level of the tile being fought on, which a bounty asks about. -1 until the main scene says.
 var tile_level := -1
@@ -65,8 +63,7 @@ func add_xp(amount: int) -> void:
 	_write()
 
 
-## One body down, for the boards that have work out on that monster. The boards are reached through
-## the inventory, which is what this already holds -- nothing here knows there is a page showing them.
+## One body down, for the board that has work out on that monster.
 func add_kill(enemy: String) -> void:
 	if not BountyBoard.count_kill(_inventory.towns, enemy, 1, tile_level):
 		# Its monster, and not filled: only the tile's level can have refused it.
@@ -79,8 +76,8 @@ func add_kill(enemy: String) -> void:
 	bounty_counted.emit(enemy, int(bounty.get(BountyBoard.HAVE, 0)), int(bounty.get(BountyBoard.NEED, 0)))
 
 
-## A find the player's own rule threw away on sight. It is not in the bag; all that is left of it is
-## that something dropped, which spends the Broken Sword.
+## A find the player's own rule threw away on sight: all that is left of it is that something dropped,
+## which spends the Broken Sword.
 func autodiscarded() -> void:
 	if _inventory.first_sword_taken:
 		return

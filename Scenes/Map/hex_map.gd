@@ -3,8 +3,7 @@ extends Node2D
 ## Clickable hex map. Ground tiles (environments, towns) go on GroundLayer, blend overlays on one layer per
 ## spreading environment above it, and road overlays on RoadLayer.
 
-## Part of the node's public surface; nothing listens yet, the main scene only acts on clicks. Its
-## `info` is worked out only while something does (`_set_hovered`).
+## Nothing listens yet; its `info` is worked out only while something does (`_set_hovered`).
 signal tile_hovered(cell: Vector2i, info: Dictionary)
 signal tile_clicked(cell: Vector2i, info: Dictionary)
 ## Mouse movement, in screen pixels, while dragging the map. Whoever owns the camera moves it.
@@ -19,6 +18,19 @@ const DRAG_THRESHOLD := 3.0
 const BACKDROP_SHADER := preload("res://Scenes/Map/backdrop.gdshader")
 ## How far the backdrop reaches from cell (0, 0) each way, in world pixels: past anywhere the camera can go.
 const BACKDROP_REACH := 50000.0
+## The sprite pixel that sits on a town's cell centre (`towns.ANCHOR` in the generator).
+const TOWN_ANCHOR := Vector2(42, 56)
+## An uncharted town's buildings: over the fog rather than under it, a little dimmed.
+const TOWN_UNCHARTED := Color(0.78, 0.76, 0.84)
+## The Gollux cave's mouth, one picture a ground (`AI-sprites-generator/caves.py`), and the one node
+## it is drawn as: there is one cave a world.
+const CAVE_ART := "res://Assets/Caves/cave_%s.png"
+const CAVE_NODE := "Cave"
+## The dark red light out of the pit, its origin on the middle of the hole (`caves.HOLE`, in the sprite's
+## pixels); the rect is the most of the map it may light, round that point.
+const CAVE_GLOW := preload("res://Scenes/Map/cave_glow.gdshader")
+const CAVE_GLOW_AT := Vector2(42, 58)
+const CAVE_GLOW_REACH := Rect2(-32, -34, 64, 54)
 
 var tileset: HexTileset
 var hovered_cell := NO_CELL
@@ -31,13 +43,12 @@ var aim_radius := -1:
 		aim_radius = value
 		highlight.queue_redraw()
 
-## Environment of cells that aren't drawn yet, as a Callable taking a cell and returning an environment name
-## ("" when there is none). Whoever generates the map sets it, so a tile can blend with land around it that the
-## player hasn't charted, and looks the same however late it is drawn.
+## Environment of cells that aren't drawn yet, as a Callable taking a cell and returning an environment
+## name ("" when there is none). Whoever generates the map sets it, so a tile blends with land the player
+## hasn't charted, and looks the same however late it is drawn.
 var hidden_env := Callable()
-## Whether a cell nothing is drawn on can still be hovered and clicked, as a Callable taking a cell:
-## the first tile into the fog, which can be charted blind (`MapBuilder.can_chart`). Whoever owns the
-## map sets it; unset, only a drawn tile answers the mouse.
+## Whether a cell nothing is drawn on can still be hovered and clicked, as a Callable taking a cell
+## (`MapBuilder.can_chart`). Unset, only a drawn tile answers the mouse.
 var can_pick := Callable()
 
 ## The interface's scale, which a press's travel is measured in. The main scene's.
@@ -51,35 +62,17 @@ var blend_layers: Dictionary[String, TileMapLayer] = {}
 @onready var ground_layer: TileMapLayer = $GroundLayer
 @onready var road_layer: TileMapLayer = $RoadLayer
 @onready var highlight: HexHighlight = $Highlight
-## The rubble of the walls that have fallen, over the blends and under the roads and the fog: it is the
-## land's, and a road runs through it.
+## The fallen walls' rubble, over the blends and under the roads and the fog.
 var rubble_layer: TileMapLayer
 
-## Marker for the player's tile, and the grey veil over tiles that aren't charted yet. Both are created
-## here, so the scene file stays untouched while the editor has it open.
+## These are made in code, so the scene file stays untouched while the editor has it open.
 var player: PlayerToken
 var fog: FogOverlay
-## Where MapBuilder puts the treasure chest sprites: over the fog, so a chest reads on uncharted land.
+## `MapBuilder`'s chest sprites, ice and edge fog: over the fog, so a chest reads on uncharted land.
 var chests: Node2D
-## A settlement's buildings, one sprite a town from `Assets/Towns/` (`AI-sprites-generator/build_towns.py`),
-## over the fog, the ice and the chests: bigger than their hex, so a town reads from across the map, and
-## only dimmed while uncharted, so a town the player has heard of stands out before the land round it.
-## The ground under them is the town tile on GroundLayer.
+## Settlements' buildings (`Assets/Towns/`, `AI-sprites-generator/build_towns.py`) and the cave, over the
+## fog, the ice and the chests. The ground under a town is its tile on GroundLayer.
 var towns: Node2D
-## The sprite pixel that sits on a town's cell centre (`towns.ANCHOR` in the generator).
-const TOWN_ANCHOR := Vector2(42, 56)
-## An uncharted town's buildings: over the fog rather than under it, a little dimmed.
-const TOWN_UNCHARTED := Color(0.78, 0.76, 0.84)
-## The Gollux cave's mouth, one picture a ground (`AI-sprites-generator/caves.py`), and the one node
-## it is drawn as: there is one cave a world.
-const CAVE_ART := "res://Assets/Caves/cave_%s.png"
-const CAVE_NODE := "Cave"
-## The dark red light out of the pit, its own shader over the picture (which leaves it out), with its
-## origin on the middle of the hole: `caves.HOLE`, in the sprite's pixels. The polygon is the most of the
-## map it may light, round that point.
-const CAVE_GLOW := preload("res://Scenes/Map/cave_glow.gdshader")
-const CAVE_GLOW_AT := Vector2(42, 58)
-const CAVE_GLOW_REACH := Rect2(-32, -34, 64, 54)
 var _town_art: Dictionary[String, Texture2D] = {}
 
 
@@ -87,21 +80,11 @@ func _ready() -> void:
 	tileset = HexTileset.new()
 	ground_layer.tile_set = tileset.tile_set
 	road_layer.tile_set = tileset.tile_set
-	# The lowest-priority environment never spreads, so it gets no layer. Each layer goes just below the roads.
+	# The lowest-priority environment never spreads, so it gets no layer.
 	for env in tileset.blend_priority.slice(1):
-		var layer := TileMapLayer.new()
-		layer.name = "Blend_" + env
-		layer.tile_set = tileset.tile_set
-		add_child(layer)
-		move_child(layer, road_layer.get_index())
-		blend_layers[env] = layer
-	rubble_layer = TileMapLayer.new()
-	rubble_layer.name = "Rubble"
-	rubble_layer.tile_set = tileset.tile_set
-	add_child(rubble_layer)
-	move_child(rubble_layer, road_layer.get_index())
+		blend_layers[env] = _add_layer("Blend_" + env)
+	rubble_layer = _add_layer("Rubble")
 	highlight.setup(self)
-	# The dark under everything, where nothing is drawn yet: drifting cloud, far wider than any map.
 	var backdrop := Polygon2D.new()
 	backdrop.name = "Backdrop"
 	backdrop.polygon = PackedVector2Array([Vector2(-BACKDROP_REACH, -BACKDROP_REACH),
@@ -111,24 +94,33 @@ func _ready() -> void:
 	backdrop.material.shader = BACKDROP_SHADER
 	add_child(backdrop)
 	move_child(backdrop, 0)
+	# Over the terrain and roads, under the outlines, each over the last.
 	fog = FogOverlay.new()
-	fog.name = "Fog"
-	add_child(fog)
-	move_child(fog, highlight.get_index())  # Over the terrain and roads, under the outlines.
+	_add_below(fog, "Fog", highlight)
 	fog.setup(self)
 	chests = Node2D.new()
-	chests.name = "Chests"
-	add_child(chests)
-	move_child(chests, highlight.get_index())
+	_add_below(chests, "Chests", highlight)
 	towns = Node2D.new()
-	towns.name = "Towns"
-	add_child(towns)
-	move_child(towns, highlight.get_index())
+	_add_below(towns, "Towns", highlight)
 	player = PlayerToken.new()
 	player.name = "Player"
 	add_child(player)  # Last, so the token draws over the highlight.
 	player.setup(self)
 	player.set_cell(NO_CELL)
+
+
+func _add_below(node: Node, node_name: String, above: Node) -> void:
+	node.name = node_name
+	add_child(node)
+	move_child(node, above.get_index())
+
+
+## A tile layer just below the roads, over every layer added before it.
+func _add_layer(layer_name: String) -> TileMapLayer:
+	var layer := TileMapLayer.new()
+	layer.tile_set = tileset.tile_set
+	_add_below(layer, layer_name, road_layer)
+	return layer
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -153,15 +145,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			# A click selects a tile; a press that travelled was a drag, and only moved the map.
 			var cell := cell_at(world_position(event.position))
-			# A tap makes no motion, so it is what moves a finger's outline: onto the tile it chose.
 			if _pressing and not _dragging:
-				_set_hovered(cell)
-			if _pressing and not _dragging and aim_radius >= 0:
-				cell_aimed.emit(cell)
-				get_viewport().set_input_as_handled()
-			elif _pressing and not _dragging and _answers(cell):
-				select_cell(cell)
-				get_viewport().set_input_as_handled()
+				_set_hovered(cell)  # a tap makes no motion, so it is what moves a finger's outline
+				if aim_radius >= 0:
+					cell_aimed.emit(cell)
+					get_viewport().set_input_as_handled()
+				elif _answers(cell):
+					select_cell(cell)
+					get_viewport().set_input_as_handled()
 			_pressing = false
 			_dragging = false
 			_point()
@@ -175,9 +166,8 @@ func _point() -> void:
 			else Cursors.HAND if hovered_cell != NO_CELL and not Cursors.holding() else Cursors.ARROW)
 
 
-## Puts a ground tile down without touching the overlays. For a bulk load, where the caller
-## refreshes the blends of everything it drew once it is all down: set_ground refreshes a cell and
-## its six neighbors, which is seven times the work when a whole map arrives at once.
+## Puts a ground tile down without touching the overlays. For a bulk load, whose caller refreshes each
+## drawn cell's blends once: `set_ground` refreshes a cell and its six neighbors.
 func place_ground(cell: Vector2i, tile_name: String) -> void:
 	ground_layer.set_cell(cell, HexTileset.SOURCE_ID, tileset.atlas_coords(tile_name))
 
@@ -190,7 +180,8 @@ func set_ground(cell: Vector2i, tile_name: String) -> void:
 	for next in HexGrid.neighbors(cell):
 		var next_env := _env_at(next)
 		if env != "" and next_env != "" and not tileset.can_border(env, next_env):
-			push_warning("%s at %s borders %s at %s, which env_adjacency doesn't allow" % [env, cell, next_env, next])
+			push_warning("%s at %s borders %s at %s, which env_adjacency doesn't allow"
+					% [env, cell, next_env, next])
 		refresh_blends(next)
 
 
@@ -217,37 +208,37 @@ func set_town(cell: Vector2i, tile_name: String, charted: bool) -> void:
 	if sprite == null:
 		if not _town_art.has(tile_name):
 			_town_art[tile_name] = load("res://Assets/Towns/%s.png" % tile_name)
-		sprite = Sprite2D.new()
-		sprite.name = _town_node(cell)
-		sprite.texture = _town_art[tile_name]
-		sprite.centered = false
-		sprite.position = ground_layer.map_to_local(cell) - TOWN_ANCHOR
-		towns.add_child(sprite)
+		sprite = _stand(_town_node(cell), _town_art[tile_name], cell)
 	sprite.modulate = Color.WHITE if charted else TOWN_UNCHARTED
 
 
-## Draws the Gollux cave's mouth on `cell`, in `env`'s picture, on the settlements' layer and at their
-## anchor (`caves.py` draws it to their size), dimmed until charted as a settlement is. Nothing where
-## the picture has not been built: the art is exported only once it has been approved.
+## Draws the Gollux cave's mouth on `cell`, in `env`'s picture, at the settlements' anchor (`caves.py`
+## draws it to their size), dimmed until charted as a settlement is. Nothing where the picture has not
+## been built: the art is exported only once it has been approved.
 func set_cave(cell: Vector2i, env: String, charted: bool) -> void:
 	var sprite := towns.get_node_or_null(CAVE_NODE) as Sprite2D
 	if sprite == null:
 		var path := CAVE_ART % env
 		if not ResourceLoader.exists(path):
 			return
-		sprite = Sprite2D.new()
-		sprite.name = CAVE_NODE
-		sprite.texture = load(path)
-		sprite.centered = false
-		sprite.position = ground_layer.map_to_local(cell) - TOWN_ANCHOR
-		towns.add_child(sprite)
+		sprite = _stand(CAVE_NODE, load(path), cell)
 		sprite.add_child(_cave_glow())
 	sprite.modulate = Color.WHITE if charted else TOWN_UNCHARTED
 
 
-## The light out of the pit: a rectangle over the hole drawn by `cave_glow.gdshader`, added onto what is
-## under it. A child of the picture, so the fog's dimming of an uncharted cave dims it too. It is only for
-## show, so with animations off it holds still.
+## A picture on the `towns` layer, its `TOWN_ANCHOR` on the middle of `cell`.
+func _stand(node_name: String, texture: Texture2D, cell: Vector2i) -> Sprite2D:
+	var sprite := Sprite2D.new()
+	sprite.name = node_name
+	sprite.texture = texture
+	sprite.centered = false
+	sprite.position = ground_layer.map_to_local(cell) - TOWN_ANCHOR
+	towns.add_child(sprite)
+	return sprite
+
+
+## The light out of the pit, added onto what is under it (`cave_glow.gdshader`). A child of the picture,
+## so the dimming of an uncharted cave dims it too; with animations off it holds still.
 func _cave_glow() -> Polygon2D:
 	var glow := Polygon2D.new()
 	glow.name = "Glow"
@@ -318,8 +309,8 @@ func blends_at(cell: Vector2i) -> Array[String]:
 	return result
 
 
-## Share of the cell's hex pixels that each environment visibly covers, largest first. Each pixel belongs to the
-## highest-priority overlay that is opaque there, or to the ground. Empty if the cell has no tile.
+## Share of the cell's hex pixels that each environment visibly covers, largest first. Each pixel belongs
+## to the highest-priority overlay that is opaque there, or to the ground. Empty if the cell has no tile.
 func env_weights(cell: Vector2i) -> Dictionary[String, float]:
 	var ground := ground_layer.get_cell_tile_data(cell)
 	if ground == null:
@@ -355,8 +346,7 @@ func env_weights(cell: Vector2i) -> Dictionary[String, float]:
 	return weights
 
 
-## Tile name, group, env and kind of the ground, the road name ("" if none), the blend overlay names and the
-## environment weights (see env_weights). Empty if the cell has no tile.
+## Empty if the cell has no tile. `environments` is `env_weights`.
 func get_tile_info(cell: Vector2i) -> Dictionary:
 	var ground := ground_layer.get_cell_tile_data(cell)
 	if ground == null:
@@ -380,7 +370,6 @@ func select_cell(cell: Vector2i) -> void:
 	tile_clicked.emit(cell, get_tile_info(cell))
 
 
-## Clears the selection, so no tile is outlined any more.
 func deselect() -> void:
 	selected_cell = NO_CELL
 	highlight.queue_redraw()
@@ -411,9 +400,9 @@ func _env_at(cell: Vector2i) -> String:
 	return hidden_env.call(cell) if hidden_env.is_valid() else ""
 
 
-## Redraws a cell's overlays per the JSON meta blend_rule: a non-town tile gets blend_<A>_<edges> for every
-## neighboring environment A with a higher blend priority than its own. Called again for a drawn cell when the
-## land around it has changed, as it does when the map grows.
+## Redraws a cell's overlays per the JSON meta blend_rule: a non-town tile gets blend_<A>_<edges> for
+## every neighboring environment A with a higher blend priority than its own. Called again for a drawn
+## cell when the land around it has changed, as it does when the map grows.
 func refresh_blends(cell: Vector2i) -> void:
 	for layer: TileMapLayer in blend_layers.values():
 		layer.erase_cell(cell)
@@ -429,4 +418,5 @@ func refresh_blends(cell: Vector2i) -> void:
 				edges_by_env[env] = []
 			edges_by_env[env].append(edge)
 	for env in edges_by_env:
-		blend_layers[env].set_cell(cell, HexTileset.SOURCE_ID, tileset.atlas_coords(tileset.blend_name(env, edges_by_env[env])))
+		blend_layers[env].set_cell(cell, HexTileset.SOURCE_ID,
+				tileset.atlas_coords(tileset.blend_name(env, edges_by_env[env])))
