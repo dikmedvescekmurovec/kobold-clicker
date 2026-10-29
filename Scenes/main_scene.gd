@@ -251,7 +251,7 @@ var _resetting := false
 ## The black screen between two worlds, while the player is on it; null otherwise.
 var _transcend_page: TranscendPage
 ## Tips earned but not shown yet, and the one that is up. A queued entry of three is the changelog
-## (`_show_changelog`).
+## (`_show_changelog`), and one of one the comic (`_queue_comic`).
 var _tip_queue: Array = []
 var _tip_panel: Control
 ## The shade over all but the button a first step is about, while one is owed (`SPOTLIGHTS`).
@@ -420,6 +420,10 @@ func _ready() -> void:
 	# Before the interface, which is what decides whether the heirlooms' button stands in the corner.
 	_credit_walls()
 	_build_ui()
+	# A first run opens on the comic, before the changelog and every tip; only on the player's own save,
+	# so a test or a screenshot opens on the map.
+	if inventory_path == Inventory.SAVE_PATH and Comic.owed(inventory):
+		_queue_comic()
 	if OS.has_feature("web") and not Settings.path.is_empty():
 		_show_changelog()
 	# A save from before there were heirlooms has just been paid for its walls: say what that means.
@@ -1939,8 +1943,19 @@ func _show_changelog() -> void:
 		_show_next_tip()
 
 
-## One tip at a time: someone speaking, in a `DialogueBox` along the window's foot, or the changelog --
-## the one plain panel left, in the middle of the window, built the way the refused-save panel is.
+## The comic a first run opens on (`Comic`), as a tip: marked seen as it is queued, so a game shut
+## under it never shows it again, and let go by Escape like any tip.
+func _queue_comic() -> void:
+	inventory.tips.append(Comic.ID)
+	_save_inventory()
+	_tip_queue.append([Comic.ID])
+	if _tip_panel == null:
+		_show_next_tip()
+
+
+## One tip at a time: the comic over the whole window, someone speaking, in a `DialogueBox` along the
+## window's foot, or the changelog -- the one plain panel left, in the middle of the window, built the
+## way the refused-save panel is.
 func _show_next_tip() -> void:
 	if _tip_queue.is_empty():
 		return
@@ -1948,6 +1963,12 @@ func _show_next_tip() -> void:
 	# A fight holds still under a tip: a charting fight's clock must not run while the player reads.
 	if _combat != null:
 		_combat.process_mode = Node.PROCESS_MODE_DISABLED
+	if tip.size() == 1:
+		var comic := Comic.new(ui_scale)
+		comic.finished.connect(_on_tip_closed)
+		_tip_panel = comic
+		_character.get_parent().add_child(comic)
+		return
 	if tip.size() > 3:
 		# The hero speaks under the name the player gave them.
 		var box := DialogueBox.new(inventory.hero() if tip[1] == HERO else tip[1], tip[2],
@@ -1989,9 +2010,12 @@ func _on_tip_closed() -> void:
 		return
 	var leaving := _tip_panel
 	_tip_panel = null
-	# Someone speaking stands over a shade of their own, which fades rather than shrinks.
+	# Someone speaking stands over a shade of their own, which fades rather than shrinks, and the comic
+	# fades whole.
 	if leaving is DialogueBox:
 		(leaving as DialogueBox).leave()
+	elif leaving is Comic:
+		(leaving as Comic).leave()
 	else:
 		Juice.pop_out(leaving, leaving.queue_free)
 	_show_next_tip()

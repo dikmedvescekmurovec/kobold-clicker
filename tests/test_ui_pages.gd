@@ -294,6 +294,19 @@ func _pages(hero: Inventory) -> Dictionary:
 			page.redraw()
 			return page,
 		"black_choice": func(scale: float) -> Control: return black.call(scale),
+		"comic": func(scale: float) -> Control:
+			# The first page's last panel: across, the page whole; held upright, the column scrolled.
+			var page := Comic.new(scale)
+			root.add_child(page)
+			for i in 5:
+				page.advance()
+			return page,
+		"comic_wall": func(scale: float) -> Control:
+			var page := Comic.new(scale)
+			root.add_child(page)
+			for i in page.presses() - 1:
+				page.advance()
+			return page,
 		"black_curses": func(scale: float) -> Control:
 			var page: TranscendPage = black.call(scale)
 			page._show_curses()

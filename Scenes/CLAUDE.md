@@ -37,6 +37,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Bag over a fight** (`_let_bag_over`, `_rearm`, `_refresh_bag_room`).
 - **The banner** (`banner`, a `Banner`, fed frames and presses by `_process` and `_input`; `Banner.raise`, `Banner.close`): a new unique (`Banner.unique`), a filled bounty (`Banner.bounty`), an achievement, and the level-up fanfare (`Banner.level_up`).
 - **Bounty toast** (`Banner.toast_bounty`, `Banner._place_toast`): "+1" for a counted kill, or "Level too low".
+- **The comic** a first run opens on (`_queue_comic`, a `Comic` through the tip queue).
 - **Tips** (`TIPS`, `_check_tips`, `_tip_due`), and the corner buttons' flash, pulse and red pip (`_flash`, `_pulse`, `_mark_new`).
 - **Changelog** (`_show_changelog`, `Changelog`): the web build's start-up panel of new `CHANGELOG.md` versions.
 - **Sound** (`sounds`, a `Jukebox`, `Scenes/jukebox.gd`, made in `_enter_tree`): the music (`play_music`) and every button's, page's and coin's click.
@@ -164,6 +165,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Raise the banner and no toast for the kill that fills a bounty** (`_on_bounty_counted`); the latest toast wins, and there is none at `Anim.NONE`. (DESIGN.md: "Bounty toast")
 
 ### Tips, banners and achievements
+- **Open a first run on the comic** (`_queue_comic`, `Comic.owed`: no body down and never shown), on the player's own save only, before the changelog and every tip, as a tip marked seen as it is queued. (DESIGN.md)
 - **Have every tip spoken, by the hero or an NPC, never a narrator** (the user's rule, 2026-09-26; a fourth `TIPS` entry names the portrait). The copy is the user's own, word for word: change it only when asked. (DESIGN.md: "Tips", "Spoken tips (2026-09-26)")
 - **Keep tip copy in voice:** a short title-case title, then two or three plain sentences, what happened and what to do, naming a button by its picture and corner. No system words, no dashes, nothing Pixellari may not draw. (DESIGN.md: "Keep tip copy in voice")
 - **Give every tip in `TIPS` its rule in `_tip_due`,** which logs an error for an id it does not know. (DESIGN.md: "Tips")

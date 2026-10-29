@@ -73,6 +73,7 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
 - **Ask every time before an heirloom's Discard** (`_ask(..., can_skip false)`), and hold a banner behind any question (`BagPage.asking()`). (DESIGN.md: "bag_page.gd")
 - **Build the fortuneteller's answer as `BagPage._ask` is built** (`TownPage._tell`, `_place_told`): a ticked Dismiss writes `SKIP_TOLD + reading` into `inventory.tips`, Escape reads no tick, and the appraisal alone offers none. (DESIGN.md: "town_page.gd")
 - **Let no key past `CloudQuestion`** (no X, no Escape; every key taken in `_input`) **or `TextPrompt`** (it eats every key its field leaves), so no hotkey opens a page under them. (DESIGN.md: "cloud_question.gd", "text_prompt.gd")
+- **Lay `Comic` out from `Assets/Comic/comic.json` alone** (`build_comic.py`): a page whole across a window, a webtoon column at one whole zoom held upright, the wall at its full height. Every click is its own; Skip and Escape let it go whole, by its own `leave()`. (DESIGN.md: "comic.gd")
 - **Give `DialogueBox` no button:** every click anywhere is its own (every child `MOUSE_FILTER_IGNORE`), it leaves by its own `leave()`, not `Juice.pop_out`, and only a `TIPS` entry with a fourth element raises it. (DESIGN.md: "dialogue_box.gd")
   - **Put the hero's portrait on the left, everyone else's on the right** (`PLAYER`; the user's rule), every frame `PORTRAIT_HEIGHT` tall, stacked top to bottom.
   - **Have the speaker babble as a page comes in** (`VOICE`): a syllable every `LETTERS_PER_SYLLABLE` letters, each cutting off the last (the user's ask).
@@ -252,6 +253,7 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
 | `tile_panel.gd` (`TilePanel`) | The selected tile's panel on the right edge: name, kind and level, lands, services, modifiers, runes, a wall's unlocks, and the buttons that can be pressed (`fill`, `update_buttons`). |
 | `banner.gd` (`Banner`) | What is announced over the map and a fight: the banner (a new unique, a filled bounty, an achievement), the bounty toast and the level-up fanfare. |
 | `changelog.gd` (`Changelog`) | `CHANGELOG.md` read into versions (`versions`, `since`) and laid out as the web build's start-up page (`page`). |
+| `comic.gd` (`Comic`) | The comic a first run opens on, over the whole window: a page at a time across, a column of panels held upright. |
 | `dialogue_box.gd` (`DialogueBox`) | Someone speaking: a box along the window's foot, words coming in beside a portrait. |
 | `spotlight.gd` (`Spotlight`) | The window shaded but for one button a first step makes the player press; every other press and key eaten. |
 | `orb_slot.gd` (`OrbSlot`) | One orb, super orb or rune as a square in its tray. |

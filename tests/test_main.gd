@@ -25,6 +25,7 @@ func _run() -> void:
 	_check(await _test_the_cloud_waits_out_a_camp_and_a_walk() == true, "calm tests ran to the end")
 	_check(await _test_a_runes_last_body_is_paid_under_it() == true, "rune tests ran to the end")
 	_check(await _test_a_tip_already_up_holds_a_new_fight() == true, "held fight tests ran to the end")
+	_check(await _test_a_first_run_opens_on_the_comic() == true, "comic tests ran to the end")
 	_check(await _test_no_key_reaches_under_the_clouds_question() == true, "cloud question tests ran to the end")
 	_check(await _test_a_retry_refused_runs_the_hero_back() == true, "refused retry tests ran to the end")
 	_check(_test_every_tip_has_its_rule() == true, "tip rule tests ran to the end")
@@ -349,6 +350,45 @@ func _test_a_tip_already_up_holds_a_new_fight() -> bool:
 			main._on_tip_closed()
 	_check(main._tip_panel == null and main._combat.process_mode == Node.PROCESS_MODE_INHERIT,
 			"and runs once the last tip is closed")
+	main.free()
+	await process_frame
+	return true
+
+
+## A first run opens on the comic, once: owed only by a save no body has fallen in, never off the
+## player's own save, marked seen as it is queued, held over the corner keys, let go by Escape; a press
+## brings on each panel and the one after the last lets it go.
+func _test_a_first_run_opens_on_the_comic() -> bool:
+	_clear()
+	var main := await _launch()
+	_check(main._tip_panel == null, "a scratch save opens on the map")
+	_check(Comic.owed(main.inventory), "though a save no body has fallen in is owed the comic")
+	var veteran := Inventory.new()
+	veteran.kills = 1
+	_check(not Comic.owed(veteran), "and one with a body down is not")
+	main._queue_comic()
+	_check(main._tip_panel is Comic, "queued, it stands over the window")
+	_check(Comic.ID in main.inventory.tips and not Comic.owed(main.inventory), "marked seen as it comes up")
+	var key := InputEventKey.new()
+	key.keycode = KEY_O
+	key.pressed = true
+	main._unhandled_input(key)
+	_check(not main.settings_page.visible, "no corner key opens a page under it")
+	var escape := InputEventAction.new()
+	escape.action = "ui_cancel"
+	escape.pressed = true
+	main._unhandled_input(escape)
+	_check(main._tip_panel == null, "Escape lets it go")
+	var comic := Comic.new(1.0)
+	root.add_child(comic)
+	var ended := [0]
+	comic.finished.connect(func() -> void: ended[0] += 1)
+	for i in comic.presses() - 1:
+		comic.advance()
+	_check(ended[0] == 0, "every panel but the first comes up a press at a time")
+	comic.advance()
+	_check(ended[0] == 1, "and the press after the last lets it go")
+	comic.free()
 	main.free()
 	await process_frame
 	return true

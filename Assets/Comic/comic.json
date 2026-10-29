@@ -1,0 +1,125 @@
+{
+	"size": [
+		384,
+		216
+	],
+	"pages": [
+		{
+			"paper": true,
+			"panels": [
+				{
+					"file": "page1_1.png",
+					"at": [
+						3,
+						3
+					]
+				},
+				{
+					"file": "page1_2.png",
+					"at": [
+						119,
+						3
+					]
+				},
+				{
+					"file": "page1_3.png",
+					"at": [
+						255,
+						3
+					]
+				},
+				{
+					"file": "page1_4.png",
+					"at": [
+						3,
+						109
+					]
+				},
+				{
+					"file": "page1_5.png",
+					"at": [
+						115,
+						109
+					]
+				},
+				{
+					"file": "page1_6.png",
+					"at": [
+						251,
+						109
+					]
+				}
+			]
+		},
+		{
+			"paper": true,
+			"panels": [
+				{
+					"file": "page2_1.png",
+					"at": [
+						3,
+						3
+					]
+				},
+				{
+					"file": "page2_2.png",
+					"at": [
+						195,
+						3
+					]
+				},
+				{
+					"file": "page2_3.png",
+					"at": [
+						3,
+						109
+					]
+				},
+				{
+					"file": "page2_4.png",
+					"at": [
+						191,
+						109
+					]
+				}
+			]
+		},
+		{
+			"paper": false,
+			"panels": [
+				{
+					"file": "page3.png",
+					"at": [
+						0,
+						0
+					]
+				}
+			]
+		},
+		{
+			"paper": false,
+			"panels": [
+				{
+					"file": "page4.png",
+					"at": [
+						0,
+						0
+					]
+				}
+			]
+		},
+		{
+			"paper": false,
+			"panels": [
+				{
+					"file": "page5.png",
+					"at": [
+						0,
+						0
+					]
+				}
+			],
+			"tall": 144
+		}
+	]
+}
