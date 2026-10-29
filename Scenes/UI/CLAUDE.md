@@ -23,6 +23,7 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
 - **Fit three panels in a town's 576 panel pixels:** the bag's grid and the town page's width never move, and the doll stands between them. (DESIGN.md)
   - **Keep `TownPage` as tight down the page as across:** all under the counter's name in `_scrolled`, the tabs and name pinned above, an offer's Buy below. Measure anything added both ways (`Scenes/Town/DESIGN.md`).
   - **Held upright, take `BagPage.least_height()` from the counter** (`LEAST_ROWS` of the grid, and the doll). (DESIGN.md: "bag_page.gd")
+  - **Held upright, pin the bag to the top over the counter, the doll its Equipment tab in the grid's place** (`BagPage.tabbed`, set in `_layout_ui`; the user's sketch, 2026-10-29). Either tab asks the counter for the same room. (DESIGN.md: "The bag over the counter, the doll a tab (2026-10-29)")
 - **Assemble bars from parts with no separation,** each blown up through its minimum size, not the node's `scale`; `HealthBar._init` and `KillPips._init` assert the sprites still measure what the consts say. (DESIGN.md)
   - **Show at most `KillPips.SHOWN` (10) pips,** so `width_for(slots)` is `mini(slots, SHOWN) * WIDTH`; `HealthBar.TROUGH` is the same width in every tier. (DESIGN.md: "kill_pips.gd")
 
@@ -254,7 +255,7 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
 | `banner.gd` (`Banner`) | What is announced over the map and a fight: the banner (a new unique, a filled bounty, an achievement), the bounty toast and the level-up fanfare. |
 | `changelog.gd` (`Changelog`) | `CHANGELOG.md` read into versions (`versions`, `since`) and laid out as the web build's start-up page (`page`). |
 | `comic.gd` (`Comic`) | The comic a first run opens on, over the whole window: a page at a time across, a column of panels held upright. |
-| `dialogue_box.gd` (`DialogueBox`) | Someone speaking: a box along the window's foot, words coming in beside a portrait. |
+| `dialogue_box.gd` (`DialogueBox`) | Someone speaking: a box along the window's foot (its top held upright), words coming in beside a portrait. |
 | `spotlight.gd` (`Spotlight`) | The window shaded but for the next thing a first step makes the player press; every other press and key eaten. |
 | `orb_slot.gd` (`OrbSlot`) | One orb, super orb or rune as a square in its tray. |
 | `orb_card.gd` (`OrbCard`) | The floating card for the orb under the cursor. |

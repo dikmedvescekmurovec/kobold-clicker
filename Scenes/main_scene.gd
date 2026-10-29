@@ -27,7 +27,7 @@ const ZOOM_MIN := 1.0
 const ZOOM_MOST := 3.0
 ## How far two fingers have to spread (or close, by its inverse) to step the zoom once.
 const PINCH_STEP := 1.3
-## Held upright (`UITheme.narrow`) a town is its page over the bag, the page this share of the room.
+## Held upright (`UITheme.narrow`) a town is the bag over its page, the page this share of the room.
 const TOWN_SPLIT := 0.5
 ## Seconds a camera glide takes (`_glide_camera`).
 const CAMERA_LIFT := 0.25
@@ -972,20 +972,23 @@ func _rune_on(cell: Vector2i) -> void:
 
 ## The tile panel is a full-height column against the right edge, its buttons at its foot. The
 ## left-hand pages lay themselves out against the other edge. Held upright, every page stands over the
-## corner row, one at a time -- but a town, whose page stands over the bag.
+## corner row, one at a time -- but a town, whose page stands under the bag.
 func _layout_ui() -> void:
 	_place_character()
 	var room := _pages_room()
 	var left := room
 	town_page.area = room
-	if _narrow() and _town_cell != HexMap.NO_CELL:
-		# The counter gives up what the bag under it needs -- the doll too -- but keeps what
-		# its own tabs and buttons need.
-		var top := floorf(minf(room.size.y * TOWN_SPLIT, room.size.y - _counter_page().least_height()))
-		top = maxf(top, (town_page.get_child(0) as Control).get_combined_minimum_size().y * ui_scale
+	var tabbed := _narrow() and _town_cell != HexMap.NO_CELL
+	bag_page.tabbed = tabbed
+	heirloom_page.tabbed = tabbed
+	if tabbed:
+		# The bag over the counter, its doll a tab of its own (the user's sketch, 2026-10-29): the counter
+		# gives up what the bag needs, but keeps what its own tabs and buttons need.
+		var low := floorf(minf(room.size.y * TOWN_SPLIT, room.size.y - _counter_page().least_height()))
+		low = maxf(low, (town_page.get_child(0) as Control).get_combined_minimum_size().y * ui_scale
 				+ 2 * UITheme.EDGE * ui_scale)
-		town_page.area = Rect2(room.position, Vector2(room.size.x, top))
-		left = Rect2(room.position.x, room.position.y + top, room.size.x, room.size.y - top)
+		town_page.area = Rect2(room.position.x, room.end.y - low, room.size.x, low)
+		left = Rect2(room.position, Vector2(room.size.x, room.size.y - low))
 	for page in _left_pages():
 		page.set("area", left)
 	tile_panel.place()

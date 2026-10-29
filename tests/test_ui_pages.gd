@@ -246,6 +246,21 @@ func _pages(hero: Inventory) -> Dictionary:
 			page.shop(PackedStringArray([TownServices.GEAR]))
 			select_first.call(page)
 			return page,
+		"bag_tabbed": func(scale: float) -> Control:
+			var page := BagPage.new(hero, "", scale)
+			root.add_child(page)
+			page.tabbed = true
+			page.shop(PackedStringArray([TownServices.GEAR]))
+			select_first.call(page)
+			return page,
+		"bag_tabbed_equipment": func(scale: float) -> Control:
+			var page := BagPage.new(hero, "", scale)
+			root.add_child(page)
+			page.tabbed = true
+			page.shop(PackedStringArray([TownServices.GEAR]))
+			page._open_side_tab(true)
+			page._select_socket(hero.equipment.worn.keys()[0])
+			return page,
 		"heirlooms": func(scale: float) -> Control:
 			var page := BagPage.new(hero, "", scale, true)
 			root.add_child(page)
@@ -720,10 +735,12 @@ func _test_questions_cover_the_window() -> bool:
 			_check(Rect2(Vector2.ZERO, Vector2(turn)).grow(SLACK).encloses(_rect(panel)),
 					"and inside the window (%s)" % _rect(panel))
 		var box := _rect(speaker._panel)
-		_check(Rect2(Vector2.ZERO, Vector2(turn)).grow(SLACK).encloses(box)
-				and absf(box.end.y - (turn.y - DialogueBox.FOOT_GAP)) <= 1.0
+		var upright := UITheme.narrow(Vector2(turn), 1.0)
+		var edge := box.position.y - DialogueBox.FOOT_GAP if upright else box.end.y - (turn.y - DialogueBox.FOOT_GAP)
+		_check(Rect2(Vector2.ZERO, Vector2(turn)).grow(SLACK).encloses(box) and absf(edge) <= 1.0
 				and absf(box.get_center().x - turn.x / 2.0) <= 1.0,
-				"a speaker's box stands at the foot of a %dx%d window (%s)" % [turn.x, turn.y, box])
+				"a speaker's box stands at the %s of a %dx%d window (%s)"
+				% ["top" if upright else "foot", turn.x, turn.y, box])
 	speaker.queue_free()
 
 	# The prompt takes every key itself: out of the way, so what is not heard is the question's doing.
@@ -1114,13 +1131,33 @@ func _test_pages_in_the_scene() -> bool:
 				for wrong: String in _wrongs(page, Vector2(window)):
 					_check(false, "the %s counter's %s at %dx%d: %s" % [service, page.get_script().get_global_name(),
 							window.x, window.y, wrong])
+			var tabs_up: bool = main.bag_page._side_tabs.all(func(tab: Button) -> bool: return tab.visible)
 			if UITheme.narrow(Vector2(window), main.ui_scale):
-				_check(_rect(main.town_page._panel).end.y <= _rect(main.bag_page._panel).position.y + SLACK,
-						"held upright the %s counter stands over the bag (%s, %s)" % [service,
-							_rect(main.town_page._panel), _rect(main.bag_page._panel)])
+				_check(_rect(main.bag_page._panel).end.y <= _rect(main.town_page._panel).position.y + SLACK
+						and absf(_rect(main.bag_page._panel).position.y - UITheme.EDGE * main.ui_scale) <= SLACK
+						and tabs_up and not main.bag_page._worn_panel.visible,
+						"held upright the bag is pinned to the top over the %s counter, its doll a tab (%s, %s)" % [service,
+							_rect(main.bag_page._panel), _rect(main.town_page._panel)])
 			else:
-				_check(_rect(main.bag_page._panel).end.x <= _rect(main.town_page._panel).position.x + SLACK,
-						"across a window the bag stands beside the %s counter" % service)
+				_check(_rect(main.bag_page._panel).end.x <= _rect(main.town_page._panel).position.x + SLACK
+						and not tabs_up and main.bag_page._worn_panel.visible,
+						"across a window the bag stands beside the %s counter, the doll between" % service)
+		if UITheme.narrow(Vector2(window), main.ui_scale):
+			var bag: BagPage = main.bag_page
+			var needs := bag.least_height()
+			bag._side_tabs[1].pressed.emit()
+			await _frames(3)
+			_check(bag._doll != null and bag._sections.is_ancestor_of(bag._doll)
+					and bag._scroll.size.y >= bag._sections.size.y - SLACK
+					and _rect(bag._panel).end.y <= _rect(main.town_page._panel).position.y + SLACK,
+					"its Equipment tab stands the doll whole in the grid's place at %dx%d (%s in %s)"
+					% [window.x, window.y, bag._sections.size.y, bag._scroll.size.y])
+			_check(is_equal_approx(bag.least_height(), needs), "and asks the counter for no more room than Items")
+			for wrong: String in _wrongs(bag, Vector2(window)):
+				_check(false, "the Equipment tab at %dx%d: %s" % [window.x, window.y, wrong])
+			bag._side_tabs[0].pressed.emit()
+			main._on_left_page_closed()
+			_check(not bag.tabbed and bag._worn_panel.visible, "and out of the town the doll is its sheet again")
 		main.queue_free()
 		await _frames(2)
 	Settings.animations = was_animations

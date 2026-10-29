@@ -40,12 +40,18 @@ func _init(equipment: Equipment, selected: int) -> void:
 	figure.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	figure.position = origin()
 	add_child(figure)
-	var art: Vector2 = TEXTURE.get_size() * SCALE + origin()
 	for socket: Equipment.Socket in SOCKETS:
 		squares[socket] = _square(socket, socket == selected)
 		add_child(squares[socket])
+	custom_minimum_size = extent()
+
+
+## The doll's size: the figure and every socket square.
+static func extent() -> Vector2:
+	var art: Vector2 = TEXTURE.get_size() * SCALE + origin()
+	for socket: Equipment.Socket in SOCKETS:
 		art = art.max(spot(socket) + Vector2(ItemSlot.SIDE, ItemSlot.SIDE))
-	custom_minimum_size = art
+	return art
 
 
 ## One socket: its piece, or its faint mark, translucent so the figure shows through.

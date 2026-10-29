@@ -109,6 +109,21 @@ const WORN_GAP := 6.0
 const TRANSCEND_HEIGHT := 0.7
 ## How many rows of the grid a room held upright has to leave showing (`least_height`).
 const LEAST_ROWS := 2
+## Held upright at a counter, the tabs down the panel's right edge (`tabbed`; the user's sketch, 2026-10-29):
+## [mark, tooltip] each, the grid's and the doll's. The open one is cream, breaking the frame `FRAME`
+## columns deep and standing `TAB_OUT` past it; a shut one is tan against the frame, `TAB_SHUT_OUT` past it.
+const SIDE_TABS := [["chest", "Items"], ["slot_body", "Equipment"]]
+## As deep as the frame's wobble patches (`ui_notch_right_*`), which reach that far in.
+const FRAME := 7
+const TAB_OUT := 20
+const TAB_SHUT_OUT := 18
+## How far under the title bar the first tab hangs, and the air between the two.
+const TAB_DROP := 6
+const TAB_GAP := 1
+## a is the frame's outline, d its shade, c the cream, f a shut tab's fill. The open tab's first `FRAME`
+## columns lie over the frame: clear on its top and foot rows, so the frame turns into the tab's outline.
+const TAB_OPEN: Array[String] = [".......aa.", "ccccccccda", "ccccccccda", "cccccccdda", ".......aa."]
+const TAB_SHUT: Array[String] = ["aaa.", "afda", "afda", "adda", "aaa."]
 
 ## Whose grid and doll this page shows: the player's inventory, or on the heirlooms' page the stash
 ## inside it (`Inventory.stash`).
@@ -162,6 +177,19 @@ var _socket_pick := 0
 ## The doll put away, leaving `_show_button` where it stood. The session's, never saved.
 var _doll_hidden := false
 var _show_button: Button
+## Held upright at a counter (the main scene's `_layout_ui`): no sheet over the bag, the doll the Equipment
+## tab's instead, drawn in the grid's place.
+var tabbed := false:
+	set(on):
+		if on == tabbed:
+			return
+		tabbed = on
+		if is_node_ready():
+			refresh()
+## The Equipment tab open. The session's, never saved.
+var _equipment_tab := false
+## Items and Equipment (`SIDE_TABS`), shown only while `tabbed`.
+var _side_tabs: Array[Button] = []
 ## The press being followed, the grid's or the doll's: where it began, the grid's scroll then, and how
 ## far it has travelled.
 var _drag_from := Vector2.ZERO
@@ -258,6 +286,12 @@ func _ready() -> void:
 	_show_button.pressed.connect(_on_fold_pressed)
 	_show_button.hide()
 	add_child(_show_button)
+	for tab: Array in SIDE_TABS:
+		var button := UITheme.button("", UITheme.BARE_BUTTON, tab[1])
+		button.scale = Vector2(_ui_scale, _ui_scale)
+		button.pressed.connect(_open_side_tab.bind(tab == SIDE_TABS[1]))
+		add_child(button)
+		_side_tabs.append(button)
 
 	# Tree order is draw order: the buttons over whichever panel holds the selected square, then the
 	# orb card, which overhangs the sheet.
@@ -394,6 +428,7 @@ func layout() -> void:
 		_sheet(room)
 	else:
 		_side_by_side(room)
+	_place_side_tabs()
 	_place_actions()
 	laid_out.emit()
 
@@ -438,6 +473,9 @@ func _sheet(room: Rect2) -> void:
 	var lift := 0.0 if over == null else (over.size.y + WORN_GAP) * _ui_scale
 	UITheme.dock(_panel, Rect2(room.position.x, room.position.y + lift, room.size.x, room.size.y - lift),
 			_ui_scale, UITheme.Dock.LEFT, layout)
+	# Over a counter it is pinned to the top of the window (the user's, 2026-10-29), not along its room's foot.
+	if tabbed:
+		_panel.position.y = room.position.y + UITheme.EDGE * _ui_scale
 	_worn_panel.position = Vector2(
 			floorf(room.position.x + (room.size.x - _worn_panel.size.x * _ui_scale) / 2.0),
 			_panel.position.y - lift)
@@ -445,11 +483,28 @@ func _sheet(room: Rect2) -> void:
 			(_panel.size.x - _show_button.size.x) * _ui_scale, -lift)
 
 
+## The tabs down the panel's right edge under its title bar, the open one over the frame.
+func _place_side_tabs() -> void:
+	var at := _panel.position + Vector2(_panel.size.x - FRAME,
+			(_panel.get_child(0) as Control).size.y + TAB_DROP) * _ui_scale
+	for tab: Button in _side_tabs:
+		var lit := (tab == _side_tabs[1]) == _equipment_tab
+		tab.reset_size()
+		tab.position = at + Vector2(0.0 if lit else FRAME - 1.0, 0.0) * _ui_scale
+		at.y += (tab.size.y + TAB_GAP) * _ui_scale
+
+
 ## The least height, in window pixels, the page needs held upright: `LEAST_ROWS` of the grid, and the
 ## sheet over the bag. A town gives its counter what is left (the main scene's `_layout_ui`).
 func least_height() -> float:
-	var tall := (_panel.get_combined_minimum_size().y + LEAST_ROWS * (ItemSlot.SIDE + SLOT_GAP)
-			+ 2 * UITheme.EDGE)
+	var rows := float(LEAST_ROWS * (ItemSlot.SIDE + SLOT_GAP))
+	if tabbed:
+		# What either tab needs, so a turn of them never asks the counter for more: the doll stands in the
+		# grid's place and the filter's.
+		var filter := (_filter_tabs.get_combined_minimum_size().y
+				+ UITheme.body_of(_panel).get_theme_constant("separation"))
+		rows = maxf(rows, Doll.extent().y - filter) + (filter if _wearing() else 0.0)
+	var tall := _panel.get_combined_minimum_size().y + rows + 2 * UITheme.EDGE
 	if _worn_panel.visible:
 		tall += _worn_panel.get_combined_minimum_size().y + WORN_GAP
 	return tall * _ui_scale
@@ -486,6 +541,7 @@ func refresh() -> void:
 	refresh_gold()
 	refresh_orbs()
 	_refresh_make()
+	_dress_side_tabs()
 	_refresh_worn()
 	UITheme.clear(_action_box)
 	if _selected >= 0 and _selected < inventory.total():
@@ -498,6 +554,9 @@ func refresh() -> void:
 
 func _fill_grid() -> void:
 	UITheme.clear(_sections)
+	# The doll stands in the grid's place (`_refresh_worn`).
+	if _wearing():
+		return
 	for item in inventory.items:
 		if not _sorted_as.has(item):
 			_sorted_as[item] = item.rarity
@@ -542,10 +601,10 @@ func _shows(item: Item) -> bool:
 
 
 ## Built again with the grid: the open tab's face and mark change with it. None on the stones page,
-## which is one kind already.
+## which is one kind already; hidden, but built, over the doll (`least_height` measures them).
 func _fill_tabs() -> void:
 	UITheme.clear(_filter_tabs)
-	_filter_tabs.visible = not _stones
+	_filter_tabs.visible = not _stones and not _wearing()
 	if _stones:
 		return
 	for slot: String in FILTERS:
@@ -1117,16 +1176,16 @@ func _show_worn(socket: Equipment.Socket) -> void:
 func _place_actions() -> void:
 	var square := _selected_square()
 	var shown := square != null and _action_box.get_child_count() > 0
-	if shown and square.has_meta("bag_index"):
+	if shown and _scroll.is_ancestor_of(square):
 		shown = _scroll.get_global_rect().has_point(square.get_global_rect().get_center())
 	_actions.visible = shown
 	if not shown:
 		return
 	_actions.reset_size()
 	# Beside a doll socket the card keeps to the page: past the sheet stands a town's own panel, which
-	# would cover it, so there it flips left over the figure instead.
+	# would cover it, so there it flips left over the figure instead. Tabbed, the town is under the bag.
 	var window := get_viewport_rect().size
-	if square.has_meta("socket"):
+	if square.has_meta("socket") and not tabbed:
 		window.x = _worn_panel.position.x + _worn_panel.size.x * _ui_scale
 	_actions.position = ItemCard.beside(square.get_global_rect(),
 			_actions.get_combined_minimum_size() * _ui_scale, window, ItemCard.GAP * _ui_scale)
@@ -1215,21 +1274,26 @@ func _refresh_worn() -> void:
 	_doll = null
 	_tree = null
 	UITheme.clear(_worn_body)
-	_worn_panel.visible = not _doll_hidden
-	_show_button.visible = _doll_hidden
-	if _worn_panel.visible:
+	_worn_panel.visible = not _doll_hidden and not tabbed
+	_show_button.visible = _doll_hidden and not tabbed
+	if _wearing():
+		UITheme.clear(_sections)
+		_show_doll(_sections)
+	elif _worn_panel.visible:
 		if _stones:
 			_show_tree()
 		else:
-			_show_doll()
+			_show_doll(_worn_body)
 	# Measured again deferred: a container's minimum is only right once it has laid out its new children.
 	layout()
 	layout.call_deferred()
 
 
-## The doll, its squares dressed for what is selected, held or on the cursor, and Hide in its corner.
-func _show_doll() -> void:
+## The doll into `holder`, its squares dressed for what is selected, held or on the cursor, and Hide in its
+## corner on the sheet; centred in the grid's place, where the tab is the way back.
+func _show_doll(holder: VBoxContainer) -> void:
 	_doll = Doll.new(inventory.equipment, _worn_selected)
+	_doll.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_doll.gui_input.connect(_on_doll_input)
 	_doll.set_drag_forwarding(Callable(), _can_drop_on_doll, _drop_on_doll)
 	for socket: Equipment.Socket in _doll.squares:
@@ -1243,6 +1307,9 @@ func _show_doll() -> void:
 		# A bag piece on the cursor dims every socket its Equip would refuse.
 		if _lifted != null and inventory.items.has(_lifted) and not inventory.can_equip(_lifted, socket):
 			slot.modulate = OrbSlot.DIM
+	holder.add_child(_doll)
+	if holder != _worn_body:
+		return
 	# Hide, in the corner the figure leaves empty. Anchored and grown leftwards because a button's
 	# size is not known until the theme reaches it.
 	var fold := UITheme.button("", "BrownIconButton", "Hide what is equipped")
@@ -1252,7 +1319,6 @@ func _show_doll() -> void:
 	fold.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	fold.pressed.connect(_on_fold_pressed)
 	_doll.add_child(fold)
-	_worn_body.add_child(_doll)
 
 
 ## The skill tree in the doll's place, on the stones page: under a bar of its own, and scaled into the
@@ -1370,6 +1436,45 @@ func _on_doll_input(event: InputEvent) -> void:
 func _on_fold_pressed() -> void:
 	_doll_hidden = not _doll_hidden
 	refresh()
+
+
+## Whether the doll stands in the grid's place: `tabbed`, with the Equipment tab open.
+func _wearing() -> bool:
+	return tabbed and _equipment_tab
+
+
+## Items or Equipment: what was open shuts, as at any other change of selection.
+func _open_side_tab(equipment: bool) -> void:
+	_equipment_tab = equipment
+	_select(-1, -1)
+
+
+## The tabs' faces and marks for which is open (`TAB_OPEN`, `TAB_SHUT`), a shut one lit cream under the mouse.
+func _dress_side_tabs() -> void:
+	for i in _side_tabs.size():
+		var tab := _side_tabs[i]
+		tab.visible = tabbed
+		var lit := (i == 1) == _equipment_tab
+		tab.icon = load(FILTER_MARK % [SIDE_TABS[i][0], "green" if lit else "brown"])
+		var wide := FRAME + TAB_OUT if lit else 1 + TAB_SHUT_OUT
+		# The mark in the middle of what stands past the frame, short of the right edge's two columns.
+		var left := (FRAME if lit else 1) + floorf((wide - (FRAME if lit else 1) - 2 - tab.icon.get_width()) / 2.0)
+		var top := floorf((TownPage.TAB_SIDE - tab.icon.get_height()) / 2.0)
+		for state: String in UITheme.STATES:
+			var rows := TAB_OPEN if lit else TAB_SHUT
+			var face := StyleBoxTexture.new()
+			face.texture = ImageTexture.create_from_image(UITheme.stamp(rows, {"a": Palette.TEXT,
+					"d": Palette.TEXT_SOFT, "c": Palette.PANEL_CREAM,
+					"f": Palette.PANEL_CREAM if state == "hover" else Palette.SLOT_TAN}))
+			face.texture_margin_left = rows[0].length() - 3
+			face.texture_margin_right = 2
+			face.texture_margin_top = 1
+			face.texture_margin_bottom = 2
+			face.content_margin_left = left
+			face.content_margin_right = wide - left - tab.icon.get_width()
+			face.content_margin_top = top
+			face.content_margin_bottom = TownPage.TAB_SIDE - top - tab.icon.get_height()
+			tab.add_theme_stylebox_override(state, face)
 
 
 ## The piece the bag has open, bag item or worn, or null.

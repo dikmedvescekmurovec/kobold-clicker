@@ -1228,7 +1228,7 @@ BARE = ["ui_icon_auto", "ui_icon_filter", "ui_icon_trash", "ui_icon_coins", "ui_
         "ui_icon_chest",
         "ui_icon_gem", "ui_icon_anvil", "ui_icon_crystal", "ui_icon_kills", "ui_icon_pencil", *SLOT_MARKS]
 GREEN_TABS = ["ui_icon_auto", "ui_icon_filter", "ui_icon_scroll", "ui_icon_sword", "ui_icon_gem", "ui_icon_anvil",
-              "ui_icon_crystal", *SLOT_MARKS]
+              "ui_icon_crystal", "ui_icon_chest", *SLOT_MARKS]
 GREEN_KEY = {"#3e1f1d": "#2c4645", "#603928": "#3f7168", "#70492a": "#478773", "#825c2f": "#50a978",
              "#88682d": "#57c767"}
 

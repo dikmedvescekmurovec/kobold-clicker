@@ -2,7 +2,8 @@ class_name DialogueBox
 extends Control
 ## Someone in the world speaking (the user's sketch, 2026-09-26): their name and words on the left and
 ## their portrait in a tan socket on the right behind a rule -- the hero's the other way round, his
-## portrait on the left (the user's rule, the same day) -- one page at a time along the window's foot,
+## portrait on the left (the user's rule, the same day) -- one page at a time along the window's foot
+## (its top held upright),
 ## over a shade across the whole window that takes every click. The words come in a letter at a time;
 ## a click anywhere finishes the page, the next turns it, and past the last it says `finished`. Escape
 ## is the main scene's, which lets it go whole and raises one for a tip that names a speaker (`TIPS`).
@@ -166,13 +167,17 @@ func typing() -> bool:
 	return _typing != null and _typing.is_running()
 
 
-## Centred across and standing `FOOT_GAP` off the foot, scaled about its own middle as `Juice` pops it.
+## Centred across and standing `FOOT_GAP` off the foot -- held upright off the top instead, clear of the
+## nav bar and the sheets along the foot (the user's, 2026-10-29) -- scaled about its own middle as `Juice`
+## pops it.
 func _settle() -> void:
 	var own := _panel.get_combined_minimum_size()
 	var view := get_viewport_rect().size
 	_panel.pivot_offset = own / 2.0
-	_panel.position = Vector2((view.x - own.x) / 2.0,
-			view.y - FOOT_GAP * _ui_scale - own.y * (1.0 + _ui_scale) / 2.0).round()
+	var y := view.y - FOOT_GAP * _ui_scale - own.y * (1.0 + _ui_scale) / 2.0
+	if UITheme.narrow(view, _ui_scale):
+		y = UITheme.safe_rect(get_viewport()).position.y + FOOT_GAP * _ui_scale + own.y * (_ui_scale - 1.0) / 2.0
+	_panel.position = Vector2((view.x - own.x) / 2.0, y).round()
 
 
 ## The page's words, a letter at a time. The label is laid out whole from the start (only the letters
