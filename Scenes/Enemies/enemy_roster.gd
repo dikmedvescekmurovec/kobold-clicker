@@ -427,8 +427,21 @@ const ENEMIES := {
 		"size": Size.LARGE,
 		"weight": 3,
 		"faces": Facing.LEFT,
-		"environments": ["dirt", "desert", "ice", "mountains"],
+		"environments": ["dirt", "desert", "mountains"],
 		"dir": "Stone Golem/new version/Sprites/outline",
+		"frame": Vector2i(220, 96),
+		"bounds": Rect2i(0, 8, 156, 76),
+		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
+	},
+	# The Stone Golem recoloured into ice by `tools/frozen_golem.py` (the user's pick, 2026-10-29): his frame and
+	# crop, and his weight on the ice he no longer walks.
+	"Frozen Golem": {
+		"tier": Tier.BOSS,
+		"size": Size.LARGE,
+		"weight": 3,
+		"faces": Facing.LEFT,
+		"environments": ["ice"],
+		"dir": "Stone Golem/frozen",
 		"frame": Vector2i(220, 96),
 		"bounds": Rect2i(0, 8, 156, 76),
 		"sheets": {"idle": "IDLE.png", "walk": "WALK.png", "attack": "ATTACK.png", "hurt": "HURT.png", "death": "DEATH.png"},
