@@ -6,6 +6,36 @@ a player has not seen yet once, together, newest first (`main_scene.gd` `_show_c
 written for players. A section may hold a two-column table instead (`| left | right |`, a header row, then
 `|---|---|`): the game draws its rows as its own tables, the left column wrapping and the right kept short.
 
+## v0.7.0 (2026-10-29)
+
+### Story
+- A new game opens on a comic: how a knight fell to Gollux and woke up a kobold at the ice wall.
+
+### First steps
+- Your first item, your first orb and your first level now show you what to do next: the screen darkens around the one thing to press until it is done.
+- On a phone, the first orb also lists the three taps of crafting: tap an orb, tap the item, then tap it again to apply.
+- Farm now appears after you first lose a fight on a tile.
+- Wander five tiles off the road on the way to the first town and the hero will remind you where roads lead.
+
+### Bosses
+- The bosses have left the towns. Each one now waits in a lair out on the map at the end of a trail of footprints, and drops a unique of its own.
+- Lairs are never close to one another, and their trails are eight tiles long.
+- New boss: the Frozen Golem rules the frozen lands.
+
+### Phones
+- Held upright, the corner buttons are now a bar along the bottom of the screen.
+- Held upright, a town shows your bag on top, with Items and Equipment tabs, over the counter.
+- The orb you are holding keeps its card at the top of the screen, clear of your items.
+- Spoken tips now appear at the top of the screen.
+- The comic reads as one tall column in any window taller than it is wide.
+- The bounty board, the journal and every other list now scroll with a finger.
+- Entering the Golden door password no longer starts the game at a tiny size while the keyboard is still up.
+
+### Interface
+- The tile panel sits in the top right and is only as tall as what it shows.
+- Holding Alt over an item that would replace nothing no longer shows an empty card.
+- A skill tree slot's tooltip now appears beside the slot, and an empty slot tells you what goes in it.
+
 ## v0.6.1 (2026-10-11)
 
 ### Front page

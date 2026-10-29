@@ -21,6 +21,7 @@ func _run() -> void:
 	_check(_test_dialogue_box() == true, "dialogue box tests ran to the end")
 	_check(_test_accordion() == true, "accordion tests ran to the end")
 	_check(await _test_settings_scroll() == true, "settings scroll tests ran to the end")
+	_check(_test_finger_scroll() == true, "finger scroll tests ran to the end")
 	_check(await _test_settings_page() == true, "settings page tests ran to the end")
 	_check(_test_table_rows() == true, "table row tests ran to the end")
 	_check(_test_palette() == true, "palette tests ran to the end")
@@ -557,14 +558,14 @@ func _test_item_card() -> bool:
 	_check(card.worn_for(sword) == null, "nothing to hold a piece against with no equipment")
 	card.equipment = Equipment.new()
 	_check(card.worn_for(sword) == null, "or with nothing on")
-	_check(card.bare_for(sword), "which Alt says in so many words, rather than doing nothing")
-	_check(card.bare_text(sword) == "Nothing is equipped in the weapon slot", "naming the socket it means")
+	var bare_square := ItemSlot.make(sword)
+	_check(not card.write_second(bare_square) and not card.hints_for(bare_square, false).has("alt"),
+			"so Alt has no second card to show, and the foot does not offer it")
+	bare_square.free()
 	var other := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng)
 	card.equipment.worn[Equipment.Socket.WEAPON] = other
 	_check(card.worn_for(sword) == other, "a worn sword is what a hovered sword is held against")
 	_check(card.worn_for(other) == null, "and the worn piece is not held against itself")
-	_check(not card.bare_for(sword) and not card.bare_for(other),
-			"and a taken socket, or the worn piece itself, is not called bare")
 	# The keys at the card's foot: Alt while the card can answer it, and whatever the square names.
 	for key: String in ItemCard.KEY_ICONS:
 		_check(ResourceLoader.exists(ItemCard.KEY_ICONS[key]), "the %s key is cut" % key)
@@ -959,6 +960,30 @@ func _test_settings_scroll() -> bool:
 	return true
 
 
+## A finger scrolls only by a drag the scroll sees: a bounty card (a PanelContainer) and its button
+## pass their press on to it once inside, whenever they came in, and stop it as before outside one.
+func _test_finger_scroll() -> bool:
+	var scroll := UITheme.scroll()
+	var rows := UITheme.vbox(0)
+	scroll.add_child(rows)
+	var early := UITheme.button("Accept", UITheme.GO_BUTTON, "")
+	rows.add_child(early)
+	root.add_child(scroll)
+	var card := PanelContainer.new()
+	var button := UITheme.button("Cancel", "SmallButton", "")
+	card.add_child(button)
+	rows.add_child(card)
+	_check(early.mouse_filter == Control.MOUSE_FILTER_PASS, "a button in a scroll before it is shown passes")
+	_check(card.mouse_filter == Control.MOUSE_FILTER_PASS and button.mouse_filter == Control.MOUSE_FILTER_PASS,
+			"and so do a card and its button added after")
+	var outside := PanelContainer.new()
+	root.add_child(outside)
+	_check(outside.mouse_filter == Control.MOUSE_FILTER_STOP, "a panel outside a scroll still stops a press")
+	outside.free()
+	scroll.free()
+	return true
+
+
 ## The settings: the player's sections and nothing of a developer's, the dev tools behind one button on
 ## a screen of their own (and the balancing page and the generator coming back to it), the corner
 ## buttons' keys on the controls screen, and every name `credits.md` thanks on the credits screen.
@@ -1056,6 +1081,9 @@ func _test_responsive() -> bool:
 	UITheme.dock(panel, room, 2.0)
 	_check(panel.position.y == 200 + UITheme.EDGE * 2.0 and panel.size.y == 200 - 2 * UITheme.EDGE,
 			"a room given is the height it takes")
+	UITheme.dock(panel, room, 2.0, UITheme.Dock.RIGHT, Callable(), true)
+	_check(panel.position.y == 200 + UITheme.EDGE * 2.0 and panel.size.y == 50.0,
+			"hugging, a page is as tall as what it holds at the top of the room")
 	# At 4 the headless window is under the budget across: narrow, a sheet along the foot of the room.
 	UITheme.dock(panel, Rect2(), 4.0, UITheme.Dock.RIGHT)
 	_check(panel.position.x == floorf((whole.x - 100 * 4.0) / 2.0) and panel.size.x == 100.0

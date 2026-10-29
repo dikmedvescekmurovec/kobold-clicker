@@ -119,6 +119,9 @@ const TIPS := [
 		"Ouch. Not ready for that one yet.",
 		"I need to get stronger. The ones back on my own land go down easy.",
 	], "player"],
+	["off_path", HERO, [
+		"Where'd the path go? Paths lead to roads. Roads lead to towns.",
+	], "player"],
 	["first_town", HERO, [
 		"Ohh ... a proper place. With a gate and everything.",
 		"Right. Plan. Sell the sticky stuff, keep the sharp stuff.",
@@ -155,6 +158,8 @@ const TIPS := [
 		"I'll tell them you're ready for the nasty jobs. Nasty pays better.",
 	], "blacksmith"],
 ]
+## How many tiles off the road the hero charts before the `off_path` tip.
+const OFF_PATH_TILES := 5
 ## The first steps a player is made to take (the user's asks, 2026-10-29), a tip's id -> its step's,
 ## first owed first. A step is put in `inventory.tips` as its tip is queued, so a save that saw the tip
 ## before there were steps owes none, and struck off once taken (`_step_taken`); while it is owed,
@@ -164,6 +169,13 @@ const SPOTLIGHTS := {
 	"first_orb": "step_orb",
 	"level_up": "step_point",
 }
+## The orb's step written out under a finger, whose taps say nothing of themselves (the user's ask,
+## 2026-10-29): `_spotlight` puts it over the shade with the line the player is on in ink.
+const ORB_TAPS := [
+	"1. Tap an orb to select it",
+	"2. Tap the item to craft",
+	"3. Tap it again to apply, once or more",
+]
 
 var towns: TownWorld
 var view: MapBuilder
@@ -973,7 +985,7 @@ func _rune_on(cell: Vector2i) -> void:
 		_layout_ui()
 
 
-## The tile panel is a full-height column against the right edge, its buttons at its foot. The
+## The tile panel is a column top-right as tall as it holds, its buttons at its foot. The
 ## left-hand pages lay themselves out against the other edge. Held upright, every page stands over the
 ## corner row, one at a time -- but a town, whose page stands under the bag.
 func _layout_ui() -> void:
@@ -1992,6 +2004,12 @@ func _tip_due(id: String) -> bool:
 			return not ledger.farming and _combat != null
 		"first_death":
 			return _tile_lost
+		"off_path":
+			# Only on the way to the start town, whose road begins underfoot, and once `OFF_PATH_TILES` are
+			# charted off the road (the user's asks, 2026-10-29).
+			return (view != null and "first_town" not in inventory.tips and not view.walking
+					and view.charted(view.player_cell) and view.road_at(view.player_cell) == 0
+					and view.town_tier(view.player_cell) == -1 and view.charted_off_road() >= OFF_PATH_TILES)
 		"first_town":
 			return view != null and view.can_visit(view.player_cell)
 		"first_accept":
@@ -2135,6 +2153,7 @@ func _on_tip_closed() -> void:
 ## a camp, a town or the black screen, so a question or a tip that comes up is never shaded.
 func _spotlight() -> void:
 	var lit: Control = null
+	var lit_step := ""
 	if (_tip_panel == null and _tip_queue.is_empty() and _combat == null and _camp == null
 			and _transcend_page == null and not town_page.visible and not _popup_up()):
 		for step: String in SPOTLIGHTS.values():
@@ -2146,6 +2165,7 @@ func _spotlight() -> void:
 				continue
 			lit = _step_target(step)
 			if lit != null and lit.is_visible_in_tree():
+				lit_step = step
 				break
 			lit = null
 	if lit == null:
@@ -2161,6 +2181,11 @@ func _spotlight() -> void:
 		top.move_child(_spot, _item_card.get_index())
 	else:
 		_spot.target = lit
+	if _spot != null:
+		var orb_taps := lit_step == "step_orb" and Cursors.touched and bag_page.visible
+		# The orb, then the piece, then the piece again: the last tap on the piece only selected it.
+		var at := 0 if bag_page.orb_in_hand().is_empty() else 2 if Cursors.selected() is Item else 1
+		_spot.say(ORB_TAPS if orb_taps else [], at, bag_page.held_card_bottom())
 
 
 ## Whether an owed step has been taken. The orb's is struck off by the bag's `crafted` (`_build_pages`).

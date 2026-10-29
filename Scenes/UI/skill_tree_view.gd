@@ -546,6 +546,15 @@ func _get_tooltip(at: Vector2) -> String:
 	return "You can socket an activated skill gem here"
 
 
+## Where `TipCard` stands its card: beside the slot under `at`, not the whole tree.
+func tip_rect(at: Vector2) -> Rect2:
+	var path: Variant = slot_at(at)
+	if path == null:
+		return get_global_rect()
+	var square: Control = squares[path]
+	return _canvas.get_global_transform() * Rect2(square.position, square.get_combined_minimum_size())
+
+
 ## The path of the slot under `at` (this Control's own pixels), or null. The bag's too, for a stone
 ## dropped on the tree.
 func slot_at(at: Vector2) -> Variant:

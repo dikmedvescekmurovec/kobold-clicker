@@ -43,8 +43,10 @@ const CHEST_REGION := Rect2(2, 12, 28, 20)  # the closed brown chest
 ## The share of open tiles that hold a boss's lair (`boss_at`), and how near `CENTER` the nearest may be.
 const LAIR_CHANCE := 0.01
 const LAIR_MIN_DISTANCE := 5
-## Tiles of footprints leading in to a lair (`trail_of`): the user's "about five" (2026-10-29).
-const TRAIL_LENGTH := 5
+## The fewest steps between two lairs (the user's "never near each other", 2026-10-29; the number is mine).
+const LAIR_SPACING := 10
+## Tiles of footprints leading in to a lair (`trail_of`): the user's eight (2026-10-29).
+const TRAIL_LENGTH := 8
 ## A lair's boss stands this many map pixels tall on its tile, a head over the hero (`PlayerToken.TALL`),
 ## its feet this far under the tile's middle.
 const LAIR_TALL := 40.0
@@ -323,6 +325,15 @@ func charted_level() -> int:
 	return _level_at(deepest)
 
 
+## How many charted tiles have no road and no settlement on them. A scan: ask once a tile is charted.
+func charted_off_road() -> int:
+	var count := 0
+	for cell: Vector2i in _states:
+		if _states[cell] == State.CHARTED and road_at(cell) == 0 and town_tier(cell) == -1:
+			count += 1
+	return count
+
+
 ## What the tile panel shows and the ceiling on what can drop there. Banded, while enemy health is smooth
 ## in the distance: two tiles at the ends of one band read alike and do not fight alike.
 static func level_of(cell: Vector2i) -> int:
@@ -414,13 +425,32 @@ func has_chest(cell: Vector2i) -> bool:
 
 ## The boss whose lair is on `cell` (`EnemyRoster.LAIRS`, its land's), or "": a per-cell roll on open land
 ## that holds until the tile is charted, as `has_chest`'s does, and never on a chest or a fallen wall's ring.
+## Of two rolled within LAIR_SPACING only the one nearer CENTER (then the lower roll) stands, whether or not
+## the other was won, so neither a charting nor land added past a wall moves a lair.
 func boss_at(cell: Vector2i) -> String:
-	if not _is_open(cell) or HexGrid.distance(CENTER, cell) < LAIR_MIN_DISTANCE \
-			or _seeded([env_seed, "lair", cell]).randf() >= LAIR_CHANCE:
+	var roll := _lair_roll(cell)
+	if roll >= LAIR_CHANCE or charted(cell) or has_chest(cell) or cell == cave:
 		return ""
-	if charted(cell) or has_chest(cell) or on_wall_ring(cell):
-		return ""
+	var far := HexGrid.distance(CENTER, cell)
+	for dy in range(-LAIR_SPACING, LAIR_SPACING + 1):
+		for dx in range(-LAIR_SPACING, LAIR_SPACING + 1):
+			var other := cell + Vector2i(dx, dy)
+			if other == cell or HexGrid.distance(cell, other) > LAIR_SPACING:
+				continue
+			var other_roll := _lair_roll(other)
+			var other_far := HexGrid.distance(CENTER, other)
+			if other_roll < LAIR_CHANCE and (other_far < far or other_far == far and other_roll <= roll):
+				return ""
 	return EnemyRoster.lair_boss(_envs[cell])
+
+
+## `cell`'s lair roll, or 1.0 where none may stand: only what never changes once the land is generated (the
+## cave, placed later, is `boss_at`'s, so placing it never brings back a lair it had kept away).
+func _lair_roll(cell: Vector2i) -> float:
+	if not _envs.has(cell) or not is_land(cell) or towns.has_town(_spot(cell)) or on_wall_ring(cell) \
+			or HexGrid.distance(CENTER, cell) < LAIR_MIN_DISTANCE:
+		return 1.0
+	return _seeded([env_seed, "lair", cell]).randf()
 
 
 ## The footprints leading in to the lair on `lair`, farthest first: a walk of TRAIL_LENGTH tiles out from

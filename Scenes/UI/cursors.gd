@@ -141,6 +141,11 @@ static func applies(what: Variant) -> bool:
 	return _applying
 
 
+## What a finger's last tap was on, as `applies` was asked of it, or null: its next tap there applies.
+static func selected() -> Variant:
+	return _read if touched and _read_tap == taps else null
+
+
 ## Fed every event the main scene hears (`_input`, since a Control would eat a press before anything
 ## later saw it): a left press tilts the cursor to the left for `TWITCH`. Nothing at `Settings.Anim.NONE`.
 static func twitch(tree: SceneTree, event: InputEvent) -> void:

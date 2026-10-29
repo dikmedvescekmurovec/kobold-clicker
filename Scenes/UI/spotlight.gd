@@ -15,6 +15,9 @@ var _ui_scale := 1.0
 ## The target's rect in this Control's coordinates, measured once a frame: a press can land after the
 ## page has redrawn the target out of the tree.
 var _hole := Rect2()
+## The small card of steps at the window's top (`say`), or null, and which of its lines is in ink.
+var _note: PanelContainer
+var _note_at := -1
 
 
 func _init(lit: Control, final: float) -> void:
@@ -49,6 +52,39 @@ func _draw() -> void:
 	draw_rect(Rect2(0, hole.end.y, size.x, size.y - hole.end.y), SHADE)
 	draw_rect(Rect2(0, hole.position.y, hole.position.x, hole.size.y), SHADE)
 	draw_rect(Rect2(hole.end.x, hole.position.y, size.x - hole.end.x, hole.size.y), SHADE)
+
+
+## Writes `lines` on a small card centred at the window's top, under `below` (window pixels: what stands
+## there already), the line `at` in ink and the rest soft; no lines take it away. Called every frame.
+func say(lines: Array, at: int, below: float) -> void:
+	if lines.is_empty():
+		if _note != null:
+			remove_child(_note)
+			_note.queue_free()
+			_note = null
+		return
+	if _note == null:
+		_note = PanelContainer.new()
+		_note.theme = UITheme.theme()  # A CanvasLayer's child has no themed ancestor.
+		_note.theme_type_variation = "TextPanel"
+		UITheme.notched(_note)
+		_note.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_note.scale = Vector2(_ui_scale, _ui_scale)
+		var rows := UITheme.vbox(2)
+		rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_note.add_child(rows)
+		add_child(_note)
+		_note_at = -1
+	if at != _note_at:
+		_note_at = at
+		var rows: VBoxContainer = _note.get_child(0)
+		UITheme.clear(rows)
+		for i: int in lines.size():
+			rows.add_child(ItemDetails.line(lines[i], Palette.TEXT if i == at else Palette.TEXT_SOFT,
+					OrbCard.WIDTH, true))
+		_note.reset_size()
+	var card := _note.get_combined_minimum_size() * _ui_scale
+	_note.position = Vector2(roundf((size.x - card.x) / 2.0), below + RIM * 2 * _ui_scale)
 
 
 func _has_point(point: Vector2) -> bool:

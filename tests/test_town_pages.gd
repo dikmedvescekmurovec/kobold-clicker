@@ -613,6 +613,19 @@ func _test_entering() -> bool:
 	_check(main.view.town_tier(town) == TownWorld.Tier.SMALL, "the start town is a village")
 	_check(main.view.town_tier(MapBuilder.CENTER) == -1, "and the middle of the map is not a town")
 	_check(not main._bounty_button.visible, "no journal in the corner before a board has been read")
+	_check(not main._tip_due("off_path"), "the start stands on the road, so the hero says nothing of paths")
+	for i in main.OFF_PATH_TILES:
+		var off: Vector2i = HexGrid.neighbors(main.view.player_cell).filter(func(c: Vector2i) -> bool:
+			return main.view.can_chart(c) and main.view.road_at(c) == 0 and main.view.town_tier(c) == -1)[0]
+		main.view.chart(off)
+		_check(not main._tip_due("off_path"), "not while still walking off the road")
+		main.map.player.advance(PlayerToken.SECONDS_PER_TILE * 2.0)
+		_check(("off_path" in main.inventory.tips) == (i == main.OFF_PATH_TILES - 1),
+				"the hero speaks of paths only on the fifth tile charted off the road (tile %d)" % (i + 1))
+	while main._tip_panel != null:
+		main._on_tip_closed()
+	main.view.player_cell = MapBuilder.CENTER
+	main.map.set_player_cell(MapBuilder.CENTER)
 
 	_check(main.view.envs_within(MapBuilder.CENTER, BountyBoard.BOUNTY_RANGE).size() > 0,
 			"there is land around the middle of the map to post monsters from")

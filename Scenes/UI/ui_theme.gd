@@ -155,9 +155,10 @@ static func safe_rect(viewport: Viewport) -> Rect2:
 ## (`narrow`) it is a sheet along the foot of the room instead: centred at its own width, as tall as what
 ## it holds (`natural_height`) and never more than half the window, scrolling past that (the user's call).
 ## `again` is the caller's whole layout, run once more the next frame: a flow (a grid of squares, the
-## trees) measures how tall it is only as it lays out, a frame after it was made wider.
+## trees) measures how tall it is only as it lays out, a frame after it was made wider. `hug` stands it
+## as tall as it holds across a monitor too, at the top of the room (the tile panel's, 2026-10-29).
 static func dock(panel: Control, room: Rect2, ui_scale: float, side := Dock.LEFT,
-		again := Callable()) -> void:
+		again := Callable(), hug := false) -> void:
 	if not room.has_area():
 		room = panel.get_viewport_rect()
 	var window := panel.get_viewport_rect().size
@@ -169,7 +170,11 @@ static func dock(panel: Control, room: Rect2, ui_scale: float, side := Dock.LEFT
 				room.end.y - (panel.size.y + EDGE) * ui_scale)
 		_settle(panel, again)
 		return
-	panel.size = Vector2(width, room.size.y / ui_scale - 2 * EDGE)
+	var tall := room.size.y / ui_scale - 2 * EDGE
+	if hug:
+		tall = minf(natural_height(panel), tall)
+		_settle(panel, again)
+	panel.size = Vector2(width, tall)
 	var x := room.position.x + EDGE * ui_scale
 	if side == Dock.RIGHT:
 		x = room.end.x - (width + EDGE) * ui_scale
@@ -538,11 +543,29 @@ static func text_field(placeholder: String, most: int, width: float) -> LineEdit
 ## A box for whatever may run past the window's foot: it takes the column's slack and scrolls by the
 ## wheel, down only and with no bar drawn. What goes after it in the column stays pinned under it.
 static func scroll() -> ScrollContainer:
-	var made := ScrollContainer.new()
+	var made := FingerScroll.new()
 	made.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	made.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	made.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	return made
+
+
+## Under a finger a ScrollContainer scrolls only by a drag it sees, and a button or a panel inside it
+## (`MOUSE_FILTER_STOP`, PanelContainer's default) keeps the press from it: the bounty cards never
+## scrolled on a phone. So whatever enters it stopping presses passes them on instead. A passing button
+## still presses (BaseButton accepts no mouse event) and is let go as a drag begins
+## (`NOTIFICATION_SCROLL_BEGIN`), both checked in 4.7; a Control that accepts its press keeps it.
+class FingerScroll extends ScrollContainer:
+	func _enter_tree() -> void:
+		get_tree().node_added.connect(_pass_on)
+
+	func _exit_tree() -> void:
+		get_tree().node_added.disconnect(_pass_on)
+
+	func _pass_on(node: Node) -> void:
+		var control := node as Control
+		if control != null and control.mouse_filter == MOUSE_FILTER_STOP and is_ancestor_of(control):
+			control.mouse_filter = MOUSE_FILTER_PASS
 
 
 ## A small heading under a bigger one: a word in the body font and a rule run out to the edge (a

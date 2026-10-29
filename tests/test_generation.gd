@@ -539,6 +539,9 @@ func _test_lairs() -> bool:
 					"each footprint a tile further out than the last")
 			at = step
 	_check(not lairs.is_empty(), "the map has lairs (%d)" % lairs.size())
+	for a in lairs:
+		for b in lairs:
+			_check(a == b or HexGrid.distance(a, b) > MapBuilder.LAIR_SPACING, "no lair near another (%s, %s)" % [a, b])
 	var lair: Vector2i = lairs.filter(func(cell: Vector2i) -> bool:
 			return view.trail_of(cell).size() == MapBuilder.TRAIL_LENGTH)[0]
 	var way := view.trail_of(lair)

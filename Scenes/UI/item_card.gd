@@ -11,9 +11,6 @@ extends PanelContainer
 const WIDTH := 150.0
 ## The air between the card and the square it describes, in panel pixels.
 const GAP := 4
-## What the second card says under Alt when nothing is worn where the hovered piece would go, the
-## socket named by `Equipment.LABELS`.
-const BARE := "Nothing is equipped in the %s slot"
 
 # The metas a square may carry to steer its card.
 ## A Control standing beside the square (the bag's buttons): the card is placed past the two of them
@@ -317,22 +314,9 @@ func worn_for(item: Item) -> Item:
 	return null
 
 
-## Whether `item` would go on somewhere nothing is worn -- which `worn_for`'s null alone does not say,
-## since the worn piece itself gets one too.
-func bare_for(item: Item) -> bool:
-	# A skill stone goes in no socket, so there is no socket to call bare.
-	return equipment != null and not (item in equipment.worn.values()) and worn_for(item) == null \
-			and not equipment.sockets_for(item).is_empty()
-
-
-## `BARE` for the socket `item` would go in: "the ring slot", "the offhand slot".
-func bare_text(item: Item) -> String:
-	return BARE % str(Equipment.LABELS[equipment.sockets_for(item)[0]]).to_lower()
-
-
 ## The second card for `slot`, written into its rows: the square's own (`ALT_CARD`), or else -- for a
-## piece, not a square with a `hint` -- the piece worn where it would go, or that the socket is bare.
-## False when there is nothing to say, and the card stays down.
+## piece, not a square with a `hint` -- the piece worn where it would go. False when there is nothing
+## to say (nothing worn there: the user's, 2026-10-29), and the card stays down.
 func write_second(slot: ItemSlot) -> bool:
 	UITheme.clear(_worn_rows)
 	if slot.has_meta(ALT_CARD):
@@ -347,10 +331,6 @@ func write_second(slot: ItemSlot) -> bool:
 		# fellow on the first card. Found by name: a plussed piece's bar stands over its name.
 		(_worn_rows.get_node(ItemDetails.RARITY_LINE) as Label).text += " · worn"
 		return true
-	if bare_for(slot.item):
-		# Alt answered, so a bare socket does not read as a key that did nothing.
-		_worn_rows.add_child(ItemDetails.line(bare_text(slot.item), Palette.TEXT_SOFT, WIDTH, true))
-		return true
 	return false
 
 
@@ -361,7 +341,7 @@ func hints_for(slot: ItemSlot, alt: bool) -> Dictionary:
 	var hints := {}
 	# A square with a `hint` is not the player's piece, so it is held against nothing worn.
 	if not alt and not slot.hint.is_valid() and not slot.has_meta(NO_COMPARE) \
-			and (worn_for(slot.item) != null or bare_for(slot.item)):
+			and worn_for(slot.item) != null:
 		hints["alt"] = "compare"
 	hints.merge(slot.get_meta(KEYS, {}))
 	if alt:

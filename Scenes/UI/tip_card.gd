@@ -112,5 +112,9 @@ func _place() -> void:
 	if not visible or not is_instance_valid(_over):
 		return
 	reset_size()
-	position = ItemCard.beside(_over.get_global_rect(), get_combined_minimum_size() * _ui_scale,
+	# A Control answering for parts of itself (`SkillTreeView`'s slots) stands the card beside the part.
+	var rect := _over.get_global_rect()
+	if _over.has_method("tip_rect"):
+		rect = _over.tip_rect(_over.get_local_mouse_position())
+	position = ItemCard.beside(rect, get_combined_minimum_size() * _ui_scale,
 			get_viewport_rect().size, ItemCard.GAP * _ui_scale)

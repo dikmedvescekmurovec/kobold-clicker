@@ -149,11 +149,11 @@ func watch_bag() -> void:
 		update_buttons()
 
 
-## Against the whole right edge, as `TownPage.layout` has its page. Run whenever a row or a button comes
-## or goes: the column's width is its contents'.
+## Top-right, as tall as it holds (the user's, 2026-10-29). Run whenever a row or a button comes or goes:
+## the column's size is its contents'.
 func place() -> void:
 	panel.reset_size()
-	UITheme.dock(panel, room.call(), _ui_scale, UITheme.Dock.RIGHT, place)
+	UITheme.dock(panel, room.call(), _ui_scale, UITheme.Dock.RIGHT, place, true)
 
 
 ## A part's rows swapped for `rows`. An empty part is hidden, or it would still take its gap.

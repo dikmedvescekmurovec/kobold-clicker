@@ -85,7 +85,7 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
   - **Keep a tooltip beside its control while it is up** (`TipCard._place` every frame), so one over a popup still settling follows it. (DESIGN.md)
 - **Serve every square with the one `ItemCard`** (the main scene's, on layer 3, over the pages and a fight), which finds squares through `ItemSlot.GROUP` (`slot_at`). (DESIGN.md: "item_card.gd")
   - **Steer a square's card through its metas:** `ItemCard.BESIDE`, `KEYS`, `NO_COMPARE`, `ALT_CARD`, `STAYS`, `PINNED`; `TipCard` reads `NOW` and `KEY`.
-  - **Write the second (Alt) card only in `ItemCard.write_second(slot)`:** what the swap takes off (`worn_for`), or `BARE` when nothing would come off, so Alt never looks like a dead key.
+  - **Write the second (Alt) card only in `ItemCard.write_second(slot)`:** what the swap takes off (`worn_for`); when nothing would come off there is no second card and no Alt hint (the user's, 2026-10-29).
   - **Put the card away at a press, but never at a craft:** with an orb held it stays (`hovered`, `Cursors.holding`, `_orb_press`) and is lit (`BagPage.crafted` -> `shine`). It is the pressed place that goes quiet, not the piece: a redraw makes new squares, a shelf new `Item`s.
 
 ### Squares, presses and cursors
@@ -107,9 +107,11 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
   - **Count the doll's click as it lets go,** as the grid's and the tree's do, or the redraw its press caused cuts the drag off.
 
 ### Touch
+- **Let a finger's drag reach every scroll:** `UITheme.scroll()` turns whatever STOPs a press inside it to PASS (`FingerScroll`), so a button or card no longer hides the drag. A Control that accepts its own press still keeps it. (DESIGN.md)
 - **Give a finger a tap for everything hover, Alt and a right click do** (`Cursors.touched`): what hover shows a tap shows, a tooltip is a held finger, and what only Escape or a right click undoes needs a tap too. (DESIGN.md)
   - **Let a tap select and the next tap on the same thing apply** (the user's rule, 2026-10-10): every press that spends, a new one too, asks `Cursors.applies(what)` first, and leaves the thing's card or panel to come up.
   - **Treat an orb or a rune in the bag's trays as the tool, not the thing:** a tap picks it up and says nothing, a held finger reads it (`OrbSlot.picks_up`). A vendor's orb is the thing: read on the first tap, pressed on the next.
+  - **Keep a held orb's card up under a finger, centred at the window's top** (`BagPage._show_held_card`; the user's, 2026-10-29), clear of the pieces it is pressed on.
   - **In a test, set `Cursors.touched` yourself** and add one to `Cursors.taps` between two taps: a test's events are a mouse's.
 - **Let a finger held on a skill node go on spending** once its second tap has learned (`SkillTreeView.repeating`). (DESIGN.md: "skills_page.gd")
 - **Show the item card at a tap and keep it until the next tap lands elsewhere;** the worn card is always the second, and no key row is written. (DESIGN.md: "item_card.gd")

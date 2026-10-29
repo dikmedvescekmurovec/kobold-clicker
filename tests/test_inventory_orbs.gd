@@ -998,9 +998,24 @@ func _test_first_steps() -> bool:
 	_check(lit.call() == main._bag_button, "the first orb: the bag")
 	main._on_bag_pressed()
 	_check(lit.call() == main.bag_page.tray_square(OrbTable.FIRST_ORB), "then the orb")
+	_check(main._spot._note == null, "under a mouse no steps are written")
+	Cursors.touched = true
+	var taps := func() -> Array:
+		lit.call()
+		if main._spot._note == null:
+			return []
+		var rows: Array = main._spot._note.get_child(0).get_children()
+		return rows.map(func(row: Label) -> bool: return row.get_theme_color("font_color") == Palette.TEXT)
+	_check(taps.call() == [true, false, false], "under a finger the orb's taps are written, the orb's first")
 	main.bag_page._on_orb_pressed(OrbTable.FIRST_ORB)
 	_check(lit.call() == main.bag_page.square_of(sword) and sword in main.inventory.equipment.worn.values(),
 			"then the piece worn")
+	_check(taps.call() == [false, true, false], "and the piece's tap")
+	Cursors.taps += 1
+	main.bag_page._orb_on(sword)
+	_check(taps.call() == [false, false, true] and main.inventory.orb_count(OrbTable.FIRST_ORB) == 1,
+			"one tap on it only selects it, and the next is written as the one that applies")
+	Cursors.touched = false
 	main.bag_page._craft(OrbTable.FIRST_ORB, sword)
 	_check(lit.call() == null and Inventory.load_from(TEST_PATH).tips.all(
 			func(id: String) -> bool: return not id.begins_with("step_")), "and the orb spent, every step is saved taken")

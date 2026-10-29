@@ -865,7 +865,7 @@ func _test_stones() -> bool:
 	retired["capstone"] = "retired"
 	_check(Item.from_dict(retired) == null, "and one this build no longer has goes whole")
 
-	# Never an heirloom, spared by the bin with the uniques, and no socket for the card to call bare.
+	# Never an heirloom, spared by the bin with the uniques, and nothing worn for the card to compare with.
 	var bag := Inventory.new()
 	bag.add(stone)
 	bag.add(cap)
@@ -874,7 +874,7 @@ func _test_stones() -> bool:
 	_check(bag.items.has(cap), "the bin spares a capstone with the uniques")
 	var card := ItemCard.new(1.0)
 	card.equipment = bag.equipment
-	_check(not card.bare_for(stone), "a stone has no bare socket to compare against")
+	_check(card.worn_for(stone) == null, "a stone has nothing worn to compare against")
 	card.free()
 	return true
 

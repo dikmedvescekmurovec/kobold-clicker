@@ -227,6 +227,7 @@ var _armed := "":
 				else RuneTable.icon(orb) if RuneTable.has(orb) else OrbTable.icon(orb)
 		# A rune's mark is made at the tray's 16, an orb's cut at 32.
 		Cursors.hold(mark, 2 if RuneTable.has(orb) else 1)
+		_show_held_card()
 		held_changed.emit(orb)
 
 ## A left press off any piece put the held orb down, and the redraw waits for its release (`_input`).
@@ -1528,7 +1529,7 @@ func refresh_orbs() -> void:
 	_rune_tray.hide()
 	_fold_button.hide()
 	# The square the card described has just been freed.
-	_orb_card.hide()
+	_show_held_card()
 	if _transcending and not _stones:
 		# Over the bag there is no tray at all, and over the heirlooms it is the super orbs: one count
 		# for the six of them (said in the corner, `_count`), so no square wears a number.
@@ -1559,7 +1560,7 @@ func _tray_slot(orb: String, count: int) -> OrbSlot:
 	slot.picks_up = true
 	slot.pressed.connect(_on_orb_pressed)
 	slot.hovered.connect(_on_orb_hovered.bind(slot))
-	slot.unhovered.connect(_orb_card.hide)
+	slot.unhovered.connect(_show_held_card)
 	return slot
 
 
@@ -1746,6 +1747,34 @@ func _on_orb_hovered(orb: String, slot: OrbSlot) -> void:
 	_orb_card.show()
 	_place_orb_card(slot.get_global_rect())
 	_place_orb_card.call_deferred(slot.get_global_rect())
+
+
+## Under a finger the orb in hand keeps its card up, centred at the window's top, clear of the pieces it
+## is pressed on (the user's, 2026-10-29); otherwise the card goes. A held finger's read of another orb
+## stands it by that square until the finger lifts.
+func _show_held_card() -> void:
+	if _orb_card == null:
+		return
+	if not Cursors.touched or _armed == "":
+		_orb_card.hide()
+		return
+	_orb_card.fill(_armed, _count_of(_armed))
+	_orb_card.show()
+	_place_held_card()
+	_place_held_card.call_deferred()
+
+
+## Where the held orb's card at the window's top ends (`_show_held_card`), in window pixels, or 0.
+func held_card_bottom() -> float:
+	return _orb_card.get_global_rect().end.y if _orb_card.visible and Cursors.touched and _armed != "" else 0.0
+
+
+func _place_held_card() -> void:
+	if not _orb_card.visible or _armed == "":
+		return
+	var card := _orb_card.get_combined_minimum_size() * _ui_scale
+	_orb_card.global_position = Vector2(roundf((get_viewport_rect().size.x - card.x) / 2.0),
+			SLOT_GAP * _ui_scale)
 
 
 ## Above the square: the screen edge is on one side of the tray and the sheet on the other.
