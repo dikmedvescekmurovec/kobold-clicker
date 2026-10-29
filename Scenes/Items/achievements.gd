@@ -133,8 +133,9 @@ static func unlocked(inventory: Inventory) -> Array:
 	return STARTERS + inventory.achievements.keys()
 
 
+## A lair's unique is never locked: its boss is all it waits on.
 static func is_unlocked(inventory: Inventory, id: String) -> bool:
-	return id in STARTERS or inventory.achievements.has(id)
+	return id in STARTERS or UniqueTable.is_lair(id) or inventory.achievements.has(id)
 
 
 ## The rank of `id` the player has earned, 0 for none.

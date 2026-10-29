@@ -42,6 +42,7 @@ func _run() -> void:
 	_check(_test_towns() == true, "town tests ran to the end")
 	_check(_test_roads() == true, "road tests ran to the end")
 	_check(_test_map_builder() == true, "map builder tests ran to the end")
+	_check(_test_lairs() == true, "lair tests ran to the end")
 	_check(_test_sight() == true, "sight tests ran to the end")
 	_check(_test_dark_reach() == true, "dark reach tests ran to the end")
 	_check(_test_distant_charting() == true, "distant charting tests ran to the end")
@@ -509,6 +510,70 @@ func _test_map_builder() -> bool:
 	return true
 
 
+## Lairs sit on open land away from the start, each holding its land's boss and led in to by a trail of
+## footprints a step further out at every tile; boss and prints are drawn once seen, and go as it is won.
+func _test_lairs() -> bool:
+	var map: HexMap = load("res://Scenes/Map/hex_map.tscn").instantiate()
+	root.add_child(map)
+	var world := TownWorld.generate(WORLD_SEED)
+	var town: Vector2i = world.towns().filter(func(spot: Vector2i) -> bool:
+			return spot.x > 20 and spot.y > 20 and spot.x < 230 and spot.y < 230)[0]
+	var view := MapBuilder.create(map, world, Vector2i(town.x, town.y & ~1), 99)
+	var lairs: Array[Vector2i] = []
+	for cell: Vector2i in view.to_save().envs:
+		var boss := view.boss_at(cell)
+		if boss.is_empty():
+			continue
+		lairs.append(cell)
+		_check(boss == EnemyRoster.lair_boss(view.env_at(cell)), "the lair on %s holds its land's boss" % cell)
+		_check(not view.towns.has_town(view.origin + cell) and not view.has_chest(cell) and view.mods_of(cell).is_empty(),
+				"no lair on a town or a chest, and none with modifiers")
+		_check(HexGrid.distance(MapBuilder.CENTER, cell) >= MapBuilder.LAIR_MIN_DISTANCE, "no lair by the start")
+		var way := view.trail_of(cell)
+		_check(way.size() <= MapBuilder.TRAIL_LENGTH and way == view.trail_of(cell),
+				"a trail of at most %d tiles, the same every time it is asked" % MapBuilder.TRAIL_LENGTH)
+		var at := cell
+		for i in way.size():
+			var step: Vector2i = way[way.size() - 1 - i]
+			_check(HexGrid.distance(step, at) == 1 and HexGrid.distance(step, cell) == i + 1,
+					"each footprint a tile further out than the last")
+			at = step
+	_check(not lairs.is_empty(), "the map has lairs (%d)" % lairs.size())
+	var lair: Vector2i = lairs.filter(func(cell: Vector2i) -> bool:
+			return view.trail_of(cell).size() == MapBuilder.TRAIL_LENGTH)[0]
+	var way := view.trail_of(lair)
+	_check(not view._lair_sprites.has(lair) or view.seen(lair), "an unseen lair is not drawn")
+	for cell: Vector2i in way + [lair]:
+		view._show(cell, MapBuilder.State.UNCHARTED)
+	_check(view._lair_sprites.has(lair) and view._lair_sprites[lair] is CombatActor, "a seen lair's boss stands on it")
+	for cell in way:
+		_check(view._track_sprites.has(cell) and view._track_sprites[cell].get_child_count() >= MapBuilder.TRACK_PRINTS,
+				"and its prints on its trail at %s" % cell)
+	for boss: String in EnemyRoster.LAIRS.values():
+		_check(load(MapBuilder.tracks_path(boss)) is Texture2D, "%s's prints load" % boss)
+	# The dev tick draws every boss and every trail, fog or not, and takes the hidden ones off again.
+	var seen_drawn := view._lair_sprites.size()
+	Settings.all_bosses = true
+	view.redraw_lairs()
+	_check(view._lair_sprites.size() == lairs.size(), "show all bosses draws all %d (%d)"
+			% [lairs.size(), view._lair_sprites.size()])
+	_check(view._tracks.keys().all(func(cell: Vector2i) -> bool: return view._track_sprites.has(cell)), "and every trail")
+	Settings.all_bosses = false
+	view.redraw_lairs()
+	_check(view._lair_sprites.size() == seen_drawn, "and unticked, only the seen ones stay")
+	# Won, the lair is open land: its boss goes, and its prints, wherever no other lair's trail crosses.
+	view._show(lair, MapBuilder.State.CHARTED)
+	_check(view.boss_at(lair).is_empty() and not view._lair_sprites.has(lair), "a charted lair holds no boss")
+	var own := 0
+	for cell in way:
+		if view._tracks[cell].all(func(step: Array) -> bool: return step[0] == lair):
+			own += 1
+			_check(not view._track_sprites.has(cell), "and its prints go with it from %s" % cell)
+	_check(own > 0, "where no other trail crosses (%d tiles)" % own)
+	map.queue_free()
+	return true
+
+
 ## Chests sit on open land away from the start, are drawn once seen, and go once the tile is charted.
 func _test_chests(map: HexMap, view: MapBuilder) -> bool:
 	var chests := 0
@@ -832,8 +897,8 @@ func _test_blind_charting() -> bool:
 		_check(view.mods_of(cell).is_empty(), "%s is short of the second wall" % cell)
 		var wild := view.mods_of(cell, true)
 		_check(wild == view.mods_of(cell, true), "and its modifiers are the same every time they are asked")
-		if view.town_tier(cell) != -1 or view.has_chest(cell):
-			_check(wild.is_empty(), "a settlement or a chest at %s is a set piece and carries none" % cell)
+		if view.town_tier(cell) != -1 or view.has_chest(cell) or not view.boss_at(cell).is_empty():
+			_check(wild.is_empty(), "a settlement, a chest or a lair at %s is a set piece and carries none" % cell)
 		else:
 			_check(wild.size() == 2, "open land at %s carries its one and Wild Tiles' one (%s)" % [cell, wild])
 			carried += 1

@@ -1285,3 +1285,56 @@ for rune, does, symbol in RUNE_SYMBOLS:
     out += [f"### {rune} -- {does}", "", "```", skill_prompt(symbol + RUNE_STROKES, "about 3/5 width"), "```", ""]
 open("tools/qa/pixellab_rune_prompts.md", "w", encoding="utf-8").write("\n".join(out))
 print(len(RUNE_SYMBOLS) + 1, "rune prompts")
+
+
+# The lairs' six uniques (2026-10-29): each its boss's own, wearing its base's picture until these come back. Every
+# one carries its boss in it -- the knight's banner, the hound's three heads, the bull's axe, the giant's leaf cloth,
+# the dragon's hoard, the golem's frost -- since the boss is all that drops it.
+POSE["STANDARD"] = ("Lying diagonally, seen flat from the front: the foot of the pole at the bottom-left, its tip at "
+                    "the top-right, the cloth hanging from the top of the pole down toward the lower right.")
+POSE["TORC"] = ("Front view, seen a little from above: the neck ring forms a wide, thick oval filling the canvas, "
+                "open at the bottom where its two ends almost meet.")
+# The mace's pose names the mace, which would draw one: the axe and the chisel each say their own word.
+POSE["AXE"] = POSE["MACE"].replace("the mace", "the axe")
+POSE["CHISEL"] = POSE["MACE"].replace("the grip at the bottom-left, the head", "the battered head at the bottom-left, "
+                                      "the cutting edge").replace("the mace", "the chisel")
+LAIR_PROMPTS = [
+ ("banner_of_challenge", "Banner of Challenge -- every common enemy comes on as an elite (Huge Knight)", "STANDARD",
+  "A knight's war banner: a tall warm brown wooden pole with a pointed dull gold tip, and hanging from its top a "
+  "long brick red cloth with a swallow-tailed end, one big dull gold device of two crossed swords on it.",
+  "warm brown #a0542a and dark brown #4e2d1f on the pole, brick red #ba3423 cloth with dark crimson #5a1122 in its "
+  "folds, dull gold #c49e48 on the tip and the device, bright gold highlights #e9bc3d", "the gold device",
+  "A single banner on its own and nothing else: no hand, no knight, no wind lines."),
+ ("three_headed_torc", "Three-Headed Torc -- every blow is three bites (Cerberus)", "TORC",
+  "A thick, heavy twisted neck ring of dull gold; at the front, where its two ends meet, three small snarling hound "
+  "heads sit side by side, each with open jaws and two glowing dots for eyes.",
+  "dull gold #c49e48 and #9b7227 on the twisted ring, bright gold highlights #e9bc3d, navy #1a2134 hound heads with "
+  "steel blue highlights #546783, dark crimson #5a1122 in the open jaws, apricot #f5ac5d eyes, dark brown shadows "
+  "#4e2d1f", "the three hound heads",
+  "Only the neck ring: no neck, no person, no bodies behind the heads."),
+ ("labrys", "Labrys -- every wound bleeds, and the wounds add up (Minotaur)", "AXE",
+  "A heavy double-headed axe: a straight warm brown haft, and at its top two big curved crescent blades back to "
+  "back, one facing each way, joined at the haft; a few drips of brick red run from both cutting edges.",
+  "neutral grey #797e80 on the blades, light grey #d1d1d1 along both cutting edges, dark grey #2f3236 in the "
+  "shadows, warm brown #a0542a and dark brown #4e2d1f on the haft, brick red drips #ba3423", "the two cutting edges",
+  "A single axe on its own and nothing else."),
+ ("giants_leafwrap", "Giant's Leafwrap -- you meet every attribute requirement (Cyclops)", "FLAT",
+  "A giant's loincloth: a thick twisted rope belt, and hanging from it a wide skirt of big, broad, overlapping green "
+  "leaves of different sizes, their tips ragged, much bigger than any person would wear.",
+  "moss green #69903e leaves with pine green #226723 shadows, burlap tan #a77a3e and sand #cca67b on the rope belt, "
+  "dark brown shadows #4e2d1f", "the leaf tips",
+  "Only the empty loincloth: no legs, no waist, no person inside it."),
+ ("hoardheart", "Hoardheart -- 10% more damage for every digit of gold held (Dragon)", "RING",
+  "A heavy dull gold ring whose top is heaped with a small pile of gold coins, and set into the middle of the pile "
+  "one big glowing dark red gem like an ember.\n" + RING_SHAPE,
+  "dull gold #c49e48 and #9b7227 on the band and the coins, bright gold highlights #e9bc3d, a wine red #8f0d22 gem "
+  "with oxblood #7e162e shadows and an apricot #f5ac5d glint, dark brown shadows #4e2d1f", "the red gem"),
+ ("masons_chisel", "Mason's Chisel -- triple damage against the ice wall (Frozen Golem)", "CHISEL",
+  "A stonemason's chisel: a long, straight, square bar of grey steel with a wide flat cutting edge at its upper end "
+  "and a short battered head at its lower end; the cutting edge is rimed with frost and a few small sharp ice "
+  "crystals cling to it.",
+  "neutral grey #797e80 and dark grey #2f3236 on the steel, light grey #d1d1d1 on the battered head, dusty blue "
+  "#628ab9 frost and crystals with muted white #F1F5E7 glints, steel blue #546783 in their shadows", "the frosted edge",
+  "A single chisel on its own and nothing else: no hammer, no hand."),
+]
+write_uniques("the lair uniques", LAIR_PROMPTS, "tools/qa/pixellab_lair_prompts.md")

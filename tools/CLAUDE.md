@@ -12,8 +12,9 @@ That row and the rest of the old table are in `DESIGN.md` under "Files in full".
 |---|---|
 | `ui_kit.py` | Cuts the interface and the orbs out of the bought packs; finishes the user's pixellab gear, unique, capstone and spell icons. |
 | `item_frames.py` | Draws the rarity frames round an item's square: drawn, not cut (the user's design, 2026-10-04). |
-| `pixellab_prompts.py` | The pixellab prompts for the item bases (text, not sprites); writes `tools/qa/pixellab_item_prompts.md`. |
+| `pixellab_prompts.py` | The pixellab prompts for the item bases and the uniques (text, not sprites); writes `tools/qa/pixellab_*_prompts.md`. |
 | `cave_dungeon.py` | Cuts the dungeon's art out of Admurin's packs: eight creatures, Gollux, the cave's seven layers. |
+| `boss_tracks.py` | Draws each lair boss's footprints for the map, a print a hex direction and foot. |
 | `frozen_golem.py` | Recolours the Stone Golem's sheets into ice for the Frost's Frozen Golem (snow caps, icicles). |
 | `pips.py` | Draws the pips of the fight's kill bar and the bounty boards, lit and spent (the user's design, 2026-10-03). |
 | `skill_stones.py` | Carves numerals I to IX into the user's three pixellab stones; draws the tree's 16 px nodes and its root. |
@@ -35,7 +36,7 @@ A rule's old text is in `DESIGN.md` under "Rules in full", headed by the rule's 
 
 ### Running and writing
 - **Take `--help` and refuse an unknown argument** in every script (`argparse`): a typo must never start an export, a recording or a deploy. `web.py` exports only; `--deploy` is what uploads and deploys.
-- **Write only the preview without `--export`** in `item_frames.py`, `cave_dungeon.py`, `frozen_golem.py`, `characters.py`, `pips.py`, `skill_stones.py`, `seeing_stone.py`, `pixel_flatten.py` and `landing_media.py` (its preview is `build/landing/`). (DESIGN.md: "Files in full")
+- **Write only the preview without `--export`** in `item_frames.py`, `cave_dungeon.py`, `frozen_golem.py`, `boss_tracks.py`, `characters.py`, `pips.py`, `skill_stones.py`, `seeing_stone.py`, `pixel_flatten.py` and `landing_media.py` (its preview is `build/landing/`). (DESIGN.md: "Files in full")
 - **After cutting, run the Godot import** and commit the `.import` files.
 - **Write `Assets/` last:** `ui_kit.py`'s `main` holds every write (`writes`) until all that can refuse a sprite has run; only `tools/qa/` previews are written as it goes.
 - **Never read what the build writes:** every source is under `Assets/Potential/` or drawn, so two runs leave `Assets/` byte for byte the same; one read back out of `Assets/Gear` would be outlined again on each run.

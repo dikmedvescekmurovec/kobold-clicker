@@ -107,7 +107,9 @@ func fill(cell: Vector2i, info: Dictionary) -> void:
 	var tile_name := _view.name_of(cell) if _view.seen(cell) else "Unknown land"
 	title.text = tile_name if tile_name != "" else "Tile"
 	var tier := _view.town_tier(cell) if _view.seen(cell) else -1
-	var kind := SETTLEMENT_KINDS[tier] if tier != -1 else "Cave" if _is_cave(cell) else ""
+	var boss := _view.boss_at(cell) if _view.seen(cell) else ""
+	var kind := SETTLEMENT_KINDS[tier] if tier != -1 else "Cave" if _is_cave(cell) \
+			else "%s's Lair" % boss if boss != "" else ""
 	level_label.text = ("%s · " % kind if kind != "" else "") + "Level %d" % _view.level_of(cell)
 	_put(env_rows, _lands(weights))
 	_put(service_rows, _services(cell))

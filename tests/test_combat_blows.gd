@@ -786,7 +786,7 @@ func _test_the_dreadmask() -> bool:
 	var commons: int = tiers.call(siege).count(EnemyRoster.Tier.COMMON)
 	siege.wear(["dread"], {"dreadmask": 4})
 	_check(siege.enemies == Encounter.SETTLEMENT["enemies"] - mini(commons, 10)
-			and tiers.call(siege)[-1] == EnemyRoster.Tier.BOSS, "a settlement keeps its elites and its boss")
+			and tiers.call(siege).count(EnemyRoster.Tier.ELITE) == 3, "a settlement keeps its elites")
 	var run := Encounter.farm(inside, "grass")
 	run.wear(["dread"], {"dreadmask": 4})
 	var wall := Encounter.for_wall(MapBuilder.CENTER + Vector2i(MapBuilder.START_LAND_RADIUS + 1, 0))
@@ -1088,7 +1088,7 @@ func _test_the_nameplate_wears_the_tier() -> bool:
 	combat.queue_free()
 	await process_frame
 
-	# A settlement is a longer fight, so its bar is a longer bar: a pip an enemy, gold at the end,
+	# A settlement is a longer fight, so its bar is a longer bar: a pip an enemy, an elite at the end,
 	# and the clock still cut to exactly the width of the pips above it.
 	var town: CombatScene = load("res://Scenes/Combat/combat_scene.tscn").instantiate()
 	root.add_child(town)
@@ -1109,8 +1109,8 @@ func _test_the_nameplate_wears_the_tier() -> bool:
 	var last_ten := siege.enemies - KillPips.SHOWN
 	siege.index = last_ten
 	town.hud.refresh()
-	_check(pips[-1].texture == KillPips.texture(EnemyRoster.Tier.BOSS),
-			"with the last ten in view the caret goes and the boss's crowned skull ends the bar")
+	_check(pips[-1].texture == KillPips.texture(EnemyRoster.Tier.ELITE),
+			"with the last ten in view the caret goes and the last elite's skull ends the bar")
 	siege.index = last_ten + 2
 	town.hud.refresh()
 	_check(pips[1].texture == KillPips.texture(Encounter.tier_in(siege, last_ten + 1), true)

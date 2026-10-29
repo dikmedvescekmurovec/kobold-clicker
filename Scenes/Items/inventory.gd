@@ -58,6 +58,7 @@ const SCHOLAR_CRIT := 10.0        ## intelligence a point of crit damage, Schola
 const PACKMULE_ROOM := 20         ## pieces more the bag holds, Packmule's Harness
 const SALVAGE_ORB := 0.05         ## of the pieces thrown away that leave an orb, Rag and Bone Sack
 const PURIST_MODS := 1.25         ## what a pure piece's modifiers count for, Purist's Seal
+const HOARD_DIGIT := 10.0         ## percent more damage a digit of the gold held, Hoardheart
 
 ## Pacifist Hands: swings a second the hands make on their own, before everything is doubled.
 const PACIFIST_SWINGS := 1.5
@@ -413,15 +414,26 @@ func why_not_equip(item: Item, socket: Equipment.Socket) -> String:
 	return ""
 
 
-## The Patchwork Coat at rank IV: while one stays worn, on either doll, through the swap (it is not in
-## `off`), any piece may be worn whatever attribute it asks for.
+## The Giant's Leafwrap, and the Patchwork Coat at rank IV: while one stays worn, on either doll, through
+## the swap (it is not in `off`), any piece may be worn whatever attribute it asks for.
 func _needs_waived(off: Array[Item]) -> bool:
-	if not _peak("patchwork_coat"):
-		return false
+	var coat := _peak("patchwork_coat")
 	for piece: Item in equipment.items() + stash().equipment.items():
-		if piece.unique == "patchwork_coat" and not piece in off:
+		var effect := UniqueTable.effect_of(piece.unique)
+		if not piece in off and (effect == "leafwrap" or (coat and piece.unique == "patchwork_coat")):
 			return true
 	return false
+
+
+## How many digits the gold held is written with: 0 for none, 1 up to 9, 2 up to 99. Divided down rather
+## than by a logarithm, which reads 1000 as 2.9999.
+func gold_digits() -> int:
+	var digits := 0
+	var left := gold
+	while left >= 1.0:
+		left /= 10.0
+		digits += 1
+	return digits
 
 
 ## `attributes()` as they would be with `off` taken off whichever doll wears them: what a piece's
@@ -593,6 +605,10 @@ func stats() -> Dictionary:
 		out["pure_pieces"] += int(lines == 0)
 	# The collection log's share is a multiplier of its own, over what gear and skills made.
 	_scale(out, "damage", collection_bonus())
+	# The Hoardheart: one on each doll counts twice. Read as the stats are, so a purse picked up mid-fight
+	# counts from the next save's rearm.
+	if "hoard" in worn:
+		_scale(out, "damage", HOARD_DIGIT * gold_digits() * worn.count("hoard"))
 	for attribute: String in ATTRIBUTE_GIVES:
 		if points[attribute] <= 0.0:
 			out.erase(attribute)

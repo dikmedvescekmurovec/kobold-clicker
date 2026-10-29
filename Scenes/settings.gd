@@ -51,6 +51,8 @@ static var filter_ascended := false
 static var all_uniques := false
 ## Every chest on the map is drawn, fog or not.
 static var all_chests := false
+## Every lair's boss and its trail are drawn on the map, fog or not.
+static var all_bosses := false
 ## A unique or a base whose icon was replaced wears the one it had before (`UniqueTable.OLD_ROOT`,
 ## `LootTable.OLD_ROOT`), to compare the two in the bag.
 static var old_icons := false
@@ -96,6 +98,7 @@ static func load_settings() -> void:
 	filter_ascended = bool(file.get_value(SECTION, "filter_ascended", filter_ascended))
 	all_uniques = bool(file.get_value(SECTION, "all_uniques", all_uniques))
 	all_chests = bool(file.get_value(SECTION, "all_chests", all_chests))
+	all_bosses = bool(file.get_value(SECTION, "all_bosses", all_bosses))
 	old_icons = bool(file.get_value(SECTION, "old_icons", old_icons))
 	all_services = bool(file.get_value(SECTION, "all_services", all_services))
 	even_loot = bool(file.get_value(SECTION, "even_loot", even_loot))
@@ -124,6 +127,7 @@ static func save() -> void:
 	file.set_value(SECTION, "filter_ascended", filter_ascended)
 	file.set_value(SECTION, "all_uniques", all_uniques)
 	file.set_value(SECTION, "all_chests", all_chests)
+	file.set_value(SECTION, "all_bosses", all_bosses)
 	file.set_value(SECTION, "old_icons", old_icons)
 	file.set_value(SECTION, "all_services", all_services)
 	file.set_value(SECTION, "even_loot", even_loot)
@@ -150,6 +154,10 @@ static func show_all_uniques() -> bool:
 
 static func show_all_chests() -> bool:
 	return all_chests and OS.is_debug_build()
+
+
+static func show_all_bosses() -> bool:
+	return all_bosses and OS.is_debug_build()
 
 
 static func show_old_icons() -> bool:

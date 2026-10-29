@@ -44,6 +44,8 @@ const MOST_MODS := 3
 ##   peak         the line it gains at rank IV (`PEAK`).
 ##   hint         its card's one line while it is locked: what it does in words, never a number (the
 ##                user's, 2026-10-07).
+##   lair         the boss whose lair alone drops it (`Encounter.for_lair`), every time and nothing else:
+##                never in a body's pool, never locked, never ranked (the user's, 2026-10-29).
 const UNIQUES := {
 	# --- The starters (`Achievements.STARTERS`, with Snowball and the Magpie's Band below): in the pool
 	# from the first unique on, one a socket, and unranked.
@@ -55,7 +57,7 @@ const UNIQUES := {
 	},
 	# The one unique with no rule (the user's stat stick).
 	"wayfarers_torch": {
-		"name": "Wayfarer's Torch", "base": "Wooden Torch",
+		"name": "Stat Stick", "base": "Wooden Torch",
 		"mods": ["added_strength", "added_dexterity", "added_intelligence"],
 		"effect": "",
 		"effect_text": "",
@@ -176,7 +178,8 @@ const UNIQUES := {
 		"effect": "home", "home": "mountains",
 		"effect_text": "Deals {times} times the damage in mountains.",
 		"ranks": {"times": [2, 2.5, 3, 4]},
-		"peak": "Bosses in mountains roll their unique chance twice.",
+		# Elites, not bosses, since 2026-10-29: a boss now always drops its own lair's unique.
+		"peak": "Elites in mountains roll their unique chance twice.",
 	},
 	"gravediggers_charm": {
 		"name": "Gravedigger's Charm", "base": "Ruby Amulet",
@@ -479,6 +482,45 @@ const UNIQUES := {
 		"effect_text": "Fights on the land have {fewer} fewer common enemies, one fewer for every ice wall inside the tile.",
 		"ranks": {"fewer": [2, 4, 6, 10]},
 	},
+	# --- The lairs' (the user's picks, 2026-10-29): one a boss, its only drop, each a rule nothing else has.
+	"banner_of_challenge": {
+		"name": "Banner of Challenge", "base": "Wooden Shield", "lair": "Huge Knight",
+		"mods": ["increased_block", "added_strength"],
+		"effect": "challenge",
+		"effect_text": "Every common enemy comes on as an elite, and drops as one.",
+	},
+	"three_headed_torc": {
+		"name": "Three-Headed Torc", "base": "Gold Amulet", "lair": "Cerberus",
+		"mods": ["added_time_on_hit", "added_damage"],
+		"effect": "torc",
+		"effect_text": "Every blow is three bites, each a third of its damage. "
+				+ "Each bite triggers on-attack effects as if it were full damage.",
+	},
+	# A club's base and not a two-hander: bleed is the mace's, and there is no axe to build one on.
+	"labrys": {
+		"name": "Labrys", "base": "Wooden Club", "lair": "Minotaur",
+		"mods": ["increased_bleed", "added_bleed", "increased_attack_speed"],
+		"effect": "labrys",
+		"effect_text": "Every wound bleeds, and the wounds add up.",
+	},
+	"giants_leafwrap": {
+		"name": "Giant's Leafwrap", "base": "Hide Jerkin", "lair": "Cyclops",
+		"mods": ["added_strength", "added_dexterity"],
+		"effect": "leafwrap",
+		"effect_text": "You meet every attribute requirement.",
+	},
+	"hoardheart": {
+		"name": "Hoardheart", "base": "Gold Ring", "lair": "Dragon",
+		"mods": ["added_gold_find", "added_damage"],
+		"effect": "hoard",
+		"effect_text": "+10% damage for every digit of the gold you hold.",
+	},
+	"masons_chisel": {
+		"name": "Mason's Chisel", "base": "Wooden Torch", "lair": "Frozen Golem",
+		"mods": ["added_crit_damage", "added_intelligence"],
+		"effect": "chisel",
+		"effect_text": "Triple damage against the ice wall.",
+	},
 }
 
 ## The rank at which a unique is all it will be.
@@ -507,6 +549,19 @@ static func effect_of(id: String) -> String:
 static func home_piece(env: String) -> String:
 	for id: String in UNIQUES:
 		if str(UNIQUES[id].get("home", "")) == env:
+			return id
+	return ""
+
+
+## Whether `id` is a lair's, dropped by its boss alone.
+static func is_lair(id: String) -> bool:
+	return UNIQUES.get(id, {}).has("lair")
+
+
+## The unique `boss`'s lair drops, or "".
+static func lair_unique(boss: String) -> String:
+	for id: String in UNIQUES:
+		if str(UNIQUES[id].get("lair", "")) == boss:
 			return id
 	return ""
 
@@ -570,9 +625,9 @@ static func icon(id: String) -> Texture2D:
 
 
 ## The uniques a body can be carrying: every one of `unlocked` (`Achievements.unlocked`) this build
-## has, on any ground.
+## has, on any ground, but a lair's.
 static func pool_for(unlocked: Array) -> Array:
-	return unlocked.filter(func(id: String) -> bool: return UNIQUES.has(id))
+	return unlocked.filter(func(id: String) -> bool: return UNIQUES.has(id) and not is_lair(id))
 
 
 ## How often this enemy is carrying one: `LootTable.chance_for`'s shape on this file's own tier line,

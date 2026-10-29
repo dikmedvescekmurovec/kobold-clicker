@@ -33,6 +33,12 @@ const TIER_HP := {
 }
 
 const ROOT := "res://Assets/Enemies/"
+## The boss whose lair each land holds (`MapBuilder.boss_at`), the user's picks (2026-10-29). Bosses come
+## nowhere else on the land: a settlement's fight ends on no boss since then.
+const LAIRS := {
+	"grass": "Huge Knight", "forest": "Cerberus", "dirt": "Minotaur",
+	"desert": "Cyclops", "mountains": "Dragon", "ice": "Frozen Golem",
+}
 
 ## The six slimes' `frames`: their packs ship a file a frame, so `sheets` is empty and this names each
 ## "<prefix><n>.png" series (`frame_paths`). One creature recoloured to its ground's palette ramp
@@ -585,6 +591,11 @@ const ENEMIES := {
 		"sheets": {"idle": "idle.png", "walk": "walk.png", "attack": "attack.png", "hurt": "hurt.png"},
 	},
 }
+
+
+## The boss of `env`'s lair, or "" for ground with none (the dungeon's).
+static func lair_boss(env: String) -> String:
+	return str(LAIRS.get(env, ""))
 
 
 ## In the table's order.

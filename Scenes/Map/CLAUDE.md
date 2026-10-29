@@ -55,7 +55,7 @@ A procedurally generated hex map, uncovered tile by tile: a hexagon of land ring
 
 ### Drawing
 - **Draw a whole map through `_draw_saved`,** not `_show`: `set_ground` refreshes seven cells per call. (DESIGN.md: "Draw a whole map through `_draw_saved`")
-- **List what stands on a cell's ground in `MapBuilder._draw_cell` only** (road, rubble, chest, settlement, cave). `_draw_rubble` covers every land tile of a ring a wall stood on (`on_wall_ring`) but a settlement's. (DESIGN.md: "map_builder.gd")
+- **List what stands on a cell's ground in `MapBuilder._draw_cell` only** (road, rubble, chest, footprints, lair, settlement, cave). `_draw_rubble` covers every land tile of a ring a wall stood on (`on_wall_ring`) but a settlement's. (DESIGN.md: "map_builder.gd")
 - **Keep the layer order:** the `Backdrop` first; rubble over the blends, under the roads and the fog; `IceOverlay` then `EdgeFog` under `chests`; `towns` over the fog, the ice and the chests. (DESIGN.md: "hex_map.tscn / hex_map.gd")
 - **Draw a settlement as two pictures:** the `town_<env>_<tier>` ground tile, and its buildings on `HexMap.towns` wherever a cell is drawn (`_draw_town`) but only on seen land, none on the wall or past it. (DESIGN.md: "Draw a settlement as two pictures")
 - **Keep the generator's constants in step:** `IceOverlay`'s sheet constants (change both, rerun `build_ice.py`), `TOWN_ANCHOR` (`towns.ANCHOR`), `CAVE_GLOW_AT` (`caves.HOLE`). (DESIGN.md: "Keep the generator's constants in step")
@@ -93,6 +93,7 @@ A procedurally generated hex map, uncovered tile by tile: a hexagon of land ring
 
 ### Derived, never saved
 - **Derive chests,** never save them: `has_chest` is a per-cell roll that holds until the tile is charted, drawn once seen (or anywhere under `Settings.show_all_chests()`). (DESIGN.md: "Derive chests")
+- **Derive lairs as chests are** (`boss_at`, `trail_of`): a per-cell roll on open land that holds until the tile is charted, never on a chest or a fallen wall's ring; `_find_lairs` indexes every trail after `_generate` and as a save loads, and a boss and its prints are drawn on seen tiles only (anywhere under `Settings.show_all_bosses()`, `redraw_lairs`). (DESIGN.md: "Boss lairs on the map (2026-10-29)")
 - **Never scan per frame:** `nearest_chest()` and `envs_within` go through every cell, so ask on arrival and when a town is walked into. (DESIGN.md: "Never scan per frame")
 - **Derive `mods_of`** like `has_chest`, off `env_seed` and `ring_of` (not `Encounter.walls_inside`), and `[]` for anything but open land, any ring a wall stood on included. (DESIGN.md: "Derive `mods_of`")
 - **Keep `can_farm` blind to where the player stands,** and refusing every settlement; `best_farm()` is the farmable tile farthest out. `can_move_to` refuses everything while `walking`. (DESIGN.md: "Keep `can_farm` blind to where the player stands")
@@ -100,6 +101,7 @@ A procedurally generated hex map, uncovered tile by tile: a hexagon of land ring
 ### The Gollux cave
 - **Keep one Gollux cave a world, saved** (`MapSave` version 4, `cave` absent for none). (DESIGN.md: "Keep one Gollux cave a world, saved")
 - **Place it beside the wall tile just broken** (the user's, 2026-10-09; `breach`, not saved): `place_cave(breach)`, asked by the main scene only once `WallUnlocks.GOLLUX` is unlocked, picks by `hash([env_seed, "cave"])`, never on `on_wall_ring` or a settlement. (DESIGN.md: "Keep one Gollux cave a world, saved")
+- **Treat a lair as a set piece too:** `mods_of` refuses it, the tile panel calls it "<boss>'s Lair", and the main scene fights it through `Encounter.for_lair` before it asks for a chest. (DESIGN.md: "Boss lairs on the map (2026-10-29)")
 - **Treat the cave as a set piece:** `road_at`, `has_chest`, `mods_of`, `can_farm` / `can_farm_ground` all refuse it, and `name_of` names it from `TileNames.CAVE_FEATURES`. (DESIGN.md: "Keep one Gollux cave a world, saved")
 - **Draw it through `HexMap.set_cave`** once seen and on land; a missing picture draws nothing. (DESIGN.md: "Keep one Gollux cave a world, saved")
 

@@ -40,6 +40,22 @@ const CHEST_MIN_DISTANCE := 3
 const CAVE_NEAR := 3
 const CHEST_TEXTURE := "res://Assets/Chests/Chests.png"
 const CHEST_REGION := Rect2(2, 12, 28, 20)  # the closed brown chest
+## The share of open tiles that hold a boss's lair (`boss_at`), and how near `CENTER` the nearest may be.
+const LAIR_CHANCE := 0.01
+const LAIR_MIN_DISTANCE := 5
+## Tiles of footprints leading in to a lair (`trail_of`): the user's "about five" (2026-10-29).
+const TRAIL_LENGTH := 5
+## A lair's boss stands this many map pixels tall on its tile, a head over the hero (`PlayerToken.TALL`),
+## its feet this far under the tile's middle.
+const LAIR_TALL := 40.0
+const LAIR_FEET := Vector2(0, 8)
+## The footprint sheets (`tools/boss_tracks.py`): `TRACK_CELL` a print, twelve across, the six hex
+## directions on screen (`k * 60` degrees, 0 east, y down) each as a left foot then a right.
+const TRACKS_ROOT := "res://Assets/Map/Tracks/"
+const TRACK_CELL := 16
+## Prints a tile's step holds, and how far either side of the way a left and a right fall, in map pixels.
+const TRACK_PRINTS := 3
+const TRACK_SPREAD := 3.0
 ## A settlement's `area_variant`, by `TownWorld.Tier`.
 const TIER_AREAS: Array[String] = ["village", "town", "fortress"]
 
@@ -96,6 +112,11 @@ var _routed_links: Dictionary[String, bool] = {}  # town links already routed: a
 var _states: Dictionary[Vector2i, State] = {}
 var _drawn_roads: Dictionary[Vector2i, int] = {}  # road mask each drawn cell shows, to spot the ones that change
 var _chest_sprites: Dictionary[Vector2i, Sprite2D] = {}
+## Every lair's trail by the tiles it crosses: tile -> [[lair, the tile it steps toward, its step from the
+## far end], ...]. Derived (`_find_lairs`), and drawn only while its lair still stands (`boss_at`).
+var _tracks: Dictionary[Vector2i, Array] = {}
+var _lair_sprites: Dictionary[Vector2i, CombatActor] = {}
+var _track_sprites: Dictionary[Vector2i, Node2D] = {}
 var _ice: IceOverlay
 var _edge_fog: EdgeFog
 
@@ -174,6 +195,7 @@ static func restore(map: HexMap, towns: TownWorld, save: MapSave, step := WALL_S
 	# A save from before names existed has seen land with none: named here, so one load makes it whole.
 	for cell in builder._states:
 		builder.name_of(cell)
+	builder._find_lairs()
 	builder._take_map()
 	builder._draw_saved()
 	builder.player_cell = save.player_cell
@@ -390,10 +412,59 @@ func has_chest(cell: Vector2i) -> bool:
 	return _seeded([env_seed, "chest", cell]).randf() < CHEST_CHANCE
 
 
+## The boss whose lair is on `cell` (`EnemyRoster.LAIRS`, its land's), or "": a per-cell roll on open land
+## that holds until the tile is charted, as `has_chest`'s does, and never on a chest or a fallen wall's ring.
+func boss_at(cell: Vector2i) -> String:
+	if not _is_open(cell) or HexGrid.distance(CENTER, cell) < LAIR_MIN_DISTANCE \
+			or _seeded([env_seed, "lair", cell]).randf() >= LAIR_CHANCE:
+		return ""
+	if charted(cell) or has_chest(cell) or on_wall_ring(cell):
+		return ""
+	return EnemyRoster.lair_boss(_envs[cell])
+
+
+## The footprints leading in to the lair on `lair`, farthest first: a walk of TRAIL_LENGTH tiles out from
+## it across generated land, each a step further from it than the last, picked off the seed. Shorter
+## where the land runs out.
+func trail_of(lair: Vector2i) -> Array[Vector2i]:
+	var rng := _seeded([env_seed, "trail", lair])
+	var way: Array[Vector2i] = []
+	var at := lair
+	for step in TRAIL_LENGTH:
+		var next: Array[Vector2i] = []
+		for near in HexGrid.neighbors(at):
+			if _envs.has(near) and is_land(near) and near != cave and HexGrid.distance(lair, near) == step + 1:
+				next.append(near)
+		if next.is_empty():
+			break
+		at = next[rng.randi() % next.size()]
+		way.push_front(at)
+	return way
+
+
+## Every lair on generated land and its trail, into `_tracks`. As the land grows (`_generate`) and as a
+## save loads.
+## ponytail: scans every generated cell, like `nearest_chest`; only start-up and a wall's fall ask.
+func _find_lairs() -> void:
+	_tracks.clear()
+	for lair in _envs:
+		if boss_at(lair).is_empty():
+			continue
+		var way := trail_of(lair)
+		for step in way.size():
+			var toward := way[step + 1] if step + 1 < way.size() else lair
+			_tracks.get_or_add(way[step], []).append([lair, toward, step])
+
+
+## The footprint sheet of `boss` (`tools/boss_tracks.py`'s `path_of`).
+static func tracks_path(boss: String) -> String:
+	return TRACKS_ROOT + boss.to_lower().replace(" ", "_") + ".png"
+
+
 ## What the land on `cell` does to its own fight (`TileMods`), derived like `has_chest`: nothing where the
 ## fight is a set piece. `wild` is the Wild Tiles curse, which the builder cannot know.
 func mods_of(cell: Vector2i, wild := false) -> Array[String]:
-	if not _is_open(cell) or has_chest(cell) or on_wall_ring(cell):
+	if not _is_open(cell) or has_chest(cell) or on_wall_ring(cell) or not boss_at(cell).is_empty():
 		return []
 	return TileMods.for_cell(env_seed, cell, ring_of(cell), wild)
 
@@ -429,6 +500,15 @@ func envs_within(cell: Vector2i, steps: int) -> PackedStringArray:
 func redraw_chests() -> void:
 	for cell in _envs:
 		_draw_chest(cell)
+
+
+## Every lair's boss and every trail again, for when the dev's `Settings.show_all_bosses` changes.
+## ponytail: scans every cell, like `redraw_chests`; only a settings tick and start-up ask.
+func redraw_lairs() -> void:
+	for cell in _envs:
+		_draw_lair(cell)
+	for cell in _tracks:
+		_draw_tracks(cell)
 
 
 func state(cell: Vector2i) -> State:
@@ -733,6 +813,10 @@ func _break_wall() -> void:
 	land_radius += wall_step
 	_chartable.clear()
 	_cover()
+	# Lairs on the new land may lay their trails across tiles already drawn.
+	for cell in _tracks:
+		if seen(cell):
+			_draw_tracks(cell)
 	for cell in _states:
 		if HexGrid.distance(CENTER, cell) == old_wall:
 			_ice.remove_cell(cell)
@@ -764,6 +848,7 @@ func _generate(area: Rect2i) -> void:
 				_tiles[cell] = _tile_name(cell)
 	RoadNetwork.extend(towns, Rect2i(_spot(area.position), area.size), map.tileset.legal_road_masks(),
 			_roads, _routed_links)
+	_find_lairs()
 
 
 ## The ground tile a cell is drawn with: its environment's town where the world has one, else one of the
@@ -886,6 +971,8 @@ func _draw_cell(cell: Vector2i) -> void:
 	_draw_road(cell)
 	_draw_rubble(cell)
 	_draw_chest(cell)
+	_draw_tracks(cell)
+	_draw_lair(cell)
 	_draw_town(cell)
 	_draw_cave(cell)
 
@@ -924,6 +1011,61 @@ func _draw_chest(cell: Vector2i) -> void:
 	sprite.position = map.ground_layer.map_to_local(cell)
 	map.chests.add_child(sprite)
 	_chest_sprites[cell] = sprite
+
+
+## A lair's boss standing on its tile once seen (anywhere under the dev's `Settings.show_all_bosses()`), in
+## its idle; taken off as the lair is won, with its trail.
+func _draw_lair(cell: Vector2i) -> void:
+	var boss := boss_at(cell) if seen(cell) or Settings.show_all_bosses() else ""
+	if boss.is_empty() == not _lair_sprites.has(cell):
+		return
+	if boss.is_empty():
+		if is_instance_valid(_lair_sprites[cell]):
+			_lair_sprites[cell].queue_free()
+		_lair_sprites.erase(cell)
+		for step in trail_of(cell):
+			_draw_tracks(step)
+		return
+	var actor := CombatActor.new()
+	actor.setup_enemy(boss, LAIR_TALL)
+	actor.position = map.ground_layer.map_to_local(cell) + LAIR_FEET
+	map.chests.add_child(actor)
+	_lair_sprites[cell] = actor
+
+
+## The footprints on a seen tile, of every lair still standing whose trail crosses it: TRACK_PRINTS a
+## tile, from its middle toward the next, the feet in turn all the way along.
+func _draw_tracks(cell: Vector2i) -> void:
+	if _track_sprites.has(cell):
+		if is_instance_valid(_track_sprites[cell]):
+			_track_sprites[cell].queue_free()
+		_track_sprites.erase(cell)
+	if not (seen(cell) or Settings.show_all_bosses()) or not _tracks.has(cell):
+		return
+	var prints := Node2D.new()
+	var from := map.ground_layer.map_to_local(cell)
+	for step: Array in _tracks[cell]:
+		var boss := boss_at(step[0])
+		if boss.is_empty():
+			continue
+		var sheet: Texture2D = load(tracks_path(boss))
+		var way := map.ground_layer.map_to_local(step[1]) - from
+		var heading := posmod(roundi(rad_to_deg(way.angle()) / 60.0), 6)
+		var right := Vector2(-way.y, way.x).normalized()
+		for at in TRACK_PRINTS:
+			var foot := (int(step[2]) * TRACK_PRINTS + at) % 2
+			var texture := AtlasTexture.new()
+			texture.atlas = sheet
+			texture.region = Rect2((heading * 2 + foot) * TRACK_CELL, 0, TRACK_CELL, TRACK_CELL)
+			var sprite := Sprite2D.new()
+			sprite.texture = texture
+			sprite.position = from + way * at / TRACK_PRINTS + right * (TRACK_SPREAD if foot else -TRACK_SPREAD)
+			prints.add_child(sprite)
+	if prints.get_child_count() == 0:
+		prints.free()
+		return
+	map.chests.add_child(prints)
+	_track_sprites[cell] = prints
 
 
 ## Buildings only on land the player has seen: none on the wall or past it (`town_tier`).

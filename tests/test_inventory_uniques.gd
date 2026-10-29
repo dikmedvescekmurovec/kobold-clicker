@@ -278,6 +278,30 @@ func _test_rank_four_uniques() -> bool:
 	_check(not motley.why_not_equip(plate, Equipment.Socket.BODY).is_empty(),
 			"but a piece that takes the Coat off asks all the same")
 
+	# The Giant's Leafwrap: any piece may be worn while it stays on, at no rank, as the Coat at IV.
+	var giant := Inventory.new()
+	var wrap := Item.rolled_unique("giants_leafwrap", rng, 1)
+	var heavy := Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 20)
+	giant.items.append(heavy)
+	_check(not giant.why_not_equip(heavy, Equipment.Socket.WEAPON).is_empty(), "a deep sword asks for its strength")
+	wear.call(giant, wrap)
+	_check(giant.why_not_equip(heavy, Equipment.Socket.WEAPON).is_empty(), "and not under the Leafwrap")
+	var mail := Item.rolled("Wooden Armour", ItemRarity.Rarity.COMMON, rng, 20)
+	giant.items.append(mail)
+	_check(not giant.why_not_equip(mail, Equipment.Socket.BODY).is_empty(),
+			"but a piece that takes the Leafwrap off asks all the same")
+
+	# The Hoardheart: a tenth more damage for every digit of the gold held.
+	var hoarder := _hero()
+	wear.call(hoarder, Item.rolled_unique("hoardheart", rng, 1))
+	hoarder.gold = 0.0
+	var poor := float(hoarder.stats()["damage"])
+	hoarder.gold = 1000.0
+	_check(hoarder.gold_digits() == 4 and is_equal_approx(float(hoarder.stats()["damage"]),
+			poor * (1.0 + 4.0 * Inventory.HOARD_DIGIT / 100.0)), "a thousand gold is four digits of damage")
+	hoarder.gold = 999.0
+	_check(hoarder.gold_digits() == 3, "and 999 three")
+
 	# The Heirloom's Echo: every heirloom one plus higher, its lines with it -- the piece itself untouched.
 	var lowest := int(ModifierTable.band_for("added_strength", 1)[0])
 	var echoed := _hero()
@@ -465,8 +489,13 @@ func _test_unique_stats() -> bool:
 ## carried through a transcension, announced and listed on its page. And the starters' own numbers.
 func _test_achievements() -> bool:
 	_clear_save()
-	# The table: every unique is a starter or has exactly one achievement, never both.
+	# The table: every unique is a starter or has exactly one achievement, never both -- but a lair's,
+	# which its boss alone drops, is neither.
 	for id: String in UniqueTable.UNIQUES:
+		if UniqueTable.is_lair(id):
+			_check(not id in Achievements.STARTERS and not Achievements.ACHIEVEMENTS.has(id),
+					"%s, a lair's, is neither a starter nor an achievement's" % id)
+			continue
 		_check((id in Achievements.STARTERS) != Achievements.ACHIEVEMENTS.has(id),
 				"%s is either a starter or unlocked by an achievement" % id)
 	for id: String in Achievements.ACHIEVEMENTS:

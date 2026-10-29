@@ -530,9 +530,11 @@ func _sync_chest() -> void:
 		_save_inventory()
 		cell = HexMap.NO_CELL
 	_chest_pointer.target = cell
-	# Dev: a fallen wall adds hidden land, whose chests only a full pass draws.
+	# Dev: a fallen wall adds hidden land, whose chests and bosses only a full pass draws.
 	if Settings.show_all_chests():
 		view.redraw_chests()
+	if Settings.show_all_bosses():
+		view.redraw_lairs()
 
 
 ## Writes the map as it stands. A refused save is never written over -- that is the whole point of
@@ -861,6 +863,7 @@ func _build_pages(layer: CanvasLayer) -> void:
 	settings_page.reset_pressed.connect(_on_reset_pressed)
 	settings_page.uniques_toggled.connect(_show_corner.bind(true))
 	settings_page.chests_toggled.connect(view.redraw_chests)
+	settings_page.bosses_toggled.connect(view.redraw_lairs)
 	# Dev only: an empty purse becomes 10, so the button always does something.
 	settings_page.cash_pressed.connect(func() -> void:
 		inventory.gold = maxf(inventory.gold, 1.0) * 10.0
@@ -1071,6 +1074,11 @@ func _on_chart_pressed() -> void:
 	if view.is_wall(cell):
 		print("The ice wall stands on %s" % cell)
 		_open_fight(Encounter.for_wall(cell), cell, false)
+		return
+	var boss := view.boss_at(cell)
+	if not boss.is_empty():
+		print("%s waits in its lair on %s" % [boss, cell])
+		_open_fight(Encounter.for_lair(cell, env, boss), cell, false)
 		return
 	var chest := view.has_chest(cell)
 	if chest:

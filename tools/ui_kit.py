@@ -199,6 +199,8 @@ _PIXELLAB_IDS = [
     "squires_blade", "wayfarers_torch", "novices_cap", "couriers_boots", "beginners_luck", "worry_stone",
     # The veteran uniques (2026-09-30).
     "nightwalkers", "dreadmask",
+    # The lairs' (2026-10-29).
+    "banner_of_challenge", "three_headed_torc", "labrys", "giants_leafwrap", "hoardheart", "masons_chisel",
 ]
 UNIQUE_GEAR = {name: ((PIXELLAB + name, 0, 0, 32, 32, 1), []) for name in _PIXELLAB_IDS}
 UNIQUE_OUT = "Assets/Gear/Unique"

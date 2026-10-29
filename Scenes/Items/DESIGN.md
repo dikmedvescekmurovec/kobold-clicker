@@ -481,7 +481,7 @@ Health, energy shield, regen, leech and the resistances are gone and load as not
 `Inventory` already had a `count(type)`, hence `tick`.
 
 #### Keep the starters' numbers in `Inventory` or the fight
-**The starters' numbers are `Inventory`'s** (`SQUIRE_DAMAGE` and `COURIER_SPAWN` as flats in `stats()`' `turned`, `NOVICE_XP` added to `xp_more` while `level < NOVICE_UNTIL`) or the fight's (`Encounter.BEGINNERS_LUCK`, the Worry Stone's save). **The Wayfarer's Torch is the one unique with no rule** (the user's stat stick): `effect` and `effect_text` are empty, `ItemDetails` skips the empty line, and `test_inventory` allows it for that id alone.
+**The starters' numbers are `Inventory`'s** (`SQUIRE_DAMAGE` and `COURIER_SPAWN` as flats in `stats()`' `turned`, `NOVICE_XP` added to `xp_more` while `level < NOVICE_UNTIL`) or the fight's (`Encounter.BEGINNERS_LUCK`, the Worry Stone's save). **The Stat Stick (`wayfarers_torch`, once the Wayfarer's Torch) is the one unique with no rule** (the user's stat stick): `effect` and `effect_text` are empty, `ItemDetails` skips the empty line, and `test_inventory` allows it for that id alone.
 
 #### Read a rank live, never write it onto an item
 **A rank is the player's and read live, never written onto an item:** every number a ranked unique's rule reads is `UniqueTable.dial(id, key, rank)` -- `Inventory._dial` at its own rank (`Achievements.rank`, rank I for one worn and not earned), `Encounter._dial` at the rank `wear` was told, a card at `UniqueTable.ranks` -- so the card and the rule are one figure and every copy held grows at once.

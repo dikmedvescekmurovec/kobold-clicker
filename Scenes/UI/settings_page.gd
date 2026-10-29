@@ -10,10 +10,11 @@ signal reset_pressed
 ## Dev: Gold x10 was pressed, and Skill points +10.
 signal cash_pressed
 signal points_pressed
-## Dev: "Show all uniques" moved (the trophy may have come or gone), and "Show all chests" (the main
-## scene redraws the map's).
+## Dev: "Show all uniques" moved (the trophy may have come or gone), and "Show all chests" and "Show all
+## bosses" (the main scene redraws the map's).
 signal uniques_toggled
 signal chests_toggled
+signal bosses_toggled
 ## The panel changed size: the corner buttons beside it move.
 signal laid_out
 
@@ -486,6 +487,10 @@ func _open_dev() -> void:
 			"Every chest is drawn on the map, fog or not", func(on: bool) -> void:
 				Settings.all_chests = on
 				chests_toggled.emit()))
+	body.add_child(_tipped_tick("Show all bosses", Settings.all_bosses,
+			"Every boss and its footprints are drawn on the map, fog or not", func(on: bool) -> void:
+				Settings.all_bosses = on
+				bosses_toggled.emit()))
 	body.add_child(_tipped_tick("Show old icons", Settings.old_icons,
 			"An item whose icon was replaced wears its old one, from the next time it is drawn",
 			func(on: bool) -> void: Settings.old_icons = on))

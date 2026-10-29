@@ -27,12 +27,13 @@ The bracket closing a rule names the heading in `DESIGN.md` that holds its full 
 
 ### Order and single paths in `Encounter`
 - **`wear` before `arm` before `start`.** `effects` set by hand does all but take the curses on, at rank I; `arm` may run again mid-fight (the main scene's `_rearm`), starting from the stats and moving the clock by `_clock_more`, never refilling it. (DESIGN.md: "`wear` before `arm` before `start`")
-- **`_append_enemy` is the one place an enemy joins a fight,** from `tier_for(position)`. Ask `EnemyRoster.tier_of`, never "is it the last one": a run's elites come round forever. A boss is only ever rolled as a settlement's last enemy, never in a run.
+- **`_append_enemy` is the one place an enemy joins a fight,** from `tier_for(position)`. Ask `EnemyRoster.tier_of`, never "is it the last one": a run's elites come round forever. No land profile rolls a boss since 2026-10-29 (a settlement's ends on an elite): a lair, the wall and a chest set theirs by hand, and only the dungeon rolls one, its Gollux. (DESIGN.md: "Boss lairs (2026-10-29)")
 - **A stat that lands on a field of its own name is a row of `ARM_STATS`** (the stat -> the most it may be, never under nought; `ARM_SECONDS` for the ones kept in tenths), which `arm` sets through `set`. So there is no `armor = ` to grep for, and a new plain stat is a row and a `var`. (DESIGN.md: "`wear` before `arm` before `start`")
 - **`_health_of` is the one place a body's starting health is worked out;** it is sized again (`_size_again`) only under a curse that moves health, so a fight built by hand keeps its own. The ice wall answers there to `WALL_HP` and the Long Winter and to nothing else. (DESIGN.md: "A curse is one `if`")
 - **`_shape` is the once-a-fight say over the rolled lineup** (`_promoted`): the count, health only where the gear moved it, then the elite chance. (DESIGN.md: "Defence-slot lines are read in `arm`")
 - **`_kill` is the one path to a death,** out of `_strike` because a wound and Dominoes' carry kill with no blow; the per-enemy flags are cleared in `_advance_phase`. (DESIGN.md: "`_kill` is the one path to a death")
 - **`_pay` is everything a land body leaves, and its steps stay in the order their generators are drawn and their signals go out:** the chest's toss, `_drop_gear`, `_drop_purse`, experience, `_drop_unique`, the Hourglass, `_drop_orb`, `_drop_stone`. `_roll_gear` and `_roll_unique` are the only calls to `LootTable.roll` and `UniqueTable.roll` here but `_even_find`'s forced one. (DESIGN.md: "`_kill` is the one path to a death")
+- **A lair pays its boss's unique and its experience, nothing else** (`for_lair`, `lair`, `_pay_lair`): every time, at a boss's drop level, whatever is unlocked or owed. (DESIGN.md: "Boss lairs (2026-10-29)")
 - **`_wear_down` is the one path for damage nobody dealt:** `WAITING` only, and a death that way sets `_domino = false`. (DESIGN.md: "`_wear_down` is the one path for damage nobody dealt")
 - **`enemy_died` goes out before the body's loot is rolled and `kill_paid(index)` once all of it has gone out,** so whatever changes what the next body pays waits for `kill_paid`. (DESIGN.md: "encounter.gd")
 - **`tier_in(slot)` is the tier both `KillPips` and `HealthBar` read.**
@@ -89,6 +90,7 @@ The bracket closing a rule names the heading in `DESIGN.md` that holds its full 
 
 ### Uniques, ranks and achievements
 - **A worn unique is one `if`** in `Encounter`, beside the capstones'; two of one ring are counted with `effects.count`. `hourglass` never pays past `seconds`, for a BOSS or while `endless`, and `tithe` makes no `LootTable.roll` at all. (DESIGN.md: "A worn unique is one `if`")
+- **The lairs' uniques are one `if` each as well:** `challenge` in `_promote` (and `_take_challenge` once, after the Dreadmask), `torc` and `labrys` where a surviving body takes its wound, `chisel` at the wall. (DESIGN.md: "Boss lairs (2026-10-29)")
 - **A rank IV line is one `if` beside its rule** (`_peak(id)`, `_home_peak()`). One that rolls draws only under its piece at IV, and the clock ones ask `endless`. (DESIGN.md: "A rank IV line is one `if` beside its rule")
 - **The Dreadmask is taken on once, before the curses** (`_take_dread`): commons off the front of a tile fight, never the last body, never `endless` or `dungeon`. (DESIGN.md: "`wear` before `arm` before `start`")
 - **Only the main scene reads `tally`,** as the fight ends (`Achievements.record`). The camp's fights keep one nobody reads, which is why the camp counts nothing. (DESIGN.md: "Only the main scene reads `tally`")

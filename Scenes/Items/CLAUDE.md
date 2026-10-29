@@ -122,6 +122,7 @@ Full text, numbers and reasons: `DESIGN.md`, "Reference (moved here from CLAUDE.
 ### Uniques, achievements and ranks
 - **Make a unique an `Item` with `unique` set:** `type` its base piece, rarity UNIQUE, its row's modifiers in the row's order, only the values rolled (`Item.rolled_unique`). (DESIGN.md)
   - **Apply only Orbs of Divine and Chaos to a unique** (`OrbTable.why_not`).
+- **A lair's unique (`lair`) drops from its boss alone:** `UniqueTable.pool_for` leaves it out of every body's pool, `Achievements.is_unlocked` calls it unlocked, and it has no ranks. The Leafwrap is read in `Inventory._needs_waived`, the Hoardheart in `stats()`. (`Scenes/Combat/DESIGN.md`: "Boss lairs (2026-10-29)")
 - **Drop a unique only once it is unlocked** (`Achievements.unlocked`), and only by luck after `UniqueTable.FIRST_UNIQUE_KILLS` but for the promised `FIRST_UNIQUE`. (DESIGN.md)
   - **Hand every source the list less what a fortuneteller has banished** (`FortuneTeller.dropping`): banished is still unlocked, and ends with the world.
   - **Do not take found for unlocked** (the user's ruling): an old save's finds must be earned again to drop.
@@ -136,7 +137,7 @@ Full text, numbers and reasons: `DESIGN.md`, "Reference (moved here from CLAUDE.
   - **Write a rank IV line on the card only once it is reached** (`Item.peak_text`, the user's call); its rule asks `_peak(id)` beside whether the piece is worn.
   - **Count gear as it is not on copies** (`_counted_dolls`).
 - **Keep the starters' numbers in `Inventory` or the fight** (`SQUIRE_DAMAGE`, `COURIER_SPAWN`, `NOVICE_XP`; `Encounter.BEGINNERS_LUCK`). (DESIGN.md)
-  - **Leave the Wayfarer's Torch the one unique with no rule** (the user's stat stick); `test_inventory` allows it for that id alone.
+  - **Leave the Stat Stick (`wayfarers_torch`) the one unique with no rule** (the user's stat stick); `test_inventory` allows it for that id alone.
 - **Tell the fight one `UniqueTable.effect_of` a worn unique** (`Equipment.effects()`), a home piece as `"home:<env>"`. The Pilgrim's set went on 2026-09-29 (the user's, "for now"). (DESIGN.md)
 - **Carry what a unique asks of the player in `Inventory.stats()`:** the Spiked Helm's share goes in with the skill tree's flat damage, so the percents scale it. (DESIGN.md)
   - **Put the attributes through `attributes()` first** (both dolls, the Echo, the Crown, then the Brand); everything reads those counted points.

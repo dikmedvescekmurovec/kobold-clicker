@@ -24,6 +24,8 @@ func _run() -> void:
 	_check(_test_a_farm_run_never_ends() == true, "farm run tests ran to the end")
 	_check(_test_a_settlement_is_a_set_piece() == true, "settlement fight tests ran to the end")
 	_check(_test_a_chest_is_a_mimic() == true, "chest fight tests ran to the end")
+	_check(_test_a_lair_is_its_boss() == true, "lair fight tests ran to the end")
+	_check(_test_lair_uniques() == true, "lair unique tests ran to the end")
 	_check(await _test_the_map_hands_over_and_takes_back() == true,
 			"the map hands over and takes back tests ran to the end")
 	_check(await _test_the_nightwalkers_fight_their_way() == true, "the nightwalkers fight their way tests ran to the end")
@@ -850,6 +852,109 @@ func _test_a_chest_is_a_mimic() -> bool:
 	return true
 
 
+## A lair fields its land's boss alone and pays its unique, every time, and nothing else but experience.
+func _test_a_lair_is_its_boss() -> bool:
+	for env in _environments():
+		var boss := EnemyRoster.lair_boss(env)
+		_check(EnemyRoster.tier_of(boss) == EnemyRoster.Tier.BOSS, "%s's lair holds %s, a boss" % [env, boss])
+		var id := UniqueTable.lair_unique(boss)
+		_check(UniqueTable.is_lair(id), "and %s drops %s" % [boss, id])
+		for attempt in 4:
+			var fight := Encounter.for_lair(Vector2i(4, 6), env, boss)
+			_check(fight.lineup == PackedStringArray([boss]) and fight.seconds == float(Encounter.LAIR["seconds"]),
+					"a lair fields its boss alone")
+			fight.unique_rng.seed = attempt
+			fight.loot_rng.seed = attempt
+			fight.always_drop = true
+			fight.always_orb = true
+			fight.stone_drops = true
+			fight.unlocked = Achievements.STARTERS
+			fight.uniques_after = 0
+			var found: Array[Item] = []
+			var other := [0]
+			fight.loot_dropped.connect(func(_i: int, item: Item) -> void: found.append(item))
+			fight.gold_dropped.connect(func(_i: int, _amount: float) -> void: other[0] += 1)
+			fight.orb_dropped.connect(func(_i: int, _orb: String) -> void: other[0] += 1)
+			fight.damage = 1 << 20
+			fight.start()
+			fight.advance(Encounter.WALK_IN)
+			fight.hit()
+			fight.advance(Encounter.DEATH)
+			_check(found.size() == 1 and found[0].unique == id, "%s leaves %s and only it (%d finds)" % [boss, id, found.size()])
+			_check(other[0] == 0 and fight.gold == 0.0, "no purse and no orb beside it")
+			_check(fight.xp > 0, "but its experience")
+			_check(fight.finished and fight.victory, "beating it takes the tile")
+	_check(UniqueTable.pool_for(UniqueTable.ids()).all(func(id: String) -> bool: return not UniqueTable.is_lair(id)),
+			"no body's pool holds a lair's unique")
+	var hero := Inventory.new()
+	_check(Achievements.is_unlocked(hero, "labrys") and not "labrys" in Achievements.unlocked(hero),
+			"a lair's unique is never locked, and never in the drops")
+	return true
+
+
+## The lairs' six rules, each against the fight without it.
+func _test_lair_uniques() -> bool:
+	# The Banner of Challenge: every common comes on as an elite of its ground, a run's as they join.
+	var banner := Encounter.for_tile(Vector2i(12, 0), "grass")
+	banner.wear(["challenge"])
+	_check(Array(banner.lineup).all(func(name: String) -> bool:
+			return EnemyRoster.tier_of(name) == EnemyRoster.Tier.ELITE), "under the banner every body is an elite")
+	_check(banner.health[0] == banner._health_of(banner.lineup[0], 0) and banner.hp == banner.health[0],
+			"sized as one")
+	var run := Encounter.farm(Vector2i(12, 0), "grass")
+	run.wear(["challenge"])
+	for i in 5:
+		run._append_enemy(run.roster_rng)
+	_check(Array(run.lineup).all(func(name: String) -> bool:
+			return EnemyRoster.tier_of(name) == EnemyRoster.Tier.ELITE), "and a run's later bodies come on as elites")
+	var cave := Encounter.for_dungeon()
+	cave.wear(["challenge"])
+	_check(EnemyRoster.tier_of(cave.lineup[0]) == EnemyRoster.Tier.COMMON, "never in the dungeon, whose floors are counted")
+
+	# The Labrys: every wound bleeds and they add up, where otherwise the deeper alone does.
+	var deep := _standing([], {"damage": 10.0, "bleed": 50.0})
+	deep.hit()
+	deep.hit()
+	var summed := _standing(["labrys"], {"damage": 10.0, "bleed": 50.0})
+	summed.hit()
+	summed.hit()
+	var wound := (1.0e9 - deep.hp) / 2.0 * 0.5
+	_check(deep._bleed == wound and summed._bleed == 2.0 * wound, "two wounds bleed one's worth, or two summed (%s, %s)"
+			% [deep._bleed, summed._bleed])
+
+	# The Three-Headed Torc: three bites, each striking on as the whole blow -- three wounds under the
+	# Labrys, three times the time on hit -- and the blow's damage the same.
+	var bitten := _standing(["torc", "labrys"], {"damage": 10.0, "bleed": 50.0})
+	bitten.hit()
+	_check(bitten._bleed == 3.0 * wound and bitten.hp == 1.0e9 - 2.0 * wound,
+			"one blow leaves three wounds and its own damage (%s)" % bitten._bleed)
+	var timed := [_standing([], {"damage": 10.0, "time_on_hit": 1.0}), _standing(["torc"], {"damage": 10.0, "time_on_hit": 1.0})]
+	var back := []
+	for fight: Encounter in timed:
+		fight.wounds = 10.0
+		var clock := fight.time_left
+		fight.hit()
+		back.append(fight.time_left - clock)
+	_check(back[0] > 0.0 and is_equal_approx(back[1], 3.0 * back[0]), "and three times the time back %s" % [back])
+
+	# The Mason's Chisel: three times the damage at the ice wall, and nowhere else.
+	var hits := []
+	for worn: Array in [[], ["chisel"]]:
+		var wall := Encounter.for_wall(Vector2i(MapBuilder.START_LAND_RADIUS + 1, 0))
+		wall.effects = worn
+		wall.arm({"damage": 10.0})
+		wall.start()
+		wall.advance(Encounter.WALK_IN)
+		var before := wall.hp
+		wall.hit()
+		hits.append(before - wall.hp)
+	var land := _standing(["chisel"], {"damage": 10.0})
+	land.hit()
+	_check(hits[1] == 3.0 * hits[0] and land.hp == 1.0e9 - hits[0], "a chiselled wall takes thrice a blow, land once %s"
+			% [hits])
+	return true
+
+
 func _test_a_settlement_is_a_set_piece() -> bool:
 	for variant in ["village", "town", "fortress"]:
 		for env in _environments():
@@ -877,9 +982,10 @@ func _test_a_settlement_is_a_set_piece() -> bool:
 						elites += 1
 						_check(i % fight.elite_every == fight.elite_every - 1,
 								"an elite stands at %d, off the rhythm" % i)
-			_check(bosses == 1, "a %s on %s ends on exactly one boss (%d)" % [variant, env, bosses])
-			# Slots 4 and 9: the boss takes the fifteenth, which would otherwise be the third elite.
-			_check(elites == 2, "and two elites before it (%d)" % elites)
+			# No boss since the bosses left the towns for their lairs (the user's, 2026-10-29): slots 4, 9
+			# and 14 are the elites.
+			_check(bosses == 0, "a %s on %s fields no boss (%d)" % [variant, env, bosses])
+			_check(elites == 3, "and three elites (%d)" % elites)
 
 	# The same tile, fought twice, fields the same fifteen -- a settlement is decided before the
 	# player reaches it, like every other tile.
@@ -1060,6 +1166,7 @@ func _test_unique_effects() -> bool:
 	boss.effects = ["hourglass"]
 	boss.arm({"damage": 1.0e9})
 	boss.index = boss.enemies - 1
+	boss.lineup[boss.index] = EnemyRoster.lair_boss("grass")
 	boss.hp = 1.0
 	boss.phase = Encounter.Phase.WAITING
 	boss.time_left = 10.0
@@ -1717,6 +1824,7 @@ func _test_rank_four() -> bool:
 	for rank in [3, iv]:
 		var boss := _on_last(
 				_told(["hourglass"], {"hourglass_amulet": rank}, {"damage": 1.0e9}, 1.0e9, "grass", "village"), 1.0)
+		boss.lineup[boss.index] = EnemyRoster.lair_boss("grass")
 		boss.time_left = 10.0
 		boss.hit()
 		_check(boss.time_left == (10.0 + Encounter.HOURGLASS_BOSS if rank == iv else 10.0), "a boss kill at rank %d" % rank)

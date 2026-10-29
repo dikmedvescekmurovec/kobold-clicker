@@ -33,10 +33,13 @@ const CLOCK_MOST := 8.0
 
 ## A fight's shape, by what the world put on the tile (`PROFILES`, keyed by `MapBuilder.area_variant`).
 const ORDINARY := {"enemies": ENEMIES, "seconds": SECONDS, "elite_every": ELITE_EVERY, "boss_last": false}
-const SETTLEMENT := {"enemies": 15, "seconds": 60.0, "elite_every": 5, "boss_last": true}
+## No boss since 2026-10-29: the bosses left the towns for their lairs (the user's).
+const SETTLEMENT := {"enemies": 15, "seconds": 60.0, "elite_every": 5, "boss_last": false}
 ## A chest's tile (`MapBuilder.has_chest`): the mimic alone.
 const CHEST := {"enemies": 1, "seconds": SECONDS, "elite_every": 1, "boss_last": true}
 const MIMIC := "Mimic"
+## A boss's lair (`MapBuilder.boss_at`): the land's boss alone, whose own unique is all it leaves (`_pay_lair`).
+const LAIR := {"enemies": 1, "seconds": 60.0, "elite_every": 1, "boss_last": true}
 ## A chest holds one unique and nothing else MIMIC_UNIQUE of the time, otherwise MIMIC_ROLLS certain pieces.
 const MIMIC_UNIQUE := 0.5
 const MIMIC_ROLLS := 4
@@ -168,6 +171,9 @@ const DOMINO_BIG := 0.5          ## of the carry an elite or a boss takes, Domin
 const HOURGLASS_BOSS := 5.0      ## seconds a boss kill puts back, Hourglass Amulet
 const BERSERK_EVERY := 10        ## clicks that land, one of which strikes twice, Berserker's Band
 const CHALICE_TWICE := 0.1       ## of crits that strike twice, Overflowing Chalice
+## The lairs' uniques (2026-10-29), unranked.
+const TORC_BITES := 3            ## bites a blow is, Three-Headed Torc
+const CHISEL_TIMES := 3.0        ## damage against the ice wall, Mason's Chisel
 ## The world's curses. `Curses` writes its sentences' figures from these: never type one in twice.
 const IRON_HP := 0.6             ## more health, added to a tile's own `hp`
 const SHORT_DAYS := 8.0          ## seconds off every clock
@@ -203,6 +209,7 @@ var env := ""             ## the terrain: it picks the enemies and the backdrop
 var endless := false      ## a farm run: no count and no clock. False in the dungeon
 var dungeon := false
 var first_floor := 0      ## the floor the dungeon's first body stands on, from 0; nought in any other fight
+var lair := false         ## a boss's lair: it pays its unique and its experience, nothing else
 
 var index := 0            ## which enemy is out, from 0: how many are slain
 var hp := 0.0             ## the current enemy's
@@ -407,6 +414,19 @@ static func for_tile(cell: Vector2i, env: String, variant := "", chest := false,
 	return fight
 
 
+## The boss of a lair alone (`MapBuilder.boss_at`), with no tile modifiers.
+static func for_lair(cell: Vector2i, env: String, boss: String) -> Encounter:
+	var fight := Encounter.new()
+	fight.env = env
+	fight.cell = cell
+	fight.lair = true
+	fight._take_profile(LAIR)
+	fight.lineup.append(boss)
+	fight.health.append(fight._health_of(boss))
+	fight.hp = fight.health[0]
+	return fight
+
+
 ## The ice wall alone, fought on the ice whatever land lies under it.
 static func for_wall(cell: Vector2i) -> Encounter:
 	var fight := Encounter.new()
@@ -591,6 +611,7 @@ func wear(worn: Array, unique_ranks := {}) -> void:
 	effects = worn
 	ranks = unique_ranks
 	_take_dread()
+	_take_challenge()
 	_take_curses()
 
 
@@ -600,6 +621,16 @@ func _take_dread() -> void:
 		return
 	_dreaded = true
 	_thin(int(_dial("dreadmask", "fewer")) - walls_inside(cell), 0)
+
+
+## The Banner of Challenge, once: every common already in the lineup comes on as an elite (`_promote`
+## takes the rest of a run's as they join).
+func _take_challenge() -> void:
+	if dungeon or not "challenge" in effects or lineup.is_empty():
+		return
+	for at in lineup.size():
+		_promote(at)
+	hp = health[index]
 
 
 ## Takes up to `fewer` commons off the lineup from `from` on, and never the last body left there.
@@ -652,11 +683,13 @@ func _append_enemy(rng: RandomNumberGenerator) -> void:
 	_promote(lineup.size() - 1)
 
 
-## Elite Chance: the common at `at` comes on as an elite of its ground instead, sized as one. Never in
-## the dungeon, whose floors are counted, and with no chance nothing is drawn. Returns whether it did.
+## Elite Chance: the common at `at` comes on as an elite of its ground instead, sized as one -- always
+## under the Banner of Challenge. Never in the dungeon, whose floors are counted, and with no chance and
+## no banner nothing is drawn. Returns whether it did.
 func _promote(at: int) -> bool:
-	if dungeon or elite_chance <= 0.0 or EnemyRoster.tier_of(lineup[at]) != EnemyRoster.Tier.COMMON \
-			or elite_rng.randf() * 100.0 >= elite_chance:
+	if dungeon or EnemyRoster.tier_of(lineup[at]) != EnemyRoster.Tier.COMMON:
+		return false
+	if not "challenge" in effects and (elite_chance <= 0.0 or elite_rng.randf() * 100.0 >= elite_chance):
 		return false
 	var picked := EnemyRoster.pick(env, EnemyRoster.Tier.ELITE, elite_rng)
 	if picked.is_empty():
@@ -1050,6 +1083,9 @@ func _strike(automatic: bool, riposte := false) -> bool:
 	# The two sums, each applied once: the gear's just before the uniques', never inside it.
 	dealt *= 1.0 + gear_more(automatic, big, first)
 	dealt = maxf(1.0, roundf(dealt * (1.0 + unique_more(automatic))))
+	# The Mason's Chisel: one on each doll counts twice.
+	if lineup[index] == WALL_NAME and "chisel" in effects:
+		dealt *= 1.0 + (CHISEL_TIMES - 1.0) * effects.count("chisel")
 	if riposte:
 		dealt = maxf(1.0, roundf(dealt * _dial("bulwark", "share") / 100.0))
 	# Two blows' worth: every tenth click that lands under the Berserker's Band at IV, one crit in ten
@@ -1084,6 +1120,9 @@ func _strike(automatic: bool, riposte := false) -> bool:
 		hp = 0.0
 	hit_landed.emit(dealt, crit, automatic)
 	enemy_hit.emit(hp)
+	# The Three-Headed Torc: the blow is three bites of a third each, and each strikes on as the whole
+	# blow would (the user's wording, 2026-10-29) -- three wounds, three burns, three times its time on hit.
+	var bites := TORC_BITES if "torc" in effects else 1
 	if hp <= 0:
 		_domino = first and "domino" in effects
 		if crit:
@@ -1093,13 +1132,17 @@ func _strike(automatic: bool, riposte := false) -> bool:
 		_kill(automatic)
 	else:
 		# Only where the body survived, and the deeper wound wins and nothing adds: or a weapon
-		# swinging twice as fast would bleed twice as hard for free. The burn likewise.
-		_bleed = maxf(_bleed, dealt * bleed / 100.0)
-		if burn > 0.0:
-			_burn = maxf(_burn, dealt * burn / 100.0 / BURN_SECONDS)
-			_burn_left = BURN_SECONDS
+		# swinging twice as fast would bleed twice as hard for free. The burn likewise. The Labrys is
+		# that very trade: under it every wound bleeds, added up.
+		for bite in bites:
+			var wound := dealt * bleed / 100.0
+			_bleed = _bleed + wound if "labrys" in effects else maxf(_bleed, wound)
+			if burn > 0.0:
+				_burn = maxf(_burn, dealt * burn / 100.0 / BURN_SECONDS)
+				_burn_left = BURN_SECONDS
 	if not endless:
-		_win_back(time_on_hit)
+		for bite in bites:
+			_win_back(time_on_hit)
 	return true
 
 
@@ -1218,6 +1261,9 @@ func _kill(swung := false) -> void:
 ## generators are drawn in and their signals go out. Nothing is rolled when the clock runs out, which
 ## is why drops survive a loss for free.
 func _pay() -> void:
+	if lair:
+		_pay_lair()
+		return
 	var mimic := lineup[index] == MIMIC
 	var big := _tier() != EnemyRoster.Tier.COMMON
 	var boss := _tier() == EnemyRoster.Tier.BOSS
@@ -1241,7 +1287,7 @@ func _pay() -> void:
 			* (1.0 + xp_more / 100.0) * lessons))
 	xp += worth
 	xp_dropped.emit(index, worth)
-	_drop_unique(mimic, boss, chest_unique)
+	_drop_unique(mimic, big, chest_unique)
 	# The Hourglass: its rank's seconds back for anything but a boss -- and at IV a boss's own -- and
 	# never past what the fight began with, so the clock can be held but not banked. A run has none.
 	if "hourglass" in effects and not endless:
@@ -1251,6 +1297,18 @@ func _pay() -> void:
 			time_left = minf(seconds, time_left + HOURGLASS_BOSS)
 	_drop_orb()
 	_drop_stone()
+
+
+## A lair's boss: its own unique, every time, at a level rolled as any boss's drop is, and its
+## experience -- no gear, purse, orb or stone (the user's, 2026-10-29).
+func _pay_lair() -> void:
+	var lessons := LESSONS_XP if _cursed_with(Curses.HARD_LESSONS) else 1.0
+	var worth := maxi(1, roundi(xp_of(lineup[index], cell) * (1.0 + xp_more / 100.0) * lessons))
+	xp += worth
+	xp_dropped.emit(index, worth)
+	var level := LootTable.drop_level(EnemyRoster.Tier.BOSS, _level(), ItemRarity.Rarity.UNIQUE, unique_rng)
+	var id := UniqueTable.lair_unique(lineup[index])
+	loot_dropped.emit(index, _lean(Item.rolled_unique(id, unique_rng, level)))
 
 
 ## The body's gear: one roll, a chest's certain several, or `none`.
@@ -1321,7 +1379,7 @@ func _drop_purse(no_gear: bool) -> void:
 
 ## A unique, beside the gear and not from its table. A chest's is its toss and nothing on top; then
 ## the promised first; then, past `uniques_after`, the chance.
-func _drop_unique(mimic: bool, boss: bool, chest_unique: Item) -> void:
+func _drop_unique(mimic: bool, big: bool, chest_unique: Item) -> void:
 	if chest_unique != null:
 		loot_dropped.emit(index, _lean(chest_unique))
 	elif mimic or even_loot:
@@ -1335,9 +1393,9 @@ func _drop_unique(mimic: bool, boss: bool, chest_unique: Item) -> void:
 				* (HOME_UNIQUES if _cursed_with(Curses.HOMELAND) and _at_home() else 1.0)
 		var rate := _lifted(drop_rate, lucky)
 		var found := _roll_unique(unlocked, false, rate)
-		# A second chance, never a second unique: a boss in the mountains under Stonebreaker at IV, and
+		# A second chance, never a second unique: an elite in the mountains under Stonebreaker at IV, and
 		# a crit kill under the Lucky Wound at IV.
-		if found == null and ((boss and env == "mountains" and _home_peak())
+		if found == null and ((big and env == "mountains" and _home_peak())
 				or (_crit_kill and "lucky_wound" in effects and _peak("lucky_wound"))):
 			found = _roll_unique(unlocked, false, rate)
 		if found != null:
