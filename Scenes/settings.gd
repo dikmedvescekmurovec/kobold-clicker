@@ -71,6 +71,9 @@ static var wall_hp: Array = [0.0, 0.0, 0.0]
 ## The newest `CHANGELOG.md` version already shown (`main_scene._show_changelog`). Here rather than in
 ## the save so a Reset does not show it again, and a browser's settings file is that player's.
 static var changelog_seen := ""
+## Whether this device has given the landing page's Golden door its password, which is asked once
+## (`landing.gd`). Here rather than in a save, so a Reset keeps the door open.
+static var door_open := false
 ## Where the file is. Empty means nowhere: nothing is read and nothing written, which is what every
 ## test and screenshot script gets, because the main scene only sets it on the player's own save.
 static var path := ""
@@ -98,6 +101,7 @@ static func load_settings() -> void:
 	even_loot = bool(file.get_value(SECTION, "even_loot", even_loot))
 	banish_now = bool(file.get_value(SECTION, "banish_now", banish_now))
 	changelog_seen = str(file.get_value(SECTION, "changelog_seen", changelog_seen))
+	door_open = bool(file.get_value(SECTION, "door_open", door_open))
 	var bases: Variant = file.get_value(SECTION, "wall_hp_base", wall_hp)
 	if bases is Array and bases.size() == wall_hp.size():
 		wall_hp = bases.map(func(base: Variant) -> float: return maxf(0.0, float(base)))
@@ -125,6 +129,7 @@ static func save() -> void:
 	file.set_value(SECTION, "even_loot", even_loot)
 	file.set_value(SECTION, "banish_now", banish_now)
 	file.set_value(SECTION, "changelog_seen", changelog_seen)
+	file.set_value(SECTION, "door_open", door_open)
 	file.set_value(SECTION, "wall_hp_base", wall_hp)
 	if file.save(path) != OK:
 		push_warning("Settings: cannot write %s" % path)

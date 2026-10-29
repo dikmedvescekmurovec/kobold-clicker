@@ -2,7 +2,8 @@ class_name WallUnlocks
 extends RefCounted
 ## What breaking each ice wall opens for good (the user's ladder, 2026-10-09). Every unlock is read
 ## off the deepest wall ever broken, in any world (`Inventory.walls_ever`), so a transcension takes
-## none back. Walls 1 and 2 are the orbs', two each (`OrbTable.unlocked`), and are not in `WALL`.
+## none back. Walls 1 and 2 are the orbs', two each (`OrbTable.unlocked`), and are not in `WALL`;
+## every wall is also an hour more of camp (`camp_hours`) and more room in the bag (`bag_slots`).
 
 const GOLLUX := "gollux"
 const RUNES := "runes"
@@ -32,10 +33,28 @@ const SHOWN := {
 			"tip": "Skill nodes that put a button in the fight"},
 }
 const BRANCH_ICON := "res://Assets/Skills/root.png"
+## The hours a hero can hold a camp with no wall down, and what every wall adds (the user's,
+## 2026-10-11): `camp_hours`, which the main scene hands `Camp.make`.
+const CAMP_HOURS := 1
+const CAMP_HOURS_A_WALL := 1
+## A stand-in mark: no tent has been drawn.
+const CAMP_ICON := "res://Assets/UI/ui_icon_scroll_brown.png"
+## The squares every wall adds to the bag (the user's, 2026-10-11): `bag_slots`, which
+## `Inventory.capacity` adds to its own.
+const BAG_SLOTS_A_WALL := 10
+const BAG_ICON := "res://Assets/UI/ui_icon_chest_brown.png"
 
 
 static func has(walls: int, id: String) -> bool:
 	return walls >= int(WALL[id])
+
+
+static func bag_slots(walls: int) -> int:
+	return BAG_SLOTS_A_WALL * maxi(0, walls)
+
+
+static func camp_hours(walls: int) -> int:
+	return CAMP_HOURS + CAMP_HOURS_A_WALL * maxi(0, walls)
 
 
 ## How many branches hang off the skill tree's root with `walls` broken (`SkillTree.root_slots`).
@@ -59,4 +78,12 @@ static func of_wall(wall: int) -> Array:
 	if more > 0:
 		shown.append({"name": "+%d skill branch%s" % [more, "es" if more > 1 else ""], "icon": BRANCH_ICON,
 				"tip": "The skill tree's root takes %d more node%s" % [more, "s" if more > 1 else ""]})
+	var hours := camp_hours(wall) - camp_hours(wall - 1)
+	if hours > 0:
+		shown.append({"name": "+%d camp hour%s" % [hours, "s" if hours > 1 else ""], "icon": CAMP_ICON,
+				"tip": "A camp holds %d more hour%s" % [hours, "s" if hours > 1 else ""]})
+	var slots := bag_slots(wall) - bag_slots(wall - 1)
+	if slots > 0:
+		shown.append({"name": "+%d bag slots" % slots, "icon": BAG_ICON,
+				"tip": "Your bag holds %d more items" % slots})
 	return shown

@@ -6,6 +6,21 @@ a player has not seen yet once, together, newest first (`main_scene.gd` `_show_c
 written for players. A section may hold a two-column table instead (`| left | right |`, a header row, then
 `|---|---|`): the game draws its rows as its own tables, the left column wrapping and the right kept short.
 
+## v0.6.1 (2026-10-11)
+
+### Front page
+- The front page now scrolls: under the cover, nine short films and pictures of what the game is, and the waiting list again at the end.
+- Golden door asks for its password once. After that it opens at a press.
+
+### Camps
+- A camp now brings back what its monsters dropped, as well as gold and experience. Your item filter and your level rules decide what it keeps.
+- A camp lasts one hour to begin with, and one hour longer for every ice wall you have ever broken.
+- Camp Earnings on your armour now also means more monsters driven off, and so more finds.
+- The Restless curse fills a camp four times sooner.
+
+### Bag
+- Your bag holds 10 more items for every ice wall you have ever broken.
+
 ## v0.6.0 (2026-10-11)
 
 ### Characters

@@ -15,7 +15,7 @@ Every kill rolls for gear (about one body in thirty), always hands over gold, an
 | `super_orb_table.gd` (`SuperOrbTable`) | The six super orbs, spent only on `TranscendPage` and only on heirlooms. |
 | `unique_table.gd` (`UniqueTable`) | The unique items: each one's row, its ranked dials and card text, and the uniques' own drop roll. |
 | `achievements.gd` (`Achievements`) | What unlocks a unique into the drops and what ranks it: the starters, the achievements, their progress, and what a finished fight records. |
-| `wall_unlocks.gd` (`WallUnlocks`) | What each ice wall opens for good, read off `Inventory.walls_ever()`. |
+| `wall_unlocks.gd` (`WallUnlocks`) | What each ice wall opens for good, read off `Inventory.walls_ever()`, the hours a camp holds and the squares a wall adds to the bag. |
 | `rune_table.gd` (`RuneTable`) | The six runes, dropped only in Gollux's cave and spent on a charted tile, and a tile's rune work. |
 | `player_level.gd` (`PlayerLevel`) | What a level costs in experience, and banking it. |
 | `inventory.gd` (`Inventory`) | All the player holds (bag, worn gear, heirloom stash, gold, orbs, runes, skills, tallies), the stats a fight is armed with, and `save` / `load_from`. |
@@ -176,10 +176,10 @@ Full text, numbers and reasons: `DESIGN.md`, "Reference (moved here from CLAUDE.
 - **Drop runes only in Gollux's cave; spend them only on a charted tile a farm run can be fought on** (the user's design, 2026-10-09). (DESIGN.md: "rune_table.gd")
 - **Never touch a tile's own modifiers with a rune:** its rune work is one Dictionary (`RuneTable.fresh()`), each entry lasting `KILLS` kills on its own count; `pool` deals only rows a farm run feels. (DESIGN.md: "rune_table.gd")
 - **Spend a rune only where it does something** (`Inventory.use_rune`; a refusal leaves no record); `rune_work(spot)` reads without keeping, `rune_state(spot)` keeps. (DESIGN.md: "inventory.gd")
-- **Read every wall unlock off `Inventory.walls_ever()`** through `WallUnlocks` (the user's ladder, 2026-10-09); `walls_credited` is the super orbs' alone. (DESIGN.md: "wall_unlocks.gd", "inventory.gd")
+- **Read every wall unlock off `Inventory.walls_ever()`** through `WallUnlocks` (the user's ladder, 2026-10-09), a camp's hours and the bag's room too (`camp_hours`, `bag_slots`, 2026-10-11); `walls_credited` is the super orbs' alone. (DESIGN.md: "wall_unlocks.gd", "inventory.gd")
 
 ### The bag
-- **Never destroy gear to fit the bag:** anything over `CAPACITY` stays whole and makes the player `encumbered()`. (DESIGN.md)
+- **Never destroy gear to fit the bag:** anything over `capacity()` stays whole and makes the player `encumbered()`. (DESIGN.md)
   - **Read the bag level-major** (`order()`, pinned by `_test_bag_order`).
 - **Hold a piece's place in the bag after an orb's lift** until the bag is shut or a town tab changes (`order(held)`). (DESIGN.md: "inventory.gd")
 - **Move a piece only through `Inventory.equip` / `unequip`:** in the bag or a socket, never both. Both refuse on a full bag (`can_equip`); worn gear is outside `CAPACITY`. (DESIGN.md)

@@ -29,7 +29,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **The dungeon** (`_on_cave_pressed`, `_on_dungeon_pressed`, `_on_dungeon_finished`, `_bank_depths`): the descent from the Gollux cave.
 - **The cloud** (`cloud`, `leaderboard_page`, `_cloud_question`): the account, the cloud save and the board; the server is `backend/leaderboard/README.md`.
 - **The cave felt** (`_cave_sense`, a `CaveSense`): the red light at the map's edge toward an unseen cave.
-- **Camps** (`_camp_while_away`, `_break_camp`): pay for the hours the game was shut, under `CampScene`.
+- **Camps** (`_camp_while_away`, `_bank_camp_finds`, `_break_camp`): pay for the hours the game was shut, finds and all, under `CampScene`.
 - **Farm runes** (`_on_farm_pressed`, `_on_kill_paid`): a tile's rune work (`inventory.rune_work`), counted down a body at a time.
 - **Walking to a fight** (`_walk_to_fight`, `_on_player_arrived`, `_retreat_cell`).
 - **Stop** (`_stop_button`, `_on_stop_pressed`): cuts a walk short.
@@ -81,7 +81,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Take every gain as it lands,** in every fight; when it is written is `FightLedger`'s rule alone: a tile fight saves each gain, a farm run nothing of its own until `bank_kills`, which both ways out call (`_on_combat_finished`, `_exit_tree`). (DESIGN.md: "Take every gain as it lands")
 - **Count a bounty kill in the ledger, never in the interface** (`_on_enemy_died` -> `ledger.add_kill`); the screen hears only `bounty_counted`. (DESIGN.md: "Take every gain as it lands")
 - **Wait for `Encounter.kill_paid` before changing what the next body pays:** `enemy_died` fires before the loot, so a rune's last body would be fought under it and paid without it (`_on_kill_paid`). (DESIGN.md: "Take every gain as it lands", "Farm runes")
-- **Autodiscard in one place,** `CombatScene._on_loot_dropped` (`Inventory.leaves_behind`), and gear only: gold, orbs and experience are never refused. Listen to `loot_kept` / `loot_discarded`, never `Encounter.loot_dropped`. (DESIGN.md: "Autodiscard in one place")
+- **Autodiscard in one place a fight,** `CombatScene._on_loot_dropped` (`Inventory.leaves_behind`), and gear only: gold, orbs and experience are never refused. Listen to `loot_kept` / `loot_discarded`, never `Encounter.loot_dropped`; a camp, which has no scene, asks the same function in `_bank_camp_finds`. (DESIGN.md: "Autodiscard in one place")
 - **Keep the fight's corner clear:** no Control in the top-left but the corner buttons, or it eats the player's swings; the one exception is the experience bar's tooltip (`MOUSE_FILTER_PASS`). (DESIGN.md: "Keep the fight's corner clear")
 - **Call wear before arm:** `_arm` calls `fight.wear(inventory.effects(), Achievements.ranks(inventory))` before `fight.arm(inventory.stats())`, for `_open_fight`, the camp and the dungeon alike. (DESIGN.md: "Call wear before arm")
 - **Rearm mid-fight, never wear again** (`_rearm`, deferred on `inventory.save_written`): a changed piece counts from the next blow, and `arm` moves the clock by the gear's seconds, never refilling it. (DESIGN.md: "Bag over a fight")
@@ -91,7 +91,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Hand `_mods_of(cell)` to all three places a fight is built** (Chart, Farm, the camp). (DESIGN.md: "Tile modifiers")
 - **Turn the strikes on here** (`fight.strikes = true` in `_open_fight`): a hand-built fight, a farm run, a camp and the ice wall are never struck. Block is in tenths of a second (`LootTable.SECONDS_STATS`), and time on hit never wins back more than the blows took. (DESIGN.md: "Turn the strikes on here")
 - **Pay salvage in all four places** gear is thrown away (`Inventory.salvage`, `salvage_orb`: `_on_loot_autodiscarded`, `_on_drop_discarded`, `BagPage._on_discard_pressed`, `_take_level`). (DESIGN.md: "Pay salvage in all four places")
-- **Add only drops to a full bag** (`Inventory.add`): a drop past `CAPACITY` is kept, never destroyed, and overencumbers the player (`Inventory.encumbered()`, Chart and Farm refused). A purchase is refused instead, and an Equip that would hand two pieces back into room for one (`Inventory.can_equip`). (DESIGN.md: "Add only drops to a full bag")
+- **Add only drops to a full bag** (`Inventory.add`): a drop past `capacity()` is kept, never destroyed, and overencumbers the player (`Inventory.encumbered()`, Chart and Farm refused). A purchase is refused instead, and an Equip that would hand two pieces back into room for one (`Inventory.can_equip`). (DESIGN.md: "Add only drops to a full bag")
 
 ### A new player's first kills
 - **No orb before kill 20** (`OrbTable.FIRST_ORB_KILLS`, passed as `Encounter.orbs_after`); `FightLedger.bank_kills` adds a fight's kills when it ends or the game closes. (DESIGN.md: "No orb before kill 20")
@@ -122,7 +122,9 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Bank depths on the way out and from `_exit_tree`** (`_bank_depths`), so quitting under a dead Gollux cannot cost him, and sync at once (`cloud.sync(true)`): the board is scored from the cloud save's `dungeon_floors`. (DESIGN.md: "The dungeon", "The cloud")
 - **Only ever raise `dungeon_depth`,** carried through every transcension (the user's ruling); each depth won is exactly one skull, the only skulls there are (`Inventory.skull_allowance`, the user's, 2026-10-03). (DESIGN.md: "The dungeon")
 - **Walk distant charting's way as the Nightwalkers'** (`view.distant`, `_dark_way`), collecting a won tile's loot by itself as they do (`CombatScene.auto_collect`, the user's, 2026-10-09). (DESIGN.md: "The dungeon")
-- **Keep camps automatic, with no button:** `_ready` reads `inventory.saved_at` before anything saves over it and, last of all, arms a run on `MapBuilder.best_farm()` as `_open_fight` does, pays `Camp.earned` at once and saves. `_break_camp` only takes the screen away, then syncs the cloud. (DESIGN.md: "Camps")
+- **Keep camps automatic, with no button:** `_ready` reads `inventory.saved_at` before anything saves over it and, last of all, arms a run on `MapBuilder.best_farm()` as `_open_fight` does, pays `Camp.earned` and banks `Camp.finds` at once and saves. `_break_camp` only takes the screen away, then syncs the cloud. (DESIGN.md: "Camps")
+- **Hand a fight its drops through `_hand_drops`** (nodes, orbs, uniques: `_open_fight` and the camp), and a camp only once no scripted first find is owed (`inventory.promised().is_empty()`): its bodies are not counted, so a stray orb or node would spend the script unseen. The promises themselves are `_open_fight`'s alone. (DESIGN.md: "Camps")
+- **Bank a camp's finds through the fight's own handlers** (`_bank_camp_finds`: `_on_loot_dropped`, `_on_loot_autodiscarded`, `_on_orb_gained`), under a ledger set `farming` so nothing is written before the camp's one save. A camp's hours are `WallUnlocks.camp_hours(inventory.walls_ever())`. (DESIGN.md: "Camps")
 - **Forbid a camp under No Rest and Berserker's World** (`_cannot_camp()`); `_sight()` loses its own ring under the Thick Fog. (DESIGN.md: "Camps", "Tile modifiers")
 - **Carry no rune work into a camp,** which builds its own run; on a farm run what ran out leaves the fight there and then (`Encounter.forget_mod`, `deeper`, `ascended`, then `_rearm`). (DESIGN.md: "Farm runes")
 - **Take the held runes from the bag** (the user's, 2026-10-09): picked up off its rune row they aim the map, and the tile pressed is `_on_cell_aimed` -> `_rune_on` -> `BagPage.rune_on`. (DESIGN.md: "The tile panel")
@@ -191,6 +193,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Mid-fight, the hit sounds and a Dreadmask put on are not followed** (`weapon_kind` is read in `_build`). (DESIGN.md: "Bag over a fight")
 - **Health, energy shield, regen, leech and the resistances are gone,** with the hat, robe, slippers and Sapphire Amulet built on them. (DESIGN.md: "Turn the strikes on here")
 - **`screenshot_ui.gd` runs under `Anim.NONE`,** so its shots are of settled pages. (DESIGN.md: "Sliding panels")
-- **No test passes through the landing page,** which on a real start has read the settings and gone full screen already (`landing.gd`). (DESIGN.md: "Never pass Settings around")
+- **No test starts the game through the landing page,** which on a real start has read the settings and gone full screen already (`landing.gd`); `test_ui_pages` builds it as a page, where it reads and writes nothing (`_real`). (DESIGN.md: "Never pass Settings around", "Landing page (2026-10-11)")
+- **Put a landing picture in `Assets/Landing/` before `landing.gd` names it:** the script preloads every one, it is the main scene's, and `test_cloud` loads it. Size the page (`_page.size`) last in `_fit`, after everything in it has its width. (DESIGN.md: "Landing page (2026-10-11)")
 - **`CHANGELOG.md` is packed only by `export_presets.cfg`'s include filter** (`test_inventory` checks it). (DESIGN.md: "Changelog")
 - **A cave from before 2026-10-09 could stand walls out,** so `CaveSense.felt` asks that its cell is land. (DESIGN.md: "The cave felt")

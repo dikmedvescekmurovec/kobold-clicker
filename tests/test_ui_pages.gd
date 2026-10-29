@@ -397,6 +397,12 @@ func _pages(hero: Inventory) -> Dictionary:
 			root.add_child(page)
 			page.pop_up(scale)
 			return page,
+		# The project's main scene, built to be looked at: not the current one, so it reads no settings,
+		# loads no game behind it and goes nowhere.
+		"landing": func(_scale: float) -> Control:
+			var page: Control = load("res://Scenes/landing.tscn").instantiate()
+			root.add_child(page)
+			return page,
 		"item_card": func(scale: float) -> Control: return await card.call(scale, false),
 		"item_card_worn": func(scale: float) -> Control: return await card.call(scale, true),
 	}

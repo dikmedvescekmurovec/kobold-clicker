@@ -220,12 +220,15 @@ func total() -> int:
 	return items.size()
 
 
-## `CAPACITY`, and `PACKMULE_ROOM` more while a rank IV Packmule's Harness is worn on either doll. The
-## heirlooms' stash keeps to `CAPACITY`.
+## `CAPACITY`, the walls' squares (`WallUnlocks.bag_slots` of `walls_ever()`), and `PACKMULE_ROOM` more
+## while a rank IV Packmule's Harness is worn on either doll. The heirlooms' stash keeps to `CAPACITY`.
 func capacity() -> int:
-	if keeper == null and "packmule" in effects() and _peak("packmule"):
-		return CAPACITY + PACKMULE_ROOM
-	return CAPACITY
+	if keeper != null:
+		return CAPACITY
+	var room := CAPACITY + WallUnlocks.bag_slots(walls_ever())
+	if "packmule" in effects() and _peak("packmule"):
+		room += PACKMULE_ROOM
+	return room
 
 
 ## How many steps from the charted land a tile can be charted (`MapBuilder.dark_reach`): 1, or the

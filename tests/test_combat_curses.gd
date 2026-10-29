@@ -854,7 +854,7 @@ func _test_more_curses() -> bool:
 	chest.hit()
 	_check(not paid.is_empty(), "a chest abroad still pays")
 
-	# Restless: a camp made under it pays twice a second and is full in two hours.
+	# Restless: a camp made under it pays twice a second and is full in a quarter of its eight hours.
 	var rested := {}
 	for worn: Array in [[], [Curses.effect(Curses.RESTLESS)]]:
 		var camped := Encounter.farm(here, "grass", "plain")
@@ -867,17 +867,16 @@ func _test_more_curses() -> bool:
 		camped.crit_rng.seed = 1
 		camped.roster_rng.seed = 1
 		camped.loot_rng.seed = 1
-		rested[worn.size()] = Camp.make(here, "Here", camped, 1000.0)
+		rested[worn.size()] = Camp.make(here, "Here", camped, 1000.0, 8.0)
 	_check(is_equal_approx(float(rested[1][Camp.GOLD]), float(rested[0][Camp.GOLD]) * Camp.RESTLESS_PAY)
 			and is_equal_approx(float(rested[1][Camp.XP]), float(rested[0][Camp.XP]) * Camp.RESTLESS_PAY),
 			"a Restless camp pays double a second")
-	var long := Camp.earned(rested[1], 1000.0 + Camp.MAX_SECONDS)
-	_check(bool(long["full"]) and is_equal_approx(float(long["seconds"]), Camp.RESTLESS_SECONDS),
-			"and is full after two hours")
-	var old_camp: Dictionary = rested[0].duplicate()
-	old_camp.erase(Camp.MOST)
-	_check(is_equal_approx(float(Camp.earned(old_camp, 1000.0 + Camp.MAX_SECONDS * 2.0)["seconds"]), Camp.MAX_SECONDS),
-			"a camp saved before the curse fills when camps always did")
+	_check(is_equal_approx(float(rested[1][Camp.KILLS]), float(rested[0][Camp.KILLS])),
+			"for the same bodies, and so the same finds")
+	var long := Camp.earned(rested[1], 1000.0 + 8.0 * 3600.0)
+	_check(bool(long["full"]) and is_equal_approx(float(long["seconds"]), 8.0 * 3600.0 * Camp.RESTLESS_SHARE),
+			"and is full in its share of the hours (%s s)" % long["seconds"])
+	_check(not bool(Camp.earned(rested[0], 1000.0 + 7.0 * 3600.0)["full"]), "where a rested one is still filling")
 
 	# Two that cannot stand together, and every row still says what it costs and pays.
 	_check(not Curses.allowed(Curses.PACIFIST_HANDS, [Curses.BERSERKERS_WORLD])

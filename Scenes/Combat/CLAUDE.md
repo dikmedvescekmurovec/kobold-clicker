@@ -1,7 +1,7 @@
 <!-- Loaded automatically when a file in this folder is read. Rules only: the reasoning behind them is in Scenes/Combat/DESIGN.md, which is read on demand. The project overview is in the root CLAUDE.md. -->
 
 ## Combat code (`Scenes/Combat/`)
-A tile is taken by beating a lineup of enemies against a clock; a taken tile can be farmed endlessly with no clock, or **camped** -- that same run, played for the hours the game is shut on the best tile taken, a full eight hours paying what half an hour of active play does.
+A tile is taken by beating a lineup of enemies against a clock; a taken tile can be farmed endlessly with no clock, or **camped** -- that same run, played for the hours the game is shut on the best tile taken, an hour away paying what 3 min 45 s of active play does, finds and all, for one hour and one more a wall broken.
 **The dungeon** is the third kind: a clock and a lineup that never ends, in depths of fifteen floors, and a depth is won only by killing the Gollux at the foot of it. **Read `DESIGN.md` here before changing the HUD's layout, what drops show as, or the fight profiles** -- it holds the why.
 
 The bracket closing a rule names the heading in `DESIGN.md` that holds its full text (under "Reference", at the end); each file's long description is there too, under its name.
@@ -101,12 +101,15 @@ The bracket closing a rule names the heading in `DESIGN.md` that holds its full 
 - **The ice wall has no growth term of its own** (`for_wall`): `hp_of(.., WALL_GROWTH)` already steps once per wall, and `WALL_HP` is the dial. From `LATE_WALL_FROM` on it is `LATE_WALL_BODIES` ordinary bodies, and every wall behind a cell multiplies its bodies by `LAND_GROWTH`. (DESIGN.md: "encounter.gd")
 
 ### The camp
-- **A camp pays gold and experience and nothing else:** no gear, no orbs, no bodies for a bounty board and nothing on `inventory.kills` -- the gates those count towards are for going in with a sword in your hand. `Camp` never touches an `Inventory`; the main scene pays it at start-up.
+- **A camp pays gold, experience and what its bodies drop** (the user's, 2026-10-11), but no bodies for a bounty board and nothing on `inventory.kills` or an achievement. `Camp` never touches an `Inventory`; the main scene pays it at start-up. (DESIGN.md: "camp.gd")
+- **A camp's finds are fought for, never rolled from a table:** `Camp.finds` plays the run `make` sampled on until the camp's bodies have fallen, so every rule over a drop is the fight's own (the user's: all gear modifiers apply). A fight drops only what it was handed, which is how the main scene keeps a camp from a kind of find. (DESIGN.md: "camp.gd")
+- **A camp holds the hours `make` is handed** (`WallUnlocks.camp_hours`: one, and one more a wall ever broken; the user's, 2026-10-11), written into it as `MOST`. An hour pays `IDLE_SHARE` of an hour's play, however many it holds. (DESIGN.md: "camp.gd")
 - **A camp is never a second economy.** What it pays an hour is sampled off a real `Encounter.farm`, so every dial that moves what a tile is worth moves a camp with it and there is no figure here to keep in step. Nothing in `Camp` writes a number in gold.
 - **The rates are worked out once and then it is arithmetic.** `make` samples at start-up, from the gear the save holds -- the gear the player shut the game in -- and `earned` is a sum over the hours since `Inventory.saved_at`.
-- **A Restless camp is still arithmetic:** `Camp.make` reads the curse off the fight's `effects` and writes its `MOST` into the camp. (DESIGN.md: "A Restless camp is still arithmetic")
+- **Camp Earnings is more of everything, Restless of the gold and experience alone:** `make` puts the gear's line on the bodies too, and so on the finds. (DESIGN.md: "camp.gd")
+- **A Restless camp is still arithmetic:** `Camp.make` reads the curse off the fight's `effects` and writes its `MOST`, `RESTLESS_SHARE` of the hours, into the camp. (DESIGN.md: "A Restless camp is still arithmetic")
 - **`earned` is clamped to its `MOST` and never negative,** in whole coins as in whole experience and bodies. (DESIGN.md: "camp.gd")
-- **The camp's screen is already paid and has nobody on it,** under the night sky whatever the clock says. (DESIGN.md: "camp_scene.gd")
+- **The camp's screen is already paid and has nobody on it,** under the night sky whatever the clock says. Its finds are a `DropsView` that is a record only, and it writes no sentence but the cap's, on one line. (DESIGN.md: "camp_scene.gd")
 
 ### The view: backdrop and fighters
 - **Cave layer 1 goes in front:** `_build_cave` lays 7 down to 2 behind the fighters and `_build` adds 1 after them; the pack's 0 is not exported. Every fight has the one scroll (`_scroll`), none of it at `Settings.Anim.NONE`. (DESIGN.md: "Cave layer 1 goes in front")

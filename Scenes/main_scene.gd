@@ -1076,25 +1076,56 @@ func _camp_while_away(left_at: float) -> void:
 			or not _cannot_camp().is_empty():
 		return
 	var env: String = map.get_tile_info(cell).get("env", "")
-	# Armed exactly as `_open_fight` arms one, and for the same reason: a camp is that fight. What it
-	# is never given is the things a camp does not pay -- no first sword, no orbs, no uniques.
+	# Armed exactly as `_open_fight` arms one, and for the same reason: a camp is that fight. Its bodies
+	# drop what a run's do (the user's, 2026-10-11) -- but nothing while a scripted first find is still
+	# owed: they are not counted towards it, and a stray orb or node would spend the script unseen.
 	var fight := Encounter.farm(cell, env, view.area_variant(cell), _mods_of(cell))
 	_arm(fight)
-	var camp := Camp.make(cell, view.name_of(cell), fight, left_at)
+	var drops := inventory.promised().is_empty()
+	if drops:
+		_hand_drops(fight)
+	var camp := Camp.make(cell, view.name_of(cell), fight, left_at,
+			WallUnlocks.camp_hours(inventory.walls_ever()))
 	var earned := Camp.earned(camp, now)
 	if float(earned[Camp.GOLD]) <= 0.0 and int(earned[Camp.XP]) <= 0:
 		return
 	inventory.gold += float(earned[Camp.GOLD])
 	_camp_levels = inventory.add_xp(int(earned[Camp.XP]))
+	var found := _bank_camp_finds(Camp.finds(fight, int(earned[Camp.KILLS]) if drops else 0))
 	_save_inventory()
-	print("Camped %s on %s, %s: %s gold, %d experience, %d driven off"
+	print("Camped %s on %s, %s: %s gold, %d experience, %d driven off, %d find(s) kept and %d left"
 			% [Camp.spell_time(float(earned["seconds"])), view.name_of(cell), cell,
-				BigNumber.format(float(earned[Camp.GOLD])), int(earned[Camp.XP]), int(earned[Camp.KILLS])])
+				BigNumber.format(float(earned[Camp.GOLD])), int(earned[Camp.XP]), int(earned[Camp.KILLS]),
+				found[Camp.ITEMS].size(), int(found["left"])])
 	_camp = CampScene.new()
 	_camp.broke_camp.connect(_break_camp)
 	add_child(_camp)
-	_camp.begin(camp, earned, env, view.area_variant(cell), ui_scale)
+	_camp.begin(camp, earned, env, view.area_variant(cell), ui_scale, found[Camp.ITEMS], found[Camp.ORBS],
+			int(found["left"]))
 	_cover_map()
+
+
+## What a camp's bodies dropped (`Camp.finds`) into the bag, each find asked of the player's own rule
+## as a fight asks it (`Inventory.leaves_behind`) and one left behind salvaged as a fight's is. Nothing
+## is written here: the camp's one save follows. Returns what was kept, `Camp.ITEMS` and `Camp.ORBS`,
+## and how many finds were `left`.
+func _bank_camp_finds(found: Dictionary) -> Dictionary:
+	var kept: Array[Item] = []
+	var left := 0
+	# A run's ledger writes nothing of its own, which is what a camp's hundred finds want.
+	ledger.farming = true
+	for item: Item in found[Camp.ITEMS]:
+		if inventory.leaves_behind(item):
+			left += 1
+			_on_loot_autodiscarded(0, item)
+		else:
+			kept.append(item)
+			_on_loot_dropped(0, item)
+	for orb: String in found[Camp.ORBS]:
+		for one in int(found[Camp.ORBS][orb]):
+			_on_orb_gained(orb)
+	ledger.farming = false
+	return {Camp.ITEMS: kept, Camp.ORBS: found[Camp.ORBS], "left": left}
 
 
 ## Breaking camp: it was paid as it was made, so this takes its screen away and brings the map back
@@ -1123,6 +1154,19 @@ func _break_camp() -> void:
 func _arm(fight: Encounter) -> void:
 	fight.wear(inventory.effects(), Achievements.ranks(inventory))
 	fight.arm(inventory.stats())
+
+
+## What the save lets a fight's bodies drop beside their gear -- a tile's, a run's and a camp's alike.
+## Not the scripted first finds (`fight.promised`), which only a fight the player is in can deal.
+func _hand_drops(fight: Encounter) -> void:
+	# Skill nodes once the sword has dropped -- the first find of any kind spends its promise -- and,
+	# while the first node is owed, none but it (the fight's own rule).
+	fight.stone_drops = inventory.first_sword_taken
+	fight.orbs_after = maxi(0, OrbTable.FIRST_ORB_KILLS - inventory.kills)
+	fight.walls_down = inventory.walls_ever()
+	fight.uniques_after = maxi(0, UniqueTable.FIRST_UNIQUE_KILLS - inventory.kills)
+	# Less whatever a fortuneteller has banished from this world's drops.
+	fight.unlocked = FortuneTeller.dropping(Achievements.unlocked(inventory), inventory.fortunes)
 
 
 ## The map and every Control out of the way of what stands over them: a fight, the dungeon or a camp.
@@ -1163,14 +1207,7 @@ func _open_fight(fight: Encounter, cell: Vector2i, farming: bool) -> void:
 	# two orbs to craft it with, the first unique and the first skill node, each inside its own kills.
 	fight.promised = inventory.promised()
 	fight.kills_before = inventory.kills
-	# Skill nodes once the sword has dropped -- the first find of any kind spends its promise -- and,
-	# while the first node is owed, none but it (the fight's own rule).
-	fight.stone_drops = inventory.first_sword_taken
-	fight.orbs_after = maxi(0, OrbTable.FIRST_ORB_KILLS - inventory.kills)
-	fight.walls_down = inventory.walls_ever()
-	fight.uniques_after = maxi(0, UniqueTable.FIRST_UNIQUE_KILLS - inventory.kills)
-	# Less whatever a fortuneteller has banished from this world's drops.
-	fight.unlocked = FortuneTeller.dropping(Achievements.unlocked(inventory), inventory.fortunes)
+	_hand_drops(fight)
 	fight.strikes = true
 	fight.even_loot = Settings.even_loot_on()
 	ledger = FightLedger.new(inventory, inventory_path, farming)

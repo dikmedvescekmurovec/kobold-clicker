@@ -98,8 +98,7 @@ const CURSES := {
 		"text": "Only one branch of the skill tree may hold points.",
 		"reward": "Every skill point is worth 50% more."},
 	RESTLESS: {"name": "Restless", "skulls": 1,
-		"text": "A camp is full after %.0f hours, not %.0f."
-				% [Camp.RESTLESS_SECONDS / 3600.0, Camp.MAX_SECONDS / 3600.0],
+		"text": "A camp is full %.0f times sooner." % (1.0 / Camp.RESTLESS_SHARE),
 		"reward": "A camp pays double for every hour."},
 	FORGOTTEN: {"name": "Forgotten", "skulls": 2,
 		"text": "The collection log adds no damage in this world.",

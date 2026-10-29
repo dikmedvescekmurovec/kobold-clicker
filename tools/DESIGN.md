@@ -245,7 +245,7 @@ A review found the corner column drawn to one standard but only the chest, the c
 The text `tools/CLAUDE.md` held until it was cut down to short rules, word for word: nothing here is newer than that date, and the sections above are where the reasoning is.
 
 ### Files in full
-The scripts with no heading here (`web.py`, `recording.py`, `trailer.py`, `reels.py`, `clip_video.py`, `check.py`) had no description in the old file: their rules are under "Rules in full" and the rest is each one's docstring.
+The scripts with no heading here (`web.py`, `recording.py`, `trailer.py`, `reels.py`, `clip_video.py`, `check.py`) had no description in the old file: their rules are under "Rules in full" and the rest is each one's docstring. `landing_media.py` (2026-10-11) is the same: its docstring says how to run it, and why the pictures are cut as they are is `Scenes/DESIGN.md`, "Landing page (2026-10-11)".
 
 #### ui_kit.py
 What each table in `ui_kit.py` cuts, with its source, its output and its preview (the old file's table, a row a block).

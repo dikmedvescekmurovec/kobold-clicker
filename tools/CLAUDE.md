@@ -26,6 +26,7 @@ That row and the rest of the old table are in `DESIGN.md` under "Files in full".
 | `trailer.py` | Records the hype trailer (`tests/trailer.gd`) with Movie Maker and cuts `build/trailer.mp4`. |
 | `reels.py` | Records the upright reels (`tests/reels.gd`) and cuts each to `build/reels/`. |
 | `clip_video.py` | Records an upright marketing clip (`tests/<name>_video.gd`) and encodes `build/<name>_video.mp4`. |
+| `landing_media.py` | Cuts the landing page's five shorts (four reels and the craft clip) and four stills out of the recorders' frames into `build/landing/`. |
 | `check.py` | Parses GDScript with Godot's own checker (`--check-only`): the changed scripts, or `--all`. |
 
 ## Rules
@@ -33,11 +34,12 @@ A rule's old text is in `DESIGN.md` under "Rules in full", headed by the rule's 
 
 ### Running and writing
 - **Take `--help` and refuse an unknown argument** in every script (`argparse`): a typo must never start an export, a recording or a deploy. `web.py` exports only; `--deploy` is what uploads and deploys.
-- **Write only the preview without `--export`** in `item_frames.py`, `cave_dungeon.py`, `characters.py`, `pips.py`, `skill_stones.py`, `seeing_stone.py` and `pixel_flatten.py`. (DESIGN.md: "Files in full")
+- **Write only the preview without `--export`** in `item_frames.py`, `cave_dungeon.py`, `characters.py`, `pips.py`, `skill_stones.py`, `seeing_stone.py`, `pixel_flatten.py` and `landing_media.py` (its preview is `build/landing/`). (DESIGN.md: "Files in full")
 - **After cutting, run the Godot import** and commit the `.import` files.
 - **Write `Assets/` last:** `ui_kit.py`'s `main` holds every write (`writes`) until all that can refuse a sprite has run; only `tools/qa/` previews are written as it goes.
 - **Never read what the build writes:** every source is under `Assets/Potential/` or drawn, so two runs leave `Assets/` byte for byte the same; one read back out of `Assets/Gear` would be outlined again on each run.
 - **Share `recording.py` between the recorders** (`trailer.py`, `reels.py`, `clip_video.py`): `GODOT`, `ready` (what a recording needs, asked for before anything is recorded) and `viewport`.
+- **Leave a reel's scenario as the user has it** (2026-10-11): re-record a reel or a clip only when asked, or where it comes out exactly the same; otherwise cut from the recording there is. Recording also overwrites the frames and the video, so copy both aside first. (`Scenes/DESIGN.md`: "Landing page (2026-10-11)")
 - **Remove `viewport`'s `override.cfg` however the run ends:** it is made only if none is there and git-ignored, and `tests/run_all.py` refuses to run while it exists. (DESIGN.md: "Share `recording.py` between the recorders")
 
 ### The theme sheet and its palette

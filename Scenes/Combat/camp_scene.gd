@@ -14,23 +14,36 @@ const LAYER := 2
 const SKY := "night"
 ## A little over the viewport, as a fight's backdrop is, so no edge can show.
 const BACKDROP_BLEED := 1.02
-## The panel's width, in panel pixels. Fixed: its one long sentence has no width of its own, and a
+## The panel's width, in panel pixels. Fixed: the cap's sentence has no width of its own, and a
 ## panel sized round a changing number breathes in and out.
 const WIDTH := 190.0
+## The least the panel keeps clear of the window's top and foot, in panel pixels, as a verdict does.
+const GAP := 4.0
 
 var _camp := {}
 var _earned := {}
+var _finds: Array[Item] = []
+var _orbs := {}
+var _left := 0
 var _ui_scale := 2.0
 var _panel: VBoxContainer
+## What the camp's bodies dropped, or null where they dropped nothing that was kept.
+var _drops: DropsView
 ## The backdrop's layers, back to front, which `_layout` fits to the window.
 var _backdrop: Node2D
 
 
 ## `camp` is what `Camp.make` built and `earned` what `Camp.earned` said it came to; `env` and `variant`
-## are the tile's, for the backdrop it would have fought on.
-func begin(camp: Dictionary, earned: Dictionary, env: String, variant: String, ui_scale: float) -> void:
+## are the tile's, for the backdrop it would have fought on. `finds` and `orbs` (kind -> count) are
+## what its bodies dropped and the player's rule kept, already in the bag, and `left` how many finds
+## that rule left behind.
+func begin(camp: Dictionary, earned: Dictionary, env: String, variant: String, ui_scale: float,
+		finds: Array[Item] = [], orbs := {}, left := 0) -> void:
 	_camp = camp
 	_earned = earned
+	_finds = finds
+	_orbs = orbs
+	_left = left
 	_ui_scale = ui_scale
 	layer = LAYER
 	# Nothing here is clicked for damage.
@@ -59,12 +72,6 @@ func _build(env: String, variant: String) -> void:
 	var place := UITheme.label(str(_camp.get(Camp.PLACE, "")), Palette.GOLD_TEXT)
 	place.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	rows.add_child(place)
-	var told := UITheme.label("While you were away, your hero camped on the best ground taken so "
-			+ "far. A camp brings back coin and what the fighting taught, and nothing that can be carried.",
-			null, true)
-	told.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	told.custom_minimum_size.x = WIDTH
-	rows.add_child(told)
 	rows.add_child(UITheme.rule(WIDTH))
 
 	var table := UITheme.vbox(0, WIDTH)
@@ -78,10 +85,24 @@ func _build(env: String, variant: String) -> void:
 				0.0, null, Palette.GOLD_TEXT if named[0] == "Gold" else null))
 		striped = not striped
 
+	# The finds as the verdict of a fight shows them, a record only: they are in the bag already.
+	if not _finds.is_empty() or not _orbs.is_empty():
+		_drops = DropsView.new()
+		# A frame on, once the panel knows what an opened find made of its height.
+		_drops.resized_contents.connect(_layout, CONNECT_DEFERRED)
+		rows.add_child(_drops)
+		_drops.fill(_finds, _orbs)
+	if _left > 0:
+		var behind := UITheme.label("1 item discarded automatically" if _left == 1
+				else "%d items discarded automatically" % _left, Palette.TEXT_SOFT, true)
+		behind.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		rows.add_child(behind)
+
 	# Only where the cap is what stopped it: a player back after a week is told why the sum looks short.
+	# One line: with finds, their orbs and the footnote over it, a second ran the panel off a 648 px window.
 	if bool(_earned["full"]):
-		var capped := UITheme.label("A hero can hold a camp for %d hours before rest is needed."
-				% int(float(_camp.get(Camp.MOST, Camp.MAX_SECONDS)) / 3600.0), Palette.TEXT_SOFT, true)
+		var capped := UITheme.label("A hero can hold a camp for %s."
+				% Camp.spell_time(float(_earned["seconds"])), Palette.TEXT_SOFT, true)
 		capped.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		capped.custom_minimum_size.x = WIDTH
 		rows.add_child(capped)
@@ -102,6 +123,10 @@ func _layout() -> void:
 	var size := Vector2(get_viewport().get_visible_rect().size)
 	for sprite in _backdrop.get_children():
 		CombatScene.fit_layer(sprite, size, BACKDROP_BLEED)
+	# A panel taller than the window gives up rows of its finds, which then scroll (`FightHud._fit_window`).
+	var over := _panel.get_combined_minimum_size().y - (size.y / _ui_scale - 2.0 * GAP)
+	if over > 0.0 and _drops != null:
+		_drops.fit_rows(over)
 	_panel.size = _panel.get_combined_minimum_size()
 	_panel.position = (size - _panel.size * _ui_scale) / 2.0
 

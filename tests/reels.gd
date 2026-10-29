@@ -535,7 +535,8 @@ func _reel_camp() -> void:
 	var fight := Encounter.farm(CELL, "grass")
 	_arm_bag(fight)
 	var now := Time.get_unix_time_from_system()
-	var camp := Camp.make(CELL, TileNames.generate(CELL, "grass", MAP_SEED), fight, now - 8.0 * 3600.0)
+	# Eight hours of camp: the hero's with seven walls down.
+	var camp := Camp.make(CELL, TileNames.generate(CELL, "grass", MAP_SEED), fight, now - 8.0 * 3600.0, 8.0)
 	var earned := Camp.earned(camp, now)
 	inventory.gold += float(earned[Camp.GOLD])
 	# The hours pay at least a level, whatever the sample made of them: the level-up is the shot.

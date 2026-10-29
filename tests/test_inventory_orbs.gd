@@ -88,14 +88,24 @@ func _test_wall_unlocks() -> bool:
 		branches.append(WallUnlocks.root_branches(walls))
 	_check(branches == [1, 1, 1, 2, 2, 3, 3, 3, 4, 5, 6],
 			"the root's branches: one, one more at the third and fifth walls and a wall from the eighth (%s)" % [branches])
+	var hours := []
+	for walls in 4:
+		hours.append(WallUnlocks.camp_hours(walls))
+	_check(hours == [1, 2, 3, 4], "a camp holds an hour, and an hour more a wall (%s)" % [hours])
+	_check(player.capacity() == Inventory.CAPACITY + 3 * WallUnlocks.BAG_SLOTS_A_WALL
+			and player.transcended().capacity() == player.capacity()
+			and Inventory.new().capacity() == Inventory.CAPACITY and player.stash().capacity() == Inventory.CAPACITY,
+			"the bag holds a wall's squares more a wall ever broken, the heirlooms' stash none (%d)" % player.capacity())
+	var hour := "+1 camp hour"
+	var slots := "+%d bag slots" % WallUnlocks.BAG_SLOTS_A_WALL
 	var named := func(wall: int) -> Array:
 		return WallUnlocks.of_wall(wall).map(func(unlock: Dictionary) -> String: return unlock["name"])
-	_check(named.call(0).is_empty() and named.call(1) == ["Orb of Alchemy", "Orb of Divinity"]
-			and named.call(2) == ["Orb of Chaos", "Orb of Exaltation"] and named.call(3) == ["Gollux", "Runes",
-					"+1 skill branch"]
-			and named.call(4) == ["Distant charting"] and named.call(5) == ["+1 skill branch"]
-			and named.call(6) == ["Item filter"] and named.call(7) == ["Abilities"]
-			and named.call(9) == ["+1 skill branch"],
+	_check(named.call(0).is_empty() and named.call(1) == ["Orb of Alchemy", "Orb of Divinity", hour, slots]
+			and named.call(2) == ["Orb of Chaos", "Orb of Exaltation", hour, slots]
+			and named.call(3) == ["Gollux", "Runes", "+1 skill branch", hour, slots]
+			and named.call(4) == ["Distant charting", hour, slots] and named.call(5) == ["+1 skill branch", hour, slots]
+			and named.call(6) == ["Item filter", hour, slots] and named.call(7) == ["Abilities", hour, slots]
+			and named.call(9) == ["+1 skill branch", hour, slots],
 			"each wall's panel names what it opens (%s, %s)" % [named.call(3), named.call(9)])
 	for wall in range(1, 10):
 		for unlock: Dictionary in WallUnlocks.of_wall(wall):

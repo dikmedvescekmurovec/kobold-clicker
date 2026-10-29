@@ -57,12 +57,18 @@ func _shoot_camp() -> void:
 	var fight := Encounter.farm(CELL, ENVIRONMENT)
 	fight.roster_rng.seed = WORLD_SEED
 	fight.arm({"damage": 12.0, "attack_speed": 1.4})
+	# Three hours of an eight-hour camp, with what a few of its bodies dropped and one find left behind.
 	var camp := Camp.make(CELL, TileNames.generate(CELL, ENVIRONMENT, MAP_SEED), fight,
-			Time.get_unix_time_from_system() - 3.0 * 3600.0)
+			Time.get_unix_time_from_system() - 3.0 * 3600.0, 8.0)
+	fight.always_drop = true
+	fight.always_orb = true
+	fight.loot_rng.seed = WORLD_SEED
+	fight.orb_rng.seed = WORLD_SEED
+	var found := Camp.finds(fight, 6)
 	var scene := CampScene.new()
 	main.add_child(scene)
 	scene.begin(camp, Camp.earned(camp, Time.get_unix_time_from_system()), ENVIRONMENT, "plain",
-			main.ui_scale)
+			main.ui_scale, found[Camp.ITEMS], found[Camp.ORBS], 1)
 	await _save(scene, "combat_camp.png")
 	scene.queue_free()
 	await process_frame
