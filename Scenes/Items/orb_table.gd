@@ -65,6 +65,8 @@ const FIRST_ORB := "Orb of Transmutation"
 ## The one promised next (`Encounter.PROMISED`'s `AUGMENT`, `Inventory.FIRST_AUGMENT`). After the
 ## first, since a common takes no modifier and the uncommon the first makes has room for one.
 const SECOND_ORB := "Orb of Augmentation"
+## The line an Augmentation always puts on the Broken Sword (`apply`), and in no pool (`ModifierTable.DORMANT`).
+const SWORD_SWINGS := "added_attack_speed"
 
 ## How often a body carries an orb, by its tier (`chance_for`).
 const TIER_CHANCE := {
@@ -168,6 +170,10 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator) -> bool:
 		"Orb of Transmutation", "Orb of Alchemy", "Orb of Exaltation":
 			_reroll_at(item, RARITY_OF[orb], rng)
 		"Orb of Augmentation":
+			# The Broken Sword's is a sure thing too (the user's, 2026-10-29): the swing it never had.
+			if item.type == LootTable.FIRST_DROP and not item.mods.any(swings):
+				item.mods.append({"id": SWORD_SWINGS, "value": 1})
+				return true
 			var extra := item.extra_mod(item.mods, rng)
 			if extra.is_empty():
 				return false
@@ -177,6 +183,10 @@ static func apply(orb: String, item: Item, rng: RandomNumberGenerator) -> bool:
 		"Orb of Chaos":
 			reroll_tiers(item, rng)
 	return true
+
+
+static func swings(mod: Dictionary) -> bool:
+	return mod.get("id") == SWORD_SWINGS
 
 
 ## Divinity's act: every modifier's number again in its own tier's band (`Item.tier_of`), the ids and

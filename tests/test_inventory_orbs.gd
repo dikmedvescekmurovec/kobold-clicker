@@ -263,6 +263,17 @@ func _test_orb_verbs() -> bool:
 		_check(first.rarity == ItemRarity.Rarity.UNCOMMON and first.mods.size() == 1
 				and first.mods[0] == {"id": "added_damage", "value": 1},
 				"a Broken Sword's first transmutation is +1 Damage alone, got %s" % [first.mods])
+		# And its Augmentation the swing it never had, a whole one a second (the user's, 2026-10-29).
+		_check(OrbTable.apply("Orb of Augmentation", first, sure_rng)
+				and first.mods.back() == {"id": OrbTable.SWORD_SWINGS, "value": 1}
+				and first.effective_stats().get("attack_speed", 0.0) == 1.0,
+				"a Broken Sword's Augmentation is +1 Attack Speed, got %s" % [first.mods])
+	var swung := Item.rolled(LootTable.FIRST_DROP, ItemRarity.Rarity.RARE, sure_rng)
+	swung.mods = [{"id": OrbTable.SWORD_SWINGS, "value": 1}]
+	_check(OrbTable.apply("Orb of Augmentation", swung, sure_rng) and swung.mods.size() == 2
+			and not OrbTable.swings(swung.mods[1]), "one that swings already takes an ordinary line")
+	_check(OrbTable.SWORD_SWINGS not in ModifierTable.pool_for(LootTable.FIRST_DROP)
+			and OrbTable.SWORD_SWINGS not in ModifierTable.pool_for("Wooden Sword"), "and no roll deals the swing")
 
 	# --- Alchemy: straight to rare from below, a reroll at rare, refused above ---
 	var climbing := Item.rolled("Leather Boots", ItemRarity.Rarity.COMMON, rng, 2)
@@ -1023,6 +1034,23 @@ func _test_first_steps() -> bool:
 	# The tip heard and no step owed, as in a save from before there were steps: nothing is forced.
 	main.inventory.add_orb(OrbTable.FIRST_ORB)
 	_check(lit.call() == null, "a tip heard with no step owed shades nothing")
+
+	# The first Augmentation to drop walks the player through again, on the Broken Sword before the piece
+	# worn; spent, the hero speaks (the user's, 2026-10-29).
+	var broken := Item.rolled(LootTable.FIRST_DROP, ItemRarity.Rarity.UNCOMMON, RandomNumberGenerator.new())
+	broken.mods = [{"id": "added_damage", "value": 1}]
+	main.inventory.add(broken)
+	main._on_orb_gained(OrbTable.SECOND_ORB)
+	_check(main.AUGMENT_STEP in main.inventory.tips and lit.call() == main.bag_page.tray_square(OrbTable.SECOND_ORB),
+			"the first Augmentation: its orb, though another lies first in the tray")
+	main.bag_page._on_orb_pressed(OrbTable.SECOND_ORB)
+	_check(lit.call() == main.bag_page.square_of(broken), "then the Broken Sword")
+	main.bag_page._craft(OrbTable.SECOND_ORB, broken)
+	_check(lit.call() == null and main.AUGMENT_STEP not in main.inventory.tips, "and spent, the step is taken")
+	_check(main._tip_panel is DialogueBox and "augmented" in main.inventory.tips, "and the hero speaks")
+	main._on_tip_closed()
+	main._on_orb_gained(OrbTable.SECOND_ORB)
+	_check(main.AUGMENT_STEP not in main.inventory.tips, "a second Augmentation owes no step")
 	main.queue_free()
 	_clear_save()
 	return true

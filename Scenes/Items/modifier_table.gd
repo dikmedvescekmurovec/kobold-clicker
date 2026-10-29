@@ -30,6 +30,9 @@ const MODS := {
 	"increased_crit": {"kind": Kind.PERCENT, "stat": "crit_chance", "range": [10, 30], "weight": 10},
 	"added_crit": {"kind": Kind.FLAT, "stat": "crit_chance", "range": [1, 4], "weight": 10},
 	"increased_attack_speed": {"kind": Kind.PERCENT, "stat": "attack_speed", "range": [5, 12], "weight": 10},
+	# A whole swing a second at every level: only the Broken Sword's Augmentation puts it on (`DORMANT`).
+	"added_attack_speed": {"kind": Kind.FLAT, "stat": "attack_speed", "range": [1, 1], "per_tier": [0, 0],
+			"weight": 10},
 	"increased_armor": {"kind": Kind.PERCENT, "stat": "armor", "range": [8, 20], "weight": 10},
 	"added_armor": {"kind": Kind.FLAT, "stat": "armor", "range": [2, 6], "weight": 10},
 	"increased_block": {"kind": Kind.PERCENT, "stat": "block", "range": [10, 25], "weight": 10},
@@ -135,8 +138,9 @@ const RENAMED := {
 }
 
 ## Modifiers no item can roll on purpose: `test_inventory` tells one from an unreachable modifier by
-## this list. Empty today, and kept for the next line written ahead of its piece.
-const DORMANT: Array[String] = []
+## this list. `added_attack_speed` is put on by hand (`OrbTable.apply`, the user's, 2026-10-29): in a
+## pool it would be a whole swing a second on every weapon.
+const DORMANT: Array[String] = ["added_attack_speed"]
 
 ## Modifiers no pool holds because only a unique's row may name them; the same test reads it. Empty
 ## today, and kept (CLAUDE.md).
@@ -150,6 +154,8 @@ static func pool_for(item_type: String, tier := SkillTree.MOST_TIER) -> PackedSt
 		return SkillTree.lines_for(item_type, tier)
 	var pool := PackedStringArray()
 	for id: String in MODS:
+		if id in DORMANT:
+			continue
 		var mod: Dictionary = MODS[id]
 		var fits := false
 		match mod["kind"]:

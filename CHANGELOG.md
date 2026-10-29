@@ -6,6 +6,12 @@ a player has not seen yet once, together, newest first (`main_scene.gd` `_show_c
 written for players. A section may hold a two-column table instead (`| left | right |`, a header row, then
 `|---|---|`): the game draws its rows as its own tables, the left column wrapping and the right kept short.
 
+## v0.7.1 (2026-10-29)
+
+### First steps
+- Your first Orb of Augmentation shows you what to do with it, just like your first orb did.
+- Augment the Broken Sword and it gets +1 Attack Speed. It finally swings on its own.
+
 ## v0.7.0 (2026-10-29)
 
 ### Story

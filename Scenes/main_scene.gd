@@ -101,6 +101,9 @@ const TIPS := [
 	["first_orb", HERO, [
 		"It's warm, and it's glowing. My gear would look good glowing.",
 	], "player"],
+	["augmented", HERO, [
+		"Dang yo",
+	], "player"],
 	["first_stone", HERO, [
 		"Can't wear it. Can't eat it. I checked both. Maybe I can learn from it.",
 	], "player"],
@@ -169,6 +172,9 @@ const SPOTLIGHTS := {
 	"first_orb": "step_orb",
 	"level_up": "step_point",
 }
+## The one step with no tip in front of it (the user's, 2026-10-29): owed as the first Augmentation drops
+## (`_on_orb_gained`), walked as the orb's is, and answered by the `augmented` tip once it is spent.
+const AUGMENT_STEP := "step_augment"
 ## The orb's step written out under a finger, whose taps say nothing of themselves (the user's ask,
 ## 2026-10-29): `_spotlight` puts it over the shade with the line the player is on in ink.
 const ORB_TAPS := [
@@ -942,10 +948,15 @@ func _build_pages(layer: CanvasLayer) -> void:
 		page.crafted.connect(_item_card.shine)
 		page.held_changed.connect(func(orb: String) -> void: _item_card.held = orb)
 	# The bag saved the orb's work before saying so, so striking off the step is a write of its own.
-	bag_page.crafted.connect(func(_orb: String) -> void:
-		if inventory.tips.has("step_orb"):
-			inventory.tips.erase("step_orb")
-			_save_inventory())
+	bag_page.crafted.connect(func(orb: String) -> void:
+		var taken := ["step_orb"] + ([AUGMENT_STEP] if orb == OrbTable.SECOND_ORB else [])
+		if taken.any(func(step: String) -> bool: return step in inventory.tips):
+			for step: String in taken:
+				inventory.tips.erase(step)
+			_save_inventory()
+		# The sword's first swing has the hero speak (`augmented`).
+		if orb == OrbTable.SECOND_ORB:
+			_check_tips())
 	# A skill point lights the card as an orb does, in its node's colour.
 	skills_page.learned.connect(_item_card.flash)
 	# A rune in the bag's hand goes on a tile: the map is aimed at while one is held (`_rune_on`).
@@ -1711,6 +1722,9 @@ func _on_gold_gained(amount: float) -> void:
 
 
 func _on_orb_gained(orb: String) -> void:
+	# Before the ledger notes the first, and written with it.
+	if orb == OrbTable.SECOND_ORB and Inventory.FIRST_AUGMENT not in inventory.tips:
+		inventory.tips.append(AUGMENT_STEP)
 	ledger.add_orb(orb)
 	bag_page.refresh_orbs()
 
@@ -1994,6 +2008,10 @@ func _tip_due(id: String) -> bool:
 			return inventory.total() > 0
 		"first_orb":
 			return inventory.total_orbs() > 0
+		"augmented":
+			# The sword's swing, which only an Augmentation puts on it, so no older save hears it.
+			return (inventory.equipment.worn.values() + inventory.items).any(func(item: Item) -> bool:
+				return item.type == LootTable.FIRST_DROP and item.mods.any(OrbTable.swings))
 		"first_stone":
 			return inventory.items.any(func(item: Item) -> bool: return item.is_stone())
 		"level_up":
@@ -2156,7 +2174,7 @@ func _spotlight() -> void:
 	var lit_step := ""
 	if (_tip_panel == null and _tip_queue.is_empty() and _combat == null and _camp == null
 			and _transcend_page == null and not town_page.visible and not _popup_up()):
-		for step: String in SPOTLIGHTS.values():
+		for step: String in SPOTLIGHTS.values() + [AUGMENT_STEP]:
 			if step not in inventory.tips:
 				continue
 			if _step_taken(step):
@@ -2182,7 +2200,7 @@ func _spotlight() -> void:
 	else:
 		_spot.target = lit
 	if _spot != null:
-		var orb_taps := lit_step == "step_orb" and Cursors.touched and bag_page.visible
+		var orb_taps := lit_step in ["step_orb", AUGMENT_STEP] and Cursors.touched and bag_page.visible
 		# The orb, then the piece, then the piece again: the last tap on the piece only selected it.
 		var at := 0 if bag_page.orb_in_hand().is_empty() else 2 if Cursors.selected() is Item else 1
 		_spot.say(ORB_TAPS if orb_taps else [], at, bag_page.held_card_bottom())
@@ -2195,6 +2213,9 @@ func _step_taken(step: String) -> bool:
 			return not inventory.equipment.worn.is_empty()
 		"step_point":
 			return inventory.skills.spent() > 0
+		AUGMENT_STEP:
+			# Sold or traded up rather than spent: nothing left to walk the player through.
+			return inventory.orb_count(OrbTable.SECOND_ORB) == 0
 	return false
 
 
@@ -2216,17 +2237,24 @@ func _step_target(step: String) -> Control:
 			# Only the piece's square is lit, so the piece open can only be this one.
 			var equip: Button = bag_page.action("Equip")
 			return equip if equip != null else bag_page.square_of(piece)
-		"step_orb":
-			# "My gear would look good glowing": the bag, the orb, a piece it can go on, worn first.
+		"step_orb", AUGMENT_STEP:
+			# "My gear would look good glowing": the bag, the orb, a piece it can go on, worn first. The
+			# Augmentation's is that orb, on the Broken Sword first.
 			if not bag_page.visible:
 				return _bag_button
 			var orb: String = bag_page.orb_in_hand()
+			if step == AUGMENT_STEP and orb != OrbTable.SECOND_ORB:
+				return bag_page.tray_square(OrbTable.SECOND_ORB)
 			if orb.is_empty():
 				for kind: String in OrbTable.orbs():
 					if inventory.orb_count(kind) > 0:
 						return bag_page.tray_square(kind)
 				return null
-			for item: Item in inventory.equipment.worn.values() + inventory.items:
+			var pieces: Array = inventory.equipment.worn.values() + inventory.items
+			if step == AUGMENT_STEP:
+				pieces.sort_custom(func(a: Item, b: Item) -> bool:
+					return a.type == LootTable.FIRST_DROP and b.type != LootTable.FIRST_DROP)
+			for item: Item in pieces:
 				if OrbTable.can_apply(orb, item):
 					return bag_page.square_of(item)
 			return null
