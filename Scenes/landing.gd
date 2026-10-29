@@ -10,6 +10,8 @@ extends Control
 const GAME := "res://Scenes/main_scene.tscn"
 ## What "Golden door" takes, in any case.
 const PASSWORDS := ["goldenkey", "golden key"]
+## How long `_start` waits for the window to come back from under a phone's keyboard, in seconds.
+const KEYBOARD_GONE := 1.5
 ## The first form's air below it, which the chevron stands in, and the field's width, in panel pixels.
 const FOOT := 44
 const FIELD_WIDTH := 160
@@ -84,6 +86,8 @@ const CHEVRON_SECONDS := 0.6
 ## then are the settings read, the game loaded behind it and a headless run sent straight through.
 var _real := false
 var _scale := 1.0
+## The window as the password prompt opened, before a phone's keyboard took half of it (`_start`).
+var _unkeyed := Vector2.ZERO
 var _page: ScrollContainer
 var _hero: Control
 var _form: VBoxContainer
@@ -399,6 +403,7 @@ func _on_door_pressed() -> void:
 ## The game's own text box over the cover. A button presses on its release, so the click that leaves
 ## this page never lands on the map behind it.
 func _ask_password() -> void:
+	_unkeyed = get_viewport_rect().size
 	var prompt := TextPrompt.new("Password", "", "Enter", 32, _scale)
 	prompt.entered.connect(func(text: String) -> void:
 		if text.strip_edges().to_lower() in PASSWORDS:
@@ -456,5 +461,12 @@ func _say(note: Label, text: String) -> void:
 
 
 func _start() -> void:
+	# The main scene picks `ui_scale` once, from the window it starts in, and the web page's canvas shrinks
+	# to a 16:9 box while a phone's keyboard is up: started at once from the password, the game stayed at
+	# scale 1, laid out as across a monitor. A window turned round meanwhile is waited out no longer.
+	var waited := 0.0
+	while _unkeyed != Vector2.ZERO and get_viewport_rect().size != _unkeyed and waited < KEYBOARD_GONE:
+		await get_tree().process_frame
+		waited += get_process_delta_time()
 	# Waits out the rest of the load when the click comes before it is done.
 	get_tree().change_scene_to_packed(ResourceLoader.load_threaded_get(GAME))

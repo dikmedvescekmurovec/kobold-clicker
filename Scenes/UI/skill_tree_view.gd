@@ -538,6 +538,14 @@ func _press(at: Vector2) -> void:
 		slot_pressed.emit(path)
 
 
+## An empty slot's words for `TipCard`: its square takes no mouse, so the view answers for it.
+func _get_tooltip(at: Vector2) -> String:
+	var path: Variant = slot_at(at)
+	if path == null or path.is_empty() or _skills.stones.has(path):
+		return ""
+	return "You can socket an activated skill gem here"
+
+
 ## The path of the slot under `at` (this Control's own pixels), or null. The bag's too, for a stone
 ## dropped on the tree.
 func slot_at(at: Vector2) -> Variant:
