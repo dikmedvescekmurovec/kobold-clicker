@@ -1,6 +1,6 @@
 class_name Blacksmith
 extends RefCounted
-## The fortress smith: the two things he does to a piece, each as `OrbTable`'s three faces -- the rule
+## The smith: the two things he does to a piece, each as `OrbTable`'s three faces -- the rule
 ## that lights a button (`can_*`), the act, and the reason it is grey (`why_not_*`). Static and
 ## node-free; what either act costs is `TownPrices`'s.
 ##

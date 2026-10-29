@@ -11,7 +11,7 @@ Each file's functions and dials and each rule's full text: the end of `DESIGN.md
 |---|---|
 | `town_services.gd` (`TownServices`) | Which counters a settlement has, by its tier and world spot, and what each counter is called. |
 | `town_prices.gd` (`TownPrices`) | Every price, quoted in bodies: a piece sold or bought, the smith's work, an orb, a shelf's reroll, the fortuneteller's readings. |
-| `blacksmith.gd` (`Blacksmith`) | What the fortress smith does to a piece: an upgrade that may break it, and a lock on one modifier. |
+| `blacksmith.gd` (`Blacksmith`) | What the smith does to a piece: an upgrade that may break it, and a lock on one modifier. |
 | `town_state.gd` (`TownState`) | What the towns the player has walked into hold: one drawer per world spot, saved as `inventory.towns`. |
 | `bounty_board.gd` (`BountyBoard`) | The work a settlement has posted: postings, the accepted one and its kills, the hand-in, the board's tier, a cleared board's options. |
 | `fortune_teller.gd` (`FortuneTeller`) | What the fortuneteller can be asked: readings, great spells, the way out, the banishing. Also the key and reader of `inventory.fortunes`. |
@@ -29,7 +29,7 @@ Each file's functions and dials and each rule's full text: the end of `DESIGN.md
 - **Read an old posting, skip an unreadable one.** `bounties` reads an older save's one `orb` name as a list; `item_of` and `choice` drop what this build cannot read. (DESIGN.md: "bounty_board.gd")
 
 ### Counters (`TownServices`)
-- **Give every settlement the fortuneteller.** `services_for`, in `ORDER`: a village is the board and one vendor (`hash([seed, spot, "vendor"])`), a town the board and both, a fortress adds the smith. (DESIGN.md: "town_services.gd")
+- **Give every settlement the fortuneteller.** `services_for`, in `ORDER`: a village has one of `TRADES` (gear, orbs, smith; drawn by `hash([seed, spot, "vendor"])`), a town two, a fortress all three. (DESIGN.md: "town_services.gd")
 - **Name a counter only through `label(service)`.** No town (-1) offers nothing; any other tier without counters is a logged error. (DESIGN.md: "town_services.gd")
 
 ### Prices (`TownPrices`)

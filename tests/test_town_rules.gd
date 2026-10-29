@@ -22,32 +22,40 @@ func _run() -> void:
 	_report("town: rules")
 
 
-## The tiers: a board everywhere, one vendor in a village, both in a town, both and a smith in a
-## fortress -- and the same answer every time for the same spot.
+## The tiers: a board and a fortuneteller everywhere, then one of the three trades in a village, two in a
+## town and all three in a fortress -- and the same answer every time for the same spot.
 func _test_services() -> bool:
 	_check(TownServices.services_for(-1, Vector2i.ZERO, WORLD_SEED).is_empty(),
 			"a tile with no town offers nothing")
-	var vendors := {TownServices.GEAR: 0, TownServices.ORBS: 0}
+	var drawn := {TownServices.GEAR: 0, TownServices.ORBS: 0, TownServices.SMITH: 0}
+	var lacked := {TownServices.GEAR: 0, TownServices.ORBS: 0, TownServices.SMITH: 0}
 	for y in SPOTS:
 		for x in SPOTS:
 			var spot := Vector2i(x, y)
 			var village := TownServices.services_for(TownWorld.Tier.SMALL, spot, WORLD_SEED)
-			_check(TownServices.BOUNTIES in village, "%s has a board" % spot)
-			_check(village.size() == 3 and TownServices.FORTUNE in village,
-					"%s has a board, one vendor and a fortuneteller (%s)" % [spot, village])
-			var vendor := TownServices.GEAR if TownServices.GEAR in village else TownServices.ORBS
-			_check(vendor in village, "%s names its one vendor" % spot)
-			vendors[vendor] += 1
-			# Seed-stable: nothing is written down, so walking back has to find the same counter.
-			_check(village == TownServices.services_for(TownWorld.Tier.SMALL, spot, WORLD_SEED),
-					"%s offers the same village twice" % spot)
-	_check(vendors[TownServices.GEAR] > 0 and vendors[TownServices.ORBS] > 0,
-			"both vendors turn up across the world (%s)" % [vendors])
+			var town := TownServices.services_for(TownWorld.Tier.MEDIUM, spot, WORLD_SEED)
+			for place: PackedStringArray in [village, town]:
+				_check(TownServices.BOUNTIES in place and TownServices.FORTUNE in place,
+						"%s has a board and a fortuneteller (%s)" % [spot, place])
+			var village_trades: Array = TownServices.TRADES.filter(func(t: String) -> bool: return t in village)
+			var town_trades: Array = TownServices.TRADES.filter(func(t: String) -> bool: return t in town)
+			_check(village.size() == 3 and village_trades.size() == 1,
+					"%s as a village has one trade (%s)" % [spot, village])
+			_check(town.size() == 4 and town_trades.size() == 2,
+					"%s as a town has two trades (%s)" % [spot, town])
+			for trade: String in village_trades:
+				drawn[trade] += 1
+			for trade: String in TownServices.TRADES:
+				if not trade in town:
+					lacked[trade] += 1
+			# Seed-stable: nothing is written down, so walking back has to find the same counters.
+			_check(village == TownServices.services_for(TownWorld.Tier.SMALL, spot, WORLD_SEED)
+					and town == TownServices.services_for(TownWorld.Tier.MEDIUM, spot, WORLD_SEED),
+					"%s offers the same counters twice" % spot)
+	for trade: String in TownServices.TRADES:
+		_check(drawn[trade] > 0 and lacked[trade] > 0,
+				"%s turns up as a village's one trade and as a town's missing one (%s, %s)" % [trade, drawn, lacked])
 
-	var town := TownServices.services_for(TownWorld.Tier.MEDIUM, Vector2i(3, 4), WORLD_SEED)
-	_check(town.size() == 4 and TownServices.GEAR in town and TownServices.ORBS in town
-			and TownServices.FORTUNE in town and not (TownServices.SMITH in town),
-			"a town has both vendors, a fortuneteller and no smith (%s)" % town)
 	var fortress := TownServices.services_for(TownWorld.Tier.FORTRESS, Vector2i(3, 4), WORLD_SEED)
 	_check(fortress.size() == 5 and TownServices.SMITH in fortress and TownServices.FORTUNE in fortress,
 			"a fortress has all five (%s)" % fortress)

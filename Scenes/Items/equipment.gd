@@ -18,15 +18,15 @@ const NAMES := {
 	Socket.BOOTS: "boots",
 }
 
-## What the screen says. Both rings are "Ring": which hand one is on never matters.
+## What the screen says. The rings are named by hand only so Equip can say which finger it fills.
 const LABELS := {
 	Socket.HELMET: "Helmet",
 	Socket.AMULET: "Amulet",
 	Socket.WEAPON: "Weapon",
 	Socket.OFFHAND: "Offhand",
 	Socket.BODY: "Body",
-	Socket.RING_LEFT: "Ring",
-	Socket.RING_RIGHT: "Ring",
+	Socket.RING_LEFT: "Left ring",
+	Socket.RING_RIGHT: "Right ring",
 	Socket.BOOTS: "Boots",
 }
 

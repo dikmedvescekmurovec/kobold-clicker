@@ -28,23 +28,28 @@ const ORDER := [BOUNTIES, GEAR, ORBS, SMITH, FORTUNE]
 static var show_all := false
 
 
+## The counters a settlement draws from by its tier: a village has one of them, a town two, a fortress all three.
+const TRADES := [GEAR, ORBS, SMITH]
+
+
 ## Every service a settlement of `tier` (a `TownWorld.Tier`) at `spot` offers; -1 (no town) has none.
-## A village's one vendor is drawn from the world seed and the spot, so it is the same every time the
-## player walks back and needs nothing written down.
+## Which trade a village has, or a town lacks, is drawn from the world seed and the spot, so it is the
+## same every time the player walks back and needs nothing written down.
 static func services_for(tier: int, spot: Vector2i, world_seed: int) -> PackedStringArray:
 	if show_all and tier != -1:
 		return PackedStringArray(ORDER)
 	var offered := {BOUNTIES: true, FORTUNE: true}
+	var drawn: String = TRADES[absi(hash([world_seed, spot, "vendor"])) % TRADES.size()]
 	match tier:
 		TownWorld.Tier.SMALL:
-			offered[GEAR if absi(hash([world_seed, spot, "vendor"])) % 2 == 0 else ORBS] = true
+			offered[drawn] = true
 		TownWorld.Tier.MEDIUM:
-			offered[GEAR] = true
-			offered[ORBS] = true
+			for trade: String in TRADES:
+				if trade != drawn:
+					offered[trade] = true
 		TownWorld.Tier.FORTRESS:
-			offered[GEAR] = true
-			offered[ORBS] = true
-			offered[SMITH] = true
+			for trade: String in TRADES:
+				offered[trade] = true
 		-1:
 			return PackedStringArray()
 		_:

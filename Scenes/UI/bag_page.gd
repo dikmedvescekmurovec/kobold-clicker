@@ -25,9 +25,10 @@ const AUTO_ON_ICON := "res://Assets/UI/ui_icon_auto_green.png"
 const CLEAR_ICON := "res://Assets/UI/ui_icon_trash_brown.png"
 const SELL_ICON := "res://Assets/UI/ui_icon_coins_brown.png"
 const COUNT_ICON := "res://Assets/UI/ui_icon_chest_brown.png"
-const SWAP_ICON := "res://Assets/UI/ui_icon_swap.png"
 const HIDE_ICON := "res://Assets/UI/ui_icon_caret_left.png"
 const SHOW_ICON := "res://Assets/UI/ui_icon_caret_right.png"
+## The meta on the Equip button of `sockets_for(item)`'s first socket, which Shift-click presses.
+const EMPTIEST := "emptiest"
 ## Filter tab -> [mark, tooltip], in tab order: "" shows everything, the rest are `LootTable.slot_of`
 ## values, the stones' last (the user's, 2026-10-09). Nine tabs `FILTER_TAB` wide and `FILTER_GAP`
 ## apart fit `WIDTH`.
@@ -171,9 +172,6 @@ var _selected := -1
 var _sorted_as := {}
 ## The open worn piece's `Equipment.Socket`, or -1.
 var _worn_selected := -1
-## Which of `sockets_for(item)` Equip fills: moved by a ring's Swap, back to 0 (the emptiest) at every
-## new selection.
-var _socket_pick := 0
 ## The doll put away, leaving `_show_button` where it stood. The session's, never saved.
 var _doll_hidden := false
 var _show_button: Button
@@ -1054,7 +1052,13 @@ func _bag_keys() -> Dictionary:
 ## with the reason on it.
 func _press_action(shift: bool) -> void:
 	var verbs := ["Equip", "Unequip"] if shift else ["Sell", "Discard"]
-	for button: Node in _action_box.get_children():
+	var buttons := _action_box.get_children()
+	# A ring's Shift-click goes on the emptiest finger, whichever of its two buttons that is.
+	for button: Node in buttons:
+		if button.has_meta(EMPTIEST):
+			buttons.push_front(button)
+			break
+	for button: Node in buttons:
 		if button is Button and not (button as Button).disabled \
 				and verbs.any(func(verb: String) -> bool: return (button as Button).text.begins_with(verb)):
 			(button as Button).pressed.emit()
@@ -1063,7 +1067,6 @@ func _press_action(shift: bool) -> void:
 
 ## -1 shuts whatever is open.
 func _select_item(index: int) -> void:
-	_socket_pick = 0
 	_select(index, -1)
 
 
@@ -1081,7 +1084,7 @@ func _select(index: int, socket: int) -> void:
 	selection_changed.emit(_open_piece())
 
 
-## A bag item's buttons, stacked: Equip (and a ring's Swap), Sell or Discard, Never sell. No Back: the
+## A bag item's buttons, stacked: Equip (a ring's two), Sell or Discard, Never sell. No Back: the
 ## square pressed again, or bare panel, is the way out.
 func _show_item(index: int) -> void:
 	if _buttonless():
@@ -1120,32 +1123,30 @@ func _show_item(index: int) -> void:
 		_add_action(lock)
 
 
-## Equip, into the socket `_socket_pick` names of those the piece fits, and beside it a ring's Swap.
+## Equip, one a socket the piece fits: a ring gets Equip left over Equip right, always in that order
+## (the user's pick, 2026-10-29, over a Swap that turned one Equip between fingers).
 func _add_equip(item: Item) -> void:
 	var sockets := inventory.equipment.sockets_for(item)
-	if sockets.is_empty():
-		return
-	var socket: Equipment.Socket = sockets[_socket_pick % sockets.size()]
-	# The tooltip is the only place the player is told what the press takes off before pressing: a
-	# two-hander hands back the offhand as well.
-	var coming_off := PackedStringArray()
-	for piece: Item in inventory.equipment.displaced_by(socket, item):
-		coming_off.append(piece.display_name())
-	# Greyed, with the reason, rather than destroying a piece to make room for what comes off.
-	var refusal := inventory.why_not_equip(item, socket)
-	var equip := UITheme.button("Equip", "LightButton", refusal if not refusal.is_empty()
-			else "Wear this in the %s slot%s" % [Equipment.LABELS[socket].to_lower(),
-				"" if coming_off.is_empty() else ", putting %s back in the bag" % ", ".join(coming_off)])
-	equip.disabled = not refusal.is_empty()
-	equip.pressed.connect(_on_equip_pressed.bind(item, socket))
-	_add_action(equip)
-	if sockets.size() > 1:
-		var swap := UITheme.button("", "BrownIconButton", "Equip over the other ring instead")
-		swap.icon = load(SWAP_ICON)
-		swap.pressed.connect(func() -> void:
-			_socket_pick += 1
-			refresh())
-		_action_box.add_child(swap)
+	var in_order := sockets.duplicate()
+	in_order.sort()
+	for socket: Equipment.Socket in in_order:
+		# The tooltip is the only place the player is told what the press takes off before pressing: a
+		# two-hander hands back the offhand as well.
+		var coming_off := PackedStringArray()
+		for piece: Item in inventory.equipment.displaced_by(socket, item):
+			coming_off.append(piece.display_name())
+		# Greyed, with the reason, rather than destroying a piece to make room for what comes off.
+		var refusal := inventory.why_not_equip(item, socket)
+		var label: String = Equipment.LABELS[socket]
+		var face := "Equip" if sockets.size() == 1 else "Equip " + label.get_slice(" ", 0).to_lower()
+		var equip := UITheme.button(face, "LightButton", refusal if not refusal.is_empty()
+				else "Wear this in the %s slot%s" % [label.to_lower(),
+					"" if coming_off.is_empty() else ", putting %s back in the bag" % ", ".join(coming_off)])
+		equip.disabled = not refusal.is_empty()
+		equip.pressed.connect(_on_equip_pressed.bind(item, socket))
+		if socket == sockets[0]:
+			equip.set_meta(EMPTIEST, true)
+		_add_action(equip)
 
 
 func _add_action(button: Button) -> void:

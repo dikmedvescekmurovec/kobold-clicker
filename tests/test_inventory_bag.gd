@@ -1316,7 +1316,7 @@ func _test_comparing() -> bool:
 		_check(not (LootTable.stat_delta(stat, change[stat]) in block),
 				"and the page says nothing about what %s would do: %s" % [stat, block])
 
-	# Two rings worn and a third selected: Swap beside Equip turns it to the other finger.
+	# Two rings worn and a third selected: Equip left over Equip right, each onto its own finger.
 	var rings: Array[Item] = []
 	for level in [2, 3, 4]:
 		var ring := Item.new()
@@ -1329,24 +1329,28 @@ func _test_comparing() -> bool:
 	main.inventory.equip(rings[0], Equipment.Socket.RING_LEFT)
 	main.inventory.equip(rings[1], Equipment.Socket.RING_RIGHT)
 	main.bag_page._select_item(main.inventory.items.find(rings[2]))
-	_check(main.bag_page._socket_pick == 0, "a ring goes on the left finger first")
-	var swap := _by_tooltip(main.bag_page._actions, "Equip over the other ring")
-	_check(swap != null, "with a Swap beside Equip")
-	if swap != null:
-		swap.pressed.emit()
-	_check(main.bag_page._socket_pick == 1, "which turns Equip to the right one")
-	_check(_by_tooltip(main.bag_page._actions, "Equip over the other ring") != null,
-			"and is still there to turn it back")
+	var faces: Array = main.bag_page._action_box.get_children().map(func(button: Node) -> String:
+			return (button as Button).text)
+	_check(faces.slice(0, 2) == ["Equip left", "Equip right"] and not faces.has("Equip"),
+			"a ring has Equip left over Equip right: %s" % [faces])
+	var right: Button = main.bag_page.action("Equip right")
+	_check(right != null and rings[1].display_name() in right.tooltip_text,
+			"each naming the ring it takes off")
 	main.bag_page._select_item(main.inventory.items.find(strong))
-	_check(_by_tooltip(main.bag_page._actions, "Equip over the other ring") == null,
-			"a sword has one socket and no Swap")
+	_check(main.bag_page.action("Equip") != null and main.bag_page.action("Equip left") == null,
+			"a sword has the one Equip")
 	main.bag_page._select_item(main.inventory.items.find(rings[2]))
-	_check(main.bag_page._socket_pick == 0, "and a new selection starts on the emptiest finger again")
-	_by_tooltip(main.bag_page._actions, "Equip over the other ring").pressed.emit()
-	_deep_button(main.bag_page._actions, "Equip").pressed.emit()
+	main.bag_page.action("Equip right").pressed.emit()
 	_check(main.inventory.equipment.item_at(Equipment.Socket.RING_RIGHT) == rings[2]
 			and main.inventory.equipment.item_at(Equipment.Socket.RING_LEFT) == rings[0],
-			"and Equip replaces the ring Swap turned to")
+			"and Equip right replaces the right ring")
+	# With the right finger bare, Shift-click takes it, though Equip left stands first.
+	main.inventory.unequip(Equipment.Socket.RING_RIGHT)
+	main.bag_page._select_item(main.inventory.items.find(rings[1]))
+	main.bag_page._press_action(true)
+	_check(main.inventory.equipment.item_at(Equipment.Socket.RING_RIGHT) == rings[1]
+			and main.inventory.equipment.item_at(Equipment.Socket.RING_LEFT) == rings[0],
+			"Shift-click puts a ring on the emptiest finger")
 
 	main.bag_page._select_item(-1)
 	await process_frame

@@ -12,6 +12,12 @@ written for players. A section may hold a two-column table instead (`| left | ri
 - Your first Orb of Augmentation shows you what to do with it, just like your first orb did.
 - Augment the Broken Sword and it gets +1 Attack Speed. It finally swings on its own.
 
+### Towns
+- The blacksmith gets around now. A village has one of the gear merchant, the orb vendor and the smith, a town two of them, a fortress all three.
+
+### Bag
+- Rings get Equip left and Equip right, so you always know which finger you're filling. Shift-click still takes the emptier one.
+
 ## v0.7.0 (2026-10-29)
 
 ### Story

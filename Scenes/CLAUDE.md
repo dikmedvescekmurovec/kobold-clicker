@@ -154,7 +154,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Stand buttons at the foot of every right-hand column,** the tile panel's shown only while they can be pressed (`TilePanel.update_buttons`, which re-places the column through `TilePanel.place`). (DESIGN.md: "The tile panel")
 - **Hand every page its room only in `_layout_ui`** (`area`, `UITheme.dock`); held upright (`UITheme.narrow`), `_show_corner` and a town's tab lay everything out again. (DESIGN.md: "Window shape")
 - **Keep the doll on a selection:** a selected bag item draws nothing of what it would replace, the worn piece is the hover card's second card under Alt (`ItemCard.worn_for`), and no block shows deltas. (DESIGN.md: "Keep the doll on a selection")
-- **Equip onto the emptiest socket the piece fits** (`BagPage._socket_pick`; a ring's Swap turns it to the other finger). Hide folds the doll for the session only (`_doll_hidden`, not saved). (DESIGN.md: "Keep the doll on a selection")
+- **Give a ring Equip left over Equip right** (the user's, 2026-10-29); Shift-click takes the emptiest finger (`BagPage.EMPTIEST`). Hide folds the doll for the session only (`_doll_hidden`, not saved). (DESIGN.md: "Keep the doll on a selection")
 - **No mouse on a bag square** (`MOUSE_FILTER_IGNORE`): the `ScrollContainer` must see every press, so the clicked square is worked out from the cursor position. (DESIGN.md: "No mouse on a bag square")
 
 ### Towns and bounties

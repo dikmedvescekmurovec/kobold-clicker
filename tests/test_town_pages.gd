@@ -375,11 +375,12 @@ func _test_smithing() -> bool:
 	page._stock_rng.seed = WORLD_SEED
 	var spot := Vector2i(130, 128)
 
-	# Only a fortress has one, which is `TownServices`' rule read off the page that has to obey it.
+	# The page carries a tab for exactly the counters `TownServices` gives it.
 	for tier: int in [TownWorld.Tier.SMALL, TownWorld.Tier.MEDIUM, TownWorld.Tier.FORTRESS]:
-		page.open("Testholm", TownServices.services_for(tier, spot, WORLD_SEED), TOWN_CELL, spot, tier)
-		_check((TownServices.SMITH in page._tabs) == (tier == TownWorld.Tier.FORTRESS),
-				"a %d has a smith tab only if it is a fortress (%s)" % [tier, page._tabs])
+		var services := TownServices.services_for(tier, spot, WORLD_SEED)
+		page.open("Testholm", services, TOWN_CELL, spot, tier)
+		_check((TownServices.SMITH in page._tabs) == (TownServices.SMITH in services),
+				"a %d has a smith tab only if it has a smith (%s)" % [tier, page._tabs])
 		# The board is the one counter every settlement has, so every one of them carries its tab.
 		_check(TownServices.BOUNTIES in page._tabs, "and every one of them has a board tab")
 	page._on_tab_pressed(TownServices.SMITH)
