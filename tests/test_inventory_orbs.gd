@@ -18,6 +18,7 @@ func _run() -> void:
 	_check(await _test_crafting_from_the_bag() == true, "crafting tests ran to the end")
 	_check(await _test_a_finger_selects_first() == true, "finger crafting tests ran to the end")
 	_check(await _test_tips() == true, "tip tests ran to the end")
+	_check(await _test_first_steps() == true, "first step tests ran to the end")
 	_check(_test_unique_table() == true, "unique table tests ran to the end")
 	_check(_test_rarity_frames() == true, "rarity frame tests ran to the end")
 	_clear_save()
@@ -876,19 +877,12 @@ func _test_tips() -> bool:
 	main._on_tip_closed()
 	main._check_tips()
 	_check(main._tip_panel == null, "and none comes twice")
-	# The words read, everything but the bag is shaded, and only a press on the bag gets through.
-	var spot: Spotlight = main._spot
-	_check(spot != null and spot.target == main._bag_button, "the first find leaves only the bag lit")
-	_check(not spot._has_point(main._bag_button.get_global_rect().get_center())
-			and spot._has_point(main.get_viewport().get_visible_rect().end - Vector2.ONE),
-			"a press on the bag falls through, one anywhere else is eaten")
 
 	# The chest's red pip is for a first of its kind alone, until the bag is next up.
 	var pip: CanvasItem = main._bag_button.get_node(^"New")
 	_check(pip.visible, "a first find puts the red pip on the bag")
 	main._on_bag_pressed()
 	_check(not pip.visible, "and the bag opened puts it out")
-	_check(main._spot == null, "and the shade with it")
 	main._on_bag_pressed()
 	main.inventory.add(_piece(ItemRarity.Rarity.COMMON, 1))
 	main._mark_new()
@@ -896,7 +890,7 @@ func _test_tips() -> bool:
 	main.inventory.add_orb("Orb of Chaos")
 	main._check_tips()
 	main._on_tip_closed()
-	_check(pip.visible and main._spot == null, "the first orb puts it back, but never the shade")
+	_check(pip.visible, "the first orb puts it back")
 	main._on_bag_pressed()
 	main._on_bag_pressed()
 	main.inventory.add(_node("Strength Node", "added_damage"))
@@ -951,6 +945,69 @@ func _test_tips() -> bool:
 			"one who saw an older one sees every version since, newest first")
 	main._on_tip_closed()
 	Settings.changelog_seen = ""
+	main.queue_free()
+	_clear_save()
+	return true
+
+
+## A tip's step (`SPOTLIGHTS`): once its words are read, everything but the next thing to press is shaded,
+## a press there falls through, and the shade moves on with the step until it is taken.
+func _test_first_steps() -> bool:
+	_clear_save()
+	var main: Node = load("res://Scenes/main_scene.tscn").instantiate()
+	main.world_seed = WORLD_SEED
+	main.map_seed = 1
+	main.inventory_path = TEST_PATH
+	main.map_path = TEST_MAP_PATH
+	root.add_child(main)
+	await process_frame
+	var lit := func() -> Control:
+		main._spotlight()
+		return null if main._spot == null else main._spot.target
+	var sword := _piece(ItemRarity.Rarity.COMMON, 1)
+	main.inventory.add(sword)
+	main.inventory.level = 2
+	main._check_tips()
+	_check(lit.call() == null, "nothing shaded while the hero is still talking")
+	while main._tip_panel != null:
+		main._on_tip_closed()
+	_check(lit.call() == main._bag_button, "the first find leaves only the bag lit")
+	var spot: Spotlight = main._spot
+	_check(not spot._has_point(main._bag_button.get_global_rect().get_center())
+			and spot._has_point(main.get_viewport().get_visible_rect().end - Vector2.ONE),
+			"a press on the bag falls through, one anywhere else is eaten")
+	main._on_bag_pressed()
+	_check(lit.call() == main.bag_page.square_of(sword), "then the piece")
+	main.bag_page._select_item(main.inventory.items.find(sword))
+	# The buttons' card is placed deferred (`BagPage._place_actions`).
+	await process_frame
+	var equip: Button = main.bag_page.action("Equip")
+	_check(equip != null and lit.call() == equip, "then its Equip")
+	equip.pressed.emit()
+	_check(lit.call() == main._skills_button and "step_equip" not in main.inventory.tips
+			and main._spot == spot, "worn, the shade moves on to the level's point")
+	main._on_skills_pressed()
+	_check(lit.call() == main.skills_page.square(""), "then the tree's root")
+	main.skills_page._on_stone_pressed("")
+	_check(lit.call() == null and "step_point" not in main.inventory.tips, "and the point spent, the shade goes")
+
+	main._on_skills_pressed()
+	main.inventory.add_orb(OrbTable.FIRST_ORB)
+	main._check_tips()
+	main._on_tip_closed()
+	_check(lit.call() == main._bag_button, "the first orb: the bag")
+	main._on_bag_pressed()
+	_check(lit.call() == main.bag_page.tray_square(OrbTable.FIRST_ORB), "then the orb")
+	main.bag_page._on_orb_pressed(OrbTable.FIRST_ORB)
+	_check(lit.call() == main.bag_page.square_of(sword) and sword in main.inventory.equipment.worn.values(),
+			"then the piece worn")
+	main.bag_page._craft(OrbTable.FIRST_ORB, sword)
+	_check(lit.call() == null and Inventory.load_from(TEST_PATH).tips.all(
+			func(id: String) -> bool: return not id.begins_with("step_")), "and the orb spent, every step is saved taken")
+
+	# The tip heard and no step owed, as in a save from before there were steps: nothing is forced.
+	main.inventory.add_orb(OrbTable.FIRST_ORB)
+	_check(lit.call() == null, "a tip heard with no step owed shades nothing")
 	main.queue_free()
 	_clear_save()
 	return true

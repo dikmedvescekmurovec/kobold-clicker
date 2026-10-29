@@ -1381,6 +1381,40 @@ func _open_piece() -> Item:
 	return null
 
 
+## Where `item` stands, its grid square or its socket on the doll, or null: what a first step lights
+## (`main_scene._step_target`), as are `action`, `tray_square` and `orb_in_hand`.
+func square_of(item: Item) -> Control:
+	for slot: Node in _squares():
+		if (slot as ItemSlot).item == item:
+			return slot
+	if _doll != null:
+		for socket: Equipment.Socket in _doll.squares:
+			if inventory.equipment.item_at(socket) == item:
+				return _doll.squares[socket]
+	return null
+
+
+## The open piece's button that reads `text`, or null.
+func action(text: String) -> Button:
+	for button: Node in _action_box.get_children():
+		if button is Button and (button as Button).text == text:
+			return button
+	return null
+
+
+## The tray's square for `orb`, or null.
+func tray_square(orb: String) -> Control:
+	for slot: Node in _orb_tray.get_children():
+		if (slot as OrbSlot).orb == orb:
+			return slot
+	return null
+
+
+## The orb in hand, or "".
+func orb_in_hand() -> String:
+	return _armed
+
+
 ## The trays redrawn: every orb lit whatever is open, since an orb is picked up, never spent on the
 ## open piece.
 func refresh_orbs() -> void:

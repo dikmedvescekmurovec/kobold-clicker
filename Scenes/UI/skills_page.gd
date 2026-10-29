@@ -81,6 +81,11 @@ func open() -> void:
 		layout()
 
 
+## The tree's square at `path` ("" the root), or null: what a first step lights.
+func square(path: String) -> Control:
+	return _view.squares.get(path)
+
+
 ## Docked like every left page, the bag's width at the least; the tree scaled into what that leaves it,
 ## a whole window pixel at a time, and at the player's zoom scrolled in that box.
 func layout() -> void:

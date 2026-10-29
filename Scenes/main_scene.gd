@@ -146,12 +146,15 @@ const TIPS := [
 		"I'll tell them you're ready for the nasty jobs. Nasty pays better.",
 	], "blacksmith"],
 ]
-## The first steps a player is made to take (the user's ask, 2026-10-29), each `[tip, done, button]`:
-## once the tip has been spoken and until `done` is in `inventory.tips`, the window is shaded but for the
-## button (`_spotlight`). Pressing the button must write `done`, or the shade never lifts.
-const SPOTLIGHTS := [
-	["first_item", "opened_bag", "_bag_button"],
-]
+## The first steps a player is made to take (the user's asks, 2026-10-29), a tip's id -> its step's,
+## first owed first. A step is put in `inventory.tips` as its tip is queued, so a save that saw the tip
+## before there were steps owes none, and struck off once taken (`_step_taken`); while it is owed,
+## everything but the next thing to press for it is shaded (`_spotlight`, `_step_target`).
+const SPOTLIGHTS := {
+	"first_item": "step_equip",
+	"first_orb": "step_orb",
+	"level_up": "step_point",
+}
 
 var towns: TownWorld
 var view: MapBuilder
@@ -496,14 +499,11 @@ func _on_cloud_asked() -> void:
 	_cloud_question.answered.connect(func(keep_cloud: bool) -> void:
 		_cloud_question.queue_free()
 		_cloud_question = null
-		_spotlight()
 		if keep_cloud:
 			cloud.keep_cloud()
 		else:
 			cloud.keep_device())
 	_ui_layer.add_child(_cloud_question)
-	# The question stands on a lower layer than the shade, which would leave it unanswerable.
-	_spotlight()
 
 
 ## Points the badge at the chest a fortuneteller was paid to find, for as long as it stands: a chest
@@ -615,6 +615,8 @@ func _process(delta: float) -> void:
 		_cave_sense.room = _map_room()
 	if banner != null:
 		banner.tick(delta)
+	if bag_page != null:
+		_spotlight()
 
 
 ## Whether a page's question, the fortuneteller's answer or the cloud's question stands over the window.
@@ -900,6 +902,11 @@ func _build_pages(layer: CanvasLayer) -> void:
 	for page: BagPage in [bag_page, heirloom_page]:
 		page.crafted.connect(_item_card.shine)
 		page.held_changed.connect(func(orb: String) -> void: _item_card.held = orb)
+	# The bag saved the orb's work before saying so, so striking off the step is a write of its own.
+	bag_page.crafted.connect(func(_orb: String) -> void:
+		if inventory.tips.has("step_orb"):
+			inventory.tips.erase("step_orb")
+			_save_inventory())
 	# A skill point lights the card as an orb does, in its node's colour.
 	skills_page.learned.connect(_item_card.flash)
 	# A rune in the bag's hand goes on a tile: the map is aimed at while one is held (`_rune_on`).
@@ -1857,7 +1864,6 @@ func _show_corner(shown: bool) -> void:
 		_flash(_bag_button, "opened_bag")
 	_pulse(_skills_button, "skill_point", _skill_point_free())
 	_mark_new()
-	_spotlight()
 	# Held upright the row takes its height from the pages' room, so they are laid out again with it.
 	if _narrow():
 		_layout_ui()
@@ -1919,6 +1925,8 @@ func _check_tips() -> void:
 	for tip: Array in TIPS:
 		if tip[0] not in inventory.tips and _tip_due(tip[0]):
 			inventory.tips.append(tip[0])
+			if SPOTLIGHTS.has(tip[0]):
+				inventory.tips.append(SPOTLIGHTS[tip[0]])
 			_tip_queue.append(tip)
 			added = true
 	# Not mid-fight: a run writes nothing until it ends, and `bank_kills` saves the seen tip then.
@@ -2021,28 +2029,89 @@ func _on_tip_closed() -> void:
 	_show_next_tip()
 	if _tip_panel == null and _combat != null:
 		_combat.process_mode = Node.PROCESS_MODE_INHERIT
-	_spotlight()
 
 
-## Puts up or takes down the shade over all but a first step's button (`SPOTLIGHTS`), worked out from
-## state as the red pip is, and never over a tip, a pop-up, a fight, a camp or the black screen: run
-## wherever one of those or a corner button comes or goes.
+## Every frame: puts up, moves on or takes down the shade over all but the next press of the first owed
+## step (`SPOTLIGHTS`) that has one, and strikes off a step taken. Never over a tip, a pop-up, a fight,
+## a camp, a town or the black screen, so a question or a tip that comes up is never shaded.
 func _spotlight() -> void:
-	var lit: Button = null
+	var lit: Control = null
 	if (_tip_panel == null and _tip_queue.is_empty() and _combat == null and _camp == null
-			and _transcend_page == null and not _popup_up()):
-		for step: Array in SPOTLIGHTS:
-			var button: Button = get(step[2])
-			if step[0] in inventory.tips and step[1] not in inventory.tips and button.is_visible_in_tree():
-				lit = button
+			and _transcend_page == null and not town_page.visible and not _popup_up()):
+		for step: String in SPOTLIGHTS.values():
+			if step not in inventory.tips:
+				continue
+			if _step_taken(step):
+				inventory.tips.erase(step)
+				_save_inventory()
+				continue
+			lit = _step_target(step)
+			if lit != null and lit.is_visible_in_tree():
 				break
-	if _spot != null and _spot.target != lit:
-		_spot.get_parent().remove_child(_spot)
-		_spot.queue_free()
-		_spot = null
-	if lit != null and _spot == null:
+			lit = null
+	if lit == null:
+		if _spot != null:
+			_spot.get_parent().remove_child(_spot)
+			_spot.queue_free()
+			_spot = null
+	elif _spot == null:
 		_spot = Spotlight.new(lit, ui_scale)
-		_character.get_parent().add_child(_spot)
+		# Under the item card and the tooltips, which take no mouse: the lit square's card reads unshaded.
+		var top := _character.get_parent()
+		top.add_child(_spot)
+		top.move_child(_spot, _item_card.get_index())
+	else:
+		_spot.target = lit
+
+
+## Whether an owed step has been taken. The orb's is struck off by the bag's `crafted` (`_build_pages`).
+func _step_taken(step: String) -> bool:
+	match step:
+		"step_equip":
+			return not inventory.equipment.worn.is_empty()
+		"step_point":
+			return inventory.skills.spent() > 0
+	return false
+
+
+## The next thing to press for an owed step, or null while there is none.
+func _step_target(step: String) -> Control:
+	match step:
+		"step_equip":
+			# "Let's see if it fits": the bag, the piece, its Equip.
+			var piece: Item = null
+			for item: Item in inventory.items:
+				var sockets := inventory.equipment.sockets_for(item)
+				if not sockets.is_empty() and inventory.can_equip(item, sockets[0]):
+					piece = item
+					break
+			if piece == null:
+				return null
+			if not bag_page.visible:
+				return _bag_button
+			# Only the piece's square is lit, so the piece open can only be this one.
+			var equip: Button = bag_page.action("Equip")
+			return equip if equip != null else bag_page.square_of(piece)
+		"step_orb":
+			# "My gear would look good glowing": the bag, the orb, a piece it can go on, worn first.
+			if not bag_page.visible:
+				return _bag_button
+			var orb: String = bag_page.orb_in_hand()
+			if orb.is_empty():
+				for kind: String in OrbTable.orbs():
+					if inventory.orb_count(kind) > 0:
+						return bag_page.tray_square(kind)
+				return null
+			for item: Item in inventory.equipment.worn.values() + inventory.items:
+				if OrbTable.can_apply(orb, item):
+					return bag_page.square_of(item)
+			return null
+		"step_point":
+			# "I feel stronger": the skill tree, its root.
+			if inventory.skills.points(inventory.level) <= 0:
+				return null
+			return skills_page.square("") if skills_page.visible else _skills_button
+	return null
 
 
 ## Pulses a button until it has been pressed once.
