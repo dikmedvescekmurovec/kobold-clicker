@@ -813,6 +813,7 @@ func _test_a_rule_keeps_finds_off_the_screen() -> bool:
 	for i in 3:
 		await process_frame
 
+	main.inventory.tips.append(Inventory.FIRST_DEATH)
 	# Everything this tile can drop is at a level the player has finished with. A tile's ceiling is
 	# its level, so ruling out every level up to it rules out the lot.
 	var here := MapBuilder.CENTER

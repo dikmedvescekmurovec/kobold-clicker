@@ -127,7 +127,7 @@ func update_buttons() -> void:
 	var cell := _map.selected_cell
 	chart_button.visible = _view.can_chart(cell)
 	move_button.visible = _view.can_move_to(cell)
-	farm_button.visible = _view.can_farm(cell)
+	farm_button.visible = _view.can_farm(cell) and _inventory.farm_unlocked()
 	_was_encumbered = _inventory.encumbered()
 	for fight: Array in [[chart_button, CHART_TIP], [farm_button, FARM_TIP]]:
 		var button: Button = fight[0]

@@ -568,6 +568,11 @@ It leaves by its own `leave()` (the shade fades, the box pops out), not `Juice.p
 Raised only by a `TIPS` entry with a fourth element (`main_scene._show_next_tip`), so it is shown once and saved as seen like any tip Held upright the words take what the window leaves beside the portrait, and the box shrinks to them (`pop_up`); a window turned or resized under the box has it back at its foot (`_settle` on its own `resized`).
 The speaker babbles while a page comes in (`VOICE`: a syllable every `LETTERS_PER_SYLLABLE` letters, each cutting off the last -- quick succession, the user's ask -- at least one; the hero's `PLAYER_PITCH` lower).
 
+#### spotlight.gd
+A first step forced on the player (the user's ask, 2026-10-29: "a dark panel to block everything but the thing you must do"): a full-window `Control` drawing `SHADE` in four bands round its `target`, the hole grown by `RIM`, redrawn every frame so it follows a corner button gliding after a page or a turned window.
+**Only the target's own rect lets a press through** (`_has_point` false there, so the GUI hands the press to whatever is under it); the rim is shade to the mouse, or a press on it would reach the map. Every key is eaten in `_input`, before the main scene's hotkeys and Escape in `_unhandled_input`: the one way on is the press.
+It fades in over `Juice.POP_TIME`, as the dialogue's shade fades out under it, and not at `Anim.NONE`. It never takes itself down: the main scene does (`_spotlight`), from state, which is why a quit mid-step brings it back at the next start.
+
 #### orb_slot.gd
 One orb in the tray, ordinary or super, or a rune in the row over it (`SuperOrbTable.has` / `RuneTable.has` pick the icon): `SIDE` 24, `ICON` 16. Three states (never found, held but unusable = `DIM`, usable). `count_label(text)` is the corner numeral, shared with `ItemSlot`'s `+n`.
 Takes the mouse: `pressed`, `hovered`, `unhovered` Under a finger the first tap puts the card up (`_read`, forgotten on `mouse_exited`) and only the next presses -- a vendor's orb, which is the thing being bought.

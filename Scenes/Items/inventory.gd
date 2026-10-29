@@ -25,6 +25,8 @@ const FIRST_RUNE := "first_rune"
 const FIRST_POINT := "first_skill_point"
 const FIRST_AUGMENT := "had_augment"
 const FIRST_NODE := "had_node"
+## The first tile fight lost, the main scene's tip: Farm stands only from then on (the user's, 2026-10-29).
+const FIRST_DEATH := "first_death"
 
 ## The starter uniques' numbers; the Novice's Cap stops paying at level `NOVICE_UNTIL`.
 const SQUIRE_DAMAGE := 3.0
@@ -282,6 +284,11 @@ func is_full() -> bool:
 ## Over the cap: slow on the map, and no fight can be started until the bag is back down to it.
 func encumbered() -> bool:
 	return items.size() > capacity()
+
+
+## Whether Farm stands: once a tile fight has been lost, or on a save that farmed before it waited for one.
+func farm_unlocked() -> bool:
+	return FIRST_DEATH in tips or "first_farm" in tips
 
 
 ## The order the bag is read in, as indices into `items`: level, highest first, then rarity, best

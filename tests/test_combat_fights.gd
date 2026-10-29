@@ -367,6 +367,8 @@ func _test_the_map_hands_over_and_takes_back() -> bool:
 
 	var target := HexGrid.neighbor(MapBuilder.CENTER, HexGrid.Edge.E)
 	_check(main.view.can_chart(target), "the tile next door can be fought for")
+	main.map.select_cell(MapBuilder.CENTER)
+	_check(not main.tile_panel.farm_button.visible, "no Farm before the first loss")
 
 	# Losing changes nothing.
 	main.map.select_cell(target)
@@ -389,6 +391,8 @@ func _test_the_map_hands_over_and_takes_back() -> bool:
 	_check(main._combat != null and main._combat != first and main._combat.cell == target,
 			"Retry opens the same tile's fight afresh")
 	_check(not main.view.charted(target) and not main.map.visible, "with nothing charted by the loss")
+	_check("first_death" in main.inventory.tips and main.inventory.farm_unlocked(),
+			"the first loss is the hero's word about getting stronger, and Farm with it")
 	_check(main.view.player_cell == target and not main.view.walking, "and the player still on the tile")
 	# Shut mid-fight, the save has the player back where they set out from, as a loss would.
 	main._save_map()

@@ -876,12 +876,19 @@ func _test_tips() -> bool:
 	main._on_tip_closed()
 	main._check_tips()
 	_check(main._tip_panel == null, "and none comes twice")
+	# The words read, everything but the bag is shaded, and only a press on the bag gets through.
+	var spot: Spotlight = main._spot
+	_check(spot != null and spot.target == main._bag_button, "the first find leaves only the bag lit")
+	_check(not spot._has_point(main._bag_button.get_global_rect().get_center())
+			and spot._has_point(main.get_viewport().get_visible_rect().end - Vector2.ONE),
+			"a press on the bag falls through, one anywhere else is eaten")
 
 	# The chest's red pip is for a first of its kind alone, until the bag is next up.
 	var pip: CanvasItem = main._bag_button.get_node(^"New")
 	_check(pip.visible, "a first find puts the red pip on the bag")
 	main._on_bag_pressed()
 	_check(not pip.visible, "and the bag opened puts it out")
+	_check(main._spot == null, "and the shade with it")
 	main._on_bag_pressed()
 	main.inventory.add(_piece(ItemRarity.Rarity.COMMON, 1))
 	main._mark_new()
@@ -889,7 +896,7 @@ func _test_tips() -> bool:
 	main.inventory.add_orb("Orb of Chaos")
 	main._check_tips()
 	main._on_tip_closed()
-	_check(pip.visible, "the first orb puts it back")
+	_check(pip.visible and main._spot == null, "the first orb puts it back, but never the shade")
 	main._on_bag_pressed()
 	main._on_bag_pressed()
 	main.inventory.add(_node("Strength Node", "added_damage"))

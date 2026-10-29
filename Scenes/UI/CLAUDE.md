@@ -253,6 +253,7 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
 | `banner.gd` (`Banner`) | What is announced over the map and a fight: the banner (a new unique, a filled bounty, an achievement), the bounty toast and the level-up fanfare. |
 | `changelog.gd` (`Changelog`) | `CHANGELOG.md` read into versions (`versions`, `since`) and laid out as the web build's start-up page (`page`). |
 | `dialogue_box.gd` (`DialogueBox`) | Someone speaking: a box along the window's foot, words coming in beside a portrait. |
+| `spotlight.gd` (`Spotlight`) | The window shaded but for one button a first step makes the player press; every other press and key eaten. |
 | `orb_slot.gd` (`OrbSlot`) | One orb, super orb or rune as a square in its tray. |
 | `orb_card.gd` (`OrbCard`) | The floating card for the orb under the cursor. |
 | `skill_tree_view.gd` (`SkillTreeView`) | The skill tree round its root: lays it out, draws, lights and zooms it, and takes its presses. |

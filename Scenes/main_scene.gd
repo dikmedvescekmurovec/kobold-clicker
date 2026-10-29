@@ -106,6 +106,10 @@ const TIPS := [
 	["first_chart", HERO, [
 		"Right, clock's ticking. I love it when the clock's ticking.",
 	], "player"],
+	["first_death", HERO, [
+		"Ouch. Not ready for that one yet.",
+		"I need to get stronger. The ones back on my own land go down easy.",
+	], "player"],
 	["first_town", HERO, [
 		"Ohh ... a proper place. With a gate and everything.",
 		"Right. Plan. Sell the sticky stuff, keep the sharp stuff.",
@@ -142,6 +146,12 @@ const TIPS := [
 		"I'll tell them you're ready for the nasty jobs. Nasty pays better.",
 	], "blacksmith"],
 ]
+## The first steps a player is made to take (the user's ask, 2026-10-29), each `[tip, done, button]`:
+## once the tip has been spoken and until `done` is in `inventory.tips`, the window is shaded but for the
+## button (`_spotlight`). Pressing the button must write `done`, or the shade never lifts.
+const SPOTLIGHTS := [
+	["first_item", "opened_bag", "_bag_button"],
+]
 
 var towns: TownWorld
 var view: MapBuilder
@@ -174,6 +184,8 @@ var _town_cell := HexMap.NO_CELL
 ## run (Farm) rather than the tile's own (Chart).
 var _fight_target := HexMap.NO_CELL
 var _fight_farms := false
+## Whether the last fight to end was a tile fight lost: the first one is the first death's tip.
+var _tile_lost := false
 ## The settlement the player is walking to to go inside (Enter town pressed from afar), NO_CELL when they aren't.
 var _town_target := HexMap.NO_CELL
 ## The charted tile the player stepped onto the fought-for one from: a lost fight runs them back there,
@@ -242,6 +254,8 @@ var _transcend_page: TranscendPage
 ## (`_show_changelog`).
 var _tip_queue: Array = []
 var _tip_panel: Control
+## The shade over all but the button a first step is about, while one is owed (`SPOTLIGHTS`).
+var _spot: Spotlight
 ## Pulses on corner buttons: the id -> `[tween, button]`.
 var _flashes := {}
 ## What the hero's camp paid for the hours the game was shut, while its screen is up; null otherwise.
@@ -478,11 +492,14 @@ func _on_cloud_asked() -> void:
 	_cloud_question.answered.connect(func(keep_cloud: bool) -> void:
 		_cloud_question.queue_free()
 		_cloud_question = null
+		_spotlight()
 		if keep_cloud:
 			cloud.keep_cloud()
 		else:
 			cloud.keep_device())
 	_ui_layer.add_child(_cloud_question)
+	# The question stands on a lower layer than the shade, which would leave it unanswerable.
+	_spotlight()
 
 
 ## Points the badge at the chest a fortuneteller was paid to find, for as long as it stands: a chest
@@ -1026,7 +1043,7 @@ func _on_chart_pressed() -> void:
 ## a tile already taken, so nothing about the map can change.
 func _on_farm_pressed() -> void:
 	var cell := map.selected_cell
-	if not view.can_farm(cell) or inventory.encumbered():
+	if not view.can_farm(cell) or not inventory.farm_unlocked() or inventory.encumbered():
 		return
 	if view.player_cell != cell:
 		_walk_to_fight(cell, true)
@@ -1383,6 +1400,7 @@ func _on_combat_finished(won: bool, cell: Vector2i, retrying := false) -> void:
 		next = _dark_way.pop_front()
 	elif not retrying:
 		_dark_way.clear()
+	_tile_lost = not won and not ledger.farming
 	ledger.farming = false
 	# A run counts the runes on its tile down.
 	if map.selected_cell != HexMap.NO_CELL:
@@ -1835,6 +1853,7 @@ func _show_corner(shown: bool) -> void:
 		_flash(_bag_button, "opened_bag")
 	_pulse(_skills_button, "skill_point", _skill_point_free())
 	_mark_new()
+	_spotlight()
 	# Held upright the row takes its height from the pages' room, so they are laid out again with it.
 	if _narrow():
 		_layout_ui()
@@ -1862,6 +1881,8 @@ func _tip_due(id: String) -> bool:
 			return ledger.farming and _combat != null
 		"first_chart":
 			return not ledger.farming and _combat != null
+		"first_death":
+			return _tile_lost
 		"first_town":
 			return view != null and view.can_visit(view.player_cell)
 		"first_accept":
@@ -1976,6 +1997,28 @@ func _on_tip_closed() -> void:
 	_show_next_tip()
 	if _tip_panel == null and _combat != null:
 		_combat.process_mode = Node.PROCESS_MODE_INHERIT
+	_spotlight()
+
+
+## Puts up or takes down the shade over all but a first step's button (`SPOTLIGHTS`), worked out from
+## state as the red pip is, and never over a tip, a pop-up, a fight, a camp or the black screen: run
+## wherever one of those or a corner button comes or goes.
+func _spotlight() -> void:
+	var lit: Button = null
+	if (_tip_panel == null and _tip_queue.is_empty() and _combat == null and _camp == null
+			and _transcend_page == null and not _popup_up()):
+		for step: Array in SPOTLIGHTS:
+			var button: Button = get(step[2])
+			if step[0] in inventory.tips and step[1] not in inventory.tips and button.is_visible_in_tree():
+				lit = button
+				break
+	if _spot != null and _spot.target != lit:
+		_spot.get_parent().remove_child(_spot)
+		_spot.queue_free()
+		_spot = null
+	if lit != null and _spot == null:
+		_spot = Spotlight.new(lit, ui_scale)
+		_character.get_parent().add_child(_spot)
 
 
 ## Pulses a button until it has been pressed once.
