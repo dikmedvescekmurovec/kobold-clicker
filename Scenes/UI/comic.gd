@@ -5,7 +5,7 @@ extends Control
 ## pictures and where each stands are `Assets/Comic/` and its `comic.json`, written by
 ## `AI-sprites-generator/build_comic.py`. A press anywhere brings on the next panel, then the next page;
 ## past the last, `finished`. Across a window a page stands whole, as drawn; held upright
-## (`UITheme.narrow`) a page's panels go down a column as a webtoon's do, at one zoom, scrolled to the
+## (taller than wide) a page's panels go down a column as a webtoon's do, at one zoom, scrolled to the
 ## newest, and the wall stands at its full height. Skip and Escape (the main scene's) let it go whole.
 
 signal finished
@@ -116,7 +116,9 @@ func _lay_out(pop: bool) -> void:
 	var panels: Array = page["panels"]
 	_ground.color = Palette.BONE if page["paper"] else Palette.INK
 	UITheme.clear(_art)
-	var upright := UITheme.narrow(view, _ui_scale)
+	# Taller than wide, not `UITheme.narrow`: a desktop window stood on end (745x974 at ui_scale 1) is not
+	# narrow, and its page fit only at 1x, 23 px short of 2x; the column there stands at 3x.
+	var upright := view.y > view.x
 	var column := maxf(1.0, floorf(view.x / COLUMN))
 	var zoom := maxf(1.0, floorf(minf(view.x / _size.x, view.y / _size.y)))
 	var origin := ((view - _size * zoom) / 2.0).round()
