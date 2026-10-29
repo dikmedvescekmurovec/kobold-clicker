@@ -80,6 +80,9 @@ var bag_size := Inventory.CAPACITY
 ## How far down the window the top-centre column stands, in screen pixels: under the character panel on
 ## a window too narrow for the two side by side.
 var hud_top := HUD_MARGIN
+## How far down the window the loot counter may stand, in screen pixels: held upright, over the corner
+## buttons' bar (`main_scene._pages_room`).
+var hud_foot := INF
 
 var fight: Encounter
 var _ui_scale := 2.0
@@ -503,7 +506,8 @@ func _place_corners(view: Vector2) -> void:
 		plate_y = view.y * CombatScene.GROUND_UPRIGHT + PLATE_UNDER * _ui_scale
 	_enemy_panel.position = Vector2((view.x - plate.x) / 2.0, plate_y)
 	var loot := _loot_button.get_combined_minimum_size() * _ui_scale
-	_loot_button.position = Vector2(safe.end.x - loot.x - HUD_MARGIN, safe.end.y - loot.y - HUD_MARGIN)
+	_loot_button.position = Vector2(safe.end.x - loot.x - HUD_MARGIN,
+			minf(safe.end.y, hud_foot) - loot.y - HUD_MARGIN)
 	_tint_loot_button()
 	var flag := _terminate.get_combined_minimum_size() * _ui_scale
 	_terminate.position = Vector2(safe.end.x - flag.x - HUD_MARGIN, safe.position.y + HUD_MARGIN)

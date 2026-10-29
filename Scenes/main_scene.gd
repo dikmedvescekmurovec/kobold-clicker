@@ -68,6 +68,15 @@ const HOTKEYS := {
 }
 ## The air between one corner button and the next, in panel pixels.
 const CORNER_GAP := 4.0
+## How tall the corner buttons' navigation bar is held upright, in panel pixels (`_place_corner_row`), and
+## how far the open page's tab stands up out of it.
+const NAV_HEIGHT := 36.0
+const NAV_RISE := 2
+## The bar's other marks while a page of its is open, so the open one stands out: warmed toward the tan
+## rather than greyed, which muddied them.
+const NAV_DIM := Color(0.9, 0.72, 0.62)
+## Where a corner button's red pip stands off its face's top-right corner, in panel pixels.
+const PIP_AT := Vector2(-6, -2)
 ## How far the character panel stands in from the window's corner, in window pixels.
 const CHARACTER_EDGE := Vector2(8, 8)
 ## A panel of plain words (the refused save's, the changelog's): how wide it may be in panel pixels,
@@ -231,6 +240,10 @@ var _roster_button: Button
 ## There while an heirloom is held, and the one corner button a town leaves standing: pressed there it
 ## swaps the bag and the heirlooms at the counter.
 var _heirloom_button: Button
+## The bar under the corner buttons while they are a navigation bar, held upright (`_place_corner_row`), and
+## the open page's tab in it.
+var _nav_bar: Panel
+var _nav_tab: StyleBoxTexture
 ## The card beside the square under the cursor. Its Alt comparison follows the doll of whichever bag
 ## page is up.
 var _item_card: ItemCard
@@ -763,6 +776,17 @@ func _show_damage(announce := false) -> void:
 ## The left-hand pages and the corner buttons that open them, built before the first `_layout_ui`,
 ## which places all of them.
 func _build_pages(layer: CanvasLayer) -> void:
+	# Under the buttons, and taking the presses that land between them, which would otherwise reach the
+	# map or the fight under the bar.
+	# Edged as the brown button's face is: the outline, then its lit row, along the top; the tab lit on
+	# the top and left and shaded on the right, standing `NAV_RISE` out of the bar.
+	_nav_bar = Panel.new()
+	_nav_bar.add_theme_stylebox_override("panel", _nav_box(["a", "l", "b"], 0))
+	_nav_bar.scale = Vector2(ui_scale, ui_scale)
+	_nav_tab = _nav_box([".aaaa.", "ahhhha", "ahllba", "ahllba"], 2)
+	_nav_tab.expand_margin_top = NAV_RISE
+	_nav_bar.hide()
+	layer.add_child(_nav_bar)
 	# In the order they join the layer. Each tooltip is the page's own name.
 	for made: Array in [
 			["_skills_button", TREE_ICON, SkillsPage.TITLE, _on_skills_pressed],
@@ -786,8 +810,8 @@ func _build_pages(layer: CanvasLayer) -> void:
 		pip.texture = load(NEW_PIP)
 		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		pip.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-		pip.offset_left = -6.0
-		pip.offset_top = -2.0
+		pip.offset_left = PIP_AT.x
+		pip.offset_top = PIP_AT.y
 		pip.hide()
 		button.add_child(pip)
 	_character_button = Button.new()
@@ -971,6 +995,7 @@ func _layout_ui() -> void:
 	_place_corner()
 	if _combat != null:
 		_combat.hud.hud_top = _fight_top()
+		_combat.hud.hud_foot = _pages_room().end.y
 
 
 func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
@@ -1283,6 +1308,7 @@ func _stage(fight: Encounter, cell: Vector2i, place: String, variant := "plain")
 	_combat.place = place
 	_combat.xp_target = _character.xp_point()
 	_combat.hud.hud_top = _fight_top()
+	_combat.hud.hud_foot = _pages_room().end.y
 	_combat.begin(fight, cell, ui_scale, variant)
 	sounds.play_music(Jukebox.BATTLE)
 	_cover_map()
@@ -1631,14 +1657,14 @@ func _narrow() -> bool:
 	return UITheme.narrow(UITheme.safe_rect(get_viewport()).size, ui_scale)
 
 
-## Where the pages stand, in window pixels: the safe part of the window, less the corner row along its
-## foot while the window is narrow and any corner button is up.
+## Where the pages stand, in window pixels: the safe part of the window, less the corner buttons' bar
+## along its foot while the window is narrow and any corner button is up.
 func _pages_room() -> Rect2:
 	var room := UITheme.safe_rect(get_viewport())
 	var shown := _bag_button != null and _corner_buttons().any(
 			func(button: Button) -> bool: return button.visible)
 	if shown and _narrow():
-		room.size.y -= (_bag_button.get_combined_minimum_size().y + UITheme.EDGE) * ui_scale
+		room.size.y -= NAV_HEIGHT * ui_scale
 	return room
 
 
@@ -1763,6 +1789,9 @@ func _place_corner() -> void:
 	if _narrow():
 		_place_corner_row()
 		return
+	_nav_bar.hide()
+	for button in _corner_buttons():
+		_fit_cell(button, 0.0)
 	var at := Vector2(_character.position.x, _character.position.y + (_character.size.y + 4) * ui_scale)
 	var page := _left_page()
 	if page != null:
@@ -1782,18 +1811,77 @@ func _place_corner() -> void:
 			at.y += step
 
 
-## Held upright, the corner buttons are a row centred along the window's foot, where a thumb is, and
-## every page stands over it (`_pages_room`): beside a page as wide as the window there is no room.
+## Held upright, the corner buttons are a navigation bar along the window's foot, where a thumb is, and
+## every page stands over it (`_pages_room`): dark brown across the window, the buttons sharing out the
+## width of the left pages' panel over it, the open page's share light brown (the user's, 2026-10-29).
 func _place_corner_row() -> void:
 	var shown := _corner_buttons().filter(func(button: Button) -> bool: return button.visible)
-	var side := _bag_button.get_combined_minimum_size()
-	var across := shown.size() * side.x + maxf(shown.size() - 1, 0) * CORNER_GAP
 	var safe := UITheme.safe_rect(get_viewport())
-	var at := Vector2(safe.position.x + (safe.size.x - across * ui_scale) / 2.0,
-			safe.end.y - (side.y + UITheme.EDGE) * ui_scale).floor()
-	for button: Button in shown:
-		_move_corner(button, at)
-		at.x += (side.x + CORNER_GAP) * ui_scale
+	var window := get_viewport().get_visible_rect()
+	var top := floorf(safe.end.y - NAV_HEIGHT * ui_scale)
+	_nav_bar.visible = not shown.is_empty()
+	_nav_bar.position = Vector2(window.position.x, top)
+	_nav_bar.size = (Vector2(window.size.x, window.end.y - top) / ui_scale).ceil()
+	# Centred as `UITheme.dock` centres a page, so the shares line up under its panel.
+	var across := minf(BagPage.WIDTH + 2 * UITheme.PANEL_MARGIN, floorf(safe.size.x / ui_scale))
+	var left := floorf(safe.position.x + (safe.size.x - across * ui_scale) / 2.0)
+	var pages := {_bag_button: bag_page, _heirloom_button: heirloom_page, _skills_button: skills_page,
+			_roster_button: roster_page, _bounty_button: bounty_page, _collection_button: collection_page,
+			_achievements_button: achievements_page, _leaderboard_button: leaderboard_page,
+			_settings_button: settings_page}
+	var open := shown.any(func(button: Button) -> bool: return (pages[button] as Control).visible)
+	for i in shown.size():
+		var button: Button = shown[i]
+		var from := floorf(across * i / shown.size())
+		var here := (pages[button] as Control).visible
+		_fit_cell(button, floorf(across * (i + 1) / shown.size()) - from, here, open and not here)
+		_move_corner(button, Vector2(left + from * ui_scale, top))
+
+
+## A box for the navigation bar cut from `rows` (`UITheme.stamp`: `a` the brown button's outline, `h` the
+## tan, `l` its lit brown, `b` its brown), the top two rows and `side` columns each side kept as drawn.
+static func _nav_box(rows: Array[String], side: int) -> StyleBoxTexture:
+	var box := StyleBoxTexture.new()
+	box.texture = ImageTexture.create_from_image(UITheme.stamp(rows, {"a": Palette.BUTTON_INK,
+			"h": Palette.SLOT_TAN, "l": Palette.BUTTON_BROWN_LT, "b": Palette.BUTTON_BROWN}))
+	box.texture_margin_top = 2
+	box.texture_margin_left = side
+	box.texture_margin_right = side
+	return box
+
+
+## A corner button as a share of the navigation bar, `width` panel pixels across and answering anywhere
+## in it: no face, its mark alone in the middle on the bar, or lifted on the tab while `here` or pressed,
+## and darkened while `dim`. A zero `width` gives the button back its own size and faces, for the column.
+func _fit_cell(button: Button, width: float, here := false, dim := false) -> void:
+	var mark := Vector2(button.icon.get_size())
+	var cell := Vector2(width, NAV_HEIGHT)
+	# Where the mark stands in the button: the content is the mark alone, so it is on whole pixels
+	# whatever the share's width.
+	var pad := ((cell - mark) / 2.0).floor() if width > 0.0 else Vector2.ONE * UITheme.ICON_FACE_MARGIN
+	for state: String in UITheme.STATES:
+		if width == 0.0:
+			button.remove_theme_stylebox_override(state)
+			continue
+		var tab := here or state == "pressed"
+		var box: StyleBox = _nav_tab.duplicate() if tab else StyleBoxEmpty.new()
+		var lift := NAV_RISE / 2.0 if tab else 0.0
+		box.content_margin_left = pad.x
+		box.content_margin_top = pad.y - lift
+		box.content_margin_right = cell.x - mark.x - pad.x
+		box.content_margin_bottom = cell.y - mark.y - pad.y + lift
+		button.add_theme_stylebox_override(state, box)
+	# Under the mouse or a press, a dim mark lights as the open one is.
+	for color: String in ["icon_normal_color", "icon_focus_color"]:
+		if dim:
+			button.add_theme_color_override(color, NAV_DIM)
+		else:
+			button.remove_theme_color_override(color)
+	# Clamped up to the button's minimum, so a zero width is its own size again.
+	button.size = cell if width > 0.0 else Vector2.ZERO
+	# Where it stood off the face's top-right corner, face or none.
+	(button.get_node(^"New") as Control).position = (pad + PIP_AT
+			+ Vector2(mark.x + UITheme.ICON_FACE_MARGIN, -UITheme.ICON_FACE_MARGIN))
 
 
 ## The corner buttons in the order they stand: what you carry (the bag, then the heirlooms), what you

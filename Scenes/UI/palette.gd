@@ -29,6 +29,10 @@ const SLOT_TAN := Color("e69c69")
 const SLOT_TAN_DK := Color("8a4836")
 ## The brown button's face (`ui_btn_brown_normal`), for a mark drawn in code that has to read as one.
 const BUTTON_BROWN := Color("8a4836")
+## Its lit edge and the wood panel's body: the open page's tab in the corner buttons' bar, held upright.
+const BUTTON_BROWN_LT := Color("bf6f4a")
+## Its outline, round the bar and the tab.
+const BUTTON_INK := Color("1c121c")
 
 ## The rarity ramp and the accents. STONE_LT, ICE and LILAC frame an item's square; ICE_DK and LILAC
 ## write a name on the cream (`ItemRarity.TEXT_COLORS`). LEAF is a gain, a boon, a thing to do or a
