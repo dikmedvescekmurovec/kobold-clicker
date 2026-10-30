@@ -50,6 +50,9 @@ var hidden_env := Callable()
 ## Whether a cell nothing is drawn on can still be hovered and clicked, as a Callable taking a cell
 ## (`MapBuilder.can_chart`). Unset, only a drawn tile answers the mouse.
 var can_pick := Callable()
+## Asked before a click selects, taking nothing: true when the click only put something away (a page
+## standing over the map) and so selects nothing. Unset, every click selects.
+var click_out := Callable()
 
 ## The interface's scale, which a press's travel is measured in. The main scene's.
 var ui_scale := 2.0
@@ -149,6 +152,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_set_hovered(cell)  # a tap makes no motion, so it is what moves a finger's outline
 				if aim_radius >= 0:
 					cell_aimed.emit(cell)
+					get_viewport().set_input_as_handled()
+				elif click_out.is_valid() and bool(click_out.call()):
 					get_viewport().set_input_as_handled()
 				elif _answers(cell):
 					select_cell(cell)

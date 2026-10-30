@@ -273,7 +273,8 @@ func _test_orb_verbs() -> bool:
 	_check(OrbTable.apply("Orb of Augmentation", swung, sure_rng) and swung.mods.size() == 2
 			and not OrbTable.swings(swung.mods[1]), "one that swings already takes an ordinary line")
 	_check(OrbTable.SWORD_SWINGS not in ModifierTable.pool_for(LootTable.FIRST_DROP)
-			and OrbTable.SWORD_SWINGS not in ModifierTable.pool_for("Wooden Sword"), "and no roll deals the swing")
+			and OrbTable.SWORD_SWINGS in ModifierTable.pool_for("Wooden Sword"),
+			"no roll deals the Broken Sword the swing, and a sword may roll it")
 
 	# --- Alchemy: straight to rare from below, a reroll at rare, refused above ---
 	var climbing := Item.rolled("Leather Boots", ItemRarity.Rarity.COMMON, rng, 2)

@@ -20,7 +20,6 @@ enum Kind {
 ##               for a number of one. Never opens on a name (the user's; CLAUDE.md).
 ##   per_tier    [low, high] added to the band a tier past the first, in place of growing by level.
 ##   signed      the band is `range` either side of nothing, never 0, and `wide` from tier `wide_from`.
-## Attack speed has no FLAT line: "+0.2 attacks a second" would be the one fraction in the file.
 ## Bands and weights are the user's dials; what each was sized against is in DESIGN.md.
 const MODS := {
 	"increased_damage": {"kind": Kind.PERCENT, "stat": "damage", "range": [8, 20], "weight": 10},
@@ -30,9 +29,10 @@ const MODS := {
 	"increased_crit": {"kind": Kind.PERCENT, "stat": "crit_chance", "range": [10, 30], "weight": 10},
 	"added_crit": {"kind": Kind.FLAT, "stat": "crit_chance", "range": [1, 4], "weight": 10},
 	"increased_attack_speed": {"kind": Kind.PERCENT, "stat": "attack_speed", "range": [5, 12], "weight": 10},
-	# A whole swing a second at every level: only the Broken Sword's Augmentation puts it on (`DORMANT`).
+	# A whole swing a second at every level, so the rarest line a weapon rolls (the user's, 2026-10-30); the
+	# Broken Sword, which shows no attack speed, gets it only from its Augmentation (`OrbTable.SWORD_SWINGS`).
 	"added_attack_speed": {"kind": Kind.FLAT, "stat": "attack_speed", "range": [1, 1], "per_tier": [0, 0],
-			"weight": 10},
+			"weight": 1},
 	"increased_armor": {"kind": Kind.PERCENT, "stat": "armor", "range": [8, 20], "weight": 10},
 	"added_armor": {"kind": Kind.FLAT, "stat": "armor", "range": [2, 6], "weight": 10},
 	"increased_block": {"kind": Kind.PERCENT, "stat": "block", "range": [10, 25], "weight": 10},
@@ -138,9 +138,8 @@ const RENAMED := {
 }
 
 ## Modifiers no item can roll on purpose: `test_inventory` tells one from an unreachable modifier by
-## this list. `added_attack_speed` is put on by hand (`OrbTable.apply`, the user's, 2026-10-29): in a
-## pool it would be a whole swing a second on every weapon.
-const DORMANT: Array[String] = ["added_attack_speed"]
+## this list. Empty today, and kept as `UNIQUE_ONLY` is.
+const DORMANT: Array[String] = []
 
 ## Modifiers no pool holds because only a unique's row may name them; the same test reads it. Empty
 ## today, and kept (CLAUDE.md).

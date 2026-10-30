@@ -200,10 +200,12 @@ var banner: Banner
 ## A claimed bounty's verdict and a cleared board's options, up over the town.
 var rewards: BountyRewards
 ## The fingers on the screen, by index, where each is now; how far apart two of them were when the map
-## last stepped its zoom; and a trackpad's pinch gathered since its last step (`_pinch`).
+## last stepped its zoom; a trackpad's pinch gathered since its last step (`_pinch`); and whether a second
+## finger has landed since the screen was last bare, which holds the map still (`_on_map_dragged`).
 var _fingers := {}
 var _pinch_from := 0.0
 var _magnified := 1.0
+var _pinched := false
 ## Runes found in the descent that is open, so leaving it saves them (`_bank_depths`).
 var _cave_runes := 0
 ## The settlement the player has walked into, in the tile panel's place, and the cell it stands on --
@@ -443,6 +445,7 @@ func _ready() -> void:
 			"Loaded" if save else "New", used_world_seed, towns.towns().size(), used_map_seed,
 			view.start_town - map_origin])
 	map.tile_clicked.connect(_on_tile_clicked)
+	map.click_out = _click_out
 	map.dragged.connect(_on_map_dragged)
 	map.cell_aimed.connect(_on_cell_aimed)
 	view.arrived.connect(_on_player_arrived)
@@ -1049,8 +1052,20 @@ func _on_tile_clicked(cell: Vector2i, info: Dictionary) -> void:
 	_keep_above_sheet(cell)
 
 
-## Dragging moves the camera the other way, so the map follows the cursor.
+## A click on the map with a page or a town over it only puts them away, as their X would, and selects
+## nothing (the user's, 2026-10-30); the tile panel alone is no page, so a click there picks the next tile.
+func _click_out() -> bool:
+	if not _left_page_up() and not town_page.visible:
+		return false
+	_on_left_page_closed()
+	return true
+
+
+## Dragging moves the camera the other way, so the map follows the cursor. Never through a pinch: the
+## first finger is also the mouse, and the map stays put until every finger is up (the user's, 2026-10-30).
 func _on_map_dragged(relative: Vector2) -> void:
+	if _pinched:
+		return
 	camera.position = _clamp_to_map(camera.position - relative / camera.zoom.x)
 
 
@@ -1163,14 +1178,10 @@ func _camp_while_away(left_at: float) -> void:
 			or not _cannot_camp().is_empty():
 		return
 	var env: String = map.get_tile_info(cell).get("env", "")
-	# Armed exactly as `_open_fight` arms one, and for the same reason: a camp is that fight. Its bodies
-	# drop what a run's do (the user's, 2026-10-11) -- but nothing while a scripted first find is still
-	# owed: they are not counted towards it, and a stray orb or node would spend the script unseen.
+	# Armed exactly as `_open_fight` arms one, and for the same reason: a camp is that fight.
 	var fight := Encounter.farm(cell, env, view.area_variant(cell), _mods_of(cell))
 	_arm(fight)
-	var drops := inventory.promised().is_empty()
-	if drops:
-		_hand_drops(fight)
+	var drops := _hand_camp_drops(fight)
 	var camp := Camp.make(cell, view.name_of(cell), fight, left_at,
 			WallUnlocks.camp_hours(inventory.walls_ever()))
 	var earned := Camp.earned(camp, now)
@@ -1190,6 +1201,22 @@ func _camp_while_away(left_at: float) -> void:
 	_camp.begin(camp, earned, env, view.area_variant(cell), ui_scale, found[Camp.ITEMS], found[Camp.ORBS],
 			int(found["left"]))
 	_cover_map()
+
+
+## A camp's bodies drop what a run's do (the user's, 2026-10-11) -- but no kind whose scripted first
+## find is still owed, and no gear while that is the sword: they are not counted towards it, and the
+## find would spend the script unseen. Gear still falls before Farm stands (the user's, 2026-10-30).
+## Returns whether the camp may drop anything at all.
+func _hand_camp_drops(fight: Encounter) -> bool:
+	var owed := inventory.promised()
+	_hand_drops(fight)
+	if Encounter.TRANSMUTE in owed or Encounter.AUGMENT in owed:
+		fight.orbs_after = 1 << 62
+	if Encounter.UNIQUE in owed:
+		fight.uniques_after = Encounter.NO_UNIQUES
+	if Encounter.NODE in owed:
+		fight.stone_drops = false
+	return Encounter.SWORD not in owed
 
 
 ## What a camp's bodies dropped (`Camp.finds`) into the bag, each find asked of the player's own rule
@@ -2715,13 +2742,18 @@ func _input(event: InputEvent) -> void:
 
 
 ## Two fingers spread or pinched over bare map zoom it a whole step at a time (`PINCH_STEP` of spread
-## a step) about the point between them, as the wheel does, and so does a trackpad's own pinch.
+## a step) about the window's middle, so the map never slides (the user's, 2026-10-30); a trackpad's own
+## pinch zooms about the cursor, as the wheel does.
 func _pinch(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			_fingers[event.index] = event.position
 		else:
 			_fingers.erase(event.index)
+		if _fingers.size() > 1:
+			_pinched = true
+		elif _fingers.is_empty():
+			_pinched = false
 		_pinch_from = _spread()
 		return
 	var zooms := _combat == null and map.visible and get_viewport().gui_get_hovered_control() == null
@@ -2729,7 +2761,7 @@ func _pinch(event: InputEvent) -> void:
 		_fingers[event.index] = event.position
 		var spread := _spread()
 		if zooms and _pinch_from > 0.0 and spread > 0.0 and absf(log(spread / _pinch_from)) >= log(PINCH_STEP):
-			_zoom_at((_fingers.values()[0] + _fingers.values()[1]) / 2.0, signf(spread - _pinch_from))
+			_zoom_at(get_viewport().get_visible_rect().size / 2.0, signf(spread - _pinch_from))
 			_pinch_from = spread
 	elif event is InputEventMagnifyGesture and zooms:
 		_magnified *= event.factor

@@ -204,8 +204,21 @@ func _test_the_map_camps_and_strikes_camp() -> bool:
 	_check(bool(main._camp._earned["full"])
 			and float(main._camp._earned["seconds"]) == WallUnlocks.camp_hours(0) * 3600.0,
 			"a hero with no wall down held it for the first hour of the three")
-	_check(not main.inventory.promised().is_empty() and main.inventory.total() == held,
-			"and brought no finds back while a first find is still owed")
+	_check(Encounter.SWORD in main.inventory.promised() and main.inventory.total() == held,
+			"and brought no finds back while the Broken Sword is still owed")
+	# Past the sword, gear falls before Farm stands, but no kind whose first find is still owed.
+	var kills: int = main.inventory.kills
+	main.inventory.first_sword_taken = true
+	var camped := Encounter.farm(best, main.map.get_tile_info(best).get("env", ""))
+	_check(main._hand_camp_drops(camped) and camped.orbs_after > 1000000
+			and camped.uniques_after == Encounter.NO_UNIQUES and not camped.stone_drops,
+			"a camp past the sword drops gear and nothing else a first find is owed for")
+	main.inventory.kills = 1000
+	camped = Encounter.farm(best, main.map.get_tile_info(best).get("env", ""))
+	_check(main._hand_camp_drops(camped) and camped.orbs_after == 0
+			and camped.uniques_after == 0 and camped.stone_drops, "and everything once nothing is owed")
+	main.inventory.first_sword_taken = false
+	main.inventory.kills = kills
 
 	# Escape does nothing here: a stray press must not throw the report away unread.
 	var escape := InputEventAction.new()

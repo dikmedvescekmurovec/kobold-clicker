@@ -557,7 +557,7 @@ func _test_modifier_tables() -> bool:
 		# inferred: a modifier nothing can roll is dead weight, and a dormant one is a system waiting.
 		var held_back: bool = id in ModifierTable.DORMANT or id in ModifierTable.UNIQUE_ONLY
 		_check(carried or held_back, "%s names %s, which no item can roll" % [id, stat])
-		# A dormant line may pass a piece's gate (`added_attack_speed`); it is the pools that leave it out.
+		# A dormant line may pass a piece's gate; it is the pools that leave it out.
 		var pooled := false
 		for item in LootTable.items():
 			pooled = pooled or id in ModifierTable.pool_for(item)

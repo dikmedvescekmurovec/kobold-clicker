@@ -6,6 +6,18 @@ a player has not seen yet once, together, newest first (`main_scene.gd` `_show_c
 written for players. A section may hold a two-column table instead (`| left | right |`, a header row, then
 `|---|---|`): the game draws its rows as its own tables, the left column wrapping and the right kept short.
 
+## v0.7.2 (2026-10-30)
+
+### Loot
+- Weapons can now roll +1 Attack Speed. It's the rarest line there is, so good luck.
+
+### Camps
+- Once you've found the Broken Sword, camps bring gear back too, even before you've seen your first orb, unique or skill node.
+
+### Map
+- Clicking the map while a page or a town is open just closes it. Clicking again picks a tile.
+- On a phone, pinching zooms around the middle of the screen, and the map stays still until you let go.
+
 ## v0.7.1 (2026-10-29)
 
 ### First steps
