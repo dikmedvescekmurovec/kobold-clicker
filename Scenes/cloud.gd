@@ -41,8 +41,9 @@ const TIMEOUT := 10.0
 const QUIT_TIMEOUT := 4.0
 ## How many of the top the board page asks for; the server gives at most 100.
 const TOP := 50
-## How often the game looks at the cloud while it runs, and uploads at most: every save rewrites the
-## files, so this is what a player's hour costs in requests. Leaving the game and a descent upload at once.
+## How often the game's tick runs, and uploads at most: a tick asks the cloud nothing unless a sync is
+## owed (`_behind`), so an hour played costs about one upload each `UPLOAD_EVERY` (the user's, 2026-10-30).
+## Leaving the game and a descent upload at once.
 const TICK := 30.0
 const UPLOAD_EVERY := 300.0
 ## A sign-in: how often the game asks whether the player has finished it, and for how long.
@@ -98,6 +99,9 @@ var _syncing := false
 var _launch_hash := ""
 ## When the last upload went, in engine ticks (ms); a start-up's first sync uploads whenever it is due.
 var _uploaded_ms := -1
+## A full sync is owed: none has read `/me` yet, a download or a question waited for calm, or an upload
+## was beaten to the cloud (409). The tick syncs while it is set, and only uploads while it is not.
+var _behind := true
 var _timeout := TIMEOUT
 
 
@@ -121,7 +125,7 @@ func _ready() -> void:
 		return
 	var timer := Timer.new()
 	timer.wait_time = TICK
-	timer.timeout.connect(sync)
+	timer.timeout.connect(_tick)
 	add_child(timer)
 	timer.start()
 
@@ -332,6 +336,7 @@ func sync(now := false) -> void:
 	_launch_hash = ""
 	var reply := await _call(HTTPClient.METHOD_GET, "/me")
 	if reply.status == 200:
+		_behind = false
 		_take_me(reply.data)
 		var saved := files()
 		var cloud: Variant = reply.data.get("save")
@@ -350,11 +355,32 @@ func sync(now := false) -> void:
 					Action.DOWNLOAD:
 						if _calm():
 							await _download()
+						else:
+							_behind = true
 					Action.ASK:
 						if _calm():
 							_ask(saved, cloud.get("summary", {}))
+						else:
+							_behind = true
 	_syncing = false
 	changed.emit()
+
+
+## The timer's: a full sync while one is owed, else an upload when due with no `/me` before it. The
+## server refuses an upload a newer save beat (409, `base_revision`), which makes a sync owed.
+func _tick() -> void:
+	if blocked or not signed_in() or _syncing or not question.is_empty():
+		return
+	if not _behind:
+		var saved := files()
+		if saved.is_empty() or hash_of(saved) == synced \
+				or _uploaded_ms >= 0 and Time.get_ticks_msec() - _uploaded_ms < UPLOAD_EVERY * 1000.0:
+			return
+		_syncing = true
+		await _upload(saved, false)
+		_syncing = false
+	if _behind:
+		await sync()
 
 
 ## Uploads now if this device has changed since it last agreed with the cloud, and nothing else: the
@@ -425,13 +451,17 @@ func _upload(saved: Dictionary, replace: bool) -> void:
 		409:
 			# Another device got there first; the next sync finds out and asks.
 			problem = ""
+			_behind = true
 
 
 ## The cloud's save written over this device's files, and `replaced` for the main scene to reload. Not
-## if the game stopped being calm while it came down: then the next tick tries again.
+## if the game stopped being calm while it came down: then the next tick syncs again (`_behind`).
 func _download() -> void:
 	var reply := await _call(HTTPClient.METHOD_GET, "/save")
-	if reply.status != 200 or not _calm():
+	if reply.status != 200:
+		return
+	if not _calm():
+		_behind = true
 		return
 	var saved := {"inventory": str(reply.data.get("inventory", "")), "map": str(reply.data.get("map", ""))}
 	# Nothing is written that this build could not read back: a reply that is no save would empty the

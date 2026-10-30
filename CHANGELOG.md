@@ -6,6 +6,11 @@ a player has not seen yet once, together, newest first (`main_scene.gd` `_show_c
 written for players. A section may hold a two-column table instead (`| left | right |`, a header row, then
 `|---|---|`): the game draws its rows as its own tables, the left column wrapping and the right kept short.
 
+## v0.8.3 (2026-10-30)
+
+### Cloud saves
+- Improved cloud save frequency
+
 ## v0.8.2 (2026-10-30)
 
 ### Crashes

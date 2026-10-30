@@ -333,6 +333,11 @@ func _notification(what: int) -> void:
 	elif (what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT) \
 			and OS.has_feature("web"):
 		_keep_run()
+	elif (what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_WM_WINDOW_FOCUS_IN) \
+			and cloud != null and not _resetting:
+		# Back from another window, perhaps from playing on another device: the cloud's tick no longer
+		# reads `/me`, so this is where a save made elsewhere comes down (the user's, 2026-10-30).
+		cloud.sync()
 	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		# Answered wherever Escape is -- a fight, the bag, a question, this scene -- by being Escape.
 		for down: bool in [true, false]:

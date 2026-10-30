@@ -25,6 +25,8 @@ func _run() -> void:
 	_check(await _test_a_blocked_cloud_moves_nothing() == true, "blocked tests ran to the end")
 	_check(await _test_the_launch_hash_waits_for_calm() == true, "launch hash tests ran to the end")
 	_check(await _test_an_answer_is_a_sync_of_its_own() == true, "answer tests ran to the end")
+	_check(await _test_a_tick_reads_the_cloud_only_when_owed() == true, "tick tests ran to the end")
+	_check(await _test_a_held_download_is_the_ticks_to_finish() == true, "held download tests ran to the end")
 	_check(_test_the_waiting_list_follows_the_cloud() == true, "waiting list tests ran to the end")
 	for path: String in [ACCOUNT, INVENTORY, MAP]:
 		SafeFile.remove(path)
@@ -309,6 +311,63 @@ func _test_an_answer_is_a_sync_of_its_own() -> bool:
 	_check(not heard.is_empty() and heard[-1] == false, "and the pages are told when it has")
 	await cloud.sync()
 	_check(sent.slice(0, 2) == ["/save", "/me"], "and the next tick syncs as ever (%s)" % [sent])
+	cloud.free()
+	return true
+
+
+## A tick reads `/me` only while a sync is owed: otherwise it uploads a changed save when due, and an
+## upload another device beat to the cloud (409) is a sync there and then.
+func _test_a_tick_reads_the_cloud_only_when_owed() -> bool:
+	_write_saves(3)
+	var sent: Array = []
+	var replies := {"GET /me": {"status": 200, "data": {"save": {"revision": 2, "summary": {}}}},
+			"PUT /save": {"status": 200, "data": {"revision": 3}}}
+	var cloud := _scripted(replies, sent)
+	cloud.revision = 2
+	cloud.synced = Cloud.hash_of(cloud.files())
+	await cloud._tick()
+	_check(_routes(sent) == ["GET /me"], "a new cloud's first tick is a full sync (%s)" % [_routes(sent)])
+	sent.clear()
+	await cloud._tick()
+	_check(sent.is_empty(), "a tick over an unchanged save calls nobody (%s)" % [_routes(sent)])
+	_write_saves(4)
+	await cloud._tick()
+	_check(_routes(sent) == ["PUT /save"] and cloud.revision == 3,
+			"a changed save goes up with no /me before it (%s)" % [_routes(sent)])
+	_write_saves(5)
+	sent.clear()
+	await cloud._tick()
+	_check(sent.is_empty(), "and the next change waits for UPLOAD_EVERY (%s)" % [_routes(sent)])
+	cloud._uploaded_ms = -1
+	replies["PUT /save"] = {"status": 409, "data": {"error": "The cloud has a newer save", "revision": 4}}
+	replies["GET /me"] = {"status": 200, "data": {"save": {"revision": 4, "summary": {}}}}
+	await cloud._tick()
+	_check(_routes(sent) == ["PUT /save", "GET /me"] and not cloud.question.is_empty(),
+			"an upload another device beat syncs at once, and asks (%s)" % [_routes(sent)])
+	cloud.free()
+	return true
+
+
+## A newer save found mid-fight waits for calm, and the tick keeps syncing until it is down.
+func _test_a_held_download_is_the_ticks_to_finish() -> bool:
+	_write_saves(3)
+	var sent: Array = []
+	var cloud := _scripted({"GET /me": {"status": 200, "data": {"save": {"revision": 3, "summary": {}}}},
+			"GET /save": {"status": 200, "data": {"revision": 3,
+				"inventory": JSON.stringify({"version": 1, "level": 9}), "map": ""}}}, sent)
+	cloud.revision = 2
+	cloud.synced = Cloud.hash_of(cloud.files())
+	var calm := [false]
+	cloud.calm = func() -> bool: return calm[0]
+	await cloud.sync(true)
+	_check(_routes(sent) == ["GET /me"] and cloud.revision == 2, "mid-fight the newer save waits")
+	calm[0] = true
+	await cloud._tick()
+	_check(_routes(sent) == ["GET /me", "GET /me", "GET /save"] and cloud.revision == 3,
+			"and the next calm tick brings it down (%s)" % [_routes(sent)])
+	sent.clear()
+	await cloud._tick()
+	_check(sent.is_empty(), "after which a tick calls nobody (%s)" % [_routes(sent)])
 	cloud.free()
 	return true
 

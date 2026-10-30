@@ -187,7 +187,8 @@ When it syncs:
 | When | What |
 |---|---|
 | Start-up | Right after the scene is built. It judges "this device changed" by the files **as the scene found them**, before start-up wrote anything (`Cloud.launched`). Otherwise a start-up's own writes (the map, a camp's pay) would make every change of device a question. While it still holds that judgement and the game is not calm (a start-up that stands a camp up), the first sync waits: it goes as the camp is struck. |
-| Every 30 s while playing | Uploads when due (at most every `UPLOAD_EVERY`, 5 min). A download or a question waits until the game is **calm**: not in a fight, walking to one, a camp, the black screen or another question. |
+| Every 30 s while playing (`Cloud._tick`) | Uploads a changed save when due (at most every `UPLOAD_EVERY`, 5 min) straight to `PUT /save`, with no `/me` first: a save another device beat to the cloud is refused (409), and that makes a full sync owed. An unchanged save calls nobody. While a full sync is owed (none yet, a 409, or a download or question that waited) the tick makes one. A download or a question waits until the game is **calm**: not in a fight, walking to one, a camp, the black screen or another question. |
+| The window or tab coming back into focus | A full sync: where a save made on another device is noticed. |
 | After a descent | Uploads at once, so the board catches up. |
 | Opening the leaderboard page | Uploads at once, then reads the board. |
 | Closing the window | The scene closes (it banks the run and writes its saves), the upload goes with a 4 s timeout, then the game quits. On Android and iOS, when the app is paused. |
@@ -325,7 +326,8 @@ Rules:
 - A rate limiter that fails lets the call through, and logs it.
 - **A body** is a JSON object of at most 4 MB. Anything else is 400, or 413.
 - A sign-in polls 30 times a minute.
-- A playing game makes about 2 requests a minute: the 30 s sync reads `/me`.
+- A playing game makes about one request each 5 minutes (an upload), and an idle one none: `/me` is read
+  only at start-up, on focus, after a descent or a camp, on the board page and after a 409.
 
 ---
 
@@ -626,16 +628,17 @@ This is Cloudflare's free plan as published at the time of writing. Check
 
 | Resource | Free plan | A player uses, per hour played |
 |---|---|---|
-| Worker requests | 100,000 / day | ~130: a `/me` every 30 s, and 12 uploads |
+| Worker requests | 100,000 / day | ~15: 12 uploads, and a `/me` at start-up and each focus |
 | D1 rows written | 100,000 / day | ~50: an upload writes its row, prunes the 11th, notes its revision, may move the board |
 | D1 rows read | 5 million / day | a few hundred |
 | D1 storage | 5 GB | 10 revisions × ~20 KB = ~200 KB a player, so ~25,000 players |
 
-That's about **750 player-hours a day** free. The limit that bites first is requests, from the 30 s
-tick. Past that, **Workers Paid is $5/month** for 10 million requests.
+That's about **6,000 player-hours a day** free; the limit that bites first is requests, from the
+uploads. Past that, **Workers Paid is $5/month** for 10 million requests.
 
-Two dials trade freshness for cost: `Cloud.TICK` (30 s) and `Cloud.UPLOAD_EVERY` (5 min). A tick of 120 s
-quarters the requests; a device then notices another's save within 2 minutes instead of 30 seconds.
+The dial that trades freshness for cost is `Cloud.UPLOAD_EVERY` (5 min): how much play a crash can keep
+out of the cloud (never off the device). Until 2026-10-30 every 30 s tick read `/me` too (~130 requests
+an hour played); now a device notices another's save on focus, at start-up or on a 409, not within 30 s.
 
 When a free limit is hit, calls fail until midnight UTC. The game says "The cloud cannot be reached",
 plays on, and syncs later. Nothing is lost, because the files on the device are the save.
