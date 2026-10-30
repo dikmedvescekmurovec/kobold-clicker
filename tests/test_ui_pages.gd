@@ -485,6 +485,24 @@ func _test_layouts() -> bool:
 
 
 ## A Control's rect in window pixels, its scale and its ancestors' counted.
+## What is wrong with the character strip while a page is up: held upright it stands, whole, in the
+## window at the widest figures `BigNumber` writes, where the character panel is hidden -- over a
+## town's bag, too (the user's, 2026-10-30); across a window it is never up, the panel being in view.
+func _strip_wrong(main: Node, window: Vector2i) -> String:
+	var strip: CharacterStrip = main._strip
+	if not UITheme.narrow(Vector2(window), main.ui_scale):
+		return "the strip is up beside the character panel" if strip.visible else ""
+	if not strip.visible or main._character.visible:
+		return "the strip is hidden, or up beside the panel"
+	var wrong := ""
+	for figure: float in [88888.0, 888e33, 8.88e88]:
+		strip.set_damage(figure, figure)
+		if wrong.is_empty() and not Rect2(Vector2.ZERO, Vector2(window)).encloses(_rect(strip)):
+			wrong = "the strip stands at %s, out of the window" % _rect(strip)
+	main._show_damage()
+	return wrong
+
+
 func _rect(control: Control) -> Rect2:
 	return (control.get_global_transform() * Rect2(Vector2.ZERO, control.size)).abs()
 
@@ -1095,6 +1113,8 @@ func _test_pages_in_the_scene() -> bool:
 			await _frames(3)
 			for wrong: String in _wrongs(left, Vector2(window)):
 				_check(false, "%s in the scene at %dx%d: %s" % [left.get_script().get_global_name(), window.x, window.y, wrong])
+			_check(_strip_wrong(main, window).is_empty(), "%s at %dx%d: %s"
+					% [left.get_script().get_global_name(), window.x, window.y, _strip_wrong(main, window)])
 			main._toggle_left_page(left)
 		var town: Vector2i = main.view.start_town - main.view.origin
 		main.view._show(town, MapBuilder.State.CHARTED)
@@ -1111,6 +1131,8 @@ func _test_pages_in_the_scene() -> bool:
 				for wrong: String in _wrongs(page, Vector2(window)):
 					_check(false, "the %s counter's %s at %dx%d: %s" % [service, page.get_script().get_global_name(),
 							window.x, window.y, wrong])
+			_check(_strip_wrong(main, window).is_empty(), "the %s counter at %dx%d: %s"
+					% [service, window.x, window.y, _strip_wrong(main, window)])
 			var tabs_up: bool = main.bag_page._side_tabs.all(func(tab: Button) -> bool: return tab.visible)
 			if UITheme.narrow(Vector2(window), main.ui_scale):
 				_check(_rect(main.bag_page._panel).end.y <= _rect(main.town_page._panel).position.y + SLACK

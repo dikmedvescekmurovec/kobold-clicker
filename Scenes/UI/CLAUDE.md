@@ -247,6 +247,7 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
 | `collection_page.gd` (`CollectionPage`) | The collection log on the left edge: every unique by name, found, known or locked, over the bonus and the count. |
 | `roster_page.gd` (`RosterPage`) | The heroes on the left edge: every one of `Characters` as a square, and beside the grid the picked one standing as a fight draws it, over Buy or Select. |
 | `character_panel.gd` (`CharacterPanel`) | The player in the top corner: portrait, level badge, damage line and experience bar. |
+| `character_strip.gd` (`CharacterStrip`) | The panel's two damage figures stacked on its band alone, in its corner held upright while a page hides it. |
 | `character_page.gd` (`CharacterPage`) | The character sheet on the left edge: name card, the two headline damages, curses, effects and stat tables. |
 | `item_details.gd` (`ItemDetails`) | One item written into a `VBoxContainer` as a table (`fill`), and what a swap would change (`deltas`). |
 | `item_slot.gd` (`ItemSlot`) | One item as a square: icon on a tan socket under its rarity's frame, with its corner marks. |

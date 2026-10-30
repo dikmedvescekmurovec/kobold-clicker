@@ -6,6 +6,11 @@ a player has not seen yet once, together, newest first (`main_scene.gd` `_show_c
 written for players. A section may hold a two-column table instead (`| left | right |`, a header row, then
 `|---|---|`): the game draws its rows as its own tables, the left column wrapping and the right kept short.
 
+## v0.8.1 (2026-10-30)
+
+### Phone
+- Your damage stays on screen while gearing up. Open the bag and your character panel slides away, and a slim strip with your click and per-second damage slides in, so you see every upgrade land.
+
 ## v0.8.0 (2026-10-30)
 
 ### Transcending

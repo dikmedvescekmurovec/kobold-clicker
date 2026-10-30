@@ -286,14 +286,15 @@ static var _shot: Image
 static var _shot_frame := -1
 
 
-static func slides(node: Control, from_left: bool) -> void:
-	node.visibility_changed.connect(_slide.bind(node, from_left))
+## `when`, if given, is asked at each change: false, the node snaps as at `NONE`.
+static func slides(node: Control, from_left: bool, when := Callable()) -> void:
+	node.visibility_changed.connect(_slide.bind(node, from_left, when))
 
 
-static func _slide(node: Control, from_left: bool) -> void:
+static func _slide(node: Control, from_left: bool, when: Callable) -> void:
 	_stop_moving(node)
 	_settle(node)
-	if Settings.animations == Settings.Anim.NONE or not node.is_inside_tree():
+	if Settings.animations == Settings.Anim.NONE or not node.is_inside_tree() or (when.is_valid() and not when.call()):
 		return
 	var rects := _drawn(node)
 	var reach := 0.0

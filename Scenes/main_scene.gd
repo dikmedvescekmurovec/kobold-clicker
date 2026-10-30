@@ -270,6 +270,8 @@ var _item_card: ItemCard
 ## The player in the top-left corner, over the map and over a fight alike -- or mirrored in the
 ## top-right while a bag page is up (`_place_character`).
 var _character: CharacterPanel
+## The panel's damage figures on its band alone, in its corner held upright while a page covers it.
+var _strip: CharacterStrip
 ## The side the panel last slid in on, so it slides only when it changes (`_slide_character`).
 var _character_slid_right := false
 
@@ -724,7 +726,14 @@ func _build_character() -> void:
 	_character.scale = Vector2(ui_scale, ui_scale)
 	_character.position = CHARACTER_EDGE
 	layer.add_child(_character)
-	banner = Banner.new(ui_scale, _banner_top, _popup_up)
+	_strip = CharacterStrip.new()
+	_strip.scale = Vector2(ui_scale, ui_scale)
+	_strip.hide()
+	layer.add_child(_strip)
+	# Held upright one slides out to the left as the other slides in, as a page covers the panel's corner.
+	Juice.slides(_strip, true)
+	Juice.slides(_character, true, _narrow)
+	banner =Banner.new(ui_scale, _banner_top, _popup_up)
 	layer.add_child(banner)
 	_sync_character()
 
@@ -758,6 +767,10 @@ func _place_character() -> void:
 		if _combat != null:
 			_character.position.y = _combat.hud.corner_bottom() + FightHud.HUD_MARGIN
 	_character.visible = _transcend_page == null and (right or _left_page() == null)
+	# In the panel's own corner, its band running off the window's edge: over a town's bag, which is
+	# pinned to the top there (the user's, 2026-10-30).
+	_strip.visible = _transcend_page == null and not _character.visible and _narrow()
+	_strip.position = safe.position + Vector2(0.0, CHARACTER_EDGE.y)
 	var drawn := _character.get_transform() * Rect2(Vector2.ZERO, _character.size)
 	_character_button.position = drawn.position
 	_character_button.size = drawn.size
@@ -795,6 +808,7 @@ func _show_damage(announce := false) -> void:
 	var fight: Encounter = _combat.fight if _combat != null and _combat.fight != null \
 			else CharacterPage.armed(inventory, inventory.stats())
 	_character.set_damage(fight.average_blow(false), fight.per_second(), announce)
+	_strip.set_damage(fight.average_blow(false), fight.per_second(), announce)
 
 
 ## The left-hand pages and the corner buttons that open them, built before the first `_layout_ui`,
