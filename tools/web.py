@@ -8,7 +8,7 @@ serves them (backend/web/).
 Needs Godot 4.7.2 with its web export templates, and wrangler signed in (backend/leaderboard/'s, so
 `npm install` there first) to deploy. Set GODOT to use another executable.
 """
-import argparse, os, shutil, subprocess, sys
+import argparse, os, re, shutil, subprocess, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -38,6 +38,10 @@ def export() -> None:
     if run.returncode != 0 or "ERROR" in out or not (OUT / "index.pck").exists():
         print(out[-4000:])
         sys.exit("export failed")
+    # The crash report the head_include loads, stamped with the version CHANGELOG.md's first heading names.
+    version = re.search(r"^## (v\S+)", (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), re.M).group(1)
+    report = (ROOT / "backend" / "web" / "crash_report.js").read_text(encoding="utf-8")
+    (OUT / "crash_report.js").write_text(report.replace("__VERSION__", version), encoding="utf-8")
     for file in sorted(OUT.iterdir()):
         print(f"{file.name:32} {file.stat().st_size / 1e6:8.1f} MB")
 

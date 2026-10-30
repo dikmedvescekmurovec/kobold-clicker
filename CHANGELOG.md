@@ -6,6 +6,12 @@ a player has not seen yet once, together, newest first (`main_scene.gd` `_show_c
 written for players. A section may hold a two-column table instead (`| left | right |`, a header row, then
 `|---|---|`): the game draws its rows as its own tables, the left column wrapping and the right kept short.
 
+## v0.8.2 (2026-10-30)
+
+### Crashes
+- Added crash reporting. A badge in the corner for minor errors and a full page report for big crashes
+- If your phone closes the game while you're playing, the report is shown the next time you open it.
+
 ## v0.8.1 (2026-10-30)
 
 ### Phone

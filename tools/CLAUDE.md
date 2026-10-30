@@ -23,7 +23,7 @@ That row and the rest of the old table are in `DESIGN.md` under "Files in full".
 | `seeing_stone.py` | Draws the Seeing Stone: **unused since 2026-10-03**, when `CaveSense` replaced the stone, and nothing loads its files. |
 | `sound_levels.py` | Cuts the sound effects out of `Sounds/Selected/` into `Sounds/Sfx/`, then sets every file's level (`LEVELS`): the mix. |
 | `pixel_flatten.py` | Flattens an AI-generated creature's frames to the bought packs' look (one palette across every frame). |
-| `web.py` | Exports the web build to `build/web/`; `--deploy` uploads it and deploys the Worker that serves it. |
+| `web.py` | Exports the web build to `build/web/` with `backend/web/crash_report.js` (the phone's error report) beside it, stamped with `CHANGELOG.md`'s version; `--deploy` uploads it and deploys the Worker that serves it. |
 | `recording.py` | What the Movie Maker recorders share (`GODOT`, `ready`, `viewport`); not a tool of its own. |
 | `trailer.py` | Records the hype trailer (`tests/trailer.gd`) with Movie Maker and cuts `build/trailer.mp4`. |
 | `reels.py` | Records the upright reels (`tests/reels.gd`) and cuts each to `build/reels/`. |
