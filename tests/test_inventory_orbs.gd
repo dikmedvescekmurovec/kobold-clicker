@@ -976,6 +976,11 @@ func _test_first_steps() -> bool:
 	var lit := func() -> Control:
 		main._spotlight()
 		return null if main._spot == null else main._spot.target
+	main.bag_page.foldable = true
+	main.bag_page._doll_hidden = true
+	main.bag_page.foldable = main._tutored()
+	_check(not main.bag_page.foldable and not main.bag_page._doll_hidden,
+			"a new player cannot fold the doll away, and a folded one comes back")
 	var sword := _piece(ItemRarity.Rarity.COMMON, 1)
 	main.inventory.add(sword)
 	main.inventory.level = 2
@@ -1052,6 +1057,7 @@ func _test_first_steps() -> bool:
 	main._on_tip_closed()
 	main._on_orb_gained(OrbTable.SECOND_ORB)
 	_check(main.AUGMENT_STEP not in main.inventory.tips, "a second Augmentation owes no step")
+	_check(main._tutored(), "every step taken, the doll may be folded again")
 	main.queue_free()
 	_clear_save()
 	return true

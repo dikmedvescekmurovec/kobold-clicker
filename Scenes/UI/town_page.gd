@@ -602,7 +602,7 @@ func _cost_cell(square: Control, figure: String, mark: Texture2D, ok: bool,
 	# clipped Label has no width of its own, so it gets the figure's, up to what the cell has left.
 	label.clip_text = true
 	var wide := UITheme.theme().get_font("font", "SmallLabel").get_string_size(figure,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, UITheme.SMALL_FONT_SIZE).x
+			HORIZONTAL_ALIGNMENT_LEFT, -1, UITheme.small_size()).x
 	label.custom_minimum_size.x = minf(ceilf(wide), room)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(label)

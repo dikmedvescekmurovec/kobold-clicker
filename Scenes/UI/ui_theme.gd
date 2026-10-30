@@ -12,6 +12,9 @@ const FONT_SIZE := 16   # Pixellari's native size: below ~14 its glyphs break up
 ## The body font (stat lines, modifiers, card bodies), at its native size only.
 const SMALL_FONT := "res://Assets/ArkPixel10.ttf"
 const SMALL_FONT_SIZE := 10
+## The body font under `Settings.large_text`: the same face at its next native size, which the same trim fits.
+const LARGE_FONT := "res://Assets/ArkPixel12.ttf"
+const LARGE_FONT_SIZE := 12
 ## The face pads its 7 px capitals out to a 14 px line; this much comes off the top and the bottom of
 ## every line, which leaves 11 and still clears the ascenders and the descenders.
 const SMALL_FONT_TRIM := Vector2i(2, 1)   # x: top, y: bottom
@@ -228,6 +231,22 @@ static func theme() -> Theme:
 	return _theme
 
 
+## The body font's size: `SMALL_FONT_SIZE`, or `LARGE_FONT_SIZE` under `Settings.large_text`.
+static func small_size() -> int:
+	return LARGE_FONT_SIZE if Settings.large_text else SMALL_FONT_SIZE
+
+
+## Sets the built theme's body font to `Settings.large_text`, which every Control drawn in it follows at
+## once. A width measured as a page was built (`table_row`'s stacking) is measured again only when it is.
+static func apply_text_size() -> void:
+	if _theme == null:
+		return
+	var small: FontVariation = _theme.get_font("font", "SmallLabel")
+	small.base_font = load(LARGE_FONT if Settings.large_text else SMALL_FONT)
+	for variation: String in ["SmallLabel"] + SMALL_BUTTONS.keys():
+		_theme.set_font_size("font_size", variation, small_size())
+
+
 static func build() -> Theme:
 	var built := Theme.new()
 	var text := FileAccess.get_file_as_string(SHEET_JSON)
@@ -255,11 +274,11 @@ static func build() -> Theme:
 	built.set_type_variation("SmallLabel", "Label")
 	built.set_color("font_color", "SmallLabel", Palette.TEXT)
 	var small := FontVariation.new()
-	small.base_font = load(SMALL_FONT)
+	small.base_font = load(LARGE_FONT if Settings.large_text else SMALL_FONT)
 	small.set_spacing(TextServer.SPACING_TOP, -SMALL_FONT_TRIM.x)
 	small.set_spacing(TextServer.SPACING_BOTTOM, -SMALL_FONT_TRIM.y)
 	built.set_font("font", "SmallLabel", small)
-	built.set_font_size("font_size", "SmallLabel", SMALL_FONT_SIZE)
+	built.set_font_size("font_size", "SmallLabel", small_size())
 
 	for variation: String in PANELS:
 		built.set_type_variation(variation, "PanelContainer")
@@ -295,7 +314,7 @@ static func build() -> Theme:
 		for item: String in FONT_STATES + ["font_disabled_color"]:
 			built.set_color(item, variation, built.get_color(item, big))
 		built.set_font("font", variation, small)
-		built.set_font_size("font_size", variation, SMALL_FONT_SIZE)
+		built.set_font_size("font_size", variation, small_size())
 
 	for variation: String in ICON_FACES:
 		built.set_type_variation(variation, "Button")
@@ -625,8 +644,8 @@ static func table_row(text: String, value: String, striped: bool, width := 0.0,
 	# With no value there is nothing to drop under the name, which only wraps.
 	if width > 0.0 and not value.is_empty():
 		var font := theme().get_font("font", "SmallLabel")
-		taken = ceilf(font.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, SMALL_FONT_SIZE).x)
-		stacked = can_stack and ceilf(font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, SMALL_FONT_SIZE).x) \
+		taken = ceilf(font.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, small_size()).x)
+		stacked = can_stack and ceilf(font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, small_size()).x) \
 				+ TABLE_GAP + taken > room
 	var cells: BoxContainer = VBoxContainer.new() if stacked else HBoxContainer.new()
 	cells.add_theme_constant_override("separation", 0 if stacked else TABLE_GAP)

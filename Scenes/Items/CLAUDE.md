@@ -12,7 +12,6 @@ Every kill rolls for gear (about one body in thirty), always hands over gold, an
 | `equipment.gd` (`Equipment`) | What is worn: the eight sockets, what a swap takes off, and the set's totals over one doll or two. |
 | `item.gd` (`Item`) | One dropped piece: type, rarity, level, stats, modifiers, what the smith, the orbs and a transcension leave on it, its lines and its save. |
 | `orb_table.gd` (`OrbTable`) | The six orbs, one job each: the one rule for applying one, which exist behind which wall, and their drop and shelf rolls. |
-| `super_orb_table.gd` (`SuperOrbTable`) | The six super orbs, spent only on `TranscendPage` and only on heirlooms. |
 | `unique_table.gd` (`UniqueTable`) | The unique items: each one's row, its ranked dials and card text, and the uniques' own drop roll. |
 | `achievements.gd` (`Achievements`) | What unlocks a unique into the drops and what ranks it: the starters, the achievements, their progress, and what a finished fight records. |
 | `wall_unlocks.gd` (`WallUnlocks`) | What each ice wall opens for good, read off `Inventory.walls_ever()`, the hours a camp holds and the squares a wall adds to the bag. |
@@ -90,10 +89,10 @@ Full text, numbers and reasons: `DESIGN.md`, "Reference (moved here from CLAUDE.
 
 ### Modifiers
 - **Build only legal candidates in `ModifierTable.pool_for`:** PERCENT needs `has_stat` and not `can_globalize` of that stat, FLAT `can_roll`, GLOBAL `can_globalize`. (DESIGN.md: "modifier_table.gd")
-- **Pass a stone's `stone_tier` to every draw on it** (`Item.rolled`, the orbs, the super orbs, the fortuneteller's odds); a new line on a made piece is `Item.extra_mod`, which does. (DESIGN.md: "modifier_table.gd", "item.gd")
+- **Pass a stone's `stone_tier` to every draw on it** (`Item.rolled`, the orbs, the fortuneteller's odds); a new line on a made piece is `Item.extra_mod`, which does. (DESIGN.md: "modifier_table.gd", "item.gd")
 - **Make a line only with `ModifierTable.rolled_mod`:** it has a tier, 1 to the level its bands are read at, and `Item._set_tier` is the one place a line is put at a tier by hand. (DESIGN.md: "modifier_table.gd", "item.gd")
 - **Write `line` and `band_line` through the same `_written`.** (DESIGN.md: "modifier_table.gd")
-- **Read a made piece's bands at `Item.mod_level()`, never `item.level`,** and a line's tier with `item.tier_of(mod)`. (DESIGN.md: "item.gd", "Honour what a super orb leaves on a piece")
+- **Read a made piece's bands at `Item.mod_level()`, never `item.level`,** and a line's tier with `item.tier_of(mod)`. (DESIGN.md: "item.gd", "Honour what a super orb left on a piece")
 - **Call `Item.refresh_perfect()` from whatever moves `mod_level`.** (DESIGN.md: "item.gd")
 - **Never open a modifier's line on a name** (the user's: "never start a line with <Name>:"): a `MODS` entry's `text` says what the line does, written by `_written`. (DESIGN.md)
   - **Keep `added_enemies` signed and never 0** (`range`, `wide` from `wide_from`; `reroll_value`, `band_for`, `rescaled`, `amount`).
@@ -102,22 +101,19 @@ Full text, numbers and reasons: `DESIGN.md`, "Reference (moved here from CLAUDE.
   - **Never give a row a PERCENT and a GLOBAL on one stat:** they write the same sentence.
 
 ### Orbs, the smith and held lines
-- **Write an orb's rule once, in `why_not`:** `can_apply` is it, empty, and `apply` refuses on it (`OrbTable`, `SuperOrbTable`, `RuneTable`). (DESIGN.md: "orb_table.gd")
+- **Write an orb's rule once, in `why_not`:** `can_apply` is it, empty, and `apply` refuses on it (`OrbTable`, `RuneTable`). (DESIGN.md: "orb_table.gd")
 - **Pass `Inventory.walls_ever()` to every source of orbs:** `OrbTable.unlocked(walls)` is which exist (the user's, 2026-10-03, permanent 2026-10-09); `EVERY_WALL` is the tests' default. (DESIGN.md: "orb_table.gd")
 - **Reroll with a rarity orb from below or above:** an epic transmuted comes down to uncommon (the user's ruling, 2026-10-02). (DESIGN.md: "orb_table.gd")
 - **Lean the shops on the drop rates, not on a table of their own** (`OrbTable.roll_favoured`). (DESIGN.md: "orb_table.gd")
-- **Give every orb, ordinary and super, a `glow`** off its icon, in ENDESGA 64. (DESIGN.md: "orb_table.gd")
+- **Give every orb a `glow`** off its icon, in ENDESGA 64. (DESIGN.md: "orb_table.gd")
 - **Craft only on a piece the bag page has open, carried or worn,** or, an orb in hand, on one still on a vendor's shelf (`craft_held`); crafted over a fight, it counts from the next blow (`main_scene._rearm`). (DESIGN.md)
-- **Change nothing on a broken piece:** no orb, no upgrade, no lock (the top of `OrbTable.why_not`); it takes Mending and nothing else. (DESIGN.md)
+- **Change nothing on a broken piece:** no orb, no upgrade, no lock (the top of `OrbTable.why_not`); broken is final. (DESIGN.md)
   - **Keep a locked modifier through every orb** (`_reroll_at`, where rarity and count are settled, fills around it; Divine skips it); a lock is one of the rarity's handful, never an extra.
   - **Freeze a held-fast line (locked or bound) in number and band** (`Item.hold`, `"at"`): `ascend()` and the smith walk past it, only `transcend()` moves it.
   - **Never make a common with an orb,** so a locked piece is never a common.
-- **Honour what a super orb leaves on a piece:** `_reroll_at` keeps `held_fast` lines and counts `extra_slot`; `reroll_values` steps over `held_fast` and `"perfect"`. (DESIGN.md)
-  - **Keep the tier on a Divine and at the smith;** Perfection is the top tier's top.
-  - **Refuse Replacement, Expansion and Binding on a unique.**
-- **Spend super orbs only on `TranscendPage` and only on heirlooms,** one count for all six (`Inventory.super_orbs`). (DESIGN.md: "super_orb_table.gd")
-- **Expect a +n piece as a drop:** `Item.ascend()` is the Orb of Ascension's act and what Lean Pickings does to a find, every modifier but a held-fast one kept in its place. (DESIGN.md)
-- **Take `Item.ascension_cost()` Orbs of Ascension for the next plus** (the user's, 2026-10-03). (DESIGN.md: "item.gd")
+- **Honour what a super orb left on a piece** (gone 2026-10-30; held pieces keep it): `_reroll_at` keeps `held_fast` lines and counts `extra_slot`; `reroll_values` steps over `held_fast` and `"perfect"`. (DESIGN.md)
+  - **Keep the tier on a Divine and at the smith;** a perfected line is the top tier's top.
+- **Expect a +n piece as a drop:** `Item.ascend()` is what Lean Pickings does to a find and the Lone Heir to the heirloom made, every modifier but a held-fast one kept in its place. (DESIGN.md)
 
 ### Uniques, achievements and ranks
 - **Make a unique an `Item` with `unique` set:** `type` its base piece, rarity UNIQUE, its row's modifiers in the row's order, only the values rolled (`Item.rolled_unique`). (DESIGN.md)
@@ -150,7 +146,7 @@ Full text, numbers and reasons: `DESIGN.md`, "Reference (moved here from CLAUDE.
   - **Ask the user when a new unique could be read either way; never guess.**
 - **Make an heirloom only on `TranscendPage`, one a transcension:** a piece in `stash()`, marked by nothing but `safe_level`. Never back to the bag, never sold, discarded one at a time. (DESIGN.md)
   - **Work on copies in `transcended()`,** so a caller whose write fails still holds the heirlooms as they were.
-  - **Carry through it the stash and its doll, unspent super orbs, `uniques_found`, `kills`, `tips`, and `first_sword_taken` forced true.**
+  - **Carry through it the stash and its doll, `uniques_found`, `kills`, `tips`, and `first_sword_taken` forced true.**
 - **Leave the count of heirlooms to `TranscendPage`;** `Inventory.make_heirloom` takes a bag piece or a worn one, never a broken one. (DESIGN.md: "inventory.gd")
 - **Carry `play_seconds`, `hero_name` and the heroes (`owned_characters`, `character`) through a transcension; leave `runes` and `runed` with the world.** (DESIGN.md: "inventory.gd")
 - **Buy and pick a hero only through `buy_character` / `use_character`** (`Characters` ids): one is bought once, and only an owned one is picked. A saved id the roster has not got is named in `lost`, and a pick not owned reads as the first. (DESIGN.md: "inventory.gd")
@@ -177,7 +173,7 @@ Full text, numbers and reasons: `DESIGN.md`, "Reference (moved here from CLAUDE.
 - **Drop runes only in Gollux's cave; spend them only on a charted tile a farm run can be fought on** (the user's design, 2026-10-09). (DESIGN.md: "rune_table.gd")
 - **Never touch a tile's own modifiers with a rune:** its rune work is one Dictionary (`RuneTable.fresh()`), each entry lasting `KILLS` kills on its own count; `pool` deals only rows a farm run feels. (DESIGN.md: "rune_table.gd")
 - **Spend a rune only where it does something** (`Inventory.use_rune`; a refusal leaves no record); `rune_work(spot)` reads without keeping, `rune_state(spot)` keeps. (DESIGN.md: "inventory.gd")
-- **Read every wall unlock off `Inventory.walls_ever()`** through `WallUnlocks` (the user's ladder, 2026-10-09), a camp's hours and the bag's room too (`camp_hours`, `bag_slots`, 2026-10-11); `walls_credited` is the super orbs' alone. (DESIGN.md: "wall_unlocks.gd", "inventory.gd")
+- **Read every wall unlock off `Inventory.walls_ever()`** through `WallUnlocks` (the user's ladder, 2026-10-09), a camp's hours and the bag's room too (`camp_hours`, `bag_slots`, 2026-10-11); `walls_credited` is this world's walls alone (achievements, the curses' pay per wall). (DESIGN.md: "wall_unlocks.gd", "inventory.gd")
 
 ### The bag
 - **Never destroy gear to fit the bag:** anything over `capacity()` stays whole and makes the player `encumbered()`. (DESIGN.md)
@@ -194,7 +190,6 @@ Full text, numbers and reasons: `DESIGN.md`, "Reference (moved here from CLAUDE.
 - **Give an `Item` built by hand its `stats`** (tests do this), or it is worth nothing. (DESIGN.md: "Never move a rolled item's level or base stats")
 - **Put a deep piece on a test fixture through `Equipment.equip`** when the test is about another rule. (DESIGN.md: "Gate Equip, and nothing else, on a piece's attribute")
 - **Add a tally with `tick`, not `count`:** `Inventory` already had a `count(type)`. (DESIGN.md: "Drop a unique only once it is unlocked")
-- **Expect Replacement to write a fresh dictionary,** so a perfected line replaced is perfect no longer. (DESIGN.md: "Honour what a super orb leaves on a piece")
 - **Remember a two-hander costs the torch too,** so a greatsword charts one ring of map less. (DESIGN.md: "Ask `Equipment.displaced_by` what a swap costs")
 - **Never ask the pool what a unique carries:** it may carry a line its base could never roll, and `effective_stats` applies by kind. (DESIGN.md: "Make a unique an `Item` with `unique` set")
 - **Draw no border on the slot's `StyleBoxFlat`:** it is the socket only; the frame is `ItemRarity.frame(rarity, rank)`, null for common. (DESIGN.md: "item_rarity.gd")

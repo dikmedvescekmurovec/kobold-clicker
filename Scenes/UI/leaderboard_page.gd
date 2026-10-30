@@ -151,7 +151,7 @@ func _tabs() -> HBoxContainer:
 			row.add_child(TownPage.tab_line(TownPage.TAB_GAP))
 		var tab := UITheme.button(BOARDS[key][0], UITheme.BARE_BUTTON, BOARDS[key][1])
 		tab.add_theme_font_override("font", theme.get_font("font", "SmallLabel"))
-		tab.add_theme_font_size_override("font_size", UITheme.SMALL_FONT_SIZE)
+		tab.add_theme_font_size_override("font_size", UITheme.small_size())
 		for state: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color",
 				"font_hover_pressed_color"]:
 			tab.add_theme_color_override(state, Palette.TEXT if key == _open else Palette.TEXT_SOFT)

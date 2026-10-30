@@ -9,8 +9,6 @@ extends RefCounted
 const PEAK_ICON := "res://Assets/UI/ui_icon_rosette.png"
 ## The bar over a piece's name that says how far it is to its next plus: its name, for tests, and its
 ## height in panel pixels, the 1 px rim of the trough included.
-const ASCENSION_BAR := "AscensionBar"
-const ASCENSION_HEIGHT := 4
 ## The line under a piece's name (its rarity, its level and what else it is), by name, for whoever adds
 ## to it (the card under Alt's "· worn"): the bar stands before the name on some pieces, so it is no
 ## fixed child.
@@ -21,22 +19,6 @@ const OPEN_ROW := "—"
 ## them from `CREST_EDGE` down, and the point under that.
 const CREST_REGION := Rect2(9, 0, 22, 8)
 const CREST_EDGE := 4
-
-
-## How far `item` is to its next plus, as the bar over its name: a socket's tan, filling with its brown.
-static func _ascension_bar(item: Item, width: float) -> ColorRect:
-	var trough := ColorRect.new()
-	trough.name = ASCENSION_BAR
-	trough.color = Palette.SLOT_TAN
-	trough.custom_minimum_size = Vector2(width, ASCENSION_HEIGHT)
-	trough.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var fill := ColorRect.new()
-	fill.color = Palette.SLOT_TAN_DK
-	fill.position = Vector2.ONE
-	fill.size = Vector2(floorf((width - 2.0) * float(item.ascension) / item.ascension_cost()), ASCENSION_HEIGHT - 2)
-	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	trough.add_child(fill)
-	return trough
 
 
 ## The unique frame's top edge laid across the card, two rows of `Palette.FRAME_GOLD`: over a unique's
@@ -77,9 +59,6 @@ static func _gold_rule(item: Item, crest: bool) -> Control:
 static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[Item] = [],
 		every_rank := false) -> void:
 	UITheme.clear(rows)
-	# Over the name the plus is written after.
-	if item.plus > 0 or item.ascension > 0:
-		rows.add_child(_ascension_bar(item, width))
 	rows.add_child(line(item.display_name(), item.text_color(), width))
 	# One line for what the piece is: its rarity, a named heirloom's base, its level, both hands (a socket
 	# is as much of what it costs as its level) and a unique's rank. In the soft ink for every rarity:
@@ -92,9 +71,10 @@ static func fill(rows: VBoxContainer, item: Item, width: float, against: Array[I
 			Palette.TEXT_SOFT, width, true)
 	rarity.name = RARITY_LINE
 	rows.add_child(rarity)
-	# A skill stone's shape: how deep it may sit and how many stones hang off it.
+	# A skill stone's shape: how deep it may sit and how many stones hang off it, and the points it takes.
 	if item.is_stone():
 		rows.add_child(line(SkillTree.shape_text(item), Palette.TEXT_SOFT, width, true))
+		rows.add_child(line("Takes %d SP" % SkillTree.base_ranks(item), Palette.TEXT_SOFT, width, true))
 	# Not coloured by whether it is met: this block knows no player, and a greyed Equip says it.
 	var needs := LootTable.requirement(item.type, item.level)
 	if not needs.is_empty():

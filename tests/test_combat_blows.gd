@@ -1261,6 +1261,7 @@ func _test_settings() -> bool:
 	Settings.fullscreen = true
 	Settings.animations = Settings.Anim.LOW
 	Settings.item_details = true
+	Settings.large_text = true
 	Settings.uniques = Settings.Uniques.KEEP
 	Settings.save()
 	Settings.sfx_volume = 1.0
@@ -1269,11 +1270,13 @@ func _test_settings() -> bool:
 	Settings.fullscreen = false
 	Settings.animations = Settings.Anim.DEFAULT
 	Settings.item_details = false
+	Settings.large_text = false
 	Settings.uniques = Settings.Uniques.ASK
 	Settings.load_settings()
 	_check(Settings.sfx_volume == 0.0 and is_equal_approx(Settings.music_volume, 0.5) and not Settings.shake
 			and Settings.fullscreen and Settings.animations == Settings.Anim.LOW and Settings.item_details
-			and Settings.uniques == Settings.Uniques.KEEP, "settings come back off their file")
+			and Settings.large_text and Settings.uniques == Settings.Uniques.KEEP, "settings come back off their file")
+	Settings.large_text = false
 	Settings.uniques = Settings.Uniques.ASK
 	Settings.shake = true
 	Settings.fullscreen = false

@@ -84,11 +84,11 @@ const MODS := {
 		"weight": 2, "text": "+{n} rank to every Intelligence Node holding a point"},
 	"added_dexterity_stones": {"kind": Kind.FLAT, "stat": "dexterity_stones", "range": [1, 1], "weight": 2,
 		"text": "+{n} rank to every Dexterity Node holding a point"},
-	# A skill stone's (the user's, 2026-10-08): the points it takes past the one every stone takes
-	# (`Skills`). Its bands are written by the tier (`per_tier`, the user's, 2026-10-09): tier 1 is 1-2
+	# A skill stone's (the user's, 2026-10-08): the points it takes past its tier's base
+	# (`SkillTree.most_ranks`). Its bands are written by the tier (`per_tier`, the user's, 2026-10-09): tier 1 is 1-2
 	# and each tier lifts the top by two. Drawn at `SkillTree.ranks_weight(tier)`, never at this weight.
 	"added_stone_ranks": {"kind": Kind.FLAT, "stat": "stone_ranks", "range": [1, 2], "weight": 4,
-		"per_tier": [0, 2], "text": "+{n} ranks", "text_one": "+{n} rank"},
+		"per_tier": [0, 2], "text": "Takes +{n} skill points", "text_one": "Takes +{n} skill point"},
 	# The body's. `added_enemies` is one more or fewer, up to two from tier `wide_from`, never none.
 	"added_camp_earnings": {"kind": Kind.FLAT, "stat": "camp_earnings", "range": [10, 25], "weight": 4,
 		"text": "Camps earn {n}% more"},

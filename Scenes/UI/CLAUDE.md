@@ -28,11 +28,11 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
   - **Show at most `KillPips.SHOWN` (10) pips,** so `width_for(slots)` is `mini(slots, SHOWN) * WIDTH`; `HealthBar.TROUGH` is the same width in every tier. (DESIGN.md: "kill_pips.gd")
 
 ### Fonts and words
-- **Use two fonts, each at its native size:** Pixellari 16 for a name, a heading or a button face (`PanelLabel`); Ark Pixel 10 for any line of a block (`SmallLabel`, `UITheme.label(.., .., true)`, `ItemDetails.line(.., true)`). (DESIGN.md; the why: "Why there are two fonts")
+- **Use two fonts, each at its native size:** Pixellari 16 for a name, a heading or a button face (`PanelLabel`); Ark Pixel 10 for any line of a block (`SmallLabel`, `UITheme.label(.., .., true)`, `ItemDetails.line(.., true)`), 12 under Larger text (`UITheme.small_size()`). (DESIGN.md; the why: "Why there are two fonts")
 - **Write no descriptive text on a page** (the user's rule, 2026-09-30): no sentence saying what a field is for, how a rule works or what a number means. Controls, values, headings, an empty state and a refusal only; anything more is a tooltip, and only when asked. (DESIGN.md)
   - **Say why a button is dead in its tooltip, never as a line on the page** -- Buy, Restock, Upgrade and Lock alike. (DESIGN.md: "town_page.gd")
   - **Give a counter no Buy heading and no helper sentences;** an empty state is the only line it writes. (DESIGN.md: "town_page.gd")
-  - **Say on a black-screen card only where it stands** ("Done", "3 to spend"), never what the card is for. (DESIGN.md: "transcend_page.gd")
+  - **Write nothing under a black-screen card** (the user's, 2026-10-30), and stand Take on a curse only once a skull is had. (DESIGN.md: "transcend_page.gd")
 - **Write a curse's sentences to be understood, not to fit** (`Curses`): they wrap and the table scrolls, so a new curse never means cutting an old one's words. (DESIGN.md: "transcend_page.gd")
 - **Give a level's heading marks, not words,** on one line: Auto a bare chest struck through (`AUTO_ICON`, green `AUTO_ON_ICON` while on), Clear a bare bin, in a town that buys gear coins (`SELL_ICON`). Tests find either by its tooltip. (DESIGN.md)
 - **Make Back the arrow, `UITheme.back_button(tooltip)`, never the word;** only the verdict of a won tile or an ended run leaves by a word, Collect. (DESIGN.md)
@@ -120,9 +120,8 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
 
 ### The bag, the doll and the orbs (DESIGN.md: "bag_page.gd")
 - **Save through `_save()` after every change;** it does nothing without a path, so a transcension's bag (`transcending`, the fifth argument) writes no file.
-- **Keep `_purse` the player's** (gold, orbs, tips, super orbs, the one thing ever saved) on the heirlooms' page too: `BagPage` with a fourth argument `true`, over `inventory.stash()`, with no Auto, bin, Sell or count.
+- **Keep `_purse` the player's** (gold, orbs, tips, the one thing ever saved) on the heirlooms' page too: `BagPage` with a fourth argument `true`, over `inventory.stash()`, with no Auto, bin, Sell or count.
 - **Make no heirloom in the ordinary bag:** Make heirloom (`_make_button`, asks first) stands only on a transcension's, where a selected piece gets no buttons.
-- **Use a super orb as an ordinary orb is used:** picked up (`_armed`), then pressed on an heirloom (the user's, 2026-10-03; `_super_press`).
 - **Put the upgrade arrow only on a piece Equip would take** (`is_upgrade`, `Inventory.can_equip`), never over a greyed Equip.
 - **Show only the doll in the sheet:** what a selected piece would replace is the hover card's under Alt, and Equip's tooltip names what it takes off (`Equipment.displaced_by`).
 - **Let a level's bin and Sell all take only what the open filter tab shows** (`Inventory.discard_level(.., slot)`); never hide a level holding nothing at all, and keep a hidden piece selected. (DESIGN.md: "The bag's filter tabs (2026-10-07)")
@@ -236,7 +235,7 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
 | `skills_page.gd` (`SkillsPage`) | The skill tree page: the free points and the zoom over a `SkillTreeView`, and one Reset. |
 | `town_page.gd` (`TownPage`) | The settlement on the right edge, a tab a counter: shelves, smith, bounty board, fortuneteller and her banishing. |
 | `smith_swing.gd` (`SmithSwing`) | The smith at `TownPage`'s bench: his portrait, his hammer strike's clock and its sound. |
-| `transcend_page.gd` (`TranscendPage`) | The black screen between two worlds: four cards (heirlooms, curses, skill tree) and the way into the new world. |
+| `transcend_page.gd` (`TranscendPage`) | The screen between two worlds: a star chart (an heirloom, curses once a skull is had, skill tree) over a nebula, its orb the way into the new world. |
 | `bounty_list.gd` (`BountyList`) | The bounty journal on the left edge, and `row`, the card a posting is written out as. |
 | `bounty_rewards.gd` (`BountyRewards`) | What the bounty board hands over, each a panel in a screen-wide catch over the town: a claim's verdict (`show_paid`) and a cleared board's three options (`show_choice`). |
 | `leaderboard_page.gd` (`LeaderboardPage`) | The leaderboards on the left edge, a tab a board, with the sign-in and the name. |
@@ -259,7 +258,7 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
 | `comic.gd` (`Comic`) | The comic a first run opens on, over the whole window: a page at a time across, a column of panels held upright. |
 | `dialogue_box.gd` (`DialogueBox`) | Someone speaking: a box along the window's foot (its top held upright), words coming in beside a portrait. |
 | `spotlight.gd` (`Spotlight`) | The window shaded but for the next thing a first step makes the player press; every other press and key eaten. |
-| `orb_slot.gd` (`OrbSlot`) | One orb, super orb or rune as a square in its tray. |
+| `orb_slot.gd` (`OrbSlot`) | One orb or rune as a square in its tray. |
 | `orb_card.gd` (`OrbCard`) | The floating card for the orb under the cursor. |
 | `skill_tree_view.gd` (`SkillTreeView`) | The skill tree round its root: lays it out, draws, lights and zooms it, and takes its presses. |
 | `coins.gd` (`Coins`) | The coin's icon and spin, and how many coins an amount is worth. |
@@ -270,5 +269,6 @@ Where a rule's full text is: `(DESIGN.md)` means under a heading that is the rul
 | `juice.gd` (`Juice`) | Static effects: sounds, bursts, hit stop, shake, how popups come and go, how side pages slide. |
 | `orb_shine.gdshader` | The light `ItemCard.shine` puts behind a card when an orb went into its piece. |
 | `node_glow.gdshader` | The light behind a skill node a point can go into. |
+| `nebula.gdshader` | The transcension's sky: a nebula of purples drifting slowly in whole interface pixels, dithered, with twinkling stars. |
 | `grey.gdshader` | Greys a piece the collection log knows of and the player has not found. |
 | `shine.gdshader` | The diagonal glint `ItemSlot` puts on rare and better. |

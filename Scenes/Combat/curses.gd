@@ -5,11 +5,11 @@ extends RefCounted
 ## (`TranscendPage`), each a handicap on the whole world for a bonus on the whole world.
 ## A table and nothing else -- `Inventory.curses` holds the ids, `Inventory.effects()` hands each to
 ## the fight as `"curse:<id>"` (`effect`), where it is one `if` like a worn unique's, and
-## `Inventory.stats()` adds a row's `stats`.
+## `Inventory.stats()` adds a row's `stats` and its `wall_damage` for every wall down in the world.
 ##
 ## **A row's two sentences are written to be understood, not to fit:** the table that shows them
 ## (`TranscendPage`) wraps and scrolls. Say the whole rule, with the number and what it is against
-## ("two super orbs, not one"). A curse takes from one side of the game and pays on another, so none
+## ("twice the health", "every 6 rings, not every 12"). A curse takes from one side of the game and pays on another, so none
 ## nets to nothing. `skulls` is how hard it is, and what it costs of the budget (`fits`).
 
 const IRON_FOES := "iron_foes"
@@ -40,10 +40,14 @@ const NO_SECOND_CHANCES := "no_second_chances"
 const HOME_PREFIX := "homeland:"
 
 ## `stats` is what `Inventory.stats()` adds while the curse is on; `xp_more` is read by `Encounter.arm`
-## and by nothing else. What is not a number is written where it is done, and named in the row's text.
+## and by nothing else. `wall_damage` is a percent more damage for every wall down in this world
+## (`Inventory.walls_credited`), the rows' together one multiplier (`wall_damage(taken)`).
+## The three rows that paid super orbs were given these on 2026-10-30, mine and unplayed. What is not a number is written where it is done, and named in the row's text.
 ## **A figure a rule reads is written into its sentence from the rule's own constant** (`Encounter`'s,
 ## `TileMods.WILD_REWARD`, `Camp`'s hours, `MapBuilder`'s wall steps), never typed in a second time; the
 ## rows stay whole sentences, since the pages read `text` and `reward` as they stand.
+const WINTER_WALL_DAMAGE := 25
+const RING_WALL_DAMAGE := 15
 const CURSES := {
 	IRON_FOES: {"name": "Iron Foes", "skulls": 1,
 		"text": "Every enemy has %.0f%% more health." % (Encounter.IRON_HP * 100.0), "reward": "+40% gold find",
@@ -104,17 +108,21 @@ const CURSES := {
 		"text": "The collection log adds no damage in this world.",
 		"reward": "Every unique first found in this world counts twice in the log, for good."},
 	LONG_WINTER: {"name": "Long Winter", "skulls": 3,
-		"text": "The ice wall has twice the health.", "reward": "Every ice wall pays two super orbs, not one."},
+		"text": "The ice wall has twice the health.",
+		"reward": "Every ice wall broken in this world gives +%d%% damage for the rest of it." % WINTER_WALL_DAMAGE,
+		"wall_damage": WINTER_WALL_DAMAGE},
 	RING_OF_WALLS: {"name": "Ring of Walls", "skulls": 3,
 		"text": "An ice wall stands every %d rings, not every %d."
 				% [MapBuilder.RING_OF_WALLS_STEP, MapBuilder.WALL_STEP],
-		"reward": "Every wall still pays its super orb, so there are twice as many to earn."},
+		"reward": "Every ice wall broken in this world gives +%d%% damage for the rest of it." % RING_WALL_DAMAGE,
+		"wall_damage": RING_WALL_DAMAGE},
 	LONE_HEIR: {"name": "Lone Heir", "skulls": 3,
 		"text": "Only one heirloom may be worn. The rest come off as the world begins.",
 		"reward": "The heirloom you make at the end of this world is made +1."},
 	NO_SECOND_CHANCES: {"name": "No Second Chances", "skulls": 3,
 		"text": "Losing the fight for a tile ends the world at once, and a world lost that way leaves no heirloom.",
-		"reward": "Every ice wall pays one more super orb."},
+		"reward": "+40% drop rate and +40% item rarity",
+		"stats": {"drop_rate": 40.0, "item_rarity": 40.0}},
 }
 
 
@@ -125,6 +133,14 @@ static func allowed(id: String, taken: Array) -> bool:
 		if other in taken:
 			return false
 	return true
+
+
+## The percent more damage a wall down pays under `taken`.
+static func wall_damage(taken: Array) -> int:
+	var sum := 0
+	for id: String in taken:
+		sum += int(CURSES[id].get("wall_damage", 0))
+	return sum
 
 
 static func skulls_of(taken: Array) -> int:

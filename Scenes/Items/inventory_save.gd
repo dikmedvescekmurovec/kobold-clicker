@@ -13,8 +13,8 @@ extends RefCounted
 ##  6  `gold`   7  `orbs`   8  `level`, `xp`   9  `skills` (not read since 33)   10  `towns`
 ## 11  `uniques_found`   12  `fortunes`
 ## 13  `first_sword_taken`, absent read as taken: the save is under way. `first_elite_taken` is ignored
-## 14  `heirlooms`, `walls_credited` (none paid, so `credit_walls` pays an old save for the walls it has
-##     down) and `heirloom_picks`, which 15 reads as `super_orbs`
+## 14  `heirlooms`, `walls_credited` (none counted, so `credit_walls` counts an old save's walls down)
+##     and `heirloom_picks`, 15's `super_orbs`: both ignored since the super orbs went (2026-10-30)
 ## 16  `play_seconds`   17  `camp`   18  `curses`
 ## 19  `skill_sunk`, `skill_transcends` (gone at 24, ignored)   20  `homeland`, `uniques_doubled`
 ## 21  `skull_budget` (ignored since 2026-10-03: only Gollux pays skulls)   22  `dungeon_depth`
@@ -70,7 +70,6 @@ static func write(inventory: Inventory, path: String, stamp: float) -> bool:
 		"fortunes": inventory.fortunes,
 		"saved_at": stamp,
 		"heirlooms": {"items": stash.items.map(as_saved), "equipped": stash.equipment.to_dict()},
-		"super_orbs": inventory.super_orbs,
 		"walls_credited": inventory.walls_credited,
 		"curses": inventory.curses,
 		"homeland": inventory.homeland,
@@ -222,8 +221,6 @@ static func _read_fields(inventory: Inventory, data: Dictionary, version: int) -
 	var heir := _dict(data.get("heirlooms"))
 	inventory.stash().items = _pieces(heir.get("items"), lost)
 	inventory.stash().equipment = Equipment.from_dict(heir.get("equipped", {}), lost)
-	# A version 14 save called them picks; what is left of them are orbs.
-	inventory.super_orbs = maxi(0, Inventory._whole(data.get("super_orbs", data.get("heirloom_picks"))))
 	inventory.walls_credited = _whole_of(data, "walls_credited")
 	var cursed := _list(data.get("curses"))
 	inventory.curses = Curses.known(cursed)

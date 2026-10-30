@@ -272,7 +272,7 @@ Written while `UNIQUE_EXPORT` is on (it is); `UniqueTable.icon` falls back to th
 - Output: `Assets/Gear/Unique/<id>.png` (32x32)
 - Preview in `tools/qa/`: `ui_kit_uniques.png` (each in its gold ring, and blacked out as the log draws a missing one)
 
-Orb icons (`ORBS`): the six orbs are the sheet's stones, the six super orbs its crystals
+Orb icons (`ORBS`): the six orbs are the sheet's stones (the six super orbs were its crystals until they went, 2026-10-30)
 - Source: `OreAndGem/OreGemSpritesheet.png`, 10x5 on a 32 px pitch
 - Output: `Assets/Orbs/`
 - Preview in `tools/qa/`: `ui_kit_orbs.png`

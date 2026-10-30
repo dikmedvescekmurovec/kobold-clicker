@@ -3,9 +3,9 @@ extends "res://tests/harness.gd"
 ##   python tests/run_all.py ui_pages
 ##
 ## Two halves. **How each page lies** (`_test_layouts`): every page the game has, built over a scratch
-## hero in a scratch world and laid out in four windows (`SHAPES`: the default one, a phone held
-## upright, the smallest upright budget and a phone on its side), then held to what must be true of
-## all of them (`_wrongs`). **What the pages do**: a question answered once, a hidden page asking
+## hero in a scratch world and laid out in five windows (`SHAPES`: the default one, a phone held
+## upright, the smallest upright budget, a phone on its side and that budget again in
+## `Settings.large_text`), then held to what must be true of all of them (`_wrongs`). **What the pages do**: a question answered once, a hidden page asking
 ## nothing, a field that keeps its cursor, and the rest, one test a bug.
 ##
 ## **A layout dump, for whoever cannot look at a screenshot.** With the environment variable
@@ -23,10 +23,10 @@ const MAP := "user://test_ui_pages_map.json"
 const DUMP := "KOBOLD_LAYOUT_DUMP"
 ## The main scene's own, and an even row (`MapBuilder.create`).
 const ORIGIN := Vector2i(128, 128)
-## Each window a page is laid out in, and the `ui_scale` the main scene would pick for it
-## (`UITheme.pick_scale`).
+## Each window a page is laid out in, the `ui_scale` the main scene would pick for it
+## (`UITheme.pick_scale`) and, where there is a third, the larger body text.
 const SHAPES := [[Vector2i(1152, 648), 2.0], [Vector2i(360, 780), 1.0], [Vector2i(324, 576), 1.0],
-		[Vector2i(780, 360), 1.0]]
+		[Vector2i(780, 360), 1.0], [Vector2i(324, 576), 1.0, true]]
 ## How far a rect may stand past the window and still be inside it: a pixel's rounding.
 const SLACK := 0.5
 
@@ -99,7 +99,6 @@ func _hero() -> Inventory:
 	hero.gold = 123456789.0
 	hero.kills = 4321
 	hero.dungeon_depth = 6
-	hero.super_orbs = 3
 	hero.farthest_land = MapBuilder.START_LAND_RADIUS + 7 * MapBuilder.WALL_STEP
 	hero.tips.append("first_orb")
 	var rarities := [ItemRarity.Rarity.COMMON, ItemRarity.Rarity.UNCOMMON, ItemRarity.Rarity.RARE, ItemRarity.Rarity.ELITE]
@@ -330,14 +329,9 @@ func _pages(hero: Inventory) -> Dictionary:
 			var page: TranscendPage = black.call(scale)
 			page._open(page._create_page, true)
 			return page,
-		"black_upgrade": func(scale: float) -> Control:
+		"black_heirlooms": func(scale: float) -> Control:
 			var page: TranscendPage = black.call(scale)
-			page._open(page._upgrade_page)
-			return page,
-		"black_upgrade_aimed": func(scale: float) -> Control:
-			var page: TranscendPage = black.call(scale)
-			page._open(page._upgrade_page)
-			page._upgrade_page._super_press(SuperOrbTable.REPLACEMENT, hero.stash().items[0])
+			page._open(page._heirloom_page, true)
 			return page,
 		"black_stones": func(scale: float) -> Control:
 			var page: TranscendPage = black.call(scale)
@@ -455,6 +449,8 @@ func _test_layouts() -> bool:
 	for shape: Array in SHAPES:
 		var window: Vector2i = shape[0]
 		var scale: float = shape[1]
+		Settings.large_text = shape.size() > 2
+		UITheme.apply_text_size()
 		root.size = window
 		await _frames(2)
 		_check(root.get_visible_rect().size == Vector2(window), "the window is %s to lay out in (%s)"
@@ -468,14 +464,17 @@ func _test_layouts() -> bool:
 			if page.has_method("layout"):
 				page.call("layout")
 			await _frames(3)
+			var shape_name := "%dx%d%s" % [window.x, window.y, "_large" if Settings.large_text else ""]
 			for wrong: String in _wrongs(page, Vector2(window)):
-				_check(false, "%s in %dx%d: %s" % [page_name, window.x, window.y, wrong])
+				_check(false, "%s in %s: %s" % [page_name, shape_name, wrong])
 			if not folder.is_empty():
-				var file := FileAccess.open(folder.path_join("%s_%dx%d.json" % [page_name, window.x, window.y]),
+				var file := FileAccess.open(folder.path_join("%s_%s.json" % [page_name, shape_name]),
 						FileAccess.WRITE)
 				file.store_string(JSON.stringify(_dump(page, page, []), "\t"))
 			page.queue_free()
 			await process_frame
+	Settings.large_text = false
+	UITheme.apply_text_size()
 	_map.queue_free()
 	_view = null
 	Settings.animations = was_animations
@@ -540,7 +539,7 @@ func _wrongs(page: Control, window: Vector2) -> PackedStringArray:
 		if lettered:
 			var font := control.get_theme_font("font")
 			var size := control.get_theme_font_size("font_size")
-			if not ((font == pixellari and size == UITheme.FONT_SIZE) or (font == ark and size == UITheme.SMALL_FONT_SIZE)):
+			if not ((font == pixellari and size == UITheme.FONT_SIZE) or (font == ark and size == UITheme.small_size())):
 				wrong.append("%s is lettered at %d in neither of the theme's two fonts" % [_path(page, control), size])
 	return wrong
 
@@ -616,22 +615,6 @@ func _test_answered_once() -> bool:
 	_button(asked, "Discard").pressed.emit()
 	_check(done.size() == 1, "and a Yes pressed after Cancel does nothing")
 	bag.queue_free()
-
-	# An aimed super orb asks which modifier: the line pressed twice spends one orb.
-	var heirlooms := BagPage.new(hero, "", 2.0, true, true)
-	root.add_child(heirlooms)
-	await process_frame
-	var treasure: Item = hero.stash().items[0]
-	hero.super_orbs = 3
-	heirlooms._super_press(SuperOrbTable.REPLACEMENT, treasure)
-	_check(heirlooms._confirm != null, "an aimed super orb asks which modifier")
-	var lines: Array = heirlooms._confirm.find_children("*", "Button", true, false).filter(
-			func(button: Button) -> bool: return not button.disabled and button.text != "Cancel")
-	_check(not lines.is_empty(), "with a line to press")
-	(lines[0] as Button).pressed.emit()
-	(lines[0] as Button).pressed.emit()
-	_check(hero.super_orbs == 2, "and a line pressed twice spends one orb (%d left of 3)" % hero.super_orbs)
-	heirlooms.queue_free()
 
 	# Her answer's Dismiss, ticked: the reading is written down once. And the way out is not taken
 	# by a Transcend pressed after Cancel.
@@ -881,7 +864,7 @@ func _test_worn_card() -> bool:
 	var slot := ItemSlot.make(Item.rolled("Wooden Sword", ItemRarity.Rarity.COMMON, rng, 1))
 	_check(card.write_second(slot), "a piece held against a worn one has a second card")
 	var written: Array = card._worn_rows.get_children().filter(func(row: Node) -> bool: return row is Label)
-	_check(card._worn_rows.get_child(0).name == ItemDetails.ASCENSION_BAR, "a plussed piece's bar stands over its name")
+	_check(card._worn_rows.get_child(0) == written[0], "a plussed piece's card opens on its name")
 	_check((written[0] as Label).text == worn.display_name(), "its name says its name (%s)" % (written[0] as Label).text)
 	_check((written[1] as Label).text.ends_with(" · worn") and (written[1] as Label).text.begins_with("Rare"),
 			"and its rarity line says it is worn (%s)" % (written[1] as Label).text)
@@ -917,9 +900,6 @@ func _test_orb_card() -> bool:
 	_check(says.call() == [orb, OrbTable.describe(orb)], "an orb held says its name and what it does (%s)" % [says.call()])
 	card.fill(orb, 0)
 	_check(says.call() == [orb, OrbTable.describe(orb), "Not found yet"], "one never found says so")
-	card.fill(SuperOrbTable.ASCENSION, 0)
-	_check(says.call() == [SuperOrbTable.ASCENSION, SuperOrbTable.describe(SuperOrbTable.ASCENSION),
-			"None left to spend"], "a super orb with none left says that")
 	card.fill(orb, 0, "120 gold", Palette.RUST)
 	_check(says.call() == [orb, OrbTable.describe(orb), "120 gold"]
 			and (card._rows.get_child(2) as Label).get_theme_color("font_color") == Palette.RUST,
@@ -946,8 +926,8 @@ func _test_black_screen_upright() -> bool:
 	var black := TranscendPage.new(_hero(), 1.0)
 	root.add_child(black)
 	await _frames(2)
-	var cards: GridContainer = black._choice.find_children("*", "GridContainer", true, false)[0]
-	_check(cards.columns == 1, "held upright the four cards stand one over another")
+	_check(black._choice.custom_minimum_size == TranscendPage.CHART[true]["size"]
+			and _rect(black._choice).size.x <= 324.0, "held upright the star chart is the upright one, in the window")
 	black._show_curses()
 	await _frames(2)
 	_check(not black._choice.visible and black._curse_face != null, "a card opens its face")

@@ -21,22 +21,19 @@ func _init() -> void:
 	add_child(_rows)
 
 
-## Fills the card for one orb, super orb or rune. `held` is how many the player has (the one count the
-## super orbs share). `note`, where given, is the third line: a vendor's price, or why it cannot be had
+## Fills the card for one orb or rune. `held` is how many the player has. `note`, where given, is the third line: a vendor's price, or why it cannot be had
 ## (`TownPage`).
 func fill(orb: String, held: int, note := "", note_tone := Palette.TEXT_SOFT) -> void:
 	UITheme.clear(_rows)
 	_rows.add_child(ItemDetails.line(orb, Palette.TEXT, WIDTH))
-	var is_super := SuperOrbTable.has(orb)
-	var does := SuperOrbTable.describe(orb) if is_super else str(RuneTable.RUNES[orb]["does"]) \
-			if RuneTable.has(orb) else OrbTable.describe(orb)
+	var does := str(RuneTable.RUNES[orb]["does"]) if RuneTable.has(orb) else OrbTable.describe(orb)
 	_rows.add_child(ItemDetails.line(does, Palette.TEXT_SOFT, WIDTH, true))
 	if not note.is_empty():
 		_rows.add_child(ItemDetails.line(note, note_tone, WIDTH, true))
 	elif held <= 0:
 		# A faded icon cannot say whether the orb was spent or never found. With any held there is nothing
 		# to add: the count is on the square, and an orb is only picked up, never spent on the open piece.
-		_rows.add_child(ItemDetails.line("None left to spend" if is_super else "Not found yet",
+		_rows.add_child(ItemDetails.line("Not found yet",
 				Palette.SLOT_TAN_DK, WIDTH, true))
 	# Sized now, not a frame later, so whoever places the card has a size to place.
 	reset_size()

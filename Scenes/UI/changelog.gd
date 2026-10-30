@@ -74,7 +74,7 @@ static func _version(version: Dictionary, width: float) -> VBoxContainer:
 	head.add_child(date)
 	column.add_child(head)
 	# On the first line's middle, whatever the body font's height.
-	var line_height := UITheme.theme().get_font("font", "SmallLabel").get_height(UITheme.SMALL_FONT_SIZE)
+	var line_height := UITheme.theme().get_font("font", "SmallLabel").get_height(UITheme.small_size())
 	var bullet_top := floorf((line_height - BULLET) / 2.0)
 	for section: Array in version["sections"]:
 		var block := UITheme.vbox(BagPage.SLOT_GAP)

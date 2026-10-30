@@ -30,6 +30,8 @@ static var animations := Anim.DEFAULT
 static var shake := true
 ## Whether a desktop window fills the screen (`apply_window`). Nothing on a phone or the web asks it.
 static var fullscreen := false
+## Whether body text is set a size up (`UITheme.small_size`); the names and headings stay as they are.
+static var large_text := false
 ## Whether a modifier's line carries the band it rolled in: "+14(8-20)% increased Damage".
 static var item_details := false
 ## What Sell all and the bin do with a unique among the handful: ask (the second question, whose tick
@@ -90,6 +92,7 @@ static func load_settings() -> void:
 	shake = bool(file.get_value(SECTION, "shake", shake))
 	fullscreen = bool(file.get_value(SECTION, "fullscreen", fullscreen))
 	animations = clampi(int(file.get_value(SECTION, "animations", animations)), Anim.NONE, Anim.DEFAULT) as Anim
+	large_text = bool(file.get_value(SECTION, "large_text", large_text))
 	item_details = bool(file.get_value(SECTION, "item_details", item_details))
 	uniques = clampi(int(file.get_value(SECTION, "uniques", uniques)), Uniques.ASK, Uniques.KEEP) as Uniques
 	filter_rarity = maxi(0, int(file.get_value(SECTION, "filter_rarity", filter_rarity)))
@@ -119,6 +122,7 @@ static func save() -> void:
 	file.set_value(SECTION, "shake", shake)
 	file.set_value(SECTION, "fullscreen", fullscreen)
 	file.set_value(SECTION, "animations", int(animations))
+	file.set_value(SECTION, "large_text", large_text)
 	file.set_value(SECTION, "item_details", item_details)
 	file.set_value(SECTION, "uniques", int(uniques))
 	file.set_value(SECTION, "filter_rarity", filter_rarity)

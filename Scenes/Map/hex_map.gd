@@ -57,6 +57,8 @@ var click_out := Callable()
 ## The interface's scale, which a press's travel is measured in. The main scene's.
 var ui_scale := 2.0
 var _press_at := Vector2.ZERO
+## Where the press was at its last motion, which a drag moves the map from.
+var _drag_at := Vector2.ZERO
 var _pressing := false
 var _dragging := false
 ## Overlay layer of each environment that can spread onto lower-priority neighbors, lowest priority first.
@@ -136,15 +138,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			var slop := Cursors.TOUCH_SLOP if Cursors.touched else DRAG_THRESHOLD
 			if _press_at.distance_to(event.position) > slop * ui_scale:
 				_dragging = true
+			# From positions, never `relative`: a finger's motion on the web build moved the map far further
+			# than the finger went (the user's, 2026-10-30), while its positions are what a tap lands on.
 			if _dragging:
-				dragged.emit(event.relative)
+				dragged.emit(event.position - _drag_at)
 				get_viewport().set_input_as_handled()
+			_drag_at = event.position
 		_point()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
 			_pressing = true
 			_dragging = false
 			_press_at = event.position
+			_drag_at = event.position
 		else:
 			# A click selects a tile; a press that travelled was a drag, and only moved the map.
 			var cell := cell_at(world_position(event.position))

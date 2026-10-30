@@ -363,7 +363,6 @@ func _transcend() -> void:
 	var heirloom := LootTable.roll("Imp", _rng, true, 8, 0.0, 0.0, ItemRarity.Rarity.ELITE)
 	_main.inventory.add(heirloom)
 	_main.inventory.make_heirloom(heirloom)
-	_main.inventory.super_orbs = 3
 	var town := view.start_town - view.origin
 	_main.inventory.gold = TownPrices.fortune_price(FortuneTeller.TRANSCEND, town) * 3.0
 	Achievements.earn(_main.inventory)

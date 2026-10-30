@@ -183,9 +183,9 @@ A press is `_find_hero`: the hero glided into the middle of that room (`_glide_c
 #### Aimed spells
 The fortuneteller's two aimed spells, the scour and the road home: `TownPage.spell_aimed(reading, price, spot)` -> `_on_spell_aimed` closes the town and the tile panel, sets `map.aim_radius` (the scour's patch, or 0 -- one tile -- for the road home) and puts nothing up (the user's call: the spell's tooltip and the outline are enough); `map.cell_aimed` -> `_on_cell_aimed` does the deed (`view.scour` / `view.jump_to`), and **only where it did something** charges, marks `FortuneTeller.ASKED + reading` in that town's drawer and saves the inventory (and the map, for a scour); `_end_aim` (a right click, or Escape before anything else but a tip) costs nothing.
 
-#### Super orbs
-**Super orbs (`_credit_walls`):** `inventory.credit_walls(view.walls_fallen())`, saved when it pays, asked at start-up before the interface is built (which pays a save from before there were heirlooms for the walls it has down) and after every `view.chart`. It also climbs the heirlooms to `view.charted_level()` (`inventory.raise_heirlooms`), saving and refreshing both bag pages when one moved.
-The tip `first_heirloom` is due while one is unspent, and says only that a fortuneteller now knows a way out.
+#### Walls down
+**Walls down (`_credit_walls`):** `inventory.credit_walls(view.walls_fallen())`, saved when it counts one, asked at start-up before the interface is built (which counts an old save's walls) and after every `view.chart`; what it pays since the super orbs went (2026-10-30) is the achievements' tally and the Long Winter's and the Ring of Walls' damage a wall. It also climbs the heirlooms to `view.charted_level()` (`inventory.raise_heirlooms`), saving and refreshing both bag pages when one moved.
+The tip `first_heirloom` is due once a wall is down in the world (`walls_credited`), and says only that a fortuneteller now knows a way out.
 
 #### Transcending
 **Transcending is two steps.** `_on_transcend_pressed` (the fortuneteller's question answered yes; the price checked, never taken) closes everything and stands `TranscendPage` on the UI layer, the black screen where one heirloom is made and the super orbs are spent -- **in memory only**.

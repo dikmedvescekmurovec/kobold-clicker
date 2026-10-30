@@ -525,14 +525,6 @@ ORBS = {
     "Orb of Chaos": ("OreAndGem/OreGemSpritesheet", 6 * 32, 2 * 32, 32, 32, 1),
     "Orb of Exaltation": ("OreAndGem/OreGemSpritesheet", 5 * 32, 1 * 32, 32, 32, 1),
     "Orb of Divinity": ("OreAndGem/OreGemSpritesheet", 8 * 32, 2 * 32, 32, 32, 1),
-    # The six super orbs (`SuperOrbTable`), spent only at a transcension: the sheet's crystals, where
-    # the ordinary six are its stones, so the two trays never read as one family.
-    "Orb of Replacement": ("OreAndGem/OreGemSpritesheet", 2 * 32, 1 * 32, 32, 32, 1),
-    "Orb of Ascension": ("OreAndGem/OreGemSpritesheet", 4 * 32, 0 * 32, 32, 32, 1),
-    "Orb of Perfection": ("OreAndGem/OreGemSpritesheet", 7 * 32, 0 * 32, 32, 32, 1),
-    "Orb of Expansion": ("OreAndGem/OreGemSpritesheet", 6 * 32, 0 * 32, 32, 32, 1),
-    "Orb of Mending": ("OreAndGem/OreGemSpritesheet", 3 * 32, 1 * 32, 32, 32, 1),
-    "Orb of Binding": ("OreAndGem/OreGemSpritesheet", 0 * 32, 1 * 32, 32, 32, 1),
 }
 # What OrbSlot draws an orb at: half the source, which is the whole reason the centring below is
 # fussier than the gear's. Written here because the preview has to show that size to be worth looking

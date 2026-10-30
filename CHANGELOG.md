@@ -6,6 +6,33 @@ a player has not seen yet once, together, newest first (`main_scene.gd` `_show_c
 written for players. A section may hold a two-column table instead (`| left | right |`, a header row, then
 `|---|---|`): the game draws its rows as its own tables, the left column wrapping and the right kept short.
 
+## v0.8.0 (2026-10-30)
+
+### Transcending
+- The fortuneteller reads your way out in the stars now. Transcending opens on her star chart, drifting through a nebula.
+- Three stars to pick from: Create an heirloom, Take on a curse (once you hold a skull), and the Skill tree.
+- Super orbs are gone, and so is upgrading heirlooms with them. Your heirlooms keep everything they already got from them.
+
+### Curses
+| Curse | New reward |
+|---|---|
+| Long Winter | +25% damage for every ice wall broken this world |
+| Ring of Walls | +15% damage for every ice wall broken this world |
+| No Second Chances | +40% drop rate and +40% item rarity |
+
+### Skill nodes
+- Nodes hold a lot more now: tier + 2 skill points before their own line. A tier I node takes 3, a tier IX takes 11.
+- A node's card tells you what it takes: "Takes 5 SP".
+- The ranks line is now "Takes +N skill points", on top of that.
+
+## v0.7.3 (2026-10-30)
+
+### Settings
+- Squinting at your loot? Tick Larger text under Display.
+
+### Map
+- On a phone, dragging the map follows your finger now, instead of flinging you halfway across the world.
+
 ## v0.7.2 (2026-10-30)
 
 ### Loot

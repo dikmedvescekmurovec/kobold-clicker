@@ -8,7 +8,7 @@ extends Control
 signal closed
 ## The open piece changed, bag item or worn; null when none is open.
 signal selection_changed(item: Item)
-## An orb, ordinary or super, went into a piece.
+## An orb went into a piece.
 signal crafted(orb: String)
 ## The page measured itself again: `column_origin` may have moved.
 signal laid_out
@@ -129,13 +129,12 @@ const TAB_SHUT: Array[String] = ["aaa.", "afda", "afda", "adda", "aaa."]
 ## Whose grid and doll this page shows: the player's inventory, or on the heirlooms' page the stash
 ## inside it (`Inventory.stash`).
 var inventory: Inventory
-## Always the player's inventory: the gold, the orbs, the tips, the super orbs, and the one thing saved.
+## Always the player's inventory: the gold, the orbs, the tips, and the one thing saved.
 var _purse: Inventory
 ## The heirlooms' page: nothing is sold or thrown away by the level, and a Discard always asks.
 var _heirlooms := false
 ## On `TranscendPage`'s black screen: centred, and written to no file (`_save`). Over the bag a piece
-## gets no buttons and Make heirloom stands in the tray's place; over the heirlooms the tray is the
-## super orbs.
+## gets no buttons and Make heirloom stands in the tray's place; over the heirlooms there is no tray.
 var _transcending := false
 ## The black screen's stones page: only the bag's stones, the ordinary orbs, and the skill tree in the
 ## doll's place (`_show_tree`).
@@ -184,6 +183,16 @@ var tabbed := false:
 		tabbed = on
 		if is_node_ready():
 			refresh()
+## Whether Hide may fold the doll away: never until the main scene's first steps are all taken (`_tutored`),
+## which may light a worn piece under a shade that covers Show (the user's, 2026-10-30).
+var foldable := true:
+	set(on):
+		if on == foldable:
+			return
+		foldable = on
+		_doll_hidden = _doll_hidden and on
+		if is_node_ready():
+			refresh()
 ## The Equipment tab open. The session's, never saved.
 var _equipment_tab := false
 ## Items and Equipment (`SIDE_TABS`), shown only while `tabbed`.
@@ -201,7 +210,7 @@ var _doll: Doll
 ## The stones page's tree, or null.
 var _tree: SkillTreeView
 
-## The question standing over the page (`_ask`, `_super_press`), or null.
+## The question standing over the page (`_ask`), or null.
 var _confirm: Control
 
 ## The rule over the trays, `_fold_button` (the chevron) in its middle.
@@ -214,15 +223,14 @@ var _orb_tray: HBoxContainer
 var _orb_card: OrbCard
 ## What a spent orb rolls with. Unseeded: a test that wants a known answer seeds it.
 var _craft_rng := RandomNumberGenerator.new()
-## The orb, super orb or rune in hand, or "". Only ever assign it: the setter makes it the cursor and
+## The orb or rune in hand, or "". Only ever assign it: the setter makes it the cursor and
 ## tells the listeners. What picks it up and puts it down: DESIGN.md, "Use an orb one way".
 var _armed := "":
 	set(orb):
 		if orb == _armed:
 			return
 		_armed = orb
-		var mark: Texture2D = null if orb == "" else SuperOrbTable.icon(orb) if SuperOrbTable.has(orb) \
-				else RuneTable.icon(orb) if RuneTable.has(orb) else OrbTable.icon(orb)
+		var mark: Texture2D = null if orb == "" else RuneTable.icon(orb) if RuneTable.has(orb) else OrbTable.icon(orb)
 		# A rune's mark is made at the tray's 16, an orb's cut at 32.
 		Cursors.hold(mark, 2 if RuneTable.has(orb) else 1)
 		_show_held_card()
@@ -531,8 +539,7 @@ func panel_corner() -> Vector2:
 func refresh() -> void:
 	_fill_tabs()
 	_fill_grid()
-	_count.text = ("%d to spend" % _purse.super_orbs if _heirlooms and _transcending
-			else "" if _heirlooms
+	_count.text = ("" if _heirlooms
 			else "%d / %d" % [inventory.total(), inventory.capacity()])
 	_count.add_theme_color_override("font_color", Palette.RUST
 			if not _heirlooms and inventory.total() >= inventory.capacity() - NEARLY_FULL
@@ -1310,7 +1317,7 @@ func _show_doll(holder: VBoxContainer) -> void:
 		if _lifted != null and inventory.items.has(_lifted) and not inventory.can_equip(_lifted, socket):
 			slot.modulate = OrbSlot.DIM
 	holder.add_child(_doll)
-	if holder != _worn_body:
+	if holder != _worn_body or not foldable:
 		return
 	# Hide, in the corner the figure leaves empty. Anchored and grown leftwards because a button's
 	# size is not known until the theme reaches it.
@@ -1532,12 +1539,9 @@ func refresh_orbs() -> void:
 	# The square the card described has just been freed.
 	_show_held_card()
 	if _transcending and not _stones:
-		# Over the bag there is no tray at all, and over the heirlooms it is the super orbs: one count
-		# for the six of them (said in the corner, `_count`), so no square wears a number.
-		_orb_tray.visible = _heirlooms
-		_orb_rule.visible = _heirlooms
-		for orb: String in SuperOrbTable.orbs() if _heirlooms else []:
-			_orb_tray.add_child(_tray_slot(orb, mini(_purse.super_orbs, 1)))
+		# No tray over a transcension's bag or its heirlooms.
+		_orb_tray.hide()
+		_orb_rule.hide()
 		return
 	# No tray until the first orb; once seen it stays, even with every orb spent. The runes the same,
 	# on the ordinary bag alone, and with them the chevron that folds both rows away.
@@ -1603,47 +1607,9 @@ func _on_orb_pressed(orb: String) -> void:
 	refresh()
 
 
-## How many of `orb` the player has to spend: the one count all six super orbs share, or the orb's (or
-## the rune's) own.
+## How many of `orb` (or the rune) the player has to spend.
 func _count_of(orb: String) -> int:
-	return _purse.super_orbs if SuperOrbTable.has(orb) else _purse.rune_count(orb) if RuneTable.has(orb) \
-			else _purse.orb_count(orb)
-
-
-## A held super orb pressed on a piece. An aimed one asks which modifier, the only question any of them
-## asks; the rest are spent at once, as an ordinary orb is.
-func _super_press(orb: String, item: Item) -> void:
-	if _purse.super_orbs <= 0 or not SuperOrbTable.can_apply(orb, item):
-		return
-	if not SuperOrbTable.aimed(orb):
-		_super_craft(orb, item, -1)
-		return
-	var panel := _open_confirm(orb)
-	var body := UITheme.body_of(panel)
-	body.add_child(UITheme.label("Which modifier?", null, true))
-	for i in item.mods.size():
-		var line := UITheme.button(ModifierTable.line(item.mods[i]), "LightButton", "")
-		line.custom_minimum_size.x = CONFIRM_WIDTH
-		line.disabled = not SuperOrbTable.can_aim(orb, item, i)
-		# Answered once, as in `_ask`: a second press while it shrinks would spend a second orb.
-		line.pressed.connect(func() -> void:
-			if not Juice.leaving(panel):
-				_close_confirm()
-				_super_craft(orb, item, i))
-		body.add_child(line)
-	# A question has no X, so its way back out is a Cancel of its own.
-	var cancel := UITheme.button("Cancel", "LightButton", "")
-	cancel.pressed.connect(_close_confirm)
-	body.add_child(cancel)
-	Juice.popup(_confirm, panel, _ui_scale)
-
-
-## Applied first and spent second, as every orb is. Not saved: see `_save`.
-func _super_craft(orb: String, item: Item, index: int) -> void:
-	if _purse.super_orbs <= 0 or not SuperOrbTable.apply(orb, item, _craft_rng, index):
-		return
-	_purse.super_orbs -= 1
-	_spent(orb, item, _purse.super_orbs)
+	return _purse.rune_count(orb) if RuneTable.has(orb) else _purse.orb_count(orb)
 
 
 ## The held orb on a piece that is not the bag's: one off a vendor's shelf. `written` is called between
@@ -1665,9 +1631,6 @@ func _orb_on(item: Item) -> void:
 ## An orb that would take a piece down a rarity asks first, with a tick to stop asking (the user's,
 ## 2026-10-02): one misplaced Transmutation is an epic gone. Anything else is done at once.
 func _craft(orb: String, item: Item, written := Callable()) -> void:
-	if SuperOrbTable.has(orb):
-		_super_press(orb, item)
-		return
 	var to: int = OrbTable.RARITY_OF.get(orb, item.rarity)
 	if to < item.rarity and OrbTable.can_apply(orb, item):
 		_ask("lower_rarity", orb, "Make the %s %s %s? It cannot be taken back." % [
@@ -1737,8 +1700,7 @@ static func _upgrade_mark() -> TextureRect:
 
 ## A square the held orb can do nothing to goes as grey as an orb with nothing to do.
 func _dim_for_orb(slot: Control, item: Item) -> void:
-	if _armed != "" and item != null and not (SuperOrbTable.can_apply(_armed, item)
-			if SuperOrbTable.has(_armed) else OrbTable.can_apply(_armed, item)):
+	if _armed != "" and item != null and not OrbTable.can_apply(_armed, item):
 		slot.modulate = OrbSlot.DIM
 
 

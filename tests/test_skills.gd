@@ -87,18 +87,23 @@ func _test_paths() -> bool:
 
 
 ## A level is a point, a point is a rank, a stone opens once the stone above it holds one, and a stone
-## holds one rank and its "+N ranks" more. Its lines count once a rank.
+## holds its tier and two ranks and its "Takes +N skill points" more. Its lines count once a rank.
 func _test_spending() -> bool:
 	var skills := Skills.new()
 	skills.stones["0"] = _stone("Strength Node", 1, 1, [["added_damage", 2], ["added_stone_ranks", 1]])
 	skills.stones["0.0"] = _stone("Strength Node", 2, 0, [["global_increased_damage", 10]])
 	_check(Skills.earned(1) == 0 and Skills.earned(5) == 4, "a point a level past the first")
-	_check(SkillTree.most_ranks(skills.stones["0"]) == 2 and SkillTree.most_ranks(skills.stones["0.0"]) == 1,
-			"a stone takes one rank and its ranks line more")
+	_check(SkillTree.most_ranks(skills.stones["0"]) == 4 and SkillTree.most_ranks(skills.stones["0.0"]) == 4,
+			"a stone takes its tier and two ranks, and its ranks line more")
 	_check(not skills.rank_up("0.0", 5) and skills.why_not("0.0", 5) == "Needs a point in the node before it",
 			"a stone opens once the one above it holds a point")
-	_check(skills.rank_up("0", 5) and skills.rank_up("0", 5), "two into a stone of two ranks")
-	_check(skills.why_not("0", 5) == SkillTree.FULL and not skills.rank_up("0", 5), "and no third")
+	_check(skills.rank_up("0", 5) and skills.rank_up("0", 5), "two into a stone of four ranks")
+	var full := Skills.new()
+	full.stones["0"] = _stone("Strength Node", 1)
+	for i in 3:
+		full.rank_up("0", 9)
+	_check(full.rank_of("0") == 3 and full.why_not("0", 9) == SkillTree.FULL and not full.rank_up("0", 9),
+			"and no fourth in a tier-I stone of three")
 	_check(skills.rank_up("0.0", 5), "and now the one under it opens")
 	_check(skills.points(5) == 1 and skills.spent() == 3, "three of four spent")
 	_check(skills.why_not("", 2) == "No skill points left", "a level with nothing left refuses")
@@ -272,7 +277,7 @@ func _test_save() -> bool:
 	var greedy := Skills.from_dict(inventory.skills.tree_dict(), {"0": 3, "0.0": 1}, 3)
 	_check(greedy.ranks.is_empty(), "and so does more than the level earned")
 	var capped := Skills.from_dict(inventory.skills.tree_dict(), {"0": 9}, 20)
-	_check(capped.ranks == {"0": 3}, "a rank past a stone's most is cut to it")
+	_check(capped.ranks == {"0": 6}, "a rank past a stone's most is cut to it")
 	var tree := inventory.skills.tree_dict()
 	tree.erase("0")
 	_check(not Skills.from_dict(tree, {}, 5).stones.has("0.0"), "a stone whose parent is gone goes with it")
@@ -347,15 +352,18 @@ func _test_page() -> bool:
 	_check(Inventory.FIRST_POINT in inventory.transcended().tips, "nor a new world, which keeps what was learned")
 	# A stone in the root's slot: lit with the root in its base's colour, faint while it holds no point.
 	inventory.skills.stones["0"] = _stone("Dexterity Node", 1)
+	inventory.level = 5
 	page.open()
 	_check(view._rings.has("") and view._rings.has("0") and view.squares["0"].modulate == SkillTreeView.UNLEARNED,
 			"with points to spend one can go into the root or the stone, the stone faint while it holds none")
 	_check(view._lights["0"].visible and lit_in.call("0") == SkillTreeView.GLOWS["dexterity"]
 			and _glow(view, "0").get_shader_parameter("reach") == SkillTreeView.GLOW_REACH,
 			"and the dexterity stone wears the small mark in green (%s)" % [lit_in.call("0")])
-	_check(view._marks.get_child_count() == 0, "a stone of one rank and a root holding nothing carry no number")
+	_check(view._marks.get_child_count() == 1, "a stone carries its points of its most, a root holding nothing no number")
 	view.slot_pressed.emit("0")
 	_check(inventory.skills.rank_of("0") == 1, "a press is a point")
+	view.slot_pressed.emit("0")
+	view.slot_pressed.emit("0")
 	_check(page._points.text == "1 skill point", page._points.text)
 	_check(flashes.back() == SkillTreeView.GLOWS["dexterity"],
 			"which lights its card in the stone's colour (%s)" % [flashes])

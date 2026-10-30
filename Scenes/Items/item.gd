@@ -16,9 +16,10 @@ var level := 1
 ##   "value"    int: the number it rolled.
 ##   "under"    int: how many tiers under its band level it sits (`tier_of`); absent at the top tier.
 ##   "locked"   true: the smith's lock, which every orb works around (`locked_mod`).
-##   "bound"    true: an Orb of Binding's, the same (`held_fast` is either).
+##   "bound"    true: the Orb of Binding's (gone with the super orbs, 2026-10-30; a piece keeps it), the
+##              same (`held_fast` is either).
 ##   "at"       int: the level a held-fast line's band is read at (`band_level`), frozen with its number.
-##   "perfect"  true: an Orb of Perfection's, kept at the top of its band (`refresh_perfect`).
+##   "perfect"  true: the Orb of Perfection's (gone likewise), kept at the top of its band (`refresh_perfect`).
 ##   "peak"     int: the best tier an heirloom's line has had (`transcend`), which it climbs back to.
 var mods: Array[Dictionary] = []
 ## Its base stats, scaled by its level as it was rolled (`scaled_stats`) and stored: what keeps a held
@@ -33,12 +34,11 @@ var unique := ""
 ## back there by itself as the land is charted (`Inventory.raise_heirlooms`), and the smith will not
 ## take it there sooner (`Blacksmith.can_upgrade`).
 var safe_level := 0
-## The pluses Orbs of Ascension have made (`SuperOrbTable`), written "+2" after its name: its modifiers
-## are read `PLUS_LEVELS` levels higher for each (`mod_level`); its base stats do not move.
+## Its pluses (`ascend`: Lean Pickings, the Lone Heir, a bounty's piece), written "+2" after its name: its
+## modifiers are read `PLUS_LEVELS` levels higher for each (`mod_level`); its base stats do not move.
 var plus := 0
-## Orbs of Ascension fed toward the next plus, which takes `ascension_cost()` of them.
-var ascension := 0
-## An Orb of Expansion has gone into it: one modifier more than its rarity allows, once per piece.
+## The Orb of Expansion's (gone with the super orbs, 2026-10-30; a piece keeps it): one modifier more
+## than its rarity allows.
 var extra_slot := false
 ## The player's padlock: a level's Sell all and bin pass it by (`Inventory.discard_level`). Not the
 ## smith's Lock, which holds one modifier (`locked_mod`).
@@ -176,14 +176,9 @@ func is_stone() -> bool:
 	return stone_tier > 0
 
 
-## How many Orbs of Ascension the next plus takes (the user's, 2026-10-03).
-func ascension_cost() -> int:
-	return plus + 1
-
-
 ## One plus more: every modifier keeps its place in its band as the band moves up `PLUS_LEVELS`
-## levels, and a held-fast line stays where it was held. An Orb of Ascension's act, and what Lean
-## Pickings does to a find as it falls.
+## levels, and a held-fast line stays where it was held. What Lean Pickings does to a find as it
+## falls, and the Lone Heir to the heirloom made.
 func ascend() -> void:
 	var was := mods.map(tier_of)
 	plus += 1
@@ -196,7 +191,7 @@ func ascend() -> void:
 
 
 ## Puts every perfected modifier at the top of the top tier as it now stands. Called by whatever moves
-## `mod_level`: the smith's upgrade, an Orb of Ascension, the end of a world.
+## `mod_level`: the smith's upgrade, a plus, the end of a world.
 func refresh_perfect() -> void:
 	for mod in mods:
 		if bool(mod.get("perfect", false)):
@@ -204,7 +199,7 @@ func refresh_perfect() -> void:
 			mod["value"] = int(ModifierTable.band_for(str(mod["id"]), tier_of(mod))[1])
 
 
-## Whether an orb must leave this modifier as it is: the smith's lock, or an Orb of Binding's.
+## Whether an orb must leave this modifier as it is: the smith's lock, or a binding.
 static func held_fast(mod: Dictionary) -> bool:
 	return bool(mod.get("locked", false)) or bool(mod.get("bound", false))
 
@@ -422,8 +417,6 @@ func to_dict() -> Dictionary:
 		out["safe_level"] = safe_level
 	if plus > 0:
 		out["plus"] = plus
-	if ascension > 0:
-		out["ascension"] = ascension
 	if extra_slot:
 		out["extra_slot"] = true
 	if locked:
@@ -489,7 +482,6 @@ static func _read(data: Variant, lost: Array) -> Item:
 	item.broken = Inventory._flag(saved.get("broken"))
 	item.safe_level = maxi(0, Inventory._whole(saved.get("safe_level")))
 	item.plus = maxi(0, Inventory._whole(saved.get("plus")))
-	item.ascension = maxi(0, Inventory._whole(saved.get("ascension")))
 	item.extra_slot = Inventory._flag(saved.get("extra_slot"))
 	item.locked = Inventory._flag(saved.get("locked"))
 	if saved.get("nickname") is String:

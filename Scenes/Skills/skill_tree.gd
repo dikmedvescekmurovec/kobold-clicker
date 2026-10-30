@@ -186,9 +186,15 @@ static func is_open(path: String, ranks: Dictionary) -> bool:
 	return parent.is_empty() or int(ranks.get(parent, 0)) > 0
 
 
-## How many points a stone takes: one, and its "+N ranks" line.
+## How many points a stone takes: its `base_ranks`, and its "Takes +N skill points" line.
 static func most_ranks(stone: Item) -> int:
-	return 1 + roundi(float(stone.effective_stats().get(RANKS_STAT, 0.0)))
+	return base_ranks(stone) + roundi(float(stone.effective_stats().get(RANKS_STAT, 0.0)))
+
+
+## The points a stone takes before its line: its tier and two (the user's, 2026-10-30; one until then).
+## The card writes it apart from the line (the user's, 2026-10-30).
+static func base_ranks(stone: Item) -> int:
+	return stone.stone_tier + 2
 
 
 static func can_rank(path: String, stones: Dictionary, ranks: Dictionary, free_points: int) -> bool:

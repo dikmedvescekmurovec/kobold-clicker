@@ -70,7 +70,6 @@ const OFF_PALETTE := [
 	["juice.gd", "Color(1.0, 0.95, 0.75, 0.35)", "a win's wash: warm light over the whole window"],
 	["orb_slot.gd", "Color(0.42, 0.42, 0.44)", "a multiplier greying an orb with nothing to do"],
 	["town_page.gd", "Color(1.2, 1.2, 1.2)", "a multiplier lifting a spell's mark under the cursor"],
-	["transcend_page.gd", "Color.BLACK", "the black screen between two worlds"],
 	["ui_theme.gd", "Color(1.25, 1.25, 1.25)", "a multiplier lifting a bare mark under the cursor"],
 ]
 

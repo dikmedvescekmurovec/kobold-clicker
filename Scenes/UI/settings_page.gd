@@ -158,6 +158,10 @@ func open() -> void:
 		_rows.add_child(_tick("Fullscreen", Settings.fullscreen, func(on: bool) -> void:
 			Settings.fullscreen = on
 			Settings.apply_window()))
+	_rows.add_child(_tick("Larger text", Settings.large_text, func(on: bool) -> void:
+		Settings.large_text = on
+		UITheme.apply_text_size()
+		layout.call_deferred()))
 	_rows.add_child(_tick("Screen shake", Settings.shake, func(on: bool) -> void: Settings.shake = on))
 	_rows.add_child(UITheme.label("Animations", null, true))
 	_rows.add_child(_choice(ANIM_NAMES, [], Settings.animations,

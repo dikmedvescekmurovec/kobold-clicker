@@ -22,7 +22,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
   - **Chest pointer** (`_chest_pointer`, `_sync_chest`): a `MapPointer` up for as long as the fortuneteller's chest is, and at no chest for nothing.
   - **Hero pointer** (`_hero_pointer`, `_find_hero`): a button at the map's foot once the map is dragged or zoomed off the hero.
   - **Aimed spells** (`_on_spell_aimed`, `_on_cell_aimed`, `_end_aim`): the fortuneteller's scour and road home.
-- **Super orbs** (`_credit_walls`): pays the fallen walls and climbs the heirlooms to the charted level.
+- **Walls down** (`_credit_walls`): counts the fallen walls and climbs the heirlooms to the charted level.
 - **Transcending** (`_open_transcend`, `_transcend`): the black `TranscendPage`, in memory only, then a Reset with the inventory written over.
 - **Tile modifiers** (`_mods_of`, `TilePanel._mods`): what a tile's fight is built with and what the panel writes.
 - **Curses:** the Ring of Walls (`view.wall_step`), the homeland (`_settle_homeland`), No Second Chances, `_sight` and `_cannot_camp`.
@@ -117,7 +117,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Drop `_fight_target`, `_town_target` and `_dark_way` before a Stop** (the user's, 2026-10-10), or the arrival presses their button again. The last step is never stoppable (`PlayerToken.can_stop`), and the button never stands under a page. (DESIGN.md: "Stop", "Stopping a walk (2026-10-10)")
 - **Let a tile under the fog be clicked** (`HexMap.can_pick`): `_on_tile_clicked` calls it "Unknown land" without asking `name_of`, and `_on_chart_pressed` reads the terrain from `view.env_at`, never from what is drawn. (DESIGN.md: "Tile modifiers")
 - **Write a tile's modifiers on the panel, never in a tooltip, and only for a seen tile** (`TilePanel._mods`). (DESIGN.md: "Tile modifiers")
-- **Run `_credit_walls` at start-up, before the interface is built, and after every `view.chart`:** it pays the walls, raises the heirlooms, puts the cave down and sets `view.distant`. (DESIGN.md: "Super orbs", "The dungeon")
+- **Run `_credit_walls` at start-up, before the interface is built, and after every `view.chart`:** it counts the walls, raises the heirlooms, puts the cave down and sets `view.distant`. (DESIGN.md: "Walls down", "The dungeon")
 - **Put the cave down only once Gollux is unlocked** (`WallUnlocks.GOLLUX`, the user's, 2026-10-09), beside the wall tile just broken (`view.place_cave(view.breach)`, after `inventory.reach`); one a world, and a world that holds a cave keeps it. (DESIGN.md: "The dungeon")
 - **Enter the dungeon only by the tile panel's Enter cave** (`MapBuilder.can_enter_cave`), and pay only runes there: no ledger, nothing connected but `finished` and `rune_gained`, so no board hears of a body and no kill is banked. (DESIGN.md: "The dungeon")
 - **Bank depths on the way out and from `_exit_tree`** (`_bank_depths`), so quitting under a dead Gollux cannot cost him, and sync at once (`cloud.sync(true)`): the board is scored from the cloud save's `dungeon_floors`. (DESIGN.md: "The dungeon", "The cloud")
@@ -154,7 +154,7 @@ Short forms only. The full text is in `DESIGN.md` under "Reference (moved here f
 - **Stand buttons at the foot of every right-hand column,** the tile panel's shown only while they can be pressed (`TilePanel.update_buttons`, which re-places the column through `TilePanel.place`). (DESIGN.md: "The tile panel")
 - **Hand every page its room only in `_layout_ui`** (`area`, `UITheme.dock`); held upright (`UITheme.narrow`), `_show_corner` and a town's tab lay everything out again. (DESIGN.md: "Window shape")
 - **Keep the doll on a selection:** a selected bag item draws nothing of what it would replace, the worn piece is the hover card's second card under Alt (`ItemCard.worn_for`), and no block shows deltas. (DESIGN.md: "Keep the doll on a selection")
-- **Give a ring Equip left over Equip right** (the user's, 2026-10-29); Shift-click takes the emptiest finger (`BagPage.EMPTIEST`). Hide folds the doll for the session only (`_doll_hidden`, not saved). (DESIGN.md: "Keep the doll on a selection")
+- **Give a ring Equip left over Equip right** (the user's, 2026-10-29); Shift-click takes the emptiest finger (`BagPage.EMPTIEST`). Hide folds the doll for the session only (`_doll_hidden`, not saved), and is not there until every first step is taken (`_tutored` -> `BagPage.foldable`; the user's, 2026-10-30). (DESIGN.md: "Keep the doll on a selection")
 - **No mouse on a bag square** (`MOUSE_FILTER_IGNORE`): the `ScrollContainer` must see every press, so the clicked square is worked out from the cursor position. (DESIGN.md: "No mouse on a bag square")
 
 ### Towns and bounties

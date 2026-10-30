@@ -168,9 +168,7 @@ var autodiscard: Array[int] = []
 ## would never finish being made.
 ## ponytail: it shares CAPACITY, 40 heirlooms; one is made a transcension, and nobody transcends forty times.
 var heirlooms: Inventory
-## Super orbs still to spend at a transcension (`SuperOrbTable`), one count for all six.
-var super_orbs := 0
-## How many of this world's fallen walls have paid their orb (`credit_walls`).
+## How many of this world's fallen walls have been counted (`credit_walls`): the curses' pay per wall.
 var walls_credited := 0
 ## The curses this world is played under, by `Curses` id, until the next transcension.
 var curses: Array[String] = []
@@ -636,6 +634,8 @@ func stats() -> Dictionary:
 		var pays: Dictionary = Curses.CURSES[curse].get("stats", {})
 		for stat: String in pays:
 			_add(out, stat, float(pays[stat]))
+	# A wall-paying curse's damage for every wall down in this world, one multiplier for all of them.
+	_scale(out, "damage", Curses.wall_damage(curses) * walls_credited)
 	return out
 
 
@@ -889,17 +889,13 @@ func stash() -> Inventory:
 	return heirlooms
 
 
-## `fallen` is how many walls are down in this world. Every one not yet paid for pays a super orb, so
-## a wall falling and a save from before there were heirlooms are the same sum. True when it paid.
+## `fallen` is how many walls are down in this world. Every one not yet counted is, so a wall falling
+## and an old save's walls are the same sum. True when one was.
 func credit_walls(fallen: int) -> bool:
 	if fallen <= walls_credited:
 		return false
 	# Thaw counts every wall ever broken, in every world, where this world's count starts again.
 	tick("walls", fallen - walls_credited)
-	# The Long Winter's pay: a wall twice as hard is worth two.
-	# No Second Chances pays one more, and the two add: three a wall under both.
-	super_orbs += (fallen - walls_credited) * (1 + int(Curses.LONG_WINTER in curses)
-			+ int(Curses.NO_SECOND_CHANCES in curses))
 	walls_credited = fallen
 	return true
 
@@ -974,7 +970,7 @@ func make_heirloom(item: Item) -> bool:
 
 ## What is left of the player when the world is left behind: what the player knows and has done (the
 ## log, the achievements, the tips, the name, the heroes, the kills and the clock, and what the dungeon and the land
-## reached), the super orbs not yet spent, the skill tree, and the heirlooms, each gone through
+## reached), the skill tree, and the heirlooms, each gone through
 ## `Item.transcend`. The kills, with both first finds read as taken, keep a second world from handing
 ## out the first one's promises again. Everything else is a fresh start.
 func transcended() -> Inventory:
@@ -998,7 +994,6 @@ func transcended() -> Inventory:
 	next.deepest_level = deepest_level
 	next.first_sword_taken = true
 	next.first_orb_taken = true
-	next.super_orbs = super_orbs
 	# The skill tree, as it was built on the black screen; its points were this world's.
 	next.skills = Skills.from_dict(skills.tree_dict(), {}, 1)
 	# What was chosen on the black screen is the new world's, and the old world's curses end with it.

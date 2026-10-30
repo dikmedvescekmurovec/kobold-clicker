@@ -22,7 +22,6 @@ func _run() -> void:
 	_check(await _test_comparing() == true, "comparison tests ran to the end")
 	_check(_test_attribute_requirements() == true, "attribute requirement tests ran to the end")
 	_check(await _test_heirlooms() == true, "heirloom tests ran to the end")
-	_check(_test_super_orbs() == true, "super orb tests ran to the end")
 	_check(_test_mod_tiers() == true, "modifier tier tests ran to the end")
 	_clear_save()
 	_report("inventory: bag")
@@ -80,12 +79,12 @@ func _test_heirlooms() -> bool:
 			and not _piece(ItemRarity.Rarity.COMMON, 1).to_dict().has("safe_level"),
 			"it is saved with the piece, and only where there is one")
 
-	# Super orbs: a wall pays once.
+	# A wall is counted once.
 	var bag := Inventory.new()
-	_check(not bag.credit_walls(0) and bag.super_orbs == 0, "no wall, no orb")
-	_check(bag.credit_walls(2) and bag.super_orbs == 2, "two walls down is two orbs, as an old save finds")
-	_check(not bag.credit_walls(2) and bag.super_orbs == 2, "asked again, nothing more")
-	_check(bag.credit_walls(3) and bag.super_orbs == 3, "and the next wall pays one")
+	_check(not bag.credit_walls(0) and bag.walls_credited == 0, "no wall, nothing counted")
+	_check(bag.credit_walls(2) and bag.walls_credited == 2, "two walls down are two, as an old save finds")
+	_check(not bag.credit_walls(2) and bag.walls_credited == 2, "asked again, nothing more")
+	_check(bag.credit_walls(3) and bag.walls_credited == 3, "and the next wall is one more")
 
 	# Making one: from the bag, or straight off the doll with the bag full, and never a broken piece.
 	var from_bag := _piece(ItemRarity.Rarity.RARE, 7)
@@ -103,25 +102,24 @@ func _test_heirlooms() -> bool:
 		bag.items.append(_piece(ItemRarity.Rarity.COMMON, 1))
 	_check(bag.make_heirloom(worn) and bag.equipment.worn.is_empty() and bag.stash().items.has(worn)
 			and bag.total() == Inventory.CAPACITY, "a worn piece comes off the doll past a full bag, which is left alone")
-	_check(bag.super_orbs == 3 and worn.level == 9, "no orb is spent on it, and nothing about the piece has moved")
+	_check(worn.level == 9, "and nothing about the piece has moved")
 
 	# The save, and a file from before there were heirlooms.
 	_check(bag.stash().remove(worn) and bag.stash().equipment.equip(Equipment.Socket.WEAPON, worn).is_empty(),
 			"an heirloom goes on the heirlooms' doll")
-	bag.super_orbs = 4
 	_check(bag.save(TEST_PATH), "it saves")
 	var back := Inventory.load_from(TEST_PATH)
 	_check(back.stash().total() == 1 and back.stash().items[0].level == 7
 			and back.stash().items[0].rarity == ItemRarity.Rarity.RARE, "the stash comes back")
 	_check(back.stash().equipment.items().size() == 1 and back.stash().equipment.items()[0].level == 9,
 			"and so does the heirlooms' doll")
-	_check(back.super_orbs == 4 and back.walls_credited == 3, "with the orbs and the walls paid for")
+	_check(back.walls_credited == 3, "with the walls counted")
 	var old := FileAccess.open(TEST_PATH, FileAccess.WRITE)
 	old.store_string(JSON.stringify({"version": 13, "items": [], "gold": 5}))
 	old.close()
 	var before := Inventory.load_from(TEST_PATH)
-	_check(before.stash().total() == 0 and before.super_orbs == 0 and before.walls_credited == 0,
-			"a version 13 save has none, and no wall paid for")
+	_check(before.stash().total() == 0 and before.walls_credited == 0,
+			"a version 13 save has none, and no wall counted")
 
 	# Two dolls. Flats add; each doll's global percents are a multiplier of their own.
 	var both := _hero()
@@ -191,7 +189,6 @@ func _test_heirlooms() -> bool:
 	leaving.tips = ["first_item"]
 	leaving.note_unique("spiked_helm")
 	leaving.add_orb(OrbTable.orbs()[0], 3)
-	leaving.super_orbs = 2
 	leaving.walls_credited = 2
 	leaving.items.append(_piece(ItemRarity.Rarity.ELITE, 20))
 	var held := _piece(ItemRarity.Rarity.RARE, 15)
@@ -202,7 +199,7 @@ func _test_heirlooms() -> bool:
 	_check(next.gold == 0.0 and next.level == 1 and next.total() == 0 and next.total_orbs() == 0
 			and next.equipment.worn.is_empty() and next.walls_credited == 0, "the world's things stay in it")
 	_check(next.kills == 900 and next.tips == ["first_item"] and next.uniques_found == ["spiked_helm"]
-			and next.first_sword_taken and next.first_orb_taken and next.super_orbs == 2, "what the player knows goes along")
+			and next.first_sword_taken and next.first_orb_taken, "what the player knows goes along")
 	_check(next.stash().total() == 1 and next.stash().items[0].level == 1 and next.stash().items[0].safe_level == 15,
 			"the stash goes along, at level 1")
 	var still_on: Item = next.stash().equipment.items()[0]
@@ -211,14 +208,15 @@ func _test_heirlooms() -> bool:
 			"both climb with the land charted, the stash's and the doll's, each no further than it had been")
 	_check(held.level == 15 and on_doll.level == 18, "the inventory that was left is untouched, should the write fail")
 
-	# A version 14 save's unspent picks are orbs now.
+	# A save from when there were super orbs (or a version 14 save's picks) reads with nothing lost.
 	leaving.save(TEST_PATH)
 	var old_save: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(TEST_PATH))
-	old_save["heirloom_picks"] = old_save["super_orbs"]
-	old_save.erase("super_orbs")
-	old_save["version"] = 14
+	old_save["super_orbs"] = 2
+	old_save["heirloom_picks"] = 2
 	SafeFile.write(TEST_PATH, JSON.stringify(old_save))
-	_check(Inventory.load_from(TEST_PATH).super_orbs == 2, "a version 14 save's picks are read as orbs")
+	var problem: Array = []
+	var read := Inventory.load_from(TEST_PATH, problem)
+	_check(problem.is_empty() and read.stash().total() == 1, "a save holding super orbs still reads")
 	_clear_save()
 	_check(_test_curses() == true, "curse tests ran to the end")
 	_check(_test_more_curses() == true, "second batch curse tests ran to the end")
@@ -226,7 +224,6 @@ func _test_heirlooms() -> bool:
 	# The pages. The ordinary bag makes no heirloom; a transcension's does, at its foot, and writes
 	# nothing: the whole transcension is one write, and the main scene's.
 	var owner := Inventory.new()
-	owner.super_orbs = 1
 	owner.tips.append(BagPage.SKIP_CONFIRM + "discard_heirloom")
 	var treasure := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 6)
 	owner.items.append(treasure)
@@ -249,8 +246,8 @@ func _test_heirlooms() -> bool:
 	make.pressed.emit()
 	_check(owner.items.has(treasure) and choosing._confirm != null, "which asks first")
 	_deep_button(choosing._confirm, "Keep").pressed.emit()
-	_check(owner.stash().items.has(treasure) and made == [treasure] and owner.super_orbs == 1,
-			"and Keep does it, for no orb")
+	_check(owner.stash().items.has(treasure) and made == [treasure],
+			"and Keep does it")
 	_check(not FileAccess.file_exists(TEST_PATH), "and writes nothing")
 	choosing.queue_free()
 	# The black screen asks for a name for it, which it goes by from then on, through the save as well.
@@ -268,35 +265,13 @@ func _test_heirlooms() -> bool:
 	_check(treasure.nickname.is_empty(), "its own name is no name")
 	black.queue_free()
 
-	# Over the heirlooms the tray is the super orbs, used as an ordinary orb is: picked up, then pressed
-	# on a piece. An aimed one asks which line; the rest are spent at once.
-	owner.super_orbs = 2
-	var upgrading := BagPage.new(owner, "", 2.0, true, true)
-	root.add_child(upgrading)
+	# No tray over the heirlooms on the black screen.
+	var heirlooms := BagPage.new(owner, "", 2.0, true, true)
+	root.add_child(heirlooms)
 	await process_frame
-	_check(upgrading._orb_tray.get_child_count() == SuperOrbTable.orbs().size(), "six super orbs in the tray")
-	var heirloom_square := func() -> Control:
-		for section: Node in upgrading._sections.get_children():
-			if section is GridContainer and section.get_child_count() > 0:
-				return section.get_child(0)
-		return null
-	upgrading._on_orb_pressed(SuperOrbTable.PERFECTION)
-	_check(upgrading._armed == SuperOrbTable.PERFECTION and owner.super_orbs == 2, "a super orb is picked up, not spent")
-	upgrading._on_clicked(_square_spot(heirloom_square.call()))
-	_check(upgrading._confirm != null and _deep_button(upgrading._confirm,
-			ModifierTable.line(treasure.mods[0])) != null, "and pressed on an heirloom Perfection asks which modifier")
-	_deep_button(upgrading._confirm, ModifierTable.line(treasure.mods[0])).pressed.emit()
-	_check(bool(treasure.mods[0].get("perfect", false)) and owner.super_orbs == 1, "and spends the orb on it")
-	_check(upgrading._armed == SuperOrbTable.PERFECTION, "still held while any are left")
-	upgrading._on_orb_pressed(SuperOrbTable.ASCENSION)
-	upgrading._on_clicked(_square_spot(heirloom_square.call()))
-	_check(upgrading._confirm == null and treasure.plus == 1 and owner.super_orbs == 0,
-			"Ascension asks nothing: +1 for its one orb")
-	_check(upgrading._armed == "", "and with none left the hand is empty")
-	upgrading._on_orb_pressed(SuperOrbTable.ASCENSION)
-	_check(upgrading._armed == "", "none to pick up")
-	_check(not FileAccess.file_exists(TEST_PATH), "and none of it is written")
-	upgrading.queue_free()
+	_check(not heirlooms._orb_tray.visible and heirlooms._orb_tray.get_child_count() == 0,
+			"the black screen's heirlooms have no orbs to press")
+	heirlooms.queue_free()
 	var page := BagPage.new(owner, TEST_PATH, 2.0, true)
 	root.add_child(page)
 	await process_frame
@@ -381,140 +356,6 @@ func _test_mod_tiers() -> bool:
 	_check(Item.from_dict(old_piece.to_dict()).mods == old_piece.mods, "and the save keeps the tier")
 	_check(old_piece.mod_lines(true)[0].ends_with(" T%d" % old_piece.tier_of(line))
 			and not old_piece.mod_lines()[0].contains(" T"), "which only a detailed line writes")
-	return true
-
-
-func _test_super_orbs() -> bool:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = WORLD_SEED
-	var sword := Item.rolled("Wooden Sword", ItemRarity.Rarity.ELITE, rng, 10)
-	for orb: String in SuperOrbTable.orbs():
-		_check(ResourceLoader.exists(OrbTable.ROOT + orb + ".png"), "%s has an icon" % orb)
-		_check(not OrbTable.ORBS.has(orb), "%s is no ordinary orb: it never drops and is never sold" % orb)
-		_check(not SuperOrbTable.can_apply(orb, null), "%s does nothing to nothing" % orb)
-
-	# Ascension: +1, every modifier kept at its place in a band three levels up, again and again.
-	var before := sword.mods.duplicate(true)
-	_check(SuperOrbTable.apply(SuperOrbTable.ASCENSION, sword, rng) and sword.plus == 1
-			and sword.mod_level() == 10 + Item.PLUS_LEVELS and sword.level == 10,
-			"+1 lifts the modifiers' level, not the piece's")
-	for i in sword.mods.size():
-		var id: String = sword.mods[i]["id"]
-		_check(sword.mods[i]["value"] == ModifierTable.rescaled(id, before[i]["value"],
-				maxi(1, 10 - int(before[i].get("under", 0))), sword.tier_of(sword.mods[i])),
-				"%s moved with its band" % id)
-	_check(sword.display_name() == "Wooden Sword +1", "and it is written after the name")
-	# Each plus takes one orb more than the last (the user's): +2 is two, fed in one at a time.
-	_check(SuperOrbTable.apply(SuperOrbTable.ASCENSION, sword, rng) and sword.plus == 1 and sword.ascension == 1,
-			"+2 takes two: the first is fed in and the piece is still +1")
-	var card := VBoxContainer.new()
-	ItemDetails.fill(card, sword, 200.0)
-	var bar := card.get_node_or_null(ItemDetails.ASCENSION_BAR)
-	_check(bar != null and card.get_child(0) == bar and _said_by(bar).is_empty()
-			and is_equal_approx((bar.get_child(0) as Control).size.x, floorf((200.0 - 2.0) / 2.0)),
-			"the card's bar over its name is half full, with no words on it")
-	card.free()
-	_check(Item.from_dict(sword.to_dict()).ascension == 1, "and the save keeps how far")
-	_check(SuperOrbTable.apply(SuperOrbTable.ASCENSION, sword, rng) and sword.plus == 2 and sword.ascension == 0,
-			"and the second makes it +2")
-	_check(sword.ascension_cost() == 3, "the next takes three")
-	_check(Item.from_dict(sword.to_dict()).plus == 2 and not _piece(ItemRarity.Rarity.RARE, 1).to_dict().has("plus")
-			and not sword.to_dict().has("ascension"), "saved with the piece, and only where there is one")
-	var bare_card := VBoxContainer.new()
-	ItemDetails.fill(bare_card, _piece(ItemRarity.Rarity.RARE, 1), 200.0)
-	_check(bare_card.get_node_or_null(ItemDetails.ASCENSION_BAR) == null, "a piece with no plus has no bar")
-	bare_card.free()
-	# A modifier the rarity has room for is an empty row on the card; a full piece and a broken one have none.
-	var short := Item.rolled("Leather Boots", ItemRarity.Rarity.RARE, rng, 4)
-	short.mods.resize(3)
-	var open_rows := func(item: Item) -> int:
-		var rows := VBoxContainer.new()
-		ItemDetails.fill(rows, item, 200.0)
-		var count := _said_by(rows).split(" ").count(ItemDetails.OPEN_ROW)
-		rows.free()
-		return count
-	_check(open_rows.call(short) == 1, "a rare with three modifiers shows one open row")
-	short.broken = true
-	_check(open_rows.call(short) == 0, "a broken one shows none")
-	short.broken = false
-	_check(OrbTable.apply("Orb of Augmentation", short, rng) and open_rows.call(short) == 0, "nor does a full one")
-
-	# Perfection: the top of the band, through a Divine, the smith and the end of a world.
-	_check(not SuperOrbTable.apply(SuperOrbTable.PERFECTION, sword, rng), "an aimed orb needs a line to aim at")
-	_check(SuperOrbTable.apply(SuperOrbTable.PERFECTION, sword, rng, 0), "Perfection takes a modifier")
-	var perfect_id: String = sword.mods[0]["id"]
-	var top := func() -> int: return int(ModifierTable.band_for(perfect_id, sword.mod_level())[1])
-	_check(sword.mods[0]["value"] == top.call(), "which goes to the top of its band")
-	_check(not SuperOrbTable.can_aim(SuperOrbTable.PERFECTION, sword, 0), "and is not perfected twice")
-	for i in 10:
-		OrbTable.apply("Orb of Divinity", sword, rng)
-	_check(sword.mods[0]["value"] == top.call(), "a Divine leaves it there")
-	_check(Blacksmith.upgrade(sword, 99, _never_breaks()) and sword.mods[0]["value"] == top.call(),
-			"the smith's upgrade carries it to the new top")
-	sword.ascend()
-	_check(sword.mods[0]["value"] == top.call(), "so does another +1")
-	sword.transcend()
-	_check(sword.plus == 3 and sword.mod_level() == 1 + 3 * Item.PLUS_LEVELS
-			and sword.mods[0]["value"] == top.call(), "and the end of a world keeps the plus and the top")
-	_check(sword.perfect_lines() == PackedStringArray([ModifierTable.line(sword.mods[0])]),
-			"its line is known to whoever writes it")
-
-	# Binding: a second lock beside the smith's, once, and no orb moves either.
-	sword.hold(1, "locked")
-	_check(not SuperOrbTable.can_aim(SuperOrbTable.BINDING, sword, 1), "a locked line is not bound as well")
-	_check(SuperOrbTable.apply(SuperOrbTable.BINDING, sword, rng, 2), "Binding locks another")
-	_check(not SuperOrbTable.can_apply(SuperOrbTable.BINDING, sword), "once per piece")
-	_check(not SuperOrbTable.can_aim(SuperOrbTable.REPLACEMENT, sword, 2), "and Replacement leaves it alone")
-	var fast := [sword.mods[1].duplicate(), sword.mods[2].duplicate()]
-	for i in 20:
-		OrbTable.apply("Orb of Chaos", sword, rng)
-		OrbTable.apply("Orb of Divinity", sword, rng)
-		_check(sword.mods.has(fast[0]) and sword.mods.has(fast[1]), "both locks survive a Chaos and a Divine")
-	_check(sword.fast_lines().size() == 2, "and both are written in ink")
-
-	# A held line keeps its band as well as its number: Ascension walks past it, a world's end does not.
-	var written := sword.fast_lines(true)
-	var bound: Dictionary = sword.mods.filter(func(mod: Dictionary) -> bool: return mod.get("bound", false))[0]
-	var held := bound.duplicate()
-	sword.ascend()
-	_check(bound == held and sword.fast_lines(true) == written, "an Ascension leaves a held line, band and all")
-	_check(Item.from_dict(sword.to_dict()).fast_lines(true) == written, "and the save keeps its band")
-	var heir := Item.from_dict(sword.to_dict())
-	heir.transcend()
-	var moved: Dictionary = heir.mods.filter(func(mod: Dictionary) -> bool: return mod.get("bound", false))[0]
-	_check(moved["at"] == heir.mod_level() and moved["value"] == ModifierTable.rescaled(
-			str(held["id"]), int(held["value"]), sword.tier_of(held), heir.tier_of(moved)),
-			"the end of a world carries it to the new band, and holds it there")
-
-	# Expansion: one past the rarity's most, once, and a reroll keeps the room.
-	var most := int(ItemRarity.MOD_COUNT[ItemRarity.Rarity.ELITE][1])
-	while sword.mods.size() < most:
-		OrbTable.apply("Orb of Augmentation", sword, rng)
-	_check(not OrbTable.can_apply("Orb of Augmentation", sword), "a full elite takes no more")
-	_check(SuperOrbTable.apply(SuperOrbTable.EXPANSION, sword, rng) and sword.mods.size() == most + 1,
-			"until it is expanded")
-	_check(not SuperOrbTable.can_apply(SuperOrbTable.EXPANSION, sword), "once per piece")
-	_check(Item.from_dict(sword.to_dict()).extra_slot, "saved with the piece")
-	_check(not SuperOrbTable.can_apply(SuperOrbTable.EXPANSION, _piece(ItemRarity.Rarity.COMMON, 1)),
-			"a common stays bare")
-
-	# Replacement: another line in that place, never the same one.
-	var plain := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 5)
-	var ids := plain.mods.map(func(mod: Dictionary) -> String: return mod["id"])
-	_check(SuperOrbTable.apply(SuperOrbTable.REPLACEMENT, plain, rng, 0) and not plain.mods[0]["id"] in ids
-			and plain.mods.size() == ids.size(), "Replacement puts a new line where the old one was")
-
-	# Mending: the one cure, and the one orb a broken piece takes.
-	_check(not SuperOrbTable.can_apply(SuperOrbTable.MENDING, plain), "a whole piece needs no mending")
-	plain.broken = true
-	_check(not SuperOrbTable.can_apply(SuperOrbTable.ASCENSION, plain), "a broken piece takes no other orb")
-	_check(SuperOrbTable.apply(SuperOrbTable.MENDING, plain, rng) and not plain.broken, "Mending makes it whole")
-
-	# A unique's lines are its own: values may move, the lines may not.
-	var unique := Item.rolled_unique(UniqueTable.UNIQUES.keys()[0], rng, 5)
-	for orb: String in [SuperOrbTable.REPLACEMENT, SuperOrbTable.EXPANSION, SuperOrbTable.BINDING]:
-		_check(not SuperOrbTable.can_apply(orb, unique), "%s is refused by a unique" % orb)
-	_check(unique.mods.is_empty() or SuperOrbTable.can_apply(SuperOrbTable.ASCENSION, unique), "+1 is not")
 	return true
 
 
@@ -809,17 +650,14 @@ func _test_stones() -> bool:
 		for mod in shallow.mods:
 			_check(SkillTree.LINES["Strength Node"][mod["id"]] == 1, "an orb on a tier I stone rolls %s" % mod["id"])
 	# So does every other hand that gives a stone a line -- the drop, a reroll round a line held fast, an
-	# Augmentation, a Replacement, an Expansion: each hands on the stone's tier, and none the whole pool.
+	# Augmentation: each hands on the stone's tier, and none the whole pool.
 	var held := Item.rolled("Strength Node", ItemRarity.Rarity.ELITE, rng, 4, 1, 0)
 	held.hold(0, "bound")
 	var roomy := Item.rolled("Strength Node", ItemRarity.Rarity.ELITE, rng, 4, 1, 0)
-	_check(SuperOrbTable.apply(SuperOrbTable.EXPANSION, roomy, rng), "a tier I stone has a line left for an Expansion")
 	for i in 20:
 		OrbTable._reroll_at(held, ItemRarity.Rarity.ELITE, rng)
 		roomy.mods.pop_back()
-		_check(SuperOrbTable.apply(SuperOrbTable.REPLACEMENT, roomy, rng, 0)
-				and OrbTable.apply("Orb of Augmentation", roomy, rng),
-				"a tier I stone takes a Replacement and an Augmentation")
+		_check(OrbTable.apply("Orb of Augmentation", roomy, rng), "a tier I stone takes an Augmentation")
 		for made: Item in [held, roomy, Item.rolled("Strength Node", ItemRarity.Rarity.ELITE, rng, 4, 1, 0)]:
 			for mod in made.mods:
 				_check(SkillTree.LINES["Strength Node"][mod["id"]] == 1, "a tier I stone is given %s" % mod["id"])
@@ -1468,11 +1306,22 @@ func _test_curses() -> bool:
 	_check(Inventory.new().skill_worth() == 1, "and nothing doubles it without the curse")
 	_check(student.effects().count(Curses.effect(Curses.HARD_LESSONS)) == 1, "the fight hears of it once")
 
-	# The Long Winter's pay: a wall twice as hard is worth two.
+	# The Long Winter's and the Ring of Walls' pay: more damage for every wall down in this world, the
+	# two one multiplier.
 	var winter := Inventory.new()
+	winter.equipment.equip(Equipment.Socket.WEAPON, _piece(ItemRarity.Rarity.COMMON, 1))
+	var bare := float(winter.stats()["damage"])
 	winter.curses = [Curses.LONG_WINTER]
-	_check(winter.credit_walls(1) and winter.super_orbs == 2, "a wall under the Long Winter pays two orbs")
-	_check(not winter.credit_walls(1) and winter.credit_walls(3) and winter.super_orbs == 6, "every one of them, once")
+	_check(is_equal_approx(float(winter.stats()["damage"]), bare), "with no wall down the Long Winter pays nothing")
+	winter.credit_walls(2)
+	var per := Curses.WINTER_WALL_DAMAGE * 2
+	_check(is_equal_approx(float(winter.stats()["damage"]), bare * (1.0 + per / 100.0)),
+			"two walls down are +%d%% damage" % per)
+	winter.curses = [Curses.LONG_WINTER, Curses.RING_OF_WALLS]
+	per = (Curses.WINTER_WALL_DAMAGE + Curses.RING_WALL_DAMAGE) * 2
+	_check(is_equal_approx(float(winter.stats()["damage"]), bare * (1.0 + per / 100.0)),
+			"and the Ring of Walls' adds to it")
+	_check(winter.transcended().walls_credited == 0, "a new world starts with none down")
 
 	# An ascended find: one plus more, every modifier still in its place in the band.
 	var piece := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 10)
@@ -1590,12 +1439,13 @@ func _test_more_curses() -> bool:
 			and not Curses.fits(Curses.BERSERKERS_WORLD, [Curses.PACIFIST_HANDS], 99),
 			"a curse fits the skulls left, and still not beside one it cannot stand with")
 
-	# No Second Chances: one more orb a wall, added to the Long Winter's.
+	# No Second Chances pays in loot, as a row's `stats`.
 	var gambler := Inventory.new()
+	var plain_stats := gambler.stats()
 	gambler.curses = [Curses.NO_SECOND_CHANCES]
-	_check(gambler.credit_walls(1) and gambler.super_orbs == 2, "a wall under No Second Chances pays two")
-	gambler.curses = [Curses.LONG_WINTER, Curses.NO_SECOND_CHANCES]
-	_check(gambler.credit_walls(2) and gambler.super_orbs == 5, "and three under both")
+	_check(float(gambler.stats().get("drop_rate", 0.0)) == float(plain_stats.get("drop_rate", 0.0)) + 40.0
+			and float(gambler.stats().get("item_rarity", 0.0)) == float(plain_stats.get("item_rarity", 0.0)) + 40.0,
+			"No Second Chances adds drop rate and item rarity")
 
 	# The Homeland's lands reach the fight, and both new lists come back off the save.
 	var settler := Inventory.new()

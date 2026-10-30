@@ -457,7 +457,6 @@ func _reel_transcend() -> void:
 	var keep := LootTable.roll("Imp", _rng, true, 14, 0.0, 0.0, ItemRarity.Rarity.ELITE)
 	inventory.add(keep)
 	inventory.add(LootTable.roll("Imp", _rng, true, 12, 0.0, 0.0, ItemRarity.Rarity.RARE))
-	inventory.super_orbs = 3
 	var town := view.start_town - view.origin
 	inventory.gold = TownPrices.fortune_price(FortuneTeller.TRANSCEND, town) * 3.0
 	Achievements.earn(inventory)

@@ -233,7 +233,6 @@
 	"heirlooms": {
 		"equipped": {
 			"weapon": {
-				"ascension": 1,
 				"broken": false,
 				"extra_slot": true,
 				"level": 3,
@@ -754,7 +753,6 @@
 			"type": "Intelligence Node"
 		}
 	},
-	"super_orbs": 3,
 	"tally": {
 		"clicks": 25000,
 		"crits": 1500,

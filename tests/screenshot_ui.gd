@@ -768,7 +768,6 @@ func _shoot_town() -> void:
 	# A wall down: the way out joins her list, and asked for it is a question before it is a deed.
 	main.view.land_radius += MapBuilder.WALL_STEP
 	main._credit_walls()
-	main.inventory.super_orbs = 3
 	main.town_page.redraw()
 	for i in 2:
 		await process_frame
@@ -861,17 +860,6 @@ func _shoot_town() -> void:
 		[func() -> void:
 			black._open(black._create_page, true)
 			black._create_page._select_item(1), "ui_transcend_create"],
-		[func() -> void:
-			black._open(black._upgrade_page)
-			# One Ascension fed into a +1 piece, so its card wears the bar toward +2.
-			var shown: Item = black._upgrade_page.inventory.items[0]
-			shown.plus = maxi(shown.plus, 1)
-			shown.ascension = 1
-			black._upgrade_page._select_item(0), "ui_transcend_upgrade"],
-		[func() -> void:
-			black._upgrade_page._on_orb_pressed(SuperOrbTable.PERFECTION)
-			black._upgrade_page._craft(SuperOrbTable.PERFECTION, black._upgrade_page.inventory.items[0]),
-			"ui_transcend_aim"],
 		# The curses behind the third card, two of them taken.
 		[func() -> void:
 			black._show_choice()

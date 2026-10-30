@@ -1,7 +1,7 @@
 class_name TranscendPage
 extends Control
 ## The black screen between two worlds, where the player is paid for the world they are leaving. Its
-## faces, one up at a time: the choice (four cards and the way on), the curses' table, and behind three
+## faces, one up at a time: the choice (its cards and the way on), the curses' table, and behind two
 ## of the cards a `BagPage` built for it (`transcending` true). Each goes back to the choice by the
 ## arrow beside it, its X, or Escape.
 ##
@@ -27,12 +27,26 @@ const SKULL_SIDE := 8
 const CURSE_MARGIN := 6.0
 ## Seconds the world takes to go dark, where animations are on at all.
 const FADE := 1.5
-const CARD_WIDTH := 164.0
-## A card's button: its picture over its words, and both cards one size whatever they wear.
-const CARD_HEIGHT := 76.0
-## How tall a card's picture stands, padded to it (`_padded`).
-const CARD_MARK := 32.0
-const CARD_GAP := 12
+const NEBULA := preload("res://Scenes/UI/nebula.gdshader")
+const GLOW := preload("res://Scenes/UI/node_glow.gdshader")
+## The star chart the choice is drawn as (the user's pick of five sketches, 2026-10-30), in panel pixels
+## and keyed by `UITheme.narrow`: its size and where each star's and the orb's centre stands. A star not
+## offered (the curse, with no skull had) leaves its place empty, and the lines join the ones there are.
+const CHART := {
+	false: {"size": Vector2(440, 210), "heirloom": Vector2(70, 40), "curse": Vector2(110, 150),
+			"tree": Vector2(215, 80), "orb": Vector2(345, 90)},
+	true: {"size": Vector2(260, 350), "heirloom": Vector2(70, 200), "curse": Vector2(190, 160),
+			"tree": Vector2(130, 300), "orb": Vector2(130, 50)},
+}
+## A star's disc to its ink edge, and the box its points stand in: its title goes under that box.
+const STAR_RADIUS := 22
+const STAR_ART := 58
+## The way on: her cracked orb at twice its art, in a breathing light.
+const ORB_SIDE := 64
+const ORB_REACH := 14.0
+## Panel pixels between two dots of a line, and how far from a centre a line starts.
+const DOT_STEP := 4.0
+const DOT_CLEAR := 27.0
 
 var _inventory: Inventory
 var _ui_scale: float
@@ -46,9 +60,10 @@ var _budget := 0
 ## The way on has been pressed once with the heirloom still unmade, and asked if that was meant.
 var _warned := false
 
-var _choice: VBoxContainer
+var _choice: Control
 var _create_page: BagPage
-var _upgrade_page: BagPage
+## The heirlooms held, to weigh the piece being made against.
+var _heirloom_page: BagPage
 ## The skill tree's: the bag's stones placed and crafted with the orbs left over (`BagPage`'s stones mode).
 var _stones_page: BagPage
 var _back: Button
@@ -79,14 +94,18 @@ func _init(inventory: Inventory, ui_scale: float, world_lost := false) -> void:
 
 func _ready() -> void:
 	var shade := ColorRect.new()
-	shade.color = Color.BLACK
+	var sky := ShaderMaterial.new()
+	sky.shader = NEBULA
+	sky.set_shader_parameter("pixel", _ui_scale)
+	sky.set_shader_parameter("speed", 0.0 if Settings.animations == Settings.Anim.NONE else 1.0)
+	shade.material = sky
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(shade)
 	# Whatever an earlier black screen left chosen was never the world's: this one starts from none.
 	_inventory.pending_curses = []
 	_create_page = BagPage.new(_inventory, "", _ui_scale, false, true)
-	_upgrade_page = BagPage.new(_inventory, "", _ui_scale, true, true)
+	_heirloom_page = BagPage.new(_inventory, "", _ui_scale, true, true)
 	_stones_page = BagPage.new(_inventory, "", _ui_scale, false, true, true)
 	_create_page.heirloom_made.connect(_name_heirloom)
 	for page: BagPage in _pages():
@@ -100,7 +119,7 @@ func _ready() -> void:
 	add_child(_back)
 	_swap = UITheme.icon_button(load(CROWN_ICON), "Your heirlooms", _ui_scale)
 	_swap.pressed.connect(func() -> void:
-		_open(_upgrade_page if _create_page.visible else _create_page, true))
+		_open(_heirloom_page if _create_page.visible else _create_page, true))
 	_swap.hide()
 	add_child(_swap)
 	get_viewport().size_changed.connect(_layout)
@@ -114,7 +133,7 @@ func _ready() -> void:
 
 
 func _pages() -> Array[BagPage]:
-	return [_create_page, _upgrade_page, _stones_page]
+	return [_create_page, _heirloom_page, _stones_page]
 
 
 ## How many heirlooms are held, in the stash and on its doll.
@@ -139,43 +158,22 @@ func _show_choice() -> void:
 	_drop(_curse_face)
 	_curse_face = null
 	_drop(_choice)
-	_choice = UITheme.vbox(CARD_GAP)
+	var chart: Dictionary = CHART[UITheme.narrow(get_viewport_rect().size, _ui_scale)]
+	_choice = Control.new()
+	_choice.custom_minimum_size = chart["size"]
 	_choice.scale = Vector2(_ui_scale, _ui_scale)
 	add_child(_choice)
-	# Two by two, or one over another on a window held upright, where two do not fit across.
-	var cards := GridContainer.new()
-	cards.columns = 1 if UITheme.narrow(get_viewport_rect().size, _ui_scale) else 2
-	cards.add_theme_constant_override("h_separation", CARD_GAP)
-	cards.add_theme_constant_override("v_separation", CARD_GAP)
-	_choice.add_child(cards)
-
-	var held := _heirlooms_held()
-	var orbs := _inventory.super_orbs
-	cards.add_child(_card("Create an heirloom", load(CROWN_ICON), not _made and not lost,
-			"Lost to No Second Chances" if lost else "Done" if _made else "",
-			_open.bind(_create_page, true)))
-	cards.add_child(_card("Upgrade an heirloom", SuperOrbTable.icon(SuperOrbTable.ASCENSION),
-			held > 0 and orbs > 0,
-			"None held" if held == 0 else "No orbs left" if orbs == 0 else "%d to spend" % orbs,
-			_open.bind(_upgrade_page)))
-	var taken := PackedStringArray()
-	for id: String in _inventory.pending_curses:
-		taken.append(str(Curses.CURSES[id]["name"]))
-	var spent := Curses.skulls_of(_inventory.pending_curses)
-	cards.add_child(_card("Take on a curse", load(SKULL_ICON), _budget > 0,
-			"No skulls" if _budget == 0 else "0 of %d skulls" % _budget if taken.is_empty()
-			else "%s: %d of %d skulls" % [", ".join(taken), spent, _budget],
-			_show_curses))
+	var stars: Array[Vector2] = []
+	# No words under a star (the user's, 2026-10-30), and no Upgrade an heirloom: that card went with them.
+	_star("Create an heirloom", load(CROWN_ICON), not _made and not lost, _open.bind(_create_page, true),
+			chart["heirloom"], stars)
+	# Not there at all until Gollux has paid a skull (the user's, 2026-10-30).
+	if _budget > 0:
+		_star("Take on a curse", load(SKULL_ICON), true, _show_curses, chart["curse"], stars)
 	# Always open: with no stone to place, the orbs left over still go into the placed ones.
-	var stones := _inventory.items.filter(func(item: Item) -> bool: return item.is_stone()).size()
-	cards.add_child(_card(SkillsPage.TITLE, SkillTree.icon("root"), true,
-			"None to place" if stones == 0 else "%d to place" % stones, _open.bind(_stones_page)))
-
-	var on := UITheme.button("Leave without an heirloom" if _warned and not _made
-			else "Enter the new world", "LightButton", "")
-	on.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	on.pressed.connect(_on_finish_pressed)
-	_choice.add_child(on)
+	_star(SkillsPage.TITLE, SkillTree.icon("root"), true, _open.bind(_stones_page), chart["tree"], stars)
+	_choice.draw.connect(_draw_lines.bind(stars, chart["orb"]))
+	_way_on(chart["orb"])
 	_layout()
 	_layout.call_deferred()
 
@@ -192,36 +190,126 @@ func _name_heirloom(item: Item) -> void:
 	add_child(prompt)
 
 
-## One card: its button, and under it in bone where it stands (done, what is left to spend) -- a status,
-## never what the card is for: the user wants no explaining on a page.
-func _card(title: String, mark: Texture2D, live: bool, text: String, pressed: Callable) -> Control:
-	var card := UITheme.vbox(4, CARD_WIDTH)
-	var button := UITheme.button(title, "LightButton", "")
-	button.icon = _padded(mark)
-	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-	button.custom_minimum_size = Vector2(CARD_WIDTH, CARD_HEIGHT)
-	button.disabled = not live
-	button.pressed.connect(pressed)
-	card.add_child(button)
-	if text.is_empty():
-		return card
-	var words := UITheme.label(text, Palette.BONE, true)
-	words.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	words.custom_minimum_size.x = CARD_WIDTH
-	card.add_child(words)
-	return card
+## One choice as a star: its mark in a ringed disc with points round it and its title under it, the
+## button the whole of both. Its centre goes on `stars`, for the lines.
+func _star(title: String, mark: Texture2D, live: bool, pressed: Callable, centre: Vector2,
+		stars: Array[Vector2]) -> void:
+	var star := _chart_button(title, STAR_ART, Palette.BONE)
+	star.disabled = not live
+	star.pressed.connect(pressed)
+	star.draw.connect(_draw_star.bind(star))
+	# The 14 px marks at 2x, the root's 32 px disc as it is.
+	var picture := _picture(mark, mark.get_width() * (2 if mark.get_width() < 20 else 1))
+	if not live:
+		picture.modulate = TownPage.TAB_REST
+	star.add_child(picture)
+	_place(star, centre, STAR_ART, picture)
+	stars.append(centre)
 
 
-## `mark` with clear rows above and below it to `CARD_MARK` tall, so every card's words stand at one
-## height whatever its picture: the crown and the skull are 16 px, the orb and the root 32.
-static func _padded(mark: Texture2D) -> Texture2D:
-	var padded := AtlasTexture.new()
-	padded.atlas = mark
-	padded.region = Rect2(Vector2.ZERO, mark.get_size())
-	var spare := maxf(0.0, CARD_MARK - mark.get_height())
-	padded.margin = Rect2(0.0, floorf(spare / 2.0), 0.0, spare)
-	return padded
+## Her cracked orb, the town's way out, in a light that breathes, and its words under it.
+func _way_on(centre: Vector2) -> void:
+	var light := ShaderMaterial.new()
+	light.shader = GLOW
+	light.set_shader_parameter("colour", Color(Palette.LILAC, 0.8))
+	light.set_shader_parameter("box", Vector2.ONE * ORB_SIDE)
+	light.set_shader_parameter("corner", ORB_SIDE / 2.0)
+	light.set_shader_parameter("reach", ORB_REACH)
+	light.set_shader_parameter("pulse", 0.0 if Settings.animations == Settings.Anim.NONE else 0.4)
+	var glow := Polygon2D.new()
+	var box := Rect2(Vector2.ZERO, Vector2.ONE * ORB_SIDE).grow(ORB_REACH)
+	glow.polygon = PackedVector2Array([box.position, Vector2(box.end.x, box.position.y), box.end,
+			Vector2(box.position.x, box.end.y)])
+	glow.material = light
+	glow.position = centre - Vector2.ONE * ORB_SIDE / 2.0
+	_choice.add_child(glow)
+	var on := _chart_button("Leave without an heirloom" if _warned and not _made else "Enter the new world",
+			ORB_SIDE, Palette.GOLD)
+	on.add_theme_color_override("font_hover_color", Palette.BONE)
+	on.pressed.connect(_on_finish_pressed)
+	var orb := _picture(load(TownPage.FORTUNE_ICONS[FortuneTeller.TRANSCEND]), ORB_SIDE)
+	on.add_child(orb)
+	_place(on, centre, ORB_SIDE, orb)
+
+
+## A button on the chart that is only its words, `top` panel pixels down: what stands over them is drawn
+## or laid on it. Added to the chart here, since `_place` needs the theme's font to measure it.
+func _chart_button(text: String, top: int, colour: Color) -> Button:
+	var button := UITheme.button(text, "", "")
+	var bare := StyleBoxEmpty.new()
+	bare.content_margin_top = top + 2
+	for state: String in ["normal", "hover", "pressed", "disabled", "focus"]:
+		button.add_theme_stylebox_override(state, bare)
+	for state: String in ["font_color", "font_focus_color"]:
+		button.add_theme_color_override(state, colour)
+	for state: String in ["font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
+		button.add_theme_color_override(state, Palette.GOLD)
+	button.add_theme_color_override("font_disabled_color", Palette.SLATE)
+	_choice.add_child(button)
+	return button
+
+
+static func _picture(mark: Texture2D, side: int) -> TextureRect:
+	var picture := TextureRect.new()
+	picture.texture = mark
+	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	picture.size = Vector2.ONE * side
+	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return picture
+
+
+## `button` with the middle of its `art`-tall top at `centre`, and `picture` in the middle of that.
+static func _place(button: Button, centre: Vector2, art: int, picture: Control) -> void:
+	button.size = button.get_combined_minimum_size()
+	button.position = (centre - Vector2(button.size.x, art) / 2.0).floor()
+	picture.position = ((Vector2(button.size.x, art) - picture.size) / 2.0).floor()
+
+
+func _draw_star(star: Button) -> void:
+	var centre := Vector2(star.size.x / 2.0, STAR_ART / 2.0).floor()
+	var ring := Palette.SLATE if star.disabled else Palette.GOLD if star.is_hovered() else Palette.LILAC
+	_disc(star, centre, STAR_RADIUS, Palette.INK)
+	_disc(star, centre, STAR_RADIUS - 1, ring)
+	_disc(star, centre, STAR_RADIUS - 3, Palette.NIGHT)
+	for k in 8:
+		var at := (centre + Vector2.from_angle(k * PI / 4.0) * (STAR_RADIUS + 5)).round()
+		var tint := Palette.SLATE if star.disabled else Palette.GOLD if k % 2 else Palette.BONE
+		star.draw_rect(Rect2(at - Vector2(1, 0), Vector2(3, 1)), tint)
+		star.draw_rect(Rect2(at - Vector2(0, 1), Vector2(1, 3)), tint)
+
+
+## A disc a pixel row at a time, so it stands in whole interface pixels however the chart is scaled.
+static func _disc(on: CanvasItem, centre: Vector2, radius: int, colour: Color) -> void:
+	for y in range(-radius, radius):
+		var half := roundf(sqrt(radius * radius - (y + 0.5) * (y + 0.5)))
+		on.draw_rect(Rect2(centre.x - half, centre.y + y, half * 2.0, 1.0), colour)
+
+
+## The chart's dotted lines: each star to the next, the last to the orb and, with more than one, the
+## first to it too, so the stars and the way on close in a ring. A line goes under every title, never
+## through it: the words are what stands under a button's top margin.
+func _draw_lines(stars: Array[Vector2], orb: Vector2) -> void:
+	var titles: Array[Rect2] = []
+	for button: Button in _choice.find_children("", "Button", false, false):
+		var top := button.get_theme_stylebox("normal").content_margin_top
+		titles.append(Rect2(button.position + Vector2(0.0, top), button.size - Vector2(0.0, top)).grow(2.0))
+	var pairs: Array = []
+	for i in stars.size() - 1:
+		pairs.append([stars[i], stars[i + 1]])
+	pairs.append([stars[-1], orb])
+	if stars.size() > 1:
+		pairs.append([stars[0], orb])
+	for pair: Array in pairs:
+		var from: Vector2 = pair[0]
+		var to: Vector2 = pair[1]
+		var steps := int(from.distance_to(to) / DOT_STEP)
+		for k in range(1, steps):
+			var at := from.lerp(to, float(k) / steps)
+			if at.distance_to(from) > DOT_CLEAR and at.distance_to(to) > DOT_CLEAR \
+					and not titles.any(func(title: Rect2) -> bool: return title.has_point(at)):
+				# Pale: lilac was lost in the nebula's own.
+				_choice.draw_rect(Rect2(at.floor(), Vector2.ONE), Color(Palette.BONE, 0.6))
 
 
 ## The curses for the world to come, as the character page's stats are written: a cream panel, and in

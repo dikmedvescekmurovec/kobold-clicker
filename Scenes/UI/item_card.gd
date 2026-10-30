@@ -225,20 +225,17 @@ func pinned() -> ItemSlot:
 func lights(slot: ItemSlot) -> bool:
 	if slot == null or held == "" or slot.hint.is_valid() or Settings.animations == Settings.Anim.NONE:
 		return false
-	if SuperOrbTable.has(held):
-		return SuperOrbTable.can_apply(held, slot.item)
 	return OrbTable.can_apply(held, slot.item)
 
 
 static func _glow_of(orb: String) -> Color:
-	return (SuperOrbTable.ORBS if SuperOrbTable.has(orb) else OrbTable.ORBS)[orb].glow
+	return OrbTable.ORBS[orb].glow
 
 
 ## `flash` in `orb`'s colour: the orb has just gone into the piece. The better the orb, the more light
-## and the longer -- its place in the tray, a super orb past them all.
+## and the longer -- its place in the tray.
 func shine(orb: String) -> void:
-	flash(_glow_of(orb), 1.0 if SuperOrbTable.has(orb)
-			else (OrbTable.orbs().find(orb) + 1.0) / (OrbTable.orbs().size() + 1.0))
+	flash(_glow_of(orb), (OrbTable.orbs().find(orb) + 1.0) / (OrbTable.orbs().size() + 1.0))
 
 
 ## Light from behind the card in `colour`, swelling in and dying away, more and longer the more `power`

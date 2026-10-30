@@ -1,6 +1,6 @@
 class_name OrbSlot
 extends Panel
-## One orb, super orb or rune as a square in its tray, on the tan socket an item sits on. Its own class
+## One orb or rune as a square in its tray, on the tan socket an item sits on. Its own class
 ## and not a mode of `ItemSlot`, which takes no mouse so a drag begun on it still scrolls the bag: an orb
 ## square is the click target and the hover target both, in a footer with no drag to protect.
 ##
@@ -61,8 +61,7 @@ func setup(which: String, count: int, usable: bool, armed := false, side := SIDE
 	_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_icon.texture = SuperOrbTable.icon(which) if SuperOrbTable.has(which) \
-			else RuneTable.icon(which) if RuneTable.has(which) else OrbTable.icon(which)
+	_icon.texture = RuneTable.icon(which) if RuneTable.has(which) else OrbTable.icon(which)
 	var icon := side - (SIDE - ICON)
 	_icon.custom_minimum_size = Vector2(icon, icon)
 	_icon.size = Vector2(icon, icon)

@@ -44,6 +44,8 @@ const ICE := Color("0098dc")
 const ICE_DK := Color("00396d")
 const LILAC := Color("93388f")
 const RUST := Color("8a4836")
+## The transcension's night (`nebula.gdshader`'s second step): a star's face on its chart.
+const NIGHT := Color("1a1932")
 ## The epic step, border and name alike, strength's ring on the character page, and a refusal.
 const BRICK := Color("891e2b")
 ## LEAF_LT's twin for a loss: a red for words outlined on the backdrop or the band, never on the cream.

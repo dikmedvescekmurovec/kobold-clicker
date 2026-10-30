@@ -1234,11 +1234,11 @@ func _test_fortune_page() -> bool:
 			"and the arrow is the way back to her spells")
 
 	# The way out: on her list once a wall is down, a question first, then the black screen where one
-	# piece is kept and the wall's orb is spent, and then everything but the heirlooms and what the
+	# piece is kept, and then everything but the heirlooms and what the
 	# player knows is gone, and the map with it.
 	main.view.land_radius += MapBuilder.WALL_STEP
 	main._credit_walls()
-	_check(main.inventory.super_orbs == 1, "a wall down is a super orb to spend")
+	_check(main.inventory.walls_credited == 1, "a wall down is counted")
 	var rng := RandomNumberGenerator.new()
 	rng.seed = WORLD_SEED
 	var kept := Item.rolled("Wooden Sword", ItemRarity.Rarity.RARE, rng, 5)
@@ -1281,8 +1281,8 @@ func _test_fortune_page() -> bool:
 	_check(black != null and not main.town_page.visible and FileAccess.file_exists(TEST_MAP_PATH),
 			"the second goes to the black screen, and the world is still there behind it")
 	black._show_choice()
-	_check(not _deep_button(black, "Create an heirloom").disabled and _deep_button(black, "Upgrade an heirloom").disabled,
-			"an heirloom can be made, and with none held there is nothing to upgrade")
+	_check(not _deep_button(black, "Create an heirloom").disabled and _deep_button(black, "Upgrade an heirloom") == null,
+			"an heirloom can be made, and none upgraded")
 	_deep_button(black, "Create an heirloom").pressed.emit()
 	_check(not black._swap.visible, "with no heirloom held the crown under the arrow is not there")
 	black._create_page._select_item(main.inventory.items.find(kept))
@@ -1297,16 +1297,12 @@ func _test_fortune_page() -> bool:
 	_check(black._swap.visible and black._swap.tooltip_text == "Your heirlooms", "the crown stands under the arrow")
 	black._swap.pressed.emit()
 	await process_frame
-	_check(black._upgrade_page.visible and not black._create_page.visible and black._swap.visible
+	_check(black._heirloom_page.visible and not black._create_page.visible and black._swap.visible
 			and black._swap.tooltip_text == "Items", "and turns the page to the heirlooms, the chest to go back")
 	black._swap.pressed.emit()
-	_check(black._create_page.visible and not black._upgrade_page.visible, "which turns it back to the items")
+	_check(black._create_page.visible and not black._heirloom_page.visible, "which turns it back to the items")
 	black._show_choice()
 	_check(not black._swap.visible, "and the choice has neither")
-	_deep_button(black, "Upgrade an heirloom").pressed.emit()
-	black._upgrade_page._on_orb_pressed(SuperOrbTable.ASCENSION)
-	black._upgrade_page._craft(black._upgrade_page._armed, kept)
-	_check(kept.plus == 1 and main.inventory.super_orbs == 0, "and the wall's orb goes into it")
 	_check(FileAccess.get_file_as_string(TEST_PATH) == written and FileAccess.file_exists(TEST_MAP_PATH),
 			"none of which has been written: a game closed here never left")
 	black._show_choice()
@@ -1339,7 +1335,7 @@ func _test_fortune_page() -> bool:
 			"the world being left is under none of them, and nothing is written")
 	black._show_choice()
 	await process_frame
-	_check("Thick Fog" in _said(black._choice) and "Long Winter" in _said(black._choice), "the card says what was taken")
+	_check(_said(black._choice).strip_edges().is_empty(), "and no card writes a word under itself")
 	_deep_button(black, "Enter the new world").pressed.emit()
 	await process_frame
 	_check(not FileAccess.file_exists(TEST_MAP_PATH), "the way on leaves the world: the map is gone")
@@ -1348,8 +1344,8 @@ func _test_fortune_page() -> bool:
 			and after.items.all(func(item: Item) -> bool: return item.type == LootTable.BROKEN_TORCH),
 			"the purse, the bag and the levels stay behind")
 	_check(after.stash().total() == 1 and after.stash().items[0].level == 1
-			and after.stash().items[0].safe_level == 5 and after.stash().items[0].plus == 1,
-			"the heirloom goes along, +1, at level 1 and remembering 5")
+			and after.stash().items[0].safe_level == 5 and after.stash().items[0].plus == 0,
+			"the heirloom goes along, at level 1 and remembering 5")
 	_check(after.kills == 321 and after.first_sword_taken and "first_town" in after.tips,
 			"and so does what the player knows, so no helping hand is dealt twice")
 	_check(after.walls_credited == 0, "the new world's walls have paid nothing yet")
@@ -1407,8 +1403,7 @@ func _test_curses_the_world_feels() -> bool:
 	_check(main._combat == null and main._transcend_page != null, "a lost tile ends the world, Retry or no")
 	var black: TranscendPage = main._transcend_page
 	black._show_choice()
-	_check(_deep_button(black, "Create an heirloom").disabled and "lost" in _said(black).to_lower(),
-			"and a world lost that way makes no heirloom")
+	_check(_deep_button(black, "Create an heirloom").disabled, "and a world lost that way makes no heirloom")
 	black.finish()
 	await process_frame
 	var after := Inventory.load_from(TEST_PATH)
@@ -1441,7 +1436,7 @@ func _test_tree_builder() -> bool:
 	root.add_child(black)
 	await process_frame
 	black._show_choice()
-	_check("1 to place" in _said(black), "the card counts the bag's one stone")
+	_check(_deep_button(black, "Take on a curse") == null, "with no skull to pay there is no curse to take")
 	_deep_button(black, "Skill tree").pressed.emit()
 	await process_frame
 	var page: BagPage = black._stones_page

@@ -463,8 +463,8 @@ func _ready() -> void:
 		_queue_comic()
 	if OS.has_feature("web") and not Settings.path.is_empty():
 		_show_changelog()
-	# A save from before there were heirlooms has just been paid for its walls: say what that means.
-	if inventory.super_orbs > 0:
+	# A save with a wall down that never heard the fortuneteller's word on it hears it now.
+	if inventory.walls_credited > 0:
 		_check_tips()
 	camera.zoom = Vector2(zoom, zoom)
 	camera.position = map.ground_layer.map_to_local(view.player_cell)
@@ -653,6 +653,7 @@ func _process(delta: float) -> void:
 		banner.tick(delta)
 	if bag_page != null:
 		_spotlight()
+		bag_page.foldable = _tutored()
 
 
 ## Whether a page's question, the fortuneteller's answer or the cloud's question stands over the window.
@@ -1528,14 +1529,14 @@ func _chart_won(cell: Vector2i) -> void:
 	_credit_walls()
 
 
-## Every wall down in this world that has not yet paid its super orb pays it; the heirlooms climb to
-## the land charted; the land's furthest reach and its deepest tile are written down; and the world's
-## cave is put down if it is due. Asked wherever a wall can have fallen (a tile charted) and once at
-## start-up, which pays a save from before there were heirlooms for the walls it already has down.
+## Every wall down in this world not yet counted is (`Inventory.credit_walls`: achievements and the
+## curses' pay per wall); the heirlooms climb to the land charted; the land's furthest reach and its
+## deepest tile are written down; and the world's cave is put down if it is due. Asked wherever a wall
+## can have fallen (a tile charted) and once at start-up, which counts an old save's walls.
 func _credit_walls() -> void:
 	var paid := inventory.credit_walls(view.walls_fallen())
 	if paid:
-		print("A wall is down: %d super orb(s) to spend at a transcension" % inventory.super_orbs)
+		print("A wall is down: %d this world" % inventory.walls_credited)
 	# The heirlooms climb with the land charted; a page already up shows the new levels.
 	var charted := view.charted_level()
 	var climbed := inventory.raise_heirlooms(charted)
@@ -2062,7 +2063,7 @@ func _tip_due(id: String) -> bool:
 		"first_unique":
 			return not inventory.uniques_found.is_empty()
 		"first_heirloom":
-			return inventory.super_orbs > 0
+			return inventory.walls_credited > 0
 		"first_fortune":
 			return town_page.visible and town_page.open_tab() == TownServices.FORTUNE
 		"first_smith":
@@ -2231,6 +2232,18 @@ func _spotlight() -> void:
 		# The orb, then the piece, then the piece again: the last tap on the piece only selected it.
 		var at := 0 if bag_page.orb_in_hand().is_empty() else 2 if Cursors.selected() is Item else 1
 		_spot.say(ORB_TAPS if orb_taps else [], at, bag_page.held_card_bottom())
+
+
+## Whether every first step has been owed and taken: each tip in `SPOTLIGHTS` seen, the first Augmentation
+## had, and none still owed. An old save that saw the tips before there were steps counts as taught.
+func _tutored() -> bool:
+	for id: String in SPOTLIGHTS.keys() + [Inventory.FIRST_AUGMENT]:
+		if id not in inventory.tips:
+			return false
+	for step: String in SPOTLIGHTS.values() + [AUGMENT_STEP]:
+		if step in inventory.tips:
+			return false
+	return true
 
 
 ## Whether an owed step has been taken. The orb's is struck off by the bag's `crafted` (`_build_pages`).

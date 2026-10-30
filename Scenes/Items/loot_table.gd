@@ -341,8 +341,8 @@ const STAT_LABELS := {
 	"strength_stones": "Strength Node Ranks",
 	"intelligence_stones": "Intelligence Node Ranks",
 	"dexterity_stones": "Dexterity Node Ranks",
-	# A skill stone's own: the points it takes past the one every stone does (`Skills`).
-	"stone_ranks": "Ranks",
+	# A skill stone's own: the points it takes past its tier's base (`SkillTree.most_ranks`).
+	"stone_ranks": "Skill Points",
 	# The body's (`Camp.make`, the fight).
 	"camp_earnings": "Camp Earnings",
 	"extra_enemies": "Enemies per Fight",
